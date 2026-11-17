@@ -1001,3 +1001,10 @@ S5 an outside scanner's rules for Electron.
 - **Content policy**: frames may now load `https://www.youtube-nocookie.com` only (YouTube's privacy-enhanced player, controlled by postMessage with its origin checked); everything else unchanged.
 - **Chapters**: the model's times and questions are checked (in order, inside the video, 3–4 options with a valid answer) and shown as text.
 - Performance: chapters are made once on her click and kept; the video plays from disk with ranges. Secrets/personal paths: none in the diff.
+
+## Scan 110 (2026-11-17): function graphs, mastery, save to course, video upload without a size cap
+- **```graph blocks**: a model's text, so untrusted. Expressions are tokenised and parsed into closures over a fixed list of math functions and constants; no `eval`, `Function`, or property access, so a block can only compute numbers (tests: `alert(1)`, `constructor`, `process.exit` are refused). At most 8 functions, drawn as SVG paths with coordinates clamped; the wheel handler is on the graph only.
+- **Save to course**: the extension posts the page to the KesherAI page in its own side panel only (exact origin), and the app takes it only from its parent when that is a chrome-extension:/moz-extension: page, as "Ask about this page" does. The route caps the body at 1 MB and the text at 200 KB; the source address is kept only when http(s) (a `javascript:` link is dropped) and is shown as a link with noopener. `/api/browser/pane/page` reads only the tab in front, behind the app's token like the other pane routes.
+- **Video upload without a size cap** (Roee's choice): still streamed, never in memory; written inside the course's folder (keeping it is a rename, no second copy); stops with 507 when the disk would keep under 2 GB free (checked every 256 MB); folders of cut-off uploads older than a day are removed. The route needs the app's token, so only she can fill her disk. Web videos now come at their best quality (no 720p cap).
+- **Mastery**: computed from her own reviews and quizzes on this computer; nothing sent.
+- Result: no open issues.

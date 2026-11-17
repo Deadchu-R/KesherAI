@@ -130,7 +130,7 @@ export async function cleanYoutube(tmp: string): Promise<void> {
 
 /**
  * A lecture video from a site yt-dlp knows (Panopto, Kaltura, Vimeo, Zoom recordings…) with her sign-in cookies:
- * the video itself (at most 720p, MP4) kept for watching, and its captions when the site has them.
+ * the video itself (its best quality, as MP4; no size cap, asked 2026-11-17) kept for watching, and its captions when the site has them.
  *
  * @param ytdlp - The yt-dlp program.
  * @param url - The video's page.
@@ -138,7 +138,7 @@ export async function cleanYoutube(tmp: string): Promise<void> {
  */
 export async function webLectureVideo(ytdlp: string, url: string, cookies?: string): Promise<{ title: string; text?: string; video?: string; tmp: string }> {
   const tmp = await mkdtemp(join(tmpdir(), "kesher-vid-"));
-  const r = await run(ytdlp, ["--no-playlist", ...(cookies ? ["--cookies", cookies] : []), "-f", "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/b[height<=720]/b", "--merge-output-format", "mp4", "--write-subs", "--write-auto-subs", "--sub-langs", "he,iw,en.*", "--sub-format", "vtt", "--print", "after_move:title", "-o", join(tmp, "video.%(ext)s"), url], { timeout: 3_600_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
+  const r = await run(ytdlp, ["--no-playlist", ...(cookies ? ["--cookies", cookies] : []), "-f", "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b", "--merge-output-format", "mp4", "--write-subs", "--write-auto-subs", "--sub-langs", "he,iw,en.*", "--sub-format", "vtt", "--print", "after_move:title", "-o", join(tmp, "video.%(ext)s"), url], { timeout: 3_600_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 });
   const title = r.stdout.split("\n").map((l) => l.trim()).filter(Boolean).pop()?.slice(0, 160) || "Video";
   const files = await readdir(tmp);
   const video = files.find((f) => /^video\.(mp4|webm|mkv|mov)$/.test(f));

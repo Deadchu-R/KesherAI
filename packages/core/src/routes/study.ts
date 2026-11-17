@@ -5,8 +5,8 @@
 import type { FastifyInstance } from "fastify";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { cardsToTsv, examPlan, formatStats, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -113,22 +113,46 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (start >= size || start > end) return reply.code(416).header("content-range", `bytes */${size}`).send();
     return reply.code(206).header("content-range", `bytes ${start}-${end}/${size}`).header("content-length", end - start + 1).send(createReadStream(path, { start, end }));
   };
-  // Her video arrives as a stream straight to disk (lectures run to gigabytes), never held in memory.
+  // Her video arrives as a stream straight to disk (lectures run to gigabytes), never held in memory. No size cap
+  // (Roee, 2026-11-17): it is written next to where it is kept (the same disk, so keeping it is a rename, never a
+  // second copy), and stops only when the disk would be left with under 2 GB free.
   app.addContentTypeParser("application/x-kesher-video", (_req, payload, done) => done(null, payload));
-  app.post<C>("/api/study/courses/:id/lectures/video-upload", { bodyLimit: 6 * 1024 ** 3 }, async (req, reply) => {
+  app.post<C>("/api/study/courses/:id/lectures/video-upload", { bodyLimit: Number.MAX_SAFE_INTEGER }, async (req, reply) => {
     const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "video.mp4")).replace(/[\\/:*?"<>|]+/g, "").slice(0, 120) || "video.mp4";
     const mime = String(req.headers["x-video-type"] ?? "video/mp4").slice(0, 40);
-    const dir = await mkdtemp(join(tmpdir(), "kesher-up-"));
+    await st.get(req.params.id);
+    const home = dirname(st.videoPath(req.params.id, "x"));
+    await mkdir(home, { recursive: true });
+    // An upload cut off by a crash leaves its folder: clear any older than a day.
+    for (const n of await readdir(home).catch(() => [] as string[])) {
+      if (!n.startsWith(".up-")) continue;
+      const at = (await stat(join(home, n)).catch(() => undefined))?.mtimeMs ?? Date.now();
+      if (Date.now() - at > 86_400_000) await rm(join(home, n), { recursive: true, force: true });
+    }
+    const dir = await mkdtemp(join(home, ".up-"));
     const file = join(dir, "video");
+    const KEEP_FREE = 2 * 1024 ** 3;
+    const freeBytes = async () => {
+      const f = await statfs(home).catch(() => undefined);
+      return f ? Number(f.bavail) * Number(f.bsize) : Infinity;
+    };
     try {
       let bytes = 0;
+      let checked = 0;
       const out = createWriteStream(file);
-      for await (const chunk of req.body as AsyncIterable<Buffer>) {
-        bytes += chunk.length;
-        if (bytes > 6 * 1024 ** 3) throw Object.assign(new Error("The video is over 6 GB."), { statusCode: 413 });
-        if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
+      try {
+        for await (const chunk of req.body as AsyncIterable<Buffer>) {
+          bytes += chunk.length;
+          // Every 256 MB: is there still room?
+          if (bytes - checked > 256 * 1024 ** 2) {
+            checked = bytes;
+            if ((await freeBytes()) < KEEP_FREE) throw Object.assign(new Error("The disk is almost full: free some space and add the video again."), { statusCode: 507 });
+          }
+          if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
+        }
+      } finally {
+        await new Promise<void>((ok, bad) => out.end((e?: Error | null) => (e ? bad(e) : ok())));
       }
-      await new Promise<void>((ok, bad) => out.end((e?: Error | null) => (e ? bad(e) : ok())));
       const text = await stampedTranscript(file);
       if (!text.trim()) return reply.code(422).send({ error: "No speech was found in this video." });
       const l = await st.addLecture(req.params.id, { title: name.replace(/\.[^.]+$/, ""), text });
