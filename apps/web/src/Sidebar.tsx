@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { askText } from "./ui/askText";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
@@ -48,7 +49,8 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
     }
   }
 
-  return (
+  // On the page itself: inside the sticky sidebar a later layer (the report's masked donut) was drawn over it.
+  return createPortal(
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
       <form
         className="dialog card"
@@ -111,7 +113,8 @@ function NewDialog({ kind, onClose }: { kind: "code" | "project"; onClose: () =>
           </button>
         </div>
       </form>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
