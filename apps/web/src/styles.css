@@ -3532,3 +3532,16 @@ div.slide-list { padding-inline-start: 0; }
 .study-paper-ref { margin: 0; text-align: left; font-size: 14px; line-height: 1.5; }
 .study-papers-answer { white-space: pre-wrap; margin: 6px 0 0; line-height: 1.6; }
 .study-papers-say { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+/* Degree progress inside Grades (design DegreeProgress). */
+.degree { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border, #333); }
+.degree-head { align-items: center; gap: 8px; }
+.degree-edit { display: flex; flex-direction: column; gap: 6px; }
+.degree-kind { gap: 8px; align-items: center; }
+.degree-kind > input { flex: 1; min-width: 0; }
+.degree-kind input[type=number], .degree-more input[type=number] { width: 72px; }
+.degree-more { gap: 8px; flex-wrap: wrap; align-items: center; }
+.degree-total, .degree-row { display: flex; flex-direction: column; gap: 3px; }
+.degree-bar { display: flex; height: 8px; border-radius: 4px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; }
+.degree-bar .done { background: var(--ok, #2e9e6a); }
+.degree-bar .doing { background: repeating-linear-gradient(45deg, var(--accent, #a5b4ff) 0 4px, transparent 4px 7px); opacity: .8; }
+.study-grade-kind { display: flex; gap: 6px; align-items: center; }

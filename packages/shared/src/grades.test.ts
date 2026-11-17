@@ -40,3 +40,19 @@ test("cleanGrades keeps numbers in range and drops what is not a course", () => 
   assert.equal(g.target, 88);
   assert.equal(g.remaining, 0);
 });
+
+test("degree progress: passed, in progress and missing credits by kind", async () => {
+  const { degreeProgress } = await import("./grades.js");
+  const g = cleanGrades({ kinds: [{ id: "req", name: "חובה", need: 10 }, { id: "el", name: "בחירה", need: 4 }, { name: "", need: 3 }], total: 20, rows: [
+    { name: "a", credits: 4, final: 90, kind: "req" },
+    { name: "b", credits: 3, final: 50, kind: "req" },
+    { name: "c", credits: 2, parts: [{ weight: 100 }], kind: "req" },
+    { name: "d", credits: 5, final: 70, kind: "el" },
+    { name: "e", credits: 1, final: 61 },
+  ] });
+  assert.equal(g.kinds?.length, 2);
+  const p = degreeProgress(g);
+  assert.deepEqual(p.kinds.map((k) => [k.done, k.doing, k.missing]), [[4, 2, 4], [5, 0, 0]]);
+  assert.deepEqual([p.total.need, p.total.done, p.total.doing, p.total.missing, p.failed], [20, 10, 2, 8, 3]);
+  assert.equal(degreeProgress({ ...g, pass: 95 }).total.done, 0);
+});

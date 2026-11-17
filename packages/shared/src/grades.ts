@@ -25,6 +25,15 @@ export interface GradeRow {
   minExam?: number;
   /** The grade she wants in this course (else her target average). */
   want?: number;
+  /** Which of her degree's requirements it counts toward (a DegreeKind id): design DegreeProgress. */
+  kind?: string;
+}
+
+/** A kind of credits her degree asks for (required, electives, general studies, English…), and how many. */
+export interface DegreeKind {
+  id: string;
+  name: string;
+  need: number;
 }
 
 /** All her grades. */
@@ -34,6 +43,12 @@ export interface Grades {
   target?: number;
   /** Credits she still has to take (for "what average do I need in the rest"). */
   remaining?: number;
+  /** Her degree's requirements by kind (design DegreeProgress, students part 28 #7). */
+  kinds?: DegreeKind[];
+  /** The degree's total credits, when it says more than the kinds add up to. */
+  total?: number;
+  /** The lowest course grade that passes (her institution's; 60 when not set). */
+  pass?: number;
 }
 
 const num = (v: unknown, lo: number, hi: number): number | undefined => {
@@ -68,11 +83,20 @@ export function cleanGrades(raw: unknown): Grades {
       ...(final !== undefined ? { final } : {}),
       ...(minExam !== undefined ? { minExam } : {}),
       ...(want !== undefined ? { want } : {}),
+      ...(typeof x.kind === "string" && /^[\w-]{1,40}$/.test(x.kind) ? { kind: x.kind } : {}),
     }];
   });
+  const kinds = (Array.isArray(o.kinds) ? o.kinds : []).slice(0, 12).flatMap((k, i): DegreeKind[] => {
+    const y = (k && typeof k === "object" ? k : {}) as Record<string, unknown>;
+    const name = text(y.name, 60);
+    const need = num(y.need, 0, 400);
+    return name && need !== undefined ? [{ id: typeof y.id === "string" && /^[\w-]{1,40}$/.test(y.id) ? y.id : `k${i}`, name, need }] : [];
+  });
+  const total = num(o.total, 0, 600);
+  const pass = num(o.pass, 0, 100);
   const target = num(o.target, 0, 100);
   const remaining = num(o.remaining, 0, 400);
-  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}) };
+  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}), ...(kinds.length ? { kinds } : {}), ...(total !== undefined ? { total } : {}), ...(pass !== undefined ? { pass } : {}) };
 }
 
 /**
@@ -128,4 +152,37 @@ export function averageNeeded(rows: GradeRow[], target: number, remaining: numbe
   const { average, credits } = weightedAverage(rows);
   const need = (target * (credits + remaining) - (average ?? 0) * credits) / remaining;
   return Math.max(0, Math.round(need * 10) / 10);
+}
+
+/** One requirement's progress: credits done (passed), in progress (no grade yet) and still missing. */
+export interface KindProgress {
+  id: string;
+  name: string;
+  need: number;
+  done: number;
+  doing: number;
+  missing: number;
+}
+
+/**
+ * Her degree's progress (design DegreeProgress, like Open Student and degree audits): for each kind of credits, what
+ * she passed, what she is taking now and what is still missing; and the same for the whole degree. A course counts
+ * as passed with a grade at or above the pass mark (60 when not set), and as in progress while it has no grade.
+ */
+export function degreeProgress(g: Grades): { kinds: KindProgress[]; total: KindProgress; failed: number } {
+  const pass = g.pass ?? 60;
+  const sum = (rows: GradeRow[], what: "done" | "doing" | "failed") => rows.reduce((n, r) => {
+    const grade = rowGrade(r).grade;
+    const is = grade === undefined ? "doing" : grade >= pass ? "done" : "failed";
+    return is === what ? n + r.credits : n;
+  }, 0);
+  const round = (n: number) => Math.round(n * 10) / 10;
+  const of = (id: string, name: string, need: number, rows: GradeRow[]): KindProgress => {
+    const done = round(sum(rows, "done"));
+    const doing = round(sum(rows, "doing"));
+    return { id, name, need, done, doing, missing: round(Math.max(0, need - done - doing)) };
+  };
+  const kinds = (g.kinds ?? []).map((k) => of(k.id, k.name, k.need, g.rows.filter((r) => r.kind === k.id)));
+  const need = Math.max(g.total ?? 0, kinds.reduce((n, k) => n + k.need, 0));
+  return { kinds, total: of("all", "", need, g.rows), failed: round(sum(g.rows, "failed")) };
 }

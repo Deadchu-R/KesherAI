@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { averageNeeded, neededFor, rowGrade, weightedAverage, type GradeRow, type Grades } from "@kesher/shared";
+import { averageNeeded, degreeProgress, neededFor, rowGrade, weightedAverage, type DegreeKind, type GradeRow, type Grades } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -53,6 +53,7 @@ export function StudyGrades({ courses }: { courses: Array<{ id: string; name: st
                 <b className="study-grade-final">{grade ?? (sofar !== undefined ? <span className="muted small">{L(`עד עכשיו ${sofar}`, `so far ${sofar}`)}</span> : "—")}</b>
                 <button type="button" className="ghost small" aria-label={L("להסיר", "Remove")} onClick={() => confirm(L(`להסיר את "${r.name}" מהציונים?`, `Remove "${r.name}" from the grades?`)) && save({ ...g, rows: g.rows.filter((x) => x.id !== r.id) })}>✕</button>
               </div>
+              {g.kinds?.length ? <label className="small study-grade-kind">{L("נחשב בתואר כ:", "Counts as:")} <select value={r.kind ?? ""} onChange={(e) => { const { kind: _, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? { ...rest, ...(e.target.value ? { kind: e.target.value } : {}) } : x)) }); }} aria-label={L("נחשב בתואר כ", "Counts in the degree as")}><option value="">{L("סוג…", "Kind…")}</option>{g.kinds.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}</select></label> : null}
               {r.final === undefined && (
                 <div className="study-grade-parts">
                   {r.parts.map((p, k) => (
@@ -90,8 +91,80 @@ export function StudyGrades({ courses }: { courses: Array<{ id: string; name: st
           <label className="small">{L("יעד ממוצע", "Target average")} <input type="number" min={0} max={100} value={val(g.target)} onChange={(e) => { const { target: _, ...rest } = g; const t = parse(e.target.value); save({ ...rest, ...(t !== undefined ? { target: t } : {}) }); }} /></label>
           <label className="small">{L('נק"ז שנשארו', "Credits to come")} <input type="number" min={0} max={400} value={val(g.remaining)} onChange={(e) => { const { remaining: _, ...rest } = g; const n = parse(e.target.value); save({ ...rest, ...(n !== undefined ? { remaining: n } : {}) }); }} /></label>
         </div>
+        <DegreeProgress g={g} save={save} />
         {avgNeed !== undefined && <p className="small" dir="auto">{avgNeed > 100 ? L(`גם 100 בכל ${g.remaining} הנק"ז שנשארו לא יביא לממוצע ${g.target}.`, `Even 100 in all ${g.remaining} credits to come will not reach ${g.target}.`) : L(`כדי להגיע לממוצע ${g.target}, צריך בממוצע ${avgNeed} ב-${g.remaining} הנק"ז שנשארו.`, `To reach an average of ${g.target}, you need ${avgNeed} on average in the ${g.remaining} credits to come.`)}</p>}
       </>}
     </section>
+  );
+}
+
+const STARTER = (): DegreeKind[] => [
+  { id: "req", name: L("חובה", "Required"), need: 90 },
+  { id: "elect", name: L("בחירה", "Electives"), need: 18 },
+  { id: "gen", name: L("לימודים כלליים", "General studies"), need: 8 },
+  { id: "eng", name: L("אנגלית", "English"), need: 4 },
+];
+
+/**
+ * Her degree's progress (design DegreeProgress, students part 28 #7, like Open Student): the credits each kind of
+ * requirement asks for, what she passed, what she takes now and what is still missing, and the whole degree.
+ */
+function DegreeProgress({ g, save }: { g: Grades; save: (g: Grades) => void }) {
+  const [edit, setEdit] = useState(false);
+  const kinds = g.kinds ?? [];
+  const p = degreeProgress(g);
+  const setKinds = (k: DegreeKind[]) => { const { kinds: _, ...rest } = g; save({ ...rest, ...(k.length ? { kinds: k } : {}) }); };
+  const bar = (done: number, doing: number, need: number) => (
+    <div className="degree-bar" aria-hidden="true">
+      <span className="done" style={{ width: `${need ? Math.min(100, (done / need) * 100) : 0}%` }} />
+      <span className="doing" style={{ width: `${need ? Math.min(100 - Math.min(100, (done / need) * 100), (doing / need) * 100) : 0}%` }} />
+    </div>
+  );
+  const unassigned = kinds.length ? g.rows.filter((r) => !r.kind || !kinds.some((k) => k.id === r.kind)).length : 0;
+  return (
+    <div className="degree">
+      <div className="row degree-head">
+        <b>🎓 {L("התקדמות בתואר", "Degree progress")}</b>
+        <span className="grow" />
+        <button type="button" className="ghost small" aria-expanded={edit} onClick={() => setEdit(!edit)}>{edit ? L("סיום", "Done") : kinds.length || g.total ? L("דרישות התואר", "Requirements") : L("להגדיר דרישות", "Set requirements")}</button>
+      </div>
+      {!kinds.length && !g.total && !edit && <p className="muted small">{L("כמה נק\"ז צריך מכל סוג (חובה, בחירה, כלליים, אנגלית), ומה כבר עשית. את הדרישות כותבים פעם אחת, מהידיעון של המוסד.", "How many credits each kind needs (required, electives, general, English) and what you have done. Write the requirements once, from your institution's catalog.")}</p>}
+      {edit && (
+        <div className="degree-edit">
+          {kinds.map((k, i) => (
+            <div key={k.id} className="row degree-kind">
+              <input dir="auto" value={k.name} onChange={(e) => setKinds(kinds.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} aria-label={L("סוג", "Kind")} />
+              <label className="small"><input type="number" min={0} max={400} value={val(k.need)} onChange={(e) => setKinds(kinds.map((x, j) => (j === i ? { ...x, need: parse(e.target.value) ?? 0 } : x)))} aria-label={L('נק"ז נדרשות', "Credits needed")} /> {L('נק"ז', "credits")}</label>
+              <button type="button" className="ghost small" aria-label={L("להסיר", "Remove")} onClick={() => setKinds(kinds.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+          <div className="row degree-more">
+            {!kinds.length && <button type="button" className="small" onClick={() => setKinds(STARTER())}>{L("התחלה מהירה: חובה, בחירה, כלליים, אנגלית", "Quick start: required, electives, general, English")}</button>}
+            <button type="button" className="ghost small" onClick={() => setKinds([...kinds, { id: `k${Date.now().toString(36)}`, name: "", need: 0 }])}>＋ {L("סוג", "Kind")}</button>
+          </div>
+          <div className="row degree-more">
+            <label className="small">{L('סה"כ נק"ז בתואר', "Degree total")} <input type="number" min={0} max={600} value={val(g.total)} onChange={(e) => { const { total: _, ...rest } = g; const t = parse(e.target.value); save({ ...rest, ...(t !== undefined ? { total: t } : {}) }); }} /></label>
+            <label className="small">{L("ציון עובר", "Pass mark")} <input type="number" min={0} max={100} value={val(g.pass)} placeholder="60" onChange={(e) => { const { pass: _, ...rest } = g; const n = parse(e.target.value); save({ ...rest, ...(n !== undefined ? { pass: n } : {}) }); }} /></label>
+          </div>
+        </div>
+      )}
+      {(kinds.length > 0 || !!g.total) && (
+        <>
+          <div className="degree-total">
+            <span className="small" dir="auto"><b>{p.total.done}</b> {L(`מתוך ${p.total.need} נק"ז`, `of ${p.total.need} credits`)}{p.total.doing ? L(` · ${p.total.doing} בלימוד עכשיו`, ` · ${p.total.doing} in progress`) : ""}{p.total.missing ? L(` · חסרות ${p.total.missing}`, ` · ${p.total.missing} missing`) : L(" · הכל מכוסה", " · all covered")}</span>
+            {bar(p.total.done, p.total.doing, p.total.need)}
+          </div>
+          {p.kinds.map((k) => (
+            <div key={k.id} className="degree-row">
+              <span className="small" dir="auto">{k.name || "—"} · {k.done}/{k.need}{k.doing ? L(` (+${k.doing} עכשיו)`, ` (+${k.doing} now)`) : ""}{k.missing ? L(` · חסרות ${k.missing}`, ` · ${k.missing} missing`) : " ✓"}</span>
+              {bar(k.done, k.doing, k.need)}
+            </div>
+          ))}
+          {unassigned > 0 && <p className="muted small">{L(`${unassigned} קורסים עוד לא משויכים לסוג. בוחרים את הסוג ליד הנק"ז של כל קורס.`, `${unassigned} courses have no kind yet; pick it next to each course's credits.`)}</p>}
+          {p.failed > 0 && <p className="muted small">{L(`${p.failed} נק"ז בקורסים מתחת לציון עובר לא נספרים.`, `${p.failed} credits in courses below the pass mark are not counted.`)}</p>}
+          {g.remaining === undefined && p.total.missing > 0 && <button type="button" className="ghost small" onClick={() => save({ ...g, remaining: p.total.missing })}>{L(`להשתמש ב-${p.total.missing} כנק"ז שנשארו לחישוב הממוצע`, `Use ${p.total.missing} as the credits to come`)}</button>}
+        </>
+      )}
+    </div>
   );
 }
