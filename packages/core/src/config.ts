@@ -151,6 +151,8 @@ export const KesherConfigSchema = z.object({
   civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
   figma: z.object({ token: z.string().max(200).optional() }).prefault({}),
+  /** The student's Moodle (moodle.ts): its address, which Moodle course goes to which Study course, and files already brought in. */
+  moodle: z.object({ base: z.string().max(200).optional(), map: z.record(z.string(), z.string()).default({}), seen: z.array(z.string()).default([]) }).prefault({}),
   /** Smart auto approvals (F10): in "auto-edit" chats, the chat's model reviews a plain command before you are asked. */
   autoReview: z.boolean().default(false),
   /**

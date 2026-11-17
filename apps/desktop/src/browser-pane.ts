@@ -244,6 +244,7 @@ export class BrowserPane {
       return this.inPage(t, "readPage()");
     }
     if (action === "fab-search") return this.fabSearch(String(a.path ?? ""));
+    if (action === "moodle") return this.moodle(a);
     const t = this.tab(a.tabId);
     if (action === "read") return this.inPage(t, "readPage()");
     if (action === "click") {
@@ -271,6 +272,59 @@ export class BrowserPane {
    * Fab's own search, run inside a fab.com tab (the user's Fab sign-in; Fab has no public API and answers only a real
    * browser). Only its search route; a fab.com tab is opened when there is none.
    */
+  /**
+   * The student's Moodle, read with her own sign-in in a tab on its address (RESEARCH_LOG "Students, part 19"): the
+   * page's own AJAX service (`lib/ajax/service.php` with the session key from her dashboard), a course page, or one
+   * file. Read only: only these GETs and the listed read methods; nothing is posted, submitted or changed.
+   */
+  private async moodle(a: Record<string, unknown>): Promise<unknown> {
+    const base = String(a.base ?? "").replace(/\/+$/, "");
+    if (!/^https:\/\/[\w.-]+(:\d+)?(\/[\w.-]+)*$/.test(base)) throw new Error("A Moodle address like https://moodle.university.ac.il");
+    const op = String(a.op ?? "");
+    const host = new URL(base).host;
+    let t = this.tabs.find((x) => { try { return new URL(x.view.webContents.getURL()).host === host; } catch { return false; } });
+    if (!t || op === "signin") {
+      t = await this.open(`${base}/my/`, undefined, true);
+      await this.settle(t, 20_000);
+      if (op === "signin") return { opened: true };
+    }
+    const run = (code: string) => t!.view.webContents.executeJavaScriptInIsolatedWorld(1002, [{ code }], true) as Promise<unknown>;
+    if (op === "call") {
+      const READ = /^(core_course_get_enrolled_courses_by_timeline_classification|core_calendar_get_action_events_by_timesort|core_webservice_get_site_info)$/;
+      const calls = (Array.isArray(a.calls) ? a.calls : []).slice(0, 5) as Array<{ methodname?: unknown; args?: unknown }>;
+      if (!calls.length || calls.some((c) => !READ.test(String(c.methodname)))) throw new Error("Only Moodle's read methods.");
+      const body = JSON.stringify(calls.map((c, index) => ({ index, methodname: String(c.methodname), args: c.args ?? {} })));
+      return run(`(async () => {
+        const home = await fetch(${JSON.stringify(`${base}/my/`)}, { credentials: "include" });
+        const html = await home.text();
+        const key = /"sesskey":"(\\w+)"/.exec(html)?.[1];
+        if (!key || /login\\/index\\.php/.test(home.url)) return { signedIn: false };
+        const r = await fetch(${JSON.stringify(`${base}/lib/ajax/service.php?sesskey=`)} + key, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: ${JSON.stringify(body)} });
+        return { signedIn: true, answers: await r.json() };
+      })()`);
+    }
+    if (op === "page") {
+      const path = String(a.path ?? "");
+      if (!/^\/course\/view\.php\?id=\d+$/.test(path)) throw new Error("Only a course page.");
+      return run(`fetch(${JSON.stringify(base + path)}, { credentials: "include" }).then(async (r) => ({ status: r.status, url: r.url, html: (await r.text()).slice(0, 3000000) }))`);
+    }
+    if (op === "file") {
+      const url = String(a.url ?? "");
+      if (!url.startsWith(`${base}/`) || !/\/(mod\/resource\/view\.php\?id=\d+|pluginfile\.php\/)/.test(url)) throw new Error("Only a course file.");
+      return run(`fetch(${JSON.stringify(url)}, { credentials: "include" }).then(async (r) => {
+        const type = r.headers.get("content-type") || "";
+        const name = decodeURIComponent((/filename\\*?=(?:UTF-8'')?"?([^";]+)/i.exec(r.headers.get("content-disposition") || "") || [])[1] || r.url.split("?")[0].split("/").pop() || "file");
+        if (type.includes("text/html")) return { status: r.status, html: true, url: r.url };
+        const buf = new Uint8Array(await r.arrayBuffer());
+        if (buf.length > 60 * 1024 * 1024) return { status: 413, name };
+        let bin = "";
+        for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 32768));
+        return { status: r.status, name, type, data: btoa(bin) };
+      })`);
+    }
+    throw new Error("Unknown Moodle step.");
+  }
+
   /** The fab.com tab KesherAI opened for searching, and when it closes. */
   private fabTab?: number;
   private fabTimer?: ReturnType<typeof setTimeout>;
