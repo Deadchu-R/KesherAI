@@ -1088,3 +1088,9 @@ S5 an outside scanner's rules for Electron.
 - **Lens window → main window**: only a `#/c/<id>` hash, checked, set as text.
 - **Performance, fixed**: the lens keeps three pictures at most (a 4K PNG is 10–20 MB); a sheet draws 200 rows at a time (an imported 2,000-row CSV was 100,000 cells at once); the vision answer stops at 6,000 characters.
 - Result: no open issues.
+
+## Scan 121 (2026-11-17): MyAnimeList in Films for you, the lens without a Hebrew OCR pack
+- **MyAnimeList by name**: the user name is checked (`^[\w-]{2,32}$`) before it goes into the address; her Client ID (hex, 20–64) is kept in KesherAI's own stremio.json (mode 0600), sent only as MyAnimeList's header; only `https://api.myanimelist.net/v2/` "next" pages are followed (at most 10); answers are read as data (titles, scores) only.
+- **MyAnimeList export**: parsed in our own code from text (30 MB body limit), titles trimmed; the .gz is opened in the page.
+- **Lens**: a missing OCR language is reported as a fixed word, never as raw command output.
+- Result: no open issues.
