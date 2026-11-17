@@ -51,7 +51,7 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
       risk: "safe",
       spec: {
         name: "generate_image",
-        description: "Generate an image from a text prompt. The image is shown to the user. If no image model is ready yet, one is downloaded and the result says how long to wait.",
+        description: "Generate an image (a picture, photo, illustration) from a text prompt. The image is shown to the user. If no image model is ready yet, one is downloaded and the result says how long to wait. Never for a graph of a function, a chart of numbers or a diagram: write a ```graph, ```chart or ```mermaid block in the answer instead (the app draws it, interactive).",
         inputSchema: {
           type: "object",
           properties: {
