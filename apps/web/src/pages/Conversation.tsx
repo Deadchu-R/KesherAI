@@ -286,7 +286,12 @@ export function ConversationPage({ id }: { id: string }) {
   // How long each answer took and how fast it was written (tokens per second, from the model's own counts): shown
   // small under the answer, as LM Studio and Open WebUI do.
   /** Runs whose receipt was undone ("Undo all"). */
-  const undoneRuns = useMemo(() => new Set(events.flatMap((e) => (e.type === "undo_run" ? [e.run] : []))), [events]);
+  // The files put back, per run (all of them: the whole receipt shows undone).
+  const undoneFiles = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    for (const e of events) if (e.type === "undo_run") for (const f of e.files ?? []) (m.get(e.run) ?? m.set(e.run, new Set()).get(e.run)!).add(f);
+    return m;
+  }, [events]);
   const answerStats = useMemo(() => {
     const out = new Map<number, { seconds: number; tps?: number; tokens: number; wait?: number }>();
     let from = 0;
@@ -913,7 +918,7 @@ export function ConversationPage({ id }: { id: string }) {
               case "undo":
                 return <p key={e.seq} className="muted note">{t("undone", { path: e.path })}</p>;
               case "receipt":
-                return <RunReceipt key={e.seq} convId={id} ev={e} busy={busy} undone={undoneRuns.has(e.run)} />;
+                return <RunReceipt key={e.seq} convId={id} ev={e} busy={busy} undoneFiles={undoneFiles.get(e.run)} />;
               case "undo_run":
                 return <p key={e.seq} className="muted note">{L(`בוטלו השינויים של ריצה: ${e.files.length} קבצים הוחזרו.`, `A run's changes were undone: ${e.files.length} files put back.`)}</p>;
               case "status":

@@ -1005,25 +1005,35 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * @param run - The id on the run's receipt.
    * @throws Error while the agent is busy, or when the run's files are no longer kept.
    */
-  async undoRun(run: string, force = false): Promise<{ files: string[]; conflicts: string[] }> {
+  async undoRun(run: string, force = false, only?: string): Promise<{ files: string[]; conflicts: string[] }> {
     if (this.busy) throw new Error("Stop the agent before undoing.");
     const kept = this.runs.get(run) ?? (await this.undoStore?.load(run).catch(() => undefined));
     if (!kept) throw new Error("This run's earlier files are no longer kept.");
     const show = (p: string) => (this.workspace ? displayPath(this.workspace, p) : p);
+    // One file of the run (its receipt's "undo" on that file, like Cursor's per-file reject), or all of them.
+    const chosen = only === undefined ? kept.files : kept.files.filter((f) => show(f.path) === only);
+    if (only !== undefined && !chosen.length) throw new Error("That file is not part of this run.");
     const conflicts: string[] = [];
-    for (const f of kept.files) if (print(await readFile(f.path, "utf8").catch(() => null)) !== f.after) conflicts.push(show(f.path));
+    for (const f of chosen) if (print(await readFile(f.path, "utf8").catch(() => null)) !== f.after) conflicts.push(show(f.path));
     if (conflicts.length && !force) return { files: [], conflicts };
-    for (const f of kept.files) {
+    for (const f of chosen) {
       if (f.before === null) await rm(f.path, { force: true });
       else await writeFile(f.path, f.before, "utf8");
     }
-    const paths = new Set(kept.files.map((f) => f.path));
+    const paths = new Set(chosen.map((f) => f.path));
     this.changes = this.changes.filter((c) => !paths.has(c.path));
-    this.runs.delete(run);
-    await this.undoStore?.remove(run).catch(() => undefined);
-    const files = kept.files.map((f) => show(f.path));
+    const left = kept.files.filter((f) => !paths.has(f.path));
+    if (left.length) {
+      const rest = { ...kept, files: left };
+      this.runs.set(run, rest);
+      await this.undoStore?.save(run, rest).catch(() => undefined);
+    } else {
+      this.runs.delete(run);
+      await this.undoStore?.remove(run).catch(() => undefined);
+    }
+    const files = chosen.map((f) => show(f.path));
     this.push({ type: "undo_run", run, files });
-    this.messages.push({ role: "user", content: `(The user undid all your changes from one run: ${files.join(", ")}. Those files are as they were before it.)` });
+    this.messages.push({ role: "user", content: only === undefined && !left.length ? `(The user undid all your changes from one run: ${files.join(", ")}. Those files are as they were before it.)` : `(The user undid your changes to ${files.join(", ")} from one run; that file is as it was before it. Your other changes stay.)` });
     return { files, conflicts };
   }
 

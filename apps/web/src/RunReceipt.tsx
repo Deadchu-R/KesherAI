@@ -17,21 +17,24 @@ export interface ReceiptEvent {
  * the files with the lines added and removed, and "Undo all" for the whole run. A file changed since the run is named
  * and changed back only after a yes.
  */
-export function RunReceipt({ convId, ev, busy, undone }: { convId: string; ev: ReceiptEvent; busy: boolean; undone: boolean }) {
+export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; ev: ReceiptEvent; busy: boolean; undoneFiles?: Set<string> }) {
+  const undone = !!undoneFiles && ev.files.every((f) => undoneFiles.has(f.path));
   const [working, setWorking] = useState(false);
   const [open, setOpen] = useState(ev.files.length <= 5);
   const added = ev.files.reduce((n, f) => n + f.added, 0);
   const removed = ev.files.reduce((n, f) => n + f.removed, 0);
-  const undo = async () => {
-    if (!confirm(L(`להחזיר ${ev.files.length} קבצים למה שהיו לפני הריצה הזאת?`, `Put ${ev.files.length} files back as they were before this run?`))) return;
+  // Every file of the run, or one (its own ↶, like Cursor's per-file reject).
+  const undo = async (path?: string) => {
+    const left = ev.files.filter((f) => !undoneFiles?.has(f.path)).length;
+    if (!confirm(path ? L(`להחזיר את ${path} למה שהיה לפני הריצה הזאת?`, `Put ${path} back as it was before this run?`) : L(`להחזיר ${left} קבצים למה שהיו לפני הריצה הזאת?`, `Put ${left} files back as they were before this run?`))) return;
     setWorking(true);
     try {
       const url = `/api/conversations/${convId}/runs/${encodeURIComponent(ev.run)}/undo`;
-      let r = await api<{ files: string[]; conflicts: string[] }>(url, { method: "POST", body: {} });
+      let r = await api<{ files: string[]; conflicts: string[] }>(url, { method: "POST", body: path ? { path } : {} });
       if (r.conflicts.length) {
         const names = r.conflicts.join("\n");
         if (!confirm(L(`הקבצים האלה השתנו אחרי הריצה (על ידך או ריצה אחרת):\n${names}\n\nלהחזיר גם אותם? השינויים המאוחרים בהם יאבדו.`, `These files changed after the run (by you or another run):\n${names}\n\nPut them back too? The later changes in them are lost.`))) return;
-        r = await api<{ files: string[]; conflicts: string[] }>(url, { method: "POST", body: { force: true } });
+        r = await api<{ files: string[]; conflicts: string[] }>(url, { method: "POST", body: path ? { force: true, path } : { force: true } });
       }
       toast(L(`הוחזרו ${r.files.length} קבצים.`, `Put back ${r.files.length} files.`));
     } catch (e) {
@@ -74,6 +77,7 @@ export function RunReceipt({ convId, ev, busy, undone }: { convId: string; ev: R
               <span className="receipt-plus small" dir="ltr">+{f.added}</span>
               <span className="receipt-minus small" dir="ltr">−{f.removed}</span>
               {pages.includes(f) && pages.length > 1 && <button type="button" className="ghost small" onClick={() => void openLive(f.path)}>{L("פתח חי", "Open live")}</button>}
+              {undoneFiles?.has(f.path) ? <span className="muted small">{L("הוחזר", "Put back")}</span> : !undone && ev.files.length > 1 && <button type="button" className="ghost small" disabled={busy || working} title={L("להחזיר רק את הקובץ הזה", "Put back only this file")} onClick={() => void undo(f.path)}>↶</button>}
             </li>
           ))}
         </ul>

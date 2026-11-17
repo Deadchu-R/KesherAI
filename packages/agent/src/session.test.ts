@@ -649,6 +649,24 @@ test("a run that changes files ends with a receipt; Undo all puts them back, ask
   await assert.rejects(session.undoRun(r.run), /no longer kept/);
 });
 
+test("one file of a run can be put back; the rest stays and Undo all takes the others later", async () => {
+  const { session, workspace } = await makeSession(
+    [
+      { calls: [{ name: "write_file", arguments: { path: "a.txt", content: "A\n" } }] },
+      { calls: [{ name: "write_file", arguments: { path: "b.txt", content: "B\n" } }] },
+      { text: "done" },
+    ],
+    "auto-edit",
+  );
+  session.send("make two");
+  const r = (await waitFor(session, (e) => e.type === "receipt")) as Extract<AgentEvent, { type: "receipt" }>;
+  assert.deepEqual((await session.undoRun(r.run, false, "a.txt")).files, ["a.txt"]);
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8").catch(() => "gone"), "gone");
+  assert.equal(await readFile(join(workspace, "b.txt"), "utf8"), "B\n");
+  await assert.rejects(session.undoRun(r.run, false, "a.txt"), /not part of this run/);
+  assert.deepEqual((await session.undoRun(r.run)).files, ["b.txt"]);
+});
+
 test("tool search: a tool the message names or points at is loaded before the model answers", async () => {
   const { AgentSession } = await import("./index.js");
   const tool = (name: string) => ({ risk: "safe" as const, spec: { name, description: `${name} does it.`, inputSchema: { type: "object" } }, async run() { return { output: "" }; } });
