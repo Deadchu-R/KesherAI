@@ -7,8 +7,8 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 ## Game engines and creative tools
 - ✅ Godot support (#/godot): the KesherAI Bridge addon (GDScript, works for C# projects), the chat sees and changes scenes, nodes and scripts as undo steps, runs the game and reads its log; checked in a real Godot 4.7.2 editor
 - ✅ UEFN / Verse: the chat lists UEFN projects and reads and writes .verse devices in them (Blueprints read through the bridge can be written as Verse); 👤 building is in UEFN itself (Verse → Build Verse Code), not tried on the PC (no UEFN project there yet)
-- ⬜ Minecraft and Roblox modding
-- ⬜ Fab search and install from the chat: no public Fab API; plan in RESEARCH_LOG (open the search, Unreal's Fab plugin for owned assets; never buys)
+- ✅ Minecraft and Roblox modding (mod_new / mod_build: Fabric, NeoForge, Bedrock, Rojo; checked on the PC 2026-11-17)
+- ⬜ Fab search and install from the chat: no public Fab API. Roee, 2026-11-17: open fab.com in KesherAI's own browser pane behind the scenes (his signed-in session) and mirror it to him; KesherAI searches, reads and compares, he clicks "Add to library"; never buys
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
 - ✅ KesherAI as a model provider for Unreal and Unity AI: a guide in Settings → For developers → API (Unity AI Gateway with Claude Code or Codex pointed at KesherAI; Unreal plugins with an OpenAI-compatible provider); KesherAI's Anthropic API answered a Claude Code style tool call on the PC. 👤 The check inside Unity AI itself needs a Unity AI Gateway seat
 - ✅ Depth and normals turned into styled frames (Nodes → ready flows: "A styled frame from the engine's depth and normals", ControlNet 1.1 depth + normals on SD 1.5; how to export the passes from Unreal and Unity). 🔧 Not yet run on the PC (the card was busy tonight)
@@ -68,6 +68,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 👤 The extension in the Edge and Firefox stores
 - 👤 OneDrive app ID
 - 👤 Figma token
+- ⬜ The heavy folder (Settings → Computer): built in 0.6.318; engines and the worker's data still to move to E: on the PC (Unreal moved 2026-11-17 by hand, a junction in its place)
 - 👤 Decide on the Chrome Web Store $5 fee
 
 ## Roee's choices for the night of 2026-11-16 (until 07:00)
