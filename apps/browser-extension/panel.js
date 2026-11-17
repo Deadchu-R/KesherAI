@@ -10,21 +10,31 @@ const he = (navigator.language || "").startsWith("he");
 if (he) {
   document.getElementById("ask").textContent = "📄 לשאול על הדף הזה";
   document.getElementById("home").textContent = "💬 צ'אט חדש";
+  document.getElementById("clip").textContent = "🎓 לשמור לקורס";
   document.documentElement.dir = "rtl";
 }
 document.getElementById("home").onclick = () => (frame.src = `${origin}/#/`);
-document.getElementById("ask").onclick = async () => {
-  // Firefox: the page's site must be allowed (asked from this click).
+// The page in front: its title, address, text and anything selected on it (sites must be allowed in Firefox).
+async function readTab() {
   try {
     if (chrome.permissions?.request) await chrome.permissions.request({ origins: ["<all_urls>"] });
   } catch {
     // already allowed
   }
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab?.id || !/^https?:/.test(tab.url || "")) return;
+  if (!tab?.id || !/^https?:/.test(tab.url || "")) return undefined;
   const [res] = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || "").slice(0, 20000) }),
+    func: () => ({ title: document.title, url: location.href, text: (document.body?.innerText || "").slice(0, 20000), selection: String(window.getSelection?.() || "").slice(0, 20000) }),
   });
-  if (res?.result) frame.contentWindow.postMessage({ type: "kesher-page", ...res.result }, origin);
+  return res?.result;
+}
+document.getElementById("ask").onclick = async () => {
+  const page = await readTab();
+  if (page) frame.contentWindow.postMessage({ type: "kesher-page", ...page }, origin);
+};
+// "Save to course": KesherAI shows where to save it (design SaveToCourse).
+document.getElementById("clip").onclick = async () => {
+  const page = await readTab();
+  if (page) frame.contentWindow.postMessage({ type: "kesher-clip", ...page }, origin);
 };

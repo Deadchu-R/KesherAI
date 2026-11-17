@@ -342,6 +342,11 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
 
+  /** A web page or her selection from it, from KesherAI's browser or the extension (design SaveToCourse). */
+  app.post<C & { Body: { title?: string; url?: string; text?: string; lectureId?: string } }>("/api/study/courses/:id/clip", { bodyLimit: 1024 * 1024 }, async (req) => {
+    const b = req.body ?? {};
+    return st.clipToCourse(req.params.id, { title: String(b.title ?? ""), url: String(b.url ?? ""), text: String(b.text ?? ""), ...(typeof b.lectureId === "string" ? { lectureId: b.lectureId } : {}) });
+  });
   app.post<C & { Body: { title?: string; text?: string; date?: string } }>("/api/study/courses/:id/lectures", async (req) => st.addLecture(req.params.id, { title: req.body?.title, text: String(req.body?.text ?? ""), date: req.body?.date }));
   app.get<L>("/api/study/courses/:id/lectures/:lid", async (req, reply) => {
     const l = (await st.get(req.params.id)).lectures.find((x) => x.id === req.params.lid);

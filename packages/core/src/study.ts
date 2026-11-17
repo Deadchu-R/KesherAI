@@ -35,6 +35,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
     ...(Array.isArray(l.video) ? { video: parseVideoSlides({ slides: l.video }) } : {}),
     ...(typeof l.youtube === "string" && /^[\w-]{11}$/.test(l.youtube) ? { youtube: l.youtube } : {}),
+    ...(typeof l.web === "string" && /^https?:\/\//.test(l.web) ? { web: l.web.slice(0, 2000) } : {}),
     ...(l.videoFile && typeof l.videoFile === "object" ? { videoFile: { mime: str(l.videoFile.mime, 40) || "video/mp4", bytes: Number(l.videoFile.bytes) || 0, ...(l.videoFile.from ? { from: str(l.videoFile.from, 200) } : {}) } } : {}),
     ...(Array.isArray(l.chapters) ? { chapters: parseChapters({ chapters: l.chapters }, Number(l.chapters.at(-1)?.end) || 0) } : {}),
     ...(l.notes ? { notes: str(l.notes, 50_000), notesT: Number(l.notesT) || Date.now() } : {}),
@@ -455,6 +456,31 @@ export class Study {
     }
     await this.save(d);
     return lecture;
+  }
+
+  /**
+   * Saves a web page (or the part she selected) to a course (design SaveToCourse): as a new lecture that keeps the
+   * page's address, or added to the end of a lecture she picked, under a line naming the page.
+   */
+  async clipToCourse(id: string, p: { title?: string; url?: string; text: string; lectureId?: string }): Promise<StudyLecture> {
+    const url = /^https?:\/\//.test(p.url ?? "") ? String(p.url).slice(0, 2000) : undefined;
+    const text = String(p.text ?? "").trim().slice(0, 200_000);
+    if (!text) throw Object.assign(new Error("Nothing to save: the page has no text."), { statusCode: 400 });
+    if (p.lectureId) {
+      const d = await this.get(id);
+      const l = d.lectures.find((x) => x.id === p.lectureId);
+      if (!l) throw Object.assign(new Error("No such lecture."), { statusCode: 404 });
+      l.text = `${l.text.trimEnd()}\n\n--- ${(p.title ?? "").trim().slice(0, 200) || url || "Web"}${url && p.title ? ` (${url})` : ""} ---\n${text}`.slice(0, 400_000);
+      await this.save(d);
+      return l;
+    }
+    const lecture = await this.addLecture(id, { title: p.title, text });
+    if (!url) return lecture;
+    const d = await this.get(id);
+    const l = d.lectures.find((x) => x.id === lecture.id)!;
+    l.web = url;
+    await this.save(d);
+    return l;
   }
 
   /** Changes a lecture's title, date or text. */

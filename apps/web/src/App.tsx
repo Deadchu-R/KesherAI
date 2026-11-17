@@ -24,6 +24,7 @@ import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
 import { Suspense, lazy, useEffect, useState } from "react";
+import { SaveToCourse, type WebClip } from "./SaveToCourse";
 import { api, isRemote } from "./api";
 import { getLocale, t } from "./i18n";
 import { Sidebar } from "./Sidebar";
@@ -411,13 +412,20 @@ function RemoteBanner() {
 /**
  * In the browser extension's side panel: "Ask about this page" sends the page here (only from the extension that
  * frames this app: the parent window, a chrome-extension:/moz-extension: page). A new chat gets the page as text
- * that is marked as the page's content, never instructions, and is asked to summarise it.
+ * that is marked as the page's content, never instructions, and is asked to summarise it. "Save to course" opens
+ * the save dialog with the page (or her selection) instead.
  */
 function ExtensionPage() {
+  // "🎓 Save to course" in the side panel (design SaveToCourse) opens the dialog here.
+  const [clip, setClip] = useState<WebClip | null>(null);
   useEffect(() => {
     const on = (e: MessageEvent) => {
       if (e.source !== window.parent || window.parent === window || !/^(chrome|moz)-extension:\/\//.test(e.origin)) return;
-      const d = e.data as { type?: string; title?: unknown; url?: unknown; text?: unknown };
+      const d = e.data as { type?: string; title?: unknown; url?: unknown; text?: unknown; selection?: unknown };
+      if (d?.type === "kesher-clip" && typeof d.text === "string") {
+        setClip({ title: String(d.title ?? "").slice(0, 200), url: String(d.url ?? "").slice(0, 2000), text: d.text.slice(0, 20000), ...(typeof d.selection === "string" && d.selection.trim() ? { selection: d.selection.slice(0, 20000) } : {}) });
+        return;
+      }
       if (d?.type !== "kesher-page" || typeof d.text !== "string") return;
       const he = getLocale() === "he";
       const title = String(d.title ?? "").slice(0, 200);
@@ -436,7 +444,7 @@ function ExtensionPage() {
     addEventListener("message", on);
     return () => removeEventListener("message", on);
   }, []);
-  return null;
+  return clip ? <SaveToCourse clip={clip} onClose={() => setClip(null)} /> : null;
 }
 
 /**

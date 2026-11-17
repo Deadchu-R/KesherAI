@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, isRemote, withToken } from "./api";
 import { desktop } from "./library";
 import { getLocale, he$ } from "./i18n";
+import { SaveToCourse, type WebClip } from "./SaveToCourse";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -31,6 +32,18 @@ export function BrowserPanel() {
   const native = isRemote() ? undefined : desktop()?.browser;
   const [st, setSt] = useState<PaneState>({ tabs: [], notice: "" });
   const [error, setError] = useState("");
+  const [clip, setClip] = useState<WebClip | null>(null);
+  // "🎓 To course": the page in front (or what is selected on it) into a course (design SaveToCourse).
+  const toCourse = async () => {
+    setError("");
+    try {
+      const p = await api<WebClip>("/api/browser/pane/page");
+      if (!(p.selection || p.text).trim()) return setError(L("בדף הזה אין טקסט לשמור.", "This page has no text to save."));
+      setClip(p);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const [addr, setAddr] = useState("");
   const [editing, setEditing] = useState(false);
   const area = useRef<HTMLDivElement>(null);
@@ -161,6 +174,7 @@ export function BrowserPanel() {
         <button type="button" className="icon-btn" disabled={!active?.canForward} aria-label={L("קדימה", "Forward")} onClick={() => void cmd("nav", "forward")}>›</button>
         <button type="button" className="icon-btn" disabled={!active} aria-label={active?.loading ? L("עצור", "Stop") : L("רענן", "Reload")} onClick={() => void cmd("nav", active?.loading ? "stop" : "reload")}>{active?.loading ? "✕" : "↻"}</button>
         <input dir="ltr" value={addr} onFocus={() => setEditing(true)} onBlur={() => setEditing(false)} onChange={(e) => setAddr(e.target.value)} placeholder={L("כתובת או חיפוש", "Address or search")} aria-label={L("כתובת", "Address")} />
+        <button type="button" className="browser-to-course" disabled={!active} title={L("שמירת הדף, או מה שסימנת בו, לקורס", "Save the page, or what you selected on it, to a course")} onClick={() => void toCourse()}>🎓 {L("לקורס", "To course")}</button>
       </form>
       {st.notice && (
         <p className="muted small browser-notice">
@@ -168,6 +182,7 @@ export function BrowserPanel() {
         </p>
       )}
       {error && <p className="error small">{error}</p>}
+      {clip && <SaveToCourse clip={clip} onClose={() => setClip(null)} />}
       {!st.tabs.length ? (
         <div className="browser-empty muted small">
           <p>{L("הדפדפן של KesherAI: המודל יכול לפתוח כאן דפים, לקרוא אותם, ללחוץ ולהקליד — ואתם רואים כל צעד.", "KesherAI's browser: the model can open pages here, read them, click and type, and you see every step.")}</p>

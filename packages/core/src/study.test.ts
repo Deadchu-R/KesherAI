@@ -185,3 +185,23 @@ test("kept recordings: saved, checked, and deleted when their time has come", as
   assert.equal(await st.cleanRecordings(Date.now() + 31 * 24 * 3600_000), 1);
   assert.equal(await st.recordingFile(c.id, l.id), undefined);
 });
+
+test("a web page saved to a course: a new lecture with its address, or added to a lecture", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "study-"));
+  try {
+    const st = new Study(dir, fake);
+    const c = await st.addCourse("פרמקולוגיה");
+    const l = await st.clipToCourse(c.id, { title: "Beta blocker", url: "https://en.wikipedia.org/wiki/Beta_blocker", text: "Beta blockers slow the heart." });
+    assert.equal(l.web, "https://en.wikipedia.org/wiki/Beta_blocker");
+    assert.equal(l.title, "Beta blocker");
+    const again = await st.clipToCourse(c.id, { title: "More", url: "javascript:alert(1)", text: "Side effects: fatigue.", lectureId: l.id });
+    assert.equal(again.id, l.id);
+    assert.match(again.text, /slow the heart\.\n\n--- More ---\nSide effects/);
+    const d = await new Study(dir, fake).get(c.id);
+    assert.equal(d.lectures.length, 1);
+    assert.equal(d.lectures[0]!.web, "https://en.wikipedia.org/wiki/Beta_blocker");
+    await assert.rejects(st.clipToCourse(c.id, { text: "  " }), /no text/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

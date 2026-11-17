@@ -94,6 +94,13 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
       return reply.code(409).send({ error: (err as Error).message });
     }
   });
+  /** The page in front in KesherAI's browser (its address, title, text and any selection), to save it to a course. */
+  app.get("/api/browser/pane/page", (_req, reply) =>
+    pane(reply, async () => {
+      const r = await s.browser.paneCall<{ url?: string; title?: string; text?: string; selection?: string }>("read");
+      return { url: String(r?.url ?? ""), title: String(r?.title ?? ""), text: String(r?.text ?? ""), ...(r?.selection ? { selection: String(r.selection) } : {}) };
+    }),
+  );
   app.post<{ Body: { cmd?: string; x?: number; y?: number; url?: string; what?: string; id?: number } }>("/api/browser/pane", (req, reply) => {
     const b = req.body ?? {};
     const cmd = String(b.cmd ?? "");

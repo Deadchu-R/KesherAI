@@ -982,6 +982,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
   return (
     <article className="study-lecture card">
       <h2 dir="auto">{l.title}</h2>
+      {l.web && <p className="muted small">🔗 {L("נשמר מ:", "Saved from:")} <a href={l.web} target="_blank" rel="noopener noreferrer" dir="ltr">{l.web.replace(/^https?:\/\//, "").slice(0, 80)}</a></p>}
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} onRemoved={() => setL({ ...l, recording: undefined })} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
         {(["watch", "summary", "terms", "diagram", "video", "teach", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (

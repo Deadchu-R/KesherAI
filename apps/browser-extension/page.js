@@ -19,7 +19,8 @@ function readPage() {
     const kind = tag === "a" ? "link" : tag === "input" ? `field${type ? ` (${type})` : ""}` : tag === "textarea" ? "text box" : tag === "select" ? "list" : el.getAttribute("role") || tag;
     lines.push(`${n}: ${kind} "${type === "password" ? "password" : label}"${tag === "a" ? ` → ${el.href.slice(0, 120)}` : ""}`);
   }
-  return { url: location.href, title: document.title, text: (document.body?.innerText || "").replace(/\n{3,}/g, "\n\n").slice(0, 20000), elements: lines };
+  const selection = String(window.getSelection?.() || "").trim().slice(0, 20000);
+  return { url: location.href, title: document.title, text: (document.body?.innerText || "").replace(/\n{3,}/g, "\n\n").slice(0, 20000), elements: lines, ...(selection ? { selection } : {}) };
 }
 
 function clickRef(ref) {

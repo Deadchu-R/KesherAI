@@ -3094,3 +3094,11 @@ html.handheld .palette-list button { min-height: 44px; }
 .fgraph-params input { flex: 1; min-width: 80px; }
 .fgraph-params output { min-width: 3em; text-align: end; font-variant-numeric: tabular-nums; }
 .fgraph figcaption { text-align: start; }
+/* Save to course (design SaveToCourse). */
+.save-course { width: min(440px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; }
+.save-course h2 { margin: 0; }
+.save-course-quote { margin: 0; padding: 8px 10px; border-radius: 9px; background: var(--panel-2, #1d1d22); font-size: 13px; line-height: 1.6; max-height: 110px; overflow: auto; }
+.save-course-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.save-course-opt { padding: 4px 11px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.save-course-opt.on { border-color: var(--accent); color: var(--accent); }
+.browser-to-course { white-space: nowrap; padding: 4px 10px; border-radius: 999px; font-size: 13px; flex: none; }

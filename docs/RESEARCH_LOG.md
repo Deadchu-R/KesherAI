@@ -1905,3 +1905,8 @@ Already covered (checked): notes and summaries, flashcards with spaced repetitio
 - Mastery: Quizlet Learn and SaveMyGPA show a level per topic; Anki shows retention only. Built: a 0–100 score per lecture from her card reviews (good/easy count, hard half, again none) and her quiz answers, recent ones weigh more (half after 30 days); compared with a week ago, a drop of 10+ points shows a nudge with a short quiz on that lecture. "On weak topics" quizzes now use it.
 - Graphs: Desmos and GeoGebra are the reference; ChatGPT added interactive math visuals with sliders in March 2026. Built: a ```graph block in any answer (chat and the course tutor): up to 8 functions, x/y ranges, a slider per parameter, drag, wheel and pinch zoom, tap to read a value. Expressions are parsed into closures, never run as code.
 - Stopped at: built; next is "save from the browser to a course".
+
+## Students, part 23: save from the browser to a course (2026-11-17)
+- Competitors: SaveMyGPA and NoteGPT extensions send a page to a notebook; NotebookLM adds a web page as a source by address; Notion Web Clipper saves to a chosen page.
+- Built: "🎓 To course" in KesherAI's browser bar and "Save to course" in the extension's side panel: the page, or only what is selected on it, as a new lecture that keeps the page's address (shown on the lecture), or added to the end of a lecture she picks. The last course is remembered. Extension 0.2.2.
+- Stopped at: built; next is the study game (match terms against the clock).

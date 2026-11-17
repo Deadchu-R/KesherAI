@@ -50,6 +50,8 @@ export interface StudyLecture {
   recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** The web page it was saved from (design SaveToCourse). */
+  web?: string;
   /** The YouTube video the lecture came from (its id): the text's minute marks open it at that minute. */
   youtube?: string;
   /** A video of the lecture kept on this computer (an MP4 she added, or one brought from Panopto/Kaltura). */
