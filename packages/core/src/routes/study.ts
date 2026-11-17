@@ -458,6 +458,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
         .map((m) => ({ ...m, title: d.lectures.find((l) => l.id === m.lectureId)?.title ?? "" }))
         .filter((m) => m.title),
       reviews: d.reviews.length,
+      // Lectures with an answered quiz question (the path's ❓ step, design CoursePath).
+      quizzed: [...new Set(d.quizzes.filter((z) => z.answers || z.marks).flatMap((z) => z.questions.map((q) => q.lectureId).filter((x): x is string => !!x)))],
     };
   });
 }

@@ -3225,3 +3225,17 @@ html.handheld .palette-list button { min-height: 44px; }
 .mistakes-options button.wrong { border-color: #ff7a7a; background: #ff7a7a22; }
 .mistakes-done { display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 20px; }
 @media (prefers-reduced-motion: reduce) { .mistakes-bar span { transition: none; } }
+/* The course as a path (design CoursePath). */
+.course-path { margin-bottom: 12px; }
+.course-path > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 6px 0; }
+.course-path ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.path-node { display: flex; align-items: center; gap: 12px; margin-inline-start: var(--off, 0); }
+@media (max-width: 480px) { .path-node { margin-inline-start: calc(var(--off, 0) / 3); } }
+.path-dot { flex: none; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; text-decoration: none; color: #121213; background: var(--border-strong); box-shadow: 0 5px 0 color-mix(in srgb, var(--border-strong) 60%, black); }
+.path-node.done .path-dot { background: #7fd8a8; box-shadow: 0 5px 0 #4f9c75; }
+.path-node.now .path-dot { background: var(--accent); box-shadow: 0 5px 0 color-mix(in srgb, var(--accent) 60%, black); outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: 4px; }
+.path-node.next .path-dot { color: var(--muted); }
+.path-steps { display: flex; gap: 6px; font-size: 15px; }
+.path-steps span { opacity: 0.3; }
+.path-steps span.ok { opacity: 1; }
+.path-node .button { margin-top: 6px; display: inline-block; }

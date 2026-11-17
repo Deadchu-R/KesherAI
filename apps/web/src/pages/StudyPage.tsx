@@ -25,7 +25,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
 interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null }
-interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; mastery?: Array<{ lectureId: string; title: string; mastery: number; n: number; change: number }>; reviews: number }
+interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; mastery?: Array<{ lectureId: string; title: string; mastery: number; n: number; change: number }>; reviews: number; quizzed?: string[] }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
   text: ["טקסט", "Text"],
@@ -907,6 +907,50 @@ function ExamPlanCard({ id, plan }: { id: string; plan: ExamPlan }) {
   );
 }
 
+/**
+ * The course as a path (design CoursePath, like Duolingo's): each lecture a step with 📝 summary, 🃏 cards, ❓ quiz and
+ * 👑 mastery 80+; the first one not crowned is "now", with one button to its next step.
+ */
+function CoursePath({ courseId, lectures }: { courseId: string; lectures: LectureRow[] }) {
+  const [p, setP] = useState<Progress | null>(null);
+  useEffect(() => void api<Progress>(`/api/study/courses/${courseId}/progress`).then(setP, () => undefined), [courseId]);
+  if (lectures.length < 2 || !p) return null;
+  const mastery = new Map((p.mastery ?? []).map((m) => [m.lectureId, m.mastery]));
+  const quizzed = new Set(p.quizzed ?? []);
+  const steps = (l: LectureRow) => ({ summary: l.summarized, cards: l.cards > 0, quiz: quizzed.has(l.id), crown: (mastery.get(l.id) ?? 0) >= 80 });
+  const ordered = [...lectures].sort((a, b) => a.date.localeCompare(b.date));
+  const now = ordered.find((l) => !steps(l).crown);
+  const next = (l: LectureRow): [string, string] => {
+    const s = steps(l);
+    if (!s.summary) return [L("לסכם", "Summarize"), `#/study/${courseId}/l/${l.id}`];
+    if (!s.cards) return [L("ליצור כרטיסיות", "Make cards"), `#/study/${courseId}/l/${l.id}`];
+    return [L("בוחן קצר", "A short quiz"), `#/study/${courseId}/quiz?l=${l.id}`];
+  };
+  return (
+    <details className="course-path" open>
+      <summary><b>🗺 {L("המסלול של הקורס", "The course path")}</b> <span className="muted small">📝 {L("סיכום", "summary")} · 🃏 {L("כרטיסיות", "cards")} · ❓ {L("בוחן", "quiz")} · 👑 {L("שליטה 80+", "mastery 80+")}</span></summary>
+      <ol>
+        {ordered.map((l, i) => {
+          const s = steps(l);
+          const state = s.crown ? "done" : l === now ? "now" : "next";
+          return (
+            <li key={l.id} className={`path-node ${state}`} style={{ ["--off" as string]: `${[0, 40, 70, 40][i % 4]}px` }}>
+              <a className="path-dot" href={`#/study/${courseId}/l/${l.id}`} aria-label={l.title}>{s.crown ? "👑" : i + 1}</a>
+              <div>
+                <b dir="auto">{l.title}</b>
+                <div className="path-steps" aria-label={L("שלבים", "Steps")}>
+                  {([["📝", s.summary, L("סיכום", "Summary")], ["🃏", s.cards, L("כרטיסיות", "Cards")], ["❓", s.quiz, L("בוחן", "Quiz")], ["👑", s.crown, L("שליטה", "Mastery")]] as const).map(([e, ok, name]) => <span key={e} className={ok ? "ok" : ""} title={`${name}: ${ok ? "✓" : "—"}`}>{e}</span>)}
+                </div>
+                {state === "now" && <a className="button primary small" href={next(l)[1]}>{L("להמשיך", "Continue")}: {next(l)[0]} ›</a>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
+
 function Lectures({ courseId, info, onChange }: { courseId: string; info: CourseInfo; onChange: () => void }) {
   const [adding, setAdding] = useState(!info.lectures.length);
   const [recording, setRecording] = useState(false);
@@ -969,6 +1013,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
   };
   return (
     <div className="study-lectures">
+      {!adding && !recording && <CoursePath courseId={courseId} lectures={info.lectures} />}
       {recording ? (
         <StudyRecorder onCancel={() => setRecording(false)} onDone={async (t, audio) => {
           setRecording(false);
