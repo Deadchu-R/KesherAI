@@ -1,5 +1,5 @@
 import { copyFile, lstat, mkdir, readdir, readlink, rename, rm, stat, symlink, utimes } from "node:fs/promises";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /**
  * A folder for heavy things (Roee, 2026-11-17: the Windows drive filled up with engines; "from now on heavy things are
@@ -66,11 +66,12 @@ export async function syncFolder(from: string, to: string, onFile?: (size: numbe
     if (signal?.aborted) throw new Error("Stopped.");
     const target = join(to, relative(from, f.path));
     if (f.link) {
-      // A link inside (Python's bin/python on Linux and macOS): made again as the same link.
+      // A link inside (Python's bin/python on Linux and macOS, uv's junction to its Python on Windows): made again,
+      // pointing at the same place inside the new folder when it pointed inside the old one.
       if (!(await isLink(target))) {
         await mkdir(dirname(target), { recursive: true });
         await rm(target, { recursive: true, force: true });
-        await symlink(f.link, target);
+        await relink(f.link, f.path, from, to, target);
         copied++;
       }
       onFile?.(0);
@@ -87,6 +88,20 @@ export async function syncFolder(from: string, to: string, onFile?: (size: numbe
     onFile?.(f.size);
   }
   return copied;
+}
+
+/**
+ * Makes a link inside a moved folder again. An absolute target inside the old folder points into the new one; on Windows
+ * a folder link is a junction (no admin needed) and a file link is copied as a file.
+ */
+async function relink(link: string, oldPath: string, from: string, to: string, target: string): Promise<void> {
+  const abs = isAbsolute(link) ? resolve(link) : resolve(dirname(oldPath), link);
+  const inside = (abs + sep).startsWith(resolve(from) + sep);
+  const where = inside ? join(to, relative(from, abs)) : abs;
+  if (process.platform !== "win32") return symlink(isAbsolute(link) ? where : link, target);
+  const st = await stat(abs).catch(() => undefined);
+  if (st?.isDirectory()) return symlink(where, target, "junction");
+  if (st?.isFile()) return copyFile(abs, target);
 }
 
 /** @returns Whether `p` is a link (a junction on Windows) and not a real folder. */
@@ -146,15 +161,21 @@ export class HeavyFolder {
     private readonly savePending: (p: HeavyPending[]) => Promise<void>,
   ) {}
 
-  /** @returns Each heavy folder: its size and whether it already lives elsewhere. */
-  async folders(): Promise<Array<{ name: HeavyName; bytes: number; linked: boolean; to?: string }>> {
-    const out: Array<{ name: HeavyName; bytes: number; linked: boolean; to?: string }> = [];
+  private sizes?: { at: number; list: Array<{ name: HeavyName; bytes: number; linked: boolean }> };
+
+  /** @returns Each heavy folder: its size and whether it already lives elsewhere (sizes kept for 10 minutes, and while copying). */
+  async folders(): Promise<Array<{ name: HeavyName; bytes: number; linked: boolean }>> {
+    if (this.sizes && (this.st.running || Date.now() - this.sizes.at < 10 * 60_000)) {
+      return Promise.all(this.sizes.list.map(async (f) => ({ ...f, linked: await isLink(join(this.root, f.name)) })));
+    }
+    const out: Array<{ name: HeavyName; bytes: number; linked: boolean }> = [];
     for (const name of HEAVY_FOLDERS) {
       const p = join(this.root, name);
       const linked = await isLink(p);
       const bytes = (await filesUnder(p)).reduce((n, f) => n + f.size, 0);
       out.push({ name, bytes, linked });
     }
+    this.sizes = { at: Date.now(), list: out };
     return out;
   }
 

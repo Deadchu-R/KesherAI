@@ -11,6 +11,10 @@ test("heavy folders: copied now, a link takes their place at the next start, and
   await mkdir(join(root, "engines", "voice", "bin"), { recursive: true });
   await writeFile(join(root, "engines", "voice", "model.bin"), "x".repeat(5000));
   await symlink("model.bin", join(root, "engines", "voice", "bin", "python"));
+  // An absolute link inside the folder (like uv's link to its Python) points into the new place after the move.
+  await mkdir(join(root, "engines", "py", "cpython-3.11.18"), { recursive: true });
+  await writeFile(join(root, "engines", "py", "cpython-3.11.18", "python"), "py");
+  await symlink(join(root, "engines", "py", "cpython-3.11.18"), join(root, "engines", "py", "cpython-3.11"));
   let pending: HeavyPending[] = [];
   const h = new HeavyFolder(root, async (p) => { pending = p; });
   h.start(other, ["engines", "unreal"]);
@@ -25,6 +29,7 @@ test("heavy folders: copied now, a link takes their place at the next start, and
   assert.equal(await readFile(join(root, "engines", "voice", "new.txt"), "utf8"), "late");
   assert.equal((await readFile(join(other, "engines", "voice", "model.bin"))).length, 5000);
   assert.equal(await readlink(join(other, "engines", "voice", "bin", "python")), "model.bin");
+  assert.equal(await readlink(join(other, "engines", "py", "cpython-3.11")), join(other, "engines", "py", "cpython-3.11.18"));
   // The old folder is removed once the link works.
   await new Promise((r) => setTimeout(r, 200));
   assert.deepEqual((await readdir(root)).filter((n) => n.startsWith("engines.moved")), []);
