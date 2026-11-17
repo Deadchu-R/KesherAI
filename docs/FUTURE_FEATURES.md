@@ -8,7 +8,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Godot support (#/godot): the KesherAI Bridge addon (GDScript, works for C# projects), the chat sees and changes scenes, nodes and scripts as undo steps, runs the game and reads its log; checked in a real Godot 4.7.2 editor
 - ✅ UEFN / Verse: the chat lists UEFN projects and reads and writes .verse devices in them (Blueprints read through the bridge can be written as Verse); 👤 building is in UEFN itself (Verse → Build Verse Code), not tried on the PC (no UEFN project there yet)
 - ✅ Minecraft and Roblox modding (mod_new / mod_build: Fabric, NeoForge, Bedrock, Rojo; checked on the PC 2026-11-17)
-- ⬜ Fab search and install from the chat: no public Fab API. Roee, 2026-11-17: open fab.com in KesherAI's own browser pane behind the scenes (his signed-in session) and mirror it to him; KesherAI searches, reads and compares, he clicks "Add to library"; never buys
+- ✅ Fab search from the chat (0.6.32x, tested on the PC 2026-11-17: fab_search through KesherAI's own pane, its tab closes 2 min after; never buys). Was: no public Fab API. Roee, 2026-11-17: open fab.com in KesherAI's own browser pane behind the scenes (his signed-in session) and mirror it to him; KesherAI searches, reads and compares, he clicks "Add to library"; never buys
 - ✅ The installed Unreal plugins listed, built for another engine version (unreal-plugins.ts)
 - ✅ KesherAI as a model provider for Unreal and Unity AI: a guide in Settings → For developers → API (Unity AI Gateway with Claude Code or Codex pointed at KesherAI; Unreal plugins with an OpenAI-compatible provider); KesherAI's Anthropic API answered a Claude Code style tool call on the PC. 👤 The check inside Unity AI itself needs a Unity AI Gateway seat
 - ✅ Depth and normals turned into styled frames (Nodes → ready flows: "A styled frame from the engine's depth and normals", ControlNet 1.1 depth + normals on SD 1.5; how to export the passes from Unreal and Unity). 🔧 Not yet run on the PC (the card was busy tonight)
@@ -44,12 +44,12 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ The editor is Monaco (VS Code's own editor)
 - ✅ Library store for languages and engines
 - ✅ Gemini through the user's own subscription (sign-in)
-- ✅ WSL targets: a project opened at \\wsl.localhost\<distro>\… runs its commands in that Linux distribution (wsl.exe -d … --cd …); ⬜ SSH targets
+- ✅ WSL targets: a project opened at \\wsl.localhost\<distro>\… runs its commands in that Linux distribution (wsl.exe -d … --cd …); ✅ SSH targets (SSHFS-Win + Windows ssh; the New project dialog; checked on the PC 2026-11-17, no server to connect to yet)
 - 👤 DeepSeek V4-Flash test (board t59; downloading on the PC)
 
 ## Models and hardware
 - ✅ Training picture LoRAs from the interface
-- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix. ⬜ Waiting for Roee: the big engines (voice ~8 GB, ComfyUI) sit on C:, which filled up tonight (0.6.317 could not download); delete their uv caches or move the engines to the models drive (E:)
+- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix; the engines moved to E:
 - ✅ Game helper over a running game
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
 - ⬜ A check on a real controller after each interface change (C6)
@@ -72,7 +72,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 👤 The extension in the Edge and Firefox stores
 - 👤 OneDrive app ID
 - 👤 Figma token
-- ⬜ The heavy folder (Settings → Computer): built in 0.6.318; engines and the worker's data still to move to E: on the PC (Unreal moved 2026-11-17 by hand, a junction in its place)
+- ✅ The heavy folder: engines, worker, unreal and outputs on E: (2026-11-17)
 - 👤 Decide on the Chrome Web Store $5 fee
 
 ## Roee's choices for the night of 2026-11-16 (until 07:00)
@@ -92,3 +92,22 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - Recordings move to the computer on sync (kept on the phone until then), playable from both.
 - If something breaks tonight: fix it first without waiting; go back to the previous version only if there is no other way.
 - Self-work: new rounds of small tasks all night, while watching the computer's health (temperatures, memory).
+
+## The chat at Claude/Gemini level (Roee, 2026-11-17; designs in the design doc, RESEARCH_LOG)
+- ⬜ 1. The answer shows what the model made (images, video, music, file cards) and math, Mermaid, quotes, inline images, copy/run on code, link cards
+- ⬜ 2. "+" like Gemini/ChatGPT: one "Files" that reads any type (Whisper for audio and video, a few video frames, code files, OCR)
+- ⬜ 3. The model team: a small translation model (TranslateGemma 4B) for the answer's prose, the other-alphabets bias, reply-language settings (chat / code); a coding brain that fits the card (Qwen 3.8 27B or Gemma 4 31B, test both) 👤 downloads
+- ⬜ 4. Artifacts in a side panel (sandboxed)
+- ⬜ 5. A design canvas (frames, comments, export)
+
+## Students, still missing (RESEARCH_LOG "Students, part 18", 2026-11-17)
+- ⬜ Moodle: course files and assignment dates through the browser pane on her sign-in
+- ⬜ Deadlines broken into steps and placed in her week (Google Calendar when connected)
+- ⬜ A video overview of a lecture (narrated slides)
+- ⬜ A slide deck from her material (PPTX)
+- ⬜ A writing coach on her own draft (never writes it for her)
+- ⬜ A sources library with APA 7 / Chicago references (Zotero import)
+- ⬜ A mind map of a course
+- ⬜ Oral exam and presentation practice by voice
+- ⬜ Read any PDF aloud, OCR for scans
+- ⬜ Comparison tables, exportable to Sheets

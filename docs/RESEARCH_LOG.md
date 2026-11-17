@@ -1859,3 +1859,19 @@ Roee: the main chat should show everything a model can make (images, video, musi
 - **Designs** (design doc, 2026-11-17 11:40): RichChatDesktop, RichChatPhone, PlusMenu, ArtifactPanel, DesignCanvasChat, ModelTeam.
 - **Build order**: (1) the answer shows what the model made inline (images, video, music, file cards) and the missing Markdown (math, Mermaid, quotes, inline images, copy/run on code, link cards); (2) "+" reads audio and video (Whisper transcript + a few frames) and code files; (3) the model team (Hebrew voice, other-alphabets bias, reply-language settings); (4) artifacts in a side panel (sandboxed); (5) the design canvas (frames made as HTML, comments, export).
 - Stopped at: research and designs done; building (1).
+
+## Students, part 18: what is still missing (2026-11-17, Roee asked)
+Sources: NotebookLM's 2026 features (Glasp round-up: Video Overviews, Cinematic video, mind map, reports, flashcards and quizzes with progress, infographics, slide decks exportable to PPTX, data tables, Deep Research, Drive sync, Literature Insights), Rework's "12 AI tools for college students 2026" (Perplexity Study Mode, Zotero, Grammarly, Notion, Otter, Quizlet, Motion, Todoist, Speechify), against parts 1–17.
+Already in KesherAI: flashcards (FSRS), practice and open questions, audio overviews, a tutor from her lectures with page citations, summaries per lecture and per course, terms, recording with captions and translation, slides read during a recording, past exams, the syllabus, a focus timer with streaks, homework step by step, Socratic study, field tools, sharing a course, notes and search, licensed diagrams.
+Missing (by value, Israeli university student):
+1. **Moodle** (most Israeli universities): bring a course's files and assignment dates in on her sign-in (through KesherAI's browser pane, like Fab), so lectures and deadlines arrive by themselves.
+2. **Deadlines and a plan** (Motion, Todoist Assist): assignments with due dates, broken into steps, placed in the week around her timetable, on Google Calendar when connected.
+3. **Video overview** (NotebookLM): a narrated slide video of a lecture (slides from the summary, her chosen voice), to watch on the bus.
+4. **Slide deck from her material** (NotebookLM, exportable PPTX): for a seminar or a presentation she gives.
+5. **Writing coach on her own draft** (Claude, Grammarly): structure, argument, Hebrew and English language, citations missing; never writes the work for her.
+6. **Sources library** (Zotero): papers she reads, with APA 7 / Chicago references from the right fields, cited in her drafts; import a Zotero library.
+7. **Mind map** of a course (NotebookLM): the course's topics as a map she can open and collapse, each node opening its lecture.
+8. **Oral exam and presentation practice by voice**: KesherAI asks like an examiner (from her material), listens, and gives feedback on content, pace and filler words.
+9. **Read any PDF aloud with OCR** (Speechify): textbook chapters and scanned articles, in Hebrew too, with the place kept.
+10. **Comparison tables** (NotebookLM data tables): e.g. drugs, theories, cases side by side, exportable to Sheets.
+- Stopped at: research done; designs and building not started (after the chat stages 1–5, or when Roee picks).
