@@ -102,8 +102,8 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ⬜ 5. A design canvas (frames, comments, export)
 
 ## Students, still missing (RESEARCH_LOG "Students, part 18", 2026-11-17)
-- ⬜ Moodle: course files and assignment dates through the browser pane on her sign-in
-- ⬜ Deadlines broken into steps and placed in her week (Google Calendar when connected)
+- ✅ Moodle: courses, what is due and lecture files through the browser pane on her sign-in (built 2026-11-17, to check on the PC)
+- ✅ My week: deadlines broken into steps and placed in her week, Google Calendar when connected (built 2026-11-17)
 - ⬜ A video overview of a lecture (narrated slides)
 - ⬜ A slide deck from her material (PPTX)
 - ⬜ A writing coach on her own draft (never writes it for her)
@@ -112,3 +112,9 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ⬜ Oral exam and presentation practice by voice
 - ⬜ Read any PDF aloud, OCR for scans
 - ⬜ Comparison tables, exportable to Sheets
+- ⬜ A YouTube lecture as a lecture (transcript with times, summary lines link to the minute)
+- ⬜ Teach-back (Feynman): she explains in her own words, KesherAI names the gaps and makes cards from them
+- ⬜ Mastery per topic, and a nudge when one drops
+- ⬜ Graphs of functions and more than one way to solve
+- ⬜ Save a page or a selection from the browser to a course
+- ⬜ A study game: match terms to meanings against the clock

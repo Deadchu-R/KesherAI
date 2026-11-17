@@ -1882,3 +1882,15 @@ Missing (by value, Israeli university student):
 - Others: Moodle MCP servers (e.g. moodle-mcp-sernobre, 44 tools) use a web-service token, aimed at teachers; the Moodle app uses login/token.php or SSO with a launch URL.
 - Plan: the same path as Fab. KesherAI's browser pane opens the student's Moodle (she signs in there once, as on any site); a "Moodle" card in Study lists her current courses and what is due; she ticks which course goes to which KesherAI course; lecture files (PDF, PPTX, DOCX) come in as lectures (deduplicated by file), assignments as deadlines. Runs on her click, and again when she opens Study (no background crawling); read-only: KesherAI never submits, posts or changes anything in Moodle.
 - Stopped at: research done; design next, then building.
+
+## Students, part 20: a second, wider look for gaps (2026-11-17, Roee asked)
+Sources: YouLearn's "Best AI study tools 2026" (YouLearn, NoteGPT, Otter, NotebookLM, Quizlet, Anki, Khanmigo, Wolfram Alpha, Photomath, Brainly, ChatGPT, Perplexity), Feynman AI, SaveMyGPA, against parts 1–19 and the code.
+New gaps (not in part 18's list):
+1. **A YouTube lecture as a lecture** (YouLearn, NoteGPT, Feynman AI, SaveMyGPA): paste a link; its transcript (with times) becomes a lecture, each summary line linking back to its minute. KesherAI has no YouTube import in Study.
+2. **Teach-back (the Feynman technique)** (Feynman AI): she explains a topic in her own words, by voice or text; KesherAI checks it against her lecture, names what was missing or wrong, and turns the gaps into cards.
+3. **Mastery per topic and weak-spot alerts** (SaveMyGPA, Quizlet Learn): a score per topic from her cards and quizzes, and a nudge when one drops; today Study shows "weak lectures" only.
+4. **Graphs and calculation** (Wolfram Alpha, Photomath): draw a function or data she gives (the chat's charts and math are there; a plotted function y = f(x) is not), and show more than one way to solve.
+5. **Save from the web to a course** (SaveMyGPA, NoteGPT extensions): KesherAI's browser extension and pane could send a page or a selection to a course as a lecture.
+6. **A study game** (Quizlet Match): match terms to meanings against the clock, from her terms and cards.
+Already covered (checked): notes and summaries, flashcards with spaced repetition, quizzes and open questions, audio overviews, a tutor from her lectures with citations, Socratic study, step-by-step homework, focus hours and streaks, sharing a course, camera input, captions and translation in class.
+- Stopped at: list made; added to the future list after part 18's items.
