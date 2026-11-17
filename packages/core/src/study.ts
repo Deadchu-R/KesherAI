@@ -1079,7 +1079,7 @@ export class Study {
     // The same messages as the phone's tutor (shared): answers from her lectures, or study mode asking her.
     const hint = d.course.field ? FIELD_HINT[d.course.field] : undefined;
     const he = /[\u0590-\u05ff]/.test(`${question} ${d.lectures[0]?.text.slice(0, 400) ?? ""}`);
-    const say = async (messages: TutorMessage[]) => (await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(300_000), () => undefined)).text;
+    const say = async (messages: TutorMessage[]) => this.turnFit(m, messages, signal ?? AbortSignal.timeout(300_000));
     const sourcesOf = (passages: StudyPassage[]) => {
       const seen = new Set<string>();
       return passages.filter((p) => !seen.has(p.lectureId) && seen.add(p.lectureId)).map((p) => ({ lectureId: p.lectureId, title: p.title, ...(p.page ? { page: p.page } : {}) }));
@@ -1178,8 +1178,8 @@ export class Study {
     const m = this.model(d.course.model);
     if (!m) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
     const messages = explainMessages({ selection, lecture: this.lecture(d, lectureId), kind, hint: d.course.field ? FIELD_HINT[d.course.field] : undefined });
-    const r = await m.turn({ messages, tools: [] }, signal ?? AbortSignal.timeout(180_000), () => undefined);
-    return { text: cleanScript(r.text.trim(), /[\u0590-\u05ff]/.test(selection)) };
+    const text = await this.turnFit(m, messages, signal ?? AbortSignal.timeout(180_000));
+    return { text: cleanScript(text.trim(), /[\u0590-\u05ff]/.test(selection)) };
   }
 
   /** Cards from the "term :: meaning" lines of a lecture's notes (design NoteCards); lines already made are skipped. */
@@ -1252,6 +1252,28 @@ export class Study {
     const passage = findPassages(d.lectures.filter((l) => !card.lectureId || l.id === card.lectureId), `${card.front} ${card.back}`, 2500).map((p) => p.text).join("\n");
     const text = await this.ask(MISSED_PROMPT, `Card: ${card.front}\nAnswer: ${card.back}${passage ? `\n\nLecture passage:\n${passage}` : ""}`, signal ?? AbortSignal.timeout(120_000), d.course);
     return { text: text.trim() };
+  }
+
+  /**
+   * A model turn that fits the model's context: on "Context size has been exceeded" the older history goes first
+   * (keeping the system message and the last two), then the longest message is cut to a half; at most three more tries.
+   */
+  private async turnFit(m: NonNullable<Model>, messages: TutorMessage[], signal: AbortSignal): Promise<string> {
+    let list = messages;
+    for (let tries = 0; ; tries++) {
+      try {
+        return (await m.turn({ messages: list as never, tools: [] }, signal, () => undefined)).text;
+      } catch (err) {
+        if (tries >= 3 || signal.aborted || !/context (size|length|window)|exceed|n_ctx|too many tokens/i.test((err as Error).message)) throw err;
+        const sys = list.filter((x) => x.role === "system");
+        const rest = list.filter((x) => x.role !== "system");
+        if (rest.length > 2) list = [...sys, ...rest.slice(-2)];
+        else {
+          const longest = list.reduce((a, x, i) => (String(x.content).length > String(list[a]!.content).length ? i : a), 0);
+          list = list.map((x, i) => (i === longest ? { ...x, content: `${String(x.content).slice(0, Math.floor(String(x.content).length / 2))}\n\n[The rest was cut to fit the model's memory.]` } : x));
+        }
+      }
+    }
   }
 
   /**
@@ -1819,7 +1841,7 @@ export class Study {
     for (const [i, q] of z.questions.entries()) {
       const text = String(texts?.[i] ?? "").trim().slice(0, 3000);
       if (!text) { marks.push(0); feedback.push(he ? "✗ לא נענתה." : "✗ Not answered."); continue; }
-      const raw = (await m.turn({ messages: openGradeMessages({ lectures: d.lectures, question: q, text }), tools: [] }, signal ?? AbortSignal.timeout(180_000), () => undefined)).text;
+      const raw = await this.turnFit(m, openGradeMessages({ lectures: d.lectures, question: q, text }), signal ?? AbortSignal.timeout(180_000));
       const r = openMark(raw, he);
       marks.push(r?.mark ?? 0);
       feedback.push(r?.line ?? (he ? "לא הצלחתי לבדוק את התשובה הזאת." : "Could not check this answer."));
