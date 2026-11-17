@@ -153,7 +153,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     syncNote = L("מסנכרן עם המחשב…", "Syncing with the computer…");
     if (view.at === "home") draw();
     try {
-      const r = await sync({ courses: db.courses.map(toData), removedCourses: db.removedCourses || [], ...(plus.tableSync.out() ? { timetable: plus.tableSync.out() } : {}) });
+      const r = await sync({ courses: db.courses.map(toData), removedCourses: db.removedCourses || [], ...(plus.tableSync.out() ? { timetable: plus.tableSync.out() } : {}), ...(plus.gradesSync.out() ? { grades: plus.gradesSync.out() } : {}) });
       if (!r) {
         syncNote = quiet ? "" : L("אין מחשב מחובר. התחברי פעם אחת למחשב (לשונית מחשב) כדי לסנכרן.", "No computer paired. Connect to your computer once (Computer tab) to sync.");
       } else {
@@ -164,6 +164,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         for (const c of db.courses) if (!theirs.has(c.id) && !gone.has(c.id)) courses.push(c);
         db = { ...db, courses, removedCourses: [] };
         plus.tableSync.in(r.timetable);
+        plus.gradesSync.in(r.grades);
         syncNote = save(db) ? L(`מסונכרן עם המחשב · ${db.courses.length} קורסים`, `Synced with the computer · ${db.courses.length} courses`) : "";
         // Kept recordings waiting on the phone go to the computer now (it keeps them, and they play from there).
         if (sync.upload) void (async () => {

@@ -335,3 +335,14 @@ test("the timetable syncs with the phone: the later copy wins", async () => {
   assert.equal((await st.timetable()).t, 2000);
   await rm(dir, { recursive: true, force: true });
 });
+
+test("grades sync with the phone: the later copy wins", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-gr-"));
+  const st = new Study(dir, () => undefined);
+  await st.setGrades({ rows: [{ id: "a", name: "Physiology", credits: 4, parts: [], final: 90 }] }, 1000);
+  assert.equal((await st.sync([], [], undefined, { rows: [{ id: "b", name: "Old", credits: 2, parts: [] }], t: 500 })).grades.rows[0]?.name, "Physiology");
+  const r = await st.sync([], [], undefined, { rows: [{ id: "b", name: "From the phone", credits: 2, parts: [], final: 80 }], t: 2000 });
+  assert.equal(r.grades.rows[0]?.name, "From the phone");
+  assert.equal((await st.grades()).t, 2000);
+  await rm(dir, { recursive: true, force: true });
+});

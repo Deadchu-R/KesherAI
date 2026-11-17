@@ -55,6 +55,8 @@ export interface Grades {
   pass?: number;
   /** Her institution's rule for a retake (Moed B): the last exam counts, or the higher of the two. */
   moedRule?: "last" | "best";
+  /** When she last changed them (ms), so the phone's and the computer's copies sync (the later one wins). */
+  t?: number;
 }
 
 const num = (v: unknown, lo: number, hi: number): number | undefined => {
@@ -103,7 +105,7 @@ export function cleanGrades(raw: unknown): Grades {
   const pass = num(o.pass, 0, 100);
   const target = num(o.target, 0, 100);
   const remaining = num(o.remaining, 0, 400);
-  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}), ...(kinds.length ? { kinds } : {}), ...(total !== undefined ? { total } : {}), ...(pass !== undefined ? { pass } : {}), ...(o.moedRule === "last" || o.moedRule === "best" ? { moedRule: o.moedRule } : {}) };
+  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}), ...(kinds.length ? { kinds } : {}), ...(total !== undefined ? { total } : {}), ...(pass !== undefined ? { pass } : {}), ...(o.moedRule === "last" || o.moedRule === "best" ? { moedRule: o.moedRule } : {}), ...(Number(o.t) > 0 && Number.isFinite(Number(o.t)) ? { t: Number(o.t) } : {}) };
 }
 
 /**

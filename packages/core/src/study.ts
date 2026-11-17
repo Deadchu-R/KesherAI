@@ -270,8 +270,8 @@ export class Study {
   }
 
   /** Saves her grades (the whole list, checked). */
-  async setGrades(raw: unknown): Promise<Grades> {
-    const g = cleanGrades(raw);
+  async setGrades(raw: unknown, at = Date.now()): Promise<Grades> {
+    const g = { ...cleanGrades(raw), t: at };
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_grades.json"), JSON.stringify(g), { mode: 0o600 });
     return g;
@@ -728,7 +728,7 @@ export class Study {
    * @param removedCourses - Courses deleted on the phone.
    * @returns All courses here after the merge, and the courses deleted on either side.
    */
-  async sync(courses: unknown[], removedCourses: unknown[], timetable?: unknown): Promise<{ courses: CourseData[]; removedCourses: string[]; timetable: Timetable }> {
+  async sync(courses: unknown[], removedCourses: unknown[], timetable?: unknown, grades?: unknown): Promise<{ courses: CourseData[]; removedCourses: string[]; timetable: Timetable; grades: Grades }> {
     for (const id of arr<string>(removedCourses, 2000)) if (typeof id === "string" && /^[a-z0-9-]{8,40}$/.test(id)) await this.removeCourse(id);
     const gone = new Set(await this.removedCourses());
     for (const raw of arr<unknown>(courses, 500)) {
@@ -747,7 +747,11 @@ export class Study {
     let table = await this.timetable();
     const theirs = timetable === undefined ? undefined : cleanTimetable(timetable);
     if (theirs?.t && theirs.t > (table.t ?? 0)) table = await this.setTimetable({ ...theirs, remind: table.remind, phone: table.phone }, undefined, theirs.t);
-    return { courses: all, removedCourses: [...gone], timetable: table };
+    // Her grades: the same rule (the phone keeps its own copy, for the phone alone).
+    let marks = await this.grades();
+    const theirMarks = grades === undefined ? undefined : cleanGrades(grades);
+    if (theirMarks?.t && theirMarks.t > (marks.t ?? 0)) marks = await this.setGrades(theirMarks, theirMarks.t);
+    return { courses: all, removedCourses: [...gone], timetable: table, grades: marks };
   }
 
   /** Adds a lecture's text (typed, pasted, or a transcript). */

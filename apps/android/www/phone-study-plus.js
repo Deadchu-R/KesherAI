@@ -469,7 +469,7 @@ export function studyPlus(x) {
   function grades() {
     let g;
     try { g = cleanGrades(JSON.parse(localStorage.getItem(GRADES_KEY) || "{}")); } catch { g = cleanGrades({}); }
-    const save = () => { try { localStorage.setItem(GRADES_KEY, JSON.stringify(g)); } catch { alert(L("אין מקום לשמור.", "No room to save.")); } x.draw(); };
+    const save = () => { try { localStorage.setItem(GRADES_KEY, JSON.stringify({ ...g, t: Date.now() })); } catch { alert(L("אין מקום לשמור.", "No room to save.")); } x.draw(); };
     const num = (v) => (String(v).trim() === "" ? undefined : Number(v));
     x.root.append(back({ at: "home" }), el("h2", {}, L("🎓 ציונים, ממוצע ותואר", "🎓 Grades, average and degree")));
     const { average, credits } = weightedAverage(g.rows);
@@ -607,5 +607,16 @@ export function studyPlus(x) {
     in: (theirs) => { const t = theirs && cleanTimetable(theirs); if (t?.t && t.t > (loadTable().t ?? 0)) saveTable(t, t.t); },
   };
 
-  return { tableSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
+  /** Her grades for a sync with the computer, and the computer's copy taken when it is newer. */
+  const gradesSync = {
+    out: () => { try { const g = cleanGrades(JSON.parse(localStorage.getItem(GRADES_KEY) || "{}")); return g.t ? g : undefined; } catch { return undefined; } },
+    in: (theirs) => {
+      const g = theirs && cleanGrades(theirs);
+      let mine = 0;
+      try { mine = cleanGrades(JSON.parse(localStorage.getItem(GRADES_KEY) || "{}")).t ?? 0; } catch { mine = 0; }
+      if (g?.t && g.t > mine) try { localStorage.setItem(GRADES_KEY, JSON.stringify(g)); } catch { /* full: kept as it was */ }
+    },
+  };
+
+  return { tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers }, homeViews: { grades, english, timetable }, classBanner };
 }
