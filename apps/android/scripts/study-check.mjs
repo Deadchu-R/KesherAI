@@ -71,6 +71,7 @@ await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "פתח" }).first().click();
 await pg.waitForTimeout(300);
 checks.teachBack = (await sec.locator("summary", { hasText: "להסביר במילים שלי" }).count()) > 0;
+checks.lectureClean = !/\b(undefined|null)\b/.test(await sec.innerText());
 await sec.locator("button", { hasText: "› חזרה" }).first().click().catch(() => undefined);
 await pg.waitForTimeout(300);
 await sec.locator("button", { hasText: "שאלי את הקורס" }).click();
@@ -97,7 +98,9 @@ checks.tools = (await sec.locator("select[aria-label='כלי'] option").count())
 // The features from the computer's Study, on the phone alone (phone-study-plus.js).
 const wide = async () => (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
 const backTo = async () => { await sec.locator("button", { hasText: "› חזרה" }).first().click().catch(() => undefined); await pg.waitForTimeout(300); };
-const open = async (label, wait = 300) => { await sec.locator("button", { hasText: label }).first().click(); await pg.waitForTimeout(wait); };
+const stray = new Set();
+const look = async (where) => { if (/\b(undefined|null|NaN)\b|\[object /.test(await sec.innerText())) stray.add(where); };
+const open = async (label, wait = 300) => { await sec.locator("button", { hasText: label }).first().click(); await pg.waitForTimeout(wait); await look(label); };
 await backTo();
 checks.plusButtons = (await sec.locator("button", { hasText: "📱 פיד" }).count()) > 0 && (await sec.locator("button", { hasText: "✉️ מכתב למרצה" }).count()) > 0;
 for (const [name, label, look] of [["mock", "📝 מבחן דמה", "button:has-text('לבנות את המבחן')"], ["feed", "📱 פיד", "text=הפיד מתמלא"], ["web", "🕸 מפת הקורס", "text=המפה נבנית"], ["palace", "🏛 ארמון זיכרון", "text=ארמון זיכרון נבנה"], ["papers", "📚 מאמרים ומקורות", "input[type=search]"], ["letter", "✉️ מכתב למרצה", "select[aria-label='סוג המכתב']"], ["writing", "✍️ מאמן כתיבה", "select[aria-label='שלב']"]]) {
@@ -129,6 +132,8 @@ await backTo();
 await open("📘 אנגלית אקדמית");
 checks.english = (await sec.locator("button", { hasText: "לתרגל על הטקסט" }).count()) > 0 && (await wide());
 checks.fits = (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
+checks.noStrayText = stray.size === 0;
+if (stray.size) console.error("stray null/undefined text on:", [...stray].join(", "));
 if (shot) await pg.screenshot({ path: shot });
 await b.close();
 srv.close();

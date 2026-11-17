@@ -776,7 +776,8 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
           el("button", { type: "button", class: "primary", onclick: (e) => void explain("explain", e.currentTarget) }, L("הסבר", "Explain")),
           el("button", { type: "button", onclick: (e) => void explain("simple", e.currentTarget) }, L("בפשטות", "Simpler")),
           el("button", { type: "button", onclick: (e) => void explain("example", e.currentTarget) }, L("דוגמה", "Example")),
-          cardBtn),
+          cardBtn,
+          el("button", { type: "button", onclick: () => plus.addHighlight(l, picked) }, L("🖍 להדגיש", "🖍 Highlight"))),
         out);
       explainBox.hidden = false;
     };
@@ -795,16 +796,17 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         return el("div", {}, el("button", { type: "button", dir: "ltr", style: "border: 0; background: none; color: var(--accent); padding: 0 4px 0 0; font: inherit; min-height: 0", onclick: () => { player.currentTime = sec; void player.play().catch(() => undefined); } }, m[0]), line.slice(m[0].length));
       }));
     };
-    root.append(back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), player ? el("section", { class: "api" }, player, el("small", { class: "muted" }, L("ההקלטה שמורה במחשב. לחיצה על דקה בטקסט המלא מנגנת משם.", "The recording is kept on the computer. A minute in the full text plays from there."))) : "", explainBox,
-      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר.", "Tip: select words in the summary or full text for an explanation.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l), plus.podcastBtn(c, l))),
+    root.append(...[back({ at: "course", course: c.id }), el("h2", { dir: "auto" }, l.title), player ? el("section", { class: "api" }, player, el("small", { class: "muted" }, L("ההקלטה שמורה במחשב. לחיצה על דקה בטקסט המלא מנגנת משם.", "The recording is kept on the computer. A minute in the full text plays from there."))) : "", explainBox,
+      el("section", { class: "api" }, el("h2", {}, L("סיכום", "Summary")), l.summary ? el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.6" }, l.summary) : el("p", { class: "muted" }, L("עוד לא סוכם.", "Not summarized yet.")), l.summary || l.text ? el("small", { class: "muted" }, L("טיפ: סמני מילים בסיכום או בטקסט המלא לקבלת הסבר או להדגשה.", "Tip: select words in the summary or full text for an explanation or a highlight.")) : "", el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, sum, listen, cards, flowBtn, clinicalField(c.field) && drugBtn(c, l), search && moreBtn(l), plus.podcastBtn(c, l))),
       plus.portions(c, l),
+      plus.highlightsBox(c, l),
       plus.teachBackBox(c, l),
       notesBox(l, c),
       picturesBox(l),
       flowView(l.diagram),
       l.terms?.length && el("section", { class: "api" }, el("h2", {}, L("מונחים", "Terms")), ...termRows(l.terms, c)),
       view.more && el("section", { class: "api" }, el("h2", {}, L("סרטונים ומאמרים", "Videos and articles")), ...view.more.map((r) => el("div", { class: "ph-row" }, el("span", {}, el("a", { href: r.url, target: "_blank", rel: "noreferrer" }, r.title), el("br"), el("small", { class: "muted" }, r.snippet))))),
-      el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), fullText()));
+      el("details", {}, el("summary", {}, L("הטקסט המלא", "Full text")), fullText())].filter((k) => k != null && k !== false && k !== 0 && k !== ""));
   }
 
   /** A lecture's diagram as boxes and arrows, the same reading as the computer's (Mermaid flowchart text). */

@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -635,6 +635,40 @@ export function studyPlus(x) {
       btns(el("button", { type: "button", class: "primary", onclick: () => x.go({ at: "mock", course: c.id }) }, L("מבחן דמה נוסף", "Another mock exam")))));
   }
 
+  // ---------- highlights while reading (the computer's ReadHighlights), on the phone ----------
+  /** Keeps the words she selected as a highlight of the lecture, with an optional note. */
+  function addHighlight(l, text, note = "") {
+    const list = cleanHighlights([...(l.highlights ?? []), { id: `h${uid().slice(0, 10)}`, text, ...(note.trim() ? { note: note.trim() } : {}), t: Date.now() }]);
+    if (list.length === (l.highlights ?? []).length) return alert(L("אפשר עד 300 הדגשות בהרצאה.", "Up to 300 highlights in a lecture."));
+    l.highlights = list;
+    if (commit()) x.draw();
+  }
+  /** Her highlights in a lecture: notes, removing, and cards from the new ones (only those, as on the computer). */
+  function highlightsBox(c, l) {
+    const list = l.highlights ?? [];
+    if (!list.length) return null;
+    const fresh = list.filter((h) => !h.carded);
+    const make = el("button", { type: "button", class: "primary", disabled: fresh.length ? undefined : "" }, fresh.length ? L(`📇 כרטיסיות מ־${fresh.length} ההדגשות החדשות`, `📇 Cards from the ${fresh.length} new highlights`) : L("✓ כל ההדגשות כבר בכרטיסיות", "✓ All highlights are cards"));
+    make.onclick = async () => {
+      const count = Math.min(40, Math.max(1, Math.round(fresh.length * 1.5)));
+      const material = `What the student highlighted (each with her note); write the cards about these only, using the lecture below for context:\n${fresh.map((h) => `- ${h.text}${h.note ? ` [her note: ${h.note}]` : ""}`).join("\n")}\n\nThe lecture:\n${(l.text || l.summary || "").slice(0, 6000)}`;
+      const r = await need([{ role: "system", content: `You write flashcards for a student. Each tests one fact; the front is a question, the back a short answer. Use only the material.${/[\u0590-\u05ff]/.test(material) ? " Write in Hebrew." : ""} Answer with JSON only: [{"front":"...","back":"..."}]` }, { role: "user", content: `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}` }], make);
+      let got;
+      try { got = r && jsonIn(r); } catch { got = undefined; }
+      if (!Array.isArray(got)) return r !== undefined && alert(L("המודל לא החזיר כרטיסיות. נסי שוב.", "The model returned no cards. Try again."));
+      let n = 0;
+      for (const k of got) if (k?.front && k?.back && n < count) { newCard(c, k.front, k.back, l.id); n++; }
+      if (!n) return alert(L("המודל לא החזיר כרטיסיות שימושיות. נסי שוב.", "The model returned no usable cards. Try again."));
+      for (const h of fresh) h.carded = true;
+      if (commit()) { alert(L(`נוצרו ${n} כרטיסיות`, `${n} cards made`)); x.draw(); }
+    };
+    return section(L(`🖍 ההדגשות שלי (${list.length})`, `🖍 My highlights (${list.length})`),
+      ...list.map((h) => el("div", { class: "ph-row" }, el("span", { dir: "auto", style: "flex: 1; min-width: 0; overflow-wrap: anywhere" }, el("mark", { dir: "auto" }, h.text.length > 240 ? `${h.text.slice(0, 240)}…` : h.text), h.note ? el("small", { class: "muted", dir: "auto" }, ` — ${h.note}`) : "", h.carded ? el("small", { class: "muted" }, " 📇") : ""),
+        el("button", { type: "button", "aria-label": L("הערה", "Note"), onclick: () => { const v = globalThis.prompt(L("הערה להדגשה:", "A note for the highlight:"), h.note ?? ""); if (v === null) return; if (v.trim()) h.note = v.trim().slice(0, 2000); else delete h.note; if (commit()) x.draw(); } }, "✎"),
+        el("button", { type: "button", "aria-label": L("להסיר הדגשה", "Remove highlight"), onclick: () => { l.highlights = list.filter((y) => y.id !== h.id); if (commit()) x.draw(); } }, "✕"))),
+      make);
+  }
+
   // ---------- explain it back (Feynman) and the writing coach, on the phone's model ----------
   const heb = (t) => /[\u0590-\u05ff]/.test(t);
   /** In a lecture: she explains it in her own words; what she got, what she left out (as cards), what was wrong. */
@@ -821,5 +855,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing }, homeViews: { grades, english, timetable, week }, classBanner };
 }
