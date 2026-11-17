@@ -3505,3 +3505,16 @@ div.slide-list { padding-inline-start: 0; }
 .study-notes-list a:hover { border-color: var(--accent, #a5b4ff); }
 .study-tnotes-list li > button.ghost { padding: 2px 8px; min-height: 0; }
 .study-notes-text { white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+/* Studying together: the shared focus room and study group links (design StudyTogether). */
+.study-together { display: flex; flex-direction: column; gap: 12px; }
+.study-room, .study-groups { display: flex; flex-direction: column; gap: 10px; }
+.study-room h2, .study-groups h2 { margin: 0; }
+.study-room-clock { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.study-room-clock > b { font-size: 52px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.study-room-clock .brk { color: var(--ok, #2e9e6a); }
+.study-room-here, .study-groups-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.study-room-here li { padding: 6px 10px; border: 1px solid var(--border, #333); border-radius: 10px; overflow-wrap: anywhere; }
+.study-groups-list li { display: flex; gap: 8px; align-items: center; }
+.study-groups-list a.button { flex: 1; min-width: 0; text-align: start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.study-groups-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.study-groups-add input { flex: 1 1 160px; min-width: 0; }

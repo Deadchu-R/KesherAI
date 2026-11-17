@@ -10,6 +10,7 @@ import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
 import { StudyLive } from "../StudyLive";
+import { StudyTogether } from "../StudyTogether";
 import { StudyNotesTab, StudyTimeNotes } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -640,6 +641,7 @@ const TABS: Array<[string, [string, string]]> = [
   ["calc", ["חישובים", "Calculations"]],
   ["terms", ["מילון", "Glossary"]],
   ["game", ["🎯 משחק", "🎯 Game"]],
+  ["together", ["👥 לומדים יחד", "👥 Study together"]],
   ["writing", ["✍ כתיבה", "✍ Writing"]],
   ["drugs", ["תרופות", "Drugs"]],
   ["labs", ["ערכי מעבדה", "Lab values"]],
@@ -759,6 +761,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
       </div>
       {lectureId ? <LectureView key={`${lectureId}-${startAt ?? ""}`} courseId={id} lectureId={lectureId} courseField={info.course.field} {...(startAt !== undefined ? { startAt } : {})} onChange={load} />
         : on === "notes" ? <StudyNotesTab courseId={id} />
+        : on === "together" ? <StudyTogether courseId={id} courseName={info.course.name} groups={info.course.groups ?? []} onChange={load} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
         : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />

@@ -398,7 +398,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       mocks: mockHistory(d.quizzes).map(({ t, grade }) => ({ t, grade })),
     };
   });
-  app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string; semesterEnd?: string } }>("/api/study/courses/:id", async (req) => {
+  app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string; semesterEnd?: string; groups?: unknown } }>("/api/study/courses/:id", async (req) => {
+    if (Array.isArray(req.body?.groups)) return st.setGroups(req.params.id, req.body.groups);
     if (typeof req.body?.examDate === "string") return st.setExam(req.params.id, req.body.examDate);
     if (typeof req.body?.model === "string") return st.setModel(req.params.id, req.body.model);
     if (typeof req.body?.semesterEnd === "string") return st.setSemesterEnd(req.params.id, req.body.semesterEnd);

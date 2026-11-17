@@ -25,6 +25,30 @@ export interface StudyCourse {
   model?: string;
   /** When her semester ends (YYYY-MM-DD), written by her when the syllabus and exam date do not say. */
   semesterEnd?: string;
+  /** Her study groups' links (a WhatsApp group, Discord, Telegram, a shared drive): design StudyTogether. */
+  groups?: StudyGroupLink[];
+}
+
+/** A study group's link. */
+export interface StudyGroupLink {
+  name: string;
+  url: string;
+}
+
+/** Her study group links, checked: https only, at most 12, a name for each (the site when she gave none). */
+export function cleanGroupLinks(raw: unknown): StudyGroupLink[] {
+  return (Array.isArray(raw) ? raw : []).slice(0, 12).flatMap((g): StudyGroupLink[] => {
+    const x = (g && typeof g === "object" ? g : {}) as Record<string, unknown>;
+    let u: URL;
+    try {
+      u = new URL(String(x.url ?? "").trim());
+    } catch {
+      return [];
+    }
+    if (u.protocol !== "https:" || u.username || u.password || u.href.length > 500) return [];
+    const name = (typeof x.name === "string" ? x.name : "").replace(/\s+/g, " ").trim().slice(0, 60);
+    return [{ name: name || u.hostname.replace(/^www\./, ""), url: u.href }];
+  });
 }
 
 /** A term from a lecture, Hebrew with its English (medical) name. */

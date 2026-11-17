@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -26,7 +26,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const d = raw as Partial<CourseData> | undefined;
   const c = d?.course;
   if (!c || typeof c.id !== "string" || !/^[a-z0-9-]{8,40}$/.test(c.id)) return undefined;
-  const course: StudyCourse = { id: c.id, name: str(c.name, 120) || "Course", createdAt: Number(c.createdAt) || Date.now(), ...(STUDY_FIELDS.some((f) => f.id === c.field) ? { field: c.field } : {}), ...(c.fieldChosen ? { fieldChosen: true } : {}), ...(typeof c.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.examDate) ? { examDate: c.examDate } : {}) };
+  const course: StudyCourse = { id: c.id, name: str(c.name, 120) || "Course", createdAt: Number(c.createdAt) || Date.now(), ...(STUDY_FIELDS.some((f) => f.id === c.field) ? { field: c.field } : {}), ...(c.fieldChosen ? { fieldChosen: true } : {}), ...(typeof c.examDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(c.examDate) ? { examDate: c.examDate } : {}), ...(cleanGroupLinks(c.groups).length ? { groups: cleanGroupLinks(c.groups) } : {}) };
   const lectures = arr<StudyLecture>(d.lectures, 2000).filter((l) => okId(l?.id)).map((l) => ({
     id: l.id, title: str(l.title, 200), date: /^\d{4}-\d{2}-\d{2}$/.test(l.date) ? l.date : new Date().toISOString().slice(0, 10), text: str(l.text, 400_000),
     ...(l.summary ? { summary: str(l.summary, 100_000) } : {}),
@@ -523,6 +523,16 @@ export class Study {
     const d = await this.get(id);
     if (date) d.course.semesterEnd = date;
     else delete d.course.semesterEnd;
+    await this.save(d);
+    return d.course;
+  }
+
+  /** Her study groups' links for a course (design StudyTogether): the whole list, checked. */
+  async setGroups(id: string, raw: unknown): Promise<StudyCourse> {
+    const d = await this.get(id);
+    const g = cleanGroupLinks(raw);
+    if (g.length) d.course.groups = g;
+    else delete d.course.groups;
     await this.save(d);
     return d.course;
   }
