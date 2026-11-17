@@ -2121,6 +2121,13 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (2026-11-18): computer and phone (designs BackOnTrack / BackOnTrackPhone).
 - Stopped at: built.
 
+## Students, part 41: attendance (2026-11-18)
+- Many Israeli courses require attendance (often 80% of the practice sessions or seminars, or "at most 3 absences"); missing one too many can cost the course. Attendance apps (Absentify, AttendMate, MyCollegeMate) mark each class as attended / absent / excused / cancelled, take either a minimum percent or a maximum number of absences per course, and warn before the limit.
+- KesherAI had: the timetable (classes by day, "now" and a reminder to record), nothing on attendance.
+- Plan (design Attendance / AttendancePhone): turned on once ("Track attendance"); after each class ends, "Were you there? ✓ / ✗ / cancelled" on the Study home (computer) and the home banner (phone), up to a week back; per course, there of held with the percent, a rule (N absences or N%) and "N absences left", amber at the last one, red over it. Kept in the timetable, so it syncs between the phone and the computer with it.
+- Built (2026-11-18): computer and phone. The computer's banner and card now share one copy of the timetable (a mark in one is no longer undone by a save from the other).
+- Stopped at: built.
+
 ## Students, part 40: a quiz question that is wrong (2026-11-18)
 - Gemini Notebook's November update lets a student edit quiz questions afterwards and ask where she fell short (Digital Trends). Quizlet and Knowt have "report this question". With a local model the risk is larger: it writes the key itself, and a wrong key teaches the wrong fact and lowers her score and her mastery.
 - KesherAI had: "What should I learn from this?" after a quiz (QuizTalk), calculation questions checked by code; nothing for a wrong key.

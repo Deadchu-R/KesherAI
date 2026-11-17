@@ -35,7 +35,10 @@ const pg = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleF
 await pg.addInitScript(() => localStorage.setItem("lang", "he"));
 const errs = [];
 pg.on("pageerror", (e) => errs.push(e.message));
+/** A prompt the check expects answers this once (any other dialog is an error). */
+let answer;
 pg.on("dialog", (d) => {
+  if (answer !== undefined) { const a = answer; answer = undefined; return void d.accept(a); }
   errs.push(`dialog: ${d.message()}`);
   void d.dismiss();
 });
@@ -142,6 +145,13 @@ await sec.locator("select[aria-label='יום']").selectOption("1");
 await sec.locator("button", { hasText: /^הוספה$/ }).click();
 await pg.waitForTimeout(300);
 checks.timetable = (await sec.locator("text=10:00–12:00").count()) > 0 && (await wide());
+await sec.locator("button", { hasText: "לעקוב אחרי נוכחות" }).click();
+await pg.waitForTimeout(300);
+answer = "3";
+await sec.locator("button", { hasText: "+ חובת נוכחות" }).first().click();
+await pg.waitForTimeout(300);
+checks.attendance = (await sec.locator("text=נשארו 3 חיסורים").count()) > 0 && (await wide());
+await pg.screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/attend-ph.png` : "/dev/null", fullPage: true }).catch(() => undefined);
 await backTo();
 await open("📈 ההתקדמות שלי");
 await sec.locator("[role=radiogroup] button", { hasText: /^15$/ }).first().click();

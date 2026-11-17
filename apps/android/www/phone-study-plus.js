@@ -7,7 +7,7 @@
  * problem, letters to the lecturer, academic English, presentation rehearsal and papers. The same shared code as the
  * computer (vendor/study-core.js), the phone's own model, and the same course data, so all of it syncs.
  */
-import { goalToday, weekRecap, studyBadges, topicMastery, studyStreak, studyDays, backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, QUESTION_CHECK_PROMPT, parseQuestionCheck, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
+import { goalToday, weekRecap, studyBadges, topicMastery, studyStreak, studyDays, backlogPlan, cleanStudyPrefs, SETUP_STEPS, STUDY_FIELDS, fsrs, recentMistakes, cardsToReview, createEmptyCard, findPassages, jsonIn, leechCards, LEECH_PROMPT, noteCards, readingPortion, studyFeed, courseWeb, whereTerm, QUIZ_TALK_PROMPT, QUESTION_CHECK_PROMPT, parseQuestionCheck, SIMILAR_MARK, PALACE_PROMPT, PALACE_SPOTS_HE, cleanPalace, PODCAST_PROMPT, parsePodcast, letterPrompt, parseLetter, ENGLISH_PROMPT, cleanEnglish, REHEARSE_PROMPT, speechStats, PAPERS_PROMPT, parseOpenAlex, cleanDoi, cleanSources, apaRef, apaCite, chicagoRef, chicagoCite, parseBibtex, parseRis, toBibtex, toRis, cleanGrades, rowGrade, weightedAverage, degreeProgress, moedB, mockMinutes, mockTime, mockResult, TEACH_BACK_PROMPT, parseTeachBack, cleanHighlights, WRITING_PROMPT, parseWritingFeedback, OPEN_QUIZ_PROMPT, parseOpenQuestions, openGradeMessages, openMark, checkCalcQuestion, detectField, attendanceFor, classesToMark, cleanTimetable, classNow, classesOn, freeSlots, planPrompt, checkPlan, TIMETABLE_PHOTO_PROMPT, cleanReadClasses } from "./vendor/study-core.js";
 
 const GRADES_KEY = "kesherai-grades";
 const TIMER_KEY = "kesherai-card-timer";
@@ -1238,11 +1238,54 @@ export function studyPlus(x) {
   const saveTable = (t, at = Date.now()) => { try { localStorage.setItem(TABLE_KEY, JSON.stringify({ ...t, t: at })); return true; } catch { alert(L("אין מקום לשמור.", "No room to save.")); return false; } };
   const courseName = (id) => x.db().courses.find((c) => c.id === id)?.name ?? "";
 
-  /** On the home page: the class she is in now, or one starting within 10 minutes. */
+  const MARK = { here: ["✓ הייתי", "✓ I was there"], absent: ["✗ לא", "✗ Missed"], excused: ["באישור", "Excused"], cancelled: ["בוטל", "Cancelled"] };
+  /** "Were you there?" for classes that ended and are not marked (design AttendancePhone), newest first. */
+  function markClasses(t, max) {
+    const todo = classesToMark(t, new Date()).filter((k) => courseName(k.slot.courseId)).slice(0, max);
+    if (!todo.length) return "";
+    const today = new Date();
+    const when = (date) => {
+      const d = new Date(`${date}T12:00`);
+      const diff = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 864e5);
+      return diff === 0 ? L("היום", "today") : diff === 1 ? L("אתמול", "yesterday") : L(`יום ${DAYS[d.getDay()][0]}`, DAYS[d.getDay()][1]);
+    };
+    return section(L("✋ היית בשיעור?", "✋ Were you there?"), ...todo.map((k) => el("div", { class: "ph-row", style: "flex-wrap: wrap; gap: 6px" },
+      el("span", { dir: "auto", class: "small" }, `${courseName(k.slot.courseId)} · ${when(k.date)} ${k.slot.start}`),
+      el("span", { class: "ph-btns", style: "flex-wrap: wrap" }, ...["here", "absent", "cancelled"].map((m) => el("button", { type: "button", onclick: () => { const fresh = loadTable(); fresh.attendance = { ...fresh.attendance, [k.key]: m }; if (saveTable(fresh)) x.draw(); } }, L(...MARK[m])))))));
+  }
+
+  /** Attendance per course (design AttendancePhone, students part 41): turned on once; there of held, the rule, what is left. */
+  function attendanceBox(t) {
+    if (!t.trackSince) return section(L("✋ נוכחות", "✋ Attendance"), el("p", { class: "muted small" }, L("בקורסים עם חובת נוכחות: אחרי כל שיעור תישאלי אם היית, ותראי כמה חיסורים נשארו.", "For courses that require attendance: after each class you are asked whether you were there, and see how many absences are left.")),
+      el("button", { type: "button", onclick: () => { if (saveTable({ ...t, trackSince: Date.now() })) x.draw(); } }, L("לעקוב אחרי נוכחות", "Track attendance")));
+    const ids = [...new Set(t.slots.map((s) => s.courseId))].filter((id) => courseName(id));
+    return el("div", {}, markClasses(t, 8), section(L("✋ נוכחות", "✋ Attendance"), ...ids.map((id) => {
+      const a = attendanceFor(t, id);
+      const lim = a.limit;
+      const state = !lim ? L("בלי חובת נוכחות", "No attendance rule") : a.over ? L("עברת את המותר", "Over the limit") : a.left === 0 ? L("לא נשארו חיסורים", "No absences left") : a.left === 1 ? L("נשאר חיסור אחד", "One absence left") : L(`נשארו ${a.left} חיסורים`, `${a.left} absences left`);
+      const rule = el("button", { type: "button", class: "link", onclick: () => {
+        const v = globalThis.prompt(L("מותר עד כמה חיסורים? או אחוז חובה (למשל 80%). ריק: בלי חובה.", "How many absences are allowed? Or a required percent (e.g. 80%). Empty: no rule."), lim ? (lim.absences !== undefined ? String(lim.absences) : `${lim.percent}%`) : "");
+        if (v === null) return;
+        const fresh = loadTable();
+        const limits = { ...fresh.limits };
+        const n = Number(v.replace("%", "").trim());
+        if (!v.trim()) delete limits[id];
+        else if (!Number.isFinite(n)) return alert(L("מספר, למשל 3 או 80%.", "A number, like 3 or 80%."));
+        else if (v.includes("%")) limits[id] = { percent: Math.min(100, Math.max(1, Math.round(n))) };
+        else limits[id] = { absences: Math.min(50, Math.max(0, Math.round(n))) };
+        if (saveTable(cleanTimetable({ ...fresh, limits }))) x.draw();
+      } }, lim ? L("לשנות", "Change") : L("+ חובת נוכחות", "+ Attendance rule"));
+      return el("div", { style: "margin: 8px 0" },
+        el("div", { class: "ph-row" }, el("b", { dir: "auto" }, courseName(id)), el("small", { style: a.over ? "color: #f08a8a" : a.warn ? "color: #f2b66d" : "", class: a.over || a.warn ? "" : "muted" }, state)),
+        el("small", { class: "muted", dir: "auto" }, (a.held ? L(`נכחת ${a.here} מתוך ${a.held} (${a.percent}%)`, `There ${a.here} of ${a.held} (${a.percent}%)`) : L("עוד לא סימנת שיעורים", "No classes marked yet")) + (lim ? (lim.absences !== undefined ? L(` · מותר עד ${lim.absences}`, ` · up to ${lim.absences}`) : L(` · חובה ${lim.percent}%`, ` · ${lim.percent}% required`)) : "") + " "), rule);
+    })));
+  }
+
+  /** On the home page: the class she is in now, or one starting within 10 minutes; and "were you there?" after one. */
   function classBanner() {
     const t = loadTable();
     const n = t.slots.length && classNow(t, new Date());
-    if (!n) return "";
+    if (!n) return markClasses(t, 3);
     const name = courseName(n.slot.courseId);
     return el("section", { class: "api" }, el("b", { dir: "auto" }, n.state === "now" ? L(`🏫 עכשיו: ${name} · עוד ${n.minutes} דק׳`, `🏫 Now: ${name} · ${n.minutes} min left`) : L(`🏫 בעוד ${n.minutes} דק׳: ${name}`, `🏫 In ${n.minutes} min: ${name}`)), n.slot.room ? el("small", { class: "muted" }, n.slot.room) : "",
       btns(x.speech && el("button", { type: "button", onclick: () => go({ at: "record", course: n.slot.courseId }) }, L("🎙 להקליט את השיעור", "🎙 Record the class")), el("button", { type: "button", onclick: () => go({ at: "course", course: n.slot.courseId }) }, L("לקורס", "To the course"))));
@@ -1297,6 +1340,7 @@ export function studyPlus(x) {
     x.root.append(section("", ...(days.length ? days.map((d) => el("div", {}, el("b", {}, L(`יום ${DAYS[d][0]}`, DAYS[d][1]), d === new Date().getDay() ? L(" · היום", " · today") : ""),
       ...classesOn(t, d).map((s) => el("div", { class: "ph-row" }, el("span", { dir: "auto" }, `${s.start}–${s.end} · ${courseName(s.courseId) || L("קורס שנמחק", "A deleted course")}${s.room ? ` · ${s.room}` : ""}`),
         el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { t.slots = t.slots.filter((y) => y.id !== s.id); if (saveTable(t)) x.draw(); } }, "✕"))))) : [el("p", { class: "muted" }, L("עוד אין שיעורים. אפשר להוסיף ידנית או מצילום של המערכת.", "No classes yet. Add them by hand or from a photo of your schedule."))])));
+    if (t.slots.length) x.root.append(attendanceBox(t));
     if (courses.length) {
       const course = el("select", { "aria-label": L("קורס", "Course") }, ...courses.map((c) => el("option", { value: c.id }, c.name)));
       const day = el("select", { "aria-label": L("יום", "Day") }, ...[0, 1, 2, 3, 4, 5].map((d) => el("option", { value: String(d) }, L(`יום ${DAYS[d][0]}`, DAYS[d][1]))));

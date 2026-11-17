@@ -3705,3 +3705,14 @@ div.slide-list { padding-inline-start: 0; }
 .study-bite-hint { position: absolute; bottom: 12px; inset-inline: 22px; text-align: center; }
 .study-bite button.small { align-self: flex-start; }
 .study-bite-en { align-self: flex-start; }
+
+/* Attendance (design Attendance) */
+.study-attend { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.study-attend-ask { display: flex; flex-direction: column; gap: 8px; }
+.study-attend .study-attend-ask { background: var(--panel-2); padding: 10px; border-radius: 10px; }
+.study-attend-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; }
+.study-attend-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.study-attend-course { display: flex; flex-direction: column; gap: 4px; }
+.study-attend-course .warn { color: var(--warn); }
+.study-attend-course .bad { color: var(--bad); }
+.study-attend-rule { display: inline-flex; gap: 6px; align-items: center; }

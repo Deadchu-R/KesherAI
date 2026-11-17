@@ -32,7 +32,20 @@ export interface Timetable {
   lastReminded?: string;
   /** When she last changed it (ms), so the phone's and the computer's copies sync (the later one wins). */
   t?: number;
+  /** Since when she tracks attendance (ms); without it, no class asks "were you there?". */
+  trackSince?: number;
+  /** Was she there (design Attendance, students part 41): "slotId@YYYY-MM-DD" → her mark. */
+  attendance?: Record<string, AttendanceMark>;
+  /** A course's attendance rule: at most this many absences, or at least this percent. */
+  limits?: Record<string, AttendanceLimit>;
 }
+
+/** One class's mark: there, missed, missed with a reason (not counted), or the class did not take place. */
+export type AttendanceMark = "here" | "absent" | "excused" | "cancelled";
+export const ATTENDANCE_MARKS: AttendanceMark[] = ["here", "absent", "excused", "cancelled"];
+
+/** A course's attendance rule (one of the two). */
+export interface AttendanceLimit { absences?: number; percent?: number }
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const mins = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
@@ -63,7 +76,82 @@ export function cleanTimetable(raw: unknown): Timetable {
     ...(o.phone === true ? { phone: true } : {}),
     ...(typeof o.lastReminded === "string" && o.lastReminded.length <= 80 ? { lastReminded: o.lastReminded } : {}),
     ...(Number.isFinite(Number(o.t)) && Number(o.t) > 0 ? { t: Number(o.t) } : {}),
+    ...(Number.isFinite(Number(o.trackSince)) && Number(o.trackSince) > 0 ? { trackSince: Number(o.trackSince) } : {}),
+    ...cleanAttendance(o.attendance, o.limits),
   };
+}
+
+/** Attendance marks (at most 2000, the latest dates kept) and rules (absences 0–50, percent 1–100), checked. */
+function cleanAttendance(rawMarks: unknown, rawLimits: unknown): Pick<Timetable, "attendance" | "limits"> {
+  const marks = Object.entries(rawMarks && typeof rawMarks === "object" ? (rawMarks as Record<string, unknown>) : {})
+    .filter(([k, v]) => /^[\w-]{1,40}@\d{4}-\d\d-\d\d$/.test(k) && ATTENDANCE_MARKS.includes(v as AttendanceMark))
+    .sort((a, b) => b[0].slice(-10).localeCompare(a[0].slice(-10)))
+    .slice(0, 2000);
+  const limits: Record<string, AttendanceLimit> = {};
+  for (const [k, v] of Object.entries(rawLimits && typeof rawLimits === "object" ? (rawLimits as Record<string, unknown>) : {}).slice(0, 100)) {
+    if (!/^[\w-]{1,80}$/.test(k) || !v || typeof v !== "object") continue;
+    const a = Number((v as AttendanceLimit).absences);
+    const pc = Number((v as AttendanceLimit).percent);
+    if (Number.isInteger(a) && a >= 0 && a <= 50) limits[k] = { absences: a };
+    else if (Number.isFinite(pc) && pc >= 1 && pc <= 100) limits[k] = { percent: Math.round(pc) };
+  }
+  return { ...(marks.length ? { attendance: Object.fromEntries(marks) as Record<string, AttendanceMark> } : {}), ...(Object.keys(limits).length ? { limits } : {}) };
+}
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/**
+ * The classes of the last `days` days (today's once they ended) that she has not marked yet, newest first, so she can
+ * say whether she was there (design Attendance). Only while she tracks it, and only classes since she started.
+ */
+export function classesToMark(t: Timetable, now: Date, days = 7): Array<{ slot: ClassSlot; date: string; key: string }> {
+  const out: Array<{ slot: ClassSlot; date: string; key: string }> = [];
+  const since = t.trackSince;
+  if (!since) return out;
+  const start = new Date(since);
+  const first = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const m = now.getHours() * 60 + now.getMinutes();
+  for (let back = 0; back < days; back++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back, 12);
+    if (d.getTime() < first) break;
+    const date = ymd(d);
+    for (const slot of classesOn(t, d.getDay()).reverse()) {
+      if (back === 0 && mins(slot.end) > m) continue;
+      const key = `${slot.id}@${date}`;
+      if (!t.attendance?.[key]) out.push({ slot, date, key });
+    }
+  }
+  return out;
+}
+
+/** A course's attendance: classes held (here + absent), there, missed, the percent, and what the rule leaves. */
+export interface AttendanceSum { held: number; here: number; absent: number; excused: number; percent: number | undefined; limit?: AttendanceLimit; left?: number; warn: boolean; over: boolean }
+
+/**
+ * Sums a course's marks. With a rule: how many more absences are allowed (`left`), a warning at one left (or within
+ * 5 points of the percent) and `over` once it is broken. A percent rule's `left` counts against the classes so far.
+ */
+export function attendanceFor(t: Timetable, courseId: string): AttendanceSum {
+  const ids = new Set(t.slots.filter((s) => s.courseId === courseId).map((s) => s.id));
+  let here = 0, absent = 0, excused = 0;
+  for (const [k, v] of Object.entries(t.attendance ?? {})) {
+    if (!ids.has(k.slice(0, k.indexOf("@")))) continue;
+    if (v === "here") here++;
+    else if (v === "absent") absent++;
+    else if (v === "excused") excused++;
+  }
+  const held = here + absent;
+  const percent = held ? Math.round((here / held) * 100) : undefined;
+  const limit = t.limits?.[courseId];
+  if (!limit) return { held, here, absent, excused, percent, warn: false, over: false };
+  if (limit.absences !== undefined) {
+    const left = limit.absences - absent;
+    return { held, here, absent, excused, percent, limit, left: Math.max(0, left), warn: left <= 1, over: left < 0 };
+  }
+  const need = (limit.percent ?? 0) / 100;
+  // Absences still allowed so far: the most a with here / (held + a) ≥ need, counting more absences as more classes.
+  const left = need > 0 ? Math.floor(here / need - held + 1e-9) : 0;
+  return { held, here, absent, excused, percent, limit, left: Math.max(0, left), warn: percent !== undefined && percent < (limit.percent ?? 0) + 5, over: percent !== undefined && percent < (limit.percent ?? 0) };
 }
 
 /**

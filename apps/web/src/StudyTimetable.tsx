@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { CLASS_KINDS, classesOn, classNow, type ClassKind, type ClassSlot, type ReadClass, type Timetable } from "@kesher/shared";
+import { useEffect, useState } from "react";
+import { attendanceFor, CLASS_KINDS, classesOn, classesToMark, classNow, type AttendanceMark, type ClassKind, type ClassSlot, type ReadClass, type Timetable } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -11,15 +11,25 @@ const COLORS = ["#3d5afe", "#2e9e6a", "#b0662e", "#9c4dcc", "#0f8fa8", "#c2410c"
 const newId = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 type Course = { id: string; name: string };
 
+// One copy for the banner and the card on the same page: a mark made in one ("were you there?") must not be undone by
+// a later save from the other's older copy.
+let shared: Timetable | null = null;
+const listeners = new Set<(t: Timetable) => void>();
+let saveTimer = 0;
+
 /** Her timetable, loaded once per page and shared by the banner and the card. */
 function useTimetable(): [Timetable | null, (t: Timetable) => void] {
-  const [t, setT] = useState<Timetable | null>(null);
-  const timer = useRef(0);
-  useEffect(() => void api<Timetable>("/api/study/timetable").then(setT, () => setT({ slots: [] })), []);
+  const [t, setT] = useState<Timetable | null>(shared);
+  useEffect(() => {
+    listeners.add(setT);
+    void api<Timetable>("/api/study/timetable").then((x) => { shared = x; for (const l of listeners) l(x); }, () => setT(shared ?? { slots: [] }));
+    return () => void listeners.delete(setT);
+  }, []);
   const save = (next: Timetable) => {
-    setT(next);
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void api<Timetable>("/api/study/timetable", { method: "PUT", body: next }).catch((e: Error) => toast(e.message)), 500);
+    shared = next;
+    for (const l of listeners) l(next);
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => void api<Timetable>("/api/study/timetable", { method: "PUT", body: next }).catch((e: Error) => toast(e.message)), 500);
   };
   return [t, save];
 }
@@ -67,6 +77,7 @@ export function StudyTimetable({ courses, part, onCourses }: { courses: Course[]
         <a className="button primary" href={`#/study/${cur.slot.courseId}?record=1`}>🎙 {L("להקליט את השיעור", "Record the class")}</a>
       </section>
     )}
+    {part === "now" && <MarkClasses t={t} save={save} name={name} max={3} />}
     {part === "card" && <section className="card study-tt">
       <button type="button" className="study-grades-head" aria-expanded={open} onClick={() => setOpen(!open)}>
         <b>🗓 {L("מערכת שעות", "Timetable")}</b>
@@ -119,6 +130,7 @@ export function StudyTimetable({ courses, part, onCourses }: { courses: Course[]
           </div>
         </>}
         <p className="muted small">{L("כשהשיעור מתחיל אפשר להקליט בלחיצה, וההקלטה נשמרת בקורס הנכון.", "When a class starts you can record it in one tap; it is saved in the right course.")}</p>
+        {!!slots.length && <Attendance t={t} save={save} courses={courses.filter((c) => slots.some((s) => s.courseId === c.id))} name={name} />}
       </>}
     </section>}
   </>;
@@ -195,6 +207,92 @@ function ReadClasses({ read, courses, onApply, onCancel }: { read: ReadClass[]; 
         <button type="button" className="primary" onClick={() => onApply(read.flatMap((c, i) => (pick[i] ? [{ c, courseId: pick[i]! }] : [])))}>{L("להוסיף למערכת", "Add to the timetable")}</button>
         <button type="button" className="ghost" onClick={onCancel}>{L("ביטול", "Cancel")}</button>
       </div>
+    </div>
+  );
+}
+
+const MARK: Record<AttendanceMark, [string, string]> = { here: ["✓ הייתי", "✓ I was there"], absent: ["✗ לא", "✗ Missed"], excused: ["באישור", "Excused"], cancelled: ["בוטל", "Cancelled"] };
+
+/** "Were you there?" for the classes that ended and are not marked yet (design Attendance), newest first. */
+function MarkClasses({ t, save, name, max }: { t: Timetable; save: (t: Timetable) => void; name: (id: string) => string; max: number }) {
+  const todo = classesToMark(t, new Date()).filter((x) => name(x.slot.courseId)).slice(0, max);
+  if (!todo.length) return null;
+  const today = new Date().toDateString();
+  const when = (date: string) => {
+    const d = new Date(`${date}T12:00`);
+    const diff = Math.round((new Date(today).getTime() - new Date(d.toDateString()).getTime()) / 864e5);
+    return diff === 0 ? L("היום", "today") : diff === 1 ? L("אתמול", "yesterday") : L(`יום ${DAYS[d.getDay()]![0]}`, DAYS[d.getDay()]![1]);
+  };
+  return (
+    <section className="card study-attend-ask" aria-label={L("היית בשיעור?", "Were you there?")}>
+      <b className="small">✋ {L("היית בשיעור?", "Were you there?")}</b>
+      {todo.map((x) => (
+        <div key={x.key} className="study-attend-row">
+          <span className="small" dir="auto">{name(x.slot.courseId)}{x.slot.kind ? ` · ${L(...KIND[x.slot.kind])}` : ""} · {when(x.date)} <span dir="ltr">{x.slot.start}</span></span>
+          <span className="study-attend-btns">
+            {(["here", "absent", "cancelled"] as const).map((m) => <button key={m} type="button" className="small" onClick={() => save({ ...t, attendance: { ...t.attendance, [x.key]: m } })}>{L(...MARK[m])}</button>)}
+          </span>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/**
+ * Attendance per course (design Attendance, students part 41, like Absentify): turned on once, then each class that
+ * ended asks "were you there?"; per course, there of held and the rule (at most N absences, or at least N%) with what
+ * is left, a warning at the last one.
+ */
+function Attendance({ t, save, courses, name }: { t: Timetable; save: (t: Timetable) => void; courses: Course[]; name: (id: string) => string }) {
+  const [rule, setRule] = useState<string | null>(null);
+  if (!t.trackSince) return (
+    <div className="study-attend">
+      <b className="small">✋ {L("נוכחות", "Attendance")}</b>
+      <p className="muted small">{L("בקורסים עם חובת נוכחות: אחרי כל שיעור תישאלי אם היית, ותראי כמה חיסורים נשארו.", "For courses that require attendance: after each class you are asked whether you were there, and see how many absences are left.")}</p>
+      <button type="button" className="small" onClick={() => save({ ...t, trackSince: Date.now() })}>{L("לעקוב אחרי נוכחות", "Track attendance")}</button>
+    </div>
+  );
+  const setLimit = (id: string, v: string) => {
+    const limits = { ...t.limits };
+    const n = Number(v.replace("%", ""));
+    if (!v.trim()) delete limits[id];
+    else if (v.includes("%")) limits[id] = { percent: Math.min(100, Math.max(1, Math.round(n))) };
+    else limits[id] = { absences: Math.min(50, Math.max(0, Math.round(n))) };
+    save({ ...t, limits });
+    setRule(null);
+  };
+  return (
+    <div className="study-attend">
+      <b className="small">✋ {L("נוכחות", "Attendance")}</b>
+      <MarkClasses t={t} save={save} name={name} max={8} />
+      {courses.map((c) => {
+        const a = attendanceFor(t, c.id);
+        const lim = a.limit;
+        return (
+          <div key={c.id} className="study-attend-course">
+            <div className="row">
+              <b className="small" dir="auto">{c.name}</b>
+              <span className="grow" />
+              <span className={`small${a.over ? " bad" : a.warn ? " warn" : " muted"}`}>
+                {!lim ? L("בלי חובת נוכחות", "No attendance rule") : a.over ? L("עברת את המותר", "Over the limit") : a.left === 0 ? L("לא נשארו חיסורים", "No absences left") : a.left === 1 ? L("נשאר חיסור אחד", "One absence left") : L(`נשארו ${a.left} חיסורים`, `${a.left} absences left`)}
+              </span>
+            </div>
+            {lim && a.held > 0 && <div className="study-mock-bar" aria-hidden="true"><i style={{ width: `${a.percent ?? 0}%` }} className={a.over || a.warn ? "low" : ""} /></div>}
+            <span className="muted small">
+              {a.held ? L(`נכחת ${a.here} מתוך ${a.held} (${a.percent}%)`, `There ${a.here} of ${a.held} (${a.percent}%)`) : L("עוד לא סימנת שיעורים", "No classes marked yet")}
+              {a.excused ? L(` · ${a.excused} באישור`, ` · ${a.excused} excused`) : ""}
+              {lim ? (lim.absences !== undefined ? L(` · מותר עד ${lim.absences} חיסורים`, ` · up to ${lim.absences} absences`) : L(` · חובה ${lim.percent}%`, ` · ${lim.percent}% required`)) : ""}
+              {" "}
+              {rule === c.id ? (
+                <form className="study-attend-rule" onSubmit={(e) => { e.preventDefault(); setLimit(c.id, String(new FormData(e.currentTarget).get("v") ?? "")); }}>
+                  <input name="v" defaultValue={lim ? (lim.absences !== undefined ? String(lim.absences) : `${lim.percent}%`) : ""} placeholder={L("3 או 80%", "3 or 80%")} aria-label={L("מותר עד כמה חיסורים, או אחוז חובה (למשל 80%)", "Absences allowed, or a required percent (e.g. 80%)")} size={6} autoFocus />
+                  <button type="submit" className="small">{L("שמירה", "Save")}</button>
+                </form>
+              ) : <button type="button" className="link small" onClick={() => setRule(c.id)}>{lim ? L("לשנות", "Change") : L("+ חובת נוכחות", "+ Attendance rule")}</button>}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

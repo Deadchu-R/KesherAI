@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classNow, classRemindNow, classesOn, cleanTimetable, freeSlots } from "./timetable.js";
+import { attendanceFor, classNow, classRemindNow, classesOn, classesToMark, cleanTimetable, freeSlots } from "./timetable.js";
 
 const t = cleanTimetable({
   slots: [
@@ -60,4 +60,32 @@ test("freeSlots: study time after classes, not on top of them or of each other",
   assert.deepEqual(freeSlots(t, "2026-11-17", [45, 30], { now: new Date("2026-11-10T09:00") }), ["18:15", "19:10"]);
   assert.deepEqual(freeSlots(t, "2026-11-18", [60], { now: new Date("2026-11-10T09:00") }), ["16:00"]);
   assert.deepEqual(freeSlots(t, "2026-11-17", [400], { now: new Date("2026-11-10T09:00") }), [undefined]);
+});
+
+test("attendance: marks and rules are checked, unmarked classes listed, sums and what is left", () => {
+  const tt = cleanTimetable({
+    slots: [{ id: "a", courseId: "anat", day: 0, start: "10:00", end: "12:00" }, { id: "b", courseId: "anat", day: 2, start: "08:00", end: "10:00" }, { id: "p", courseId: "pharm", day: 0, start: "14:00", end: "16:00" }],
+    attendance: { "a@2026-11-15": "here", "b@2026-11-10": "absent", "a@2026-11-08": "here", "a@2026-11-01": "excused", "bad key": "here", "a@2026-11-02": "maybe" },
+    limits: { anat: { absences: 2 }, pharm: { percent: 80 }, "../x": { absences: 1 }, big: { absences: 99 } },
+    trackSince: new Date(2026, 10, 9, 9).getTime(),
+  });
+  assert.deepEqual(Object.keys(tt.attendance!).sort(), ["a@2026-11-01", "a@2026-11-08", "a@2026-11-15", "b@2026-11-10"]);
+  assert.deepEqual(tt.limits, { anat: { absences: 2 }, pharm: { percent: 80 } });
+  const anat = attendanceFor(tt, "anat");
+  assert.deepEqual([anat.held, anat.here, anat.absent, anat.excused, anat.percent, anat.left, anat.warn, anat.over], [3, 2, 1, 1, 67, 1, true, false]);
+  // Sunday 2026-11-15 at 13:00: the 10:00 class ended (marked), 14:00 not yet; Tuesday the 10th's class is marked.
+  const now = new Date(2026, 10, 15, 13, 0);
+  const todo = classesToMark(tt, now, 7);
+  assert.deepEqual(todo, []);
+  const later = classesToMark(tt, new Date(2026, 10, 15, 17, 0), 7);
+  assert.deepEqual(later.map((x) => x.key), ["p@2026-11-15"]);
+  // Not tracking: nothing asks; tracking since today: only today's classes.
+  assert.deepEqual(classesToMark({ ...tt, trackSince: undefined } as never, new Date(2026, 10, 15, 17, 0)), []);
+  assert.deepEqual(classesToMark({ ...tt, attendance: {}, trackSince: new Date(2026, 10, 15, 9).getTime() }, new Date(2026, 10, 15, 17, 0)).map((x) => x.key), ["p@2026-11-15", "a@2026-11-15"]);
+  // A percent rule: 4 of 5 at 80% leaves no more absences; one more class there leaves one.
+  const pc = cleanTimetable({ slots: tt.slots, limits: { pharm: { percent: 80 } }, attendance: { "p@2026-11-01": "here", "p@2026-11-02": "here", "p@2026-11-03": "here", "p@2026-11-04": "here", "p@2026-11-05": "absent" } });
+  assert.equal(attendanceFor(pc, "pharm").left, 0);
+  assert.equal(attendanceFor(cleanTimetable({ ...pc, attendance: { ...pc.attendance, "p@2026-11-06": "here" } }), "pharm").left, 0);
+  assert.equal(attendanceFor(cleanTimetable({ ...pc, attendance: { ...pc.attendance, "p@2026-11-06": "here", "p@2026-11-07": "here", "p@2026-11-08": "here", "p@2026-11-09": "here", "p@2026-11-10": "here" } }), "pharm").left, 1);
+  assert.equal(attendanceFor(tt, "none").held, 0);
 });
