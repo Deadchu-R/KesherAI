@@ -3343,3 +3343,24 @@ div.slide-list { padding-inline-start: 0; }
 .study-mock-topic a { grid-row: 1; grid-column: 2; }
 .study-mock-time label { display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .study-mock-time input[type="checkbox"] { width: 18px; height: 18px; flex: none; }
+/* Grades and the weighted average (design Grades). */
+.study-grades { display: flex; flex-direction: column; gap: 10px; }
+.study-grades-head { display: flex; align-items: baseline; gap: 8px; background: none; border: 0; padding: 0; color: inherit; text-align: start; flex-wrap: wrap; }
+.study-grades-avg { font-size: 24px; }
+.study-grade-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.study-grade-top, .study-grade-part, .study-grade-more, .study-grade-target { gap: 8px; align-items: center; flex-wrap: wrap; }
+.study-grades label { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; }
+.study-grades input[type="number"] { width: 64px; }
+.study-grades input[type="checkbox"] { width: 16px; height: 16px; }
+.study-grade-name { flex: 1 1 160px; font-weight: 600; }
+.study-grade-part input:not([type]) { flex: 1 1 100px; min-width: 0; }
+.study-grade-final { font-size: 18px; }
+.study-grade-need { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 8px; padding: 6px 8px; margin: 0; }
+.study-grade-need.far { background: color-mix(in srgb, #ffb27a 18%, transparent); }
+.study-grade-top, .study-grade-part { flex-wrap: nowrap; }
+.study-grade-top .study-grade-name, .study-grade-part input:not([type]) { flex: 1 1 0; min-width: 0; }
+.study-grade-top .grow { display: none; }
+.study-grade-row button.ghost.small { padding: 2px 6px; min-width: 0; flex: none; }
+@media (max-width: 600px) { .study-grades input[type="number"] { width: 52px; } }
+.study-grades input[type="number"] { padding: 6px 4px; text-align: center; box-sizing: border-box; }
+@media (max-width: 600px) { .study-grades input[type="number"] { width: 56px; } }

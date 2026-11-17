@@ -48,6 +48,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
   /** Simple mode and the first visit (design StudyWelcome / StudySimple). */
   app.get("/api/study/prefs", async () => st.prefs());
+  app.get("/api/study/grades", async () => st.grades());
+  app.put("/api/study/grades", { bodyLimit: 512 * 1024 }, async (req) => st.setGrades(req.body));
   app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean } }>("/api/study/prefs", async (req) => {
     const b = req.body ?? {};
     return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));

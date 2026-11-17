@@ -1,0 +1,131 @@
+/**
+ * Grades and the weighted average (design Grades, RESEARCH_LOG "Students, part 27" #2): each course's credits (נק"ז)
+ * and the parts of its grade with their weights, the course grade, what she needs in what is left for the grade she
+ * wants, and the weighted average with what she needs in the credits left for a target average.
+ */
+
+/** A part of a course's grade: its weight in percent and her score once known. */
+export interface GradePart {
+  name: string;
+  weight: number;
+  score?: number;
+}
+
+/** A course in her grades: one of her Study courses or an earlier one. */
+export interface GradeRow {
+  id: string;
+  /** Her Study course, when it is one. */
+  courseId?: string;
+  name: string;
+  credits: number;
+  parts: GradePart[];
+  /** A final grade she typed (an earlier course, or the official one): wins over the parts. */
+  final?: number;
+  /** The lowest exam score that passes the course, when it has one (many courses: 55 or 60). */
+  minExam?: number;
+  /** The grade she wants in this course (else her target average). */
+  want?: number;
+}
+
+/** All her grades. */
+export interface Grades {
+  rows: GradeRow[];
+  /** The average she aims for. */
+  target?: number;
+  /** Credits she still has to take (for "what average do I need in the rest"). */
+  remaining?: number;
+}
+
+const num = (v: unknown, lo: number, hi: number): number | undefined => {
+  const n = Number(v);
+  return v === null || v === undefined || v === "" || !Number.isFinite(n) ? undefined : Math.max(lo, Math.min(hi, Math.round(n * 10) / 10));
+};
+const text = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[\r\n]+/g, " ").trim().slice(0, n) : "");
+
+/** Her grades from the page, checked: at most 200 courses of at most 10 parts, numbers in range. */
+export function cleanGrades(raw: unknown): Grades {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rows = (Array.isArray(o.rows) ? o.rows : []).slice(0, 200).flatMap((r, i): GradeRow[] => {
+    const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const name = text(x.name, 120);
+    if (!name) return [];
+    const parts = (Array.isArray(x.parts) ? x.parts : []).slice(0, 10).flatMap((p): GradePart[] => {
+      const y = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const weight = num(y.weight, 0, 100);
+      if (weight === undefined) return [];
+      const score = num(y.score, 0, 100);
+      return [{ name: text(y.name, 60), weight, ...(score !== undefined ? { score } : {}) }];
+    });
+    const final = num(x.final, 0, 100);
+    const minExam = num(x.minExam, 0, 100);
+    const want = num(x.want, 0, 100);
+    return [{
+      id: typeof x.id === "string" && /^[\w-]{1,40}$/.test(x.id) ? x.id : `g${i}${Date.now().toString(36)}`,
+      ...(typeof x.courseId === "string" && /^[\w-]{1,80}$/.test(x.courseId) ? { courseId: x.courseId } : {}),
+      name,
+      credits: num(x.credits, 0, 30) ?? 0,
+      parts,
+      ...(final !== undefined ? { final } : {}),
+      ...(minExam !== undefined ? { minExam } : {}),
+      ...(want !== undefined ? { want } : {}),
+    }];
+  });
+  const target = num(o.target, 0, 100);
+  const remaining = num(o.remaining, 0, 400);
+  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}) };
+}
+
+/**
+ * A course's grade: the final one she typed, else the weighted parts once all are known (weights that do not add up
+ * to 100 are taken relative to their sum). `sofar` is the grade from the parts known so far, `left` the weight still
+ * open.
+ */
+export function rowGrade(r: GradeRow): { grade?: number; sofar?: number; left: number } {
+  if (r.final !== undefined) return { grade: r.final, left: 0 };
+  const total = r.parts.reduce((s, p) => s + p.weight, 0);
+  if (!total) return { left: 0 };
+  const known = r.parts.filter((p) => p.score !== undefined);
+  const kw = known.reduce((s, p) => s + p.weight, 0);
+  const got = known.reduce((s, p) => s + p.weight * p.score!, 0);
+  const left = ((total - kw) / total) * 100;
+  const round = (n: number) => Math.round(n * 10) / 10;
+  return { ...(left === 0 ? { grade: round(got / total) } : {}), ...(kw ? { sofar: round(got / kw) } : {}), left: round(left) };
+}
+
+/**
+ * What she needs in the parts still open (as one score) to finish the course with `target`, at least the course's
+ * passing exam score. Undefined when nothing is open; above 100 means it cannot be reached.
+ */
+export function neededFor(r: GradeRow, target: number): number | undefined {
+  if (r.final !== undefined) return undefined;
+  const total = r.parts.reduce((s, p) => s + p.weight, 0);
+  const open = r.parts.filter((p) => p.score === undefined).reduce((s, p) => s + p.weight, 0);
+  if (!total || !open) return undefined;
+  const got = r.parts.filter((p) => p.score !== undefined).reduce((s, p) => s + p.weight * p.score!, 0);
+  const need = Math.ceil((target * total - got) / open);
+  return Math.max(0, need, r.minExam ?? 0);
+}
+
+/** The weighted average of the courses with a grade, and their credits. */
+export function weightedAverage(rows: GradeRow[]): { average?: number; credits: number } {
+  let sum = 0;
+  let credits = 0;
+  for (const r of rows) {
+    const g = rowGrade(r).grade;
+    if (g === undefined || !r.credits) continue;
+    sum += g * r.credits;
+    credits += r.credits;
+  }
+  return { ...(credits ? { average: Math.round((sum / credits) * 100) / 100 } : {}), credits };
+}
+
+/**
+ * The average she needs in the credits still to come to reach `target` overall. Undefined without credits to come;
+ * above 100 means it cannot be reached.
+ */
+export function averageNeeded(rows: GradeRow[], target: number, remaining: number): number | undefined {
+  if (!(remaining > 0)) return undefined;
+  const { average, credits } = weightedAverage(rows);
+  const need = (target * (credits + remaining) - (average ?? 0) * credits) / remaining;
+  return Math.max(0, Math.round(need * 10) / 10);
+}

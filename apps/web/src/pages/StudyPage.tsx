@@ -8,6 +8,7 @@ import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
 import { StudyMock } from "../StudyMock";
+import { StudyGrades } from "../StudyGrades";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -165,6 +166,7 @@ function StudyHome() {
       {!!courses?.length && <GoalCard />}
       {!!courses?.length && <FocusCard courses={courses} />}
       {!!courses?.length && <WeekCard />}
+      {!!courses?.length && <StudyGrades courses={courses.map((c) => ({ id: c.id, name: c.name }))} />}
       {!!courses?.length && <section className="study-today">
         <h2>{L("להיום", "Today")}</h2>
         <div className="study-actions">
