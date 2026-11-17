@@ -1060,3 +1060,10 @@ S5 an outside scanner's rules for Electron.
 - **The sheet**: built in the page from her summary, terms and diagram as React text nodes (the diagram through the existing parser, never HTML); "PDF" is the browser's print of the page with only the sheet visible. No model call, nothing sent.
 - **Questions during a recording**: the question (600 characters) and the transcript so far (the last 30,000 characters, 1 MB body limit) go to her chosen model with an instruction to answer from the transcript only; the answer is shown as text.
 - Result: no open issues.
+
+## Scan 117 (2026-11-17): KesherAI's own sheets
+- **Formulas**: parsed by our own tokenizer and recursive parser into a tree and computed by a fixed table of functions; anything else (unknown names, `;`, property access, calls on values) is a parse error shown as `#ERR`; nothing is ever passed to `eval`, `Function` or a worker. Cycles are caught (`#CYCLE`), recursion is bounded by the cell count.
+- **Store**: one JSON file per sheet, id checked, written through a temporary file and a rename, mode 0600, under a write lock; saves carry the revision they started at (409 otherwise); at most 50,000 cells of 2,000 characters, 52 columns and 2,000 rows; addresses outside the grid are dropped; versions keep their own copy of the cells.
+- **CSV in**: parsed in our own code from text (6 MB), into cells as typed text — a CSV cell that starts with "=" becomes a formula in KesherAI only (computed by the same safe engine). **CSV out**: values, quoted; a downloaded CSV opened in Excel could still read a value starting with "=" as a formula (CSV injection) — values are written as shown, and a formula's computed value never starts with "=" unless the text itself does. Noted, low: the user's own data.
+- **The chat's "sheet" tool**: acts on the chat's own sheet or one the user named by id (unknown ids refused), cells cleaned the same way.
+- Result: no open issues (one low note).
