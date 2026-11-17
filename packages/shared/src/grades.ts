@@ -27,6 +27,10 @@ export interface GradeRow {
   want?: number;
   /** Which of her degree's requirements it counts toward (a DegreeKind id): design DegreeProgress. */
   kind?: string;
+  /** A pass/fail course (design MoedB): its credits count toward the degree when passed, never in the average. */
+  binary?: boolean;
+  /** A pass/fail course's result, once known. */
+  passed?: boolean;
 }
 
 /** A kind of credits her degree asks for (required, electives, general studies, English…), and how many. */
@@ -49,6 +53,8 @@ export interface Grades {
   total?: number;
   /** The lowest course grade that passes (her institution's; 60 when not set). */
   pass?: number;
+  /** Her institution's rule for a retake (Moed B): the last exam counts, or the higher of the two. */
+  moedRule?: "last" | "best";
 }
 
 const num = (v: unknown, lo: number, hi: number): number | undefined => {
@@ -84,6 +90,7 @@ export function cleanGrades(raw: unknown): Grades {
       ...(minExam !== undefined ? { minExam } : {}),
       ...(want !== undefined ? { want } : {}),
       ...(typeof x.kind === "string" && /^[\w-]{1,40}$/.test(x.kind) ? { kind: x.kind } : {}),
+      ...(x.binary === true ? { binary: true, ...(typeof x.passed === "boolean" ? { passed: x.passed } : {}) } : {}),
     }];
   });
   const kinds = (Array.isArray(o.kinds) ? o.kinds : []).slice(0, 12).flatMap((k, i): DegreeKind[] => {
@@ -96,7 +103,7 @@ export function cleanGrades(raw: unknown): Grades {
   const pass = num(o.pass, 0, 100);
   const target = num(o.target, 0, 100);
   const remaining = num(o.remaining, 0, 400);
-  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}), ...(kinds.length ? { kinds } : {}), ...(total !== undefined ? { total } : {}), ...(pass !== undefined ? { pass } : {}) };
+  return { rows, ...(target !== undefined ? { target } : {}), ...(remaining !== undefined ? { remaining } : {}), ...(kinds.length ? { kinds } : {}), ...(total !== undefined ? { total } : {}), ...(pass !== undefined ? { pass } : {}), ...(o.moedRule === "last" || o.moedRule === "best" ? { moedRule: o.moedRule } : {}) };
 }
 
 /**
@@ -136,7 +143,7 @@ export function weightedAverage(rows: GradeRow[]): { average?: number; credits: 
   let credits = 0;
   for (const r of rows) {
     const g = rowGrade(r).grade;
-    if (g === undefined || !r.credits) continue;
+    if (r.binary || g === undefined || !r.credits) continue;
     sum += g * r.credits;
     credits += r.credits;
   }
@@ -173,7 +180,7 @@ export function degreeProgress(g: Grades): { kinds: KindProgress[]; total: KindP
   const pass = g.pass ?? 60;
   const sum = (rows: GradeRow[], what: "done" | "doing" | "failed") => rows.reduce((n, r) => {
     const grade = rowGrade(r).grade;
-    const is = grade === undefined ? "doing" : grade >= pass ? "done" : "failed";
+    const is = r.binary ? (r.passed === undefined ? "doing" : r.passed ? "done" : "failed") : grade === undefined ? "doing" : grade >= pass ? "done" : "failed";
     return is === what ? n + r.credits : n;
   }, 0);
   const round = (n: number) => Math.round(n * 10) / 10;
@@ -185,4 +192,20 @@ export function degreeProgress(g: Grades): { kinds: KindProgress[]; total: KindP
   const kinds = (g.kinds ?? []).map((k) => of(k.id, k.name, k.need, g.rows.filter((r) => r.kind === k.id)));
   const need = Math.max(g.total ?? 0, kinds.reduce((n, k) => n + k.need, 0));
   return { kinds, total: of("all", "", need, g.rows), failed: round(sum(g.rows, "failed")) };
+}
+
+/**
+ * "Should I take Moed B?" (design MoedB, like the Israeli "מועד ב׳" app): the course grade and the weighted average
+ * with her Moed A score and with a Moed B score she expects, under her institution's rule (the last exam counts, or
+ * the higher). `part` is the exam part of the course (by default the heaviest).
+ */
+export function moedB(g: Grades, rowId: string, b: number, part?: number): { part: number; a?: number; course: { now?: number; withB?: number }; average: { now?: number; withB?: number } } | undefined {
+  const row = g.rows.find((r) => r.id === rowId);
+  if (!row || row.binary || !row.parts.length || row.final !== undefined) return undefined;
+  const i = part ?? row.parts.reduce((best, p, k) => (p.weight > row.parts[best]!.weight ? k : best), 0);
+  const a = row.parts[i]?.score;
+  const score = g.moedRule === "best" && a !== undefined ? Math.max(a, b) : b;
+  const withB = { ...row, parts: row.parts.map((p, k) => (k === i ? { ...p, score } : p)) };
+  const rows = g.rows.map((r) => (r.id === rowId ? withB : r));
+  return { part: i, ...(a !== undefined ? { a } : {}), course: { now: rowGrade(row).grade, withB: rowGrade(withB).grade }, average: { now: weightedAverage(g.rows).average, withB: weightedAverage(rows).average } };
 }

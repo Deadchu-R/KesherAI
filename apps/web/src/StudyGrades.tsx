@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { averageNeeded, degreeProgress, neededFor, rowGrade, weightedAverage, type DegreeKind, type GradeRow, type Grades } from "@kesher/shared";
+import { averageNeeded, degreeProgress, moedB, neededFor, rowGrade, weightedAverage, type DegreeKind, type GradeRow, type Grades } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -50,11 +50,13 @@ export function StudyGrades({ courses }: { courses: Array<{ id: string; name: st
                 <input dir="auto" className="study-grade-name" value={r.name} onChange={(e) => setRow(r.id, { name: e.target.value })} aria-label={L("שם הקורס", "Course name")} />
                 <label className="small">{L('נק"ז', "Credits")} <input type="number" min={0} max={30} step={0.5} value={val(r.credits)} onChange={(e) => setRow(r.id, { credits: parse(e.target.value) ?? 0 })} /></label>
                 <span className="grow" />
-                <b className="study-grade-final">{grade ?? (sofar !== undefined ? <span className="muted small">{L(`עד עכשיו ${sofar}`, `so far ${sofar}`)}</span> : "—")}</b>
+                <b className="study-grade-final">{r.binary ? (r.passed === undefined ? "—" : r.passed ? L("עבר", "Pass") : L("נכשל", "Fail")) : grade ?? (sofar !== undefined ? <span className="muted small">{L(`עד עכשיו ${sofar}`, `so far ${sofar}`)}</span> : "—")}</b>
                 <button type="button" className="ghost small" aria-label={L("להסיר", "Remove")} onClick={() => confirm(L(`להסיר את "${r.name}" מהציונים?`, `Remove "${r.name}" from the grades?`)) && save({ ...g, rows: g.rows.filter((x) => x.id !== r.id) })}>✕</button>
               </div>
               {g.kinds?.length ? <label className="small study-grade-kind">{L("נחשב בתואר כ:", "Counts as:")} <select value={r.kind ?? ""} onChange={(e) => { const { kind: _, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? { ...rest, ...(e.target.value ? { kind: e.target.value } : {}) } : x)) }); }} aria-label={L("נחשב בתואר כ", "Counts in the degree as")}><option value="">{L("סוג…", "Kind…")}</option>{g.kinds.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}</select></label> : null}
-              {r.final === undefined && (
+              {r.binary ? (
+                <label className="small study-grade-kind">{L("תוצאה:", "Result:")} <select value={r.passed === undefined ? "" : r.passed ? "1" : "0"} onChange={(e) => { const { passed: _, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? { ...rest, ...(e.target.value ? { passed: e.target.value === "1" } : {}) } : x)) }); }}><option value="">{L("עוד לא", "Not yet")}</option><option value="1">{L("עבר", "Pass")}</option><option value="0">{L("נכשל", "Fail")}</option></select></label>
+              ) : r.final === undefined && (
                 <div className="study-grade-parts">
                   {r.parts.map((p, k) => (
                     <div key={k} className="row study-grade-part">
@@ -75,11 +77,13 @@ export function StudyGrades({ courses }: { courses: Array<{ id: string; name: st
                         : L(`כדי לסיים עם ${want} צריך ${need} במה שנשאר (${left}% מהציון)`, `To finish with ${want} you need ${need} in what is left (${left}% of the grade)`)}{r.minExam !== undefined ? L(` · מינימום לעבור: ${r.minExam}`, ` · pass mark: ${r.minExam}`) : ""}
                     </p>
                   )}
+                  <MoedB g={g} row={r} />
                 </div>
               )}
-              <label className="small study-grade-typed"><input type="checkbox" checked={r.final !== undefined} onChange={(e) => { const { final: _, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? (e.target.checked ? { ...rest, final: grade ?? sofar ?? 80 } : rest) : x)) }); }} /> {L("ציון סופי ידוע", "Final grade known")}
+              <label className="small study-grade-typed"><input type="checkbox" checked={!!r.binary} onChange={(e) => { const { binary: _b, passed: _p, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? (e.target.checked ? { ...rest, binary: true } : rest) : x)) }); }} /> {L("עובר/נכשל (לא נכנס לממוצע)", "Pass/fail (not in the average)")}</label>
+              {!r.binary && <label className="small study-grade-typed"><input type="checkbox" checked={r.final !== undefined} onChange={(e) => { const { final: _, ...rest } = r; save({ ...g, rows: g.rows.map((x) => (x.id === r.id ? (e.target.checked ? { ...rest, final: grade ?? sofar ?? 80 } : rest) : x)) }); }} /> {L("ציון סופי ידוע", "Final grade known")}
                 {r.final !== undefined && <input type="number" min={0} max={100} value={val(r.final)} onChange={(e) => setRow(r.id, { final: parse(e.target.value) ?? 0 })} aria-label={L("ציון סופי", "Final grade")} />}
-              </label>
+              </label>}
             </div>
           );
         })}
@@ -89,6 +93,7 @@ export function StudyGrades({ courses }: { courses: Array<{ id: string; name: st
         </div>
         <div className="row study-grade-target">
           <label className="small">{L("יעד ממוצע", "Target average")} <input type="number" min={0} max={100} value={val(g.target)} onChange={(e) => { const { target: _, ...rest } = g; const t = parse(e.target.value); save({ ...rest, ...(t !== undefined ? { target: t } : {}) }); }} /></label>
+          <label className="small">{L("במועד ב׳ קובע", "On a retake counts")} <select value={g.moedRule ?? "last"} onChange={(e) => save({ ...g, moedRule: e.target.value === "best" ? "best" : "last" })}><option value="last">{L("הציון האחרון", "the last exam")}</option><option value="best">{L("הגבוה מבין השניים", "the higher of the two")}</option></select></label>
           <label className="small">{L('נק"ז שנשארו', "Credits to come")} <input type="number" min={0} max={400} value={val(g.remaining)} onChange={(e) => { const { remaining: _, ...rest } = g; const n = parse(e.target.value); save({ ...rest, ...(n !== undefined ? { remaining: n } : {}) }); }} /></label>
         </div>
         <DegreeProgress g={g} save={save} />
@@ -164,6 +169,30 @@ function DegreeProgress({ g, save }: { g: Grades; save: (g: Grades) => void }) {
           {p.failed > 0 && <p className="muted small">{L(`${p.failed} נק"ז בקורסים מתחת לציון עובר לא נספרים.`, `${p.failed} credits in courses below the pass mark are not counted.`)}</p>}
           {g.remaining === undefined && p.total.missing > 0 && <button type="button" className="ghost small" onClick={() => save({ ...g, remaining: p.total.missing })}>{L(`להשתמש ב-${p.total.missing} כנק"ז שנשארו לחישוב הממוצע`, `Use ${p.total.missing} as the credits to come`)}</button>}
         </>
+      )}
+    </div>
+  );
+}
+
+/** "Should I take Moed B?" for one course (design MoedB): its grade and the average now and with the score she expects. */
+function MoedB({ g, row }: { g: Grades; row: GradeRow }) {
+  const [open, setOpen] = useState(false);
+  const [b, setB] = useState<number | undefined>();
+  if (!row.parts.some((p) => p.score !== undefined)) return null;
+  if (!open) return <button type="button" className="ghost small study-moed-btn" onClick={() => setOpen(true)}>🔁 {L("לגשת למועד ב׳?", "Take Moed B?")}</button>;
+  const r = b !== undefined ? moedB(g, row.id, b) : undefined;
+  const diff = (x?: number, y?: number) => (x !== undefined && y !== undefined ? `${y - x >= 0 ? "+" : ""}${Math.round((y - x) * 100) / 100}` : "");
+  return (
+    <div className="study-moed">
+      <label className="small">{L(`ציון צפוי במועד ב׳ (ב${row.parts[moedB(g, row.id, 0)?.part ?? 0]?.name || L("מבחן", "exam")})`, "Expected Moed B score")} <input type="number" min={0} max={100} value={val(b)} onChange={(e) => setB(parse(e.target.value))} /></label>
+      {r && (
+        <p className="small" dir="auto">
+          {L(`ציון הקורס: ${r.course.now ?? "—"} ← ${r.course.withB ?? "—"} (${diff(r.course.now, r.course.withB)})`, `Course grade: ${r.course.now ?? "—"} → ${r.course.withB ?? "—"} (${diff(r.course.now, r.course.withB)})`)}
+          <br />
+          {L(`הממוצע: ${r.average.now ?? "—"} ← ${r.average.withB ?? "—"} (${diff(r.average.now, r.average.withB)})`, `Average: ${r.average.now ?? "—"} → ${r.average.withB ?? "—"} (${diff(r.average.now, r.average.withB)})`)}
+          <br />
+          <span className="muted">{(g.moedRule ?? "last") === "last" ? L("אצלך הציון האחרון קובע, גם אם הוא נמוך יותר. כדאי לבדוק את התקנון.", "With you the last exam counts, even if lower. Check your rules.") : L("אצלך הגבוה מבין השניים קובע, אז אין סיכון לרדת.", "With you the higher counts, so there is no risk of going down.")}</span>
+        </p>
       )}
     </div>
   );

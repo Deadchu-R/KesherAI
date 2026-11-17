@@ -56,3 +56,20 @@ test("degree progress: passed, in progress and missing credits by kind", async (
   assert.deepEqual([p.total.need, p.total.done, p.total.doing, p.total.missing, p.failed], [20, 10, 2, 8, 3]);
   assert.equal(degreeProgress({ ...g, pass: 95 }).total.done, 0);
 });
+
+test("Moed B: the course grade and average either way, by the institution's rule; pass/fail courses stay out of the average", async () => {
+  const { moedB, degreeProgress } = await import("./grades.js");
+  const g = cleanGrades({ rows: [
+    { id: "a", name: "פיזיו", credits: 4, parts: [{ name: "עבודה", weight: 30, score: 90 }, { name: "מבחן", weight: 70, score: 60 }] },
+    { id: "b", name: "אחר", credits: 2, final: 80 },
+    { id: "c", name: "סדנה", credits: 2, binary: true, passed: true },
+  ], kinds: [{ id: "x", name: "x", need: 10 }] });
+  assert.equal(weightedAverage(g.rows).average, 72.67);
+  const last = moedB(g, "a", 50)!;
+  assert.deepEqual([last.part, last.a, last.course.now, last.course.withB], [1, 60, 69, 62]);
+  const best = moedB({ ...g, moedRule: "best" }, "a", 50)!;
+  assert.equal(best.course.withB, 69);
+  assert.equal(moedB(g, "a", 90)!.average.withB, 86.67);
+  assert.equal(moedB(g, "c", 90), undefined);
+  assert.equal(degreeProgress(g).total.done, 8);
+});

@@ -3587,3 +3587,5 @@ div.slide-list { padding-inline-start: 0; }
 .study-portion-head { justify-content: space-between; align-items: baseline; }
 .study-portion progress { width: 100%; }
 .study-portion-text { white-space: pre-wrap; line-height: 1.8; }
+.study-moed { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.study-moed-btn { align-self: flex-start; }
