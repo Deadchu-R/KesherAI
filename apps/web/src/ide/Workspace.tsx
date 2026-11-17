@@ -2,15 +2,17 @@
  * The IDE panel beside a code chat: the project's files, the changes the agent made (with diffs), and a
  * terminal in the project folder. On a phone it opens on demand at half the screen.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "../api";
-import { t } from "../i18n";
+import { getLocale, he$, t } from "../i18n";
 import { EditorPane } from "./Editor";
 import { TerminalPane } from "./Terminal";
 import { useSessionEnv } from "../CodeEnvironment";
 import { GitPanel } from "./GitPanel";
 import { AgentCliBar } from "./AgentCliBar";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface FileItem { path: string; size: number }
 interface Node { name: string; path: string; children?: Map<string, Node> }
@@ -70,6 +72,35 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
   // A fresh terminal (n) that may start a known command (Antigravity CLI, or its install).
   const [termRun, setTermRun] = useState<{ run?: string; n: number }>({ n: 0 });
   const env = useSessionEnv(convId);
+  // Follow the agent (like Cursor and Zed): the file it writes opens in the editor as it works. On by default; her own
+  // choice is remembered on this device.
+  const [follow, setFollow] = useState(() => {
+    try {
+      return localStorage.getItem("kesher-follow-agent") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const lastSeen = useRef(events.at(-1)?.seq ?? 0);
+  useEffect(() => {
+    const fresh = events.filter((e) => (e.seq ?? 0) > lastSeen.current);
+    if (!fresh.length) return;
+    lastSeen.current = fresh.at(-1)!.seq ?? lastSeen.current;
+    if (!follow || tab !== "files") return;
+    const wrote = [...fresh].reverse().find((e): e is Extract<AgentEvent, { type: "tool_call" }> => e.type === "tool_call" && /^(write_file|edit_file|multi_edit|apply_patch|create_file)$/.test(e.name));
+    const given = typeof wrote?.input?.path === "string" ? wrote.input.path.replace(/\\/g, "/") : "";
+    if (!given) return;
+    const hit = files.find((f) => given === f.path || given.endsWith(`/${f.path}`))?.path ?? (given.includes(":") || given.startsWith("/") ? "" : given);
+    if (!hit) return;
+    setCurrent(hit);
+    // Its folders open in the tree.
+    setOpen((o) => {
+      const n = new Set(o);
+      const parts = hit.split("/");
+      for (let i = 1; i < parts.length; i++) n.add(parts.slice(0, i).join("/"));
+      return n;
+    });
+  }, [events.length]);
 
   useEffect(() => {
     void api<{ files: FileItem[] }>(`/api/conversations/${convId}/files`).then((d) => setFiles(d.files)).catch(() => undefined);
@@ -96,6 +127,7 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
             {x === "changes" && changes.length > 0 && <span className="tab-count">{changes.length}</span>}
           </button>
         ))}
+        <button type="button" className={`ghost small ws-follow${follow ? " on" : ""}`} aria-pressed={follow} title={L("הקובץ שהסוכן כותב נפתח בעורך", "The file the agent writes opens in the editor")} onClick={() => { const v = !follow; setFollow(v); try { localStorage.setItem("kesher-follow-agent", v ? "1" : "0"); } catch { /* this visit only */ } }}>👁 {L("עקוב", "Follow")}</button>
       </nav>
 
       {tab === "files" && (
