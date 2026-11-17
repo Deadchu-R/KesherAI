@@ -1293,7 +1293,7 @@ function LectureView({ courseId, lectureId, courseField, onChange }: { courseId:
         {view === "watch" ? <StudyVideoLecture base={base} lecture={l} onLecture={setL} />
           : view === "video" ? <StudyVideo base={base} lecture={l} onLecture={setL} />
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
-          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : l.text}</div>
+          : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : <ReadAlong text={l.text} plain />}</div>
           : !l.summary ? (
             <div className="study-empty">
               <p className="muted">{L("עוד לא סוכם. הסיכום, המונחים והתרשים נכתבים מהטקסט של ההרצאה בלבד.", "Not summarized yet. The summary, terms and diagram come from the lecture's text only.")}</p>

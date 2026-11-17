@@ -17,9 +17,10 @@ export function sentences(text: string): string[] {
 
 /**
  * Read-along (RESEARCH_LOG students part 26 #4, like NaturalReader): the text read aloud sentence by sentence, the
- * sentence being read highlighted and kept in view; tap a sentence to read from it. Otherwise the text as usual.
+ * sentence being read highlighted and kept in view; tap a sentence to read from it. Otherwise the text as usual
+ * (`plain`: a lecture's own text, shown as it is, not as markdown).
  */
-export function ReadAlong({ text }: { text: string }) {
+export function ReadAlong({ text, plain }: { text: string; plain?: boolean }) {
   const parts = sentences(text);
   const [at, setAt] = useState<number | null>(null);
   const run = useRef(0);
@@ -50,7 +51,7 @@ export function ReadAlong({ text }: { text: string }) {
   return (
     <div className="read-along">
       <button type="button" className={at !== null ? "primary" : ""} onClick={() => (at !== null ? stop() : play(0))}>{at !== null ? `⏹ ${L("עצירה", "Stop")}` : `🔊 ${L("להקריא עם הדגשה", "Read aloud with highlight")}`}</button>
-      {at === null ? <div dir="auto"><RichText text={text} /></div> : (
+      {at === null ? (plain ? <div dir="auto" className="read-along-plain">{text}</div> : <div dir="auto"><RichText text={text} /></div>) : (
         <div ref={box} className="read-along-text" dir="auto">
           {parts.map((p, i) => <span key={i} data-s={i} className={i === at ? "now" : i < at ? "read" : ""} onClick={() => play(i)}>{p} </span>)}
         </div>
