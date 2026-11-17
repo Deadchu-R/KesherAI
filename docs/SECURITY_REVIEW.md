@@ -971,3 +971,10 @@ S5 an outside scanner's rules for Electron.
 - **"+" files**: recordings, videos and code are read only inside the chat's folders (the same check as documents); ffmpeg and whisper get the path as an argument list; frames and transcripts stay on this computer unless the user chose a cloud speech service.
 - **Translator**: the answer's prose only; code, inline code and links leave as markers and must come back unchanged, or the original answer stays.
 - Performance: KaTeX and Mermaid are their own chunks; the translator runs only when the final answer is in another language or mixes alphabets (one extra model call). Secrets/personal paths: none in the diff.
+
+## Scan 106 (2026-11-17): the design canvas, the translated chip, Moodle, My week, the KaTeX version
+- **Moodle**: everything runs in KesherAI's own browser pane with her own sign-in (KesherAI never sees or types a password). The address is checked (https, a host and a plain path); the pane only calls Moodle's AJAX service with three read methods (enrolled courses, the timeline of what is due, site info) and refuses any other; it GETs only `course/view.php?id=<n>` and files under `mod/resource/view.php` or `pluginfile.php` on that same Moodle; nothing is posted to Moodle except the read-method call itself. Files are capped at 60 MB and only PDF, slides, Word and text become lectures; each file is remembered so it is brought in once.
+- **My week**: dates and minutes from the model are checked and clamped before they are kept; calendar events are written only on her click, to her primary calendar, with no guests or emails.
+- **Design canvas**: screens run in the same sandbox as artifacts (no same-origin, a content policy with no network); comments stay in this browser; "ask for a change" sends a chat message, nothing else.
+- **KaTeX**: back on the patched version the repository's overrides require (^0.18.2); the release had failed on the lockfile.
+- Performance: Moodle and plans are read on her click or when Study opens; the plan file drops plans two weeks after their due day. Secrets/personal paths: none in the diff.
