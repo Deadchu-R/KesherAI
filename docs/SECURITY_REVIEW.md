@@ -1123,6 +1123,15 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 133 (2026-11-18): Back on track, My progress and the goal reminder, long reports and quizzes on a small context
+- **Back on track**: `/review?limit=N&backlog=1` caps N at 1–500; the order and the plan are computed from her own course (no new data kept); the pace is one word in the browser's or phone's storage.
+- **Long reports (fixed from Roee's phone)**: "Context size has been exceeded" ended an import or a new report with a server error. Parts are now smaller on a context error (halves, then quarters; notes 40k → 20k → 10k characters), a model too small even then gets a 422 with what to do, and the error path no longer leaks a stack or a 500. The retries are bounded (at most three sizes, two levels of halving), so a failing model cannot loop.
+- **Quizzes**: at most one more try, with a third of the material; aborting the request stops it.
+- **My progress / goal reminder (phone)**: computed on the phone from its own data; the reminder is a local notification with fixed text (no course content in it).
+- **Hebrew address**: the converter only swaps listed whole words; the new noun phrases keep their words. No user text reaches a regular expression (the phrases are fixed).
+- **Engine**: after a context overflow the llama.cpp server kept failing to find KV space for later requests; it was reloaded on the PC. The fixes above keep requests within the context, so it should not recur; noted for a check after the install.
+- **Tests**: the self-work worker test no longer depends on free disk (an environment variable only tests set); the 5 GB rule for users is unchanged.
+
 ## Scan 132 (2026-11-17): image cards on the phone, self-work start, the devcontainer, small phone items
 - **Image cards on the phone**: the picture is re-drawn on a canvas and saved as a JPEG (at most 1600 px), which also drops the photo's metadata (EXIF, including where it was taken) before it is kept; it stays in the phone's IndexedDB and never leaves the phone (sync carries only the card, with a name that matches the computer's `^[\w-]{1,80}\.(png|jpg|webp)$` check). At most 40 boxes, labels cut to 200 characters, shown as text. The computer does not request a "ph-" picture; it says the picture is on the phone.
 - **Self-work start**: the "branch taken" check runs `git rev-parse --verify --quiet refs/heads/kesher-self/<digits>` (a fixed pattern, no user text in the command); a model id gets "main/" only when it lacks it.
