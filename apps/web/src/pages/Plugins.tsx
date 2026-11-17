@@ -20,6 +20,9 @@ interface Installed {
   ui?: { pages: unknown[]; panels: unknown[]; styles: unknown[]; composerActions: unknown[] };
   programs?: Array<{ name: string }>;
   removable?: boolean;
+  /** Loaded from a folder she is developing (reloads on every change). */
+  dev?: boolean;
+  dir?: string;
 }
 
 interface CatalogItem {
@@ -154,6 +157,8 @@ export function PluginsPage() {
             <li key={p.id} className={p.status}>
               <div className="pl-main">
                 <strong>{p.name}</strong> <span className="muted small" dir="ltr">v{p.version}{p.author ? ` · ${p.author}` : ""}</span>
+                {p.dev && <span className="chip small" title={p.dir}>🛠 {getLocale() === "he" ? "בפיתוח" : "in development"}</span>}
+                {p.dev && p.error && <p className="small" dir="ltr" style={{ color: "var(--danger, #f08a8a)" }}>{p.error}</p>}
                 {p.description && <p className="muted small" dir="auto">{p.description}</p>}
                 {adds(p).length > 0 && <p className="small">{adds(p).join(" · ")}</p>}
                 {p.permissions.length > 0 && (
@@ -220,7 +225,48 @@ export function PluginsPage() {
         <h2>{t("plMake")}</h2>
         <p className="muted" dir="auto">{t("plMakeText")}</p>
         <a href="https://github.com/Deadchu-R/KesherAI/blob/main/docs/PLUGINS.md" target="_blank" rel="noreferrer">{t("plGuide")}</a>
+        <DevFolders onChange={() => void load().then(() => refreshPluginUi())} />
       </section>
+    </div>
+  );
+}
+
+/**
+ * Plugins she is developing (RESEARCH_LOG "Open source", like Zed's "Install Dev Extension"): a folder with a
+ * kesher-plugin.json is loaded from where it is, and reloads a moment after any file in it changes.
+ */
+function DevFolders({ onChange }: { onChange: () => void }) {
+  const he = getLocale() === "he";
+  const [folders, setFolders] = useState<string[]>([]);
+  const [folder, setFolder] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => void api<{ folders: string[] }>("/api/plugins/dev").then((r) => setFolders(r.folders), () => undefined), []);
+  const send = async (body: { folder: string; remove?: boolean }) => {
+    setError("");
+    try {
+      const r = await api<{ folders: string[] }>("/api/plugins/dev", { method: "POST", body });
+      setFolders(r.folders);
+      setFolder("");
+      onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <div className="stack" style={{ marginTop: 12 }}>
+      <b className="small">🛠 {he ? "טעינת תיקייה (פיתוח)" : "Load a folder (development)"}</b>
+      <p className="muted small">{he ? "תיקייה עם kesher-plugin.json נטענת מהמקום שלה ונטענת מחדש בכל שמירה. ליצירת תיקייה: pnpm create-plugin <id> --dir <תיקייה>." : "A folder with kesher-plugin.json loads from where it is and reloads on every save. To make one: pnpm create-plugin <id> --dir <folder>."}</p>
+      <form className="row" onSubmit={(e) => { e.preventDefault(); if (folder.trim()) void send({ folder: folder.trim() }); }}>
+        <input dir="ltr" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={"C:\\dev\\my-plugin"} aria-label={he ? "נתיב התיקייה" : "Folder path"} style={{ flex: 1, minWidth: 0 }} />
+        <button type="submit" disabled={!folder.trim()}>{he ? "טעינה" : "Load"}</button>
+      </form>
+      {error && <p className="small" role="alert">{error}</p>}
+      {folders.map((f) => (
+        <div key={f} className="row small">
+          <span dir="ltr" className="mono grow" style={{ overflowWrap: "anywhere" }}>{f}</span>
+          <button type="button" className="small" onClick={() => void send({ folder: f, remove: true })}>{he ? "הסרה" : "Remove"}</button>
+        </div>
+      ))}
     </div>
   );
 }

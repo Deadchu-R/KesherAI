@@ -143,7 +143,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   if (worker) registry.add({ id: "main", type: "openai-compatible", name: "KesherAI (main)", location: "local", baseUrl: `${worker.mainUrl.replace(/\/$/, "")}/v1`, options: { waitForServerMs: 10 * 60_000 } });
 
   const plugins = new PluginHost(registry, config, paths.root);
-  if (features.plugins) await plugins.loadAll([paths.plugins, ...(options.pluginRoots ?? [])]);
+  if (features.plugins) await plugins.loadAll([paths.plugins, ...(options.pluginRoots ?? [])], config.pluginDevFolders);
 
   const autodetected = await addProviders(registry, config, options.autodetect ?? features.autodetectLocalServers);
 
@@ -698,6 +698,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();
+      plugins.stopWatching();
       await plugins.deactivateAll();
     },
   };

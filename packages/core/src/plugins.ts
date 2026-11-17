@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, watch, type FSWatcher } from "node:fs";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { CategoryDefinition } from "@kesher/shared";
@@ -24,6 +24,8 @@ export interface LoadedPlugin {
   error?: string;
   /** Its code runs in its own process (board t39); and whether files outside its folders are closed to it there. */
   isolation?: { process: true; files: boolean };
+  /** Loaded from a folder she is developing in (Settings → Plugins → "Load a folder"), reloaded when its files change. */
+  dev?: boolean;
 }
 
 /**
@@ -42,6 +44,9 @@ export class PluginHost {
   private readonly plugins: LoadedPlugin[] = [];
   private readonly active: Array<{ id: string; plugin?: KesherPlugin; proc?: PluginProcess }> = [];
   private roots: string[] = [];
+  private devFolders: string[] = [];
+  private watchers: FSWatcher[] = [];
+  private devTimer?: NodeJS.Timeout;
 
   /**
    * @param registry - Where plugin provider factories go.
@@ -65,28 +70,65 @@ export class PluginHost {
    *
    * @param roots - Folders whose sub-folders are plugins.
    */
-  async loadAll(roots: string[]): Promise<void> {
+  async loadAll(roots: string[], devFolders: string[] = this.devFolders): Promise<void> {
     this.roots = roots;
+    this.devFolders = devFolders;
     for (const root of roots) {
       const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
         if (entry.isDirectory()) await this.loadOne(resolve(root, entry.name));
       }
     }
+    for (const dir of devFolders) await this.loadOne(resolve(dir), true);
+    this.watchDev();
   }
 
-  private async loadOne(dir: string): Promise<void> {
+  /**
+   * Plugins she is developing (like Zed's "Install Dev Extension" and Obsidian's hot reload): each folder is loaded as
+   * a plugin and everything reloads a moment after a file in one changes (node_modules and .git are ignored).
+   */
+  private watchDev(): void {
+    for (const w of this.watchers.splice(0)) w.close();
+    for (const dir of this.devFolders) {
+      try {
+        const w = watch(resolve(dir), { recursive: true }, (_e, name) => {
+          if (name && /(^|[\\/])(node_modules|\.git)([\\/]|$)/.test(String(name))) return;
+          clearTimeout(this.devTimer);
+          this.devTimer = setTimeout(() => void this.reload().catch((err: Error) => console.warn(`[plugins] reload after a change: ${err.message}`)), 800);
+        });
+        w.on("error", () => undefined);
+        this.watchers.push(w);
+      } catch {
+        // A folder that is gone: shown in the list as an error by loadOne.
+      }
+    }
+  }
+
+  /** Sets the folders she is developing; they load on the next {@link reload}. */
+  setDevFolders(folders: string[]): void {
+    this.devFolders = [...folders];
+  }
+
+  /** Stops watching the development folders (at shutdown). */
+  stopWatching(): void {
+    clearTimeout(this.devTimer);
+    for (const w of this.watchers.splice(0)) w.close();
+  }
+
+  private async loadOne(dir: string, dev = false): Promise<void> {
     let manifest: PluginManifest;
     try {
       const raw = await readFile(join(dir, "kesher-plugin.json"), "utf8");
       manifest = PluginManifestSchema.parse(JSON.parse(raw));
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return; // not a plugin folder
+      if ((err as NodeJS.ErrnoException).code === "ENOENT" && !dev) return; // not a plugin folder
       console.warn(`[plugins] invalid manifest in ${dir}: ${(err as Error).message}`);
+      // A folder she is developing shows its mistake in the list instead of disappearing.
+      if (dev) this.plugins.push({ manifest: { id: `dev:${dir.split(/[\\/]/).pop() ?? "plugin"}`, name: dir, version: "0.0.0", kesher: { apiVersion: PLUGIN_API_VERSION } } as unknown as PluginManifest, dir, status: "error", error: `kesher-plugin.json: ${(err as Error).message}`, dev: true });
       return;
     }
 
-    const record: LoadedPlugin = { manifest, dir, status: "disabled" };
+    const record: LoadedPlugin = { manifest, dir, status: "disabled", ...(dev ? { dev: true } : {}) };
     this.plugins.push(record);
     if (this.plugins.filter((p) => p.manifest.id === manifest.id).length > 1) {
       record.status = "error";

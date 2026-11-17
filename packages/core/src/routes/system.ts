@@ -130,7 +130,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get("/api/system/device", async () => deviceInfo());
 
   app.get("/api/plugins", async () =>
-    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep), ...(p.isolation ? { isolation: p.isolation } : {}) })),
+    s.plugins.list().map((p) => ({ ...p.manifest, status: p.status, error: p.error, dir: p.dir, removable: resolve(p.dir).startsWith(resolve(s.paths.plugins) + sep), ...(p.isolation ? { isolation: p.isolation } : {}), ...(p.dev ? { dev: true } : {}) })),
   );
 
   app.get("/api/tools", async () =>

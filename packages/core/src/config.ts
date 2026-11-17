@@ -400,6 +400,8 @@ export const KesherConfigSchema = z.object({
     .prefault({}),
   /** Per-plugin settings, keyed by plugin id. */
   plugins: z.record(z.string(), z.object({ enabled: z.boolean().default(true), settings: z.record(z.string(), z.unknown()).prefault({}) })).prefault({}),
+  /** Plugin folders she is developing, loaded from where they are and reloaded when their files change. */
+  pluginDevFolders: z.array(z.string().max(500)).max(10).default([]),
 });
 
 /** Parsed config; see {@link KesherConfigSchema}. */

@@ -99,3 +99,29 @@ export default {
   assert.deepEqual(words, ["one", "two", "three"]);
   await host.deactivateAll();
 });
+
+test("a plugin folder she is developing loads from where it is and reloads when a file changes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-plugins-root-"));
+  const dev = await mkdtemp(join(tmpdir(), "kesher-plugin-dev-"));
+  await mkdir(join(dev, "ui"));
+  await writeFile(join(dev, "ui", "a.html"), "<p>a</p>");
+  const manifest = (title: string) => JSON.stringify({ id: "my-dev", name: "Dev", version: "0.1.0", kesher: { apiVersion: 1 }, ui: { pages: [{ id: "p", title, file: "ui/a.html" }] } });
+  await writeFile(join(dev, "kesher-plugin.json"), manifest("First"));
+  const host = new PluginHost(new ProviderRegistry(), KesherConfigSchema.parse({}), root);
+  try {
+    await host.loadAll([root], [dev]);
+    const p = host.list().find((x) => x.manifest.id === "my-dev");
+    assert.equal(p?.status, "active");
+    assert.equal(p?.dev, true);
+    await writeFile(join(dev, "kesher-plugin.json"), manifest("Second"));
+    for (let i = 0; i < 40 && host.ui().pages[0]?.title !== "Second"; i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(host.ui().pages[0]?.title, "Second");
+    // A broken manifest shows as an error instead of disappearing.
+    await writeFile(join(dev, "kesher-plugin.json"), "{ not json");
+    for (let i = 0; i < 40 && host.list().find((x) => x.dev)?.status !== "error"; i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(host.list().find((x) => x.dev)?.status, "error");
+  } finally {
+    host.stopWatching();
+    await host.deactivateAll();
+  }
+});

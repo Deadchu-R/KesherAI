@@ -13,6 +13,10 @@ pnpm dev                          # the core loads everything in plugins/
 
 Open **Connections → Plugins** and your plugin is listed as `active`.
 
+**With the installed app (no repo build):** make the folder anywhere (`pnpm create-plugin my-plugin --dir C:\dev\my-plugin`), then **Connections → Plugins → 🛠 Load a folder (development)**. KesherAI loads it from where it is and reloads it a moment after you save any file; a mistake in `kesher-plugin.json` shows in the list.
+
+**Before publishing:** `pnpm plugin:check <folder>` checks the manifest, what it asks for, its size, and loads it once in a test core.
+
 ## Anatomy
 
 ```

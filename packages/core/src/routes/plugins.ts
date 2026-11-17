@@ -3,7 +3,7 @@ import { findAffinity, openInAffinity } from "../open-in-app.js";
 import type { FastifyInstance } from "fastify";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, resolve } from "node:path";
 import type { KesherServices } from "../services.js";
 import { PluginManifestSchema } from "@kesher/plugin-sdk";
 
@@ -65,6 +65,24 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
+  });
+
+  /** Plugin folders she is developing (RESEARCH_LOG "Open source"): loaded where they are, reloaded on every change. */
+  app.get("/api/plugins/dev", async () => ({ folders: s.config.pluginDevFolders }));
+  app.post<{ Body: { folder?: string; remove?: boolean } }>("/api/plugins/dev", async (req, reply) => {
+    // Code that runs on this computer: only from this computer.
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Plugins are loaded on the computer that runs KesherAI." });
+    const folder = resolve(String(req.body?.folder ?? "").trim());
+    if (req.body?.remove) {
+      s.config.pluginDevFolders = s.config.pluginDevFolders.filter((f) => resolve(f) !== folder);
+    } else {
+      if (!existsSync(join(folder, "kesher-plugin.json"))) return reply.code(400).send({ error: "That folder has no kesher-plugin.json (make one with: pnpm create-plugin <id> --dir <folder>)." });
+      if (!s.config.pluginDevFolders.some((f) => resolve(f) === folder)) s.config.pluginDevFolders = [...s.config.pluginDevFolders, folder].slice(-10);
+    }
+    await s.saveConfig();
+    s.plugins.setDevFolders(s.config.pluginDevFolders);
+    await s.plugins.reload();
+    return { folders: s.config.pluginDevFolders, plugins: s.plugins.list().filter((p) => p.dev).map((p) => ({ id: p.manifest.id, dir: p.dir, status: p.status, error: p.error })) };
   });
 
   /** Turns a plugin on or off. Body: `{ enabled }`. */

@@ -126,6 +126,6 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 
 ## Open source: easier to change and extend (RESEARCH_LOG "Open source for users and developers", 2026-11-17)
 - ⬜ Publish `@kesher/plugin-sdk` to npm and a template repository, so a plugin lives in its own repo (like obsidian-sample-plugin).
-- ⬜ Settings → Plugins → "Load a folder (development)": runs a plugin from any folder, reloads it when its files change, shows its log.
-- ⬜ `pnpm plugin:check <folder>`: the manifest, the permissions asked, the size, and one load in a test core, before publishing.
+- ✅ Settings → Plugins → "Load a folder (development)": runs a plugin from any folder, reloads it when its files change, shows a broken manifest (2026-11-17).
+- ✅ `pnpm plugin:check <folder>`: the manifest, the permissions asked, the size, and one load in a test core, before publishing (2026-11-17).
 - ⬜ "good first issue" labels on small tasks, and a 10-minute "your first change" walk-through in CONTRIBUTING.md.
