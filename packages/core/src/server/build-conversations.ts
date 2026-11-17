@@ -20,7 +20,7 @@ import { appUri, mcpResultText } from "../mcp.js";
 import { memoryTools } from "../memory-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
-import { speechTools } from "../speech-tools.js";
+import { readMedia, speechTools } from "../speech-tools.js";
 import { type AgentTool } from "@kesher/agent";
 import { ComfyUIProvider } from "@kesher/providers";
 import { cleanAppearance } from "@kesher/shared";
@@ -125,6 +125,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     engineSlotTokens: () => (worker ? mainSlot() : engine.slotContext()),
     saveConfig: () => persist(),
     browserPane: () => browser.status().pane,
+    // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
+    ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),
     tor,
     faults,
     doctorState: async () => {

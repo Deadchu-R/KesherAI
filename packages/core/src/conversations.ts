@@ -966,7 +966,7 @@ export class ConversationManager {
     }
     // Attached files, read now: pictures to the model as pictures, documents as their text (not just a path).
     const roots = [this.workspaceOf(conversation), ...session.grants].filter((x): x is string => !!x);
-    const att = await readAttachments(text, roots).catch(() => ({ images: [] as Array<{ mimeType: string; data: string }> }) as ReadAttachments);
+    const att = await readAttachments(text, roots, this.deps.readMedia ? (path) => this.deps.readMedia!(path) : undefined).catch(() => ({ images: [] as Array<{ mimeType: string; data: string }> }) as ReadAttachments);
     if (att.context) context = context ? `${context}\n\n${att.context}` : att.context;
     session.send(text, context, note, steps, att.images);
   }

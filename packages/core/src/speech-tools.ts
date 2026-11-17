@@ -69,6 +69,53 @@ export async function transcribeWith(d: SpeechDeps, data: Buffer, ext: string, l
   return { text: await d.whisper.transcribe(data, language, ext, timestamps), engine: "local" };
 }
 
+/**
+ * An attached recording or video, read for the model: its transcript, and for a video up to four frames spread over
+ * it (pictures the model can look at). Used when a chat message has such a file attached ("+" → Files).
+ *
+ * @param d - Engines and settings.
+ * @param path - The file (already checked to be inside the chat's folders).
+ * @param frames - How many frames to take from a video (0 for none).
+ * @returns The transcript (empty when no speech) and the frames as JPEG.
+ */
+export async function readMedia(d: SpeechDeps, path: string, frames = 4): Promise<{ transcript: string; engine?: string; frames: Buffer[] }> {
+  const ext = extname(path).toLowerCase();
+  const st = await stat(path);
+  if (st.size > 2 * 1024 ** 3) throw new Error("over 2 GB");
+  const video = /^\.(mp4|mov|mkv|webm|avi|m4v)$/.test(ext);
+  const out: { transcript: string; engine?: string; frames: Buffer[] } = { transcript: "", frames: [] };
+  try {
+    const usable = WHISPER_READS.test(ext) && st.size < 400 * 1024 ** 2;
+    const data = usable ? await readFile(path) : await toWav(path, d.ffmpeg);
+    const r = await transcribeWith(d, data, usable ? ext : ".wav", d.speech().language);
+    out.transcript = r.text.trim();
+    out.engine = r.engine;
+  } catch (e) {
+    // A video without a sound track, or no speech engine: the frames still help.
+    if (!video) throw e;
+  }
+  if (video && frames > 0 && d.ffmpeg) {
+    const ff = await d.ffmpeg();
+    // "ffmpeg -i" alone ends with an error but prints the file's length on stderr.
+    const probe = await new Promise<string>((ok) => execFile(ff, ["-hide_banner", "-i", path], { timeout: 60_000, windowsHide: true }, (_e, _o, err) => ok(String(err ?? ""))));
+    const m = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(String(probe));
+    const seconds = m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
+    for (let i = 0; i < frames && seconds > 0; i++) {
+      const at = (seconds * (i + 0.5)) / frames;
+      const file = join(tmpdir(), `kesher-frame-${randomUUID()}.jpg`);
+      try {
+        await run(ff, ["-hide_banner", "-loglevel", "error", "-y", "-ss", at.toFixed(2), "-i", path, "-frames:v", "1", "-vf", "scale='min(768,iw)':-2", "-q:v", "4", file], 120_000);
+        out.frames.push(await readFile(file));
+      } catch {
+        // A frame that could not be taken is skipped.
+      } finally {
+        await rm(file, { force: true });
+      }
+    }
+  }
+  return out;
+}
+
 /** Converts any audio or video to 16 kHz mono WAV with ffmpeg, when it is installed. */
 async function toWav(path: string, ffmpeg: () => Promise<string> = async () => "ffmpeg"): Promise<Buffer> {
   const out = join(tmpdir(), `kesher-audio-${randomUUID()}.wav`);

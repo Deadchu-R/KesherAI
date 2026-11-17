@@ -157,22 +157,14 @@ export function AddMenu(p: AddMenuProps) {
       open={open}
       onOpenChange={(o) => (o ? setOpen(true) : done())}
     >
-      <MenuItem icon="📎" onSelect={p.onFiles}>{L("קבצים…", "Files…")}</MenuItem>
+      {/* Like Gemini and ChatGPT (RESEARCH_LOG, design PlusMenuDesktop): one "Files" for every kind of file (KesherAI
+          reads documents, code, pictures, and listens to recordings and videos), a few uploads, then tools; the rest
+          in "More". */}
+      <MenuItem icon="📎" onSelect={p.onFiles} title={L("כל סוג: מסמכים, קוד, תמונות, וידאו, אודיו", "Any kind: documents, code, pictures, video, audio")}>{L("קבצים ותמונות", "Files and photos")}</MenuItem>
       <MenuItem icon="📷" onSelect={p.onPhoto}>{L("מצלמה או תמונה", "Camera or photo")}</MenuItem>
-      {p.onAnnotate && (
-        <>
-          <MenuItem icon="✏️" onSelect={() => p.onAnnotate!("screen")}>{L("צילום מסך של המחשב + סימון", "The computer's screen + mark it up")}</MenuItem>
-          <MenuItem icon="🖍" onSelect={() => p.onAnnotate!("file")}>{L("סימון על תמונה", "Mark up a picture")}</MenuItem>
-        </>
-      )}
-      <MenuSub icon="📄" label={L("מסמך מהדפים", "A document from Pages")} {...subProps("pages")}>
-        {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</MenuItem>)}
-      </MenuSub>
-      <MenuSub icon="💬" label={L("משיחה אחרת", "From another chat")} {...subProps("chats")}>
-        {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertChat(x.id, x.title ?? "")}>{x.title}</MenuItem>)}
-      </MenuSub>
+      {p.onAnnotate && <MenuItem icon="✏️" onSelect={() => p.onAnnotate!("screen")}>{L("צילום מסך לסימון", "Mark up the screen")}</MenuItem>}
       {(p.onGameProject || p.onProject) && (
-        <MenuSub icon="🎮" label={L("פרויקט Unity או Unreal", "A Unity or Unreal project")} {...subProps("projects")}>
+        <MenuSub icon="📁" label={L("קוד או פרויקט", "Code or a project")} {...subProps("projects")}>
           {games === null ? <MenuNote>…</MenuNote> : games.length === 0 ? <MenuNote>{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</MenuNote> : games.map((g) => (
             <MenuItem key={g.path} dir="auto" title={g.path} onSelect={() => p.onGameProject?.(g.path)} end={g.engine}>
               {g.kind === "unity" ? "◼ Unity" : "◆ Unreal"} · {g.name}
@@ -189,28 +181,38 @@ export function AddMenu(p: AddMenuProps) {
           ))}
         </MenuSub>
       )}
+      <MenuSub icon="☁️" label={L("עוד העלאות", "More uploads")}>
+        <MenuSub icon="📄" label={L("מסמך מהדפים", "A document from Pages")} {...subProps("pages")}>
+          {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertPage(x.id, x.title ?? x.name ?? "")}>{x.title ?? x.name}</MenuItem>)}
+        </MenuSub>
+        <MenuSub icon="💬" label={L("משיחה אחרת", "From another chat")} {...subProps("chats")}>
+          {list((x) => <MenuItem key={x.id} dir="auto" keepOpen onSelect={() => void insertChat(x.id, x.title ?? "")}>{x.title}</MenuItem>)}
+        </MenuSub>
+        <MenuSub icon="📚" label={L("ידע וספריות", "Knowledge and libraries")} {...subProps("knowledge")}>
+          {list((x) => <MenuItem key={x.id} dir="auto" onSelect={() => p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `)}>{x.name}</MenuItem>)}
+          <MenuItem icon="📦" href="#/libraries">{L("חנות ספריות", "Library store")}</MenuItem>
+        </MenuSub>
+        {p.onAnnotate && <MenuItem icon="🖍" onSelect={() => p.onAnnotate!("file")}>{L("סימון על תמונה", "Mark up a picture")}</MenuItem>}
+      </MenuSub>
       <MenuSeparator />
       <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
-      <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
-        {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
-          <MenuItem key={c} keepOpen onSelect={() => void toBoard(c).then(done, (e: Error) => { p.onInsert(`(${e.message})\n`); done(); })}>{label}</MenuItem>
-        ))}
-      </MenuSub>
-      <MenuSub icon="📚" label={L("ידע וספריות", "Knowledge and libraries")} {...subProps("knowledge")}>
-        {list((x) => <MenuItem key={x.id} dir="auto" onSelect={() => p.onInsert(`${L("חפש בבסיס הידע", "Search the knowledge base")} "${x.name}": `)}>{x.name}</MenuItem>)}
-        <MenuItem icon="📦" href="#/libraries">{L("חנות ספריות", "Library store")}</MenuItem>
-      </MenuSub>
-      <MenuSub icon="🧩" label={L("סקילים", "Skills")} {...subProps("skills")}>
-        {list((x) => <MenuItem key={x.id ?? x.name} dir="auto" title={x.description} onSelect={() => p.onInsert(`${L("השתמש בסקיל", "Use the skill")} "${x.name}": `)}>{x.name}</MenuItem>)}
-      </MenuSub>
-      {p.onMode && (
-        <MenuSub icon="✅" label={L("אישורים", "Approvals")} {...subProps("approvals")}>
-          {modes.map(([m, label]) => <MenuItem key={m} kind="radio" checked={p.mode === m} onSelect={() => p.onMode!(m)}>{label}</MenuItem>)}
+      <MenuSub icon="🧰" label={L("עוד כלים", "More tools")}>
+        <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
+          {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
+            <MenuItem key={c} keepOpen onSelect={() => void toBoard(c).then(done, (e: Error) => { p.onInsert(`(${e.message})\n`); done(); })}>{label}</MenuItem>
+          ))}
         </MenuSub>
-      )}
-      <MenuSeparator />
-      <MenuItem icon="🔌" href="#/connections">{L("קונקטורים ומכשירים", "Connectors and devices")}</MenuItem>
-      <MenuItem icon="🧠" href="#/memory">{L("זיכרונות", "Memory")}</MenuItem>
+        <MenuSub icon="🧩" label={L("סקילים", "Skills")} {...subProps("skills")}>
+          {list((x) => <MenuItem key={x.id ?? x.name} dir="auto" title={x.description} onSelect={() => p.onInsert(`${L("השתמש בסקיל", "Use the skill")} "${x.name}": `)}>{x.name}</MenuItem>)}
+        </MenuSub>
+        {p.onMode && (
+          <MenuSub icon="✅" label={L("אישורים", "Approvals")} {...subProps("approvals")}>
+            {modes.map(([m, label]) => <MenuItem key={m} kind="radio" checked={p.mode === m} onSelect={() => p.onMode!(m)}>{label}</MenuItem>)}
+          </MenuSub>
+        )}
+        <MenuItem icon="🔌" href="#/connections">{L("קונקטורים ומכשירים", "Connectors and devices")}</MenuItem>
+        <MenuItem icon="🧠" href="#/memory">{L("זיכרונות", "Memory")}</MenuItem>
+      </MenuSub>
     </Menu>
   );
 }

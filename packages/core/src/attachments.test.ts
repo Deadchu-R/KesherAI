@@ -20,3 +20,14 @@ test("attachments: a picture goes as a picture, a text file as its text; files o
   assert.match(r.context!, /The attached file notes\.md[\s\S]*Buy milk/);
   assert.doesNotMatch(r.context!, /do not read/);
 });
+
+test("an attached code file is read as code, and a recording through the media reader", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "att-"));
+  writeFileSync(join(dir, "Move.cs"), "float speed = 3f;");
+  writeFileSync(join(dir, "talk.mp3"), "not really audio");
+  const r = await readAttachments("look [Attached: Move.cs] and [Attached: talk.mp3]", [dir], async () => ({ transcript: "שלום עולם", frames: [] }));
+  assert.match(r.context ?? "", /```cs\nfloat speed = 3f;\n```/);
+  assert.match(r.context ?? "", /recording talk\.mp3: what is said in it:\nשלום עולם/);
+  const v = await readAttachments("[Attached: talk.mp3]", [dir]);
+  assert.equal(v.context, undefined, "no media reader: nothing is said about it");
+});

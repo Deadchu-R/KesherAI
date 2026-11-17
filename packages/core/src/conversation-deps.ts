@@ -93,6 +93,8 @@ export interface ConversationDeps {
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
   /** Whether KesherAI's own browser pane (the desktop app) is there. */
   browserPane?(): boolean;
+  /** An attached recording or video, read for the model: its transcript and a few frames (speech-tools.ts readMedia). */
+  readMedia?(path: string): Promise<{ transcript: string; engine?: string; frames: Buffer[] }>;
   /** Tor, for pages that do not open directly (when installed). */
   tor?: import("./tor.js").Tor;
   /** KesherAI's fault log (failed chats are written to it; the doctor tool reads it). */

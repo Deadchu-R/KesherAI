@@ -14,6 +14,10 @@ import { documentText, formatPages } from "@kesher/agent";
 const LINE = /\[(?:Attached|קובץ מצורף|מצורף)\s*:\s*([^\]\n]+)\]/gi;
 const PICTURES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
 const DOCUMENTS = new Set([".pdf", ".docx", ".xlsx", ".pptx", ".tsv", ".txt", ".md", ".csv", ".json", ".log", ".xml", ".html", ".htm", ".yaml", ".yml", ".ini", ".cfg", ".toml"]);
+/** Code and plain-text files read as they are (the model sees the code, not just the path). */
+const CODE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".cs", ".cpp", ".cc", ".c", ".h", ".hpp", ".java", ".kt", ".go", ".rs", ".rb", ".php", ".swift", ".gd", ".lua", ".sh", ".ps1", ".bat", ".sql", ".css", ".scss", ".vue", ".svelte", ".hlsl", ".glsl", ".shader", ".usf", ".ush", ".verse", ".uproject", ".uplugin", ".csproj", ".gradle", ".r", ".m", ".dart", ".scala", ".zig", ".tf", ".dockerfile", ".env.example"]);
+/** Recordings and videos: their speech as text, and a few frames of a video. */
+const MEDIA = /^\.(wav|mp3|flac|ogg|m4a|aac|opus|wma|webm|mp4|mkv|mov|avi|m4v|3gp|amr)$/;
 const MAX_PICTURES = 4;
 const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const DOC_BUDGET = 24_000;
@@ -36,7 +40,7 @@ const inside = (root: string, path: string) => {
  * @param text - The message as the user wrote it.
  * @param roots - The chat's folder first (relative paths start there), then the folders opened to it.
  */
-export async function readAttachments(text: string, roots: string[]): Promise<ReadAttachments> {
+export async function readAttachments(text: string, roots: string[], media?: (path: string) => Promise<{ transcript: string; engine?: string; frames: Buffer[] }>): Promise<ReadAttachments> {
   const out: ReadAttachments = { images: [] };
   const parts: string[] = [];
   let budget = DOC_BUDGET;
@@ -61,6 +65,27 @@ export async function readAttachments(text: string, roots: string[]): Promise<Re
       }
       out.images.push({ mimeType: PICTURES[ext]!, data: (await readFile(path)).toString("base64") });
       parts.push(`(${name}: the picture is attached to this message; look at it.)`);
+    } else if (CODE.has(ext) || name.toLowerCase() === "dockerfile" || name.toLowerCase() === "makefile") {
+      if (info.size > 2 * 1024 * 1024 || budget < 500) {
+        parts.push(`(${name}: read it with read_file.)`);
+        continue;
+      }
+      const body = await readFile(path, "utf8");
+      if (body.includes("\u0000")) continue;
+      const shown = body.slice(0, budget);
+      budget -= shown.length;
+      parts.push(`The attached file ${name}:\n\`\`\`${ext.slice(1)}\n${shown}\n\`\`\`${shown.length < body.length ? `\n(Shown up to character ${shown.length}; read the rest with read_file.)` : ""}`);
+    } else if (MEDIA.test(ext) && media) {
+      try {
+        const r = await media(path);
+        const room = Math.max(0, MAX_PICTURES - out.images.length);
+        for (const f of r.frames.slice(0, room)) out.images.push({ mimeType: "image/jpeg", data: f.toString("base64") });
+        const said = r.transcript.slice(0, Math.max(0, budget));
+        budget -= said.length;
+        parts.push(`The attached ${/\.(mp4|mkv|mov|avi|m4v|webm|3gp)$/.test(ext) ? "video" : "recording"} ${name}${r.frames.length ? ` (${Math.min(r.frames.length, room)} frames from it are attached as pictures, in order)` : ""}: ${said ? `what is said in it${r.engine && r.engine !== "local" ? ` (transcribed by ${r.engine})` : ""}:\n${said}${said.length < r.transcript.length ? "\n(The transcript goes on; use transcribe_audio for all of it.)" : ""}` : "no speech in it."}`);
+      } catch (err) {
+        parts.push(`(${name}: could not be listened to here (${(err as Error).message}); transcribe_audio may work.)`);
+      }
     } else if (DOCUMENTS.has(ext)) {
       if (info.size > 50 * 1024 * 1024 || budget < 500) {
         parts.push(`(${name}: read it with read_document.)`);
