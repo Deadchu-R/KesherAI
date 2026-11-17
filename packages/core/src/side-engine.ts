@@ -62,3 +62,32 @@ export class SideEngine {
     await e?.stop("unloaded");
   }
 }
+
+const shared = new WeakMap<object, SideEngine>();
+
+/**
+ * The one beside engine of an app (by its registry), so the engine page and the translator share it.
+ *
+ * @param registry - The app's provider registry.
+ * @param make - Makes it the first time.
+ */
+export function sideEngineOf(registry: ProviderRegistry, make: () => SideEngine): SideEngine {
+  let e = shared.get(registry);
+  if (!e) shared.set(registry, (e = make()));
+  return e;
+}
+
+/**
+ * The model id to translate with: a GGUF file chosen as the translator (TranslateGemma) is loaded beside the main
+ * model the first time it is needed; any other choice is a model id as it is.
+ *
+ * @param side - The beside engine.
+ * @param pick - The translator setting.
+ */
+export async function translatorModelId(side: SideEngine, pick: string): Promise<string> {
+  if (!/\.gguf$/i.test(pick)) return pick;
+  const st = side.status();
+  if (st.running && st.modelPath === pick && st.modelId) return st.modelId;
+  return side.load(pick);
+}
+

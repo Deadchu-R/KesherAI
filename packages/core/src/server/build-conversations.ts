@@ -21,6 +21,7 @@ import { memoryTools } from "../memory-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
 import { readMedia, speechTools } from "../speech-tools.js";
+import { SideEngine, sideEngineOf, translatorModelId } from "../side-engine.js";
 import { type AgentTool } from "@kesher/agent";
 import { ComfyUIProvider } from "@kesher/providers";
 import { cleanAppearance } from "@kesher/shared";
@@ -127,6 +128,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     browserPane: () => browser.status().pane,
     // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
     ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),
+    // The translator, when it is a GGUF file (Settings → Chats → Model team): loaded beside the main model.
+    translatorModel: (pick: string) => translatorModelId(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })), pick),
     tor,
     faults,
     doctorState: async () => {

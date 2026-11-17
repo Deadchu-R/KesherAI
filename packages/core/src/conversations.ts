@@ -625,7 +625,7 @@ export class ConversationManager {
         const pick = this.deps.config.translator ?? "main";
         const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
         if (pick === "off" || model.startsWith("agent/")) return undefined;
-        const turnOf = modelTurnFor(this.deps.registry, pick === "main" ? model : pick);
+        const turnOf = modelTurnFor(this.deps.registry, pick === "main" ? model : this.deps.translatorModel ? await this.deps.translatorModel(pick) : pick);
         return answerInUserLanguage(answer, userText, async (system, text) => (await turnOf({ messages: [{ role: "system", content: system }, { role: "user", content: text }], tools: [] }, signal, () => undefined)).text);
       },
       // Smart auto approvals (F10): the chat's own model reviews a plain command first, when turned on in Settings.

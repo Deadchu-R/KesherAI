@@ -12,7 +12,7 @@ import { insideAny, looksLikeGguf, matchRecommended, scanComputer, scanFolder, t
 import { bySpeed, planGpus, type Gpu } from "../gpus.js";
 import { RECOMMENDED_VIDEO_MODEL, comfyWanStatus, ensureImageModel, ensureVideoModel, setupComfyWan, videoStatus } from "../sdcpp.js";
 import { BENCH_SET, BENCH_SYSTEM, benchRight } from "../bench-set.js";
-import { SideEngine } from "../side-engine.js";
+import { SideEngine, sideEngineOf } from "../side-engine.js";
 
 /**
  * Installs the llama.cpp engine if it is missing. Shared by the install
@@ -112,7 +112,7 @@ function allowedModelPath(s: KesherServices, path: string): boolean {
 export async function engineRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   // A second model beside the main one (audit F19): loaded only when asked, never remembered.
   let sideEngine: SideEngine | undefined;
-  const side = () => (sideEngine ??= new SideEngine({ dir: s.paths.engines, binary: () => s.engine.status().binaryPath, ...(s.config.engines.llamaVersion ? { version: s.config.engines.llamaVersion } : {}), args: s.config.engines.llamaServerArgs, registry: s.registry }));
+  const side = () => (sideEngine ??= sideEngineOf(s.registry, () => new SideEngine({ dir: s.paths.engines, binary: () => s.engine.status().binaryPath, ...(s.config.engines.llamaVersion ? { version: s.config.engines.llamaVersion } : {}), args: s.config.engines.llamaServerArgs, registry: s.registry })));
   app.addHook("onClose", async () => sideEngine?.stop());
   app.get("/api/engines/beside", async () => side().status());
   app.post<{ Body: { modelPath?: string } }>("/api/engines/beside/load", async (req, reply) => {

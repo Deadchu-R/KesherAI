@@ -93,6 +93,8 @@ export interface ConversationDeps {
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
   /** Whether KesherAI's own browser pane (the desktop app) is there. */
   browserPane?(): boolean;
+  /** The translator's model id: a GGUF translator (TranslateGemma) is loaded beside the main model when needed. */
+  translatorModel?(pick: string): Promise<string>;
   /** An attached recording or video, read for the model: its transcript and a few frames (speech-tools.ts readMedia). */
   readMedia?(path: string): Promise<{ transcript: string; engine?: string; frames: Buffer[] }>;
   /** Tor, for pages that do not open directly (when installed). */

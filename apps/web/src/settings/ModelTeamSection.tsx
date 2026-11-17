@@ -15,9 +15,12 @@ interface Model { id: string; name: string; category?: string }
 export function ModelTeamSection() {
   const [translator, setTranslator] = useState<string | null>(null);
   const [models, setModels] = useState<Model[]>([]);
+  // Downloaded translation models (TranslateGemma…): chosen by file, loaded beside the main model when needed.
+  const [files, setFiles] = useState<Array<{ path: string; name: string }>>([]);
   useEffect(() => {
     void api<{ translator: string }>("/api/model-team").then((r) => setTranslator(r.translator), () => undefined);
     void api<{ models: Model[] }>("/api/models").then((r) => setModels(r.models.filter((m) => (m.category ?? "chat") === "chat")), () => undefined);
+    void api<Array<{ path: string; name: string; gguf?: boolean; source?: string }>>("/api/models/local").then((r) => setFiles(r.filter((m) => m.gguf && m.source === "KesherAI" && /translat/i.test(m.name)).map((m) => ({ path: m.path, name: m.name.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") }))), () => undefined);
   }, []);
   if (translator === null) return null;
   const save = (v: string) => {
@@ -32,6 +35,7 @@ export function ModelTeamSection() {
         <span className="grow">🗣️ {L("המתרגם", "The translator")}</span>
         <select value={translator} onChange={(e) => save(e.target.value)} aria-label={L("המתרגם", "The translator")}>
           <option value="main">{L("המודל של הצ'אט", "The chat's own model")}</option>
+          {files.map((f) => <option key={f.path} value={f.path}>🌐 {f.name} {L("(מודל תרגום, נטען ליד הראשי)", "(translation model, loaded beside the main one)")}</option>)}
           {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           <option value="off">{L("כבוי", "Off")}</option>
         </select>
