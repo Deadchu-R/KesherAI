@@ -101,8 +101,8 @@ export function LensPage({ id }: { id?: string }) {
     try {
       const r = await api<{ text: string; ocr?: string; lines?: Array<{ t: string; x: number; y: number; w: number; h: number }> }>("/api/lens/act", { method: "POST", body: { image: cut.data, action, question, he } });
       // Windows has no Hebrew text recognition yet: the model read it (slower); say once how to add it.
-      const tipped = (() => { try { const v = sessionStorage.getItem("lens-ocr-tip"); sessionStorage.setItem("lens-ocr-tip", "1"); return !!v; } catch { return false; } })();
-      if (r.ocr === "no-language" && !tipped) {
+      const tipped = () => { try { const v = sessionStorage.getItem("lens-ocr-tip"); sessionStorage.setItem("lens-ocr-tip", "1"); return !!v; } catch { return false; } };
+      if (r.ocr === "no-language" && !tipped()) {
         toast(L("לזיהוי טקסט מהיר בעברית: הגדרות Windows ← זמן ושפה ← שפה ← עברית ← אפשרויות ← זיהוי תווים אופטי (OCR) ← הורדה.", "For fast Hebrew text recognition: Windows Settings → Time & language → Language → Hebrew → Options → Optical character recognition → Download."));
       }
       setResult({ action, text: r.text });
