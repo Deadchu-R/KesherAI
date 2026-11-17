@@ -52,9 +52,9 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.put("/api/study/grades", { bodyLimit: 512 * 1024 }, async (req) => st.setGrades(req.body));
   app.get("/api/study/timetable", async () => st.timetable());
   app.put("/api/study/timetable", { bodyLimit: 256 * 1024 }, async (req) => st.setTimetable(req.body));
-  app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean } }>("/api/study/prefs", async (req) => {
+  app.put<{ Body: { simple?: boolean; welcomed?: boolean; easyRead?: boolean; path?: boolean; readFont?: boolean } }>("/api/study/prefs", async (req) => {
     const b = req.body ?? {};
-    return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
+    return st.setPrefs(Object.fromEntries((["simple", "welcomed", "easyRead", "path", "readFont"] as const).filter((k) => typeof b[k] === "boolean").map((k) => [k, b[k]])));
   });
   /** A video she watched to the end (a video lecture or a video overview), for the goal. */
   app.post("/api/study/activity/video", async () => {
@@ -432,13 +432,13 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     const l = (await st.get(req.params.id)).lectures.find((x) => x.id === req.params.lid);
     return l ?? reply.code(404).send({ error: "No such lecture." });
   });
-  app.patch<L & { Body: { title?: string; date?: string; text?: string; summary?: string; notes?: string } }>("/api/study/courses/:id/lectures/:lid", async (req) => st.updateLecture(req.params.id, req.params.lid, req.body ?? {}));
+  app.patch<L & { Body: { title?: string; date?: string; text?: string; summary?: string; notes?: string; readPos?: number } }>("/api/study/courses/:id/lectures/:lid", async (req) => st.updateLecture(req.params.id, req.params.lid, req.body ?? {}));
   app.delete<L>("/api/study/courses/:id/lectures/:lid", async (req) => {
     await st.removeLecture(req.params.id, req.params.lid);
     return { ok: true };
   });
   app.post<L>("/api/study/courses/:id/lectures/:lid/summarize", async (req) => st.summarize(req.params.id, req.params.lid));
-  app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true, highlights: req.body?.highlights === true }) }));
+  app.post<L & { Body: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean; range?: { from: number; to: number } } }>("/api/study/courses/:id/lectures/:lid/cards", async (req) => ({ cards: await st.makeCards(req.params.id, req.params.lid, { ...(req.body ?? {}), cloze: req.body?.cloze === true, highlights: req.body?.highlights === true, ...(req.body?.range && typeof req.body.range === "object" ? { range: { from: Number(req.body.range.from), to: Number(req.body.range.to) } } : {}) }) }));
   /** Image occlusion cards: a picture and its boxes (design ImageOcclusion). */
   app.post<C & { Body: { image?: string; mime?: string; boxes?: unknown; lectureId?: string; title?: string } }>("/api/study/courses/:id/occlusion", { bodyLimit: 12 * 1024 * 1024 }, async (req) => {
     const b = req.body ?? {};

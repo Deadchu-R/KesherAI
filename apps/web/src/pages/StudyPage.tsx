@@ -15,6 +15,7 @@ import { StudyPapers } from "../StudyPapers";
 import { StudyPalace } from "../StudyPalace";
 import { StudyTopicVideos } from "../StudyTopicVideos";
 import { StudyLeeches } from "../StudyLeeches";
+import { StudyPortions } from "../StudyPortions";
 import { StudyNotesTab, StudyTimeNotes, clockOf } from "../StudyTimeNotes";
 import { StudyGrades } from "../StudyGrades";
 import { StudyTimetable } from "../StudyTimetable";
@@ -138,7 +139,7 @@ function BackLink({ to }: { to: string }) {
 }
 
 /** Simple mode and the first visit (design StudySimple / StudyWelcome), shared by the home and the course. */
-type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean; path?: boolean };
+type StudyPrefs = { simple: boolean; welcomed: boolean; easyRead?: boolean; path?: boolean; readFont?: boolean };
 function useStudyPrefs(): [StudyPrefs | null, (p: StudyPrefs) => void] {
   const [p, setP] = useState<StudyPrefs | null>(null);
   useEffect(() => void api<StudyPrefs>("/api/study/prefs").then(setP, () => setP({ simple: false, welcomed: true })), []);
@@ -172,7 +173,7 @@ function StudyHome() {
   }
   const simple = !!prefs?.simple;
   return (
-    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
+    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}${prefs?.readFont ? " study-read-font" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
       {!!courses?.length && <StudySearch />}
       {/* "Now: <class>" first, the timetable itself lower with the other set-up cards (simple mode: under "more"). */}
@@ -720,7 +721,7 @@ function CoursePage({ id, tab, lectureId, startAt }: { id: string; tab: string; 
   if (!info) return <div className="page study-page"><BackLink to="#/study" /><p className="muted">…</p></div>;
   const on = lectureId ? "lectures" : tab;
   return (
-    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}`}>
+    <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}${prefs?.readFont ? " study-read-font" : ""}`}>
       <BackLink to={lectureId ? `#/study/${id}` : "#/study"} />
       <div className="study-head">
         <h1 dir="auto">{info.course.name}</h1>
@@ -1375,7 +1376,7 @@ function LectureAudio({ courseId, lecture, player, startAt, onRemoved, onTime }:
 
 function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { courseId: string; lectureId: string; courseField?: string; startAt?: number; onChange: () => void }) {
   const [l, setL] = useState<StudyLecture | null>(null);
-  const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "read" | "sheet" | "slides" | "text">("summary");
+  const [view, setView] = useState<"watch" | "summary" | "terms" | "diagram" | "video" | "teach" | "read" | "sheet" | "slides" | "portions" | "text">("summary");
   // A video lecture opens on its video.
   useEffect(() => {
     if (l?.youtube || l?.videoFile) setView("watch");
@@ -1473,9 +1474,9 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
       {l.recording && <LectureAudio courseId={courseId} lecture={l} player={player} {...(startAt !== undefined && !(l.youtube || l.videoFile) ? { startAt } : {})} onRemoved={() => setL({ ...l, recording: undefined })} onTime={(t) => setHeard(Math.floor(t))} />}
       {l.recording && !(l.youtube || l.videoFile) && <StudyTimeNotes base={base} lecture={l} now={heard ?? 0} onLecture={setL} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} />}
       <div className="seg-pills" role="tablist" aria-label={L("תצוגה", "View")}>
-        {(["watch", "summary", "terms", "diagram", "sheet", "slides", "video", "teach", "read", "text"] as const).filter((v) => v !== "watch" || l.youtube || l.videoFile).map((v) => (
+        {(["watch", "summary", "terms", "diagram", "sheet", "slides", "video", "teach", "read", "portions", "text"] as const).filter((v) => (v !== "watch" || l.youtube || l.videoFile) && (v !== "portions" || l.text.length > 12_000)).map((v) => (
           <button key={v} type="button" role="tab" aria-selected={view === v} className={view === v ? "on" : ""} onClick={() => setView(v)}>
-            {{ watch: L("▶ הרצאה בווידאו", "▶ Video lecture"), summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), read: L("🖍 קריאה והדגשה", "🖍 Read and highlight"), sheet: L("📄 דף סיכום", "📄 One-page sheet"), slides: L("📑 שקפים", "📑 Slides"), text: L("הטקסט המלא", "Full text") }[v]}
+            {{ watch: L("▶ הרצאה בווידאו", "▶ Video lecture"), summary: L("סיכום", "Summary"), terms: L("מונחים", "Terms"), diagram: L("תרשים", "Diagram"), video: L("🎬 סרטון", "🎬 Video"), teach: L("🎓 ללמד בחזרה", "🎓 Teach back"), read: L("🖍 קריאה והדגשה", "🖍 Read and highlight"), sheet: L("📄 דף סיכום", "📄 One-page sheet"), portions: L("📖 קריאה במנות", "📖 Read in portions"), slides: L("📑 שקפים", "📑 Slides"), text: L("הטקסט המלא", "Full text") }[v]}
           </button>
         ))}
       </div>
@@ -1485,6 +1486,7 @@ function LectureView({ courseId, lectureId, courseField, startAt, onChange }: { 
           : view === "teach" ? <StudyTeachBack base={base} lecture={l} />
           : view === "slides" ? <StudySlides base={base} slides={l.slides ?? []} heard={heard} hasRecording={!!l.recording} onSlides={(sl) => setL({ ...l, slides: sl })} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} />
           : view === "sheet" ? <StudySheet lecture={l} {...(l.diagram ? { diagram: <FlowView src={l.diagram} /> } : {})} />
+          : view === "portions" ? <StudyPortions base={base} lecture={l} onLecture={setL} onCards={onChange} />
           : view === "read" ? <StudyHighlights key={l.id} base={base} text={l.text} initial={l.highlights ?? []} onCards={onChange} />
           : view === "text" ? <div className="study-text" dir="auto">{l.recording ? <StampedText text={l.text} {...(heard !== undefined ? { now: heard } : {})} onSeek={(sec) => { const a = player.current; if (a) { a.currentTime = sec; void a.play().catch(() => undefined); } }} /> : l.youtube ? <StampedText text={l.text} onSeek={(sec) => window.open(`https://www.youtube.com/watch?v=${l.youtube}&t=${sec}s`, "_blank", "noopener")} /> : <ReadAlong text={l.text} plain />}</div>
           : !l.summary ? (

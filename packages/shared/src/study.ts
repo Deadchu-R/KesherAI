@@ -75,6 +75,8 @@ export interface StudyLecture {
   recording?: { t: number; bytes: number; mime: string };
   /** A spoken review of the lecture (an "audio overview", to listen to on the bus), once made. */
   audio?: string;
+  /** Where she is in reading it in portions (characters), design Portions. */
+  readPos?: number;
   /** The same review as a talk between two hosts (design Podcast, students part 29 #2): lines "A: …" / "B: …". */
   podcast?: string;
   /** The web page it was saved from (design SaveToCourse). */
@@ -1961,6 +1963,29 @@ export function noteCards(text: string): Array<{ front: string; back: string }> 
     const m = /^\s*(?:[-•*]\s+)?(.+?)\s*::\s*(.+?)\s*$/.exec(line);
     return m && m[1]!.length <= 500 && m[2]!.length <= 2000 ? [{ front: m[1]!, back: m[2]! }] : [];
   }).slice(0, 200);
+}
+
+/**
+ * A portion of a long text to read today (design Portions, students part 30 #4, SuperMemo's incremental reading):
+ * from `pos`, about `size` characters, ending at a paragraph (else a sentence) end; with its number and how many.
+ */
+export function readingPortion(text: string, pos: number, size = 6000): { from: number; to: number; part: number; parts: number } {
+  const ends: number[] = [];
+  let at = 0;
+  while (at < text.length) {
+    let to = Math.min(text.length, at + size);
+    if (to < text.length) {
+      const para = text.lastIndexOf("\n\n", to);
+      const dot = text.lastIndexOf(". ", to);
+      to = para > at + size * 0.5 ? para + 2 : dot > at + size * 0.5 ? dot + 2 : to;
+    }
+    ends.push(to);
+    at = to;
+  }
+  if (!ends.length) return { from: 0, to: 0, part: 1, parts: 1 };
+  const i = ends.findIndex((e) => e > pos);
+  const k = i < 0 ? ends.length - 1 : i;
+  return { from: k ? ends[k - 1]! : 0, to: ends[k]!, part: k + 1, parts: ends.length };
 }
 
 /** Fixing a hard card: simpler, split in two, or a memory hook added to its answer. */

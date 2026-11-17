@@ -497,3 +497,19 @@ test("noteCards: \"term :: meaning\" lines in her notes", async () => {
     { front: "Tachycardia", back: "over 100" },
   ]);
 });
+
+test("readingPortion: portions end at paragraphs, the place is kept, the last one stays", async () => {
+  const { readingPortion } = await import("./study.js");
+  const para = (n: number) => `${"מילה ".repeat(n).trim()}.`;
+  const text = [para(400), para(400), para(400), para(100)].join("\n\n");
+  const a = readingPortion(text, 0, 3000);
+  assert.equal(a.part, 1);
+  assert.ok(text.slice(a.to - 2, a.to) === "\n\n");
+  const b = readingPortion(text, a.to, 3000);
+  assert.equal(b.from, a.to);
+  assert.equal(b.part, 2);
+  const last = readingPortion(text, text.length, 3000);
+  assert.equal(last.part, last.parts);
+  assert.equal(last.to, text.length);
+  assert.deepEqual(readingPortion("", 0), { from: 0, to: 0, part: 1, parts: 1 });
+});

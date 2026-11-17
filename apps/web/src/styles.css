@@ -3580,3 +3580,10 @@ div.slide-list { padding-inline-start: 0; }
 .study-card-timer { flex-direction: row; align-items: center; gap: 6px; }
 .study-card-clock { height: 4px; border-radius: 2px; background: color-mix(in srgb, currentColor 12%, transparent); overflow: hidden; margin: 4px 0; }
 .study-card-clock span { display: block; height: 100%; background: var(--accent, #a5b4ff); transition: width 1s linear; }
+/* A reading font for dyslexia (design ReadFont, students part 30 #5): plain shapes Windows and phones have (Hebrew too), wider spacing. */
+.study-read-font { font-family: Verdana, Tahoma, "Segoe UI", Arial, sans-serif; }
+.study-read-font p, .study-read-font li, .study-read-font dd, .study-read-font .study-text, .study-read-font .msg-text { letter-spacing: 0.05em; word-spacing: 0.25em; line-height: 1.9; }
+.study-portion { display: flex; flex-direction: column; gap: 10px; }
+.study-portion-head { justify-content: space-between; align-items: baseline; }
+.study-portion progress { width: 100%; }
+.study-portion-text { white-space: pre-wrap; line-height: 1.8; }

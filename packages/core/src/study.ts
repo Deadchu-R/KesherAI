@@ -36,6 +36,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
     ...(l.diagram ? { diagram: str(l.diagram, 20_000) } : {}),
     ...(l.audio ? { audio: str(l.audio, 20_000) } : {}),
     ...(l.podcast ? { podcast: str(l.podcast, 20_000) } : {}),
+    ...(Number.isInteger(l.readPos) && l.readPos! > 0 ? { readPos: l.readPos } : {}),
     ...(Array.isArray(l.video) ? { video: parseVideoSlides({ slides: l.video }) } : {}),
     ...(typeof l.youtube === "string" && /^[\w-]{11}$/.test(l.youtube) ? { youtube: l.youtube } : {}),
     ...(typeof l.web === "string" && /^https?:\/\//.test(l.web) ? { web: l.web.slice(0, 2000) } : {}),
@@ -245,17 +246,17 @@ export class Study {
   }
 
   /** How Study looks for her (design StudySimple): simple mode, and whether she went through the first visit. */
-  async prefs(): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }> {
+  async prefs(): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }> {
     const j = await readFile(join(this.dir, "_prefs.json"), "utf8").then((t) => JSON.parse(t) as Record<string, unknown>, () => ({}) as Record<string, unknown>);
     // The course path (design CoursePath) is on until she turns it off (Roee: optional, 2026-11-17).
-    return { simple: j.simple === true, welcomed: j.welcomed === true, easyRead: j.easyRead === true, path: j.path !== false };
+    return { simple: j.simple === true, welcomed: j.welcomed === true, easyRead: j.easyRead === true, path: j.path !== false, readFont: j.readFont === true };
   }
 
   /** Changes them. */
-  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }>): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean }> {
+  async setPrefs(change: Partial<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }>): Promise<{ simple: boolean; welcomed: boolean; easyRead: boolean; path: boolean; readFont: boolean }> {
     const cur = await this.prefs();
-    const pick = (k: "simple" | "welcomed" | "easyRead" | "path") => (typeof change[k] === "boolean" ? change[k]! : cur[k]);
-    const next = { simple: pick("simple"), welcomed: pick("welcomed"), easyRead: pick("easyRead"), path: pick("path") };
+    const pick = (k: "simple" | "welcomed" | "easyRead" | "path" | "readFont") => (typeof change[k] === "boolean" ? change[k]! : cur[k]);
+    const next = { simple: pick("simple"), welcomed: pick("welcomed"), easyRead: pick("easyRead"), path: pick("path"), readFont: pick("readFont") };
     await mkdir(this.dir, { recursive: true });
     await writeFile(join(this.dir, "_prefs.json"), JSON.stringify(next));
     return next;
@@ -759,13 +760,14 @@ export class Study {
   }
 
   /** Changes a lecture's title, date or text. */
-  async updateLecture(id: string, lectureId: string, p: Partial<Pick<StudyLecture, "title" | "date" | "text" | "summary" | "notes">>): Promise<StudyLecture> {
+  async updateLecture(id: string, lectureId: string, p: Partial<Pick<StudyLecture, "title" | "date" | "text" | "summary" | "notes" | "readPos">>): Promise<StudyLecture> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     if (typeof p.title === "string") l.title = p.title.trim().slice(0, 200) || l.title;
     if (typeof p.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) l.date = p.date;
     if (typeof p.text === "string" && p.text.trim()) l.text = p.text.slice(0, 400_000);
     if (typeof p.summary === "string") l.summary = p.summary.slice(0, 100_000);
+    if (typeof p.readPos === "number" && Number.isInteger(p.readPos) && p.readPos >= 0) l.readPos = Math.min(p.readPos, l.text.length);
     if (typeof p.notes === "string") {
       if (p.notes.trim()) l.notes = p.notes.slice(0, 50_000);
       else delete l.notes;
@@ -1253,7 +1255,7 @@ export class Study {
   }
 
   /** Makes flashcards from a lecture, studied in one format. */
-  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean }, signal?: AbortSignal): Promise<StudyCard[]> {
+  async makeCards(id: string, lectureId: string, p: { format?: StudyFormat; count?: number; cloze?: boolean; highlights?: boolean; range?: { from: number; to: number } }, signal?: AbortSignal): Promise<StudyCard[]> {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     // From her highlights (students part 27 #5): only the ones not made into cards yet, a card or two each.
@@ -1261,7 +1263,9 @@ export class Study {
     if (p.highlights && !marked.length) throw Object.assign(new Error("No new highlights to make cards from."), { statusCode: 400 });
     const format: StudyFormat = STUDY_FORMATS.includes(p.format as StudyFormat) ? p.format! : "text";
     const count = p.highlights ? Math.min(40, Math.max(1, Math.round(marked.length * 1.5))) : Math.max(3, Math.min(40, Number(p.count) || 12));
-    const material = p.highlights ? `What the student highlighted (each with its page and her note); write the cards about these only, using the lecture below for context:\n${marked.map((h) => `- ${h.page ? `(p. ${h.page}) ` : ""}${h.text}${h.note ? ` [her note: ${h.note}]` : ""}`).join("\n")}\n\nThe lecture:\n${l.text.slice(0, 20_000)}` : (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
+    // A portion she just read (design Portions): cards from it alone.
+    const part = p.range && Number.isInteger(p.range.from) && Number.isInteger(p.range.to) && p.range.to > p.range.from ? l.text.slice(Math.max(0, p.range.from), Math.min(l.text.length, p.range.to, p.range.from + 40_000)) : "";
+    const material = part ? part : p.highlights ? `What the student highlighted (each with its page and her note); write the cards about these only, using the lecture below for context:\n${marked.map((h) => `- ${h.page ? `(p. ${h.page}) ` : ""}${h.text}${h.note ? ` [her note: ${h.note}]` : ""}`).join("\n")}\n\nThe lecture:\n${l.text.slice(0, 20_000)}` : (l.summary && l.text.length > 24_000 ? `${l.summary}\n\nTerms: ${(l.terms ?? []).map((t) => `${t.term}${t.en ? ` (${t.en})` : ""}: ${t.explain}`).join("; ")}` : l.text).slice(0, 40_000);
     const raw = await this.ask(p.cloze ? CLOZE_PROMPT : `${CARDS_PROMPT}\n${FORMAT_HINT[format]}`, `Write ${count} cards.\n\nLecture: ${l.title}\n\n${material}`, signal, d.course);
     const list = jsonIn(raw);
     if (!Array.isArray(list)) throw Object.assign(new Error("The model did not return cards. Try again, or another model."), { statusCode: 502 });
