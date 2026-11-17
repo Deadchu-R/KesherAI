@@ -64,7 +64,11 @@ export function parseOcr(out: string): OcrLine[] | undefined {
  * Windows' own text recognition (Windows.Media.Ocr, on the computer, nothing sent): the text of a picture, or
  * undefined when it is not available (not Windows, no language pack) so the vision model reads it instead.
  */
+/** Why the last OCR attempt failed (shown with the answer, so a missing language pack is visible). */
+let ocrWhy = "";
+
 async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefined> {
+  ocrWhy = "";
   if (process.platform !== "win32") return undefined;
   const dir = await mkdtemp(join(tmpdir(), "kesher-ocr-"));
   try {
@@ -78,6 +82,10 @@ async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefin
       "[Windows.Storage.StorageFile,Windows.Storage,ContentType=WindowsRuntime]|Out-Null",
       "[Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
       "[Windows.Graphics.Imaging.BitmapDecoder,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
+      "[Windows.Graphics.Imaging.SoftwareBitmap,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
+      "[Windows.Storage.Streams.IRandomAccessStream,Windows.Storage.Streams,ContentType=WindowsRuntime]|Out-Null",
+      "[Windows.Media.Ocr.OcrResult,Windows.Foundation,ContentType=WindowsRuntime]|Out-Null",
+      "[Windows.Globalization.Language,Windows.Globalization,ContentType=WindowsRuntime]|Out-Null",
       `$f=Await ([Windows.Storage.StorageFile]::GetFileFromPathAsync($env:KESHER_OCR_FILE)) ([Windows.Storage.StorageFile])`,
       "$s=Await ($f.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])",
       "$d=Await ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($s)) ([Windows.Graphics.Imaging.BitmapDecoder])",
@@ -91,10 +99,13 @@ async function windowsOcr(png: Buffer, he: boolean): Promise<OcrLine[] | undefin
       "ConvertTo-Json -Compress -Depth 3 @($r.Lines|%{$ws=@($_.Words|%{$_.BoundingRect});$x=($ws|%{$_.X}|Measure-Object -Minimum).Minimum;$y=($ws|%{$_.Y}|Measure-Object -Minimum).Minimum;$r2=($ws|%{$_.X+$_.Width}|Measure-Object -Maximum).Maximum;$b=($ws|%{$_.Y+$_.Height}|Measure-Object -Maximum).Maximum;@{t=$_.Text;x=$x;y=$y;w=$r2-$x;h=$b-$y}})",
     ].join(";");
     const out = await new Promise<string>((resolve, reject) =>
-      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KESHER_OCR_FILE: file }, timeout: 20_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => (err ? reject(err) : resolve(stdout))),
+      execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { env: { ...process.env, KESHER_OCR_FILE: file }, timeout: 20_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { why: String(stderr || err.message).replace(/\s+/g, " ").slice(0, 300) })) : resolve(stdout))),
     );
-    return parseOcr(out);
-  } catch {
+    const lines = parseOcr(out);
+    if (!lines) ocrWhy = out.trim() ? "no text lines" : "no text found";
+    return lines;
+  } catch (e) {
+    ocrWhy = (e as { why?: string }).why ?? (e as Error).message;
     return undefined;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
@@ -150,14 +161,22 @@ export async function lensRoutes(app: FastifyInstance, s: KesherServices): Promi
         return { text: lines.map((l) => l.t).join("\n"), lines, by: "ocr" };
       }
     }
+    // A model that runs on (seen on the PC: 1,900 tokens and still going) is stopped at 6,000 characters.
+    let so = "";
     const r = await modelTurnFor(s.registry, chat)(
       { messages: [{ role: "user", content: lensPrompt(action, String(b.question ?? "").slice(0, 1000), he), images: [{ mimeType: "image/png", data: png.toString("base64") }] }], tools: [] },
       AbortSignal.any([ac.signal, AbortSignal.timeout(180_000)]),
-      () => undefined,
-    );
+      (d) => {
+        so += d;
+        if (so.length > 6000) ac.abort();
+      },
+    ).catch((e: unknown) => {
+      if (so.length > 6000) return { text: so };
+      throw e;
+    });
     const text = r.text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
     if (!text) return reply.code(502).send({ error: "The chat model did not answer. Choose a model that sees pictures (for example Gemma 4 or Qwen-VL)." });
-    return { text, by: "model" };
+    return { text, by: "model", ...(ocrWhy && (action === "text" || action === "translate") ? { ocr: ocrWhy } : {}) };
   });
   /** "Continue in chat": a new chat with the marked part attached and her question (or the action) sent. */
   app.post<{ Body: { image?: string; action?: string; question?: string; he?: boolean } }>("/api/lens/chat", { bodyLimit: 28 * 1024 * 1024 }, async (req) => {
