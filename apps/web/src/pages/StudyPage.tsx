@@ -7,6 +7,7 @@ import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from 
 import { ReadAlong } from "../ReadAlong";
 import { StudyWelcome } from "../StudyWelcome";
 import { GOAL_NAMES } from "../settings/StudySection";
+import { StudyMock } from "../StudyMock";
 import { StudyMatch } from "../StudyMatch";
 import { type ExamPlan, type StudyNext, type StudySyllabus, type StudyCourseSummary, type StudyHit, type StudyLevel, type StudyPicture, type StudyMediaKind, syllabusNow, toolsFor, benefitsFor, calcCorrect, clinicalField, LAB_VALUES, STUDY_FIELDS, practiceProblem, STUDY_FORMATS, type CalcKind, type LabValue, type StudyDrug, type CalcProblem, type StudyCard, type StudyCourse, type StudyFormat, type StudyLecture, type StudyQuiz, type StudyTerm, GOAL_KINDS, type GoalKind, type StudyGoal } from "@kesher/shared";
 import { api, withToken } from "../api";
@@ -27,7 +28,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type CourseRow = StudyCourse & { lectures: number; cards: number; due: number; daysLeft?: number; perDay?: number };
 type LectureRow = Omit<StudyLecture, "text" | "summary"> & { chars: number; summarized: boolean; cards: number };
-interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null }
+interface CourseInfo { course: StudyCourse; lectures: LectureRow[]; cards: number; due: number; drugs: StudyDrug[]; quizzes: Array<{ id: string; t: number; score?: number; of: number }>; plan: ExamPlan | null; pastExams?: Array<{ id: string; title: string; t: number; chars: number }>; syllabus?: StudySyllabus | null; courseSummary?: StudyCourseSummary | null; mocks?: Array<{ t: number; grade: number }> }
 interface Progress { formats: Array<{ format: StudyFormat; n: number; recall: number; enough: boolean }>; byKind: Array<{ kind: string; formats: Progress["formats"] }>; weak: Array<{ lectureId: string; title: string; correct: number; n: number }>; mastery?: Array<{ lectureId: string; title: string; mastery: number; n: number; change: number }>; reviews: number; quizzed?: string[] }
 
 const FORMAT_NAME: Record<StudyFormat, [string, string]> = {
@@ -745,7 +746,7 @@ function CoursePage({ id, tab, lectureId }: { id: string; tab: string; lectureId
       {lectureId ? <LectureView courseId={id} lectureId={lectureId} courseField={info.course.field} onChange={load} />
         : on === "review" ? <Review courseId={id} courseName={info.course.name} onChange={load} />
         : on === "quick" ? <StudyMistakes quick courseId={id} courseName={info.course.name} onClose={() => { load(); go(`#/study/${id}`); }} />
-        : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} onChange={load} />
+        : on === "quiz" ? <Quiz courseId={id} lectures={info.lectures} pastExams={info.pastExams ?? []} clinical={clinicalField(info.course.field)} mocks={info.mocks ?? []} onChange={load} />
         : on === "calc" ? <CalcPractice />
         : on === "terms" ? <Glossary lectures={info.lectures} />
         : on === "writing" ? <StudyWriting courseId={id} />
@@ -1585,7 +1586,8 @@ function PastExams({ courseId, exams, onChange }: { courseId: string; exams: Non
   );
 }
 
-function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; lectures: LectureRow[]; pastExams: NonNullable<CourseInfo["pastExams"]>; onChange: () => void }) {
+function Quiz({ courseId, lectures, pastExams, clinical, mocks, onChange }: { courseId: string; lectures: LectureRow[]; pastExams: NonNullable<CourseInfo["pastExams"]>; clinical: boolean; mocks: NonNullable<CourseInfo["mocks"]>; onChange: () => void }) {
+  const [mock, setMock] = useState(false);
   const only = new URLSearchParams(location.hash.split("?")[1] ?? "").get("l") ?? undefined;
   const [quiz, setQuiz] = useState<StudyQuiz | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -1626,6 +1628,7 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
     if (r) { setQuiz(r); onChange(); }
   };
   if (!lectures.length) return <p className="muted">{L("הוסיפי הרצאה כדי לקבל בוחן.", "Add a lecture to get a quiz.")}</p>;
+  if (mock) return <StudyMock courseId={courseId} lectures={lectures} pastExams={pastExams.length} clinical={clinical} history={mocks} onDone={onChange} onClose={() => setMock(false)} />;
   if (!quiz) return (
     <section className="card study-quiz-setup">
       <h2>{only ? L(`בוחן על "${lectures.find((l) => l.id === only)?.title ?? ""}"`, `Quiz on "${lectures.find((l) => l.id === only)?.title ?? ""}"`) : L("בוחן על כל הקורס", "Quiz on the whole course")}</h2>
@@ -1640,8 +1643,7 @@ function Quiz({ courseId, lectures, pastExams, onChange }: { courseId: string; l
       <div className="study-actions">
         <button type="button" className="primary" disabled={busy} onClick={() => void make(false)}>{busy ? L("כותב שאלות…", "Writing questions…") : L("התחל בוחן", "Start quiz")}</button>
         {!only && <button type="button" disabled={busy} onClick={() => void make(true)}>{L("על הנושאים החלשים", "On weak topics")}</button>}
-        {!only && <button type="button" disabled={busy} onClick={() => void make(false, true)}>{L("מבחן בסגנון בחינת הרישוי (30 שאלות, עם זמן)", "Licensing-exam style (30 questions, timed)")}</button>}
-        {!only && pastExams.length > 0 && <button type="button" disabled={busy} onClick={() => void make(false, false, true)}>{L("מבחן בסגנון המבחנים הקודמים (20 שאלות, עם זמן)", "Like the past exams (20 questions, timed)")}</button>}
+        {!only && <button type="button" disabled={busy} onClick={() => setMock(true)}>📝 {L("מבחן דמה (עם שעון, ציון בסוף)", "Mock exam (timed, graded at the end)")}</button>}
       </div>
       {!only && <PastExams courseId={courseId} exams={pastExams} onChange={onChange} />}
       <p className="muted small">{kind === "choice" ? L("השאלות נכתבות מהחומר שלך בלבד, והבדיקה נעשית בקוד.", "Questions come from your material only; grading is done by code.") : L("השאלות נכתבות מהחומר שלך בלבד. את התשובות בודק המודל מול תשובה לדוגמה ומול ההרצאה.", "Questions come from your material only. The model checks answers against a model answer and the lecture.")}</p>

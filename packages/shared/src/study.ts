@@ -120,6 +120,89 @@ export interface StudyQuiz {
   marks?: number[];
   /** What the grader said about each written answer. */
   feedback?: string[];
+  /** A part of a mock exam (students part 27 #1): the parts of one exam share `group`. */
+  mock?: StudyMock;
+}
+
+/** A mock exam's settings, kept on each of its parts. */
+export interface StudyMock {
+  group: string;
+  /** Its time, without the extra time. */
+  minutes: number;
+  /** Extra time (accommodations): a quarter more. */
+  extra?: boolean;
+}
+
+/** An open answer counts as much as this many multiple-choice questions in a mock exam's grade. */
+export const MOCK_OPEN_WEIGHT = 3;
+
+/**
+ * The mock exam's default time: about 90 seconds a multiple-choice question and 8 minutes an open one, rounded up to
+ * 5 minutes.
+ */
+export function mockMinutes(choice: number, open: number): number {
+  return Math.max(5, Math.ceil((choice * 1.5 + open * 8) / 5) * 5);
+}
+
+/** A mock exam's time in minutes, with the extra quarter when she has it. */
+export function mockTime(m: Pick<StudyMock, "minutes" | "extra">): number {
+  return m.extra ? Math.ceil(m.minutes * 1.25) : m.minutes;
+}
+
+/**
+ * A mock exam's result from its parts: a grade out of 100 (a multiple-choice question 1 point, an open answer
+ * MOCK_OPEN_WEIGHT points times its mark), and how she did per lecture, weakest first. Undefined until every part is
+ * graded.
+ */
+export function mockResult(parts: StudyQuiz[]): { grade: number; right: number; choice: number; open: number; openMax: number; byLecture: Array<{ lectureId: string; got: number; of: number }> } | undefined {
+  if (!parts.length || parts.some((p) => p.score === undefined)) return undefined;
+  let got = 0;
+  let of = 0;
+  let right = 0;
+  let choice = 0;
+  let open = 0;
+  let openMax = 0;
+  const by = new Map<string, { got: number; of: number }>();
+  for (const p of parts)
+    p.questions.forEach((q, i) => {
+      const w = p.kind ? MOCK_OPEN_WEIGHT : 1;
+      const mark = p.kind ? (p.marks?.[i] ?? 0) : p.answers?.[i] === q.answer ? 1 : 0;
+      got += mark * w;
+      of += w;
+      if (p.kind) {
+        open += mark;
+        openMax++;
+      } else {
+        right += mark;
+        choice++;
+      }
+      if (q.lectureId) {
+        const b = by.get(q.lectureId) ?? { got: 0, of: 0 };
+        b.got += mark;
+        b.of++;
+        by.set(q.lectureId, b);
+      }
+    });
+  return {
+    grade: of ? Math.round((got / of) * 100) : 0,
+    right,
+    choice,
+    open,
+    openMax,
+    byLecture: [...by].map(([lectureId, b]) => ({ lectureId, ...b })).sort((a, b) => a.got / a.of - b.got / b.of),
+  };
+}
+
+/** Her finished mock exams, oldest first (the last 10), for "your earlier results". */
+export function mockHistory(quizzes: StudyQuiz[]): Array<{ group: string; t: number; grade: number }> {
+  const groups = new Map<string, StudyQuiz[]>();
+  for (const q of quizzes) if (q.mock?.group) (groups.get(q.mock.group) ?? groups.set(q.mock.group, []).get(q.mock.group)!).push(q);
+  const out: Array<{ group: string; t: number; grade: number }> = [];
+  for (const [group, parts] of groups) {
+    const r = mockResult(parts);
+    if (r) out.push({ group, t: Math.min(...parts.map((p) => p.t)), grade: r.grade });
+  }
+  return out.sort((a, b) => a.t - b.t).slice(-10);
 }
 
 /** How hard a quiz is. */

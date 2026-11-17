@@ -8,7 +8,7 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -1164,7 +1164,7 @@ export class Study {
   }
 
   /** Makes a multiple-choice quiz from chosen lectures (or the weak ones, or all). */
-  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: "open" | "case"; level?: StudyLevel }, signal?: AbortSignal): Promise<StudyQuiz> {
+  async makeQuiz(id: string, p: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: "open" | "case"; level?: StudyLevel; mock?: StudyMock }, signal?: AbortSignal): Promise<StudyQuiz> {
     const d = await this.get(id);
     let chosen = d.lectures.filter((l) => !p.lectureIds?.length || p.lectureIds.includes(l.id));
     if (p.weak) {
@@ -1174,7 +1174,7 @@ export class Study {
       if (weak.size) chosen = chosen.filter((l) => weak.has(l.id));
     }
     if (!chosen.length) throw Object.assign(new Error("Add a lecture first."), { statusCode: 400 });
-    const count = Math.max(3, Math.min(p.style === "licensing" ? 60 : 30, Number(p.count) || 10));
+    const count = Math.max(p.mock ? 1 : 3, Math.min(p.style === "licensing" || p.mock ? 60 : 30, Number(p.count) || 10));
     const budget = Math.floor(48_000 / chosen.length);
     const material = chosen.map((l, i) => `### Lecture ${i + 1}: ${l.title}\n${(l.text.length > budget && l.summary ? l.summary : l.text).slice(0, budget)}`).join("\n\n");
     const level = p.level && p.level !== "normal" ? `\n${LEVEL_RULE[p.level]}` : "";
@@ -1184,7 +1184,7 @@ export class Study {
       const raw = await this.ask(`${OPEN_QUIZ_PROMPT(p.kind)}${level}`, `Write exactly ${n} questions, then stop.\n\n${material}`, signal, d.course, n * 1800 + 2000);
       const questions = parseOpenQuestions(raw, chosen.map((l) => l.id), n);
       if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
-      const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, kind: p.kind, ...(p.level ? { level: p.level } : {}) };
+      const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, kind: p.kind, ...(p.level ? { level: p.level } : {}), ...(p.mock ? { mock: p.mock } : {}) };
       d.quizzes.push(quiz);
       if (d.quizzes.length > 200) d.quizzes.splice(0, d.quizzes.length - 200);
       await this.save(d);
@@ -1211,7 +1211,7 @@ export class Study {
       if (questions.length >= count) break;
     }
     if (!questions.length) throw Object.assign(new Error("The model did not return usable questions. Try again, or another model."), { statusCode: 502 });
-    const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, ...(p.level ? { level: p.level } : {}) };
+    const quiz: StudyQuiz = { id: randomUUID(), t: Date.now(), questions, ...(p.level ? { level: p.level } : {}), ...(p.mock ? { mock: p.mock } : {}) };
     d.quizzes.push(quiz);
     if (d.quizzes.length > 200) d.quizzes.splice(0, d.quizzes.length - 200);
     await this.save(d);

@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, statfs, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat } from "@kesher/shared";
+import { cardsToTsv, examPlan, formatStats, GOAL_KINDS, recentMistakes, topicMastery, weakLectures, type StudyFormat, mockHistory } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { cleanYoutube, ensureYtDlp, webLectureVideo, youtubeId, youtubeLecture } from "../youtube-lecture.js";
@@ -387,6 +387,7 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
       pastExams: (d.pastExams ?? []).map(({ id, title, t, text }) => ({ id, title, t, chars: text.length })),
       syllabus: d.syllabus ?? null,
       courseSummary: d.courseSummary ?? null,
+      mocks: mockHistory(d.quizzes).map(({ t, grade }) => ({ t, grade })),
     };
   });
   app.patch<C & { Body: { name?: string; field?: string; examDate?: string; model?: string; semesterEnd?: string } }>("/api/study/courses/:id", async (req) => {
@@ -449,14 +450,18 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<C>("/api/study/courses/:id/mistakes", async (req) => recentMistakes(await st.get(req.params.id)));
   app.post<{ Params: { id: string; cid: string }; Body: { rating?: number } }>("/api/study/courses/:id/cards/:cid/review", async (req) => st.review(req.params.id, req.params.cid, Number(req.body?.rating)));
 
-  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: string; level?: string } }>("/api/study/courses/:id/quiz", async (req) => {
+  app.post<C & { Body: { lectureIds?: string[]; count?: number; weak?: boolean; style?: "licensing" | "past"; kind?: string; level?: string; mock?: { group?: unknown; minutes?: unknown; extra?: unknown } } }>("/api/study/courses/:id/quiz", async (req) => {
     const b = req.body ?? {};
+    // A part of a mock exam (students part 27 #1): its group id and time, checked.
+    const m = b.mock;
+    const mock = m && typeof m.group === "string" && /^[\w-]{4,40}$/.test(m.group) ? { group: m.group, minutes: Math.max(5, Math.min(300, Math.round(Number(m.minutes) || 30))), ...(m.extra === true ? { extra: true } : {}) } : undefined;
     return st.makeQuiz(req.params.id, {
       ...(Array.isArray(b.lectureIds) ? { lectureIds: b.lectureIds.map(String).slice(0, 200) } : {}),
       ...(b.count ? { count: Number(b.count) } : {}),
       ...(b.weak ? { weak: true } : {}),
       ...(b.style === "licensing" || b.style === "past" ? { style: b.style } : {}),
       ...(b.kind === "open" || b.kind === "case" ? { kind: b.kind } : {}),
+      ...(mock ? { mock } : {}),
       ...(b.level === "easy" || b.level === "normal" || b.level === "hard" ? { level: b.level } : b.level === "auto" ? { level: await autoLevel(req.params.id, Array.isArray(b.lectureIds) ? b.lectureIds.map(String) : []) } : {}),
     });
   });
