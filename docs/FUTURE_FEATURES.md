@@ -49,7 +49,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Models and hardware
 - ✅ Training picture LoRAs from the interface
-- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent)
+- ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix. ⬜ Waiting for Roee: the big engines (voice ~8 GB, ComfyUI) sit on C:, which filled up tonight (0.6.317 could not download); delete their uv caches or move the engines to the models drive (E:)
 - ✅ Game helper over a running game
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
 - ⬜ A check on a real controller after each interface change (C6)
