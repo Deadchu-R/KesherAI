@@ -1078,6 +1078,34 @@ export interface StudyCourseData {
   sources?: StudySource[];
   /** Her memory palace for this course (design MemoryPalace). */
   palace?: StudyPalace;
+  /** A group project's board (design GroupProject). */
+  project?: StudyProject;
+}
+
+/** A group project's board (design GroupProject, students part 33 #3): tasks, who does each, by when; a link for teammates. */
+export interface StudyProject {
+  title: string;
+  tasks: Array<{ id: string; text: string; who?: string; due?: string; done?: boolean }>;
+  /** The teammates' link key, while shared. */
+  token?: string;
+  t: number;
+}
+
+/** A project board, checked: at most 100 tasks, short texts, dates as YYYY-MM-DD. */
+export function cleanProject(raw: unknown): StudyProject | undefined {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const t = (v: unknown, n: number) => (typeof v === "string" ? [...v].filter((c) => c >= " " && c !== "<" && c !== ">").join("").replace(/\s+/g, " ").trim().slice(0, n) : "");
+  const tasks = (Array.isArray(o.tasks) ? o.tasks : []).slice(0, 100).flatMap((x, i) => {
+    const y = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const text = t(y.text, 300);
+    if (!text) return [];
+    const who = t(y.who, 40);
+    const due = typeof y.due === "string" && /^\d{4}-\d{2}-\d{2}$/.test(y.due) ? y.due : "";
+    return [{ id: typeof y.id === "string" && /^[\w-]{1,40}$/.test(y.id) ? y.id : `t${i}${Date.now().toString(36)}`, text, ...(who ? { who } : {}), ...(due ? { due } : {}), ...(y.done === true ? { done: true } : {}) }];
+  });
+  const title = t(o.title, 120);
+  if (!title && !tasks.length) return undefined;
+  return { title, tasks, ...(typeof o.token === "string" && /^[\w-]{16,40}$/.test(o.token) ? { token: o.token } : {}), t: Number(o.t) || Date.now() };
 }
 
 /** The course's growing summary: markdown by topic, and which lectures are already in it. */
@@ -1689,6 +1717,7 @@ export function mergeCourseData(a: StudyCourseData, b: StudyCourseData): StudyCo
     quizzes: byId(a.quizzes, b.quizzes, gone, (x, y) => (!x.answers && y.answers ? y : x)).sort((x, y) => x.t - y.t),
     ...(drugs.length ? { drugs } : {}),
     ...(sources.length ? { sources } : {}),
+    ...((a.project?.t ?? 0) >= (b.project?.t ?? 0) ? (a.project ? { project: a.project } : {}) : b.project ? { project: b.project } : {}),
     ...((a.palace?.t ?? 0) >= (b.palace?.t ?? 0) ? (a.palace ? { palace: a.palace } : {}) : b.palace ? { palace: b.palace } : {}),
     ...(removed.length ? { removed } : {}),
     ...(focus.length ? { focus } : {}),

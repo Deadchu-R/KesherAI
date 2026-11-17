@@ -548,3 +548,11 @@ test("courseWeb: lectures joined by the terms they share", async () => {
   assert.deepEqual(w.edges, [{ a: "a", b: "b", terms: ["סיסטולה"] }]);
   assert.equal(w.nodes.length, 3);
 });
+
+test("cleanProject: tasks checked, the share key kept only when valid", async () => {
+  const { cleanProject } = await import("./study.js");
+  const p = cleanProject({ title: "עבודה", token: "short", tasks: [{ text: " סקירת <b>ספרות</b> ", who: "דנה", due: "2026-12-01", done: true }, { text: "" }, { text: "x", due: "1.12" }] });
+  assert.deepEqual(p?.tasks.map((t) => [t.text, t.who, t.due, t.done]), [["סקירת bספרות/b", "דנה", "2026-12-01", true], ["x", undefined, undefined, undefined]]);
+  assert.equal(p?.token, undefined);
+  assert.equal(cleanProject({}), undefined);
+});

@@ -99,3 +99,56 @@ export async function focusRoomRoutes(app: FastifyInstance): Promise<void> {
     return r ? { id: joinFocus(r, String(req.body?.name ?? ""), String(req.body?.task ?? "")) } : reply.code(404).send({ error: "closed" });
   });
 }
+
+/** The page teammates open for a group project board (design GroupProject): its own script only, no account. */
+function projectPage(token: string, nonce: string): string {
+  return `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>עבודה קבוצתית · KesherAI</title>
+<style>body{margin:0;font:16px system-ui,Arial,sans-serif;background:#121213;color:#eee;display:flex;justify-content:center}main{width:min(640px,100%);padding:16px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px}h1{font-size:20px;margin:0}p{margin:0}button,input{font:inherit;border-radius:10px;border:1px solid #333;padding:9px 12px;background:#1e1f24;color:inherit}.primary{background:#a5b4ff;color:#111;border:0;font-weight:700}.muted{color:#9a9caa;font-size:14px}ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}li{padding:10px;border:1px solid #2a2a30;border-radius:12px;display:flex;flex-direction:column;gap:6px}li.done b{text-decoration:line-through;color:#9a9caa}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}input{flex:1;min-width:0}</style></head>
+<body><main id="m"><p class="muted">…</p></main>
+<script nonce="${nonce}">
+const T=${JSON.stringify(token)};const m=document.getElementById("m");let me=localStorage.getItem("gp-name")||"";
+const esc=(x)=>String(x).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function send(b){const r=await fetch("/g/"+T+"/task",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b)});const j=await r.json();if(j.error)alert(j.error);else draw(j);}
+function draw(s){if(!s||s.error){m.innerHTML='<h1>הלוח לא משותף יותר</h1>';return;}
+let h='<h1>'+esc(s.title||s.course)+'</h1><p class="muted">'+esc(s.course)+' · '+s.tasks.filter(t=>t.done).length+' מתוך '+s.tasks.length+' בוצעו</p>';
+h+='<div class="row"><input id="me" maxlength="40" placeholder="השם שלך" dir="auto" value="'+esc(me)+'"></div><ul>';
+for(const t of s.tasks){h+='<li class="'+(t.done?'done':'')+'"><b dir="auto">'+esc(t.text)+'</b><span class="muted">'+(t.who?'👤 '+esc(t.who):'אף אחד עוד לא לקח')+(t.due?' · עד '+esc(t.due.split("-").reverse().join("."))+'':'')+'</span><div class="row"><button data-a="claim" data-id="'+esc(t.id)+'">'+(t.who&&t.who===me?'לשחרר':'אני לוקח/ת')+'</button><button data-a="done" data-id="'+esc(t.id)+'">'+(t.done?'לבטל ✓':'✓ בוצע')+'</button></div></li>';}
+h+='</ul><div class="row"><input id="nt" maxlength="300" placeholder="משימה חדשה" dir="auto"><button class="primary" id="add">להוסיף</button></div>';
+m.innerHTML=h;
+document.getElementById("me").onchange=(e)=>{me=e.target.value.trim();localStorage.setItem("gp-name",me);};
+document.getElementById("add").onclick=()=>{const v=document.getElementById("nt").value.trim();if(v)send({action:"add",text:v,who:me});};
+m.querySelectorAll("button[data-a]").forEach((b)=>b.onclick=()=>{const a=b.dataset.a;const t=s.tasks.find(x=>x.id===b.dataset.id);if(a==="claim")send({action:"claim",id:b.dataset.id,who:t&&t.who===me?"":me});else send({action:"done",id:b.dataset.id});});}
+async function pull(){try{const r=await fetch("/g/"+T+"/state");draw(r.ok?await r.json():null);}catch{}}
+pull();setInterval(()=>{if(!document.activeElement||document.activeElement.tagName!=="INPUT")pull();},10000);
+</script></body></html>`;
+}
+
+/**
+ * The group project board (design GroupProject): her routes under /api, and the teammates' page and calls at
+ * /g/<token> (the key is the token; it ends when she stops sharing).
+ *
+ * @param app - Fastify instance.
+ * @param st - Study.
+ */
+export async function projectRoutes(app: FastifyInstance, st: Study): Promise<void> {
+  app.get<{ Params: { id: string } }>("/api/study/courses/:id/project", async (req) => ({ project: await st.project(req.params.id) }));
+  app.put<{ Params: { id: string }; Body: unknown }>("/api/study/courses/:id/project", { bodyLimit: 128 * 1024 }, async (req) => ({ project: await st.saveProject(req.params.id, req.body) }));
+  app.post<{ Params: { id: string }; Body: { on?: boolean } }>("/api/study/courses/:id/project/share", async (req) => ({ project: await st.shareProject(req.params.id, req.body?.on !== false) }));
+
+  const view = (f: { course: string; project: { title: string; tasks: unknown[] } }) => ({ course: f.course, title: f.project.title, tasks: f.project.tasks });
+  app.get<{ Params: { token: string } }>("/g/:token", async (req, reply) => {
+    if (!(await st.projectByToken(req.params.token))) return reply.code(404).type("text/plain; charset=utf-8").send("This board is not shared.");
+    const nonce = randomBytes(12).toString("base64");
+    return reply.headers(headers(nonce)).send(projectPage(req.params.token, nonce));
+  });
+  app.get<{ Params: { token: string } }>("/g/:token/state", async (req, reply) => {
+    const f = await st.projectByToken(req.params.token);
+    return f ? reply.header("cache-control", "no-store").send(view(f)) : reply.code(404).send({ error: "not shared" });
+  });
+  app.post<{ Params: { token: string }; Body: { action?: string; id?: string; text?: string; who?: string } }>("/g/:token/task", { bodyLimit: 4096 }, async (req) => {
+    const b = req.body ?? {};
+    const p = await st.projectTeamChange(req.params.token, { action: String(b.action ?? ""), ...(typeof b.id === "string" ? { id: b.id } : {}), ...(typeof b.text === "string" ? { text: b.text } : {}), ...(typeof b.who === "string" ? { who: b.who } : {}) });
+    const f = await st.projectByToken(req.params.token);
+    return f ? view(f) : { course: "", title: p.title, tasks: p.tasks };
+  });
+}

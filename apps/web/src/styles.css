@@ -3638,3 +3638,13 @@ div.slide-list { padding-inline-start: 0; }
 .study-web-list li.sel button { color: var(--accent, #a5b4ff); font-weight: 700; }
 .study-web-sel { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .study-web-node:focus { outline: none; } .study-web-node:focus-visible circle { stroke-width: 4; }
+.study-project { display: flex; flex-direction: column; gap: 10px; }
+.study-project h2 { margin: 0; }
+.study-project-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.study-project-tasks li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 10px; border: 1px solid var(--border, #333); border-radius: 10px; }
+.study-project-tasks li > .muted { grid-column: 1; }
+.study-project-tasks li > button { grid-column: 2; grid-row: 1 / span 2; align-self: center; padding: 2px 8px; }
+.study-project-tasks li.done span[dir] { text-decoration: line-through; color: var(--muted); }
+.study-project-add { gap: 6px; flex-wrap: wrap; }
+.study-project-add input:not([type=date]) { flex: 1 1 160px; min-width: 0; }
+.study-project-add .study-project-who { flex: 0 1 100px; }

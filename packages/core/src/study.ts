@@ -3,14 +3,14 @@
  * spaced-repetition schedule (FSRS), quizzes graded by code, and recall per study format ("what works for me").
  * One JSON file per course, on this computer.
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { renderPdfPages } from "./pdf-pages.js";
 import { ocrText } from "./ocr.js";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import { downloadPicture } from "./look-pictures.js";
-import { ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
+import { cleanProject, type StudyProject, ENGLISH_PROMPT, cleanEnglish, type EnglishPractice, speechStats, REHEARSE_PROMPT, LETTER_KINDS, letterPrompt, parseLetter, type LetterKind, TIMETABLE_PHOTO_PROMPT, cleanReadClasses, type ReadClass, noteCards, leechCards, LEECH_PROMPT, type LeechFix, PODCAST_PROMPT, parsePodcast, PALACE_PROMPT, cleanPalace, type StudyPalace, QUIZ_TALK_PROMPT, cleanSources, cleanDoi, parseOpenAlex, PAPERS_PROMPT, type StudySource, cleanGroupLinks, AUDIO_PROMPT, VIDEO_PROMPT, parseVideoSlides, CHAPTERS_PROMPT, parseChapters, lastStamp, TEACH_BACK_PROMPT, parseTeachBack, type TeachBackResult, cardsToReview, detectField, examPlan, findPassages, openSharedCourse, shareCourse, MISSED_PROMPT, tutorMessages, gradeMessages, gradeLine, cleanScript, explainMessages, TRANSLATE_PROMPT, type TutorMessage, type StudyPassage, type SharedCourse, jsonIn, mergeCourseData, STUDY_FIELDS, STUDY_FORMATS, topicMastery, weakLectures, type StudyCard, type StudyCourse, type StudyCourseData, type StudyFocus, type StudyPastExam, pastExamStyle, parseSyllabus, SYLLABUS_PROMPT, checkCalcQuestion, studyNext, type StudyNext, cardsFromTsv, dayKey, COURSE_SUMMARY_PROMPT, STUDY_FIELD_HINTS, RECORDING_DEFAULTS, recordingExpired, semesterEnd, type StudyRecordingSettings, pictureQueries, relevantPictures, commonsSearchUrl, parseCommonsPictures, type StudyPicture, type StudyMediaKind, STUDY_TOOLS, toolMaterial, LEVEL_RULE, OPEN_QUIZ_PROMPT, openGradeMessages, openMark, parseOpenQuestions, type StudyLevel, type StudyMock, cleanGrades, type Grades, cleanHighlights, type StudyHighlight, alignSlides, stampedChunks, type StudySlide, cleanBoxes, cleanTimetable, classRemindNow, type Timetable, searchStudy, type StudyHit, courseSummaryInput, parseCourseSummary, type StudyCourseSummary, type StudySyllabus, studyStreak, studyDays, focusWeek, goalToday, goalRemindNow, GOAL_DEFAULTS, GOAL_KINDS, type StudyGoal, type StudyActivity, type GoalKind, type StudyEnergy, weekRecap, studyBadges, type StudyBadge, WRITING_PROMPT, parseWritingFeedback, type WritingFeedback, type WritingStage, type StudyDrug, type StudyFormat, type StudyLecture, type StudyQuestion, type StudyQuiz, type StudyReview, type StudyTerm } from "@kesher/shared";
 import { documentText, type ModelTurn } from "@kesher/agent";
 
 /** Everything kept for one course. */
@@ -60,7 +60,7 @@ export function cleanCourseData(raw: unknown): CourseData | undefined {
   const pastExams = arr<StudyPastExam>(d.pastExams, 50).filter((e) => okId(e?.id)).map((e) => ({ id: e.id, title: str(e.title, 200), text: str(e.text, 200_000), t: Number(e.t) || Date.now() }));
   const cs = d.courseSummary as StudyCourseSummary | undefined;
   const courseSummary = cs && typeof cs.text === "string" ? { text: str(cs.text, 120_000), lectureIds: arr<string>(cs.lectureIds, 5000).filter(okId), t: Number(cs.t) || Date.now() } : undefined;
-  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(cleanSources(d.sources).length ? { sources: cleanSources(d.sources) } : {}), ...(cleanPalace(d.palace) ? { palace: cleanPalace(d.palace)! } : {}) };
+  return { course, lectures, cards, reviews, quizzes, ...(drugs.length ? { drugs } : {}), ...(removed.length ? { removed } : {}), ...(focus.length ? { focus } : {}), ...(pastExams.length ? { pastExams } : {}), ...(syllabus ? { syllabus } : {}), ...(courseSummary ? { courseSummary } : {}), ...(cleanSources(d.sources).length ? { sources: cleanSources(d.sources) } : {}), ...(cleanPalace(d.palace) ? { palace: cleanPalace(d.palace)! } : {}), ...(cleanProject(d.project) ? { project: cleanProject(d.project)! } : {}) };
 }
 
 type Model = { turn: ModelTurn; id: string } | undefined;
@@ -863,6 +863,65 @@ export class Study {
     const read = vision ? Math.min(r.pages.length, 15) : r.pages.length;
     const note = r.total > read ? `\n\n(${read} of ${r.total} pages were read.)` : "";
     return `${out.join("\n\n")}${note}`.slice(0, 400_000);
+  }
+
+  /** Her group project board for a course (design GroupProject). */
+  async project(id: string): Promise<StudyProject | null> {
+    return (await this.get(id)).project ?? null;
+  }
+
+  /** Saves her board (title and tasks; the share key stays as it is). */
+  async saveProject(id: string, raw: unknown): Promise<StudyProject | null> {
+    const d = await this.get(id);
+    const p = cleanProject(raw);
+    if (!p) delete d.project;
+    else d.project = { ...p, t: Date.now(), ...(d.project?.token ? { token: d.project.token } : {}) };
+    if (!d.project?.token) delete d.project?.token;
+    await this.save(d);
+    return d.project ?? null;
+  }
+
+  /** Shares the board with teammates (a new key), or stops sharing it. */
+  async shareProject(id: string, on: boolean): Promise<StudyProject> {
+    const d = await this.get(id);
+    const p = d.project ?? { title: d.course.name, tasks: [], t: Date.now() };
+    if (on) p.token = randomBytes(16).toString("base64url");
+    else delete p.token;
+    d.project = { ...p, t: Date.now() };
+    await this.save(d);
+    return d.project;
+  }
+
+  /** The board a teammate's link opens (by its key), with its course's id. */
+  async projectByToken(token: string): Promise<{ id: string; course: string; project: StudyProject } | undefined> {
+    if (!/^[\w-]{16,40}$/.test(token)) return undefined;
+    for (const d of await this.allData()) if (d.project?.token === token) return { id: d.course.id, course: d.course.name, project: d.project };
+    return undefined;
+  }
+
+  /** A teammate adds a task, takes one, or marks one done (through the link). */
+  async projectTeamChange(token: string, change: { action: string; id?: string; text?: string; who?: string }): Promise<StudyProject> {
+    const found = await this.projectByToken(token);
+    if (!found) throw Object.assign(new Error("This board is not shared."), { statusCode: 404 });
+    const d = await this.get(found.id);
+    const p = d.project!;
+    const tasks = [...p.tasks];
+    const who = cleanProject({ tasks: [{ text: "x", who: change.who }] })?.tasks[0]?.who;
+    const i = tasks.findIndex((x) => x.id === change.id);
+    if (change.action === "add") {
+      const t = cleanProject({ tasks: [{ text: change.text, ...(who ? { who } : {}) }] })?.tasks[0];
+      if (!t || tasks.length >= 100) throw Object.assign(new Error("Write the task."), { statusCode: 400 });
+      tasks.push({ ...t, id: `t${randomBytes(6).toString("hex")}` });
+    } else if (change.action === "claim" && i >= 0) {
+      if (who) tasks[i] = { ...tasks[i]!, who };
+      else { const { who: _w, ...rest } = tasks[i]!; tasks[i] = rest; }
+    } else if (change.action === "done" && i >= 0) {
+      const { done: _d, ...rest } = tasks[i]!;
+      tasks[i] = tasks[i]!.done ? rest : { ...rest, done: true };
+    } else throw Object.assign(new Error("Unknown change."), { statusCode: 400 });
+    d.project = { ...p, tasks, t: Date.now() };
+    await this.save(d);
+    return d.project;
   }
 
   /** Academic English practice from her English text (design AcademicEnglish): questions and hard words. */

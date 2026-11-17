@@ -2028,7 +2028,8 @@ Missing:
 2. **The course as a web** (Obsidian's graph view): lectures as points joined by the terms they share, a tap opens a lecture or shows the shared terms.
 3. **A group project board** (Taskphase, Wrike for students): a course project's tasks with who does what and by when, and a link teammates open (no account) to take a task and mark it done.
 - Not taken: a full notes app with backlinks (KesherAI's documents and "where else a term appears" cover it).
-- Stopped at: list made; building from (1).
+- Built (2026-11-17): all three (design Part33).
+- Stopped at: built; next research round (34).
 
 ## Screen lens, part 1: capture part of the screen and hand it to the AI (2026-11-17, Roee asked)
 - Google: Circle to Search on Android (hold home, circle anything; search, translate in place, AI overview); Lens in desktop Chrome (a region on the page → search, "translate" puts the translation over the picture, text selection by OCR, AI Mode follow-ups). Microsoft: Click to Do on Windows 11 (Win+click or Win+Q; local OCR, text actions — summarize, rewrite, search — run on the PC with Phi Silica on Copilot+ PCs; image actions: visual search, erase, remove background; nothing kept after the action), Copilot Vision (shares a window with Copilot), Edge Lens (experimental). Snipping Lens (open source): Snipping Tool region → uploaded to an image host → Google image search (cloud, privacy cost). ChatGPT/Claude desktop apps: a hotkey to attach a screenshot or a window to a chat.
