@@ -1805,3 +1805,22 @@ tools' own pages, against what was added tonight:
   from the report page (Print → Save as PDF), its text extracted; (3) pasted text. All three end in the same mapping by
   the model into our report form, marked "from Brandon"; adding the chat itself then allows follow-ups and an update.
 - Stopped at: research done for the whole path and import; design v2 next.
+
+## How open-source projects feel to contributors, and KesherAI (2026-11-17, part 1; Roee asked)
+- **VS Code**: `yo code` makes a working extension; F5 opens an Extension Development Host; edit, "Reload Window", breakpoints
+  in the editor. One command to a running example, and a separate window so nothing of yours breaks.
+- **Obsidian**: clone the sample plugin into a test vault's plugins folder, `npm run dev` rebuilds on save; turn it on in
+  Settings; a community "Hot Reload" plugin reloads it on each build. A separate test vault keeps real notes safe.
+- **Contributor-friendly repos** (Callstack, OpenTelemetry 2026): a short README that says the problem, the answer and how
+  to install; a CONTRIBUTING that is a copy-paste step list with zero-config defaults; scoped "good first issue"
+  issues with context; human examples; quick, kind reviews.
+- **KesherAI today**: `pnpm create-plugin` scaffolds a plugin in a blink (like `yo code`); CONTRIBUTING has the setup in six
+  commands; issue and PR templates; TSDoc enforced by lint; CODE_GUIDE (every file, Hebrew lines too), FORKING, PLUGINS.
+- **Gaps found** (to the future list): (1) no plugin dev loop: a plugin reloads only when toggled; wanted a "develop this
+  plugin" mode that rebuilds and reloads it on save and shows its errors and logs in place (VS Code / Obsidian);
+  (2) no public "good first issue" list: the shared task board's small tasks could be published as issues;
+  (3) no one-click environment (a devcontainer / Codespaces) and a big build: the web build needs 6 GB of Node memory,
+  which CONTRIBUTING does not say; (4) no separate safe profile for development (Obsidian's test vault): a
+  `--data-dir` exists but is not in CONTRIBUTING; (5) no hosted API docs (typedoc builds them locally only).
+- Stopped at: part 1 (contributors and plugin authors). Next: how editing code inside KesherAI feels to users (the
+  Code chat against Claude Code, Cursor, Zed: diffs, review, checkpoints), then the list of changes.

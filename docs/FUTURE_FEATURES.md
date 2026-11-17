@@ -65,6 +65,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Research to do
 - ⬜ A deep look at open-source projects (Roee, 2026-11-17): how the code, editing it, adding to it (plugins, forks, contributions) feels for users and for developers elsewhere (VS Code, Zed, Godot, Blender, Obsidian, ComfyUI, LobeHub, Open WebUI…), and how it feels in KesherAI: getting started, reading the code, CODE_GUIDE, plugin and skill authoring, forking, tests, the PR path; then a list of what to change, in the future list.
+  - Part 1 done (RESEARCH_LOG): ⬜ a plugin dev mode (rebuild and reload on save, its errors and logs in place); ⬜ small board tasks published as "good first issue"; ⬜ a devcontainer and the 6 GB build note in CONTRIBUTING; ⬜ a safe development profile (`--data-dir`) in CONTRIBUTING; ⬜ hosted API docs. Part 2 next: editing code inside KesherAI vs Claude Code, Cursor, Zed.
 
 ## Waiting on the owner 👤
 - 👤 SignPath application and 2FA (signed installer)
