@@ -124,6 +124,19 @@ export function classesToMark(t: Timetable, now: Date, days = 7): Array<{ slot: 
   return out;
 }
 
+/**
+ * "Were you there?" as a note (design Attendance): while she tracks attendance, a class of a course with a rule that
+ * ended 5 to 15 minutes ago and is not marked. Returns the class and its mark key (to ask once).
+ */
+export function attendanceAskNow(t: Timetable, now: Date): { slot: ClassSlot; key: string } | undefined {
+  if (!t.trackSince || !t.limits) return undefined;
+  const m = now.getHours() * 60 + now.getMinutes();
+  const slot = classesOn(t, now.getDay()).find((s) => t.limits![s.courseId] && m - mins(s.end) >= 5 && m - mins(s.end) <= 15);
+  if (!slot) return undefined;
+  const key = `${slot.id}@${ymd(now)}`;
+  return t.attendance?.[key] ? undefined : { slot, key };
+}
+
 /** A course's attendance: classes held (here + absent), there, missed, the percent, and what the rule leaves. */
 export interface AttendanceSum { held: number; here: number; absent: number; excused: number; percent: number | undefined; limit?: AttendanceLimit; left?: number; warn: boolean; over: boolean }
 

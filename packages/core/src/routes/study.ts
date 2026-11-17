@@ -68,6 +68,8 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
     void st.remindIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["dart"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined);
     // A class starting (design Timetable): record it.
     void st.remindClassIfDue((title, body, path, phone) => s.notifier.send({ title, body, path, tags: ["studio_microphone"], ...(phone ? {} : { computerOnly: true }) })).catch(() => undefined);
+    // After a class with an attendance rule (design Attendance): were you there? (The phone schedules its own.)
+    void st.askAttendanceIfDue((title, body, path) => s.notifier.send({ title, body, path, tags: ["raised_hand"], computerOnly: true })).catch(() => undefined);
   }, 60_000);
   remind.unref?.();
   app.addHook("onClose", async () => clearInterval(remind));

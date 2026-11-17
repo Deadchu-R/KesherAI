@@ -257,6 +257,13 @@ test("timetable: only her courses' classes, and one reminder per class a day", a
     assert.equal(sent.length, 1);
     assert.match(sent[0]![0]!, /פיזיולוגיה מתחיל ב-10:00 · חדר 101/);
     assert.equal(sent[0]![2], `#/study/${c.id}?record=1`);
+    // Attendance: with a rule and tracking on, once, 5–15 minutes after the class ends.
+    await st.setTimetable({ ...(await st.timetable()), trackSince: 1, limits: { [c.id]: { absences: 2 } } });
+    const asked: string[] = [];
+    const ask = async (title: string) => void asked.push(title);
+    assert.equal(await st.askAttendanceIfDue(ask, new Date(2026, 10, 15, 12, 7)), true);
+    assert.equal(await st.askAttendanceIfDue(ask, new Date(2026, 10, 15, 12, 9)), false);
+    assert.deepEqual(asked, ["✋ היית בפיזיולוגיה?"]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
