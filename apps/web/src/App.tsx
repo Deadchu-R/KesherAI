@@ -437,6 +437,11 @@ function ExtensionPage() {
         setClip({ title: String(d.title ?? "").slice(0, 200), url: String(d.url ?? "").slice(0, 2000), text: d.text.slice(0, 20000), ...(typeof d.selection === "string" && d.selection.trim() ? { selection: d.selection.slice(0, 20000) } : {}) });
         return;
       }
+      // "🔍 Lens" in the side panel (design ScreenLens): the part of the page she marked, as a lens picture.
+      if (d?.type === "kesher-lens" && typeof (d as { image?: unknown }).image === "string") {
+        void api<{ id: string }>("/api/lens/shot", { method: "POST", body: { data: (d as { image: string }).image } }).then((r) => (location.hash = `#/lens/${r.id}?all=1`), (er: Error) => toast(er.message));
+        return;
+      }
       if (d?.type !== "kesher-page" || typeof d.text !== "string") return;
       const he = getLocale() === "he";
       const title = String(d.title ?? "").slice(0, 200);

@@ -49,6 +49,8 @@ function crop(img: HTMLImageElement, marked: Box): string {
  */
 export function LensPage({ id }: { id?: string }) {
   const overlay = /[?&]overlay=1/.test(location.hash);
+  // From the browser extension: the part she marked on the page is the whole picture.
+  const all = /[?&]all=1/.test(location.hash);
   const [shot, setShot] = useState(id);
   const [box, setBox] = useState<Box | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
@@ -144,7 +146,7 @@ export function LensPage({ id }: { id?: string }) {
   const left = box ? Math.max(8, Math.min(box.x, innerWidth - 420)) : 0;
   return (
     <div className={`lens${overlay ? " overlay" : ""}`} onPointerDown={down} onPointerMove={moveTo} onPointerUp={up}>
-      <img ref={img} src={withToken(`/api/lens/shot/${shot}`)} alt="" draggable={false} onError={() => { toast(L("התמונה כבר לא שמורה. לחצי שוב על המקש.", "The picture is gone. Press the key again.")); setShot(undefined); }} />
+      <img ref={img} src={withToken(`/api/lens/shot/${shot}`)} alt="" draggable={false} onLoad={() => { if (all && img.current) { const r = shown(img.current); setBox({ x: r.x, y: r.y, w: r.w, h: r.h }); } }} onError={() => { toast(L("התמונה כבר לא שמורה. לחצי שוב על המקש.", "The picture is gone. Press the key again.")); setShot(undefined); }} />
       {box && <div className="lens-box" style={{ left: box.x, top: box.y, width: box.w, height: box.h }} />}
       {!box && <div className="lens-hint chip">{L("גוררים כדי לסמן · נגיעה = כל התמונה · Esc לסגירה", "Drag to mark · a tap = the whole picture · Esc to close")}</div>}
       <button type="button" className="lens-close ghost" onClick={close} aria-label={L("סגירה", "Close")}>✕</button>
