@@ -106,7 +106,12 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
   // Screen pictures: small, in order, on the folded line (open one to see it full size).
   const shots = steps.flatMap((s) => (SCREEN.test(s.call.name) ? s.result?.assetIds ?? [] : []));
   const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
-  const sounds = steps.flatMap((s) => s.result?.audioIds ?? []);
+  // A song's title and lyrics come from the make_music call itself (t80).
+  const sounds = steps.flatMap((s) => (s.result?.audioIds ?? []).map((id) => {
+    const input = (s.call.input ?? {}) as { title?: unknown; lyrics?: unknown };
+    const lyrics = typeof input.lyrics === "string" && !/^\[instrumental\]$/i.test(input.lyrics.trim()) ? input.lyrics.trim() : "";
+    return { id, title: typeof input.title === "string" ? input.title.trim() : "", lyrics };
+  }));
   // Older builds only said "Built dist/x.exe." in their output.
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
@@ -165,10 +170,17 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {sounds.length > 0 && (
         <div className="activity-audio">
-          {sounds.map((id) => (
+          {sounds.map(({ id, title, lyrics }) => (
             <div key={id} className="audio-card">
+              {title && <strong className="audio-title" dir="auto">{title}</strong>}
               <audio src={withToken(`/api/assets/${id}`)} controls preload="metadata" />
-              <a href={withToken(`/api/assets/${id}`)} download={`kesher-music-${id.slice(0, 8)}.mp3`}>{t("download")}</a>
+              <a href={withToken(`/api/assets/${id}`)} download={`${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || `kesher-music-${id.slice(0, 8)}`}.mp3`}>{t("download")}</a>
+              {lyrics && (
+                <details className="audio-lyrics">
+                  <summary>{t("songLyrics")}</summary>
+                  <pre dir="auto">{lyrics}</pre>
+                </details>
+              )}
             </div>
           ))}
         </div>

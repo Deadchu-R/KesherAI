@@ -455,6 +455,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           ) : (
             <a key={e.key} className={`nav-link${e.key === "new-chat" ? " new-chat" : ""}`} href={e.href} aria-current={hash === e.href ? "page" : undefined}>
               <span className={e.icon === "+" ? "plus" : "nav-ico"} aria-hidden="true"><Glyph of={e.icon} href={e.href} {...(e.icon === "+" ? { size: 15 } : {})} /></span> {e.label}
+              {e.href === "#/tasks" && <RunningCount />}
             </a>
           ),
         )}
@@ -463,6 +464,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
             {pinnedItems.map((n) => (
               <a key={n.href} href={n.href} className={`nav-link nav-pin${pinDrag.dragging === n.href ? " dragging" : ""}`} aria-current={hash === n.href ? "page" : undefined} {...pinDrag.props(n.href)}>
                 {NAV_ICONS[n.href] && <span className="nav-ico" aria-hidden="true"><ToolIcon href={n.href} fallback={NAV_ICONS[n.href]!} /></span>} {n.label}
+                {n.href === "#/tasks" && <RunningCount />}
               </a>
             ))}
           </div>
@@ -655,6 +657,13 @@ try {
  * The sidebar's edge, dragged with the mouse to make it wider or narrower (200-520 px, kept for next time);
  * double-click or Home puts back the usual width; arrow keys move it too.
  */
+/** How many chats are working or waiting for you, beside the Tasks link (t128). */
+function RunningCount() {
+  const n = Object.keys(useActivity()).length;
+  if (!n) return null;
+  return <span className="nav-count" aria-label={getLocale() === "he" ? `${n} עובדים עכשיו` : `${n} working now`}>{n}</span>;
+}
+
 function SidebarGrip() {
   const save = (px: number | null) => {
     setSideWidth(px);

@@ -49,7 +49,12 @@ export function GpuCheck() {
             </div>
           )}
           {c.platform.platform === "linux" && <p className="muted" dir="ltr">Vulkan drivers: {c.vulkanDrivers.join(", ") || "none"}</p>}
-          {c.engineLog.length > 0 && <pre className="ctx-text" dir="ltr">{c.engineLog.join("\n")}</pre>}
+          {c.engineLog.length > 0 && (
+            <pre className="ctx-text" dir="ltr">
+              {/* KesherAI's own lines (a routine's start, t81) stand apart from llama-server's. */}
+              {c.engineLog.map((l, i) => <div key={i} className={/^KesherAI:/.test(l) ? "muted" : undefined}>{l}</div>)}
+            </pre>
+          )}
           <div className="row">
             <button type="button" className="small" onClick={() => void run()}>{L("בדוק שוב", "Check again")}</button>
             <button type="button" className="small" onClick={() => void navigator.clipboard.writeText(text).then(() => toast(L("הועתק: אפשר להדביק ולשלוח", "Copied: paste it to send")))}>{L("העתק את כל הבדיקה", "Copy the whole check")}</button>

@@ -143,7 +143,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     const platform = enginePlatform(hw);
     const bin = s.engine.status().binaryPath;
     const libs = bin ? (await readdir(dirname(bin)).catch(() => [] as string[])).filter((f) => /ggml/i.test(f)) : [];
-    const log = (s.engine.status().log ?? []).filter((l) => /vulkan|ggml_vk|offload|gpu|device|layers to/i.test(l)).slice(-25);
+    const log = (s.engine.status().log ?? []).filter((l) => /^KesherAI:/.test(l) || /vulkan|ggml_vk|offload|gpu|device|layers to/i.test(l)).slice(-25);
     return {
       gpus: hw.gpus.map((g) => ({ name: g.name, vendor: g.vendor ?? "", vramGb: Math.round((g.vramTotal / 1024 ** 3) * 10) / 10 })),
       platform,

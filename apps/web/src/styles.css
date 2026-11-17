@@ -1253,6 +1253,9 @@ label.biz-toggle .grow { flex: 1; }
 .activity-audio { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .audio-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .audio-card audio { width: min(420px, 100%); }
+.audio-card .audio-title { flex-basis: 100%; }
+.audio-card .audio-lyrics { flex-basis: 100%; }
+.audio-card .audio-lyrics pre { white-space: pre-wrap; font: inherit; line-height: 1.6; margin: 6px 0 0; max-height: 320px; overflow: auto; }
 
 /* First-run welcome */
 .welcome { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: radial-gradient(1200px 600px at 50% -10%, rgb(152 163 255 / 0.16), transparent 60%), color-mix(in srgb, var(--bg) calc(0.92 * 100%), black 6%); backdrop-filter: blur(6px); overflow-y: auto; }
@@ -2846,3 +2849,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .stremio-rate > input { flex: 1 1 180px; min-width: 0; }
 @media (max-width: 640px) { .stremio-rate > input { flex-basis: 100%; } }
 .study-field select, .study-field input { max-width: 100%; }
+.nav-count { position: absolute; inset-inline-end: 10px; top: 50%; transform: translateY(-50%); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent, #ededee); color: var(--bg, #121213); font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
