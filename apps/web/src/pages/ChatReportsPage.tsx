@@ -305,7 +305,7 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
       </div>
       <div className="cr-hero">
       {rep ? <h1 className="cr-headline" dir="auto">"{rep.headline}"</h1>
-        : r.status === "error" ? <p className="bad">{r.error}</p>
+        : r.status === "error" ? <div className="stack"><p className="bad" dir="auto">{r.error}</p>{r.hasChat !== false && <button type="button" className="primary" style={{ alignSelf: "flex-start" }} onClick={() => void api(`/api/chat-reports/${id}/retry`, { method: "POST", body: {} }).then(() => window.location.reload(), (e: Error) => toast(e.message))}>{L("↻ לנסות שוב", "↻ Try again")}</button>}</div>
         : <div className="cr-card navy stack"><h3>{r.status === "writing" ? L("כותב את הדוח…", "Writing the report…") : L(`קורא חלק ${r.progress?.part ?? 1} מתוך ${r.progress?.parts ?? "?"}…`, `Reading part ${r.progress?.part ?? 1} of ${r.progress?.parts ?? "?"}…`)}</h3><progress max={(r.progress?.parts ?? 1) + 1} value={r.status === "writing" ? r.progress?.parts ?? 1 : (r.progress?.part ?? 1) - 1} /><span className="muted small">{L("המודל על המחשב שלך. אפשר לצאת ולחזור; הדוח ממשיך להיכתב.", "The model on your computer. You can leave and come back; it keeps writing.")}</span></div>}
       {n.people.length > 0 && <div className="row wrap">{n.people.slice(0, 6).map((p) => <span key={p.name}>{who(p.name, p.name === r.me)}</span>)}{n.from && <span className="muted small">· {monthName(n.from)} – {monthName(n.to)}</span>}</div>}
       {rep?.read && <p className="cr-read" dir="auto">{rep.read}</p>}

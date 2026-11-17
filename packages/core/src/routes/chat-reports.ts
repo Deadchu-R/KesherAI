@@ -53,6 +53,8 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
     return { id: r.id };
   });
   app.get<{ Params: { id: string } }>("/api/chat-reports/:id", async (req) => reports.get(req.params.id));
+  // A report that failed (a context error, the model stopped): written again from the chat it has.
+  app.post<{ Params: { id: string }; Body: { model?: string } }>("/api/chat-reports/:id/retry", async (req) => reports.retry(req.params.id, ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   app.post<{ Params: { id: string }; Body: { question?: string; model?: string } }>("/api/chat-reports/:id/ask", async (req) => reports.followUp(req.params.id, String(req.body?.question ?? ""), ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   /** "Want to know more?": a few words, or another export of the chat (or the chat of an imported report). */
   app.post<{ Params: { id: string }; Body: { text?: string; source?: string; title?: string; chatText?: string; parts?: unknown[]; model?: string } }>("/api/chat-reports/:id/add", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {

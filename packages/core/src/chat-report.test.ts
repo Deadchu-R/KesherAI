@@ -185,3 +185,16 @@ test("a long chat is written even when the model's context is small (parts split
   assert.equal(done.report?.headline, "ארוך");
   assert.ok(biggestFinal > 0 && biggestFinal <= 15_000);
 });
+
+test("a failed report is written again from the chat it has", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const bad = async () => { throw new Error("The model stopped."); };
+  const r = await reports.start(chat(), { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, bad);
+  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "error"; i++) await new Promise((x) => setTimeout(x, 20));
+  assert.equal((await reports.get(r.id)).status, "error");
+  const good = async (system: string) => (system.includes("part of a chat") ? JSON.stringify({ notes: ["n"] }) : JSON.stringify({ headline: "שוב", read: "r", findings: [] }));
+  await reports.retry(r.id, good);
+  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  assert.equal((await reports.get(r.id)).report?.headline, "שוב");
+  await assert.rejects(reports.retry(r.id, good), /Only a report that failed/);
+});

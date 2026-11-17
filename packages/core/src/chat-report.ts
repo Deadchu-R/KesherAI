@@ -564,6 +564,25 @@ export class ChatReports {
   }
 
   /**
+   * Writes a report that failed again, from the chat it already has (after a model change or a fix), without
+   * uploading the chat again.
+   */
+  async retry(id: string, ask: Ask): Promise<StoredReport> {
+    if (this.running.has(id)) throw Object.assign(new Error("The report is still being written."), { statusCode: 409 });
+    const r = await this.get(id);
+    if (r.status !== "error") throw Object.assign(new Error("Only a report that failed can be tried again."), { statusCode: 400 });
+    const chat = r.hasChat === false ? undefined : await this.chat(id);
+    if (!chat) throw Object.assign(new Error("This report has no chat to read; add its export."), { statusCode: 400 });
+    r.status = "reading";
+    delete r.error;
+    await this.put(r);
+    const stop = new AbortController();
+    this.running.set(id, stop);
+    void this.write(r, realMessages(chat), ask, stop.signal).finally(() => this.running.delete(id));
+    return r;
+  }
+
+  /**
    * "Want to know more?": what the reader adds (a few words, another export of the same chat, or the chat for an
    * imported report) is kept and the report is written again as the next version.
    */
