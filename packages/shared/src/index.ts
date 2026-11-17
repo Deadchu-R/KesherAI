@@ -27,3 +27,4 @@ export * from "./study.js";
 export * from "./hebrew-address.js";
 export * from "./graph.js";
 export * from "./ideas.js";
+export * from "./pptx.js";

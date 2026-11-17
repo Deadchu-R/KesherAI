@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { StudyLecture, StudyPicture, VideoSlide } from "@kesher/shared";
+import { pptxFiles, type StudyLecture, type StudyPicture, type VideoSlide } from "@kesher/shared";
+import { strToU8, zipSync } from "fflate";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -20,6 +21,7 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
   const [busy, setBusy] = useState(false);
   const [pics, setPics] = useState<StudyPicture[] | null>(null);
   const run = useRef(0);
+  const stage = useRef<HTMLDivElement>(null);
   useEffect(() => () => stopSpeaking(), []);
   useEffect(() => {
     if (!slides.some((s) => s.picture) || pics) return;
@@ -62,7 +64,7 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
   const tone = TONES[at % TONES.length]!;
   return (
     <div className="video-overview">
-      <div className="video-stage" style={{ ["--tone" as string]: tone }}>
+      <div className="video-stage" ref={stage} style={{ ["--tone" as string]: tone }}>
         <div className="video-slide">
           <div className="video-text">
             <span className="video-count" style={{ color: tone, borderColor: tone }}>{L(`שקופית ${at + 1} מתוך ${slides.length}`, `Slide ${at + 1} of ${slides.length}`)}</span>
@@ -87,6 +89,21 @@ export function StudyVideo({ base, lecture, onLecture }: { base: string; lecture
         {slides.map((x, i) => <li key={i}><button type="button" className={i === at ? "on" : ""} onClick={() => (playing ? play(i) : setAt(i))} dir="auto">{x.title}</button></li>)}
       </ol>
       <p className="muted small video-say" dir="auto">{s.say}</p>
+      <div className="row video-deck">
+        <button type="button" onClick={() => void stage.current?.requestFullscreen?.().catch(() => undefined)}>🖥 {L("להציג (מסך מלא)", "Present (full screen)")}</button>
+        <button type="button" onClick={() => downloadDeck(lecture.title, slides)}>⬇ {L("PowerPoint עם הערות דובר", "PowerPoint with speaker notes")}</button>
+      </div>
     </div>
   );
+}
+
+/** The slides as an editable .pptx (the narration in the speaker notes), downloaded. */
+function downloadDeck(title: string, slides: VideoSlide[]) {
+  const files = pptxFiles(title, slides.map((x) => ({ title: x.title, bullets: x.bullets, notes: x.say })));
+  const zip = zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }));
+  a.download = `${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 80) || "slides"}.pptx`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }

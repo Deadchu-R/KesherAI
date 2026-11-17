@@ -3248,3 +3248,4 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 .study-badges span { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: 13px; }
 .read-along-plain { white-space: pre-wrap; }
+.video-deck { flex-wrap: wrap; gap: 8px; margin-top: 8px; } .video-stage:fullscreen { display: flex; flex-direction: column; justify-content: center; background: #111; padding: 4vh 6vw; } .video-stage:fullscreen .video-slide h3 { font-size: 3.2vw; } .video-stage:fullscreen .video-slide li { font-size: 2.2vw; }
