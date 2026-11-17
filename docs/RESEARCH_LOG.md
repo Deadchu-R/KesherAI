@@ -1894,3 +1894,9 @@ New gaps (not in part 18's list):
 6. **A study game** (Quizlet Match): match terms to meanings against the clock, from her terms and cards.
 Already covered (checked): notes and summaries, flashcards with spaced repetition, quizzes and open questions, audio overviews, a tutor from her lectures with citations, Socratic study, step-by-step homework, focus hours and streaks, sharing a course, camera input, captions and translation in class.
 - Stopped at: list made; added to the future list after part 18's items.
+
+## Students, part 21: video lectures from any system, split into chapters with questions (2026-11-17, Roee asked)
+- Where lectures are: Tel Aviv University records in Panopto, inside each course's Moodle site (published by the lecturer); Zoom cloud recordings are kept 14 days only. Panopto or Kaltura is what most Israeli universities use. yt-dlp has extractors for Panopto, Kaltura, Vimeo and Zoom and accepts a cookies file, so her own sign-in in KesherAI's browser is enough.
+- In-video questions: Panopto and Kaltura both offer in-video quizzes (multiple choice only, placed by the lecturer); Edpuzzle pauses the video at a question. Coursera does the same.
+- Built: a lecture from her MP4 (streamed to disk, transcribed with minute marks) or from a Panopto/Kaltura/Vimeo link (video at most 720p and captions via yt-dlp with that site's cookies only); 3–10 chapters by topic from the transcript, each with a summary and a multiple-choice question; a player that pauses at each chapter's end to ask and offers to go back on a wrong answer (YouTube's privacy-enhanced player, or the kept video).
+- Stopped at: built; to check on the PC with a real YouTube lecture and, with Roee, a Panopto one.

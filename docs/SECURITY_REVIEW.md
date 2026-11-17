@@ -993,3 +993,11 @@ S5 an outside scanner's rules for Electron.
 - **Follow the agent**: opens files already in the chat's file list in the editor; nothing new is read.
 - **Teach-back**: the model's answer is parsed, clamped and shown as text; cards are added through the existing card route on her click.
 - Performance: YouTube fetches captions only (no video) unless there are none; the review loads on its button. Secrets/personal paths: none in the diff.
+
+## Scan 109 (2026-11-17): video lectures (MP4 upload, Panopto/Kaltura through her sign-in), the picture proxy, YouTube in the content policy
+- **Her sign-in cookies for a video site**: taken from KesherAI's own browser profile only on her click on "Lecture from a link", only for that link's site (its host and its registrable domain, where universities keep the sign-in), https only; written to a temporary file readable only by her user (0600), handed to yt-dlp, and the folder removed right after. Never sent anywhere else, never kept. A YouTube link never takes cookies.
+- **MP4 upload**: streamed to a temporary folder (cap 6 GB, nothing held in memory), transcribed, then moved into the course's own folder; the file name is cleaned of path characters. The kept video is served with byte ranges from that folder only; a removed lecture removes its video.
+- **Picture proxy** (`/api/web/image`): https only, no user/password in the address, every resolved address checked against this computer and private networks (IPv4 and IPv6, incl. CGNAT and mapped addresses), no redirects, image types only, 10 MB cap, no cookies or referrer. Used only after her tap.
+- **Content policy**: frames may now load `https://www.youtube-nocookie.com` only (YouTube's privacy-enhanced player, controlled by postMessage with its origin checked); everything else unchanged.
+- **Chapters**: the model's times and questions are checked (in order, inside the video, 3–4 options with a valid answer) and shown as text.
+- Performance: chapters are made once on her click and kept; the video plays from disk with ranges. Secrets/personal paths: none in the diff.
