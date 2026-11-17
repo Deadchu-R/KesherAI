@@ -5,6 +5,7 @@
  * and the UI. The desktop app and `pnpm dev` both start here. See docs/CODE_GUIDE.md (Hebrew) and
  * docs/ARCHITECTURE.md for the walk-through.
  */
+import { LinkWatch } from "./link-watch.js";
 import { LipSync } from "./lipsync.js";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -628,6 +629,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Protect the graphics card, close left-over engines, and bring back the last model (server/start-engines.ts).
   startEngines({ app, services, guard, engine, comfy, config, faults, registry, afterTerminate });
 
+  let linkWatch: LinkWatch | undefined;
   return {
     app,
     services,
@@ -637,9 +639,19 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (config.remote.anywhere) {
         services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
       }
+      // A new "anywhere" address: the link goes to the user's Telegram bot and phone, so the phone is never left with an
+      // old one (link-watch.ts). The main app only.
+      if (!options.worker && features.remote) {
+        linkWatch = new LinkWatch(join(paths.root, "anywhere-link.json"), () => (config.remote.anywhere ? services.tunnel.status().url : undefined), async (link, address) => {
+          await services.notifier.send({ title: "A new link to your computer", body: `The internet address of KesherAI on this computer changed to ${address}. The full link (with the access key) was sent to your Telegram bot; or open the app and connect with the new address.`, tags: ["link"], priority: 4 }, true).catch(() => undefined);
+          await telegram.broadcast(`🔗 KesherAI: the link to your computer changed. Open this on the phone to connect again (it holds the access key; keep it private):\n${link}`).catch(() => undefined);
+        }, () => config.remote.token ?? "");
+        void linkWatch.start();
+      }
       return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${config.port}`;
     },
     async close() {
+      linkWatch?.stop();
       // A restart (from the phone, or to install an update) keeps the tunnel, so its address stays the same.
       if (services.restarting) services.tunnel.detach();
       else services.tunnel.stop();
