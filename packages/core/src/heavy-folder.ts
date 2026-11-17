@@ -166,7 +166,15 @@ export class HeavyFolder {
   /** @returns Each heavy folder: its size and whether it already lives elsewhere (sizes kept for 10 minutes, and while copying). */
   async folders(): Promise<Array<{ name: HeavyName; bytes: number; linked: boolean }>> {
     if (this.sizes && (this.st.running || Date.now() - this.sizes.at < 10 * 60_000)) {
-      return Promise.all(this.sizes.list.map(async (f) => ({ ...f, linked: await isLink(join(this.root, f.name)) })));
+      const cached = this.sizes;
+      return Promise.all(HEAVY_FOLDERS.map(async (name) => {
+        const linked = await isLink(join(this.root, name));
+        const known = cached.list.find((f) => f.name === name);
+        // A folder not measured yet while copying (one not being moved): measured once, or 0 when it is a link.
+        const bytes = known ? known.bytes : linked ? 0 : (await filesUnder(join(this.root, name))).reduce((n, f) => n + f.size, 0);
+        if (!known) cached.list.push({ name, bytes, linked });
+        return { name, bytes, linked };
+      }));
     }
     const out: Array<{ name: HeavyName; bytes: number; linked: boolean }> = [];
     for (const name of HEAVY_FOLDERS) {
@@ -219,6 +227,9 @@ export class HeavyFolder {
       for (const n of names) {
         if (await isLink(join(this.root, n)) || !(await stat(join(this.root, n)).catch(() => undefined))?.isDirectory()) continue;
         const files = await filesUnder(join(this.root, n));
+        const known = this.sizes?.list.find((f) => f.name === n);
+        if (known) known.bytes = files.reduce((t, f) => t + f.size, 0);
+        else (this.sizes ??= { at: Date.now(), list: [] }).list.push({ name: n, bytes: files.reduce((t, f) => t + f.size, 0), linked: false });
         this.st.files += files.length;
         this.st.bytes += files.reduce((s, f) => s + f.size, 0);
         todo.push(n);

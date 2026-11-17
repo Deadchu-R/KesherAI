@@ -77,3 +77,52 @@ test("a report is written from the model's notes, with checked quotes, and a fol
   await reports.remove(r.id);
   assert.equal((await reports.list()).length, 0);
 });
+
+test("names are made plain, another export merges without doubles, and an added note writes version 2", async () => {
+  const { renamed, mergeChats } = await import("./chat-report.js");
+  const c = renamed(chat(), { Dana: "דנה" });
+  assert.equal(c.messages[0]!.sender, "דנה");
+  const more: PeopleChat = { source: "whatsapp", title: "Dana", messages: [chat().messages[0]!, { at: "2025-12-31T10:00:00", sender: "Dana", text: "שנה טובה" }] };
+  const merged = mergeChats(chat(), more);
+  assert.equal(merged.messages.length, chat().messages.length + 1);
+  assert.equal(merged.messages[0]!.text, "שנה טובה");
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  let seen = "";
+  const ask = async (system: string, user: string) => {
+    if (!system.includes("part of a chat")) seen = user;
+    return system.includes("part of a chat") ? JSON.stringify({ notes: ["x"] }) : JSON.stringify({ headline: "h", read: "r", askMore: ["מה השתנה?"], wouldHelp: [{ ask: "מה קרה ב-13.1?", kind: "text" }] });
+  };
+  const r = await reports.start(chat(), { kind: "couple", voice: "coach", lang: "he", me: "Dana", names: { Dana: "דנה" } }, ask);
+  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  const one = await reports.get(r.id);
+  assert.equal(one.me, "דנה");
+  assert.deepEqual(one.report?.askMore, ["מה השתנה?"]);
+  assert.equal(one.report?.wouldHelp[0]?.kind, "text");
+  await reports.add(r.id, { text: "רבנו ב-13.1 על החתונה" }, ask);
+  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  const two = await reports.get(r.id);
+  assert.equal(two.version, 2);
+  assert.equal(two.history?.length, 1);
+  assert.ok(seen.includes("רבנו ב-13.1"));
+});
+
+test("a Brandon report is brought in without its chat, and the chat added later writes a checked report", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const ask = async (system: string) => (system.includes("another app")
+    ? JSON.stringify({ title: "Dana and me", headline: "Brandon's verdict", read: "…", findings: [{ title: "Mornings", body: "She opens.", quotes: [{ who: "Dana", text: "good morning" }] }], askMore: ["Who apologises first?"] })
+    : system.includes("part of a chat") ? JSON.stringify({ notes: ["x"] }) : JSON.stringify({ headline: "now with the chat", read: "r" }));
+  const r = await reports.importReport("Brandon's verdict. ".repeat(20), "en", ask);
+  const got = await reports.get(r.id);
+  assert.equal(got.origin, "brandon");
+  assert.equal(got.hasChat, false);
+  assert.equal(got.report?.findings[0]?.quotes[0]?.text, "good morning");
+  assert.equal(got.report?.wouldHelp[0]?.kind, "export");
+  const f = await reports.followUp(r.id, "Who opens?", async () => JSON.stringify({ answer: "Dana, by the report." }));
+  assert.equal(f.a, "Dana, by the report.");
+  await reports.add(r.id, { chat: chat() }, ask);
+  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  const after = await reports.get(r.id);
+  assert.equal(after.hasChat, true);
+  assert.equal(after.report?.headline, "now with the chat");
+  assert.equal(after.numbers.messages, 60);
+});
