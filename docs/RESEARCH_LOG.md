@@ -1822,5 +1822,18 @@ tools' own pages, against what was added tonight:
   (3) no one-click environment (a devcontainer / Codespaces) and a big build: the web build needs 6 GB of Node memory,
   which CONTRIBUTING does not say; (4) no separate safe profile for development (Obsidian's test vault): a
   `--data-dir` exists but is not in CONTRIBUTING; (5) no hosted API docs (typedoc builds them locally only).
-- Stopped at: part 1 (contributors and plugin authors). Next: how editing code inside KesherAI feels to users (the
-  Code chat against Claude Code, Cursor, Zed: diffs, review, checkpoints), then the list of changes.
+- Stopped at: part 1 done; part 2 below.
+
+## Editing code inside KesherAI, against Zed and Cursor (2026-11-17, part 2)
+- **Zed**: the agent panel says which files changed and by how many lines; "Review Changes" opens one tab with every
+  change, each hunk kept or rejected (or all at once); an option shows the same inside each file; "follow the agent"
+  moves the editor to each file it touches.
+- **Cursor**: users loved per-change Keep / Undo with red-green inline diffs ("file by file, chunk by chunk", it made
+  letting the agent work feel safe); 2026 versions moved to auto-apply with one bulk "Review +1181 -413" and drew a
+  long complaint thread; per-change review is still there, off by default.
+- **KesherAI today**: in plan and ask modes each edit waits for approval with its diff; after a run a receipt lists the
+  files with lines added and removed and "Undo all" for the run (asks before undoing files changed since).
+- **Gaps** (future list): ⬜ keep / undo per file and per hunk in the receipt (not only the whole run); ⬜ one review view of
+  all of a run's changes (Zed's multibuffer); ⬜ "follow the agent" in the editor pane. Keep per-change review the
+  default (Cursor's users show why).
+- Stopped at: research done (parts 1 and 2); the changes are in FUTURE_FEATURES.
