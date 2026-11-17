@@ -39,6 +39,7 @@ export function studyPlus(x) {
       el("button", { type: "button", onclick: () => go({ at: "practice", course: c.id, mode: "quick" }) }, L("⚡ 5 דקות", "⚡ 5 minutes")),
       el("button", { type: "button", onclick: () => go({ at: "practice", course: c.id, mode: "mistakes" }) }, L("🔁 הטעויות שלי", "🔁 My mistakes")),
       el("button", { type: "button", onclick: () => go({ at: "match", course: c.id }) }, L("🧩 התאמה", "🧩 Match")),
+      el("button", { type: "button", onclick: () => go({ at: "occlusion", course: c.id }) }, L("🖼 כרטיסיות מתמונה", "🖼 Cards from a picture")),
       el("button", { type: "button", onclick: () => go({ at: "mock", course: c.id }) }, L("📝 מבחן דמה", "📝 Mock exam")),
       el("button", { type: "button", onclick: () => go({ at: "feed", course: c.id }) }, L("📱 פיד", "📱 Feed")),
       el("button", { type: "button", onclick: () => go({ at: "web", course: c.id }) }, L("🕸 מפת הקורס", "🕸 Course web")),
@@ -776,6 +777,88 @@ export function studyPlus(x) {
     return box;
   }
 
+  // ---------- image cards (image occlusion) made on the phone (design PhoneOcclusion) ----------
+  // The picture is kept once on the phone (IndexedDB, at most 1600 px), named "ph-….jpg" so a synced card is accepted
+  // by the computer too (which shows its text there); boxes are drawn with a finger, each box becomes a card.
+  const imageDb = () => new Promise((ok, bad) => { const q = globalThis.indexedDB.open("kesherai-images", 1); q.onupgradeneeded = () => q.result.createObjectStore("pics"); q.onsuccess = () => ok(q.result); q.onerror = () => bad(q.error); });
+  async function putImage(name, dataUrl) { const d = await imageDb(); await new Promise((ok, bad) => { const t = d.transaction("pics", "readwrite"); t.objectStore("pics").put(dataUrl, name); t.oncomplete = ok; t.onerror = () => bad(t.error); }); }
+  /** A picture kept on the phone for its image cards, or "" when it is not here. */
+  async function phoneImage(name) {
+    try { const d = await imageDb(); return await new Promise((ok) => { const q = d.transaction("pics").objectStore("pics").get(name); q.onsuccess = () => ok(q.result || ""); q.onerror = () => ok(""); }); } catch { return ""; }
+  }
+  const shrink = (file) => new Promise((ok, bad) => {
+    const url = URL.createObjectURL(file);
+    const im = new globalThis.Image();
+    im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)); const cv = document.createElement("canvas"); cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k); cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url); ok(cv.toDataURL("image/jpeg", 0.85)); };
+    im.onerror = () => { URL.revokeObjectURL(url); bad(new Error("not a picture")); };
+    im.src = url;
+  });
+  function occlusion(c) {
+    x.root.append(back({ at: "course", course: c.id }), el("h2", {}, L("🖼 כרטיסיות מתמונה", "🖼 Cards from a picture")));
+    const box = el("div");
+    const pick = el("input", { type: "file", accept: "image/*", hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (!f) return;
+      let data;
+      try { data = await shrink(f); } catch { return alert(L("זו לא תמונה.", "That is not a picture.")); }
+      editor(data);
+    } });
+    const start = () => box.replaceChildren(section("", el("p", { class: "muted small" }, L("מצלמים או בוחרים תמונה (אנטומיה, תרשים, מפה), ומסמנים באצבע את מה להסתיר. כל תיבה היא כרטיסייה.", "Take or choose a picture (anatomy, a diagram, a map) and mark with a finger what to hide. Each box is a card.")),
+      pick, el("button", { type: "button", class: "primary", onclick: () => pick.click() }, L("📷 תמונה", "📷 A picture"))));
+    function editor(data) {
+      const boxes = [];
+      const area = el("div", { style: "position: relative; touch-action: none; user-select: none; max-width: 100%" });
+      const img = el("img", { src: data, alt: "", draggable: "false", style: "display: block; width: 100%; border-radius: 8px; background: #fff" });
+      area.append(img);
+      const list = el("div");
+      const title = el("input", { dir: "auto", "aria-label": L("כותרת", "Title"), placeholder: L("כותרת, למשל: הלב", "A title, e.g. The heart"), style: "width: 100%" });
+      const make = el("button", { type: "button", class: "primary", disabled: "" }, L("ליצור כרטיסיות", "Make cards"));
+      const pct = (n) => `${n * 100}%`;
+      const draw = () => {
+        area.replaceChildren(img, ...boxes.map((b, i) => el("div", { style: `position: absolute; left: ${pct(b.x)}; top: ${pct(b.y)}; width: ${pct(b.w)}; height: ${pct(b.h)}; background: #a5b4ff; border-radius: 4px; display: grid; place-items: center; color: #111; font-weight: 700` }, String(i + 1))));
+        list.replaceChildren(...boxes.map((b, i) => el("div", { class: "ph-row" }, el("b", {}, String(i + 1)),
+          el("input", { dir: "auto", value: b.label || "", "aria-label": L(`תיבה ${i + 1}`, `Box ${i + 1}`), placeholder: L("מה מוסתר כאן", "What is hidden here"), style: "flex: 1; min-width: 0", oninput: (e) => { b.label = e.target.value.slice(0, 200); } }),
+          el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { boxes.splice(i, 1); draw(); } }, "✕"))));
+        make.disabled = !boxes.length;
+        make.textContent = L(`ליצור ${boxes.length} כרטיסיות`, `Make ${boxes.length} cards`);
+      };
+      let from;
+      let live;
+      const at = (e) => { const r = area.getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)) }; };
+      area.onpointerdown = (e) => { from = at(e); area.setPointerCapture?.(e.pointerId); live = el("div", { style: "position: absolute; border: 2px dashed #f0a830; border-radius: 4px; pointer-events: none" }); area.append(live); };
+      area.onpointermove = (e) => { if (!from || !live) return; const p = at(e); Object.assign(live.style, { left: pct(Math.min(from.x, p.x)), top: pct(Math.min(from.y, p.y)), width: pct(Math.abs(p.x - from.x)), height: pct(Math.abs(p.y - from.y)) }); };
+      area.onpointerup = (e) => {
+        if (!from) return;
+        const p = at(e);
+        const b = { x: Math.min(from.x, p.x), y: Math.min(from.y, p.y), w: Math.abs(p.x - from.x), h: Math.abs(p.y - from.y) };
+        from = undefined;
+        live?.remove();
+        // A tap, not a box: too small to hide anything.
+        if (b.w > 0.02 && b.h > 0.02 && boxes.length < 40) boxes.push(b);
+        draw();
+      };
+      make.onclick = async () => {
+        const name = `ph-${uid().replace(/[^\w-]/g, "").slice(0, 24)}.jpg`;
+        try { await putImage(name, data); } catch { return alert(L("אין מקום לשמור את התמונה בטלפון.", "No room on the phone to keep the picture.")); }
+        const t = title.value.trim().slice(0, 200);
+        boxes.forEach((b, i) => {
+          newCard(c, `🖼 ${t || "?"} — ${i + 1}/${boxes.length}`, b.label?.trim() || `#${i + 1}`);
+          const card = c.cards[c.cards.length - 1];
+          card.format = "diagram";
+          card.kind = "anatomy";
+          card.occlusion = { image: name, boxes: boxes.map(({ x: bx, y, w, h, label }) => ({ x: bx, y, w, h, ...(label ? { label: label.trim().slice(0, 200) } : {}) })), i };
+        });
+        if (commit()) { alert(L(`נוצרו ${boxes.length} כרטיסיות`, `${boxes.length} cards made`)); go({ at: "course", course: c.id }); }
+      };
+      box.replaceChildren(section("", el("p", { class: "muted small" }, L("גוררים באצבע מסביב למה שצריך להסתיר.", "Drag with a finger around what to hide.")), area, list, title,
+        el("div", { class: "ph-btns", style: "flex-wrap: wrap" }, make, el("button", { type: "button", onclick: start }, L("תמונה אחרת", "Another picture")))));
+      draw();
+    }
+    x.root.append(box);
+    start();
+  }
+
   // ---------- my mistakes, the 5-minute lesson and the match game: from what is already on the phone ----------
   const scheduler = fsrs();
   const shuffle = (a) => { const b = [...a]; for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
@@ -1130,5 +1213,5 @@ export function studyPlus(x) {
     },
   };
 
-  return { needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match }, homeViews: { grades, english, timetable, week }, classBanner };
+  return { phoneImage, needsSetup, setupView, setupList, addHighlight, highlightsBox, teachBackBox, tableSync, gradesSync, courseButtons, examEve, hardCards, cardTimer, noteCardsBtn, portions, podcastBtn, whereBtn, quizTalk, homeworkExtras, views: { feed, web, palace, letter, rehearse, papers, mock, writing, practice, match, occlusion }, homeViews: { grades, english, timetable, week }, classBanner };
 }

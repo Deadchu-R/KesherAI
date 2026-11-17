@@ -1321,10 +1321,14 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
     const show = () => { answer.hidden = false; rates.hidden = false; showBtn.hidden = true; };
     // An image occlusion card made on the computer: its picture comes from there, every box hidden, the asked one marked.
     const occ = card.occlusion;
-    const picSrc = occ && sync?.imageUrl?.(c.id, occ.image);
+    // A picture made on the phone ("ph-….jpg") is kept on the phone; one made on the computer comes from there.
+    const onPhone = occ && /^ph-/.test(occ.image);
+    const picSrc = occ && (onPhone ? "" : sync?.imageUrl?.(c.id, occ.image));
     const pct = (n) => `${Math.max(0, Math.min(100, n * 100))}%`;
     const occBoxes = occ ? occ.boxes.map((b, i) => el("div", { style: `position: absolute; left: ${pct(b.x)}; top: ${pct(b.y)}; width: ${pct(b.w)}; height: ${pct(b.h)}; border-radius: 4px; display: grid; place-items: center; font-weight: 700; color: #111; background: ${i === occ.i ? "#f0a830" : "#a5b4ff"}` }, i === occ.i ? "?" : "")) : [];
-    const occPic = picSrc ? el("div", { style: "position: relative; max-width: 100%" }, el("img", { src: picSrc, alt: "", crossorigin: "anonymous", style: "display: block; width: 100%; border-radius: 8px; background: #fff" }), ...occBoxes)
+    const occImg = (picSrc || onPhone) && el("img", { ...(picSrc ? { src: picSrc, crossorigin: "anonymous" } : {}), alt: "", style: "display: block; width: 100%; min-height: 60px; border-radius: 8px; background: #fff" });
+    if (onPhone) void plus.phoneImage(occ.image).then((u) => { if (u) occImg.src = u; else occImg.replaceWith(el("p", { class: "muted small" }, L("התמונה של הכרטיסייה לא נמצאת בטלפון הזה.", "The card's picture is not on this phone."))); });
+    const occPic = occImg ? el("div", { style: "position: relative; max-width: 100%" }, occImg, ...occBoxes)
       : occ ? el("p", { class: "muted small" }, L("את התמונה של הכרטיסייה רואים כשהטלפון מחובר למחשב.", "The card's picture shows when the phone is connected to the computer.")) : null;
     showBtn.onclick = () => { show(); const box = occBoxes[occ?.i ?? -1]; if (box) { box.style.background = "transparent"; box.style.outline = "3px solid #f0a830"; box.textContent = ""; } };
     root.append(el("section", { class: "api" },

@@ -91,6 +91,8 @@ export function OcclusionEditor({ courseId, lectureId, onDone }: { courseId: str
  * name when it has one).
  */
 export function OcclusionCard({ courseId, occ, shown }: { courseId: string; occ: StudyOcclusion; shown: boolean }) {
+  // Made on the phone alone: its picture stays on the phone (design PhoneOcclusion).
+  if (/^ph-/.test(occ.image)) return <p className="muted small">{L("את התמונה של הכרטיסייה הזו רואים בטלפון שבו נעשתה.", "This card's picture shows on the phone it was made on.")}</p>;
   return (
     <div className="study-occ-pic view">
       <img src={withToken(`/api/study/courses/${courseId}/images/${occ.image}`)} alt="" draggable={false} />
