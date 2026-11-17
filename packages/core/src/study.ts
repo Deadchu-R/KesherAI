@@ -109,6 +109,17 @@ const toCard = (c: StudyCard): Card => {
 };
 const fromCard = (c: Card): Record<string, unknown> => JSON.parse(JSON.stringify(c)) as Record<string, unknown>;
 
+/** Whether a lecture is mostly in Hebrew (its overviews are then asked for in Hebrew outright). */
+function hebrewLecture(text: string): boolean {
+  const sample = text.slice(0, 4000);
+  return (sample.match(/[\u0590-\u05ff]/g) ?? []).length > (sample.match(/[A-Za-z]/g) ?? []).length;
+}
+
+/** Whether a text meant to be Hebrew came out mostly in Latin letters. */
+function latinMostly(text: string): boolean {
+  return (text.match(/[A-Za-z]/g) ?? []).length > (text.match(/[\u0590-\u05ff]/g) ?? []).length * 1.5;
+}
+
 /** The study store. */
 export class Study {
   private readonly scheduler = fsrs();
@@ -521,7 +532,12 @@ export class Study {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture (start):\n${l.text.slice(0, 20_000)}` : l.text.slice(0, 40_000);
-    l.audio = (await this.ask(AUDIO_PROMPT, `Lecture: ${l.title}\n\n${material}`, signal, d.course)).replace(/[#*_`>|]/g, "").trim().slice(0, 20_000);
+    const he = hebrewLecture(l.text);
+    const say = async (extra: string) => (await this.ask(`${AUDIO_PROMPT}${extra}`, `Lecture: ${l.title}\n\n${material}`, signal, d.course)).replace(/[#*_`>|]/g, "").trim().slice(0, 20_000);
+    let text = await say(he ? " Write it in Hebrew." : "");
+    // Some local models answer in English whatever they are told (found on the PC): once more, Hebrew first.
+    if (he && latinMostly(text)) text = await say(" Answer in Hebrew only (עברית), every sentence.");
+    l.audio = text;
     await this.save(d);
     return l;
   }
@@ -531,7 +547,10 @@ export class Study {
     const d = await this.get(id);
     const l = this.lecture(d, lectureId);
     const material = l.summary ? `Summary:\n${l.summary}\n\nThe lecture (start):\n${l.text.slice(0, 16_000)}` : l.text.slice(0, 30_000);
-    const slides = parseVideoSlides(jsonIn(await this.ask(VIDEO_PROMPT, `Lecture: ${l.title}\n\n${material}`, signal, d.course)));
+    const he = hebrewLecture(l.text);
+    const make = async (extra: string) => parseVideoSlides(jsonIn(await this.ask(`${VIDEO_PROMPT}${extra}`, `Lecture: ${l.title}\n\n${material}`, signal, d.course)));
+    let slides = await make(he ? " Write every title, bullet and narration in Hebrew." : "");
+    if (he && latinMostly(slides.map((x) => `${x.title} ${x.bullets.join(" ")} ${x.say}`).join(" "))) slides = await make(" Answer in Hebrew only (עברית): every title, bullet and narration.");
     if (slides.length < 2) throw Object.assign(new Error("The model did not write the slides in the expected form; try again or pick another model."), { statusCode: 502 });
     l.video = slides;
     await this.save(d);
