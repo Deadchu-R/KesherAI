@@ -491,7 +491,12 @@ export function studyPlus(x) {
           el("details", {}, el("summary", {}, L("מה נשמע", "What was heard")), el("p", { dir: "auto", class: "small" }, text)), ask, notes));
       } };
     };
-    x.root.append(section("", el("p", { class: "muted small" }, L("אומרים את ההצגה כמו מול הכיתה. התמלול נעשה בטלפון, וההקלטה לא נשמרת.", "Give the talk as in front of the class. It is transcribed on the phone and not kept.")), el("label", { class: "ph-filter" }, L("הזמן שהוקצב: ", "Your time: "), target), b, state), result);
+    // The last runs (t145), oldest first, to see the pace and the filler words improve.
+    const runs = (c.rehearseRuns ?? []).filter((r) => r && r.s);
+    const past = runs.length ? el("details", {}, el("summary", {}, L(`החזרות הקודמות (${runs.length})`, `Earlier runs (${runs.length})`)),
+      ...runs.map((r) => el("p", { class: "small", dir: "auto" }, `${new Date(r.t).toLocaleDateString(L("he-IL", "en-GB"), { day: "numeric", month: "numeric" })} · ${Math.floor(r.seconds / 60)}:${String(r.seconds % 60).padStart(2, "0")} · ${L(`${r.s.wpm} מילים לדקה`, `${r.s.wpm} words a minute`)} · ${L(`${r.s.fillerShare}% מילוי`, `${r.s.fillerShare}% filler`)}`)),
+      el("button", { type: "button", class: "link", onclick: () => { if (confirm(L("למחוק את החזרות השמורות?", "Delete the saved runs?"))) { c.rehearseRuns = []; if (commit()) x.draw(); } } }, L("למחוק אותן", "Delete them"))) : "";
+    x.root.append(section("", el("p", { class: "muted small" }, L("אומרים את ההצגה כמו מול הכיתה. התמלול נעשה בטלפון, וההקלטה עצמה לא נשמרת. התמלול והמספרים של 5 החזרות האחרונות נשמרים בקורס, כדי להשוות.", "Give the talk as in front of the class. It is transcribed on the phone; the recording is not kept. The text and numbers of the last 5 runs are kept in the course, to compare.")), el("label", { class: "ph-filter" }, L("הזמן שהוקצב: ", "Your time: "), target), b, state, past), result);
   }
 
   /** Papers: OpenAlex over the phone's internet, "what the studies say" by the phone's model, the course's sources. */
