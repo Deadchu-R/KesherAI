@@ -10,6 +10,7 @@ import { SidebarShortcuts } from "./SidebarShortcuts";
 import { SidebarEdit } from "./SidebarEdit";
 import { useAppMenu } from "./AppMenu";
 import { api, appHome, disconnectComputer, isRemote } from "./api";
+import { ProjectShare } from "./ProjectShare";
 import { createConversation, desktop, refreshLibrary, toast, useActivity, useLibrary } from "./library";
 import { getLocale, setLocale, t } from "./i18n";
 import { SshFolder } from "./SshFolder";
@@ -409,6 +410,8 @@ export function useNavItems(): Array<{ href: string; label: string; group: strin
  */
 export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: string; online: boolean | null; open: boolean; onLocale: () => void }) {
   const { projects, conversations } = useLibrary();
+  // Sharing a project with a guest (ProjectShare, docs/COLLABORATION.md).
+  const [sharing, setSharing] = useState<{ id: string; name: string } | null>(null);
   const [dialog, setDialog] = useState<"code" | "project" | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const searching = useSearching();
@@ -500,9 +503,12 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           const expanded = open[p.id] ?? items.some((c) => c.id === activeId);
           return (
             <div key={p.id}>
-              <button type="button" className="project-btn" aria-expanded={expanded} onClick={() => setOpen({ ...open, [p.id]: !expanded })}>
-                <span aria-hidden="true">{expanded ? "▾" : "▸"}</span> {p.name}
-              </button>
+              <div className="row project-row">
+                <button type="button" className="project-btn grow" aria-expanded={expanded} onClick={() => setOpen({ ...open, [p.id]: !expanded })}>
+                  <span aria-hidden="true">{expanded ? "▾" : "▸"}</span> {p.name}
+                </button>
+                <button type="button" className="icon-btn project-share-btn" aria-label={getLocale() === "he" ? `שיתוף ${p.name}` : `Share ${p.name}`} title={getLocale() === "he" ? "שיתוף הפרויקט" : "Share the project"} onClick={() => setSharing({ id: p.id, name: p.name })}>⇪</button>
+              </div>
               {expanded && (
                 <div className="project-items">
                   <button
@@ -521,6 +527,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           );
         })}
 
+        {sharing && <ProjectShare projectId={sharing.id} name={sharing.name} onClose={() => setSharing(null)} />}
         <div className="section-head">
           <span>{t("recents")}</span>
         </div>

@@ -1123,6 +1123,14 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 144 (2026-11-18): shared projects, stage 1 (guests)
+- **Deny by default**: a guest key (`project:<id>:read|edit`) passes the auth hook only for `/api/guest/*`, and never with `.` or `..` path segments (tested with plain and encoded `..`); every guest route checks the guest's own project again. Owner routes (`/api/projects/:id/invites`, `/guests`) are out of a guest's reach.
+- **The invite**: 32 random bytes; only its SHA-256 is stored (guest-invites.json, mode 600); one use, 1 hour to 7 days; the only route that takes it as a key is `/api/join/:token` (GET to see the project's name, POST with a name). A name is cut to letters, digits and a few marks (40).
+- **What a guest can do**: read the project's chats as text (no tool output, no files); with edit, start chats of their own (`source: "guest"`, incognito, mode ask) and write only in those — never in the owner's chats, which can use tools, so a guest's words never reach a chat with tools. Guest chats get **no tools at all** (no files, computer, network, memory), and memory never files from them. A daily allowance (default 100 answers) per guest.
+- **The owner**: is notified when someone joins; sees who has access, when they joined and were last seen; Remove deletes the key at once (tested).
+- **Still to come** (COLLABORATION stages 2–4): ban an email, alerts on unusual use, Google sign-in for email invites, tools for guests behind the owner's approval.
+- 891 tests pass; lint and typecheck clean. No secret, email, user name or personal path in the changed files.
+
 ## Scan 143 (2026-11-18): Stremio's link sign-in, tabs, three.js and 3D previews
 - **Found and fixed**: a `.gltf` model can name textures and buffers at any web address; the viewer now loads only this app's own addresses and `data:`/`blob:` (a LoadingManager URL filter), so previewing a model (one the agent downloaded, say) never contacts another server. GLB files embed everything.
 - **three.js 0.181.0** (pinned, with @types/three): loaded only when a model opens (a lazy chunk), no network of its own.

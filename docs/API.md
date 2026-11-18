@@ -271,3 +271,13 @@ Claude Code: `ANTHROPIC_BASE_URL=http://127.0.0.1:7420 ANTHROPIC_AUTH_TOKEN=kai-
 ## App access keys
 
 Settings → "API and app access keys" makes a key per app (`kai-…`, shown once; only its hash is kept), with when it was last used, and revokes it. The model APIs (`/v1`, `/mcp`) take a key as `Authorization: Bearer` or `x-api-key`; keys do not open the rest of `/api`. Other devices need a key or the remote access token; apps on this computer need one only when "ask apps on this computer for a key too" is on.
+
+## Shared projects (docs/COLLABORATION.md, stage 1)
+| Route | What |
+|---|---|
+| `POST /api/projects/:id/invites` | `{ role: "read"\|"edit", hours: 1–168 }` → `{ token, expiresAt, role }`: a one-time invite; the link is `<address>/#/join/<token>` |
+| `GET /api/projects/:id/guests` | `{ people: [{ id, name, role, joinedAt, lastSeen, left }], invites, dailyLimit }` |
+| `DELETE /api/projects/:id/guests/:guest` · `DELETE /api/projects/:id/invites/:invite` | Remove a guest (their key stops at once) · cancel an unused invite |
+| `GET /api/join/:token` · `POST /api/join/:token` | No key (the token is one): the project's name and role · `{ name }` → `{ key, project, role }` (once) |
+| `GET /api/guest/me` · `GET /api/guest/chats` · `GET /api/guest/chats/:id` | A guest key only: who and what is left today · the project's chats · one chat's messages as text |
+| `POST /api/guest/chats` · `POST /api/guest/chats/:id/messages` | Edit only: a new chat of their own · a message in one of their own chats (`{ text }` → `{ ok, left }`) |

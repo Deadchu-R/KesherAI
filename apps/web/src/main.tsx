@@ -2,6 +2,7 @@ import "./excalidraw-assets";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { GuestApp, isGuest } from "./GuestApp";
 import { getLocale, setLocale } from "./i18n";
 // The default font (redesign 2026-11): Heebo. Rubik and the others load only when picked in Appearance.
 import "@fontsource/heebo/400.css";
@@ -52,7 +53,8 @@ window.addEventListener("vite:preloadError", (e) => {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    {/* A guest of a shared project (an invite link, or one who joined) sees only the guest page. */}
+    {isGuest() ? <GuestApp /> : <App />}
   </StrictMode>,
 );
 

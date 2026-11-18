@@ -208,3 +208,42 @@ test("amdCardOnLinux: an AMD card with at least 4 GB of its own memory", async (
     assert.equal(await amdCardOnLinux(root), false);
   }
 });
+
+test("a shared project: invite, join from outside, read, write in their own chat only, nothing else", async () => {
+  const server = await makeServer();
+  try {
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/providers", payload: { id: "echo", type: "echo" } })).statusCode, 200);
+    server.services.config.activeModels.chat = "echo/echo-1";
+    const project = (await server.app.inject({ method: "POST", url: "/api/projects", payload: { name: "Game" } })).json() as { id: string };
+    const owners = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", projectId: project.id } })).json() as { id: string };
+    const invite = (await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/invites`, payload: { role: "edit", hours: 1 } })).json() as { token: string };
+    const away = { remoteAddress: "203.0.113.7", headers: { host: "kesher.example" } };
+    // The link, from outside, with no key.
+    assert.equal(((await server.app.inject({ url: `/api/join/${invite.token}`, ...away })).json() as { project: string }).project, "Game");
+    const joined = (await server.app.inject({ method: "POST", url: `/api/join/${invite.token}`, payload: { name: "Dani" }, ...away })).json() as { key: string };
+    assert.match(joined.key, /^kd_/);
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/join/${invite.token}`, payload: { name: "Again" }, ...away })).statusCode, 404, "the link works once");
+    const as = { remoteAddress: "203.0.113.7", headers: { host: "kesher.example", authorization: `Bearer ${joined.key}` } };
+    assert.equal(((await server.app.inject({ url: "/api/guest/me", ...as })).json() as { project: string }).project, "Game");
+    // Nothing outside the guest API.
+    for (const url of ["/api/conversations", "/api/settings", `/api/conversations/${owners.id}`, "/api/models", `/api/projects/${project.id}/guests`]) {
+      assert.equal((await server.app.inject({ url, ...as })).statusCode, 403, url);
+    }
+    // The owner's chat: readable, not writable.
+    assert.equal((await server.app.inject({ url: `/api/guest/chats/${owners.id}`, ...as })).statusCode, 200);
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/guest/chats/${owners.id}/messages`, payload: { text: "hi" }, ...as })).statusCode, 403);
+    // Their own chat: no tools, written and answered.
+    const mine = (await server.app.inject({ method: "POST", url: "/api/guest/chats", ...as })).json() as { id: string };
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/guest/chats/${mine.id}/messages`, payload: { text: "hello" }, ...as })).statusCode, 200);
+    const summary = server.services.library.summary(mine.id);
+    assert.equal(summary?.source, "guest");
+    assert.equal(summary?.incognito, true);
+    // The owner sees them and removes them: the key stops at once.
+    const g = (await server.app.inject({ url: `/api/projects/${project.id}/guests` })).json() as { people: Array<{ id: string; name: string }> };
+    assert.equal(g.people.length, 1);
+    assert.equal((await server.app.inject({ method: "DELETE", url: `/api/projects/${project.id}/guests/${g.people[0]!.id}` })).statusCode, 200);
+    assert.notEqual((await server.app.inject({ url: "/api/guest/me", ...as })).statusCode, 200);
+  } finally {
+    await server.close();
+  }
+});
