@@ -22,6 +22,7 @@ const HE = {
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   splitAi: "חלוקה לפי משמעות (רגל, מושב, ידית) צריכה מודל חלוקה תלת ממדי במחשב (PartField / P3-SAM). הוא עוד לא מותקן, אז בינתיים: 'לפי חלקים נפרדים' מפריד כל חתיכה שלא נוגעת באחרת.", piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
+  texPromptPh: "✨ טקסטורה ממילים: עץ אלון ישן, קטיפה אדומה…", texAi: "✨", texMaking: "מודל התמונות מצייר טקסטורה… (במחשב)", texDone: "הטקסטורה החדשה על החלק", needWords: "כתוב איזו טקסטורה",
   modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
 };
@@ -414,6 +415,22 @@ async function setTexture(mesh, dataUrl) {
   t.needsUpdate = true;
   [].concat(mesh.material).forEach((m) => { m.map = t; m.color?.set(0xffffff); m.needsUpdate = true; });
 }
+// A texture from words with the picture model on the computer (Meshy's and Tripo's "retexture", simply): seamless,
+// so it repeats over the part without seams.
+$("texAi").onclick = async () => {
+  const mesh = meshOfChosen();
+  const words = $("texPrompt").value.trim();
+  if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
+  if (!words) return msg(T("needWords", "Write which texture"), true);
+  busy(T("texMaking", "The picture model is painting a texture… (on your computer)"));
+  try {
+    const [url] = await kesher.call("image.generate", { prompt: `${words}, seamless tileable texture, flat even lighting, top-down, no shadows, high detail`, width: 1024, height: 1024 });
+    remember();
+    await setTexture(mesh, url);
+    showTexture();
+    msg(T("texDone", "The new texture is on the part"));
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+};
 $("texEdit").onclick = () => editTexture(false);
 $("texNew").onclick = () => editTexture(true);
 $("texRemove").onclick = () => { const mesh = meshOfChosen(); if (!mesh) return; remember(); [].concat(mesh.material).forEach((m) => { m.map = null; m.needsUpdate = true; }); showTexture(); };
@@ -719,6 +736,6 @@ kesher.call("storage.get", { key: "keymap" }).then((v) => { if (v === "blender" 
 $("keymap").onchange = () => kesher.call("storage.set", { key: "keymap", value: $("keymap").value }).catch(() => undefined);
 kesher.call("info").then((i) => {
   he = i.locale === "he";
-  if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); }
+  if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); }
 }).catch(() => undefined);
 open();
