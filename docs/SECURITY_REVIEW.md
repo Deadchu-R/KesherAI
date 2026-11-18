@@ -1339,7 +1339,8 @@ S5 an outside scanner's rules for Electron.
   checked to be a GLB (magic bytes, ≤ 200 MB) and written to a random folder under `engines/p3sam/work`, removed after.
   One job at a time (409 while busy); every run has a timeout. **Known risk, accepted by Roee:** the setup downloads and
   runs Tencent's Hunyuan3D-Part code from its Hugging Face Space (its latest version, not pinned) and the PyG / PyTorch
-  wheels; it runs in its own venv, with the app's user rights. Pinning a Space revision is on the list.
+  wheels; it runs in its own venv, with the app's user rights. **Then fixed:** the first setup records the Space's and the
+  weights' revisions (`paths.json`), and every later setup downloads exactly those, never newer code.
 - **`video.scenes` / `POST …/files/scenes`**: the path goes through `resolveInWorkspace` and must be a video; the
   threshold is clamped to 0.05–0.9 and written with `toFixed`, so nothing else reaches FFmpeg's filter; `execFile`, no
   shell. **Fixed in this scan:** it decodes the whole video, so it is now one at a time (429), like cutting.

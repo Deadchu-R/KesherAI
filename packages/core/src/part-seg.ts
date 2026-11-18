@@ -41,15 +41,24 @@ json.dump({"faces": [[round(float(x), 5) for x in c[i]] + [int(labels[i])] for i
 print("DONE", n)
 `;
 
-/** The weights: the newest checkpoint of P3-SAM in the Hunyuan3D-Part model page (or none, and the code finds its own). */
+/**
+ * The code (the Hunyuan3D-Part Space) and the weights (its model page), each at one fixed revision: the one recorded by
+ * the first setup (trust on first use, security review scan 149), so setting up again never takes newer, unseen code.
+ */
 const FETCH = `import glob, json, os, sys
-from huggingface_hub import snapshot_download
+from huggingface_hub import HfApi, snapshot_download
 d = sys.argv[1]
-code = snapshot_download(repo_id="tencent/Hunyuan3D-Part", repo_type="space", local_dir=os.path.join(d, "code"))
-w = snapshot_download(repo_id="tencent/Hunyuan3D-Part", local_dir=os.path.join(d, "weights"), allow_patterns=["*p3sam*", "*P3-SAM*", "*p3-sam*"])
+old = {}
+if os.path.exists(os.path.join(d, "paths.json")):
+    old = json.load(open(os.path.join(d, "paths.json")))
+api = HfApi()
+code_rev = old.get("codeRevision") or api.space_info("tencent/Hunyuan3D-Part").sha
+w_rev = old.get("weightsRevision") or api.model_info("tencent/Hunyuan3D-Part").sha
+code = snapshot_download(repo_id="tencent/Hunyuan3D-Part", repo_type="space", revision=code_rev, local_dir=os.path.join(d, "code"))
+w = snapshot_download(repo_id="tencent/Hunyuan3D-Part", revision=w_rev, local_dir=os.path.join(d, "weights"), allow_patterns=["*p3sam*", "*P3-SAM*", "*p3-sam*"])
 ck = [f for f in glob.glob(os.path.join(w, "**", "*"), recursive=True) if f.endswith((".ckpt", ".safetensors", ".pt", ".pth"))]
-json.dump({"code": code, "ckpt": ck[0] if ck else None}, open(os.path.join(d, "paths.json"), "w"))
-print("FETCHED", len(ck))
+json.dump({"code": code, "ckpt": ck[0] if ck else None, "codeRevision": code_rev, "weightsRevision": w_rev}, open(os.path.join(d, "paths.json"), "w"))
+print("FETCHED", len(ck), "code", code_rev, "weights", w_rev)
 `;
 
 /** Installs P3-SAM once and splits meshes into parts with it. */
