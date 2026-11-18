@@ -1462,3 +1462,20 @@ S5 an outside scanner's rules for Electron.
   FFmpeg's own report of the opened video (numbers only), so no page text reaches the filter graph.
 - Checked: lint, typecheck, tests (asset-bank 4, video-cut +3, image-hash), a real FFmpeg cut of a video + another
   video without sound + a picture, cropped to 9:16; the three editors' Add in a browser (desktop and 390 px).
+
+## Scan 157 (2026-11-18): dialogs, the fade, the bank's "edit in", the engine's reason, routines and the card
+- **The app's own confirm** (`askConfirm`): built from DOM nodes with `textContent` (a chat's title is never HTML);
+  Escape / outside / Cancel give no. The chat menu's Delete now asks first (it deleted at once).
+- **Fade between clips**: the route clamps it to 0–1 s, `cutArgs` again to a third of each stretch, written as fixed
+  decimals; no page text reaches the filter.
+- **The bridge's `video.cut`** passes `clips` (checked by the route: inside the chat's folder, a video or picture, at
+  most 20) and `fade` (a number).
+- **Bank "edit in"**: a chat file's path comes back from the bank id and the editor page reads it through the chat's own
+  routes (inside its folder); a generated file is copied first (`/api/bank/copy`, as scan 156).
+- **Engine reason**: the chat titles named in the engine's log are the library's own, at most two.
+- **Routines and the card**: a background or start-up routine also waits while the card is ≥ 60 % busy with none of
+  our work running (no new access: the guard's own nvidia-smi reading).
+- **Semgrep** (CI): the two `openExternal` calls now check the address where they are called (http(s) or Stremio's
+  own links), as the rule asks; the rule was failing on every push.
+- Checked: lint, typecheck, tests (video-cut 12, gpu-guard 7, chat-report 17, asset-bank 4), a real FFmpeg cut with a
+  fade and an added clip.
