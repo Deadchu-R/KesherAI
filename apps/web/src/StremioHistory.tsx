@@ -55,6 +55,13 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
       );
     }, 3000);
   };
+  /** A new code and Stremio's page for it (also "↻ New code" when the last one expired), then waits for her. */
+  const startLink = () =>
+    api<{ code: string; link: string }>("/api/stremio/account/link", { method: "POST", body: { op: "start" } }).then((r) => {
+      setLink(r);
+      window.open(r.link, "_blank", "noopener");
+      waitLink(r.code, Date.now() + 10 * 60_000);
+    });
   const run = async (what: string, f: () => Promise<void>) => {
     setBusy(what);
     try {
@@ -105,11 +112,15 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
               <span className="small">{L("פתח את הדף של Stremio, התחבר שם (גם עם Google או Facebook) ואשר את הקוד:", "Open Stremio's page, sign in there (Google or Facebook work too) and confirm the code:")}</span>
               <b className="trakt-user-code" dir="ltr">{link.code}</b>
               <a className="button primary" href={link.link} target="_blank" rel="noopener noreferrer" dir="ltr">{link.link.replace("https://", "")} ↗</a>
-              <span className="muted small">{L("מחכה לאישור… קשר יזהה את זה לבד.", "Waiting for you to confirm… KesherAI notices by itself.")}</span>
+              <span className="muted small">{L("מחכה לאישור… קשר יזהה את זה לבד. הקוד תקף כמה דקות; אם Stremio כותב שהוא פג, קחו קוד חדש.", "Waiting for you to confirm… KesherAI notices by itself. The code lasts a few minutes; if Stremio says it expired, get a new one.")}</span>
+              <div className="row wrap">
+                <button type="button" disabled={!!busy} onClick={() => void run("s-link", () => { clearTimeout(pageTimer.current); return startLink(); })}>{busy === "s-link" ? "…" : L("↻ קוד חדש", "↻ New code")}</button>
+                <button type="button" className="ghost" onClick={() => { clearTimeout(pageTimer.current); setLink(null); }}>{L("ביטול", "Cancel")}</button>
+              </div>
             </div>
           ) : (
             <div className="row wrap">
-              <button type="button" className="primary" disabled={!!busy} onClick={() => void run("s-link", () => api<{ code: string; link: string }>("/api/stremio/account/link", { method: "POST", body: { op: "start" } }).then((r) => { setLink(r); window.open(r.link, "_blank", "noopener"); waitLink(r.code, Date.now() + 10 * 60_000); }))}>{L("התחבר דרך האתר של Stremio", "Sign in on Stremio's site")}</button>
+              <button type="button" className="primary" disabled={!!busy} onClick={() => void run("s-link", startLink)}>{L("התחבר דרך האתר של Stremio", "Sign in on Stremio's site")}</button>
               <button type="button" className="ghost small" onClick={() => setWithEmail(true)}>{L("או עם אימייל וסיסמה", "Or with email and password")}</button>
             </div>
           )
