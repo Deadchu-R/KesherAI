@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D editor</title>
+  <link rel="stylesheet" href="editor.css" />
+  <script type="importmap">{ "imports": { "three": "./vendor/three/build/three.module.min.js", "three/addons/": "./vendor/three/examples/jsm/" } }</script>
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+      <b class="grow name" id="name">3D editor</b>
+      <select id="light" title="Light"><option value="studio" data-t="lStudio">Studio</option><option value="sun" data-t="lSun">Sun</option><option value="evening" data-t="lEvening">Evening</option></select>
+      <button id="wire" title="Wireframe (W)">▦</button>
+      <button id="keysBtn" title="Shortcuts (?)">?</button>
+      <button id="export" data-t="export">Export GLB</button>
+      <button id="toChat" class="primary" data-t="toChat">Send to the chat</button>
+    </header>
+    <main class="middle">
+      <aside class="parts">
+        <b data-t="partsH">Parts</b>
+        <ul id="partList"></ul>
+      </aside>
+      <section class="view" id="view">
+        <div class="empty" id="empty" data-t="empty">Open a model from a chat: "Edit in the 3D editor" on its preview.</div>
+        <div class="stats muted small" id="stats"></div>
+      </section>
+      <aside class="inspector">
+        <b id="partName" data-t="noPart">Choose a part</b>
+        <label class="field"><span data-t="color">Colour</span><input type="color" id="color" value="#cccccc" /></label>
+        <label class="field"><span data-t="rough">Roughness</span><input type="range" id="rough" min="0" max="100" value="50" /></label>
+        <label class="field"><span data-t="metal">Metalness</span><input type="range" id="metal" min="0" max="100" value="0" /></label>
+        <div class="muted small" id="size"></div>
+        <hr />
+        <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button></div>
+        <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
+      </aside>
+    </main>
+    <footer class="versions">
+      <button id="keep" data-t="keep">＋ Keep a version</button>
+      <div class="strip" id="strip"></div>
+    </footer>
+    <nav class="phonebar" aria-label="Tools">
+      <button data-do="parts"><span>☰</span><b data-t="partsH">Parts</b></button>
+      <button data-do="inspector"><span>🎨</span><b data-t="paintS">Material</b></button>
+      <button data-do="frame"><span>⊕</span><b data-t="frameS">Frame</b></button>
+      <button data-do="undo"><span>↶</span><b data-t="undoS">Undo</b></button>
+      <button data-do="keep"><span>＋</span><b data-t="keepS">Version</b></button>
+    </nav>
+  </div>
+  <dialog id="chatDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="toChatH">Send to the chat</strong>
+      <img id="chatThumb" class="thumb" alt="" />
+      <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <dialog id="keysDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="keysH">Shortcuts (as in Blender)</strong>
+      <table class="keys" id="keysTable"></table>
+      <div class="row"><span class="grow"></span><button value="ok" class="primary" data-t="close">Close</button></div>
+    </form>
+  </dialog>
+  <div class="busy" id="busy" hidden><span id="busyText">…</span></div>
+  <footer class="status" id="msg" role="status"></footer>
+  <script src="kesher.js"></script>
+  <script type="module" src="editor.js"></script>
+</body>
+</html>

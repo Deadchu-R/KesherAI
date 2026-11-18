@@ -24,8 +24,9 @@ export const PluginPermissionSchema = z.enum(["network", "filesystem", "shell"])
  * - `speech`: speech to text and reading text aloud.
  * - `video`: open a chat's video ("Edit in the video editor") and export a cut of it back to that chat.
  * - `sound`: open a chat's sound or recording ("Edit in the sound editor"), read what is said in it, and send it back.
+ * - `model`: open a chat's 3D model (.glb, .gltf) in the page ("Edit in the 3D editor") and send it back.
  */
-export const PluginUseSchema = z.enum(["chat", "image", "speech", "video", "sound"]);
+export const PluginUseSchema = z.enum(["chat", "image", "speech", "video", "sound", "model"]);
 
 /** One permission; see {@link PluginPermissionSchema}. */
 export type PluginPermission = z.infer<typeof PluginPermissionSchema>;

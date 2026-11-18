@@ -70,12 +70,12 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
  * "Edit" on a chat's picture or video: opens it in the image or video editor (a plugin page) as a tab, which can send
  * the result back to the chat. Shown only when that editor is installed.
  */
-function EditIn({ convId, path, kind }: { convId: string; path: string; kind: "image" | "video" | "sound" }) {
+function EditIn({ convId, path, kind }: { convId: string; path: string; kind: "image" | "video" | "sound" | "model" }) {
   const { pages } = usePluginUi();
   const id = `${kind}-editor`;
   const editor = pages.find((p) => p.pluginId === id && p.uses?.includes(kind));
   const href = `#/p/${id}/${editor?.id ?? "editor"}?c=${encodeURIComponent(convId)}&f=${encodeURIComponent(path)}`;
-  const label = kind === "image" ? L("עריכה בעורך התמונות", "Edit in the image editor") : kind === "video" ? L("עריכה בעורך הווידאו", "Edit in the video editor") : L("עריכה בעורך הסאונד", "Edit in the sound editor");
+  const label = kind === "image" ? L("עריכה בעורך התמונות", "Edit in the image editor") : kind === "video" ? L("עריכה בעורך הווידאו", "Edit in the video editor") : kind === "sound" ? L("עריכה בעורך הסאונד", "Edit in the sound editor") : L("עריכה בעורך התלת ממד", "Edit in the 3D editor");
   // Each editor is its own part: when it is off, the button offers to turn it on first.
   return (
     <a
@@ -155,7 +155,7 @@ export function FilePreview({ convId, path, reloadKey }: { convId: string; path:
       {p?.kind === "text" && <pre className="attach-text" dir="auto">{p.text}</pre>}
       {p?.kind === "image" && <img className="attach-img" src={download} alt={p.name} />}
       {p?.kind === "image" && <EditIn convId={convId} path={file} kind="image" />}
-      {p?.kind === "model" && <Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={download} name={p.name} /></Suspense>}
+      {p?.kind === "model" && <><Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={download} name={p.name} /></Suspense><EditIn convId={convId} path={file} kind="model" /></>}
       {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <><Media kind="video" className="attach-img" src={download} controls preload="metadata" /><EditIn convId={convId} path={file} kind="video" /></>}
       {p?.kind === "none" && /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <><Media kind="audio" src={download} controls preload="metadata" style={{ width: "100%" }} /><EditIn convId={convId} path={file} kind="sound" /></>}
       {p?.kind === "none" && !/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <p className="muted">{L("אין תצוגה מקדימה לסוג הקובץ הזה. אפשר להוריד אותו.", "No preview for this kind of file. You can download it.")}</p>}

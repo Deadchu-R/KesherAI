@@ -1,0 +1,63 @@
+/* The same dark studio look as the other editors. */
+:root { --bg: #1d1e21; --well: #0f1012; --panel: #26272b; --panel-2: #2f3035; --line: #3a3c42; --text: #e6e7ea; --muted: #9b9fa8; --accent: #8fa2ff; --accent-ink: #0d1020; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+button, textarea, select { font: inherit; color: inherit; }
+button, select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { background: #393b41; }
+button.primary, button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: 0.45; cursor: default; }
+textarea { width: 100%; background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+input[type="range"] { accent-color: var(--accent); width: 100%; }
+input[type="color"] { width: 100%; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--well); }
+hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.grow { flex: 1; }
+.muted { color: var(--muted); }
+.small { font-size: 11.5px; }
+.field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+
+/* Layout (design Model3DEditorWorkspace): bar; parts | view | inspector; versions. */
+.app { display: grid; grid-template-rows: 42px 1fr 74px; height: 100%; }
+.top { display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid #111; }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.middle { display: flex; min-height: 0; }
+.parts { width: 210px; padding: 10px; background: var(--panel); border-inline-end: 1px solid #111; overflow: auto; }
+.parts ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.parts li { display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.parts li:hover { background: var(--panel-2); }
+.parts li.on { background: #33385e; }
+.parts li.off span { opacity: 0.45; }
+.parts li button { padding: 0 6px; border: 0; background: none; }
+.view { flex: 1; position: relative; min-width: 0; background: radial-gradient(circle at 50% 35%, #2a2a33, #0c0c0e); touch-action: none; }
+.view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); padding: 20px; text-align: center; }
+.stats { position: absolute; top: 8px; inset-inline-start: 10px; pointer-events: none; }
+.inspector { width: 230px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--panel); border-inline-start: 1px solid #111; overflow: auto; }
+.versions { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--panel); border-top: 1px solid #111; overflow-x: auto; }
+.strip { display: flex; gap: 6px; }
+.strip button { padding: 2px; border-radius: 8px; }
+.strip img { width: 72px; height: 50px; object-fit: cover; display: block; border-radius: 6px; }
+.thumb { max-width: 100%; max-height: 200px; object-fit: contain; border-radius: 6px; background: var(--well); }
+.busy { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); font-size: 15px; z-index: 9; }
+.status { position: fixed; bottom: 8px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; z-index: 10; }
+.status.show { opacity: 1; }
+.status.error { border-color: #ff6b6b; color: #ffb3b3; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.keys td { padding: 3px 12px 3px 0; }
+.keys kbd { font: 12px ui-monospace, monospace; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.phonebar { display: none; }
+[hidden] { display: none !important; }
+
+/* Phone (after Nomad Sculpt and Spline's viewer): the model gets the screen, tools at the bottom, panels as sheets. */
+@media (max-width: 760px) {
+  .app { grid-template-rows: 46px 1fr 64px 56px; }
+  .parts, .inspector, #keysBtn, #export, #light { display: none; }
+  .app.sheet-parts .parts, .app.sheet-inspector .inspector { display: flex; flex-direction: column; position: fixed; inset-inline: 0; bottom: 120px; width: auto; max-height: 50vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
+  .phonebar { display: flex; background: var(--panel); border-top: 1px solid #111; }
+  .phonebar button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }
+  .phonebar button span { font-size: 18px; color: var(--text); }
+  .phonebar b { font-weight: 500; }
+}

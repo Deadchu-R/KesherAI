@@ -170,7 +170,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const name = input.path.split(/[\\/]/).pop() ?? "";
           // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
           if (blob.size > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
-          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer(), ...(input.sound ? { sound: input.sound, soundBytes: await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.sound)}`)).then((x) => (x.ok ? x.arrayBuffer() : undefined)) } : {}), ...(input.returnVideo ? { returnVideo: input.returnVideo } : {}) };
+          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus|glb|gltf)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer(), ...(input.sound ? { sound: input.sound, soundBytes: await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.sound)}`)).then((x) => (x.ok ? x.arrayBuffer() : undefined)) } : {}), ...(input.returnVideo ? { returnVideo: input.returnVideo } : {}) };
           return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
         }
         // The video editor's export: the kept stretches of the video the page was opened with, as a new file in that
