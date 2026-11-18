@@ -25,6 +25,7 @@ const HE = {
   texH: "טקסטורה", toUnity: "שמור ל-Unity", standInUnity: "תחליף של סצנת Unity: מזיזים, ואז \"שמור ל-Unity\"; Unity מכניס את זה כשהסצנה פתוחה", unityQueued: "מחכה ל-Unity", unityHow: "Unity מכניס את זה כשהסצנה פתוחה (Ctrl+Z אחד)", toGodot: "שמור לסצנה", standIn: "תחליף של סצנת Godot: מזיזים, ואז \"שמור לסצנה\" (כש-Godot סגור)", noMoves: "עוד לא זז כלום", savingScene: "שומר לסצנה…", clash: "אלה זזו גם ב-Godot:", keepMine: "לשמור את ההזזות שלך?", sceneSaved: "נשמר לסצנה", notFound: "לא נמצאו", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
+  inGodot: "בסצנה הפתוחה ב-Godot (Ctrl+Z אחד; שומרים שם)", movedThere: "זזו גם ב-Godot, נשארו כמו שם",
   searchPh: "🔍 חיפוש…", lock: "נעל", unlock: "שחרר", aModel: "מודל", aPicture: "תמונה", aScript: "סקריפט", aScene: "סצנה", aPlaced: "הוצב",
   toUnreal: "שמור לרמה", standInUnreal: "תחליף של רמת Unreal: מזיזים, ואז \"שמור לרמה\"", standInUnrealKept: "הרמה כפי שנקראה לאחרונה (Unreal סגור): מזיזים, ואז \"שמור לרמה\"",
   unrealMoved: "זז ב-Unreal", unrealSaved: "נשמר", unrealClash: "זזו גם ב-Unreal, נשארו כמו שם",
@@ -378,7 +379,9 @@ $("toGodot").onclick = async () => {
     if (r.ok) {
       // What is in the file now is the new "before".
       model.traverse((o) => { const g = o.userData.godot; if (!g || g.path === ".") return; if (g.is2d) { g.from = [o.position.x * PX, -o.position.y * PX]; g.rot = -o.rotation.z; g.scl = [o.scale.x, o.scale.y]; } else g.from = toGodot(o.matrix); });
-      msg(`${T("sceneSaved", "Saved into the scene")}: ${r.written}${r.missing?.length ? ` · ${T("notFound", "not found")}: ${r.missing.join(", ")}` : ""}`);
+      // Godot open: the moves went into its open scene (one Ctrl+Z there), and she saves them there.
+      const where = r.inEditor ? T("inGodot", "In Godot's open scene (one Ctrl+Z; save it there)") : T("sceneSaved", "Saved into the scene");
+      msg(`${where}: ${r.written}${r.missing?.length ? ` · ${T("notFound", "not found")}: ${r.missing.join(", ")}` : ""}${r.conflicts?.length ? ` · ${T("movedThere", "moved in Godot too, left as there")}: ${r.conflicts.join(", ")}` : ""}`, !!r.conflicts?.length);
     } else msg(r.error, true);
   } catch (e) { msg(e.message, true); } finally { busy(""); }
 };

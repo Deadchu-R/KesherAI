@@ -3,7 +3,7 @@ extends EditorPlugin
 ## KesherAI Bridge: connects the Godot editor to KesherAI on this computer (never the other way round) and answers
 ## its commands. Every change goes through the editor's undo history, so Ctrl+Z takes it back.
 
-const VERSION := "0.1.1"
+const VERSION := "0.1.2"
 const URL := "ws://127.0.0.1:7420/api/godot/ws"
 
 var _ws := WebSocketPeer.new()
@@ -265,6 +265,58 @@ func _run(cmd: String, a: Dictionary):
 			if img.get_width() > 1280:
 				img.resize(1280, int(img.get_height() * 1280.0 / img.get_width()))
 			return {"png": Marshalls.raw_to_base64(img.save_png_to_buffer())}
+		"standin_moves":
+			# Moves made in KesherAI's stand-in of this scene, while Godot is open: into the open scene (opened if it
+			# is not), as one undo step, for her to save; a node that moved here too keeps its place here.
+			var scene := String(a.get("scene", ""))
+			if not scene.begins_with("res://") or not scene.ends_with(".tscn"):
+				return {"error": "A scene inside the project (res://….tscn)."}
+			if _root() == null or _root().scene_file_path != scene:
+				EditorInterface.open_scene_from_path(scene)
+			var root := _root()
+			if root == null or root.scene_file_path != scene:
+				return {"error": "The scene could not be opened in Godot."}
+			var written := 0
+			var missing := []
+			var conflicts := []
+			ur.create_action("KesherAI: moves from the stand-in")
+			for c in a.get("changes", []):
+				if typeof(c) != TYPE_DICTIONARY:
+					continue
+				var path := String(c.get("path", ""))
+				var n := root.get_node_or_null(NodePath(path))
+				if n == null or n.scene_file_path != "" and n != root and n.owner != root:
+					missing.append(path)
+					continue
+				var from = c.get("from")
+				if n is Node3D and typeof(c.get("transform")) == TYPE_DICTIONARY:
+					var t: Dictionary = c.transform
+					var now := _flat3(n.transform)
+					if typeof(from) == TYPE_ARRAY and from.size() == 12 and not _same(now, from):
+						conflicts.append(path)
+						continue
+					var nt := _transform3(t.get("basis", []), t.get("origin", []))
+					ur.add_do_property(n, "transform", nt)
+					ur.add_undo_property(n, "transform", n.transform)
+					written += 1
+				elif n is Node2D and typeof(c.get("position2d")) == TYPE_ARRAY:
+					var p: Array = c.position2d
+					if typeof(from) == TYPE_ARRAY and from.size() == 2 and not _same([n.position.x, n.position.y], from):
+						conflicts.append(path)
+						continue
+					ur.add_do_property(n, "position", Vector2(float(p[0]), float(p[1])))
+					ur.add_undo_property(n, "position", n.position)
+					if c.has("rotation2d"):
+						ur.add_do_property(n, "rotation", float(c.rotation2d))
+						ur.add_undo_property(n, "rotation", n.rotation)
+					if typeof(c.get("scale2d")) == TYPE_ARRAY:
+						ur.add_do_property(n, "scale", Vector2(float(c.scale2d[0]), float(c.scale2d[1])))
+						ur.add_undo_property(n, "scale", n.scale)
+					written += 1
+				else:
+					missing.append(path)
+			ur.commit_action()
+			return {"written": written, "missing": missing, "conflicts": conflicts, "inEditor": true}
 		_:
 			return {"error": "Unknown command " + cmd}
 
@@ -278,3 +330,25 @@ func _list(dir: String, out: Array, depth: int) -> void:
 		if d.begins_with(".") or d == "addons" and dir == "res://":
 			continue
 		_list(dir.path_join(d), out, depth + 1)
+
+## A Transform3D as the .tscn writes it: the basis by rows, then the origin.
+func _flat3(t: Transform3D) -> Array:
+	var b := t.basis
+	return [b.x.x, b.y.x, b.z.x, b.x.y, b.y.y, b.z.y, b.x.z, b.y.z, b.z.z, t.origin.x, t.origin.y, t.origin.z]
+
+## Back from those 12 numbers (rows of the basis, then the origin).
+func _transform3(basis: Array, origin: Array) -> Transform3D:
+	if basis.size() != 9 or origin.size() != 3:
+		return Transform3D.IDENTITY
+	var x := Vector3(float(basis[0]), float(basis[3]), float(basis[6]))
+	var y := Vector3(float(basis[1]), float(basis[4]), float(basis[7]))
+	var z := Vector3(float(basis[2]), float(basis[5]), float(basis[8]))
+	return Transform3D(Basis(x, y, z), Vector3(float(origin[0]), float(origin[1]), float(origin[2])))
+
+func _same(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if absf(float(a[i]) - float(b[i])) > 0.001:
+			return false
+	return true

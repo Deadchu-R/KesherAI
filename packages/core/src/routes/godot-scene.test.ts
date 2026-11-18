@@ -9,13 +9,13 @@ import type { GodotBridge } from "../godot-bridge.js";
 
 const SCENE = `[gd_scene format=3]\n\n[node name="Level" type="Node3D"]\n\n[node name="Crate" type="Node3D" parent="."]\ntransform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -1)\n`;
 
-async function setup(open = false) {
+async function setup(open = false, request?: (cmd: string, args: Record<string, unknown>) => Promise<unknown>) {
   const dir = await mkdtemp(join(tmpdir(), "godot-"));
   await writeFile(join(dir, "project.godot"), "config_version=5\n");
   await mkdir(join(dir, "levels"));
   await writeFile(join(dir, "levels", "a.tscn"), SCENE);
   const app = Fastify();
-  await godotSceneRoutes(app, { status: () => ({ connected: open, latest: "x" }) } as unknown as GodotBridge);
+  await godotSceneRoutes(app, { status: () => ({ connected: open, latest: "x" }), request: request ?? (() => Promise.reject(new Error("Unknown command standin_moves"))) } as unknown as GodotBridge);
   return { app, dir };
 }
 const move = (from?: number[]) => ({ path: "Crate", ...(from ? { from } : {}), transform: { basis: [1, 0, 0, 0, 1, 0, 0, 0, 1], origin: [5, 0, 0] as [number, number, number] } });
@@ -41,8 +41,20 @@ test("it moved in Godot meanwhile: a conflict, unless she keeps hers; Godot open
   assert.equal((await app.inject({ method: "POST", url: "/api/godot/scene", payload: { project: dir, scene: "res://levels/a.tscn", keep: "mine", changes: [move([0])] } })).json().written, 1);
   await app.close();
   const open = await setup(true);
-  assert.equal((await open.app.inject({ method: "POST", url: "/api/godot/scene", payload: { project: open.dir, scene: "res://levels/a.tscn", changes: [move()] } })).json().code, "godot-open");
+  // An older addon: the move waits for Godot to close.
+  const old = await open.app.inject({ method: "POST", url: "/api/godot/scene", payload: { project: open.dir, scene: "res://levels/a.tscn", changes: [move()] } });
+  assert.equal(old.json().code, "godot-open");
+  assert.match(old.json().error, /0\.1\.2/);
   await open.app.close();
+  // Addon 0.1.2: the moves go into the open scene, and the file is not touched.
+  const sent: Array<Record<string, unknown>> = [];
+  const live = await setup(true, async (cmd, args) => { sent.push({ cmd, ...args }); return { written: 1, missing: [], conflicts: [] }; });
+  const r = (await live.app.inject({ method: "POST", url: "/api/godot/scene", payload: { project: live.dir, scene: "res://levels/a.tscn", changes: [move()] } })).json();
+  assert.equal(r.inEditor, true);
+  assert.equal(sent[0]!.cmd, "standin_moves");
+  assert.equal(sent[0]!.scene, "res://levels/a.tscn");
+  assert.equal(await readFile(join(live.dir, "levels", "a.tscn"), "utf8"), SCENE);
+  await live.app.close();
 });
 
 test("a link inside the project that leads outside is refused", async () => {

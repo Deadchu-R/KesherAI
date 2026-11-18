@@ -15,7 +15,7 @@ import type WebSocket from "ws";
  */
 
 /** The addon version this KesherAI ships. */
-export const GODOT_BRIDGE_VERSION = "0.1.1";
+export const GODOT_BRIDGE_VERSION = "0.1.2";
 
 /** What the editor said when it connected. */
 export interface GodotEditor {

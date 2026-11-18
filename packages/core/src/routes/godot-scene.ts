@@ -140,9 +140,16 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
     try {
       const { dir, file } = paths(req.body?.project, req.body?.scene);
       await inside(dir, file!);
-      if (g.status().connected) return reply.code(409).send({ error: "Godot is open: close it to save into the scene, or apply the moves there.", code: "godot-open" });
       const changes = Array.isArray(req.body?.changes) ? req.body!.changes.slice(0, 5000) : [];
       const ok = changes.filter((c) => typeof c?.path === "string" && ((Array.isArray(c.transform?.basis) && c.transform!.basis.length === 9 && Array.isArray(c.transform!.origin) && c.transform!.origin.length === 3 && [...c.transform!.basis, ...c.transform!.origin].every(Number.isFinite)) || (Array.isArray(c.position2d) && c.position2d.length === 2 && c.position2d.every(Number.isFinite) && (c.rotation2d === undefined || Number.isFinite(c.rotation2d)) && (c.scale2d === undefined || (Array.isArray(c.scale2d) && c.scale2d.length === 2 && c.scale2d.every(Number.isFinite))))));
+      // Godot is open: the file would be reloaded under her feet, so the addon (0.1.2+) applies the moves in the open
+      // scene as one undo step instead, for her to save there.
+      if (g.status().connected) {
+        const scene = `res://${relative(dir, file!).split(sep).join("/")}`;
+        const r = await g.request<{ written: number; missing: string[]; conflicts: string[]; error?: string }>("standin_moves", { scene, changes: ok }, 60_000).catch((e: Error) => ({ error: e.message }) as { error: string });
+        if ("error" in r && r.error) return reply.code(409).send({ error: /Unknown command/.test(r.error) ? "Godot is open and its KesherAI addon is older than 0.1.2: update it from the Godot page, or close Godot to save into the file." : r.error, code: "godot-open" });
+        return { ...r, inEditor: true };
+      }
       const text = await readFile(file!, "utf8");
       const clash = req.body?.keep === "mine" ? [] : clashes(readTscn(text), ok);
       if (clash.length) return reply.code(409).send({ error: "These moved in Godot too.", code: "conflict", conflicts: clash });
