@@ -23,8 +23,9 @@ export const PluginPermissionSchema = z.enum(["network", "filesystem", "shell"])
  * - `image`: make and edit pictures (with a mask), and enlarge them.
  * - `speech`: speech to text and reading text aloud.
  * - `video`: open a chat's video ("Edit in the video editor") and export a cut of it back to that chat.
+ * - `sound`: open a chat's sound or recording ("Edit in the sound editor"), read what is said in it, and send it back.
  */
-export const PluginUseSchema = z.enum(["chat", "image", "speech", "video"]);
+export const PluginUseSchema = z.enum(["chat", "image", "speech", "video", "sound"]);
 
 /** One permission; see {@link PluginPermissionSchema}. */
 export type PluginPermission = z.infer<typeof PluginPermissionSchema>;

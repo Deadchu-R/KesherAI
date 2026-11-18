@@ -2454,3 +2454,38 @@ Each AI tool shows which local model it uses and offers to download it the first
   texture, remove, change by a sentence), export GLB/OBJ, open in Blender/Unreal/Unity, Send to the chat; the phone with
   the gestures above, tools at the bottom, undo/redo always there.
 - Stopped at: all three editor screens researched; next boards for the video, sound and 3D screens in the design doc.
+
+## Instruments in the sound editor, and a hum or whistle into an instrument (2026-11-18, 15:40; Roee asked)
+- Roee: the sound editor should support instruments (drums, guitar, trumpet, violin…), and recording a hum or a whistle
+  and turning it into the sound of an instrument he picks.
+- **Two ways the others do it:**
+  1. **Audio → notes (MIDI) → any instrument**: Spotify **Basic Pitch** (open source, polyphonic, pitch bends, tiny:
+     under 17K parameters, runs in the browser), **Vochlea Dubler 3** (voice to MIDI live, beatbox to drums, mouth sweeps
+     to a controller), **Logic Pro** (audio to score, Session Players follow it), **GarageBand / BandLab** (hum → a
+     track), **VoiceDrums** (beatbox → a drum kit with velocity layers). The notes can be fixed in a piano roll, moved to
+     a key, put on the beat, then played by any instrument. Tip they all give: hum stepped notes (glides confuse the
+     pitch), and say "t", "k", "p" for the attacks.
+  2. **Timbre transfer (the hum itself becomes the instrument)**: Google Magenta **Tone Transfer / DDSP** (violin, flute,
+     trumpet, saxophone, tenor), **SoundID VoiceAI** instrument mode, **Suno Studio** (hum a melody → an instrument part),
+     **Udio Converter** (a vocal up to 45 s → stems). Keeps the expression (slides, vibrato, breath) but each instrument
+     is its own model.
+- **The flow everyone shares**: record (with a count-in and a click), pick an instrument from a gallery with a preview,
+  hear it at once, fix notes / timing / key, then lay it as a new track beside the original (or instead of it).
+- **What KesherAI can run locally, with no cloud**: monophonic pitch tracking (YIN) in the page for a hum or a whistle,
+  exact and instant; Basic Pitch (TF.js, Apache 2.0) later for chords from a guitar or piano; instruments from the
+  FluidR3 General MIDI set (CC BY 3.0, by Frank Wen; gleitz's per-note files), sampled every few notes and pitched
+  between; drums synthesized in the page (808/909-style kick, snare, hats, clap: no samples, no licence); DDSP timbre
+  transfer as stage B for the most expressive instruments; the music model (Models page) as stage C for "a backing track
+  to this melody".
+- **The plan**:
+  - Stage A (now): ● record in the editor (or use the selection); "To an instrument…": the notes found (shown in a piano
+    roll), "snap to the key" and "on the beat" switches, an instrument gallery (piano, acoustic and electric guitar, bass,
+    violin, cello, strings, trumpet, saxophone, flute, clarinet, choir, synth) with a preview, and drums from a beatbox
+    (kick / snare / hat by the sound's brightness); the result as a new track over the original with a volume each.
+  - Stage B: DDSP timbre transfer (violin, flute, trumpet, saxophone) for the expression; Basic Pitch for chords.
+  - Stage C: a backing track from the melody with the music model; an instrument track drawn by hand (piano roll, drum
+    grid) as in GarageBand.
+- Sources: sonarworks.com "Can you turn your voice into an instrument?" (Dubler 3, Logic 11.2, SoundID VoiceAI, Udio
+  Converter, VoiceDrums), basicpitch.spotify.com/about, elephorm.com on humming in Suno Studio, the gleitz
+  midi-js-soundfonts README (FluidR3_GM, CC BY 3.0).
+- Stopped at: research done; next the board, then stage A.

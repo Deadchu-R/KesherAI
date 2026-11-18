@@ -11,4 +11,6 @@ test("a page gets a chat's file only when it is a picture and the page declared 
   assert.equal(pageInput("", ["image"]), undefined);
   assert.deepEqual(pageInput("c=abc&f=clip.mp4", ["video"]), { conversationId: "abc", path: "clip.mp4" });
   assert.equal(pageInput("c=abc&f=clip.mp4", ["image"]), undefined, "a picture page gets no video");
+  assert.deepEqual(pageInput("c=abc&f=talk.m4a", ["sound"]), { conversationId: "abc", path: "talk.m4a" });
+  assert.equal(pageInput("c=abc&f=talk.m4a", ["video"]), undefined);
 });

@@ -132,7 +132,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const name = input.path.split(/[\\/]/).pop() ?? "";
           // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
           if (blob.size > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
-          if (/\.(mp4|webm|mov|m4v|mkv)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer() };
+          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer() };
           return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
         }
         // The video editor's export: the kept stretches of the video the page was opened with, as a new file in that
@@ -149,8 +149,9 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           return { path, captions };
         }
         // What is said in the video the page was opened with, in pieces with their times (whisper on the computer).
-        case "video.transcript": {
-          need("video");
+        case "video.transcript":
+        case "sound.transcript": {
+          need(msg.method === "video.transcript" ? "video" : "sound");
           if (!input) throw new Error("This page was not opened from a chat.");
           const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/transcript`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: input.path }) });
           const j = (await res.json()) as { parts?: Array<{ start: number; end: number; text: string }>; error?: string };

@@ -14,7 +14,7 @@ export interface RoleDefinition {
   ideas: { en: string[]; he: string[] };
 }
 
-const ALL = ["images", "video", "image-editor", "video-editor", "nodes", "unreal", "unity", "voice", "day", "pages", "knowledge", "browser", "watch", "pipelines", "compare", "community", "study"];
+const ALL = ["images", "video", "image-editor", "video-editor", "sound-editor", "nodes", "unreal", "unity", "voice", "day", "pages", "knowledge", "browser", "watch", "pipelines", "compare", "community", "study"];
 
 export const ROLES: RoleDefinition[] = [
   {
@@ -33,7 +33,7 @@ export const ROLES: RoleDefinition[] = [
     icon: "🎮",
     title: { en: "Game developer", he: "מפתח/ת משחקים" },
     description: { en: "Unreal and Unity graphs, pictures, music and 3D for your game", he: "גרפים של Unreal ו-Unity, תמונות, מוזיקה ותלת-ממד למשחק" },
-    parts: ["images", "image-editor", "video-editor", "nodes", "unreal", "unity", "pages", "knowledge", "voice", "compare", "community"],
+    parts: ["images", "image-editor", "video-editor", "sound-editor", "nodes", "unreal", "unity", "pages", "knowledge", "voice", "compare", "community"],
     ideas: {
       en: ["Make a pixel-art sprite of a knight", "Make a 30-second battle theme", "On BeginPlay, open the door when the player is near", "Turn this picture into a 3D model"],
       he: ["צייר ספרייט פיקסל-ארט של אביר", "תכין מוזיקת קרב של 30 שניות", "ב-BeginPlay תפתח את הדלת כשהשחקן קרוב", "תהפוך את התמונה הזאת למודל תלת-ממד"],
@@ -44,7 +44,7 @@ export const ROLES: RoleDefinition[] = [
     icon: "🎨",
     title: { en: "Artist or designer", he: "אמן/ית או מעצב/ת" },
     description: { en: "Pictures, the image editor, ComfyUI nodes and video", he: "תמונות, עורך התמונות, הנודים של ComfyUI ווידאו" },
-    parts: ["images", "video", "image-editor", "video-editor", "nodes", "pages", "voice", "community"],
+    parts: ["images", "video", "image-editor", "video-editor", "sound-editor", "nodes", "pages", "voice", "community"],
     ideas: {
       en: ["Paint a lighthouse at sunset, oil painting", "Make five logo ideas for a coffee shop", "Remove the background from my picture", "A short clip of waves on rocks"],
       he: ["צייר מגדלור בשקיעה, ציור שמן", "תן חמישה רעיונות ללוגו של בית קפה", "תוריד את הרקע מהתמונה שלי", "סרטון קצר של גלים על סלעים"],
