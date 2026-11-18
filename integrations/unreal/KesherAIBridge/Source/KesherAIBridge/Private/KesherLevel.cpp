@@ -69,6 +69,9 @@ namespace KesherLevel
 	TSharedRef<FJsonObject> Levels()
 	{
 		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+		// In the headless editor (Unreal closed) the registry is still scanning when the command runs: wait for it,
+		// else the list is empty (found on the PC: no levels in a project that has them).
+		if (IsRunningCommandlet() || Registry.IsLoadingAssets()) Registry.SearchAllAssets(true);
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByClass(UWorld::StaticClass()->GetClassPathName(), Assets, true);
 		TArray<TSharedPtr<FJsonValue>> Items;

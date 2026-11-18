@@ -100,7 +100,7 @@ export function StandInLevels() {
   return (
     <section className="card">
       <strong>{L("רמה בלי Unreal", "A level without Unreal")}</strong>
-      <p className="small muted">{L("פותחים רמה בעורך התלת ממד כתחליף, עם הצורות האמיתיות, ומזיזים. כש-Unreal פתוח השינויים נכנסים בצעד ביטול אחד; כשהוא סגור, עורך ברקע שומר אותם (תוסף 0.1.21).", "Open a level in the 3D editor as a stand-in, with the real shapes, and move things. With Unreal open the moves go in as one undo step; with it closed, a background editor saves them (plugin 0.1.21).")}</p>
+      <p className="small muted">{L("פותחים רמה בעורך התלת ממד כתחליף, עם הצורות האמיתיות, ומזיזים. כש-Unreal פתוח השינויים נכנסים בצעד ביטול אחד; כשהוא סגור, עורך ברקע שומר אותם (תוסף 0.1.22).", "Open a level in the 3D editor as a stand-in, with the real shapes, and move things. With Unreal open the moves go in as one undo step; with it closed, a background editor saves them (plugin 0.1.22).")}</p>
       <button type="button" className="primary" disabled={busy} onClick={load}>{busy ? L("קורא…", "Reading…") : L("הצג רמות", "Show levels")}</button>
       {levels && (levels.length ? (
         <div className="standin-scenes">

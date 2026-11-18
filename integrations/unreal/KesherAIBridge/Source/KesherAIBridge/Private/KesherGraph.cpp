@@ -309,6 +309,8 @@ namespace KesherGraph
 	TSharedRef<FJsonObject> List()
 	{
 		IAssetRegistry& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry").Get();
+		// Headless (Unreal closed): the registry may still be scanning; wait, or the list comes back short.
+		if (IsRunningCommandlet() || Registry.IsLoadingAssets()) Registry.SearchAllAssets(true);
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), Assets, true);
 		TArray<TSharedPtr<FJsonValue>> Items;

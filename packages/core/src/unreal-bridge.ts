@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.21";
+export const BRIDGE_VERSION = "0.1.22";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -383,7 +383,7 @@ export class UnrealBridge {
     if (this.connected) {
       try {
         const live = await this.request<T>(cmd, { path }, 120_000);
-        await this.writeJson(file, live);
+        if (!(cmd === "levels" && !(live as { levels?: unknown[] }).levels?.length)) await this.writeJson(file, live);
         return live as T;
       } catch (e) {
         const kept = await this.readJson<T>(file);
@@ -394,7 +394,8 @@ export class UnrealBridge {
     const kept = await this.readJson<T>(file);
     if (kept) return { ...kept, cached: true };
     const answer = await this.request<T>(cmd, { path }, 900_000);
-    await this.writeJson(file, answer);
+    // An empty list is not kept (a scan that was not ready would stick): the next read asks again.
+    if (!(cmd === "levels" && !(answer as { levels?: unknown[] }).levels?.length)) await this.writeJson(file, answer);
     return answer as T;
   }
 
