@@ -9,7 +9,7 @@
 
   const HE = {
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -85,6 +85,22 @@
       let peak = 0;
       chans.forEach((c) => { for (let i = a; i < b; i++) peak = Math.max(peak, Math.abs(c[i])); });
       if (peak > 0) gainRange(a, b, Math.pow(10, -1 / 20) / peak);
+    },
+    // Noise clean-up (Audacity's Noise Reduction, in one step): a short selection is the noise to learn; with none (or
+    // a long one), the quietest moments are. The whole sound is cleaned, as the noise runs under all of it.
+    clean() {
+      if (!length()) return;
+      const fromSel = sel && sel[1] - sel[0] < length() * 0.6 && sel[1] - sel[0] > rate * 0.1;
+      busy(T("cleaning", "Cleaning the noise…"));
+      // After the busy sign is painted; a minute of sound takes about a second.
+      setTimeout(() => {
+        try {
+          remember();
+          chans = chans.map((c) => window.KClean.clean(c, fromSel ? window.KClean.profile(c, sel[0], sel[1]) : window.KClean.profile(c)));
+          after();
+          msg(fromSel ? T("cleanedSel", "The noise is cleaned (learned from your selection)") : T("cleanedAuto", "The noise is cleaned (learned from the quiet moments)"));
+        } catch (e) { msg(e.message, true); } finally { busy(""); }
+      }, 30);
     },
   };
   function gain(k) { const [a, b] = sel ?? [0, length()]; gainRange(a, b, k); }
