@@ -1271,3 +1271,17 @@ S5 an outside scanner's rules for Electron.
 - **Academic English**: only the text she pasted goes to the local model (128 KB body, 8000 characters used); the answer is checked (8 questions, 20 words, lengths cut) and shown as text; adding words uses the normal card route.
 - **Course web and feed**: computed from her own course data (at most 400 terms looked up, 300 links; feed at most 60 items); card text in the feed goes through RichText as in review.
 - **Performance**: the project page polls every 10 s and pauses while she types; a teammate's lookup reads her courses' files once per request (a handful of courses).
+
+## Scan 145 (2026-11-18): the image editor from the chat, Stremio links, tabs, the report in chapters
+- **A page opened with a chat's file** (`#/p/<plugin>/<page>?c=&f=`): `pageInput` hands a file only when it is a picture
+  (by its extension), the chat id is plain (`[\w-]`), and the page declared the picture models. The file is read through
+  the chat's own download route, which stays inside the chat's folder. A link cannot give any page any file.
+- **`chat.sendFile`**: only after the page was opened from a chat, only to that chat, up to 50 MB, the name cut to 120
+  characters and cleaned again by the server's upload route.
+- **Found and fixed:** the plugin bridge read `image.upscale`, `speech.transcribe` (and the new `chat.sendFile`) with
+  `fetch(whatever the page sent)`. A page could have passed an address of this app (`/api/…`), fetched with the app's
+  rights. Now only `data:` URLs are read (`fromDataUrl`).
+- **Desktop links out**: besides web addresses, only `stremio://` links leave the app (they open the Stremio app at a
+  title, or add our add-on); `file:`, `smb:` and other schemes still never do.
+- Tabs and the report's chapters: display only; the "all on one page" choice is in localStorage (per browser), nothing sent.
+- Checked: lint, typecheck, 896 tests.

@@ -4,6 +4,16 @@ import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
 
 /** A file as a `data:` URL, the form plugin pages get pictures and sound in. */
+/**
+ * A file a plugin page handed over: only a `data:` URL is read, never an address, which would be fetched with this
+ * app's rights (security review, scan 145).
+ */
+function fromDataUrl(given: unknown): Promise<Response> {
+  const url = String(given ?? "");
+  if (!url.startsWith("data:")) return Promise.reject(new Error("Send the file as a data: URL."));
+  return fetch(url);
+}
+
 function dataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -124,7 +134,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
         case "chat.sendFile": {
           if (!input) throw new Error("This page was not opened from a chat.");
-          const bytes = await fetch(String(p.data ?? "")).then((x) => x.blob());
+          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
           if (!bytes.size || bytes.size > 50 * 1024 * 1024) throw new Error("The file is empty or larger than 50 MB.");
           const name = String(p.name ?? "edited.png").slice(0, 120);
           const up = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
@@ -155,7 +165,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         }
         case "image.upscale": {
           need("image");
-          const png = await fetch(String(p.image ?? "")).then((x) => x.blob());
+          const png = await fromDataUrl(p.image).then((x) => x.blob());
           const res = await fetch(withToken("/api/images/upscale"), { method: "POST", headers: { "content-type": "image/png" }, body: png });
           if (res.status === 409) {
             await api("/api/images/upscale/setup", { method: "POST" });
@@ -166,7 +176,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         }
         case "speech.transcribe": {
           need("speech");
-          const wav = await fetch(String(p.audio ?? "")).then((x) => x.blob());
+          const wav = await fromDataUrl(p.audio).then((x) => x.blob());
           const res = await fetch(withToken(`/api/speech/transcribe${typeof p.language === "string" ? `?lang=${encodeURIComponent(p.language)}` : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
           const j = (await res.json()) as { text?: string; error?: string };
           if (!res.ok) throw new Error(j.error === "needs-setup" ? "Speech to text is not set up yet (Models → Speech to text)." : j.error ?? String(res.status));
