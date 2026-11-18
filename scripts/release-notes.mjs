@@ -24,7 +24,7 @@ for (const entry of log.split(SEP)) {
     continue;
   }
   // Leave out phone-only changes (they have their own notes), versions and test-only commits.
-  if (body.some((l) => /^Phone-he:/i.test(l.trim())) || /^(Version |Phone|Android|Release|Journal test|Lint|Doc comment)/i.test(subject) || /\(lint\)$/.test(subject)) continue;
+  if (body.some((l) => /^Phone-he:/i.test(l.trim())) || /^(Version |Phone|Android|Release|Journal test|Lint|Doc comment|Research log|Future features|Design doc|Docs?:)/i.test(subject) || /\(lint\)$/.test(subject)) continue;
   lines.push(subject.replace(/^\d+\.\d+\.\d+:\s*/, ""));
 }
 const unique = [...new Set(lines)].slice(0, 25);

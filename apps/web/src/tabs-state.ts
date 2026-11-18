@@ -30,6 +30,14 @@ export function openTab(tabs: readonly PageTab[], from: string, hash: string): P
   const at = tabs.findIndex((t) => placeOf(t.hash) === placeOf(hash));
   if (at >= 0) return tabs.map((t, i) => (i === at ? { ...t, hash } : t));
   const cur = tabs.findIndex((t) => placeOf(t.hash) === placeOf(from));
+  // A chat or an editor is something she works in: it opens as a kept tab (so tabs build up even where the row is
+  // hidden or there is nothing to double-click, as on a phone). Menu pages open as a preview that the next one replaces.
+  if (/^#\/(c|p)\//.test(placeOf(hash))) {
+    const next = [...tabs];
+    next.splice(cur >= 0 ? cur + 1 : next.length, 0, { hash });
+    while (next.length > MAX) next.splice(next.findIndex((t) => placeOf(t.hash) !== placeOf(hash)), 1);
+    return next;
+  }
   const preview = tabs.findIndex((t) => t.preview);
   // The preview tab is reused (the one showing, or else the one there is).
   if (cur >= 0 && tabs[cur]!.preview) return tabs.map((t, i) => (i === cur ? { hash, preview: true } : t));

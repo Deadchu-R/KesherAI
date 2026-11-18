@@ -221,7 +221,7 @@ export function PageTabs({ hash }: { hash: string }) {
                       <a href={tb.hash} dir="auto">{icon} <span className="page-tab-title">{title}</span></a>
                       <button type="button" className="icon-btn" aria-label={L(`סגירת ${title}`, `Close ${title}`)} onClick={() => close(tb.hash)}>✕</button>
                     </span>
-                    <a href={tb.hash} className="page-tab-card-body" tabIndex={-1} aria-hidden dir="auto">{decodeURIComponent(placeOf(tb.hash).slice(2)).split("/")[0]}</a>
+                    <a href={tb.hash} className="page-tab-card-body" tabIndex={-1} aria-hidden dir="auto"><span className="page-tab-card-icon">{icon}</span>{kindOf(tb.hash)}</a>
                   </SwipeCard>
                 );
               })}
@@ -236,6 +236,15 @@ export function PageTabs({ hash }: { hash: string }) {
       )}
     </>
   );
+}
+
+/** What a tab is, in a word, for its card in the switcher. */
+function kindOf(hash: string): string {
+  const place = placeOf(hash);
+  if (place.startsWith("#/c/")) return L("צ'אט", "Chat");
+  if (place.startsWith("#/p/")) return /editor/.test(place) ? L("עורך", "Editor") : L("כלי", "Tool");
+  if (place.startsWith("#/settings")) return L("הגדרות", "Settings");
+  return L("עמוד", "Page");
 }
 
 /** A tab card that closes when it is swiped aside more than a third of its width (Chrome's tab switcher). */

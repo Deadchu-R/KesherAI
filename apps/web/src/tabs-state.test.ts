@@ -2,16 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { closeTab, openTab, pinTab, readTabs, stepTab } from "./tabs-state.js";
 
-test("going somewhere opens a preview tab, which the next place replaces until it is pinned", () => {
-  let tabs = openTab([], "#/", "#/c/a");
-  assert.deepEqual(tabs, [{ hash: "#/c/a", preview: true }]);
-  tabs = openTab(tabs, "#/c/a", "#/models");
+test("a page opens a preview tab, which the next page replaces until it is pinned; chats and editors are kept", () => {
+  let tabs = openTab([], "#/", "#/settings");
+  assert.deepEqual(tabs, [{ hash: "#/settings", preview: true }]);
+  tabs = openTab(tabs, "#/settings", "#/models");
   assert.deepEqual(tabs, [{ hash: "#/models", preview: true }]);
   tabs = pinTab(tabs, "#/models");
   tabs = openTab(tabs, "#/models", "#/c/b");
-  assert.deepEqual(tabs, [{ hash: "#/models" }, { hash: "#/c/b", preview: true }]);
+  assert.deepEqual(tabs, [{ hash: "#/models" }, { hash: "#/c/b" }], "a chat is kept");
+  tabs = openTab(tabs, "#/c/b", "#/p/video-editor/editor?c=b&f=x.mp4");
+  assert.deepEqual(tabs.map((t) => !!t.preview), [false, false, false], "an editor is kept too");
   // A place already open switches to its tab (with its new query), and Home is never a tab.
-  assert.deepEqual(openTab(tabs, "#/c/b", "#/models?x=1"), [{ hash: "#/models?x=1" }, { hash: "#/c/b", preview: true }]);
+  assert.deepEqual(openTab(tabs, "#/c/b", "#/models?x=1")[0], { hash: "#/models?x=1" });
   assert.deepEqual(openTab(tabs, "#/c/b", "#/"), tabs);
 });
 
