@@ -273,3 +273,11 @@ test("after a restart: a report cut off goes on from its kept notes, an import f
   assert.equal(total, undefined);
   assert.ok(seen.length < parts + 5, "the part read before the restart is not read again");
 });
+
+test("jsonOf: past a thinking model's reasoning, a fence, and prose with braces", async () => {
+  const { jsonOf } = await import("./chat-report.js");
+  assert.deepEqual(jsonOf('<think>maybe {"x": 1} or not</think>\nHere: {"headline":"h"}'), { headline: "h" });
+  assert.deepEqual(jsonOf('Sure! ```json\n{"a":2}\n``` hope it helps'), { a: 2 });
+  assert.deepEqual(jsonOf('use {curly} style: {"b":3}'), { b: 3 });
+  assert.equal(jsonOf("no json here"), undefined);
+});

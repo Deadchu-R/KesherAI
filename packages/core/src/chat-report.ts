@@ -289,15 +289,26 @@ export function checkStory(raw: Record<string, unknown> | undefined, msgs: Perso
 
 /** The first {...} object in a model's answer. */
 export function jsonOf(text: string): Record<string, unknown> | undefined {
-  const s = text.indexOf("{");
-  const e = text.lastIndexOf("}");
-  if (s < 0 || e <= s) return undefined;
-  try {
-    const v = JSON.parse(text.slice(s, e + 1)) as unknown;
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
-  } catch {
-    return undefined;
+  // A thinking model's reasoning (<think>…</think>) can hold braces of its own: it goes first; then a ```json fence.
+  const plain = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  const fence = /```(?:json)?\s*([\s\S]*?)```/i.exec(plain)?.[1];
+  const tryParse = (t: string) => {
+    try {
+      const v = JSON.parse(t) as unknown;
+      return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  for (const src of fence ? [fence, plain] : [plain]) {
+    const e = src.lastIndexOf("}");
+    // From each "{" (a few at most) to the last "}": prose with a brace before the object is passed over.
+    for (let s = src.indexOf("{"), n = 0; s >= 0 && s < e && n < 20; s = src.indexOf("{", s + 1), n++) {
+      const v = tryParse(src.slice(s, e + 1));
+      if (v) return v;
+    }
   }
+  return undefined;
 }
 
 const str = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/[*_`#]/g, "").trim().slice(0, n) : "");
@@ -639,6 +650,9 @@ export class ChatReports {
       }
       // Some local models answer in English whatever they are told: once more, with the language first.
       if (raw && r.lang === "he" && mostlyLatin(raw) && !signal.aborted) raw = jsonOf(await ask(`Answer in Hebrew only (עברית).\n${reportPrompt(r)}`, user, signal)) ?? raw;
+      // Not JSON (a long answer cut off, or prose around it; found on the PC with a coding model): once more, shorter
+      // and stricter, before failing. The notes are kept, so a retry does not read the chat again either.
+      if (!raw && !signal.aborted) raw = jsonOf(await ask(`${reportPrompt(r)}\nYour answer must be ONE valid JSON object and nothing else: no text before or after it, no markdown fence. Keep every text value short.`, userFor(10_000), signal));
       if (!raw) throw new Error("The model did not write the report in the expected form; try again or pick another model.");
       const short = checkReport(raw, msgs, r.numbers, r.lang);
       // The full report (the long read in chapters) from the same notes; when the model cannot (its context, its
