@@ -2666,3 +2666,47 @@ Each AI tool shows which local model it uses and offers to download it the first
   the music while the video's own sound is loud (no keyframes to edit; the preview lowers it under transcript lines).
 - Next (later): beat marks to snap cuts to, several music clips, a music model to write the track from words.
 - Stopped at: built (video-cut.ts musicGraph, the lane and the inspector); checked with a real FFmpeg run.
+
+## Adding files and objects to the editors, and one bank of everything the AI made (2026-11-18, 22:45; Roee: "video, sound and 3D are not really usable without adding a file and adding an object; a bank of everything the AI generates, easy to reach, with deleting what's not needed and finding duplicates")
+- **CapCut** (desktop and phone): a Media panel on the left with Import (file picker or drag in), the project's media
+  as thumbnails, plus Library (stock) and Cloud tabs; a clip goes to the timeline by dragging or its "+" (at the
+  playhead). On the phone, "+" over the timeline opens the album, several picked at once, added at the playhead.
+- **Premiere Pro**: the Project panel (bins = folders), Import / Media Browser, drag to the timeline or "Insert" at the
+  playhead; "Find duplicates" is not built in (plugins do it by name, length and size).
+- **Descript**: a Media panel with **My Media** (the drive's media library, other projects, reused without uploading
+  again) and **Stock**; click to preview, "Add to project", drag into the script, or right-click "Add at playhead";
+  several at once; search by name and by words spoken in the file; recording happens in place (the record button
+  writes a new clip at the playhead).
+- **Audacity**: File > Import > Audio (or drag in) makes a new track; the red Record button records into a new track
+  at the cursor (Shift+R starts a new track).
+- **Blender**: Shift+A, the Add menu (Mesh: cube, sphere, cylinder, plane, cone, torus; Light; Camera; Empty; Text),
+  the new object lands at the 3D cursor; File > Import for glTF / FBX / OBJ; the **Asset Browser** (libraries:
+  this file, Essentials, the user's; catalogs as a tree; drag an object into the viewport, a material onto an object).
+- **Spline**: a "+" in the top bar (shapes, text, lights, cameras), Open / Import (Ctrl+O) or drag a file into the
+  viewport (GLB, GLTF, FBX, OBJ, STL, PNG, JPG, SVG, MP4, MP3, WAV); a 3D Library of ready models.
+- **ComfyUI Assets panel** (the closest to our bank): **Generated** and **Imported** tabs; a run that made several files
+  shows as one card with a count; list / small / large grid; double-click previews (video plays, audio and 3D in their
+  viewers); search by name, filter by type and date, sort by date / name / time to make; select by dragging a box or
+  Ctrl-click, then a bottom bar with Download and Delete (a dialog lists the files first); drag a card onto the canvas
+  to use it. Duplicates: a separate "Image Deduplication" node by perceptual hash with a threshold.
+- **Midjourney Organize**: folders, saved searches, filters, a timeline bar by date, bulk select (drag, Shift-click,
+  "+" per day), Hide (not delete; a filter brings hidden back), Like.
+- **Duplicate finding** (common practice): the same bytes by a hash of the file (SHA-256; exact copies); pictures that
+  look the same by a perceptual hash (dHash: shrink to 9×8 grey, compare neighbours, 64 bits; a Hamming distance of
+  5 or less = the same picture at another size or quality).
+- **What we take**:
+  - **One "Add" button in every editor** (video, sound, 3D) with the same four places: **From the computer / phone**
+    (picker, drag in, several at once), **From this chat** (its files), **From the bank** (everything the AI made in
+    every chat and the generated assets), **Create here** (3D: the Add menu shapes, light, camera, a model from words;
+    sound: record; video: a picture or title card later). The new thing lands at the playhead (video, sound) or the
+    view's centre (3D, Blender's cursor idea), selected.
+  - **The bank** (a page, and a panel inside the editors): ComfyUI's cards with type filters (pictures, video, sound,
+    3D), search by name / prompt / chat, newest first by day (Midjourney's timeline), preview on a click, the chat it
+    came from; select several, Delete with a list first; **Find duplicates** groups the same bytes (SHA-256) and, for
+    pictures, ones that look the same (dHash in the page), keeps the oldest marked and offers to delete the others.
+  - Taking from the bank into a chat copies the file into that chat's folder (`shared/`), so the chat owns it.
+- Sources: capcut.com "How to use stock footage and music in CapCut"; cursa.app "CapCut desktop & mobile workspace";
+  help.descript.com Media panel; docs.spline.design "How to import content" and "3D library"; Blender manual Asset
+  Browser; docs.comfy.org Assets panel and Image Deduplication; docs.midjourney.com "Organizing your creations".
+- Stopped at: research done; next the boards (the Add menu in the three editors, the bank page and its duplicates),
+  then the bank's server (list, delete, duplicates) and the Add menus.

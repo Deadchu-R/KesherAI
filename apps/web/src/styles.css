@@ -3866,3 +3866,34 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .standin-projects button.on { outline: 2px solid var(--accent); }
 .standin-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .standin-scenes .button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* #/bank: everything the AI made (pages/BankPage.tsx) */
+.bank { padding: 16px 20px 90px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.bank-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bank-head h2 { margin: 0; font-size: 20px; }
+.bank-head input[type="search"] { width: min(320px, 100%); }
+.bank-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.bank-filters .chip-text.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.bank-day { font-size: 13px; font-weight: 500; color: var(--muted); margin: 8px 0 6px; }
+.bank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.bank-card { position: relative; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); overflow: hidden; min-width: 0; }
+.bank-card.sel { outline: 2px solid var(--accent); }
+.bank-thumb { display: flex; align-items: center; justify-content: center; width: 100%; height: 110px; padding: 0; border: 0; border-radius: 0; background: var(--bg-2, #0e0e10); font-size: 34px; cursor: pointer; }
+.bank-thumb img, .bank-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.bank-check { position: absolute; top: 6px; inset-inline-start: 6px; display: flex; padding: 4px; border-radius: 6px; background: rgb(0 0 0 / .45); }
+.bank-check input { width: 18px; height: 18px; margin: 0; }
+.bank-cap { padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; min-width: 0; }
+.bank-cap b, .bank-cap small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bank-group { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bank-bar { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 30; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / .4); }
+.bank-bar select { max-width: 170px; }
+.bank .danger { color: var(--bad); }
+.bank-view { position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.bank-view > .card { width: min(760px, 100%); max-height: 100%; overflow: auto; padding: 14px; }
+.bank-view img, .bank-view video { max-width: 100%; max-height: 60vh; border-radius: 10px; align-self: center; }
+.bank-view audio { width: 100%; }
+@media (max-width: 600px) {
+  .bank { padding: 12px 12px 110px; }
+  .bank-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bank-thumb { height: 120px; }
+}

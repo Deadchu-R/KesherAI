@@ -433,6 +433,55 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (!res.ok) throw new Error(j.error ?? String(res.status));
           return { path: `shared/${j.name}` };
         }
+        // The editors' "Add" (RESEARCH_LOG "Adding files and objects to the editors"): what can be added from this chat
+        // or from the bank of everything made, one item's bytes, taking a bank item into this chat, and a file from the
+        // device put into the chat. Ids: `chat:<path>` for this chat's files, the bank's own ids otherwise.
+        case "media.list": {
+          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          const kind = ["image", "video", "audio", "model"].includes(String(p.kind)) ? String(p.kind) : "";
+          if (p.from === "bank") {
+            const r = await api<{ items: Array<{ id: string; kind: string; name: string; size: number; createdAt: string; chat?: { id: string; title: string }; prompt?: string }> }>(`/api/bank${kind ? `?kind=${kind}` : ""}`);
+            return r.items.filter((i) => !input || i.chat?.id !== input.conversationId).slice(0, 500);
+          }
+          if (!input) return [];
+          const KIND: Record<string, RegExp> = { image: /\.(png|jpe?g|webp|gif|bmp)$/i, video: /\.(mp4|webm|mov|m4v|mkv)$/i, audio: /\.(mp3|wav|m4a|flac|ogg|opus|aac)$/i, model: /\.(glb|gltf|fbx|obj|stl)$/i };
+          const r = await api<{ files: Array<{ path: string; size: number; modifiedAt: string }> }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files`);
+          return r.files
+            .map((f) => ({ id: `chat:${f.path}`, name: f.path.split("/").pop() ?? f.path, path: f.path, size: f.size, createdAt: f.modifiedAt, kind: Object.keys(KIND).find((k) => KIND[k]!.test(f.path)) }))
+            .filter((f) => f.kind && (!kind || f.kind === kind))
+            .slice(0, 500);
+        }
+        case "media.bytes": {
+          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          const id = String(p.id ?? "");
+          if (id.startsWith("chat:") && !input) throw new Error("This page was not opened from a chat.");
+          const url = id.startsWith("chat:") && input ? `/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(id.slice(5))}` : `/api/bank/file?id=${encodeURIComponent(id)}`;
+          const res = await fetch(withToken(url));
+          if (!res.ok) throw new Error(`The file could not be read (${res.status}).`);
+          if (Number(res.headers.get("content-length") ?? 0) > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
+          return res.arrayBuffer();
+        }
+        case "media.take": {
+          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const id = String(p.id ?? "");
+          if (id.startsWith("chat:")) return { path: id.slice(5) };
+          const r = await api<{ paths: string[] }>("/api/bank/copy", { method: "POST", body: { ids: [id], conversationId: input.conversationId } });
+          if (!r.paths[0]) throw new Error("This file is not in the bank any more.");
+          return { path: r.paths[0] };
+        }
+        case "media.upload": {
+          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const bytes = p.bytes as ArrayBuffer;
+          if (!(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 300 * 1024 ** 2) throw new Error("A file up to 300 MB.");
+          const name = String(p.name ?? "file").replace(/[\\/]/g, "-").slice(0, 120);
+          if (!/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v|mkv|mp3|wav|m4a|flac|ogg|opus|aac|glb|gltf|fbx|obj|stl)$/i.test(name)) throw new Error("A picture, video, sound or 3D model file.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          const j = (await res.json()) as { name?: string; error?: string };
+          if (!res.ok) throw new Error(j.error ?? String(res.status));
+          return { path: `shared/${j.name}` };
+        }
         // Where the video the page was opened with changes shot, in seconds (FFmpeg's scene score, on the computer).
         case "video.scenes": {
           need("video");
@@ -441,6 +490,16 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const j = (await res.json()) as { times?: number[]; error?: string };
           if (!res.ok) throw new Error(j.error ?? String(res.status));
           return j.times ?? [];
+        }
+        // Asks the chat the page was opened from to do something with its tools (the 3D editor's "a model from words").
+        // The user sees the words and agrees first: a page cannot run the chat's tools on its own.
+        case "chat.ask": {
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const text = String(p.text ?? "").slice(0, 2000).trim();
+          if (!text) throw new Error("Nothing to ask.");
+          if (!confirm(`${getLocale() === "he" ? "העורך רוצה לשלוח לצ׳אט:" : "The editor wants to send the chat:"}\n\n${text}`)) throw new Error(getLocale() === "he" ? "בוטל" : "Cancelled");
+          await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text } });
+          return { sent: true };
         }
         // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
         case "chat.sendFile": {

@@ -13,6 +13,7 @@
       <button id="undo" title="Undo (Ctrl+Z)">↶</button>
       <div class="seg" id="dims" hidden title="2D / 3D"><button id="dim2" data-t="dim2">2D</button><button id="dim3" class="on" data-t="dim3">3D</button></div>
       <b class="grow name" id="name">3D editor</b>
+      <button id="addBtn" class="primary" data-t="addB" title="Add a model, a picture, a shape, a light or a camera">＋ Add</button>
       <div class="seg" id="modes" title="Move / rotate / scale">
         <button data-mode="translate" class="on" title="Move">✥</button><button data-mode="rotate" title="Rotate">⟳</button><button data-mode="scale" title="Scale">⤢</button>
       </div>
@@ -34,7 +35,7 @@
         <ul id="partList"></ul>
       </aside>
       <section class="view" id="view">
-        <div class="empty" id="empty" data-t="empty">Open a model from a chat: "Edit in the 3D editor" on its preview.</div>
+        <div class="empty" id="empty" data-t="empty">Open a model from a chat ("Edit in the 3D editor" on its preview), or press ＋ Add: a model, a picture, a shape, a light.</div>
         <div class="stats muted small" id="stats"></div>
         <!-- The chosen part's task bar (the image editor's, and Meshy's / Tripo's "edit this part"): in words, the chat model
              turns it into the editor's own tools (colour, roughness, metal, a texture, a split, hide, duplicate). -->
@@ -107,6 +108,7 @@
       <div class="strip" id="strip"></div>
     </footer>
     <nav class="phonebar" aria-label="Tools">
+      <button data-do="add"><span>＋</span><b data-t="addS">Add</b></button>
       <button data-do="parts"><span>☰</span><b data-t="partsH">Parts</b></button>
       <button data-do="inspector"><span>🎨</span><b data-t="paintS">Material</b></button>
       <button data-do="frame"><span>⊕</span><b data-t="frameS">Frame</b></button>

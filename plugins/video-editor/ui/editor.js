@@ -2,13 +2,14 @@
 // stretches of one source video, split / trim / delete / move with the keys editors know, played back as the edit,
 // and exported by FFmpeg on the computer (video.cut). A plugin page with no build step: it talks to KesherAI only
 // through window.kesher (kesher.js).
-/* global document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
+/* global performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -33,7 +34,36 @@
   video.addEventListener("pause", () => newAudio.pause());
   video.addEventListener("seeked", () => { if (soundPath) newAudio.currentTime = video.currentTime; });
   let source = null; // { name, duration }
-  let clips = []; // [{ id, from, to }] in seconds of the source
+  let clips = []; // [{ id, from, to, m? }] in seconds of their file (m: which of `media`; none = the opened video)
+  // The files in the edit: [0] the video the editor opened, then the clips added with ＋ Add (videos, pictures).
+  let media = []; // [{ path, kind: "video" | "image", url, duration, name }]
+  const mOf = (c) => c?.m ?? 0;
+  let loadedM = 0; // which file the <video> holds
+  let switching = false;
+  let lastT = 0;
+  const still = document.createElement("img");
+  still.className = "still";
+  still.alt = "";
+  still.hidden = true;
+  video.after(still);
+  /** Shows a file of the edit: a video in the player (loaded if it is another one), a picture over it. */
+  async function setMedia(m) {
+    const md = media[m];
+    if (!md) return;
+    if (md.kind === "image") { still.src = md.url; still.hidden = false; video.style.visibility = "hidden"; video.pause(); return; }
+    still.hidden = true;
+    video.style.visibility = "";
+    if (loadedM !== m) {
+      switching = true;
+      loadedM = m;
+      video.src = md.url;
+      await new Promise((resolve) => { video.onloadedmetadata = resolve; video.onerror = resolve; });
+      switching = false;
+    }
+    // The sound editor's new sound belongs to the opened video only.
+    video.muted = m === 0 && !!soundPath;
+    if (m !== 0) newAudio.pause();
+  }
   let chosen = -1;
   let now = 0; // the playhead, in seconds of the edit
   let nextId = 1;
@@ -87,7 +117,7 @@
     const c = clips[i];
     if (!c || src - c.from < 0.1 || c.to - src < 0.1) return msg(T("tooShort", "Too short to split here"), true);
     remember();
-    clips.splice(i, 1, { id: nextId++, from: c.from, to: src }, { id: nextId++, from: src, to: c.to });
+    clips.splice(i, 1, { ...c, id: nextId++, from: c.from, to: src }, { ...c, id: nextId++, from: src, to: c.to });
     chosen = i + 1;
     render();
   }
@@ -102,6 +132,7 @@
       let n = 0;
       const next = [];
       for (const c of clips) {
+        if (mOf(c)) { next.push(c); continue; }
         let from = c.from;
         for (const t of times) if (t > from + 0.1 && t < c.to - 0.1) { next.push({ id: nextId++, from, to: t }); from = t; n++; }
         next.push(from === c.from ? c : { id: nextId++, from, to: c.to });
@@ -149,8 +180,13 @@
   let rate = 1;
   function seek(t) {
     now = Math.max(0, Math.min(t, Math.max(0, total() - 0.001)));
-    const { src } = locate(now);
-    if (source && Math.abs(video.currentTime - src) > 0.03) video.currentTime = src;
+    const { i, src } = locate(now);
+    const m = mOf(clips[i]);
+    if (source && clips[i]) {
+      if (media[m]?.kind === "image") void setMedia(m);
+      else if (loadedM !== m || !still.hidden) void setMedia(m).then(() => { video.currentTime = src; });
+      else if (Math.abs(video.currentTime - src) > 0.03) video.currentTime = src;
+    }
     drawHead();
   }
   function play(on = !playing) {
@@ -159,21 +195,33 @@
     if (playing) {
       if (now >= total() - 0.05) seek(0);
       video.playbackRate = rate;
-      video.play().catch(() => (playing = false));
+      lastT = performance.now();
+      if (media[mOf(clips[locate(now).i])]?.kind !== "image") video.play().catch(() => (playing = false));
       requestAnimationFrame(tick);
     } else video.pause();
     $("play").textContent = playing ? "⏸" : "▶";
   }
   function tick() {
     if (!playing) return;
+    if (switching) return requestAnimationFrame(tick);
     const { i, start } = locate(now);
     const c = clips[i];
+    const t = performance.now();
     if (c) {
-      if (video.currentTime >= c.to - 0.03) {
-        // The end of this stretch: on to the next one, or stop at the end.
-        if (i + 1 < clips.length) { now = start + len(c); video.currentTime = clips[i + 1].from; } else { now = total(); play(false); }
-      } else now = start + Math.max(0, video.currentTime - c.from);
+      const pic = media[mOf(c)]?.kind === "image";
+      // A picture has no clock of its own: the edit's time moves on with the real one.
+      if (pic) now += ((t - lastT) / 1000) * rate;
+      if (pic ? now >= start + len(c) : video.currentTime >= c.to - 0.03) {
+        // The end of this stretch: on to the next one (another file is loaded first), or stop at the end.
+        if (i + 1 < clips.length) {
+          const n = clips[i + 1];
+          now = start + len(c);
+          if (mOf(n) === mOf(c) && !pic) video.currentTime = n.from;
+          else void setMedia(mOf(n)).then(() => { if (media[mOf(n)]?.kind !== "image") { video.currentTime = n.from; if (playing) video.play().catch(() => undefined); } });
+        } else { now = total(); play(false); }
+      } else if (!pic) now = start + Math.max(0, video.currentTime - c.from);
     }
+    lastT = t;
     drawHead();
     requestAnimationFrame(tick);
   }
@@ -188,7 +236,9 @@
       d.className = `clip${i === chosen ? " on" : ""}`;
       d.style.left = `${startOf(i) * zoom}px`;
       d.style.width = `${Math.max(4, len(c) * zoom - 2)}px`;
-      d.textContent = `🎬 ${T("clip", "Clip")} ${i + 1}`;
+      const md = media[mOf(c)];
+      d.textContent = mOf(c) ? `${md?.kind === "image" ? "🖼" : "🎬"} ${md?.name ?? ""}` : `🎬 ${T("clip", "Clip")} ${i + 1}`;
+      if (mOf(c)) d.classList.add("added");
       const s = document.createElement("small");
       s.textContent = `${fmt(c.from)}–${fmt(c.to)}`;
       d.append(s);
@@ -208,7 +258,7 @@
       d.className = "clip snd";
       d.style.left = `${startOf(i) * zoom}px`;
       d.style.width = `${Math.max(4, len(c) * zoom - 2)}px`;
-      d.textContent = soundPath ? `🔊 ${T("newSound", "New sound")}` : "〰〰〰";
+      d.textContent = mOf(c) ? (media[mOf(c)]?.kind === "image" ? "" : "〰") : soundPath ? `🔊 ${T("newSound", "New sound")}` : "〰〰〰";
       d.title = T("dbl", "Double-click: edit in the sound editor (instruments, voices…)");
       d.ondblclick = (e) => { e.stopPropagation(); openSound(); };
       return d;
@@ -276,19 +326,19 @@
   function cutSource(a, b) {
     const next = [];
     for (const c of clips) {
-      if (b <= c.from || a >= c.to) { next.push(c); continue; }
+      if (mOf(c) || b <= c.from || a >= c.to) { next.push(c); continue; }
       if (a - c.from >= 0.1) next.push({ id: nextId++, from: c.from, to: a });
       if (c.to - b >= 0.1) next.push({ id: nextId++, from: b, to: c.to });
     }
     if (next.length) clips = next;
   }
   /** Whether a stretch of the source is still in the edit. */
-  const kept = (a, b) => clips.some((c) => c.from < b - 0.05 && c.to > a + 0.05);
+  const kept = (a, b) => clips.some((c) => !mOf(c) && c.from < b - 0.05 && c.to > a + 0.05);
   /** The edit's time of a moment of the source, if it is still in. */
   function editTimeOf(src) {
     let at = 0;
     for (const c of clips) {
-      if (src >= c.from && src < c.to) return at + src - c.from;
+      if (!mOf(c) && src >= c.from && src < c.to) return at + src - c.from;
       at += len(c);
     }
     return undefined;
@@ -416,7 +466,7 @@
   for (const id of ["musicVol", "fadeIn", "fadeOut", "duck"]) $(id).oninput = () => { $("musicVolN").textContent = `${$("musicVol").value}%`; render(); };
   const editKey = () => `edit:${source?.path ?? ""}`;
   /** The edit is kept while she is in the sound editor, so coming back finds it as it was. */
-  const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, at: Date.now() } }).catch(() => undefined);
+  const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, media: media.slice(1).map(({ path, kind, duration, name }) => ({ path, kind, duration, name })), at: Date.now() } }).catch(() => undefined);
   async function openSound() {
     if (!source) return;
     play(false);
@@ -426,6 +476,91 @@
   }
 
   // ---------- open from the chat, export, send ----------
+
+  // ---------- ＋ Add (RESEARCH_LOG "Adding files and objects to the editors"): a video or a picture from the device,
+  // this chat or the bank, put into the edit at the playhead (CapCut's "+"), the clip there split around it ----------
+  const addedMsg = (n) => (he ? HE.addedClip(n) : `Added: ${n}`);
+  async function addClip(fileName, path, bytes) {
+    if (!path) throw new Error(T("needChat", "To add clips, open the video editor from a chat"));
+    const kind = /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName) ? "image" : "video";
+    const url = URL.createObjectURL(new Blob([bytes]));
+    let duration = 5;
+    if (kind === "video") {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.src = url;
+      duration = await new Promise((resolve, reject) => { v.onloadedmetadata = () => resolve(v.duration); v.onerror = () => reject(new Error(T("cantPlay", "This video cannot be played here"))); });
+    }
+    // An empty editor: the first video becomes the one it edits.
+    if (!source) {
+      if (kind === "image") throw new Error(T("startVideo", "Start with a video: a picture goes in once there is one"));
+      $("empty").hidden = true;
+      $("name").textContent = fileName;
+      video.src = url;
+      await new Promise((resolve) => { video.onloadedmetadata = resolve; video.onerror = resolve; });
+      source = { name: fileName, path, duration };
+      media = [{ path, kind, url, duration, name: fileName }];
+      loadedM = 0;
+      clips = [{ id: nextId++, from: 0, to: duration }];
+      chosen = 0; fitZoom(); seek(0); void listMusic();
+      return;
+    }
+    media.push({ path, kind, url, duration, name: fileName });
+    const m = media.length - 1;
+    remember();
+    const { i, src } = locate(now);
+    const c = clips[i];
+    let at = clips.length;
+    if (c && src - c.from >= 0.1 && c.to - src >= 0.1) { clips.splice(i, 1, { ...c, id: nextId++, to: src }, { ...c, id: nextId++, from: src }); at = i + 1; }
+    else if (c) at = src - c.from < 0.1 ? i : i + 1;
+    clips.splice(at, 0, { id: nextId++, from: 0, to: duration, m });
+    chosen = at;
+    now = startOf(at);
+    after();
+    void saveEdit();
+    msg(addedMsg(fileName));
+  }
+  async function addFrom(from) {
+    const am = await import("./add-media.js");
+    try {
+      if (from === "device" || from === "picture") {
+        for (const f of await am.pickDevice(from === "picture" ? "image/*" : "video/*,image/*")) {
+          busy(T("loading", "Loading the video…"));
+          try { const { path, bytes } = await am.uploadMedia(f); await addClip(f.name, path, bytes); } finally { busy(""); }
+        }
+        return;
+      }
+      const it = await am.pickMedia(from, ["video", "image"]);
+      if (!it) return;
+      busy(T("loading", "Loading the video…"));
+      try { const { path, bytes } = await am.takeMedia(it); await addClip(it.name, path, bytes); } finally { busy(""); }
+    } catch (e) { msg(e.message || String(e), true); }
+  }
+  async function addMenu(anchor) {
+    const am = await import("./add-media.js");
+    am.setHebrew(he);
+    am.openMenu(anchor, T("addAt", "Goes in at the playhead"), [
+      { icon: "💻", label: T("fromDevice", "From the computer / phone"), hint: T("dragToo", "drag in too"), run: () => addFrom("device") },
+      { icon: "💬", label: T("fromChat", "From this chat's files"), run: () => addFrom("chat") },
+      { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
+      "-",
+      { icon: "🖼", label: T("picClip", "A picture as a clip"), hint: T("picHint", "5 s, shorten it with trim"), run: () => addFrom("picture") },
+    ]);
+  }
+  $("addBtn").onclick = () => addMenu($("addBtn"));
+  for (const zone of [$("tracks"), video.parentElement]) {
+    zone.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
+    zone.addEventListener("drop", async (e) => {
+      const files = [...(e.dataTransfer?.files ?? [])];
+      if (!files.length) return;
+      e.preventDefault();
+      const am = await import("./add-media.js");
+      for (const f of files) {
+        busy(T("loading", "Loading the video…"));
+        try { const { path, bytes } = await am.uploadMedia(f); await addClip(f.name, path, bytes); } catch (err) { msg(err.message || String(err), true); } finally { busy(""); }
+      }
+    });
+  }
   let busyCount = 0;
   function busy(text) {
     busyCount += text ? 1 : -1;
@@ -450,10 +585,22 @@
       video.src = URL.createObjectURL(new Blob([input.bytes], { type: input.type }));
       await new Promise((resolve, reject) => { video.onloadedmetadata = resolve; video.onerror = () => reject(new Error("The video could not be played here.")); });
       source = { name: input.name, path: input.path, duration: video.duration };
+      media = [{ path: input.path, kind: "video", url: video.src, duration: video.duration, name: input.name }];
+      loadedM = 0;
       clips = [{ id: nextId++, from: 0, to: video.duration }];
       // Back from the sound editor: the edit as she left it (within a day), and the new sound playing instead.
       const kept = await kesher.call("storage.get", { key: editKey() }).catch(() => null);
-      if (kept?.clips?.length && Date.now() - kept.at < 86_400_000 && kept.clips.every((c) => c.to <= video.duration + 0.01)) { clips = kept.clips; nextId = Math.max(...clips.map((c) => c.id)) + 1; }
+      if (kept?.clips?.length && Date.now() - kept.at < 86_400_000 && kept.clips.every((c) => mOf(c) || c.to <= video.duration + 0.01)) {
+        // The added files come back from the chat's folder; a clip whose file is gone is left out.
+        const back = await Promise.all((kept.media ?? []).map(async (md) => {
+          const bytes = await kesher.call("media.bytes", { id: `chat:${md.path}` }).catch(() => null);
+          return bytes ? { ...md, url: URL.createObjectURL(new Blob([bytes])) } : null;
+        }));
+        media = [media[0], ...back.map((b) => b ?? { kind: "gone" })];
+        clips = kept.clips.filter((c) => media[mOf(c)] && media[mOf(c)].kind !== "gone");
+        if (!clips.length) clips = [{ id: 1, from: 0, to: video.duration }];
+        nextId = Math.max(...clips.map((c) => c.id)) + 1;
+      }
       if (input.sound && input.soundBytes) {
         soundPath = input.sound;
         newAudio.src = URL.createObjectURL(new Blob([input.soundBytes], { type: "audio/wav" }));
@@ -475,7 +622,7 @@
     const out = [];
     let at = 0;
     for (const c of clips) {
-      for (const p of parts) {
+      for (const p of mOf(c) ? [] : parts) {
         const a = Math.max(p.start, c.from), b = Math.min(p.end, c.to);
         if (b - a > 0.2) out.push({ start: at + a - c.from, end: at + b - c.from, text: p.text });
       }
@@ -483,13 +630,24 @@
     }
     return out;
   }
+  /** The stretches and the added files for the export: each added file once, numbered in the order it is first used. */
+  function cutPlan() {
+    const used = [];
+    const segments = clips.map((c) => {
+      if (!mOf(c)) return { from: c.from, to: c.to };
+      let k = used.indexOf(mOf(c));
+      if (k < 0) k = used.push(mOf(c)) - 1;
+      return { from: c.from, to: c.to, src: k + 1 };
+    });
+    return { segments, ...(used.length ? { clips: used.map((m) => ({ path: media[m].path })) } : {}) };
+  }
   async function exportCut(send, text) {
     if (!source) return;
     play(false);
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
-      const r = await kesher.call("video.cut", { segments: clips.map(({ from, to }) => ({ from, to })), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
+      const r = await kesher.call("video.cut", { ...cutPlan(), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);
@@ -522,7 +680,7 @@
   $("right").onclick = () => moveClip(1);
   $("zoomIn").onclick = () => zoomBy(1.4);
   $("zoomOut").onclick = () => zoomBy(1 / 1.4);
-  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play(), words: () => $("app").classList.toggle("sheet") })[b.dataset.do]()));
+  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play(), add: () => addMenu(b), words: () => $("app").classList.toggle("sheet") })[b.dataset.do]()));
 
   const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Home / End", "kHomeEnd", "The start / the end"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom the timeline"]];
   function showKeys() {

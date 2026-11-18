@@ -5,6 +5,23 @@ import { dirname } from "node:path";
 export interface Segment {
   from: number;
   to: number;
+  /** Another file's stretch (1 = the first of the added clips); none or 0 is the video the editor opened. */
+  src?: number;
+}
+
+/** A file added to the edit (the editors' "Add"): a video, or a picture shown for its stretch. */
+export interface ExtraClip {
+  file: string;
+  kind: "video" | "image";
+  /** Whether it has sound (a picture never does). */
+  audio: boolean;
+}
+
+/** The picture every stretch is fitted into when the edit has added clips: the opened video's size and frame rate. */
+export interface Frame {
+  w: number;
+  h: number;
+  fps: number;
 }
 
 /** At most this many stretches, and only this long a video (12 hours), so a page cannot ask for anything silly. */
@@ -18,12 +35,14 @@ const MAX_SECONDS = 12 * 3600;
  * @returns The stretches, rounded to milliseconds.
  * @throws When they are not usable.
  */
-export function checkSegments(given: unknown): Segment[] {
+export function checkSegments(given: unknown, extras = 0): Segment[] {
   if (!Array.isArray(given) || !given.length || given.length > MAX_SEGMENTS) throw new Error(`Send 1 to ${MAX_SEGMENTS} stretches to keep.`);
   return given.map((g) => {
     const from = Number((g as Segment)?.from), to = Number((g as Segment)?.to);
     if (!Number.isFinite(from) || !Number.isFinite(to) || from < 0 || to > MAX_SECONDS || to - from < 0.1) throw new Error("Each stretch needs a start and an end, at least 0.1 s apart.");
-    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000 };
+    const src = Number((g as Segment)?.src ?? 0);
+    if (!Number.isInteger(src) || src < 0 || src > extras) throw new Error("A stretch names a clip that was not sent.");
+    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000, ...(src ? { src } : {}) };
   });
 }
 
@@ -99,16 +118,27 @@ export function musicGraph(m: MusicTrack, input: number, total: number, voice?: 
  * @param music - A music track under it.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
   const a = sound ? "1:a" : "0:a";
+  // Added clips (other videos, pictures): each stretch is fitted into the opened video's frame (letterboxed), at its
+  // frame rate, with stereo sound at 48 kHz (silence where a clip has none), so concat can join them.
+  const extra = more?.clips.length ? more : undefined;
+  const first = 1 + (sound ? 1 : 0) + (music ? 1 : 0);
+  const fit = extra ? `,scale=${extra.frame.w}:${extra.frame.h}:force_original_aspect_ratio=decrease,pad=${extra.frame.w}:${extra.frame.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${extra.frame.fps},format=yuv420p` : "";
+  const af = ",aformat=sample_rates=48000:channel_layouts=stereo";
   const parts = segments.map((s, i) => {
-    const v = `[0:v]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS[v${i}]`;
-    return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS[a${i}]` : v;
+    const c = s.src && extra ? extra.clips[s.src - 1] : undefined;
+    const vin = c ? `${first + s.src! - 1}:v` : "0:v";
+    const v = `[${vin}]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS${fit}[v${i}]`;
+    if (!extra) return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS[a${i}]` : v;
+    const hasSound = c ? c.audio : audio || !!sound;
+    const ain = c ? `${first + s.src! - 1}:a` : a;
+    return hasSound ? `${v};[${ain}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${af}[a${i}]` : `${v};anullsrc=r=48000:cl=stereo,atrim=duration=${(s.to - s.from).toFixed(3)}[a${i}]`;
   });
-  audio = audio || !!sound;
+  audio = audio || !!sound || !!extra;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
   // Burned captions (CapCut's and Premiere's "burn in"): white with a dark outline, low in the frame, readable anywhere.
   // The new shape first, so the captions sit inside it: the largest middle part with that ratio, at even sizes for H.264.
@@ -125,7 +155,13 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     graph += `;${m.graph}`;
     outA = m.out;
   }
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), ...(music ? ["-i", music.file] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(outA ? ["-map", outA, "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  // A picture is read as a still that lasts as long as its longest stretch.
+  const extraInputs = (extra?.clips ?? []).flatMap((c, k) => {
+    if (c.kind === "video") return ["-i", c.file];
+    const until = Math.max(0.1, ...segments.filter((s) => s.src === k + 1).map((s) => s.to));
+    return ["-loop", "1", "-framerate", String(extra!.frame.fps), "-t", until.toFixed(3), "-i", c.file];
+  });
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), ...(music ? ["-i", music.file] : []), ...extraInputs, "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(outA ? ["-map", outA, "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -140,10 +176,17 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param shape - One of SHAPES, or none.
  * @param music - A music track under it.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = []): Promise<void> {
+  // With added clips: the opened video's frame, and which added videos have sound (FFmpeg reads their headers).
+  let more: { clips: ExtraClip[]; frame: Frame } | undefined;
+  if (extras.length) {
+    const main = await probeMedia(ffmpeg, input);
+    const clips = await Promise.all(extras.map(async (c) => ({ ...c, audio: c.kind === "video" && (await probeMedia(ffmpeg, c.file)).audio })));
+    more = { clips, frame: { w: main.w || 1920, h: main.h || 1080, fps: main.fps || 30 } };
+  }
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);
@@ -152,6 +195,33 @@ export async function cutVideo(ffmpeg: string, input: string, output: string, se
     if (!/matches no streams|0:a|Stream specifier/i.test((err as Error).message)) throw err;
     await run(false);
   }
+}
+
+/**
+ * What FFmpeg says of a file's first video stream (size, frame rate) and whether it has sound, from `ffmpeg -i`.
+ *
+ * @param ffmpeg - The FFmpeg program.
+ * @param file - The file.
+ * @returns Its size and rate (0 when not found) and whether it has an audio stream.
+ */
+export function probeMedia(ffmpeg: string, file: string): Promise<{ w: number; h: number; fps: number; audio: boolean }> {
+  return new Promise((resolve) => {
+    execFile(ffmpeg, ["-hide_banner", "-i", file], { timeout: 30_000, windowsHide: true }, (_err, _out, stderr) => resolve(probeText(String(stderr))));
+  });
+}
+
+/**
+ * Reads `ffmpeg -i`'s report.
+ *
+ * @param text - What FFmpeg printed.
+ * @returns The first video stream's size and frame rate, and whether there is an audio stream.
+ */
+export function probeText(text: string): { w: number; h: number; fps: number; audio: boolean } {
+  const video = /Stream #[^\n]*Video:[^\n]*/.exec(text)?.[0] ?? "";
+  const size = /\b(\d{2,5})x(\d{2,5})\b/.exec(video);
+  const fps = /([\d.]+) (?:fps|tbr)/.exec(video);
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  return { w: size ? even(Number(size[1])) : 0, h: size ? even(Number(size[2])) : 0, fps: fps ? Math.min(120, Math.max(1, Math.round(Number(fps[1])))) : 0, audio: /Stream #[^\n]*Audio:/.test(text) };
 }
 
 /** A caption line, in seconds of the cut video. */

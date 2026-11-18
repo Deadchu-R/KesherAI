@@ -1442,3 +1442,23 @@ S5 an outside scanner's rules for Electron.
 - **P3-SAM**: lighter settings (fewer points), and only flags its own script knows.
 - Checked: lint, typecheck, tests (video-cut, godot-scene with the addon path, game-projects with Godot, chat-report 16,
   chat-report-text), a real FFmpeg run of the music track, the video editor in a browser (desktop and 390 px).
+
+## Scan 156 (2026-11-18): the bank of everything made, the editors' Add, clips from other files in a cut
+- **The bank** (`/api/bank…`, asset-bank.ts): guests cannot reach it (their key opens only `/api/guest/`). An item id
+  is either `a.<uuid>` (the asset store) or `f.<chat uuid>.<path in base64url>`: the path must be a media file name,
+  with no `..`, no empty part, no drive letter, inside that chat's folder (`relative` check), and code sessions'
+  folders (projects) are never listed or served. `/api/bank/file` sends pictures, video and sound inline with
+  `nosniff`, anything else (3D) as a download; SVG is not a bank kind. Delete is at most 500 ids, copy at most 50,
+  into the target chat's `shared/` under a cleaned name that never overwrites. Tests: traversal ids, code chats,
+  duplicates, copy, delete.
+- **Duplicates**: only files of the same size are hashed (SHA-256, streamed), each once while its size and time stay;
+  the look-alike check (dHash) runs in the page on at most 400 pictures.
+- **The editors' Add** (`media.list` / `media.bytes` / `media.take` / `media.upload`): only plugins that declared
+  `video`, `sound` or `model`; a chat file is read through the existing chat routes (inside the chat's folder), an
+  upload is a media file name up to 300 MB into `shared/`. **`chat.ask`** (the 3D editor's "a model from words") shows
+  the user the exact words and sends nothing unless she agrees, so a page cannot run the chat's tools on its own.
+- **Clips in a cut** (`/files/cut` with `clips`): at most 20, each resolved inside the same chat's folder and a video
+  or picture file; a segment may name only a clip that was sent (`checkSegments`). The frame size and rate come from
+  FFmpeg's own report of the opened video (numbers only), so no page text reaches the filter graph.
+- Checked: lint, typecheck, tests (asset-bank 4, video-cut +3, image-hash), a real FFmpeg cut of a video + another
+  video without sound + a picture, cropped to 9:16; the three editors' Add in a browser (desktop and 390 px).

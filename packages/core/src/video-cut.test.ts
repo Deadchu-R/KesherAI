@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkSegments, cutArgs, sceneArgs, sceneTimes, soundArgs, srtOf } from "./video-cut.js";
+import { checkSegments, cutArgs, probeText, sceneArgs, sceneTimes, soundArgs, srtOf } from "./video-cut.js";
 
 test("the stretches to keep are checked and rounded", () => {
   assert.deepEqual(checkSegments([{ from: 0, to: 2.00049 }, { from: 5, to: 9 }]), [{ from: 0, to: 2 }, { from: 5, to: 9 }]);
@@ -68,4 +68,30 @@ test("a music track: from where it starts, faded, ducked under the voice (side-c
   assert.equal(musicGraph(m, 1, 10).out, "[mu]");
   // Odd numbers are kept in range (the page sends them).
   assert.match(musicGraph({ ...m, volume: 99, start: -5, fadeIn: 1e9 }, 1, 10).graph, /volume=1\.500,afade=t=in:d=5\.000/);
+});
+
+test("added clips: other videos and pictures are fitted into the opened video's frame, with silence where needed", () => {
+  const args = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }, { from: 1, to: 3, src: 1 }, { from: 0, to: 4, src: 2 }], true, undefined, undefined, undefined, undefined, {
+    clips: [{ file: "b.mp4", kind: "video", audio: false }, { file: "p.png", kind: "image", audio: false }],
+    frame: { w: 1280, h: 720, fps: 30 },
+  });
+  const g = args[args.indexOf("-filter_complex") + 1]!;
+  assert.ok(args.join(" ").includes("-i b.mp4 -loop 1 -framerate 30 -t 4.000 -i p.png"));
+  assert.match(g, /\[1:v\]trim=start=1:end=3,setpts=PTS-STARTPTS,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720/);
+  assert.match(g, /\[2:v\]trim=start=0:end=4/);
+  assert.match(g, /anullsrc=r=48000:cl=stereo,atrim=duration=2\.000\[a1\]/);
+  assert.match(g, /\[0:a\]atrim=start=0:end=2,asetpts=PTS-STARTPTS,aformat=sample_rates=48000/);
+  assert.match(g, /concat=n=3:v=1:a=1/);
+});
+
+test("segments may name an added clip only when it was sent", () => {
+  assert.deepEqual(checkSegments([{ from: 0, to: 1, src: 1 }], 1), [{ from: 0, to: 1, src: 1 }]);
+  assert.throws(() => checkSegments([{ from: 0, to: 1, src: 2 }], 1));
+  assert.throws(() => checkSegments([{ from: 0, to: 1, src: 1 }]));
+});
+
+test("probeText reads FFmpeg's report", () => {
+  const t = "  Stream #0:0[0x1](und): Video: h264 (High), yuv420p, 1919x1080 [SAR 1:1 DAR 16:9], 4000 kb/s, 29.97 fps, 30 tbr\n  Stream #0:1: Audio: aac, 48000 Hz, stereo";
+  assert.deepEqual(probeText(t), { w: 1920, h: 1080, fps: 30, audio: true });
+  assert.equal(probeText("Stream #0:0: Video: png, rgba, 640x480").audio, false);
 });

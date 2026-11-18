@@ -8,6 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
     cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
@@ -296,6 +297,7 @@
 
   // ---------- record (R): a count-in of four clicks, then the microphone into a new sound ----------
   let recording = null;
+  let recordInto = false;
   async function record() {
     if (recording) return recording.stop();
     let stream;
@@ -328,6 +330,13 @@
         const mono = new Float32Array(n);
         let o = 0;
         for (const p of pieces) { mono.set(p, o); o += p.length; }
+        // Into the open sound at the playhead (Audacity records into the cursor), or a new sound.
+        if (length() && recordInto) {
+          recordInto = false;
+          const at = Math.min(head, length());
+          void resampled(mono, ctx.sampleRate).then((v) => { putAt(v, at, false); msg(addedMsg("🎙")); });
+          return;
+        }
         remember();
         rate = ctx.sampleRate;
         chans = [mono];
@@ -518,6 +527,103 @@
   $("voiceReplace").onclick = () => putVoice(true);
   $("voiceInsert").onclick = () => putVoice(false);
 
+
+  // ---------- ＋ Add (RESEARCH_LOG "Adding files and objects to the editors"): a sound from the device, this chat or
+  // the bank, recorded here, or a voice from words, put in at the playhead (the rest moves on) or mixed over it ----------
+  const TT = (k, en) => (he && HE[k] !== undefined ? HE[k] : en);
+  const addedMsg = (n) => (he ? HE.addedSound(n) : `Added: ${n}`);
+  /** Samples at the editor's rate and channel count (a sound of another rate or mono / stereo fits in). */
+  async function resampled(mono, fromRate) {
+    const outRate = length() ? rate : fromRate;
+    const off = new OfflineAudioContext(chans.length || 1, Math.max(1, Math.ceil((mono.length / fromRate) * outRate)), outRate);
+    const buf = off.createBuffer(1, mono.length, fromRate);
+    buf.copyToChannel(mono, 0);
+    const src = off.createBufferSource();
+    src.buffer = buf; src.connect(off.destination); src.start();
+    const r = await off.startRendering();
+    return Array.from({ length: r.numberOfChannels }, (_, i) => r.getChannelData(i));
+  }
+  async function decoded(bytes) {
+    ctx ??= new AudioContext();
+    const a = await ctx.decodeAudioData(bytes.slice(0));
+    const outRate = length() ? rate : a.sampleRate;
+    const off = new OfflineAudioContext(chans.length || Math.min(2, a.numberOfChannels), Math.max(1, Math.ceil(a.duration * outRate)), outRate);
+    const src = off.createBufferSource();
+    src.buffer = a; src.connect(off.destination); src.start();
+    const r = await off.startRendering();
+    return { samples: Array.from({ length: r.numberOfChannels }, (_, i) => r.getChannelData(i)), rate: r.sampleRate };
+  }
+  /** Puts samples in at a point: inserted (the rest moves on) or mixed over (the length stays, unless it runs past the end). */
+  function putAt(v, at, mix) {
+    remember();
+    chans = chans.map((c, i) => {
+      const x = v[Math.min(i, v.length - 1)];
+      if (!mix) { const n = new Float32Array(c.length + x.length); n.set(c.subarray(0, at)); n.set(x, at); n.set(c.subarray(at), at + x.length); return n; }
+      const n = new Float32Array(Math.max(c.length, at + x.length));
+      n.set(c);
+      for (let j = 0; j < x.length; j++) n[at + j] = Math.max(-1, Math.min(1, n[at + j] + x[j]));
+      return n;
+    });
+    sel = [at, at + v[0].length];
+    $("empty").hidden = true;
+    after();
+  }
+  async function addBytes(fileName, bytes, anchor) {
+    const d = await decoded(bytes);
+    if (!length()) {
+      remember();
+      rate = d.rate; chans = d.samples.map((c) => c.slice()); parts = [];
+      name = fileName; $("name").textContent = name; $("empty").hidden = true;
+      sel = null; head = 0; firstLength = length();
+      fitZoom(); after();
+      return;
+    }
+    const at = Math.min(head, length());
+    const am = await import("./add-media.js");
+    am.openMenu(anchor, TT("howH", "How should it go in?"), [
+      { icon: "⇥", label: TT("insertHere", "Insert at the playhead"), hint: TT("insertHint", "the rest moves on"), run: () => { putAt(d.samples, at, false); msg(addedMsg(fileName)); } },
+      { icon: "⇅", label: TT("mixHere", "Mix over, from the playhead"), hint: TT("mixHint", "the length stays"), run: () => { putAt(d.samples, at, true); msg(addedMsg(fileName)); } },
+    ]);
+  }
+  async function addFrom(from, anchor) {
+    const am = await import("./add-media.js");
+    try {
+      if (from === "device") {
+        const [f] = await am.pickDevice("audio/*,video/*,.mp3,.wav,.m4a,.flac,.ogg,.opus", false);
+        if (!f) return;
+        busy(T("loading", "Loading the sound…"));
+        try { const { bytes } = await am.uploadMedia(f); await addBytes(f.name, bytes, anchor); } finally { busy(""); }
+        return;
+      }
+      const it = await am.pickMedia(from, ["audio", "video"]);
+      if (!it) return;
+      busy(T("loading", "Loading the sound…"));
+      try { const { bytes } = await am.takeMedia(it); await addBytes(it.name, bytes, anchor); } finally { busy(""); }
+    } catch (e) { msg(e.message || String(e), true); }
+  }
+  async function addMenu(anchor) {
+    const am = await import("./add-media.js");
+    am.setHebrew(he);
+    am.openMenu(anchor, TT("addAt", "Goes in at the playhead"), [
+      { icon: "💻", label: TT("fromDevice", "From the computer / phone"), hint: TT("dragToo", "drag in too"), run: () => addFrom("device", anchor) },
+      { icon: "💬", label: TT("fromChat", "From this chat's files"), run: () => addFrom("chat", anchor) },
+      { icon: "🗂", label: TT("fromBank", "From everything made"), run: () => addFrom("bank", anchor) },
+      "-",
+      { icon: "⏺", label: TT("recHere", "Record here"), hint: TT("micToo", "from the microphone"), run: () => { recordInto = true; record(); } },
+      { icon: "🗣", label: TT("voiceWords", "A voice from words"), run: () => $("toVoice").click() },
+    ]);
+  }
+  $("addBtn").onclick = () => addMenu($("addBtn"));
+  $("wrap").addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
+  $("wrap").addEventListener("drop", async (e) => {
+    const f = e.dataTransfer?.files?.[0];
+    if (!f) return;
+    e.preventDefault();
+    const am = await import("./add-media.js");
+    busy(T("loading", "Loading the sound…"));
+    try { const { bytes } = await am.uploadMedia(f); await addBytes(f.name, bytes, $("addBtn")); } catch (err) { msg(err.message || String(err), true); } finally { busy(""); }
+  });
+
   // ---------- open ----------
   let busyCount = 0;
   function busy(text) { busyCount = Math.max(0, busyCount + (text ? 1 : -1)); $("busy").hidden = busyCount <= 0; if (text) $("busyText").textContent = text; }
@@ -545,7 +651,7 @@
   Object.keys(ops).forEach((k) => ($(k).onclick = ops[k]));
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
-  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : b.dataset.do === "inst" ? $("toInst").click() : ops[b.dataset.do]())));
+  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "add" ? addMenu(b) : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : b.dataset.do === "inst" ? $("toInst").click() : ops[b.dataset.do]())));
   const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"], ["Home / End", "kHomeEnd", "The start / the end"], ["R", "rec", "Record"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => { const tr = document.createElement("tr"); const a = document.createElement("td"); const kbd = document.createElement("kbd"); kbd.textContent = k; a.append(kbd); const b = document.createElement("td"); b.textContent = T(key, en); tr.append(a, b); return tr; }));

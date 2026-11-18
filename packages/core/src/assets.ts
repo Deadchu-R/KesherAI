@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Asset, AssetKind } from "@kesher/shared";
 
@@ -42,6 +42,61 @@ export class AssetStore {
     await writeFile(join(this.dir, `${id}.${EXTENSIONS[mimeType] ?? "bin"}`), data);
     await writeFile(join(this.dir, `${id}.json`), JSON.stringify(asset, null, 2));
     return asset;
+  }
+
+  /**
+   * Every asset with its file's size, newest first (for the bank of everything made).
+   *
+   * @returns The assets; a broken record is skipped.
+   */
+  async list(): Promise<Array<Asset & { size: number }>> {
+    const out: Array<Asset & { size: number }> = [];
+    for (const name of await readdir(this.dir).catch(() => [] as string[])) {
+      if (!/^[0-9a-f-]{36}\.json$/.test(name)) continue;
+      try {
+        const asset = JSON.parse(await readFile(join(this.dir, name), "utf8")) as Asset;
+        const st = await stat(this.fileOf(asset));
+        out.push({ ...asset, size: st.size });
+      } catch {
+        // A record without its file (or a broken record) is not shown.
+      }
+    }
+    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /**
+   * The full path of an asset's file.
+   *
+   * @param asset - The asset's record.
+   * @returns The file's path.
+   */
+  fileOf(asset: Pick<Asset, "id" | "mimeType">): string {
+    return join(this.dir, `${asset.id}.${EXTENSIONS[asset.mimeType] ?? "bin"}`);
+  }
+
+  /**
+   * An asset's record without its bytes.
+   *
+   * @param id - Asset id.
+   * @returns The record, or undefined.
+   */
+  async recordOf(id: string): Promise<Asset | undefined> {
+    if (!/^[0-9a-f-]{36}$/.test(id)) return undefined;
+    return readFile(join(this.dir, `${id}.json`), "utf8").then((t) => JSON.parse(t) as Asset, () => undefined);
+  }
+
+  /**
+   * Deletes an asset (its file and its record).
+   *
+   * @param id - Asset id.
+   * @returns Whether it was there.
+   */
+  async delete(id: string): Promise<boolean> {
+    const found = await this.recordOf(id);
+    if (!found) return false;
+    await rm(this.fileOf(found), { force: true });
+    await rm(join(this.dir, `${id}.json`), { force: true });
+    return true;
   }
 
   /**

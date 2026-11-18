@@ -70,16 +70,26 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean } } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
     let segments;
     let sound: string | undefined;
     let music: MusicTrack | undefined;
+    const extras: Array<{ file: string; kind: "video" | "image" }> = [];
     try {
       full = await resolveInWorkspace(root, req.body?.path ?? "");
-      segments = checkSegments(req.body?.segments);
+      // Clips added to the edit (the editor's "Add"): other videos or pictures of the same chat, at most 20.
+      const given = Array.isArray(req.body?.clips) ? (req.body.clips as Array<{ path?: unknown }>) : [];
+      if (given.length > 20) return reply.code(400).send({ error: "At most 20 added clips." });
+      for (const c of given) {
+        const file = await resolveInWorkspace(root, String(c?.path ?? ""));
+        const kind = /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) ? "video" : /\.(png|jpe?g|webp|bmp)$/i.test(file) ? "image" : undefined;
+        if (!kind || !(await stat(file).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: `An added clip was not found: ${String(c?.path ?? "")}` });
+        extras.push({ file, kind });
+      }
+      segments = checkSegments(req.body?.segments, extras.length);
       // A new sound for the video (from the sound editor): a sound file of the same chat.
       if (req.body?.sound) {
         sound = await resolveInWorkspace(root, req.body.sound);
@@ -111,7 +121,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     try {
       if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
       if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music);
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {

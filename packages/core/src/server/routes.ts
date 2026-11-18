@@ -2,6 +2,7 @@
  * Every area's routes (docs/ARCHITECTURE_REVIEW.md B7), registered in one place and in the order they always had:
  * system first, the pages last. The key check for remote access is set up before this (server.ts), so it covers them.
  */
+import { bankRoutes } from "../routes/bank.js";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { features } from "@kesher/shared";
@@ -178,6 +179,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
+  await bankRoutes(app, services);
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);

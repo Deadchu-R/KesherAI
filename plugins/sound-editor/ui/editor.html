@@ -12,6 +12,7 @@
       <button id="undo" title="Undo (Ctrl+Z)">↶</button>
       <button id="redo" title="Redo (Ctrl+Y)">↷</button>
       <b class="grow name" id="name">Sound editor</b>
+      <button id="addBtn" class="primary" data-t="addB" title="Add a sound at the playhead">＋ Add</button>
       <button id="rec" class="rec" title="Record (R)"><span>●</span> <b data-t="rec">Record</b></button>
       <button id="keysBtn" title="Shortcuts (?)">?</button>
       <button id="export" data-t="export">Export WAV</button>
@@ -56,6 +57,7 @@
     </main>
 
     <nav class="phonebar" aria-label="Tools">
+      <button data-do="add"><span>＋</span><b data-t="addS">Add</b></button>
       <button data-do="play"><span>▶</span><b data-t="playS">Play</b></button>
       <button data-do="cut"><span>✂</span><b data-t="cutS">Cut</b></button>
       <button data-do="fadeIn"><span>◢</span><b data-t="fadeS">Fade</b></button>

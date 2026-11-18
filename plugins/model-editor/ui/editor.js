@@ -11,10 +11,12 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } from "./add-media.js";
 
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
+  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
@@ -590,7 +592,7 @@ function tris(obj) { let n = 0; obj.traverse((o) => { if (o.isMesh) { const g = 
 const isGenerated = (o) => { for (let x = o; x; x = x.parent) if (x.userData.generated) return true; return false; };
 function stats() { $("stats").textContent = model ? `${meshes.filter((p) => !isGenerated(p.mesh)).length} ${T("parts", "parts")} · ${tris(model).toLocaleString()} ${T("tris", "triangles")}` : ""; }
 /** Groups that hold a single mesh and nothing else are shown as that mesh (files often wrap each mesh in a node). */
-const shown = (o) => (o.children.length === 1 && !o.isMesh && o.children[0].isMesh && !o.children[0].children.length ? o.children[0] : o);
+const shown = (o) => (o.children.length === 1 && !o.isMesh && o.children[0].isMesh && !o.children[0].children.length && !o.children[0].userData.generated ? o.children[0] : o);
 function renderParts() {
   nodes = [];
   // The outliner's search: what matches, with the way down to it (as the engines' Hierarchy search shows it).
@@ -1557,8 +1559,136 @@ addEventListener("keydown", (e) => {
 document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => {
   const d = b.dataset.do, app = $("app");
   if (d === "parts" || d === "inspector") { const on = app.classList.contains(`sheet-${d}`); app.classList.remove("sheet-parts", "sheet-inspector"); if (!on) app.classList.add(`sheet-${d}`); }
-  else ({ frame: () => $("frame").click(), undo, keep: keepVersion })[d]();
+  else ({ frame: () => $("frame").click(), undo, keep: keepVersion, add: () => addMenu(b) })[d]();
 }));
+
+// ---------- ＋ Add (RESEARCH_LOG "Adding files and objects to the editors"): a model or a picture from the device,
+// this chat or the bank, and Blender's Shift+A shapes, a light and a camera, at the middle of the view ----------
+/** The scene to add into: the open model, or a new empty one. */
+function ensureScene() {
+  if (model) return model;
+  model = new THREE.Group();
+  model.name = T("scene", "Scene");
+  scene.add(model);
+  $("empty").hidden = true;
+  return model;
+}
+/** A size that fits the view: about a fifth of what the camera sees. */
+const fitSize = () => Math.max(0.05, camera.position.distanceTo(controls.target) * 0.2);
+const ADDED = (label) => (he ? HE.added(label) : `Added: ${label}`);
+function addShape(kind) {
+  const u = fitSize();
+  const geo = { cube: () => new THREE.BoxGeometry(u, u, u), sphere: () => new THREE.SphereGeometry(u / 2, 32, 16), cylinder: () => new THREE.CylinderGeometry(u / 2, u / 2, u, 32), cone: () => new THREE.ConeGeometry(u / 2, u, 32), plane: () => new THREE.PlaneGeometry(u * 2, u * 2).rotateX(-Math.PI / 2), torus: () => new THREE.TorusGeometry(u / 2, u / 6, 16, 48) }[kind]();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xcfd3dc, roughness: 0.6 }));
+  addAndSay(mesh, T(`a${kind[0].toUpperCase()}${kind.slice(1)}`, kind[0].toUpperCase() + kind.slice(1)));
+}
+function addAndSay(obj, label) {
+  const root = ensureScene();
+  remember();
+  obj.name = label;
+  root.add(obj);
+  obj.position.copy(root.worldToLocal(controls.target.clone()));
+  rebuild();
+  choose(obj);
+  stats();
+  msg(ADDED(label));
+}
+/** A light (exported to GLB as a light) with a small bulb to click and move. */
+function addLight() {
+  const light = new THREE.PointLight(0xffffff, 3, 0, 2);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(fitSize() * 0.12, 16, 8), new THREE.MeshBasicMaterial({ color: 0xffe27a }));
+  bulb.userData.generated = true;
+  light.add(bulb);
+  light.userData.icon = "💡";
+  addAndSay(light, T("aLight", "Light"));
+  light.position.y += fitSize();
+}
+/** A camera (exported to GLB as a camera) with its frustum drawn. */
+function addCamera() {
+  const cam = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 10);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.8).scale(fitSize() * 0.4, fitSize() * 0.4, fitSize() * 0.4), new THREE.MeshBasicMaterial({ color: 0x8fa2ff, wireframe: true }));
+  body.userData.generated = true;
+  cam.add(body);
+  cam.userData.icon = "🎥";
+  addAndSay(cam, T("aCamera", "Camera"));
+  cam.position.z += fitSize() * 2;
+}
+/** A model or a picture's bytes, added: a model as it is, a picture on a flat panel in its proportions. */
+async function addFile(fileName, bytes) {
+  if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName)) {
+    const url = URL.createObjectURL(new Blob([bytes]));
+    const tex = await new THREE.TextureLoader().loadAsync(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const u = fitSize() * 2, a = tex.image.width / tex.image.height || 1;
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(a >= 1 ? u : u * a, a >= 1 ? u / a : u), new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.9 }));
+    addAndSay(panel, fileName.replace(/\.[^.]+$/, ""));
+    return;
+  }
+  if (!/\.(glb|gltf|fbx|obj)$/i.test(fileName)) throw new Error(T("notModel", "A model (GLB, GLTF, FBX, OBJ) or a picture can be added here"));
+  const shape = /\.fbx$/i.test(fileName) ? new FBXLoader().parse(bytes, "")
+    : /\.obj$/i.test(fileName) ? new OBJLoader().parse(new TextDecoder().decode(bytes))
+    : (await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject))).scene;
+  shape.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); });
+  // Scaled to the view (a model in centimetres would be huge), standing on the point the view looks at.
+  const box = new THREE.Box3().setFromObject(shape);
+  const s = box.getSize(new THREE.Vector3());
+  const big = Math.max(s.x, s.y, s.z) || 1;
+  const holder = new THREE.Group();
+  const k = (fitSize() * 2.5) / big;
+  shape.scale.multiplyScalar(k);
+  shape.position.set(-(box.min.x + s.x / 2) * k, -box.min.y * k, -(box.min.z + s.z / 2) * k);
+  holder.add(shape);
+  addAndSay(holder, fileName.replace(/\.[^.]+$/, ""));
+}
+async function addFrom(from) {
+  try {
+    if (from === "device") {
+      for (const f of await pickDevice(".glb,.gltf,.fbx,.obj,image/*")) {
+        busy(T("loading", "Loading the model…"));
+        try { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } finally { busy(""); }
+      }
+      return;
+    }
+    const it = await pickMedia(from, ["model", "image"]);
+    if (!it) return;
+    busy(T("loading", "Loading the model…"));
+    try { const { bytes } = await takeMedia(it); await addFile(it.name, bytes); } finally { busy(""); }
+  } catch (e) { msg(e.message, true); }
+}
+/** A model from words: the chat makes it (a picture, then Hunyuan3D), and it comes back through "From this chat". */
+async function addFromWords() {
+  const words = window.prompt(T("wordsAsk", "What to make? (an old wooden chair…)"));
+  if (!words?.trim()) return;
+  try {
+    await kesher.call("chat.ask", { text: `Make a 3D model of: ${words.trim()}. First a picture of the object alone on a plain background, then turn it into a 3D model with make_3d.` });
+    msg(T("wordsSent", "Asked the chat. When the model is ready (a few minutes), add it from \"From this chat\"."));
+  } catch (e) { msg(e.message, true); }
+}
+function addMenu(anchor) {
+  openMenu(anchor, T("addAt", "Lands in the middle of the view, chosen"), [
+    { icon: "💻", label: T("fromDevice", "From the computer / phone"), hint: T("dragToo", "drag in too"), run: () => addFrom("device") },
+    { icon: "💬", label: T("fromChat", "From this chat's files"), run: () => addFrom("chat") },
+    { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
+    "-",
+    ...["cube", "sphere", "cylinder", "cone", "plane", "torus"].map((k) => ({ icon: { cube: "⬛", sphere: "⚪", cylinder: "🛢", cone: "🔺", plane: "▭", torus: "◯" }[k], label: T(`a${k[0].toUpperCase()}${k.slice(1)}`, k[0].toUpperCase() + k.slice(1)), run: () => addShape(k) })),
+    { icon: "💡", label: T("aLight", "Light"), run: addLight },
+    { icon: "🎥", label: T("aCamera", "Camera"), run: addCamera },
+    "-",
+    { icon: "✨", label: T("aWords", "A model from words"), hint: T("aWordsHint", "through the chat"), run: addFromWords },
+  ]);
+}
+$("addBtn").onclick = () => addMenu($("addBtn"));
+// A model or a picture dropped on the view is added too (Spline, Blender).
+host.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
+host.addEventListener("drop", async (e) => {
+  const files = [...(e.dataTransfer?.files ?? [])];
+  if (!files.length) return;
+  e.preventDefault();
+  for (const f of files) {
+    busy(T("loading", "Loading the model…"));
+    try { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } catch (err) { msg(err.message, true); } finally { busy(""); }
+  }
+});
 let busyCount = 0;
 $("busyStop").onclick = () => kesher.call("model.parts.cancel").catch(() => undefined);
 function busy(text) { busyCount = Math.max(0, busyCount + (text ? 1 : -1)); $("busy").hidden = busyCount <= 0; if (text) $("busyText").textContent = text; }
@@ -1568,6 +1698,7 @@ kesher.call("storage.get", { key: "keymap" }).then((v) => { if (v === "blender" 
 $("keymap").onchange = () => kesher.call("storage.set", { key: "keymap", value: $("keymap").value }).catch(() => undefined);
 kesher.call("info").then((i) => {
   he = i.locale === "he";
+  setHebrew(he);
   if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); document.querySelectorAll("[data-ta]").forEach((el) => el.setAttribute("aria-label", T(el.dataset.ta, el.getAttribute("aria-label")))); }
 }).catch(() => undefined);
 open();
