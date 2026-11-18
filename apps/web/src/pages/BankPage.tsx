@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { askConfirm } from "../ui/askText";
 import { dHash, hamming } from "../image-hash";
 
+const ModelViewer = lazy(() => import("../ModelViewer"));
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** One file in the bank (packages/core/src/asset-bank.ts). */
@@ -41,6 +42,8 @@ export function BankPage() {
   const [items, setItems] = useState<BankItem[] | null>(null);
   const [kind, setKind] = useState<Kind | "">("");
   const [q, setQ] = useState("");
+  // Newest first by day, or the biggest first (to free space: Premiere's and Windows' "sort by size").
+  const [order, setOrder] = useState<"new" | "big">("new");
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [view, setView] = useState<BankItem | null>(null);
   const [dups, setDups] = useState<Group[] | null>(null);
@@ -53,17 +56,19 @@ export function BankPage() {
   const byId = useMemo(() => new Map((items ?? []).map((i) => [i.id, i])), [items]);
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase();
-    return (items ?? []).filter((i) => (!kind || i.kind === kind) && (!words || `${i.name} ${i.prompt ?? ""} ${i.chat?.title ?? ""}`.toLowerCase().includes(words)));
-  }, [items, kind, q]);
+    const list = (items ?? []).filter((i) => (!kind || i.kind === kind) && (!words || `${i.name} ${i.prompt ?? ""} ${i.chat?.title ?? ""}`.toLowerCase().includes(words)));
+    return order === "big" ? [...list].sort((a, b) => b.size - a.size) : list;
+  }, [items, kind, q, order]);
   const days = useMemo(() => {
     const out: Array<[string, BankItem[]]> = [];
+    if (order === "big") return shown.length ? [[L("הכי גדולים קודם", "Biggest first"), shown] as [string, BankItem[]]] : [];
     for (const it of shown) {
       const d = dayOf(it.createdAt);
       if (out.at(-1)?.[0] === d) out.at(-1)![1].push(it);
       else out.push([d, [it]]);
     }
     return out;
-  }, [shown]);
+  }, [shown, order]);
   const total = (items ?? []).reduce((t, i) => t + i.size, 0);
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -143,6 +148,11 @@ export function BankPage() {
         <div className="bank-filters" role="group" aria-label={L("סוג", "Kind")}>
           <button type="button" className={`chip-text${kind === "" ? " on" : ""}`} onClick={() => setKind("")}>{L("הכל", "All")}</button>
           {KINDS.map(([k, ic, he, en]) => <button key={k} type="button" className={`chip-text${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{ic} {L(he, en)} {(items ?? []).filter((i) => i.kind === k).length}</button>)}
+          <span className="grow" />
+          <select value={order} onChange={(e) => setOrder(e.target.value as "new" | "big")} aria-label={L("סדר", "Order")}>
+            <option value="new">{L("חדש קודם", "Newest first")}</option>
+            <option value="big">{L("גדול קודם (לפנות מקום)", "Biggest first (free space)")}</option>
+          </select>
         </div>
       )}
       {!items && <p className="muted">{L("טוען…", "Loading…")}</p>}
@@ -190,7 +200,9 @@ export function BankPage() {
             {view.kind === "image" && <img src={bankFileUrl(view.id)} alt={view.prompt ?? view.name} />}
             {view.kind === "video" && <video src={bankFileUrl(view.id)} controls autoPlay playsInline />}
             {view.kind === "audio" && <audio src={bankFileUrl(view.id)} controls autoPlay />}
-            {view.kind === "model" && <p className="muted">{L("מודל 3D. הוסף אותו לצ׳אט ופתח בעורך התלת, או הורד.", "A 3D model. Add it to a chat and open it in the 3D editor, or download it.")}</p>}
+            {view.kind === "model" && (/\.(glb|gltf)$/i.test(view.name) || view.id.startsWith("a.")
+              ? <Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={bankFileUrl(view.id)} name={view.name} /></Suspense>
+              : <p className="muted">{L("מודל 3D. הוסף אותו לצ׳אט ופתח בעורך התלת, או הורד.", "A 3D model. Add it to a chat and open it in the 3D editor, or download it.")}</p>)}
             {view.prompt && <p dir="auto" className="muted">“{view.prompt}”</p>}
             <small className="muted">{size(view.size)} · {new Date(view.createdAt).toLocaleString(getLocale() === "he" ? "he-IL" : undefined)}{view.chat ? ` · ${view.chat.title}` : ""}</small>
             <div className="row">

@@ -3872,7 +3872,8 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .bank-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .bank-head h2 { margin: 0; font-size: 20px; }
 .bank-head input[type="search"] { width: min(320px, 100%); }
-.bank-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.bank-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.bank-filters .grow { flex: 1; }
 .bank-filters .chip-text.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .bank-day { font-size: 13px; font-weight: 500; color: var(--muted); margin: 8px 0 6px; }
 .bank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
