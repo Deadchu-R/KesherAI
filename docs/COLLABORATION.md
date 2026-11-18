@@ -1,6 +1,6 @@
 # Working together on a KesherAI project (design, 2026-11-17)
 
-Status: designed, not built. Roee's choices (2026-11-16): a short-lived invite link, a link for read or edit, and
+Status: designed and approved by Roee (2026-11-18), not built yet. Roee's choices (2026-11-16): a short-lived invite link, a link for read or edit, and
 long-term invites by email like Figma, with a page of who is approved, alerts on anything unusual, and a ban button.
 Every part optional; KesherAI works the same without it.
 
