@@ -1,3 +1,4 @@
+import { originalSections } from "../chat-report-text";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ModelSuggest } from "../ModelSuggest";
 import { api } from "../api";
@@ -12,10 +13,10 @@ type Voice = "coach" | "friend" | "roast";
 interface Quote { who: string; at: string; text: string }
 interface Person { name: string; messages: number; words: number; starts: number; replyMinutes?: number; questions: number; laughs: number; love: number; night: number; topEmojis: string[] }
 interface Numbers { messages: number; from: string; to: string; days: number; people: Person[]; hours: number[]; months: Array<{ month: string; messages: number }>; busiestDay?: { day: string; messages: number }; longestSilence?: { from: string; to: string; days: number }; longestStreak: number; topWords: string[] }
-interface Report { mixed?: boolean; headline: string; read: string; kinder?: string; moves?: { keep: string[]; stop: string[]; say: string[] }; askMore: string[]; wouldHelp: Array<{ ask: string; kind: "text" | "export" }>; scores: Array<{ name: string; value: string; measured: boolean; of5?: number }>; findings: Array<{ title: string; body: string; measured: boolean; quotes: Quote[] }>; turningPoint?: { when: string; what: string; quotes: Quote[] }; roles: Array<{ name: string; role: string }>; next: string }
+interface Report { mixed?: boolean; headline: string; read: string; kinder?: string; moves?: { keep: string[]; stop: string[]; say: string[] }; askMore: string[]; wouldHelp: Array<{ ask: string; kind: "text" | "export" }>; scores: Array<{ name: string; value: string; measured: boolean; of5?: number }>; findings: Array<{ title: string; body: string; measured: boolean; quotes: Quote[] }>; turningPoint?: { when: string; what: string; quotes: Quote[] }; roles: Array<{ name: string; role: string }>; next: string; story?: Array<{ title: string; body: string; quotes: Quote[] }> }
 /** A chat already uploaded (kept with the report made from it). */
 interface KnownChat { id: string; title: string; source: string; messages: number; from?: string; to?: string; people: number; createdAt: string }
-interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; step?: { key: ImportStepKey; detail?: string }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>; version?: number; origin?: "brandon"; hasChat?: boolean }
+interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; step?: { key: ImportStepKey; detail?: string }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>; version?: number; origin?: "brandon"; hasChat?: boolean; imported?: string }
 interface Item { id: string; title: string; kind: Kind; status: Stored["status"]; createdAt: string; messages: number }
 interface Body { source: "whatsapp" | "instagram"; title: string; text?: string; parts?: unknown[] }
 interface Peek { title: string; messages: number; from: string; to: string; people: Array<{ name: string; messages: number }> }
@@ -313,6 +314,33 @@ function awards(n: Numbers): Array<{ icon: string; title: string; who: string }>
   return out.slice(0, 6);
 }
 
+/** The full report (asked 2026-11-18): the original text of an imported report, or KesherAI's own long read, with a contents list. */
+function FullReport({ sections, bubbles, original }: { sections: Array<{ title: string; body: string; quotes: Quote[] }>; bubbles: (q: Quote[]) => ReactNode; original: boolean }) {
+  const words = sections.reduce((n, x) => n + x.body.split(/\s+/).length, 0);
+  const named = sections.filter((x) => x.title);
+  return (
+    <div className="cr-full w6">
+      <div className="cr-full-text">
+        <h3>📖 {L("הדוח המלא", "The full report")}</h3>
+        <p className="muted small">{original ? L("הטקסט המקורי של הדוח, כמו שנכתב ב-What Brandon Thinks", "The report's original text, as What Brandon Thinks wrote it") : L("הקריאה הארוכה של KesherAI, עם ציטוטים שנבדקו מול הצ'אט", "KesherAI's long read, with quotes checked against the chat")} · {named.length > 1 ? `${named.length} ${L("פרקים", "chapters")} · ` : ""}{L(`כ-${Math.max(1, Math.round(words / 200))} דקות קריאה`, `about ${Math.max(1, Math.round(words / 200))} minutes to read`)}</p>
+        {sections.map((x, i) => (
+          <section key={i} id={`cr-full-${i}`} className="cr-full-part">
+            {x.title && <h4 dir="auto">{x.title}</h4>}
+            {x.body.split(/\n{2,}/).map((para, j) => <p key={j} dir="auto">{para}</p>)}
+            {bubbles(x.quotes)}
+          </section>
+        ))}
+      </div>
+      {named.length > 1 && (
+        <nav className="cr-full-toc" aria-label={L("תוכן הדוח", "The report's contents")}>
+          <b>{L("בדוח הזה", "In this report")}</b>
+          {sections.map((x, i) => x.title && <button key={i} type="button" className="link" dir="auto" onClick={() => document.getElementById(`cr-full-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>{x.title}</button>)}
+        </nav>
+      )}
+    </div>
+  );
+}
+
 function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
   const [r, setR] = useState<Stored | null>(null);
   const [q, setQ] = useState("");
@@ -386,6 +414,9 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
       {rep?.kinder && <p className="cr-kinder" dir="auto">{L("ובקריאה רכה יותר: ", "Read more kindly: ")}{rep.kinder}</p>}
       </div>
     ) },
+    // KesherAI's own long read, and an imported report's original text (both, when the chat was added to an import).
+    { id: "full", name: ["📖 הדוח המלא", "📖 The full report"], has: !!rep?.story?.length, body: <FullReport sections={rep?.story ?? []} bubbles={bubbles} original={false} /> },
+    { id: "original", name: ["📜 הדוח של Brandon", "📜 Brandon's report"], has: !!r.imported, body: <FullReport sections={originalSections(r.imported ?? "")} bubbles={bubbles} original /> },
     { id: "numbers", name: ["המספרים", "The numbers"], has: n.messages > 0 || n.people.length > 1, body: <>
       {n.people.length > 1 && (
         <div className="cr-card lav w2">
@@ -485,6 +516,10 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
           <div className="muted small" dir="auto">{n.messages ? `${L("קרא", "Read")} ${n.messages.toLocaleString()} ${L("הודעות", "messages")} · ` : ""}{r.title}{(r.version ?? 1) > 1 ? ` · ${L("גרסה", "version")} ${r.version}` : ""}</div></div>
         <button type="button" className="ghost small" onClick={() => { if (confirm(L("למחוק את הדוח ואת העותק של הצ'אט?", "Delete the report and its copy of the chat?"))) void api(`/api/chat-reports/${id}`, { method: "DELETE" }).then(onGone); }}>{L("מחק", "Delete")}</button>
       </div>
+      {/* A new version being written (or one that went on by itself after a restart), over the one shown. */}
+      {rep && (r.status === "reading" || r.status === "writing") && (
+        <div className="card row cr-next" role="status"><span aria-hidden>⏳</span><span className="small grow">{r.status === "writing" ? L("כותב את הגרסה הבאה… (ממשיך גם אחרי הפעלה מחדש)", "Writing the next version… (it goes on after a restart too)") : L(`קורא חלק ${r.progress?.part ?? 1} מתוך ${r.progress?.parts ?? "?"} לגרסה הבאה… (ממשיך גם אחרי הפעלה מחדש)`, `Reading part ${r.progress?.part ?? 1} of ${r.progress?.parts ?? "?"} for the next version… (it goes on after a restart too)`)}</span></div>
+      )}
       {!all && chapters.length > 1 && (
         <nav className="cr-chapters" aria-label={L("פרקי הדוח", "The report's chapters")}>
           <div className="cr-segs" aria-hidden>{chapters.map((c, i) => <span key={c.id} className={i < at ? "done" : i === at ? "on" : ""} />)}</div>

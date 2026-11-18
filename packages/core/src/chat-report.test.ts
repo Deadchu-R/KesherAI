@@ -228,3 +228,48 @@ test("an ex: the story over time and what to take on, never a push back to them"
   assert.match(p, /Never advise getting back together or contacting the other person/);
   assert.doesNotMatch(reportPrompt({ kind: "couple", voice: "coach", lang: "he" }), /has ended/);
 });
+
+test("the full report: chapters of the long read, their quotes checked against the chat", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const long = "בבקרים היא פותחת את השיחה, כמעט תמיד באותן מילים, והוא עונה בתוך דקות. ".repeat(3);
+  const ask = async (system: string) => (system.includes("part of a chat")
+    ? JSON.stringify({ notes: ["Dana opens the mornings"], quotes: [{ who: "Dana", text: "בוקר טוב! מה שלומך?" }] })
+    : system.includes("full, long version")
+      ? JSON.stringify({ chapters: [{ title: "הבקרים", body: long, quotes: [{ who: "Dana", text: "בוקר טוב! מה שלומך?" }, { who: "Dana", text: "ציטוט שלא קיים בכלל בצ'אט הזה" }] }, { title: "קצר", body: "קצר מדי" }] })
+      : JSON.stringify({ headline: "h", read: "r", findings: [] }));
+  const r = await reports.start(chat(), { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, ask);
+  for (let i = 0; i < 100 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  const story = (await reports.get(r.id)).report?.story ?? [];
+  assert.equal(story.length, 1);
+  assert.equal(story[0]!.title, "הבקרים");
+  assert.equal(story[0]!.quotes.length, 1);
+});
+
+test("after a restart: a report cut off goes on from its kept notes, an import from the text it read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "chat-reports-"));
+  const first = new ChatReports(dir);
+  let parts = 0;
+  const hang = async (system: string, _user: string, signal?: AbortSignal) => {
+    if (system.includes("part of a chat")) {
+      parts++;
+      if (parts === 1) return JSON.stringify({ notes: ["first part"] });
+    }
+    // The restart: nothing answers any more.
+    return new Promise<string>((_ok, no) => signal?.addEventListener("abort", () => no(new Error("stopped"))));
+  };
+  const r = await first.start(chat(), { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, hang);
+  for (let i = 0; i < 100 && parts < 2; i++) await new Promise((x) => setTimeout(x, 20));
+  // A new KesherAI on the same folder, as after an update.
+  const again = new ChatReports(dir);
+  const seen: string[] = [];
+  const good = async (system: string, user: string) => {
+    if (system.includes("part of a chat")) { seen.push(user.slice(0, 20)); return JSON.stringify({ notes: ["n"] }); }
+    return JSON.stringify({ headline: "המשיך", read: "r", findings: [] });
+  };
+  assert.deepEqual(await again.resume(good), [r.id]);
+  for (let i = 0; i < 100 && (await again.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  assert.equal((await again.get(r.id)).report?.headline, "המשיך");
+  const total = (await again.get(r.id)).progress;
+  assert.equal(total, undefined);
+  assert.ok(seen.length < parts + 5, "the part read before the restart is not read again");
+});

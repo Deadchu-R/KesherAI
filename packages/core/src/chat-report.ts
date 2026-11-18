@@ -172,6 +172,8 @@ export interface ChatReport {
   askMore: string[];
   /** What would help read it better, from what is missing (a few words, or another export). */
   wouldHelp: Array<{ ask: string; kind: "text" | "export" }>;
+  /** The full report (What Brandon Thinks' long read): chapters of a few paragraphs each, with checked quotes. */
+  story?: Array<{ title: string; body: string; quotes: Quote[] }>;
 }
 
 const norm = (s: string) => s.normalize("NFKC").replace(/[‎‏"'״׳“”‘’]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -254,6 +256,35 @@ export function reportPrompt(o: { kind: ChatKind; voice: ReportVoice; lang: "he"
     "Names: write every person's name exactly as it appears in the chat, in its own script (never translated or spelled in another alphabet).",
     `Every text value in the JSON is in ${o.lang === "he" ? "Hebrew (only the quotes stay as written)" : "English (only the quotes and names stay as written)"}.`,
   ].join("\n");
+}
+
+/**
+ * What the model is told when writing the full report, after the short one: the long read, in chapters.
+ *
+ * @param o - The kind of chat, the voice, the language, who "I" am.
+ */
+export function storyPrompt(o: { kind: ChatKind; voice: ReportVoice; lang: "he" | "en"; me?: string }): string {
+  return [
+    `You write the full, long version of a report about a chat between ${KIND[o.kind]}, in the voice of ${VOICE[o.voice]}, in ${o.lang === "he" ? "Hebrew" : "English"}.${o.me ? ` Speak to ${o.me} as "you".` : ""}`,
+    "You get the exact numbers, the notes from reading the whole chat, and the short report already written. Write it as a long read in chapters, like a thoughtful magazine piece about these two (or these people): how it started, how they talk, what they give each other, where it is hard, the moments that changed it, and where it is going.",
+    'Answer with JSON only: {"chapters":[{"title":"a short chapter title","body":"2 to 4 paragraphs, separated by a blank line","quotes":[{"who":"exact sender name","text":"an exact line from the notes"}]}]}. 6 to 10 chapters, in the order of the story.',
+    "Use only the given numbers, never new ones. Every quote must be copied exactly from the notes. No therapy, no diagnosis, no predictions. Names exactly as in the chat.",
+  ].join("\n");
+}
+
+/**
+ * The full report's chapters from the model's answer, each quote checked against the chat.
+ *
+ * @param raw - The model's JSON.
+ * @param msgs - The chat's messages.
+ * @returns The chapters (none when the answer has none).
+ */
+export function checkStory(raw: Record<string, unknown> | undefined, msgs: PersonMessage[]): NonNullable<ChatReport["story"]> {
+  return arr(raw?.chapters).slice(0, 12).map((c) => {
+    const o = c as Record<string, unknown>;
+    const quotes = arr(o.quotes).map((q) => findQuote(msgs, str((q as { text?: unknown })?.text, 400), str((q as { who?: unknown })?.who, 80) || undefined)).filter((q): q is Quote => !!q).slice(0, 3);
+    return { title: str(o.title, 120), body: (typeof o.body === "string" ? o.body.replace(/[*_`#]/g, "").trim() : "").slice(0, 4000), quotes };
+  }).filter((c) => c.title && c.body.length > 40);
 }
 
 /** The first {...} object in a model's answer. */
@@ -553,8 +584,13 @@ export class ChatReports {
   private async write(r: StoredReport, msgs: PersonMessage[], ask: Ask, signal: AbortSignal): Promise<void> {
     try {
       const { parts, total } = chatParts(chatLines(msgs));
-      const notes: string[] = [];
-      for (let i = 0; i < parts.length; i++) {
+      // The notes of the parts read so far are kept beside the report, so a run cut off (KesherAI restarted, an update)
+      // goes on from the part it stopped at instead of reading 35,000 messages again.
+      const cacheFile = join(this.folder(r.id), "notes.json");
+      const key = `${r.version ?? 1}:${parts.length}:${total}`;
+      const cached = JSON.parse(await readFile(cacheFile, "utf8").catch(() => "{}")) as { key?: string; notes?: string[] };
+      const notes: string[] = cached.key === key && Array.isArray(cached.notes) ? cached.notes.slice(0, parts.length) : [];
+      for (let i = notes.length; i < parts.length; i++) {
         if (signal.aborted) return;
         r.progress = { part: i + 1, parts: parts.length, total };
         await this.put(r);
@@ -578,6 +614,7 @@ export class ChatReports {
           ...arr(j?.quotes).map((x) => `> ${str((x as { who?: unknown }).who, 60)}: "${str((x as { text?: unknown }).text, 300)}"`),
         ].filter((l) => l.length > 3);
         notes.push(`Part ${i + 1} (${parts[i]!.slice(1, 11)}…):\n${lines.join("\n")}`);
+        await writeFile(cacheFile, JSON.stringify({ key, notes })).catch(() => undefined);
       }
       if (signal.aborted) return;
       r.status = "writing";
@@ -603,9 +640,24 @@ export class ChatReports {
       // Some local models answer in English whatever they are told: once more, with the language first.
       if (raw && r.lang === "he" && mostlyLatin(raw) && !signal.aborted) raw = jsonOf(await ask(`Answer in Hebrew only (עברית).\n${reportPrompt(r)}`, user, signal)) ?? raw;
       if (!raw) throw new Error("The model did not write the report in the expected form; try again or pick another model.");
+      const short = checkReport(raw, msgs, r.numbers, r.lang);
+      // The full report (the long read in chapters) from the same notes; when the model cannot (its context, its
+      // form), the short report still stands.
+      let story: ChatReport["story"] = [];
+      for (const cap of [30_000, 15_000]) {
+        if (signal.aborted) return;
+        try {
+          story = checkStory(jsonOf(await ask(storyPrompt(r), `${userFor(cap)}\n\nThe short report:\n${JSON.stringify({ headline: short.headline, read: short.read, findings: short.findings.map((f) => ({ title: f.title, body: f.body })), turningPoint: short.turningPoint?.what, next: short.next })}`, signal)), msgs);
+          break;
+        } catch (err) {
+          if (signal.aborted) return;
+          if (!CONTEXT_FULL.test((err as Error).message)) break;
+        }
+      }
       if (r.report) (r.history ??= []).push(r.report);
-      r.report = checkReport(raw, msgs, r.numbers, r.lang);
+      r.report = { ...short, ...(story.length ? { story } : {}) };
       r.status = "done";
+      await rm(cacheFile, { force: true }).catch(() => undefined);
       delete r.progress;
       await this.put(r);
     } catch (e) {
@@ -689,6 +741,13 @@ export class ChatReports {
     const r: StoredReport = { id, title: "What Brandon Thinks", source: "whatsapp", kind: "friends", voice: "friend", lang, createdAt: new Date().toISOString(), status: "reading", step: { key: "read" }, numbers: chatNumbers({ source: "whatsapp", title: "", messages: [] }), followUps: [], version: 1, origin: "brandon", hasChat: false };
     await mkdir(this.folder(id), { recursive: true });
     await this.put(r);
+    this.runImport(r, source, ask);
+    return r;
+  }
+
+  /** Reads the report's text (from the source, or the copy kept) into this report, in the background. */
+  private runImport(r: StoredReport, source: (step: (key: ImportStep, detail?: string) => Promise<void>) => Promise<string>, ask: Ask): void {
+    const lang = r.lang;
     const step = async (key: ImportStep, detail?: string) => {
       r.step = { key, ...(detail ? { detail } : {}) };
       if (key === "write") r.status = "writing";
@@ -698,13 +757,15 @@ export class ChatReports {
       try {
         const text = await source(step);
         const body = text.replace(/\s+\n/g, "\n").trim().slice(0, 60_000);
+        // Kept, so an import cut off by a restart goes on by itself (resume), and the original shows in full.
+        await writeFile(join(this.folder(r.id), "import.txt"), body).catch(() => undefined);
         await step("read", String(body.length));
         if (body.length < 200) throw new Error(lang === "he" ? "מה שנקרא קצר מדי בשביל דוח. נסה PDF או הדבקת הטקסט." : "What was read is too short to be a report. Try a PDF or paste its text.");
         const done = await this.mapImport(body, lang, ask, async (part, parts) => {
           r.progress = { part, parts, total: body.length };
           await step(part > parts ? "write" : "parts");
         });
-        Object.assign(r, done, { status: "done", imported: body.slice(0, 20_000) });
+        Object.assign(r, done, { status: "done", imported: body });
         delete r.step;
         delete r.progress;
       } catch (e) {
@@ -714,9 +775,40 @@ export class ChatReports {
       }
       await this.put(r);
     })();
-    this.importing.set(id, run);
-    void run.finally(() => this.importing.delete(id));
-    return r;
+    this.importing.set(r.id, run);
+    void run.finally(() => this.importing.delete(r.id));
+  }
+
+  /**
+   * After a restart (an update, a crash): every report that was still being read or written goes on by itself —
+   * a chat report from the part it had reached (its notes are kept), an import from the text it had read.
+   *
+   * @param ask - The model.
+   * @returns The reports that went on.
+   */
+  async resume(ask: Ask): Promise<string[]> {
+    const out: string[] = [];
+    for (const id of await readdir(this.dir).catch(() => [] as string[])) {
+      const r = await this.get(id).catch(() => undefined);
+      // Also one marked as stopped by a restart before this existed (its words say so).
+      const cut = r?.status === "error" && /restarted|הופעל מחדש/.test(r.error ?? "");
+      if (!r || (r.status !== "reading" && r.status !== "writing" && !cut) || this.running.has(id) || this.importing.has(id)) continue;
+      if (cut) { r.status = r.hasChat === false ? "reading" : "writing"; delete r.error; await this.put(r); }
+      if (r.hasChat !== false) {
+        const chat = await this.chat(id).catch(() => undefined);
+        if (!chat) continue;
+        const stop = new AbortController();
+        this.running.set(id, stop);
+        void this.write(r, realMessages(chat), ask, stop.signal).finally(() => this.running.delete(id));
+        out.push(id);
+      } else {
+        const kept = await readFile(join(this.folder(id), "import.txt"), "utf8").catch(() => "");
+        if (!kept) continue;
+        this.runImport(r, async () => kept, ask);
+        out.push(id);
+      }
+    }
+    return out;
   }
 
   /** Reads an imported report's text into this report's form (in parts when it is long). */

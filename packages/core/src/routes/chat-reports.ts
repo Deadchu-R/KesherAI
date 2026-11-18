@@ -25,6 +25,8 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
     return chat;
   };
   const off = () => s.config.parts?.["chat-reports"] === false;
+  // Reports cut off by a restart (an update) go on by themselves, soon after start-up (the model loads on demand).
+  setTimeout(() => { if (!off()) void reports.resume(ask()).catch(() => undefined); }, 3000).unref();
 
   app.get("/api/chat-reports", async () => ({ reports: off() ? [] : await reports.list() }));
   /** The chats already uploaded, to start another report from one without uploading it again. */
