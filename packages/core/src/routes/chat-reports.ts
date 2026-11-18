@@ -60,6 +60,8 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
   });
   app.get<{ Params: { id: string } }>("/api/chat-reports/:id", async (req) => reports.live(req.params.id));
   // A report that failed (a context error, the model stopped): written again from the chat it has.
+  // A finished report's full report, written again from its kept notes (no new read of the chat).
+  app.post<{ Params: { id: string }; Body: { model?: string } }>("/api/chat-reports/:id/full", async (req) => reports.fullReport(req.params.id, ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   app.post<{ Params: { id: string }; Body: { model?: string } }>("/api/chat-reports/:id/retry", async (req) => reports.retry(req.params.id, ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   app.post<{ Params: { id: string }; Body: { question?: string; model?: string } }>("/api/chat-reports/:id/ask", async (req) => reports.followUp(req.params.id, String(req.body?.question ?? ""), ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   /** "Want to know more?": a few words, or another export of the chat (or the chat of an imported report). */

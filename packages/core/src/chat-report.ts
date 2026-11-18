@@ -687,25 +687,12 @@ export class ChatReports {
       const short = checkReport(raw, msgs, r.numbers, r.lang);
       // The full report (the long read in chapters) from the same notes; when the model cannot (its context, its
       // form), the short report still stands.
-      let story: ChatReport["story"] = [];
-      const shortText = JSON.stringify({ headline: short.headline, read: short.read, findings: short.findings.map((f) => ({ title: f.title, body: f.body })), turningPoint: short.turningPoint?.what, next: short.next });
-      // A long answer can stop in the middle (the model's length limit): the chapters it finished are kept
-      // (storyChapters), and an answer with none is asked again shorter (found on the PC: "רועי וליזי" v3 had no
-      // full report at all).
-      for (const [cap, extra] of [[30_000, ""], [15_000, ""], [15_000, "\nKeep it shorter this time: 5 or 6 chapters, each 2 short paragraphs."]] as const) {
-        if (signal.aborted) return;
-        try {
-          story = checkStory({ chapters: storyChapters(await ask(storyPrompt(r) + extra, `${userFor(cap)}\n\nThe short report:\n${shortText}`, signal)) }, msgs);
-          if (story.length >= 3) break;
-        } catch (err) {
-          if (signal.aborted) return;
-          if (!CONTEXT_FULL.test((err as Error).message)) continue;
-        }
-      }
+      const story = await this.story(r, short, userFor, msgs, ask, signal);
+      if (signal.aborted) return;
       if (r.report) (r.history ??= []).push(r.report);
       r.report = { ...short, ...(story.length ? { story } : {}) };
       r.status = "done";
-      await rm(cacheFile, { force: true }).catch(() => undefined);
+      // The notes stay beside the report (removed with it), so its full report can be written again from them alone.
       delete r.progress;
       await this.put(r);
     } catch (e) {
@@ -714,6 +701,72 @@ export class ChatReports {
       r.error = (e as Error).message.slice(0, 400);
       await this.put(r).catch(() => undefined);
     }
+  }
+
+  /**
+   * The full report's chapters from the notes and the short report: a long answer cut off keeps its finished chapters,
+   * and one with none is asked again shorter.
+   */
+  private async story(r: StoredReport, short: ChatReport, userFor: (cap: number) => string, msgs: PersonMessage[], ask: Ask, signal: AbortSignal): Promise<NonNullable<ChatReport["story"]>> {
+    let story: ChatReport["story"] = [];
+    const shortText = JSON.stringify({ headline: short.headline, read: short.read, findings: short.findings.map((f) => ({ title: f.title, body: f.body })), turningPoint: short.turningPoint?.what, next: short.next });
+    // A long answer can stop in the middle (the model's length limit): the chapters it finished are kept
+    // (storyChapters), and an answer with none is asked again shorter (found on the PC: "רועי וליזי" v3 had no
+    // full report at all).
+    for (const [cap, extra] of [[30_000, ""], [15_000, ""], [15_000, "\nKeep it shorter this time: 5 or 6 chapters, each 2 short paragraphs."]] as const) {
+      if (signal.aborted) return story;
+      try {
+        story = checkStory({ chapters: storyChapters(await ask(storyPrompt(r) + extra, `${userFor(cap)}\n\nThe short report:\n${shortText}`, signal)) }, msgs);
+        if (story.length >= 3) break;
+      } catch {
+        // A full context, or an answer that is not JSON: the next, shorter try.
+        if (signal.aborted) return story;
+      }
+    }
+    return story;
+  }
+
+  /**
+   * Writes (again) the full report of a finished report from the notes kept beside it, without reading the chat again
+   * (a full report that did not come the first time).
+   *
+   * @param id - The report.
+   * @param ask - The model.
+   * @returns The report, with its chapters.
+   */
+  async fullReport(id: string, ask: Ask): Promise<StoredReport> {
+    if (this.running.has(id)) throw Object.assign(new Error("The report is still being written."), { statusCode: 409 });
+    const r = await this.get(id);
+    if (r.status !== "done" || !r.report) throw Object.assign(new Error("Only a finished report has a full report to write."), { statusCode: 400 });
+    const cached = JSON.parse(await readFile(join(this.folder(id), "notes.json"), "utf8").catch(() => "{}")) as { notes?: string[] };
+    if (!Array.isArray(cached.notes) || !cached.notes.length) throw Object.assign(new Error("This report's reading notes were not kept (reports finished before 0.6.394). Add a note or another export to read it again."), { statusCode: 409 });
+    const chat = r.hasChat === false ? undefined : await this.chat(id).catch(() => undefined);
+    const msgs = chat ? realMessages(chat) : [];
+    const notes = cached.notes;
+    const userFor = (cap: number) => `Numbers (exact):\n${JSON.stringify(r.numbers)}\n\nNotes from reading the chat:\n${notes.join("\n\n").slice(0, cap)}`;
+    const stop = new AbortController();
+    this.running.set(id, stop);
+    r.status = "writing";
+    delete r.error;
+    await this.put(r);
+    void (async () => {
+      try {
+        const story = await this.story(r, r.report!, userFor, msgs, ask, stop.signal);
+        const fresh = await this.get(id);
+        fresh.status = "done";
+        if (fresh.report && story.length) fresh.report.story = story;
+        if (!story.length) fresh.error = "The model did not write the full report; try again or pick another model.";
+        await this.put(fresh);
+      } catch (e) {
+        const fresh = await this.get(id).catch(() => r);
+        fresh.status = "done";
+        fresh.error = (e as Error).message.slice(0, 400);
+        await this.put(fresh).catch(() => undefined);
+      } finally {
+        this.running.delete(id);
+      }
+    })();
+    return r;
   }
 
   /**

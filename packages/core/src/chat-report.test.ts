@@ -296,3 +296,23 @@ test("storyChapters keeps the chapters a cut-off answer finished", async () => {
   assert.equal(storyChapters('{"chapters":[{"title":"a","body":"b"}]}').length, 1);
   assert.equal(storyChapters("no json").length, 0);
 });
+
+test("a finished report keeps its notes, and its full report can be written again from them", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  let storyCalls = 0;
+  const ask = async (system: string) => {
+    if (system.includes("part of a chat")) return JSON.stringify({ notes: ["Dana opens the mornings"], quotes: [{ who: "Dana", text: "בוקר טוב! מה שלומך?" }] });
+    if (system.includes("full, long version")) {
+      storyCalls++;
+      // The first time the long answer stops before a chapter closes; later it comes whole.
+      return storyCalls <= 3 ? '{"chapters":[{"title":"נחתך' : JSON.stringify({ chapters: [1, 2, 3].map((n) => ({ title: `פרק ${n}`, body: "גוף ארוך מספיק כדי לעבור את הבדיקה של ארבעים תווים לפחות, בבקשה.", quotes: [] })) });
+    }
+    return JSON.stringify({ headline: "כותרת", read: "קצר.", findings: [], roles: [], next: "הלאה." });
+  };
+  const r = await reports.start(chat(), { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, ask);
+  for (let i = 0; i < 100 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  assert.equal((await reports.get(r.id)).report?.story, undefined);
+  await reports.fullReport(r.id, ask);
+  for (let i = 0; i < 100 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  assert.equal((await reports.get(r.id)).report?.story?.length, 3);
+});

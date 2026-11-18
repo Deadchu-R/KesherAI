@@ -508,6 +508,12 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
     { id: "more", name: ["עוד", "More"], has: !!rep && r.status === "done", body: <>
       {rep && r.status === "done" && (
         <div className="cr-card navy stack w6">
+          {!rep.story?.length && r.origin !== "brandon" && (
+            <div className="stack">
+              <p className="muted small" dir="auto">{r.error ?? L("לדוח הזה עוד אין דוח מלא (הקריאה הארוכה בפרקים).", "This report has no full report yet (the long read in chapters).")}</p>
+              <button type="button" className="primary" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => void run(() => api(`/api/chat-reports/${id}/full`, { method: "POST", body: {} }))}>{L("📖 כתוב את הדוח המלא", "📖 Write the full report")}</button>
+            </div>
+          )}
           <h3>{L("שאלות מנחות", "Guiding questions")}</h3>
           <p className="muted small">{L("כל שאלה כותבת עמוד המשך לדוח, מתוך הצ׳אט.", "Each question writes a follow-on page of the report, from the chat.")}</p>
           {rep.askMore.length > 0 && <div className="row wrap">{rep.askMore.map((x) => <button key={x} type="button" className="cr-ask" disabled={busy} onClick={() => void ask(x)} dir="auto">{x}</button>)}</div>}
