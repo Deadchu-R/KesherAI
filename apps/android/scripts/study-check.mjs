@@ -1,4 +1,4 @@
-/* global localStorage, document, process, console -- the functions passed to the page run in the browser; process and console are Node's */
+/* global localStorage, document, process, console, Touch, TouchEvent, setTimeout -- the functions passed to the page run in the browser; process and console are Node's */
 /**
  * A quick check of the phone app's own Study tab (no computer), at 390 px in Hebrew: the start guide, a course with a
  * lecture and an exam date (the plan shows), the file and photo buttons, "Ask the course" and its study mode. No page
@@ -97,6 +97,21 @@ await sec.locator("button", { hasText: "שאלי את הקורס" }).click();
 await pg.waitForTimeout(400);
 checks.ask = (await sec.locator("text=התשובות רק מההרצאות שלך").count()) > 0;
 checks.askVoice = (await sec.locator("button[aria-label='לשאול בקול']").count()) > 0 && (await pg.evaluate(() => document.documentElement.scrollWidth)) <= 390;
+// A sideways swipe moves between the tutor's modes (swipe-tabs.js): in Hebrew the finger moving right is "next".
+checks.swipeTabs = await pg.evaluate(async () => {
+  const list = [...document.querySelectorAll('[role="tablist"]')].find((l) => /השאלות שלי/.test(l.textContent));
+  const el = list?.nextElementSibling ?? list ?? document.body;
+  const mk = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: 400 });
+  el.dispatchEvent(new TouchEvent("touchstart", { touches: [mk(100)], changedTouches: [mk(100)], bubbles: true }));
+  await new Promise((ok) => setTimeout(ok, 120));
+  el.dispatchEvent(new TouchEvent("touchend", { touches: [], changedTouches: [mk(260)], bubbles: true }));
+  await new Promise((ok) => setTimeout(ok, 400));
+  const ok = [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].some((t) => /מצב תרגול/.test(t.textContent));
+  // Back to "My questions" for the steps after.
+  [...document.querySelectorAll('[role="tab"]')].find((t) => /השאלות שלי/.test(t.textContent))?.click();
+  await new Promise((ok2) => setTimeout(ok2, 300));
+  return ok;
+});
 await sec.locator("button", { hasText: "מצב תרגול" }).click();
 await pg.waitForTimeout(300);
 checks.studyMode = (await sec.locator("button", { hasText: "התחילי תרגול" }).count()) > 0;
