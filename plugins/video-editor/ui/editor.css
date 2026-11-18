@@ -1,0 +1,65 @@
+/* The same dark studio look as the image editor: neutral greys, one accent. */
+:root { --bg: #1d1e21; --well: #0f1012; --panel: #26272b; --panel-2: #2f3035; --line: #3a3c42; --text: #e6e7ea; --muted: #9b9fa8; --accent: #8fa2ff; --accent-ink: #0d1020; --clip: #8fa2ff; --cut: #ff6b6b; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+button, textarea { font: inherit; color: inherit; }
+button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { background: #393b41; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: 0.45; cursor: default; }
+textarea { width: 100%; background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical; }
+hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.grow { flex: 1; }
+.muted { color: var(--muted); }
+.small { font-size: 11.5px; }
+.mono { font-variant-numeric: tabular-nums; }
+.field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+
+/* Layout (design VideoEditorWorkspace): bar, viewer + inspector, timeline. */
+.app { display: grid; grid-template-rows: 42px 1fr 210px; height: 100%; }
+.top { display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid #111; }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.middle { display: flex; min-height: 0; }
+.viewer { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: var(--well); min-width: 0; }
+.viewer video { max-width: 100%; max-height: 100%; }
+.empty { position: absolute; color: var(--muted); padding: 20px; text-align: center; }
+.busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); font-size: 15px; }
+.inspector { width: 240px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); border-inline-start: 1px solid #111; overflow: auto; }
+.timeline { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--panel); border-top: 1px solid #111; min-height: 0; }
+.transport { display: flex; align-items: center; gap: 8px; }
+.overview { position: relative; height: 10px; border-radius: 4px; background: var(--panel-2); cursor: pointer; }
+.overview .window { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: #4a4f80; }
+.tracks { position: relative; flex: 1; overflow-x: auto; overflow-y: hidden; direction: ltr; scrollbar-width: thin; }
+.lane { display: flex; align-items: center; gap: 0; height: 56px; }
+.lab { position: sticky; left: 0; z-index: 2; width: 56px; flex: none; color: var(--muted); font-size: 11.5px; background: var(--panel); height: 100%; display: flex; align-items: center; }
+.clips { position: relative; height: 48px; flex: none; }
+.clip { position: absolute; top: 0; height: 48px; border-radius: 6px; background: var(--clip); color: var(--accent-ink); font-size: 11.5px; font-weight: 600; padding: 4px 8px; overflow: hidden; white-space: nowrap; cursor: pointer; border: 2px solid transparent; background-size: auto 100%; background-blend-mode: soft-light; }
+.clip.on { border-color: #fff; }
+.clip small { display: block; font-weight: 400; opacity: 0.75; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--cut); pointer-events: none; z-index: 3; }
+.hint { margin: 0; }
+.phonebar { display: none; }
+.status { position: fixed; bottom: 8px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; }
+.status.show { opacity: 1; }
+.status.error { border-color: var(--cut); color: #ffb3b3; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.keys td { padding: 3px 12px 3px 0; }
+.keys kbd { font: 12px ui-monospace, monospace; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+[hidden] { display: none !important; }
+
+/* Phone (design VideoEditorWorkspacePhone, after CapCut mobile): viewer, timeline, tools at the bottom. */
+@media (max-width: 760px) {
+  .app { grid-template-rows: 46px minmax(180px, 40vh) 1fr 56px; }
+  .inspector, .hint, #export, #keysBtn { display: none; }
+  .top #toChat { padding: 5px 8px; }
+  .timeline { border-top: 0; }
+  .lane { height: 64px; }
+  .clips, .clip { height: 56px; }
+  .phonebar { display: flex; background: var(--panel); border-top: 1px solid #111; }
+  .phonebar button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }
+  .phonebar button span { font-size: 18px; color: var(--text); }
+  .phonebar b { font-weight: 500; }
+}

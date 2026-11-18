@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video editor</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+      <button id="redo" title="Redo (Ctrl+Y)">↷</button>
+      <b class="grow name" id="name">Video editor</b>
+      <button id="keysBtn" title="Shortcuts (?)">?</button>
+      <button id="export" data-t="export">Export</button>
+      <button id="toChat" class="primary" data-t="toChat">Send to the chat</button>
+    </header>
+
+    <main class="middle">
+      <section class="viewer">
+        <video id="video" playsinline preload="auto"></video>
+        <div class="empty" id="empty" data-t="empty">Open a video from a chat: "Edit in the video editor" on its preview.</div>
+        <div class="busy" id="busy" hidden><span id="busyText">…</span></div>
+      </section>
+      <aside class="inspector">
+        <b data-t="clipH">The chosen clip</b>
+        <div id="clipInfo" class="muted"></div>
+        <div class="row"><button id="splitBtn" data-t="split">✂ Split</button><button id="delBtn" data-t="delete">⌫ Delete</button></div>
+        <div class="row"><button id="trimStart" data-t="trimStart">⇤ Trim start</button><button id="trimEnd" data-t="trimEnd">Trim end ⇥</button></div>
+        <div class="row"><button id="left" data-t="moveLeft">◀ Move</button><button id="right" data-t="moveRight">Move ▶</button></div>
+        <hr />
+        <b data-t="soonH">Coming next</b>
+        <span class="muted small" data-t="soon">The transcript (delete words to cut), captions from speech, and "What to do here?" with the video model.</span>
+      </aside>
+    </main>
+
+    <section class="timeline" id="timeline">
+      <div class="transport">
+        <button id="play" title="Play (Space)">▶</button>
+        <span id="time" class="mono" dir="ltr">0:00.0 / 0:00.0</span>
+        <span class="grow"></span>
+        <button id="zoomOut" title="Zoom out (−)">−</button>
+        <button id="zoomIn" title="Zoom in (+)">+</button>
+      </div>
+      <div class="overview" id="overview"><div class="window" id="window"></div></div>
+      <div class="tracks" id="tracks">
+        <div class="lane"><span class="lab" data-t="videoTrack">Video</span><div class="clips" id="clips"></div></div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+      <p class="hint muted small" data-t="hint">Space play · J/K/L · S split · Q/W trim · Delete · the main track closes gaps</p>
+    </section>
+
+    <!-- Phone: the tools at the bottom, as CapCut -->
+    <nav class="phonebar" aria-label="Tools">
+      <button data-do="split"><span>✂</span><b data-t="splitS">Split</b></button>
+      <button data-do="trimStart"><span>⇤</span><b data-t="trimS">Trim</b></button>
+      <button data-do="trimEnd"><span>⇥</span><b data-t="trimE">Trim</b></button>
+      <button data-do="delete"><span>⌫</span><b data-t="deleteS">Delete</b></button>
+      <button data-do="play"><span>▶</span><b data-t="playS">Play</b></button>
+    </nav>
+  </div>
+
+  <dialog id="chatDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="toChatH">Send to the chat</strong>
+      <span class="muted" id="chatSummary"></span>
+      <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <dialog id="keysDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="keysH">Shortcuts (as in Premiere and CapCut)</strong>
+      <table class="keys" id="keysTable"></table>
+      <div class="row"><span class="grow"></span><button value="ok" class="primary" data-t="close">Close</button></div>
+    </form>
+  </dialog>
+  <footer class="status" id="msg" role="status"></footer>
+
+  <script src="kesher.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>

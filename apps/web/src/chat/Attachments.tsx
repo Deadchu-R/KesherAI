@@ -67,15 +67,16 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
 }
 
 /**
- * "Edit" on a chat's picture: opens it in the image editor (a plugin page) as a tab, which can send it back to the chat.
- * Shown only when the image editor is installed.
+ * "Edit" on a chat's picture or video: opens it in the image or video editor (a plugin page) as a tab, which can send
+ * the result back to the chat. Shown only when that editor is installed.
  */
-function EditPicture({ convId, path }: { convId: string; path: string }) {
+function EditIn({ convId, path, kind }: { convId: string; path: string; kind: "image" | "video" }) {
   const { pages } = usePluginUi();
-  const editor = pages.find((p) => p.pluginId === "image-editor" && p.uses?.includes("image"));
+  const id = kind === "image" ? "image-editor" : "video-editor";
+  const editor = pages.find((p) => p.pluginId === id && p.uses?.includes(kind));
   if (!editor) return null;
   const href = `#/p/${editor.pluginId}/${editor.id}?c=${encodeURIComponent(convId)}&f=${encodeURIComponent(path)}`;
-  return <a className="btn attach-edit" href={href}><LineIcon name="pencil" size={15} /> {L("עריכה בעורך התמונות", "Edit in the image editor")}</a>;
+  return <a className="btn attach-edit" href={href}><LineIcon name="pencil" size={15} /> {kind === "image" ? L("עריכה בעורך התמונות", "Edit in the image editor") : L("עריכה בעורך הווידאו", "Edit in the video editor")}</a>;
 }
 
 /** Files shown as a preview rather than as text: Office files, PDF and pictures (the Workspace opens these so). */
@@ -140,9 +141,9 @@ export function FilePreview({ convId, path, reloadKey }: { convId: string; path:
       {p?.kind === "html" && <iframe className="attach-frame" sandbox="" srcDoc={framed(p.html)} title={p.name} />}
       {p?.kind === "text" && <pre className="attach-text" dir="auto">{p.text}</pre>}
       {p?.kind === "image" && <img className="attach-img" src={download} alt={p.name} />}
-      {p?.kind === "image" && <EditPicture convId={convId} path={file} />}
+      {p?.kind === "image" && <EditIn convId={convId} path={file} kind="image" />}
       {p?.kind === "model" && <Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={download} name={p.name} /></Suspense>}
-      {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <Media kind="video" className="attach-img" src={download} controls preload="metadata" />}
+      {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <><Media kind="video" className="attach-img" src={download} controls preload="metadata" /><EditIn convId={convId} path={file} kind="video" /></>}
       {p?.kind === "none" && /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <Media kind="audio" src={download} controls preload="metadata" style={{ width: "100%" }} />}
       {p?.kind === "none" && !/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <p className="muted">{L("אין תצוגה מקדימה לסוג הקובץ הזה. אפשר להוריד אותו.", "No preview for this kind of file. You can download it.")}</p>}
     </div>

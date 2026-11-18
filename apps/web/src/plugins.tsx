@@ -129,7 +129,23 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             if (!x.ok) throw new Error(`The file could not be read (${x.status}).`);
             return x.blob();
           });
-          return { conversationId: input.conversationId, path: input.path, name: input.path.split(/[\\/]/).pop() ?? "", data: await dataUrl(blob) };
+          const name = input.path.split(/[\\/]/).pop() ?? "";
+          // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
+          if (/\.(mp4|webm|mov|m4v|mkv)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer() };
+          return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
+        }
+        // The video editor's export: the kept stretches of the video the page was opened with, as a new file in that
+        // chat's folder (cut by FFmpeg on the computer); with `send`, attached to the chat with an optional message.
+        case "video.cut": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const { path } = await api<{ path: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}) } });
+          if (p.send) {
+            const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
+            await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]` } });
+            location.hash = `#/c/${input.conversationId}`;
+          }
+          return { path };
         }
         // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
         case "chat.sendFile": {

@@ -1,10 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { basename, extname, join, relative, sep } from "node:path";
 import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
+import { ensureFfmpeg } from "../ffmpeg.js";
+import { checkSegments, cutVideo } from "../video-cut.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
 const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "build", ".next", ".cache"]);
@@ -56,6 +59,35 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     return { folder: root, files: await listFiles(root) };
+  });
+
+  /**
+   * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
+   * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    let full: string;
+    let segments;
+    try {
+      full = await resolveInWorkspace(root, req.body?.path ?? "");
+      segments = checkSegments(req.body?.segments);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    if (!/\.(mp4|webm|mov|m4v|mkv)$/i.test(full) || !(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "Video not found" });
+    const dir = join(root, "shared");
+    await mkdir(dir, { recursive: true });
+    const base = (String(req.body?.name ?? basename(full).replace(/\.[^.]+$/, "") + "-edited").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 100) || "edited").replace(/\.mp4$/i, "");
+    let out = join(dir, `${base}.mp4`);
+    for (let i = 2; existsSync(out); i++) out = join(dir, `${base} (${i}).mp4`);
+    try {
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments);
+    } catch (err) {
+      return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
+    }
+    return { path: relative(root, out).split(sep).join("/") };
   });
 
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>("/api/conversations/:id/files/download", async (req, reply) => {

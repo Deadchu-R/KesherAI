@@ -22,8 +22,9 @@ export const PluginPermissionSchema = z.enum(["network", "filesystem", "shell"])
  * - `chat`: the chat model (always allowed, as in API version 1).
  * - `image`: make and edit pictures (with a mask), and enlarge them.
  * - `speech`: speech to text and reading text aloud.
+ * - `video`: open a chat's video ("Edit in the video editor") and export a cut of it back to that chat.
  */
-export const PluginUseSchema = z.enum(["chat", "image", "speech"]);
+export const PluginUseSchema = z.enum(["chat", "image", "speech", "video"]);
 
 /** One permission; see {@link PluginPermissionSchema}. */
 export type PluginPermission = z.infer<typeof PluginPermissionSchema>;

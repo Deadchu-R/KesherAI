@@ -163,7 +163,8 @@ Pages and panels run in a **sandboxed frame**: their scripts run, but they canno
 | `conversation` | – | panels only: `{ title, messages }` of the open conversation |
 | `insertPrompt` | `{ text }` | panels only: puts text in the message box |
 | `toast` | `{ text }` | shows a short message |
-| `editor.input` | – | `uses: image`, pages only · the chat picture the page was opened with ("Edit in the image editor" on a chat's picture, `#/p/<plugin>/<page>?c=<chat>&f=<file>`): `{ conversationId, path, name, data }`, or `null` |
+| `editor.input` | – | `uses: image` or `video`, pages only · the chat file the page was opened with ("Edit in the image/video editor" on a chat's picture or video, `#/p/<plugin>/<page>?c=<chat>&f=<file>`): a picture as `{ conversationId, path, name, data }` (a data URL), a video as `{ …, type, bytes }` (an ArrayBuffer), or `null` |
+| `video.cut` | `{ segments: [{ from, to }], send?, text?, name? }` | `uses: video`, only after `editor.input` gave a video · keeps those stretches (seconds) in order, cut by FFmpeg on the computer into a new .mp4 in the chat's folder; with `send`, attaches it to the chat · `{ path }` |
 | `chat.sendFile` | `{ name, data, text? }` | only after `editor.input` gave a picture · attaches the file (`data:` URL, up to 50 MB) to that same chat with an optional message, sends it and goes to the chat |
 | `image.generate` | `{ prompt, width?, height?, steps?, seed?, model? }` | `uses: image` · the pictures, as `data:` URLs (default: the user's picture model) |
 | `image.edit` | `{ prompt, image, mask?, strength? }` | `uses: image` · edits a picture (`data:` URLs); with a mask, only the white part changes |
