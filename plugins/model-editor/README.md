@@ -13,6 +13,7 @@ and Meshy's studio (docs/RESEARCH_LOG.md → "The 3D editor's screen"; design Mo
 - **Textures** (Maya's PSD Network, Blender's Edit Externally): the chosen part's base colour texture as a thumbnail;
   *Edit in the image editor* or *New texture* hands it to the image editor with the part's UV layout as a guide layer
   (never saved), and the model as a working copy; *Back to the 3D model* there brings the picture into the same part.
+- **Choose by click** (Blender's Select Linked by angle): a click picks the faces under it and spreads until the surface turns more than the angle (Shift adds); *Separate* makes them a part of their own.
 - **Split into parts** (Blender's Separate): by loose pieces (triangles that touch nothing else) or by material, so each
   piece can get its own texture. By meaning (seat, leg, handle) needs a 3D part-segmentation model; it says so for now.
 - **Modifiers** (3ds Max's stack, Blender's modifiers): Mirror (an axis), Array (an axis, a count, a gap) and Smooth

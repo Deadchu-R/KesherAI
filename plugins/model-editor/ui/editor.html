@@ -70,6 +70,9 @@
         <hr />
         <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button><button id="dup" data-t="dup">Duplicate</button><button id="del" data-t="del">Delete</button></div>
         <!-- Split a part into parts (Blender's Separate: by loose parts, by material), to texture each on its own -->
+        <!-- Choose faces by a click (Blender's Select Linked, delimited by the angle), then Separate them into a part -->
+        <div class="row"><button id="pickFaces" data-t="pickFaces">🎯 Choose by click</button><label class="row small"><span data-t="angle">Angle</span> <input type="range" id="pickAngle" min="5" max="90" value="30" style="width:80px" /></label></div>
+        <div class="row" id="pickRow" hidden><span class="muted small" id="pickInfo"></span><button id="separate" class="primary" data-t="separate">Separate</button></div>
         <div class="row"><select id="split"><option value="" data-t="splitH">✂ Split into parts…</option><option value="loose" data-t="sLoose">By loose pieces</option><option value="material" data-t="sMaterial">By material</option><option value="ai" data-t="sAi">By meaning (AI)…</option></select></div>
         <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
       </aside>

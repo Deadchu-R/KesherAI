@@ -21,6 +21,7 @@ const HE = {
   texH: "טקסטורה (צבע בסיס)", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   splitAi: "חלוקה לפי משמעות (רגל, מושב, ידית) צריכה מודל חלוקה תלת ממדי במחשב (PartField / P3-SAM). הוא עוד לא מותקן, אז בינתיים: 'לפי חלקים נפרדים' מפריד כל חתיכה שלא נוגעת באחרת.", piece: "חתיכה",
+  pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
   modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
 };
@@ -237,7 +238,8 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   const r = renderer.domElement.getBoundingClientRect();
   const ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
-  const hit = ray.intersectObjects(meshes.filter((p) => p.mesh.visible).map((p) => p.mesh), false)[0];
+  const hit = ray.intersectObjects(meshes.filter((p) => p.mesh.visible && (!picking || !isGenerated(p.mesh))).map((p) => p.mesh), false)[0];
+  if (picking) { if (hit && hit.faceIndex !== undefined) pickAt(hit.object, hit.faceIndex, e.shiftKey); else { picked = null; showPicked(); } return; }
   let o = hit?.object ?? null;
   while (o && o.parent && (o.userData.generated || o.parent.userData.generated)) o = o.parent;
   if (o?.name === "⚙ modifiers") o = o.parent;
@@ -472,6 +474,85 @@ function splitChosen(how) {
   msg(he ? HE.splitDone(groups.length) : `Split into ${groups.length} parts`);
 }
 $("split").onchange = () => { const how = $("split").value; $("split").value = ""; if (how) splitChosen(how); };
+
+// ---------- choose by click: the faces linked under the click, until the surface turns (Blender's Select Linked) ----------
+let picking = false;
+let picked = null; // { mesh, tris: Set of triangle starts }
+let pickOverlay = null;
+/** Each triangle's neighbours across a shared edge (by position, so UV seams still join). */
+function neighbours(geo) {
+  if (geo.userData.nb) return geo.userData.nb;
+  const pos = geo.attributes.position, idx = geo.index, n = idx ? idx.count : pos.count;
+  const key = (k) => `${pos.getX(k).toFixed(5)},${pos.getY(k).toFixed(5)},${pos.getZ(k).toFixed(5)}`;
+  const vid = (i) => key(idx ? idx.getX(i) : i);
+  const edges = new Map(), nb = new Map(), normal = new Map();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const at = (i, v) => { const k = idx ? idx.getX(i) : i; return v.set(pos.getX(k), pos.getY(k), pos.getZ(k)); };
+  for (let t = 0; t + 2 < n; t += 3) {
+    normal.set(t, new THREE.Triangle(at(t, a), at(t + 1, b), at(t + 2, c)).getNormal(new THREE.Vector3()));
+    nb.set(t, []);
+    const v = [vid(t), vid(t + 1), vid(t + 2)];
+    for (const [x, y] of [[v[0], v[1]], [v[1], v[2]], [v[2], v[0]]]) {
+      const e = x < y ? `${x}|${y}` : `${y}|${x}`;
+      if (!edges.has(e)) edges.set(e, []);
+      edges.get(e).push(t);
+    }
+  }
+  for (const ts of edges.values()) for (const t of ts) for (const u of ts) if (t !== u) nb.get(t).push(u);
+  geo.userData.nb = { nb, normal };
+  return geo.userData.nb;
+}
+function pickAt(mesh, faceIndex, add) {
+  const { nb, normal } = neighbours(mesh.geometry);
+  const start = faceIndex * 3, limit = Math.cos(THREE.MathUtils.degToRad(Number($("pickAngle").value)));
+  const set = add && picked?.mesh === mesh ? picked.tris : new Set();
+  const queue = [start];
+  set.add(start);
+  while (queue.length) {
+    const t = queue.pop();
+    for (const u of nb.get(t) ?? []) if (!set.has(u) && normal.get(t).dot(normal.get(u)) >= limit) { set.add(u); queue.push(u); }
+  }
+  picked = { mesh, tris: set };
+  showPicked();
+}
+function showPicked() {
+  pickOverlay?.removeFromParent();
+  pickOverlay = null;
+  $("pickRow").hidden = !picked;
+  if (!picked) return;
+  pickOverlay = new THREE.Mesh(subGeometry(picked.mesh.geometry, [...picked.tris]), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.55, depthTest: false }));
+  pickOverlay.userData.generated = true;
+  picked.mesh.add(pickOverlay);
+  $("pickInfo").textContent = he ? HE.picked(picked.tris.size) : `${picked.tris.size} triangles chosen`;
+}
+$("pickFaces").onclick = () => {
+  picking = !picking;
+  $("pickFaces").classList.toggle("on", picking);
+  if (picking) msg(T("pickHint", "Click the model: the choice spreads until a sharp corner. Shift adds.")); else { picked = null; showPicked(); }
+};
+/** The chosen faces become a part of their own (Blender's Separate → Selection), the rest stays. */
+$("separate").onclick = () => {
+  if (!picked) return;
+  const { mesh, tris } = picked;
+  const all = [];
+  const n = mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.attributes.position.count;
+  for (let t = 0; t + 2 < n; t += 3) all.push(t);
+  const rest = all.filter((t) => !tris.has(t));
+  if (!rest.length) return msg(T("splitNone", "This part is one piece already"));
+  remember();
+  picked = null; showPicked();
+  const part = new THREE.Mesh(subGeometry(mesh.geometry, [...tris]), [].concat(mesh.material)[0].clone());
+  part.name = `${label(mesh)} · ${T("piece", "piece")}`;
+  part.position.copy(mesh.position); part.quaternion.copy(mesh.quaternion); part.scale.copy(mesh.scale);
+  const keep = new THREE.Mesh(subGeometry(mesh.geometry, rest), [].concat(mesh.material)[0]);
+  keep.name = label(mesh);
+  keep.position.copy(mesh.position); keep.quaternion.copy(mesh.quaternion); keep.scale.copy(mesh.scale);
+  const parent = mesh.parent;
+  parent.add(keep, part);
+  mesh.removeFromParent();
+  rebuild(); choose(part); stats();
+  msg(T("separated", "The choice became a part of its own"));
+};
 
 // ---------- duplicate and delete ----------
 function duplicate() {
