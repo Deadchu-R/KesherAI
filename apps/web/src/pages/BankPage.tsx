@@ -27,6 +27,15 @@ const dayOf = (at: string) => {
   return d.toLocaleDateString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "long", year: "numeric" });
 };
 
+/** The editor page for a kind, opened on a chat's file (as "Edit in…" under a chat's file). */
+const EDITOR: Record<Kind, string> = { image: "image-editor", video: "video-editor", audio: "sound-editor", model: "model-editor" };
+const editorHref = (k: Kind, chatId: string, path: string) => `#/p/${EDITOR[k]}/editor?c=${encodeURIComponent(chatId)}&f=${encodeURIComponent(path)}`;
+/** The path in its chat of a bank id `f.<chat>.<path in base64url>`. */
+const chatPathOf = (id: string) => {
+  const b = id.split(".").slice(2).join(".").replace(/-/g, "+").replace(/_/g, "/");
+  try { return new TextDecoder().decode(Uint8Array.from(atob(b + "=".repeat((4 - (b.length % 4)) % 4)), (c) => c.charCodeAt(0))); } catch { return ""; }
+};
+
 /** A card's picture: the image itself, a video's first frame, or the kind's icon. */
 function Thumb({ it }: { it: BankItem }) {
   if (it.kind === "image") return <img src={bankFileUrl(it.id)} alt="" loading="lazy" />;
@@ -124,6 +133,12 @@ export function BankPage() {
     }
   };
 
+  /** A generated file (not in any chat) opens in its editor after it is copied into the chosen chat. */
+  const editIn = async (it: BankItem, chatId: string) => {
+    if (!chatId) return;
+    const r = await api<{ paths: string[] }>("/api/bank/copy", { method: "POST", body: { ids: [it.id], conversationId: chatId } }).catch((e: Error) => (toast(e.message), undefined));
+    if (r?.paths[0]) location.hash = editorHref(it.kind, chatId, r.paths[0]);
+  };
   const card = (it: BankItem, note?: string) => (
     <div key={it.id} className={`bank-card${sel.has(it.id) ? " sel" : ""}`}>
       <button type="button" className="bank-thumb" onClick={() => setView(it)} aria-label={L(`תצוגה של ${it.name}`, `Preview ${it.name}`)}><Thumb it={it} /></button>
@@ -207,6 +222,12 @@ export function BankPage() {
             <small className="muted">{size(view.size)} · {new Date(view.createdAt).toLocaleString(getLocale() === "he" ? "he-IL" : undefined)}{view.chat ? ` · ${view.chat.title}` : ""}</small>
             <div className="row">
               {view.chat && <a className="button" href={`#/c/${view.chat.id}`}>{L("פתח את הצ׳אט", "Open the chat")}</a>}
+              {view.chat
+                ? <a className="button" href={editorHref(view.kind, view.chat.id, chatPathOf(view.id))}>✎ {L("ערוך בעורך", "Edit in the editor")}</a>
+                : <select value="" onChange={(e) => void editIn(view, e.target.value)} aria-label={L("ערוך בעורך, בצ׳אט…", "Edit in the editor, in a chat…")}>
+                  <option value="">✎ {L("ערוך בעורך, בצ׳אט…", "Edit in the editor, in a chat…")}</option>
+                  {chats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                </select>}
               <a className="button" href={bankFileUrl(view.id)} download>{L("⬇ הורד", "⬇ Download")}</a>
               <span className="grow" />
               <button type="button" className="danger" onClick={() => { const id = view.id; setView(null); void remove([id]); }}>{L("🗑 מחק", "🗑 Delete")}</button>
