@@ -55,12 +55,24 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .transcript time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
 .transcript span { flex: 1; }
 .transcript button { padding: 0 6px; flex: none; }
+.rec span { color: #ff6b6b; }
+.rec.on { background: #ff6b6b; color: #121213; border-color: #ff6b6b; }
+.rec.on span { color: #121213; }
+dialog.wide { width: min(860px, calc(100vw - 24px)); }
+.roll { width: 100%; height: 170px; background: var(--well); border-radius: 8px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.gallery button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 10px; font-size: 12px; }
+.gallery button b { font-size: 20px; font-weight: 400; }
+.gallery button.on { border: 2px solid var(--accent); background: #2b3050; }
+input[type="number"] { width: 64px; background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; color: inherit; }
+select { background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; color: inherit; }
 [hidden] { display: none !important; }
 
 /* Phone (after Ferrite and CapCut): the waveform large, tools at the bottom, the transcript as a sheet. */
 @media (max-width: 760px) {
   .app { grid-template-rows: 46px 1fr 56px; }
-  .side, .hint, #export, #keysBtn { display: none; }
+  .side, .hint, #export, #keysBtn, .rec b { display: none; }
+  .gallery { grid-template-columns: repeat(3, 1fr); }
   .app.sheet .side { display: flex; position: fixed; inset-inline: 0; bottom: 56px; width: auto; max-height: 60vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
   .canvas-wrap { min-height: 260px; }
   .phonebar { display: flex; background: var(--panel); border-top: 1px solid #111; }

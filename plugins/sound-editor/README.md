@@ -12,8 +12,20 @@ A sound editor that runs inside KesherAI as an app plugin, laid out after Auditi
   Ctrl+Y, `+`/`−` zoom, ←/→ move the playhead a second, `?` shows them all.
 - **Transcript:** *Transcribe* runs whisper on your computer; each line shows its time, a tap selects it, ✂ cuts it, and
   *Remove long silences* cuts the pauses over a second.
+- **Record** (● or R): four clicks to count in, then the microphone.
+- **To an instrument…**: the notes of a hum, a whistle or a sung line are found in the page (YIN pitch tracking, no
+  model), shown in a piano roll, moved to the key (found by itself) and on the beat if you like, an octave up or down,
+  and played by an instrument you pick: piano, acoustic or electric guitar, bass, violin, cello, strings, trumpet,
+  saxophone, flute, clarinet, choir, synth; or a beatbox becomes drums (kick, snare and hat, synthesized). Listen first,
+  then replace the stretch with it or mix it over the sound.
+- **From the video editor:** double-click its sound track; *Back to the video* brings the new sound there.
 - **Export / Send to the chat:** a WAV made in the page (16-bit), downloaded or attached to the same chat.
 
 It talks to KesherAI only through `window.kesher` (`ui/kesher.js`): `editor.input` (the chat's sound, as bytes),
-`sound.transcript` and `chat.sendFile`. Next: clean-up (noise, echo) with a strength and A/B, loudness for a target,
-stems for music, and "fix this line in my voice".
+`sound.transcript` and `chat.sendFile`. Next: timbre transfer (DDSP) that keeps the hum's expression, chords with Basic
+Pitch, a backing track from the music model, voices (a line in another voice), clean-up (noise, echo), loudness for a
+target, and stems for music.
+
+**Credits:** the instrument samples (`ui/instruments/`) are from the FluidR3 General MIDI SoundFont by Frank Wen, as
+rendered per note by gleitz/midi-js-soundfonts, under the Creative Commons Attribution 3.0 licence; every third note is
+kept and the ones between are pitched from it.

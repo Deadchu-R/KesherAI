@@ -12,6 +12,7 @@
       <button id="undo" title="Undo (Ctrl+Z)">↶</button>
       <button id="redo" title="Redo (Ctrl+Y)">↷</button>
       <b class="grow name" id="name">Sound editor</b>
+      <button id="rec" class="rec" title="Record (R)"><span>●</span> <b data-t="rec">Record</b></button>
       <button id="keysBtn" title="Shortcuts (?)">?</button>
       <button id="export" data-t="export">Export WAV</button>
       <button id="toChat" class="primary" data-t="toChat">Send to the chat</button>
@@ -40,6 +41,7 @@
           <button id="louder" data-t="louder">+3 dB</button>
           <button id="quieter" data-t="quieter">−3 dB</button>
           <button id="normalize" data-t="normalize">Normalize</button>
+          <button id="toInst" class="primary" data-t="toInst">🎻 To an instrument…</button>
         </div>
         <p class="hint muted small" data-t="hint">Drag to select · Space play · Delete cut · Ctrl+A all · Esc let go</p>
       </section>
@@ -56,6 +58,7 @@
       <button data-do="cut"><span>✂</span><b data-t="cutS">Cut</b></button>
       <button data-do="fadeIn"><span>◢</span><b data-t="fadeS">Fade</b></button>
       <button data-do="louder"><span>🔊</span><b data-t="volS">Louder</b></button>
+      <button data-do="inst"><span>🎻</span><b data-t="instS">Instrument</b></button>
       <button data-do="words"><span>📝</span><b data-t="wordsS">Words</b></button>
     </nav>
   </div>
@@ -66,6 +69,29 @@
       <span class="muted" id="chatSummary"></span>
       <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <!-- A hum, a whistle or a beatbox → an instrument (design HumToInstrument) -->
+  <dialog id="instDialog" class="wide">
+    <form method="dialog" class="stack">
+      <div class="row"><strong class="grow" data-t="instH">To an instrument</strong><span class="muted" id="instFound"></span></div>
+      <canvas id="roll" class="roll"></canvas>
+      <div class="row">
+        <label class="row"><input type="checkbox" id="snapKey" checked /> <span id="keyLabel" data-t="snapKey">To the key</span></label>
+        <label class="row"><input type="checkbox" id="snapBeat" /> <span data-t="snapBeat">On the beat</span></label>
+        <label class="row"><input type="number" id="bpm" value="100" min="40" max="220" /> BPM</label>
+        <label class="row"><span data-t="octave">Octave</span> <select id="octave"><option value="-24">−2</option><option value="-12">−1</option><option value="0" selected>0</option><option value="12">+1</option><option value="24">+2</option></select></label>
+      </div>
+      <div class="gallery" id="gallery"></div>
+      <div class="row">
+        <button type="button" id="instPreview">▶ <span data-t="listen">Listen</span></button>
+        <label class="row"><span data-t="origVol">The original</span> <input type="range" id="origVol" min="0" max="100" value="0" /></label>
+        <span class="grow"></span>
+        <button value="cancel" data-t="cancel">Cancel</button>
+        <button type="button" id="instMix" data-t="instMix">Mix over the sound</button>
+        <button type="button" id="instReplace" class="primary" data-t="instReplace">Replace with the instrument</button>
+      </div>
+      <span class="muted small" data-t="instHint">Hum or whistle separate notes ("ta ta" helps); a beatbox becomes drums. Instruments: FluidR3 (CC BY 3.0, Frank Wen).</span>
     </form>
   </dialog>
   <dialog id="keysDialog">
@@ -79,6 +105,7 @@
   <footer class="status" id="msg" role="status"></footer>
 
   <script src="kesher.js"></script>
+  <script src="instrument.js"></script>
   <script src="editor.js"></script>
 </body>
 </html>

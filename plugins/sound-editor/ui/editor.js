@@ -2,7 +2,7 @@
 // a waveform with a selection, edits on the samples (cut, keep, silence, fades, gain, normalize) with undo, the
 // transcript from whisper, and a WAV sent back to the chat. A plugin page with no build step: it talks to KesherAI
 // only through window.kesher (kesher.js).
-/* global confirm, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio */
+/* global confirm, navigator, window, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -15,6 +15,11 @@
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Audition)", close: "סגור",
     toVideo: "↩ חזרה לווידאו", fromVideo: "הסאונד של הווידאו. כשתסיים: \"חזרה לווידאו\".", lengthChanged: "האורך השתנה, אז הסאונד לא יתאים לווידאו בדיוק. להמשיך?", backing: "מחזיר לווידאו…",
+    rec: "הקלטה", stopRec: "עצור", toInst: "🎻 לכלי נגינה…", instH: "לכלי נגינה", snapKey: "לסולם", snapBeat: "על הקצב", octave: "אוקטבה", listen: "האזנה", origVol: "המקור",
+    instMix: "ערבב מעל הסאונד", instReplace: "החלף בכלי", instS: "כלי", instHint: "זמזם או שרוק צלילים נפרדים (\"טה טה\" עוזר); ביטבוקס הופך לתופים. הכלים: FluidR3 (CC BY 3.0, Frank Wen).",
+    found: (n) => `נמצאו ${n} תווים`, hitsFound: (n) => `נמצאו ${n} מכות`, none: "לא נמצאו תווים ברורים. נסה לזמזם חזק וברור יותר.", rendering: "מנגן את הכלי…", countIn: "ספירה…", recording: "מקליט… (R או עצור)", micNo: "אין גישה למיקרופון",
+    keyName: (k) => `לסולם: ${k}`,
+    emptyRec: "פתח צליל מצ'אט, או לחץ ● הקלטה וזמזם או שרוק.",
     loading: "טוען את הצליל…", transcribing: "מתמלל במחשב… (whisper)", sending: "שולח…", needSel: "קודם בחר קטע (גרירה על הגל)", tooBig: "הקובץ גדול מ-50MB; ייצא קטע קצר יותר",
     silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות", cutLine: "לחתוך את השורה", sel: "בחירה",
     kPlay: "נגן / עצור (הבחירה, אם יש)", kCut: "מחיקת הבחירה", kAll: "בחירת הכל", kEsc: "ביטול הבחירה", kUndo: "ביטול / ביצוע שוב", kZoom: "זום", kMove: "ראש הניגון שנייה אחורה / קדימה",
@@ -270,6 +275,163 @@
     } catch (e) { msg(e.message, true); } finally { busy(""); }
   };
 
+  // ---------- record (R): a count-in of four clicks, then the microphone into a new sound ----------
+  let recording = null;
+  async function record() {
+    if (recording) return recording.stop();
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); } catch { return msg(T("micNo", "No access to the microphone"), true); }
+    ctx ??= new AudioContext();
+    await ctx.resume();
+    // Four clicks at the tempo of the instrument dialog, so the notes land on the beat.
+    const beat = 60 / Math.max(40, Math.min(220, +$("bpm").value || 100));
+    msg(T("countIn", "Counting in…"));
+    for (let i = 0; i < 4; i++) {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + i * beat;
+      o.frequency.value = i ? 1000 : 1500; g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.06);
+    }
+    await new Promise((r) => setTimeout(r, 4 * beat * 1000));
+    const srcNode = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const pieces = [];
+    proc.onaudioprocess = (e) => pieces.push(e.inputBuffer.getChannelData(0).slice());
+    srcNode.connect(proc).connect(ctx.destination);
+    $("rec").classList.add("on");
+    msg(T("recording", "Recording… (R or stop)"));
+    recording = {
+      stop() {
+        proc.disconnect(); srcNode.disconnect(); stream.getTracks().forEach((t) => t.stop());
+        $("rec").classList.remove("on");
+        recording = null;
+        const n = pieces.reduce((s, p) => s + p.length, 0);
+        if (!n) return;
+        const mono = new Float32Array(n);
+        let o = 0;
+        for (const p of pieces) { mono.set(p, o); o += p.length; }
+        remember();
+        rate = ctx.sampleRate;
+        chans = [mono];
+        parts = [];
+        name = "recording.wav";
+        $("name").textContent = name;
+        $("empty").hidden = true;
+        sel = null; head = 0; firstLength = length();
+        fitZoom(); after();
+      },
+    };
+  }
+  $("rec").onclick = record;
+
+  // ---------- to an instrument (design HumToInstrument) ----------
+  const K = window.KInstrument;
+  let inst = "violin";
+  let found = { notes: [], hits: [], key: null, from: 0, to: 0 };
+  /** The notes as they will be played: the switches applied. */
+  function shaped() {
+    let ns = found.notes;
+    if ($("snapKey").checked && found.key) ns = K.toKey(ns, found.key);
+    if ($("snapBeat").checked) ns = K.toBeat(ns, 30 / Math.max(40, +$("bpm").value || 100));
+    const oct = +$("octave").value;
+    return ns.map((n) => ({ ...n, midi: n.midi + oct }));
+  }
+  function drawRoll() {
+    const c = $("roll"), w = c.clientWidth, h = c.clientHeight, d = devicePixelRatio || 1;
+    c.width = w * d; c.height = h * d;
+    const g = c.getContext("2d");
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const dur = secs(found.to - found.from) || 1;
+    if (inst === "drums") {
+      const rows = { hat: 0.2, snare: 0.5, kick: 0.8 };
+      g.fillStyle = "#f5d36b";
+      found.hits.forEach((x) => g.fillRect((x.start / dur) * w, rows[x.kind] * h - 6, 6, 12));
+      g.fillStyle = "#9b9fa8"; g.font = "11px system-ui";
+      Object.entries(rows).forEach(([k, y]) => g.fillText(k, 4, y * h - 8));
+      return;
+    }
+    const ns = shaped();
+    if (!ns.length) return;
+    const lo = Math.min(...ns.map((n) => n.midi)) - 2, hi = Math.max(...ns.map((n) => n.midi)) + 2, row = h / (hi - lo + 1);
+    g.fillStyle = "#26272b";
+    for (let m = lo; m <= hi; m++) if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) g.fillRect(0, (hi - m) * row, w, row);
+    g.fillStyle = "#8fa2ff";
+    ns.forEach((n) => g.fillRect((n.start / dur) * w, (hi - n.midi) * row + 1, Math.max(3, ((n.end - n.start) / dur) * w - 1), Math.max(3, row - 2)));
+    g.fillStyle = "#9b9fa8"; g.font = "10px system-ui";
+    for (let m = lo; m <= hi; m++) if (m % 12 === 0) g.fillText(K.noteName(m), 2, (hi - m) * row + row - 2);
+  }
+  function renderGallery() {
+    $("gallery").replaceChildren(...K.INSTRUMENTS.map(([id, icon, h, en]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = id === inst ? "on" : "";
+      const i = document.createElement("b");
+      i.textContent = icon;
+      b.append(i, document.createTextNode(he ? h : en));
+      b.onclick = () => { inst = id; renderGallery(); showFound(); drawRoll(); };
+      return b;
+    }));
+  }
+  function showFound() {
+    const names = ["דו", "רה♭", "רה", "מי♭", "מי", "פה", "סול♭", "סול", "לה♭", "לה", "סי♭", "סי"];
+    const en = ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B"];
+    if (found.key) $("keyLabel").textContent = he ? HE.keyName(`${names[found.key.root]} ${found.key.minor ? "מינור" : "מז'ור"}`) : `To the key: ${en[found.key.root]} ${found.key.minor ? "minor" : "major"}`;
+    $("instFound").textContent = inst === "drums" ? (he ? HE.hitsFound(found.hits.length) : `${found.hits.length} hits found`) : (he ? HE.found(found.notes.length) : `${found.notes.length} notes found`);
+  }
+  $("toInst").onclick = () => {
+    if (!length()) return;
+    stop();
+    const [a, b] = sel ?? [0, length()];
+    // One voice: the channels averaged.
+    const mono = new Float32Array(b - a);
+    chans.forEach((c) => { for (let i = 0; i < mono.length; i++) mono[i] += c[a + i] / chans.length; });
+    const ns = K.notes(mono, rate);
+    found = { notes: ns, hits: K.hits(mono, rate), key: ns.length ? K.keyOf(ns) : null, from: a, to: b };
+    if (!ns.length && !found.hits.length) return msg(T("none", "No clear notes found. Try humming louder and clearer."), true);
+    renderGallery();
+    showFound();
+    $("instDialog").showModal();
+    requestAnimationFrame(drawRoll);
+  };
+  ["snapKey", "snapBeat", "bpm", "octave"].forEach((id) => ($(id).onchange = drawRoll));
+  /** The stretch as the instrument plays it (mono samples). */
+  const played = () => {
+    const n = found.to - found.from;
+    return inst === "drums" ? K.renderDrums(found.hits, rate, n) : K.render(shaped(), inst, rate, n);
+  };
+  let previewSrc = null;
+  $("instPreview").onclick = async () => {
+    if (previewSrc) { previewSrc.stop(); previewSrc = null; return; }
+    busy(T("rendering", "Playing the instrument…"));
+    try {
+      const out = await played();
+      const k = +$("origVol").value / 100;
+      const buf = ctx.createBuffer(1, out.length, rate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < out.length; i++) { let o = 0; chans.forEach((c) => (o += c[found.from + i] / chans.length)); d[i] = Math.max(-1, Math.min(1, out[i] + o * k)); }
+      previewSrc = ctx.createBufferSource();
+      previewSrc.buffer = buf;
+      previewSrc.connect(ctx.destination);
+      previewSrc.onended = () => (previewSrc = null);
+      previewSrc.start();
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
+  };
+  /** Puts the instrument into the sound: instead of the stretch, or mixed over it (with the original's volume). */
+  async function apply(mix) {
+    previewSrc?.stop(); previewSrc = null;
+    busy(T("rendering", "Playing the instrument…"));
+    try {
+      const out = await played();
+      const k = mix ? 1 : +$("origVol").value / 100;
+      remember();
+      chans.forEach((c) => { for (let i = 0; i < out.length; i++) c[found.from + i] = Math.max(-1, Math.min(1, out[i] + c[found.from + i] * k)); });
+      $("instDialog").close();
+      after();
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
+  }
+  $("instReplace").onclick = () => apply(false);
+  $("instMix").onclick = () => apply(true);
+
   // ---------- open ----------
   let busyCount = 0;
   function busy(text) { busyCount = Math.max(0, busyCount + (text ? 1 : -1)); $("busy").hidden = busyCount <= 0; if (text) $("busyText").textContent = text; }
@@ -279,7 +441,7 @@
     busy(T("loading", "Loading the sound…"));
     try {
       const input = await kesher.call("editor.input");
-      if (!input?.bytes) return;
+      if (!input?.bytes) { $("empty").textContent = T("emptyRec", "Open a sound from a chat, or press ● Record and hum or whistle."); return; }
       name = input.name;
       $("name").textContent = input.name;
       ctx = new AudioContext();
@@ -297,8 +459,8 @@
   Object.keys(ops).forEach((k) => ($(k).onclick = ops[k]));
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
-  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : ops[b.dataset.do]())));
-  const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"]];
+  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : b.dataset.do === "inst" ? $("toInst").click() : ops[b.dataset.do]())));
+  const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"], ["R", "rec", "Record"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => { const tr = document.createElement("tr"); const a = document.createElement("td"); const kbd = document.createElement("kbd"); kbd.textContent = k; a.append(kbd); const b = document.createElement("td"); b.textContent = T(key, en); tr.append(a, b); return tr; }));
     $("keysDialog").showModal();
@@ -311,7 +473,7 @@
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); return redo(); }
     if ((e.ctrlKey || e.metaKey) && k === "a") { e.preventDefault(); sel = length() ? [0, length()] : null; return draw(); }
     if (e.ctrlKey || e.metaKey) return;
-    const map = { " ": play, delete: ops.cut, backspace: ops.cut, escape: () => { sel = null; draw(); }, "+": () => zoomBy(1.5), "=": () => zoomBy(1.5), "-": () => zoomBy(1 / 1.5), arrowleft: () => { head = Math.max(0, head - rate); draw(); }, arrowright: () => { head = Math.min(length(), head + rate); draw(); }, "?": showKeys };
+    const map = { " ": play, delete: ops.cut, backspace: ops.cut, escape: () => { sel = null; draw(); }, "+": () => zoomBy(1.5), "=": () => zoomBy(1.5), "-": () => zoomBy(1 / 1.5), arrowleft: () => { head = Math.max(0, head - rate); draw(); }, arrowright: () => { head = Math.min(length(), head + rate); draw(); }, "?": showKeys, r: record };
     if (map[k]) { e.preventDefault(); map[k](); }
   });
   new ResizeObserver(() => draw()).observe(wrap);

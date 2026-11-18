@@ -148,6 +148,14 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           }
           return { path, captions };
         }
+        // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
+        case "own.file": {
+          const path = String(p.path ?? "");
+          if (!/^[\w-]+(\/[\w.-]+)*$/.test(path) || path.split("/").includes("..")) throw new Error("Give a path inside the plugin's folder.");
+          const res = await fetch(pluginFileUrl(pluginId, path));
+          if (!res.ok) throw new Error(`${path}: ${res.status}`);
+          return res.arrayBuffer();
+        }
         // The video's sound into the sound editor (double-click the sound track): a WAV of it in the chat's folder,
         // opened there with the way back to this video.
         case "video.openSound": {
@@ -323,5 +331,5 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     addEventListener("message", on);
     return () => removeEventListener("message", on);
   }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path, input?.sound, input?.returnVideo]);
-  return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" />;
+  return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }
