@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ModelSuggest } from "../ModelSuggest";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { text, unzipSome, waTitle } from "../ImportPeopleChats";
@@ -170,6 +171,7 @@ function NewReport({ onMade }: { onMade: (id: string) => void }) {
   const people = peek?.people.slice(0, 12) ?? [];
   return (
     <section className="card stack cr-wizard">
+      {step === 1 && <ModelSuggest tool="chat-report" />}
       <div className="row muted small"><span className="grow">{L(`${step} מתוך ${STEPS}`, `${step} of ${STEPS}`)}</span><span>{L(...STEP_NAMES[step - 1]!)}</span></div>
       <div className="cr-track" role="progressbar" aria-valuemin={1} aria-valuemax={STEPS} aria-valuenow={step}><span style={{ width: `${(step / STEPS) * 100}%` }} /></div>
       {step === 1 && (

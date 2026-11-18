@@ -48,7 +48,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 👤 DeepSeek V4-Flash test (board t59; downloading on the PC)
 
 ## Models and hardware
-- ⬜ Tools suggest a better model when they start (Roee, 2026-11-18): each tool (Study, chat reports, the code agent, pictures, voice…) knows what it needs (Hebrew, context length, vision, tool use, speed) and, when a model on the computer (or one to download) fits the job better than the one loaded, says so in one line with its size and "switch" / "keep"; it never switches by itself. Seen tonight: a 32K context was too small for long Hebrew reports, and Study is best with DictaLM.
+- ✅ Tools suggest a better model when they start (Roee, 2026-11-18; built the same day as a 0–100 score per tool and computer, `@kesher/shared` model-fit, a line in Study, chat reports and Code): each tool (Study, chat reports, the code agent, pictures, voice…) knows what it needs (Hebrew, context length, vision, tool use, speed) and, when a model on the computer (or one to download) fits the job better than the one loaded, says so in one line with its size and "switch" / "keep"; it never switches by itself. Seen tonight: a 32K context was too small for long Hebrew reports, and Study is best with DictaLM.
 - ✅ Training picture LoRAs from the interface
 - ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix; the engines moved to E:
 - ✅ Game helper over a running game
@@ -62,7 +62,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Content and import
 - ✅ WhatsApp and Instagram chats imported, with the relationship-analyst persona (AskBrandon style)
-- ✅ Films for you (#/stremio): taste from a Letterboxd export and ratings in KesherAI, recommendations by the chat model matched on Stremio's catalogue (Cinemeta), and a Stremio addon row "KesherAI: for you" (its address holds a revocable app key). ⬜ Stremio's own watch history (Stremio gives addons no access to it)
+- ✅ Films for you (#/stremio): taste from a Letterboxd export and ratings in KesherAI, recommendations by the chat model matched on Stremio's catalogue (Cinemeta), and a Stremio addon row "KesherAI: for you" (its address holds a revocable app key). 🔧 Stremio's own watch history (addons get no access; Roee chose both ways, 2026-11-18): ⬜ sign in to Stremio inside KesherAI (the password goes only to Stremio; the library's watched items, times and dates through api.strem.io datastoreGet), ⬜ Trakt (Stremio's official Trakt integration scrobbles there; KesherAI reads Trakt's API with device-code sign-in; needs a Trakt app client id from Roee)
 - ✅ MyAnimeList in Films for you (Roee, 2026-11-17; built: the export .xml/.gz or his public list by name with his Client ID, anime picks in their own Stremio row "KesherAI: anime for you"): taste from his MAL list (an export, or his public list by username through MAL's API v2 with a Client ID), like the Letterboxd import, so the Stremio addon "KesherAI: for you" also recommends anime (matched on Stremio's anime catalogues by title and year)
 
 ## Research to do

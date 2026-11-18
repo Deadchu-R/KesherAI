@@ -1,3 +1,4 @@
+import { ModelSuggest } from "../ModelSuggest";
 import { EnvironmentEditor, useNamedEnvs } from "../CodeEnvironment";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposerBar } from "../ComposerBar";
@@ -138,6 +139,7 @@ export function CodeHome() {
   return (
     <div className="home code-home">
       <h1 className="greeting">{L("מה נבנה?", "What should we build?")}</h1>
+      <ModelSuggest tool="code" />
       <form className="composer home-composer" onSubmit={(e) => { e.preventDefault(); void start(); }}>
         <div className="box">
           <PromptTextarea

@@ -68,6 +68,8 @@ export interface KesherServices {
   plugins: PluginHost;
   /** The built-in llama.cpp engine. */
   engine: LlamaEngine;
+  /** The chat model files on this computer (KesherAI's own and the scanned folders), cached for 5 minutes. */
+  localModels?: () => Promise<Array<{ path: string; name: string; size: number }>>;
   /** Saved projects and conversations. */
   library: Library;
   /** Live conversations. */

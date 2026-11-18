@@ -2,6 +2,7 @@
  * The Study home page's cards: what to study next, the week, the daily goal, focus, benefits, search, back on track.
  * Part of the Study page (pages/StudyPage.tsx).
  */
+import { ModelSuggest } from "../../ModelSuggest";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { celebrate } from "../../celebrate";
 import { playFocusSound, setFocusVolume, stopFocusSound, type FocusSound } from "../../focus-sounds";
@@ -101,6 +102,7 @@ export function StudyHome() {
   return (
     <div className={`page study-page${prefs?.easyRead ? " study-easy-read" : ""}${prefs?.readFont ? " study-read-font" : ""}`}>
       <h1>{L("לימודים", "Study")}</h1>
+      {!!courses?.length && <ModelSuggest tool="study" />}
       {!!courses?.length && prefs && <StudySetupChecklist prefs={prefs} onPrefs={setPrefs} courses={courses} />}
       {!!courses?.length && <StudySearch />}
       {/* "Now: <class>" first, the timetable itself lower with the other set-up cards (simple mode: under "more"). */}

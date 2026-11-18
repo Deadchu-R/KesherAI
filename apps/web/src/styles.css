@@ -3739,3 +3739,8 @@ div.slide-list { padding-inline-start: 0; }
 .cr-steps li.now { font-weight: 600; }
 /* A heading focused by the page (a new wizard step, for screen readers) shows no ring to a mouse or finger user. */
 h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-visible), h3[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+/* "This tool works better with another model" (ModelSuggest). */
+.model-suggest { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.6rem 0.75rem; margin-bottom: 0.75rem; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.model-suggest-row { gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.model-suggest-row + .model-suggest-row { margin-top: 0.35rem; }
+.model-score { margin-inline: 0.25rem; font-variant-numeric: tabular-nums; }

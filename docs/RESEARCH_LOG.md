@@ -2163,3 +2163,18 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   96 frames in 4 s (24 fps). Qwen3-Coder-Next is not downloaded (download waits for Roee).
 - Hosted API docs: `.github/workflows/docs.yml` builds typedoc on every release and deploys it to GitHub Pages; it
   stops if the site names a Windows user folder, a home folder or a Gmail address (the local build had none).
+
+## Tools suggest a better model (2026-11-18)
+- **AnythingLLM's Model Router**: a primary model plus rules checked top to bottom; "calculated" rules (keywords,
+  conversation tokens, an image attached, time of day) and rules a model classifies; it switches by itself.
+- **Msty's Model Matchmaker**: choose what matters for the task and get ranked suggestions to try side by side.
+- **Cursor**: an image in the chat and a model without vision gives an error; users ask for a warning and a way on.
+- **LM Studio**: marks each download as fitting fully on the card, partly, or too big for the computer.
+- Built (Roee asked for one smart score that joins all the checks): every model (loaded, on the computer, "Start
+  here") gets 0–100 for a tool on this computer: quality by parameters (40), fit for the tool (35: Hebrew → Dicta
+  first; code → coding models first; long reports → long-context models), speed here from the Models page's own
+  estimate (25; too big = 0, never offered). A line shows when another model is 8 or more higher: the best one on the
+  computer and a better download, each with its score (parts on hover), size and whether it fits on the card; and a
+  short-context warning for long reports. Never switches by itself; "Keep" is remembered per tool and model. Study
+  counts the Hebrew model it already loads by itself (course model "auto").
+- Stopped at: built and tested; checking on the PC after the next release.

@@ -4,7 +4,7 @@ import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { RECOMMENDED_MODELS, type RecommendedModel } from "@kesher/shared";
+import { RECOMMENDED_MODELS, suggestModel, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload } from "../llamacpp.js";
@@ -159,6 +159,30 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
    * compute capability, fastest first marked), the user's choice, and what
    * that choice does for a model of a given size (`?modelGb=`).
    */
+  // "This tool works better with another model" (FUTURE: tools suggest a better model): one suggestion for the tool,
+  // or none. Only the built-in engine's model is judged; a cloud or other provider's chat model gets no suggestion.
+  app.get<{ Querystring: { tool?: string; lang?: string } }>("/api/models/suggest", async (req, reply) => {
+    const tool = req.query.tool;
+    if (tool !== "study" && tool !== "chat-report" && tool !== "code") return reply.code(400).send({ error: "Unknown tool." });
+    const active = s.config.activeModels.chat;
+    const st = s.engine.status();
+    if (active && !active.startsWith("llamacpp/")) return { suggestion: null };
+    const hw = await detectHardwareCached();
+    // The Models page's own estimate for this computer (speed, and whether all of it fits on the graphics card).
+    const speed = (sizeGb: number, activeFraction?: number) => {
+      const e = estimatePerformance(sizeGb * 1024 ** 3, hw, activeFraction ? { activeFraction } : {});
+      // The same room the estimate leaves on the largest card (context and desktop beside the weights).
+      const vram = Math.max(0, ...hw.gpus.map((g) => g.vramTotal)) / 1024 ** 3;
+      return { tokensPerSecond: e.tokensPerSecond, fitsGpu: vram * 0.9 - 1 >= sizeGb * 1.1 };
+    };
+    const local = (await s.localModels?.().catch(() => [])) ?? [];
+    const name = st.modelPath ? basename(st.modelPath) : active ? active.slice("llamacpp/".length) : undefined;
+    const size = local.find((m) => m.path === st.modelPath)?.size;
+    const loaded = { ...(name ? { name } : {}), ...(size ? { size } : {}), ...(st.slotTokens ? { slotTokens: st.slotTokens } : {}) };
+    const suggestion = suggestModel(toolNeed(tool as ModelTool, req.query.lang === "he"), loaded, local, speed) ?? null;
+    return { suggestion, loaded: loaded.name ?? null };
+  });
+
   app.get<{ Querystring: { modelGb?: string } }>("/api/engines/gpus", async (req) => {
     const hw = await detectHardwareCached();
     const gpus: Gpu[] = hw.gpus

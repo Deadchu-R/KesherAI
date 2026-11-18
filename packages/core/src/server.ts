@@ -442,6 +442,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
   const projectFacts = new ProjectFacts(join(paths.root, "project-facts.json"));
   const services: KesherServices = {
+    localModels: localGgufs,
     browser,
     config,
     paths,
