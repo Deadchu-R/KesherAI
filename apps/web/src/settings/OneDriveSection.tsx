@@ -5,7 +5,6 @@ import { t } from "../i18n";
 interface OneDriveStatus { configured: boolean; connected: boolean; email: string | null; lastSync: string | null; lastError: string | null; customClient: boolean }
 
 /** "Connect OneDrive": the Microsoft twin of {@link GoogleDriveSection}. */
-
 export function OneDriveSection() {
   const [o, setO] = useState<OneDriveStatus | null>(null);
   const [waiting, setWaiting] = useState(false);

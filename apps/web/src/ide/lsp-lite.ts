@@ -1,13 +1,15 @@
 import { withToken } from "../api";
 
+/** One suggestion from the language server. */
+export interface LspItem { label: string; detail?: string; doc?: string; insert: string; snippet: boolean; kind?: number }
+/** One error or warning from the language server (lines and characters from 0). */
+export interface LspDiag { line: number; character: number; endLine: number; endCharacter: number; severity: number; message: string; code?: string }
+
 /**
  * A small language-server link with no editor attached (for the touch editor):
  * the document's text, its changes, suggestions at a place, and the server's
  * errors. The same server and WebSocket as the desktop editor's Rider mode.
  */
-export interface LspItem { label: string; detail?: string; doc?: string; insert: string; snippet: boolean; kind?: number }
-export interface LspDiag { line: number; character: number; endLine: number; endCharacter: number; severity: number; message: string; code?: string }
-
 export class LspLite {
   private ws: WebSocket;
   private next = 1;

@@ -64,6 +64,7 @@ export function addressFrom(text: string): string {
   return `https://duckduckgo.com/?q=${encodeURIComponent(t)}`;
 }
 
+/** The browser pane of one window: its tabs, where they are drawn, and the model's commands (see the top of this file). */
 export class BrowserPane {
   private tabs: Tab[] = [];
   private active = 0;

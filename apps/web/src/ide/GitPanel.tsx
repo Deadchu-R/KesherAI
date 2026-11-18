@@ -17,6 +17,9 @@ const hunks = (d: string) => (d.includes("\n@@") ? d.slice(d.indexOf("\n@@") + 1
 
 const STATE: Record<ChangedFile["state"], [string, string]> = { A: ["נוסף", "added"], M: ["שונה", "changed"], D: ["נמחק", "deleted"], R: ["שם חדש", "renamed"], "?": ["חדש", "new"] };
 
+/** One note of "Review code" on the diff. */
+interface Finding { file: string; line: number; severity: "bug" | "risk" | "nit"; note: string }
+
 /**
  * The project's git on the code page (computer and phone): what changed since
  * the last commit with a diff per file, one button for the next step (Commit →
@@ -29,8 +32,6 @@ const STATE: Record<ChangedFile["state"], [string, string]> = { A: ["נוסף", 
  * @param props.refresh - Changes whenever the agent may have changed files.
  * @param props.onFixInChat - Puts text into the chat's message box.
  */
-interface Finding { file: string; line: number; severity: "bug" | "risk" | "nit"; note: string }
-
 export function GitPanel({ convId, refresh, onFixInChat }: { convId: string; refresh: number; onFixInChat?: (text: string) => void }) {
   const base = `/api/conversations/${convId}/git`;
   const [st, setSt] = useState<GitState | null>(null);

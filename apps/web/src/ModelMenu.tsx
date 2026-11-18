@@ -25,11 +25,6 @@ async function loadProviderNames(fresh = false): Promise<Record<string, string>>
 }
 
 /**
- * @param props.models - Chat models to offer.
- * @param props.value - The conversation's current model id.
- * @param props.onChange - Called with the chosen model id.
- */
-/**
  * A model's id as a name to show when the model is not in the list right now (its engine is not loaded): without
  * the connection's prefix, the folders and the file ending ("llamacpp/Qwen3.8-27B-Q4" → "Qwen3.8-27B-Q4").
  *
@@ -40,6 +35,13 @@ export function shortModelName(id: string): string {
   return id.split(/[\\/]/).pop()!.replace(/\.(gguf|safetensors)$/i, "") || id;
 }
 
+/**
+ * The composer's model chooser (see the top of this file).
+ *
+ * @param props.models - Chat models to offer.
+ * @param props.value - The conversation's current model id.
+ * @param props.onChange - Called with the chosen model id.
+ */
 export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
   const [finding, setFinding] = useState(false);

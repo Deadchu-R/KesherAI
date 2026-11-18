@@ -6,7 +6,6 @@ import { t } from "../i18n";
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 
 /** "Chat folders": the local sync folder for the chats, and the clouds that keep a copy. */
-
 export function Sync() {
   const [folder, setFolder] = useState("");
   const [current, setCurrent] = useState<string | null>(null);

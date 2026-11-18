@@ -7,7 +7,6 @@ import { Select } from "../ui/Select";
 interface Settings { activeModels: Record<string, string>; syncFolder: string | null }
 
 /** "Active models": the chat, image and the other category defaults, chosen from every installed model. */
-
 export function ActiveModels() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [categories, setCategories] = useState<CategoryDefinition[]>([]);

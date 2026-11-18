@@ -19,6 +19,7 @@ interface Check {
   engineLog: string[];
 }
 
+/** "Check the graphics card": the button and the copyable report (see the top of this file). */
 export function GpuCheck() {
   const [c, setC] = useState<Check | null>(null);
   const [busy, setBusy] = useState(false);

@@ -91,6 +91,10 @@ const QUICK: Record<string, Partial<Op>> = {
   o: { op: "add", type: "macro", macro: "DoOnce" },
 };
 
+/**
+ * A Blueprint (or C# script) graph as nodes and wires: pan, zoom, select, connect and the add-node menu.
+ * Changes go to the editor (Unreal or Unity) or, with `onOps`, to the page.
+ */
 export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[] }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";

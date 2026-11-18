@@ -54,11 +54,19 @@ export function Diff({ diff, onLine, marks, onHunk, hunkLabel }: { diff: string;
   );
 }
 
+/**
+ * A tool call in a few words: its path, command, pattern, prompt or question.
+ *
+ * @param name - The tool's name.
+ * @param input - The call's arguments.
+ * @returns The short text, or "" when there is none.
+ */
 export function summary(name: string, input: Record<string, unknown>): string {
   const v = input.path ?? input.command ?? input.pattern ?? input.prompt ?? input.glob ?? input.question;
   return typeof v === "string" ? v : "";
 }
 
+/** One tool call in the chat, with its result once it comes (a group member's part shows as that member's answer). */
 export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_result"> }) {
   if (call.name === "ask_user") return null;
   // Agent group: a member's part, shown as that member's answer.
@@ -114,6 +122,7 @@ export function reasonText(reason: string): string {
   return reason;
 }
 
+/** The agent asks to run a tool: allow once, deny with a note, or always (in this chat, for this model, everywhere). */
 export function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<"approval_request">; pending: boolean; result?: Ev<"approval_result"> }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -232,6 +241,7 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
   );
 }
 
+/** The agent asks the user a question (or for a path): the choices or a text box, then the answer as given. */
 export function QuestionCard({ convId, ev, pending, answer }: { convId: string; ev: Ev<"question">; pending: boolean; answer?: Ev<"answer"> }) {
   const [text, setText] = useState(ev.path ?? "");
   const send = (value: string) => void api(`/api/conversations/${convId}/answers/${ev.questionId}`, { method: "POST", body: { text: value } }).catch(() => undefined);

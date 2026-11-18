@@ -66,4 +66,11 @@ export default tseslint.config(
       "jsdoc/check-tag-names": ["error", { definedTags: ["remarks", "typeParam", "packageDocumentation"] }],
     },
   },
+  // The interface and the desktop shell: every exported function and class says what it is too (2026-11-18).
+  {
+    files: ["apps/web/src/**/*.{ts,tsx}", "apps/desktop/src/**/*.ts"],
+    ignores: ["**/*.test.ts"],
+    plugins: { jsdoc },
+    rules: { "jsdoc/require-jsdoc": ["error", { publicOnly: true, require: { FunctionDeclaration: true, ClassDeclaration: true } }] },
+  },
 );

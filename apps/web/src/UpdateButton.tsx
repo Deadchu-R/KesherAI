@@ -8,6 +8,7 @@ import { getLocale, he$ } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
+/** The "Update" button (see the top of this file); nothing while KesherAI is up to date. */
 export function UpdateButton() {
   const [latest, setLatest] = useState("");
   useEffect(() => {

@@ -398,7 +398,14 @@ export function useNavItems(): Array<{ href: string; label: string; group: strin
   ]);
 }
 
-
+/**
+ * The app's side menu: the chats, the page groups, the plugins' pages and the computers.
+ *
+ * @param props.hash - The page address now (to mark the open page).
+ * @param props.online - Whether the server answers (null while checking).
+ * @param props.open - Whether the menu is open (on the phone).
+ * @param props.onLocale - Called after the language changes.
+ */
 export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: string; online: boolean | null; open: boolean; onLocale: () => void }) {
   const { projects, conversations } = useLibrary();
   const [dialog, setDialog] = useState<"code" | "project" | null>(null);

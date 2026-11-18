@@ -5,7 +5,6 @@ import { t } from "../i18n";
 interface GoogleStatus { configured: boolean; connected: boolean; email: string | null; lastSync: string | null; lastError: string | null; customClient: boolean }
 
 /** "Connect Google Drive": the folder the chats are mirrored to, with the app’s OAuth or your own client. */
-
 export function GoogleDriveSection() {
   const [g, setG] = useState<GoogleStatus | null>(null);
   const [waiting, setWaiting] = useState(false);

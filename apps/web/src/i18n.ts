@@ -1663,6 +1663,11 @@ export function he$(text: string): string {
   return hebrewFor(text, address);
 }
 
+/**
+ * The interface language now.
+ *
+ * @returns "he" or "en".
+ */
 export function getLocale(): Locale {
   return current;
 }

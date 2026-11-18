@@ -1,14 +1,15 @@
 import * as monaco from "monaco-editor";
 import { api } from "../api";
 
+let registered = false;
+let off = false;
+
 /**
  * Copilot-style suggestions in every code editor of KesherAI: a short pause
  * after typing asks the model chosen in Settings (Code suggestions) for what
  * comes next; it shows greyed out, Tab inserts it, Esc or typing on dismisses
  * it. Nothing is asked when no model is chosen there.
  */
-let registered = false;
-let off = false;
 export function registerInlineSuggestions(): void {
   if (registered) return;
   registered = true;

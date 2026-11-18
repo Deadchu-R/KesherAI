@@ -59,6 +59,7 @@ const WARN_HE: Record<string, string> = {
   "Not on GitHub: KesherAI cannot show what it does before installing. Install only if you trust where it comes from.": "לא ב-GitHub: אי אפשר להראות מראש מה הוא עושה. התקן רק אם אתה סומך על המקור.",
 };
 
+/** The Plugins page: installed plugins (on, off, remove), the catalog, and installing from GitHub with a look first. */
 export function PluginsPage() {
   const [list, setList] = useState<Installed[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);

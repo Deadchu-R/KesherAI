@@ -131,6 +131,8 @@ Every conversation is an agent session. A `chat` conversation has the media tool
 | `POST /api/conversations/:id/answers/:questionId` | `{ text }` — answers an `ask_user` question |
 | `POST /api/conversations/:id/stop` | Stops the agent; open approvals are denied |
 | `POST /api/conversations/:id/undo` | Reverts the agent's last file change |
+| `GET /api/conversations/:id/runs/:run/diff` | `{ files: { path, diff }[] }` — every file a run changed, from before the run to now (the receipt's Review) |
+| `POST /api/conversations/:id/runs/:run/undo` | `{ force?, path?, hunk? }` — puts back a whole run, one file (`path`), or one change of one file (`path` + `hunk`, counted as the `@@` blocks of that file's diff). Without `force`, files changed since the run come back in `conflicts` untouched. 409 while the agent works or when the run is no longer kept |
 
 Events (`AgentEvent` in `@kesher/shared`): `user`, `assistant_delta`, `assistant`, `tool_call`, `approval_request` (with `preview`: a diff or the command), `approval_result`, `question`, `answer`, `tool_result` (with `diff`, `assetIds`), `undo`, `status`, `note`.
 

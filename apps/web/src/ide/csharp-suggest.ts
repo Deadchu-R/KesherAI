@@ -8,6 +8,11 @@ import { NAMESPACE_OF, UNITY_API, UNITY_ATTRIBUTES, type ApiMember } from "./uni
 
 /** The project's own script classes (set by the page), offered as types. */
 export let projectTypes: string[] = [];
+/**
+ * Sets the project's own script classes, offered as types.
+ *
+ * @param names - The class names.
+ */
 export function setProjectTypes(names: string[]): void {
   projectTypes = names;
 }
