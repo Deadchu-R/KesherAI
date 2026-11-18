@@ -1,10 +1,11 @@
 name: API docs
 
-# The API reference (typedoc) as a website, rebuilt on every release.
-# GitHub Pages must be set once to "GitHub Actions" (Settings → Pages → Source).
+# The API reference (typedoc) as a website, rebuilt after every release (from main: GitHub Pages deploys only from the
+# default branch unless told otherwise). GitHub Pages must be set once to "GitHub Actions" (Settings → Pages → Source).
 on:
-  push:
-    branches: [release]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +19,8 @@ concurrency:
 
 jobs:
   build:
+    # Only after a release that succeeded (or when run by hand).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
