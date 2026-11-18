@@ -2366,3 +2366,20 @@ Each AI tool shows which local model it uses and offers to download it the first
   next part by a button or a swipe. Done: seven chapters (empty ones left out), segments and names on top, ← → keys, swipe,
   and "All on one page".
 - Stopped at: checking both on the PC after 0.6.373.
+
+## Tabs on the phone, as Chrome and Safari (2026-11-18, 15:05; Roee: "check how others do it, Chrome too, and above all on mobile")
+- **Chrome (Android/iOS):** a square with the number of tabs beside the menu, at the end of the top bar. A tap opens
+  the tab switcher: cards two in a row, the open one outlined, ✕ on each, and a card swiped aside closes. A long press
+  on the square: new tab, close this tab. A swipe along the toolbar goes to the next or previous tab. On the desktop:
+  Ctrl+1…8 jump to a tab and Ctrl+9 to the last; middle click closes; hover shows a card.
+- **Safari (iOS):** a swipe along the address bar moves between tabs, and the neighbour peeks in from the edge while the
+  finger moves (the only browser with a visible hint, per the write-up below); the tab overview is a grid of cards.
+- **Firefox and Samsung Internet:** a counter button and a tray of cards; Firefox does not swipe between tabs on iOS
+  (a long-standing request).
+- Done in KesherAI: the counter moved into the top bar (a slot in AppBar, from two tabs), long press → new chat / close
+  this tab, a swipe on the top bar with the neighbour's name peeking in, the switcher full screen on the phone with cards
+  two in a row, swipe a card to close, "Close all" and "Done"; Ctrl+1…9 on the desktop. Boards TabsPhoneBar and
+  TabsPhoneSwitcher.
+- Sources: ssims.co.uk "Mobile Browser Tab Switching and Affordance" (2023), gadgethacks "Swipe Chrome's address bar to
+  switch tabs", PCWorld "6 great Chrome gestures for Android and iOS", connect.mozilla.org "Swipe between open tabs on iOS".
+- Stopped at: checking on the phone (remote) after the release.
