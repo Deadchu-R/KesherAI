@@ -2314,3 +2314,15 @@ Each AI tool shows which local model it uses and offers to download it the first
 3. Generative: mark a stretch → "what to do" (restyle, remove a thing, extend the end) with Wan; object masks with SAM 2.
 4. Later: multicam by who speaks, a script to a rough cut (IntelliScript), a finished mix.
 - Stopped at: video done; next sound in depth (Audition, Logic/Ableton AI, iZotope RX, Descript, ElevenLabs, Suno Studio), then 3D in depth (Blender, Substance, Meshy, Tripo, Spline); boards for Roee after each.
+
+## The sound editor, in depth (2026-11-18)
+**iZotope RX 11/12** (the repair standard): Repair Assistant (listens and suggests a repair chain), Dialogue Isolate (voice out of noise, with de-reverb), Dialogue Contour (reshape a line's pitch), Music Rebalance (stems by a neural net, each with a volume and a mute), Loudness Optimize and a streaming preview, a spectrogram you paint on to remove a cough or a phone ring, de-click, de-hum. **Logic Pro (2024–2025)**: Stem Splitter (vocals, drums, bass, other), Session Players (AI drummer, bass and keys that follow the song and take direction), Mastering Assistant, Chord ID. **Suno Studio 2.0**: a timeline of AI tracks, stems (up to 12, lead and backing vocals apart), MIDI in and out (a MIDI clip as a prompt), a synth, a chat assistant that adds instruments and tidies the session; the song editor replaces or extends a section. **Descript**: edit the words, filler words, Studio Sound, Overdub. **ElevenLabs**: fix a line's words and only it is spoken again, voice isolator, voice changer. **Adobe Podcast / Auphonic**: one-click clean-up and loudness. **Audition**: the waveform and spectrogram, multitrack, Essential Sound (dialogue, music, effects presets), remix to a length.
+
+**What runs locally for KesherAI**: transcript = whisper (already); stems = Demucs (htdemucs: vocals, drums, bass, other); voice out of noise = DeepFilterNet; "fix this line in my voice" = the voice clone KesherAI already has; music sections = the music model on the Models page (generate, extend, inpaint a stretch); loudness, fades, cuts, speed = ffmpeg (loudnorm); beats, tempo and key = an onset and key detector; the spectrogram = drawn in the page from the samples.
+
+**The plan**:
+1. The editor: a waveform (and a spectrogram view), cut, trim, fade, volume, speed, several tracks; the transcript beside spoken sound (delete words → cut); open from a chat's sound as a tab; export; Send to the chat.
+2. Plain AI: clean up (noise, echo) with a strength, remove silences and filler words, loudness for a target (podcast, YouTube), stems for music with a slider each.
+3. Generative: "fix this line" in her voice, mark a stretch of music → redo / extend / replace in a style, a backing track from a melody.
+4. Later: paint on the spectrogram to remove a sound, session players, a repair assistant that suggests the chain.
+- Stopped at: sound done; next 3D in depth (Blender, Substance 3D, Meshy, Tripo, Spline, Rodin), then boards for video, sound and 3D for Roee.
