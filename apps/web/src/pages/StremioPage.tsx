@@ -6,6 +6,13 @@ import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
+/**
+ * A pick's page in Stremio (asked 2026-11-18: not IMDb). On this computer the Stremio app opens (`stremio://`); from
+ * the phone or another device, Stremio Web, since the app may not be there.
+ */
+const stremioLink = (p: { id: string; type: "movie" | "series" }) =>
+  isRemote() ? `https://web.stremio.com/#/detail/${p.type}/${encodeURIComponent(p.id)}` : `stremio:///detail/${p.type}/${encodeURIComponent(p.id)}`;
+
 interface Pick { id: string; type: "movie" | "series"; name: string; poster?: string; year?: string; why?: string }
 interface State extends HistoryState { rated: number; letterboxd: number; mal?: number; malClient?: boolean; mine: Array<{ title: string; rating?: number }>; picks: { movie: Pick[]; series: Pick[]; anime?: Pick[]; t?: number } }
 
@@ -99,7 +106,7 @@ export function StremioPage() {
         {picks.length ? (
           <div className="stremio-grid">
             {picks.map((p) => (
-              <a key={p.id} className="stremio-pick" href={`https://www.imdb.com/title/${p.id}/`} target="_blank" rel="noreferrer">
+              <a key={p.id} className="stremio-pick" href={stremioLink(p)} {...(isRemote() ? { target: "_blank", rel: "noreferrer" } : {})} title={L("פתיחה ב-Stremio", "Open in Stremio")}>
                 {p.poster ? <img src={withToken(`/api/stremio/poster/${p.id}`)} alt="" loading="lazy" /> : <div className="stremio-noposter" aria-hidden />}
                 <strong dir="auto">{p.name}</strong>
                 <span className="muted small" dir="auto">{[p.year, st.picks.anime?.some((a) => a.id === p.id) ? L("אנימה", "anime") : p.type === "series" ? L("סדרה", "series") : "", p.why].filter(Boolean).join(" · ")}</span>

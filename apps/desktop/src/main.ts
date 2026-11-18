@@ -422,16 +422,18 @@ async function createWindow(url: string): Promise<void> {
     }, () => callback({}));
   });
 
-  // Links to other sites open in the user's browser, never inside the app.
+  // Links to other sites open in the user's browser, never inside the app. Besides web addresses, only Stremio's
+  // own links (a title's page in the Stremio app, `stremio:///detail/…`, and adding the add-on) leave the app.
+  const outside = (target: string) => /^https?:\/\//.test(target) || /^stremio:\/\/[\w./%:#?=&-]*$/.test(target);
   win.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (/^https?:\/\//.test(target)) void shell.openExternal(target);
+    if (outside(target)) void shell.openExternal(target);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, target) => {
     if (!target.startsWith(`${url}/`) && target !== url) {
       event.preventDefault();
-      // Only web addresses go to the browser (never file:, smb: or another app's own scheme).
-      if (/^https?:\/\//.test(target)) void shell.openExternal(target);
+      // Only web addresses go to the browser, and Stremio's links to its app (never file:, smb: or other schemes).
+      if (outside(target)) void shell.openExternal(target);
     }
   });
 

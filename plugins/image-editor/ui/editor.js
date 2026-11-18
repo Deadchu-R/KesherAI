@@ -19,6 +19,7 @@
     pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
+    taskPh: "מה לעשות כאן? (ריק = מילוי שמתאים לסביבה)", pSelect: "בחירה", keysH: "קיצורים (כמו בפוטושופ)", close: "סגור",
     toChat: "שלח לצ'אט", toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתה (לא חובה)", toChatPh: "למשל: תעשה את השמיים חמים יותר", send: "שלח", sending: "שולח…", fromChat: "נפתח מהצ'אט",
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
@@ -136,6 +137,7 @@
   };
   let ants = 0;
   function draw() {
+    $("taskbar").hidden = !selection;
     const d = devicePixelRatio;
     vctx.setTransform(1, 0, 0, 1, 0, 0);
     vctx.fillStyle = "#111214";
@@ -979,6 +981,55 @@
     } finally {
       busy("");
     }
+  });
+
+  // ---------- the task bar under the selection ----------
+  // Empty means Photoshop's "Generative fill" with no words: fill the area so it matches what is around it.
+  const FILL = "fill this area so it matches its surroundings seamlessly, same light and texture";
+  $("taskbar").onsubmit = (e) => {
+    e.preventDefault();
+    $("prompt").value = $("taskPrompt").value.trim() || FILL;
+    $("aiInpaint").click();
+  };
+  $("taskClear").onclick = () => clearSelection();
+  $("taskDone").onclick = () => $("selNone").click();
+
+  // ---------- phone: the bottom bar, and the dock as a sheet ----------
+  const app = $("app");
+  function sheet(name) {
+    const open = app.classList.contains(`sheet-${name}`);
+    app.classList.remove("sheet", "sheet-layers", "sheet-ai");
+    if (!open) app.classList.add("sheet", `sheet-${name}`);
+    document.querySelectorAll(".phonebar [data-sheet]").forEach((b) => b.classList.toggle("on", !open && b.dataset.sheet === name));
+  }
+  document.querySelectorAll(".phonebar [data-sheet]").forEach((b) => (b.onclick = () => sheet(b.dataset.sheet)));
+  document.querySelectorAll(".phonebar [data-phone]").forEach((b) => (b.onclick = () => {
+    const what = b.dataset.phone;
+    if (what === "fit") return fit();
+    // Select: rectangle, then lasso, then rectangle again.
+    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : "brush");
+    document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", x === b));
+  }));
+
+  // ---------- "?": the shortcuts ----------
+  const KEYS = [["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
+  function showKeys() {
+    $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
+      const tr = document.createElement("tr");
+      const a = document.createElement("td");
+      const kbd = document.createElement("kbd");
+      kbd.textContent = k;
+      a.append(kbd);
+      const b = document.createElement("td");
+      b.textContent = T(key, en);
+      tr.append(a, b);
+      return tr;
+    }));
+    $("keysDialog").showModal();
+  }
+  $("keysBtn").onclick = showKeys;
+  addEventListener("keydown", (e) => {
+    if (e.key === "?" && !e.target.closest?.("input, textarea, select")) showKeys();
   });
 
   // ---------- start ----------

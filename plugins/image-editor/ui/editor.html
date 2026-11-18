@@ -43,6 +43,7 @@
       <span class="grow"></span>
       <span class="muted" id="zoomInfo"></span>
       <button id="fit" data-t="fit">Fit</button>
+      <button id="keysBtn" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
     </div>
 
     <!-- Tools (one column, like Photoshop), colors at the bottom -->
@@ -70,6 +71,13 @@
       <div class="doctabs"><span class="doctab" id="docTab">Untitled</span></div>
       <div class="stage" id="stage">
         <canvas id="view"></canvas>
+        <!-- Contextual task bar under the selection (Photoshop's): ask the model about this area, clear it, or let go -->
+        <form class="taskbar" id="taskbar" hidden>
+          <input id="taskPrompt" dir="auto" data-tp="taskPh" placeholder="What to do here? (empty = fill to match)" aria-label="What to do here" />
+          <button type="submit" class="primary" id="taskGo" title="Repaint with AI">✦</button>
+          <button type="button" id="taskClear" title="Clear (Del)">⌫</button>
+          <button type="button" id="taskDone" title="Deselect (Ctrl+D)">✕</button>
+        </form>
         <div class="busy" id="busy"><span id="busyText">…</span></div>
         <div class="linked" id="linked" hidden><span data-t="affinityChanged">Saved in Affinity.</span> <button id="bringBack" class="primary" data-t="bringBack">Bring it back as a layer</button></div>
       </div>
@@ -129,6 +137,14 @@
       </section>
     </aside>
 
+    <!-- Phone: the tools at the bottom (thumb reach); Layers and AI open the dock as a sheet -->
+    <nav class="phonebar" aria-label="Tools">
+      <button data-sheet="layers"><span>▤</span><b data-t="tLayers">Layers</b></button>
+      <button data-phone="select"><span>◯</span><b data-t="pSelect">Select</b></button>
+      <button data-sheet="ai"><span>✦</span><b>AI</b></button>
+      <button data-phone="brush"><span>✎</span><b data-t="hBrush">Brush</b></button>
+      <button data-phone="fit"><span>⤢</span><b data-t="fit">Fit</b></button>
+    </nav>
     <footer class="status"><span id="docInfo"></span><span id="msg"></span></footer>
   </div>
 
@@ -147,6 +163,13 @@
       <img id="chatThumb" class="chat-thumb" alt="" />
       <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto" data-tp="toChatPh" placeholder="e.g. Make the sky warmer"></textarea></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <dialog id="keysDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="keysH">Shortcuts (as in Photoshop)</strong>
+      <table class="keys" id="keysTable"></table>
+      <div class="row"><span class="grow"></span><button value="ok" class="primary" data-t="close">Close</button></div>
     </form>
   </dialog>
   <input type="file" id="file" accept="image/*" hidden />
