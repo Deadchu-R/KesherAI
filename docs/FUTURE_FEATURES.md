@@ -67,7 +67,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Research to do
 - ⬜ A deep look at open-source projects (Roee, 2026-11-17): how the code, editing it, adding to it (plugins, forks, contributions) feels for users and for developers elsewhere (VS Code, Zed, Godot, Blender, Obsidian, ComfyUI, LobeHub, Open WebUI…), and how it feels in KesherAI: getting started, reading the code, CODE_GUIDE, plugin and skill authoring, forking, tests, the PR path; then a list of what to change, in the future list.
-  - Part 1 done (RESEARCH_LOG): ✅ a plugin dev mode (development folders reload on save, Plugins → Development; `pnpm plugin:check`); 👤 small board tasks published as "good first issue" (needs the GitHub labels); ✅ a devcontainer and the 6 GB build note in CONTRIBUTING (2026-11-17); ✅ a safe development profile (`--data-dir`) in CONTRIBUTING (2026-11-17); ⬜ hosted API docs. Part 2 done: ⬜ keep / undo per file and per hunk in the run receipt; ⬜ one review view of all a run's changes (like Zed); ⬜ follow the agent in the editor pane; per-change review stays the default.
+  - Part 1 done (RESEARCH_LOG): ✅ a plugin dev mode (development folders reload on save, Plugins → Development; `pnpm plugin:check`); ✅ the GitHub labels exist and CONTRIBUTING links them (2026-11-18); 👤 publishing small board tasks as issues (asks Roee first); ✅ a devcontainer and the 6 GB build note in CONTRIBUTING (2026-11-17); ✅ a safe development profile (`--data-dir`) in CONTRIBUTING (2026-11-17); ⬜ hosted API docs. Part 2 done: ✅ undo per file in the run receipt (↶ on each file); ⬜ per hunk; ✅ one review view of all a run's changes (Review, like Zed); ⬜ follow the agent in the editor pane; per-change review stays the default.
 
 ## Waiting on the owner 👤
 - 👤 SignPath application and 2FA (signed installer)
@@ -135,4 +135,4 @@ Every addition is an optional component: he chooses whether to use it, and a cle
 - ⬜ Publish `@kesher/plugin-sdk` to npm and a template repository, so a plugin lives in its own repo (like obsidian-sample-plugin).
 - ✅ Settings → Plugins → "Load a folder (development)": runs a plugin from any folder, reloads it when its files change, shows a broken manifest (2026-11-17).
 - ✅ `pnpm plugin:check <folder>`: the manifest, the permissions asked, the size, and one load in a test core, before publishing (2026-11-17).
-- ✅ A 10-minute "your first change" walk-through in CONTRIBUTING.md (2026-11-17); ⬜ "good first issue" labels on GitHub (board task).
+- ✅ A 10-minute "your first change" walk-through in CONTRIBUTING.md (2026-11-17); ✅ "good first issue" and "help wanted" labels on GitHub, linked from CONTRIBUTING (2026-11-18).
