@@ -283,6 +283,29 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (!res.ok) throw Object.assign(new Error(j.error ?? String(res.status)), { code: res.status });
           return j.faces ?? [];
         }
+        // The background remover (rembg + BiRefNet) for the image editor: its state; setting it up (asks first: about
+        // 1 GB); a picture (data URL) in, the cut-out PNG (data URL) out.
+        case "image.bg.status":
+          need("image");
+          return api("/api/bg-remove");
+        case "image.bg.setup": {
+          need("image");
+          const he = getLocale() === "he";
+          if (!confirm(he ? "להסרת רקע KesherAI יוריד את rembg עם BiRefNet (רישיון MIT): Python, onnxruntime והמודל, כ-1 GB פעם אחת. זה רץ במחשב שלך. להוריד?" : "To remove backgrounds, KesherAI downloads rembg with BiRefNet (MIT licence): Python, onnxruntime and the model, about 1 GB once. It runs on your computer. Download?")) return false;
+          await api("/api/bg-remove/install", { method: "POST" });
+          return true;
+        }
+        case "image.bg.remove": {
+          need("image");
+          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
+          const model = typeof p.model === "string" ? p.model : "";
+          const res = await fetch(withToken(`/api/bg-remove/remove${model ? `?model=${encodeURIComponent(model)}` : ""}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          if (!res.ok) throw Object.assign(new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status)), { code: res.status });
+          const png = new Uint8Array(await res.arrayBuffer());
+          let bin = "";
+          for (let i = 0; i < png.length; i += 0x8000) bin += String.fromCharCode(...png.subarray(i, i + 0x8000));
+          return `data:image/png;base64,${btoa(bin)}`;
+        }
         // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
         case "own.file": {
           const path = String(p.path ?? "");

@@ -38,6 +38,8 @@ import { VoiceCloner } from "./voice-clone.js";
 import { voiceCloneRoutes } from "./routes/voice-clone.js";
 import { PartSegmenter } from "./part-seg.js";
 import { partSegRoutes } from "./routes/part-seg.js";
+import { BgRemover } from "./bg-remove.js";
+import { bgRemoveRoutes } from "./routes/bg-remove.js";
 import { localCall } from "./local-call.js";
 import { scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
@@ -609,19 +611,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   await trainingRoutes(app, { training, chatTrainer, vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) });
   // A voice of her own: Chatterbox Multilingual (Hebrew too), from a short clip, in its own Python (voice-clone.ts).
-  await voiceCloneRoutes(app, new VoiceCloner(join(paths.engines, "chatterbox"), async () => {
+  // uv (installed when first needed): the engines below each set up their own Python with it.
+  const uvPath = async () => {
     await runtimes.install("uv");
     const dir = (await runtimes.paths()).find((p) => existsSync(join(p, process.platform === "win32" ? "uv.exe" : "uv")));
     if (!dir) throw new Error("uv was not found after installing it.");
     return join(dir, process.platform === "win32" ? "uv.exe" : "uv");
-  }));
+  };
+  await voiceCloneRoutes(app, new VoiceCloner(join(paths.engines, "chatterbox"), uvPath));
   // Splitting a 3D model into parts by meaning: P3-SAM in its own Python (part-seg.ts), set up when she asks for it.
-  await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), async () => {
-    await runtimes.install("uv");
-    const dir = (await runtimes.paths()).find((p) => existsSync(join(p, process.platform === "win32" ? "uv.exe" : "uv")));
-    if (!dir) throw new Error("uv was not found after installing it.");
-    return join(dir, process.platform === "win32" ? "uv.exe" : "uv");
-  }));
+  await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), uvPath));
+  // Removing a picture's background (the image editor): rembg + BiRefNet in its own Python (bg-remove.ts).
+  await bgRemoveRoutes(app, new BgRemover(join(paths.engines, "rembg"), uvPath));
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });

@@ -11,7 +11,7 @@
   const HE = {
     new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
-    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4",
+    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
@@ -762,6 +762,40 @@
       fit();
     });
 
+  // Remove background (Photoshop's and Canva's): rembg + BiRefNet on the computer, set up the first time (asks first).
+  // The cut-out goes in a new layer above, and the original is hidden, not deleted, so nothing is lost.
+  async function bgReady() {
+    let s = await kesher.call("image.bg.status");
+    if (s.installed) return true;
+    if (s.phase !== "installing" && !(await kesher.call("image.bg.setup"))) return false;
+    busy(T("noBgSetup", "Setting up the background remover… (once)"));
+    try {
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 3000));
+        s = await kesher.call("image.bg.status");
+        if (s.installed && s.phase !== "installing") return true;
+        if (s.phase === "error") throw new Error(s.message || "The setup stopped.");
+        if (s.log?.length) $("busyText").textContent = `${T("noBgSetup", "Setting up the background remover… (once)")} ${s.log[s.log.length - 1].slice(0, 80)}`;
+      }
+    } finally { busy(""); }
+  }
+  $("aiNoBg").onclick = async () => {
+    const src = active();
+    if (!src) return;
+    try {
+      if (!(await bgReady())) return;
+      busy(T("noBgWorking", "Removing the background… (BiRefNet on your computer)"));
+      const img = await loadImage(await kesher.call("image.bg.remove", { data: src.canvas.toDataURL("image/png") }));
+      remember(T("hNoBg", "Remove background"));
+      const l = makeLayer(`${src.name} · ${T("noBgLayer", "no background")}`);
+      Object.assign(l, { x: src.x, y: src.y, opacity: src.opacity, blend: src.blend });
+      l.ctx.drawImage(img, 0, 0, l.canvas.width, l.canvas.height);
+      src.visible = false;
+      addLayer(l, doc.active + 1);
+      msg(T("done", "Done"));
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
+  };
+
   // ---------- keys, status ----------
   function msg(text, error) {
     const m = $("msg");
@@ -871,6 +905,7 @@
       ["aiLayer", "New layer from words", "", () => { setPersona("ai"); $("prompt").focus(); }],
       ["aiInpaint", "Repaint the selection", "", () => { setPersona("ai"); $("prompt").focus(); }],
       ["aiUpscale", "Enlarge ×4", "", () => $("aiUpscale").click()],
+      ["aiNoBg", "Remove background", "", () => $("aiNoBg").click()],
     ]],
     ["mView", "View", [
       ["zoomIn", "Zoom in", "Ctrl++", () => zoomBy(1.25)],
