@@ -2202,3 +2202,19 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   (Chrome exposes UIA once an accessibility client asks), measuring the time per read; then the overlay and the key
   hook. Step 1 (a small model's speed beside the big one) can be measured any time the card is free.
 - Stopped at: step 2's first try (above); continue at the keyboard.
+
+## What competitors added lately, against KesherAI (2026-11-18, Roee asked for new ideas)
+- **Open WebUI 0.11 / 0.11.1**: built-in slash commands (`/compact`, `/fork`, `/status`, `/model`) beside saved prompts;
+  chat variables (a prompt asks for its fields in a small form before sending); notes with full chat that edits the
+  note; usage heatmap and streaks; hover previews of chats; remappable shortcuts; tool-call approvals; `ask_user`;
+  sub-agents; delta streaming.
+- **LM Studio 0.4.24–0.4.26 and Bionic 1.1–1.2**: per-load llama.cpp argument overrides; a shared canvas exported to
+  PNG/SVG/Excalidraw; in-app previews of Word, spreadsheet, presentation, CSV and HTML files; read-aloud; a terminal;
+  LM Link (remote chats, projects and fast file transfer between devices); automatic compaction.
+- **Already in KesherAI**: hover previews, remappable keys, usage heatmap and streaks, approvals, ask_user, groups and
+  delegation, compaction, canvas export, read-aloud, the terminal, the phone link, streamed deltas.
+- **Not yet in KesherAI** (proposed to Roee): (1) built-in slash commands (/compact, /fork, /model, /new, /status) next
+  to saved prompts; (2) prompt fields: `{{name}}` / `{{tone:formal|casual}}` in a saved prompt asks for them in a small
+  form; (3) previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (attached or written by
+  the agent); (4) engine arguments per model (today one set for all models).
+- Stopped at: the list above, waiting for Roee's pick.
