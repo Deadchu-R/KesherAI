@@ -9,7 +9,12 @@ import type { UnrealBridge } from "../unreal-bridge.js";
 
 const LEVEL = /^\/Game\/[\w ./-]{1,300}$/;
 const MESH = /^\/(Game|Engine)\/[\w ./-]{1,300}$/;
-const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) => reply.code(/not connected|does not know|closed/i.test((e as Error).message) ? 409 : 502).send({ error: (e as Error).message });
+const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) => {
+  const m = (e as Error).message;
+  // The project's plugin is older than the stand-in (0.1.21): say what to do, not "Unknown command".
+  if (/Unknown command: level/.test(m)) return reply.code(409).send({ error: "The KesherAI Bridge plugin in this project is older than 0.1.21: update it from the Unreal page (Update the plugin), open the project once so Unreal builds it, then try again.", code: "plugin-old" });
+  return reply.code(/not connected|does not know|closed/i.test(m) ? 409 : 502).send({ error: m });
+};
 
 /**
  * The routes.
