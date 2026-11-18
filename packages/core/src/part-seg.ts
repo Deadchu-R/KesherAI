@@ -53,6 +53,12 @@ except Exception as e:
 sys.argv = ["auto_mask.py", "--mesh_path", a["mesh"], "--output_path", out, "--parallel", "0", "--post_process", "0", "--clean_mesh", "0", "--save_mid_res", "0", "--show_info", "0", "--show_time_info", "0"]
 if a.get("ckpt"):
     sys.argv += ["--ckpt_path", a["ckpt"]]
+# Lighter than the demo's defaults (100 000 points, 400 prompts), which filled a 24 GB card and spilled into the
+# computer's memory (found on the PC: ten minutes on a small chair). Only the flags this auto_mask.py knows.
+src = open(os.path.join(demo, "auto_mask.py"), encoding="utf-8").read()
+for flag, value in (("--point_num", "30000"), ("--prompt_num", "200"), ("--prompt_bs", "8")):
+    if flag in src:
+        sys.argv += [flag, value]
 os.chdir(demo)
 runpy.run_path(os.path.join(demo, "auto_mask.py"), run_name="__main__")
 ids = sorted(glob.glob(os.path.join(out, "**", "*face_ids.npy"), recursive=True))
@@ -144,6 +150,8 @@ export class PartSegmenter {
     if (this.state.phase !== "working" || !this.child) return false;
     this.child.kill();
     this.add("Stopped by the user.");
+    // The screen leaves "Splitting…" at once (the run's own end may take a moment to arrive).
+    Object.assign(this.state, { phase: undefined, message: "Stopped." });
     return true;
   }
 
