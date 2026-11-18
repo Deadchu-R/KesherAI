@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה (צבע בסיס)", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -110,9 +110,11 @@ async function open() {
     grid.position.y = box.min.y;
     $("empty").hidden = true;
     // Back from the image editor: the new texture into the slot it was made for.
-    if (input.back?.data && /^\d+:map$/.test(input.back.slot)) {
-      const mesh = meshes.filter((p) => !isGenerated(p.mesh))[Number(input.back.slot.split(":")[0])]?.mesh;
-      if (mesh) { await setTexture(mesh, input.back.data); msg(T("texBack", "The texture came back from the image editor")); setTimeout(() => choose(mesh), 0); }
+    const back = /^(\d+):(map|roughnessMap|normalMap)$/.exec(input.back?.data ? input.back.slot : "");
+    if (back) {
+      const mesh = meshes.filter((p) => !isGenerated(p.mesh))[Number(back[1])]?.mesh;
+      $("texKind").value = back[2];
+      if (mesh) { await setTexture(mesh, input.back.data, back[2]); msg(T("texBack", "The texture came back from the image editor")); setTimeout(() => choose(mesh), 0); }
     }
     frame(model);
     stats();
@@ -352,20 +354,28 @@ $("addMod").onchange = () => {
   stats();
 };
 
-// ---------- textures: the base colour map, edited in the image editor (a hand-off with the way back) ----------
+// ---------- textures: glTF's PBR slots (colour, roughness, normal), each edited in the image editor (a hand-off with the way back) ----------
+/** The slots, as glTF and Blender's Principled BSDF: colour is sRGB; roughness and normal are data (linear). */
+const kind = () => $("texKind").value;
 /** The mesh a texture belongs to: the chosen one, or the first mesh in the chosen group. */
 const meshOfChosen = () => (chosen?.isMesh ? chosen : chosen?.getObjectByProperty("isMesh", true)) ?? null;
-/** A stable name for a mesh across saving and opening again: its place among the file's meshes. */
-const slotOf = (mesh) => `${meshes.filter((p) => !isGenerated(p.mesh)).findIndex((p) => p.mesh === mesh)}:map`;
-function texCanvas(mesh, size) {
-  const c = document.createElement("canvas");
+/** A stable name for a mesh's slot across saving and opening again: its place among the file's meshes, and the slot. */
+const slotOf = (mesh, k = kind()) => `${meshes.filter((p) => !isGenerated(p.mesh)).findIndex((p) => p.mesh === mesh)}:${k}`;
+/** An empty slot's starting picture: the part's colour; middle roughness (or the part's); a flat normal (pointing out). */
+function blankFill(mesh, k) {
   const m = matOf(mesh);
-  const img = m?.map?.image;
+  if (k === "roughnessMap") { const v = Math.round((m?.roughness ?? 0.5) * 255); return `rgb(${v},${v},${v})`; }
+  if (k === "normalMap") return "rgb(128,128,255)";
+  return `#${(m?.color ?? new THREE.Color(0xcccccc)).getHexString()}`;
+}
+function texCanvas(mesh, size, k = kind(), fresh = false) {
+  const c = document.createElement("canvas");
+  const img = fresh ? null : matOf(mesh)?.[k]?.image;
   c.width = img?.width || size;
   c.height = img?.height || size;
   const g = c.getContext("2d");
   if (img) g.drawImage(img, 0, 0, c.width, c.height);
-  else { g.fillStyle = `#${(m?.color ?? new THREE.Color(0xcccccc)).getHexString()}`; g.fillRect(0, 0, c.width, c.height); }
+  else { g.fillStyle = blankFill(mesh, k); g.fillRect(0, 0, c.width, c.height); }
   return c;
 }
 /** The UV layout as white lines on a clear picture: the guide layer (Maya's UV snapshot). */
@@ -387,37 +397,98 @@ function uvGuide(mesh, w, h) {
 }
 function showTexture() {
   const mesh = meshOfChosen();
-  const map = mesh && matOf(mesh)?.map;
+  const map = mesh && matOf(mesh)?.[kind()];
   $("texThumb").hidden = !map;
   if (map?.image) { const c = texCanvas(mesh, 128); $("texThumb").src = c.toDataURL("image/png"); $("texInfo").textContent = `${map.image.width}×${map.image.height}`; }
   else $("texInfo").textContent = T("noTex", "No texture");
   $("texRemove").disabled = !map;
+  // Roughness and normal can be made from the colour texture (Materialize's and Substance's "from base colour").
+  $("texDerive").hidden = kind() === "map";
 }
+$("texKind").onchange = showTexture;
 async function editTexture(fresh) {
   const mesh = meshOfChosen();
   if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
-  const size = 1024;
-  const tex = fresh ? (() => { const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d"); g.fillStyle = `#${(matOf(mesh)?.color ?? new THREE.Color(0xffffff)).getHexString()}`; g.fillRect(0, 0, size, size); return c; })() : texCanvas(mesh, size);
+  const k = kind();
+  const tex = texCanvas(mesh, 1024, k, fresh);
   const guide = uvGuide(mesh, tex.width, tex.height);
   if (!guide) msg(T("noUv", "This part has no UVs, so there are no guide lines"));
   busy(T("texSent", "Opening the texture in the image editor…"));
   try {
     const working = await new Promise((resolve) => glb().then((b) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(b); }));
     const part = (label(mesh) || "part").replace(/[^\p{L}\p{N}_-]+/gu, "-").slice(0, 40);
-    await kesher.call("editor.handoff", { to: "image-editor", data: tex.toDataURL("image/png"), name: `${part}-texture.png`, slot: slotOf(mesh), ...(guide ? { guide: guide.toDataURL("image/png"), guideName: `${part}-uv.png` } : {}), working, workingName: `${base().replace(/-edited$/, "")}-working.glb` });
+    const suffix = { map: "texture", roughnessMap: "roughness", normalMap: "normal" }[k];
+    await kesher.call("editor.handoff", { to: "image-editor", data: tex.toDataURL("image/png"), name: `${part}-${suffix}.png`, slot: slotOf(mesh, k), ...(guide ? { guide: guide.toDataURL("image/png"), guideName: `${part}-uv.png` } : {}), working, workingName: `${base().replace(/-edited$/, "")}-working.glb` });
   } catch (e) { msg(e.message, true); } finally { busy(""); }
 }
-/** A picture as the mesh's base colour map (glTF's way: not flipped, sRGB), the colour set to white so it shows true. */
-async function setTexture(mesh, dataUrl) {
+/**
+ * A picture into one of the mesh's slots, glTF's way: not flipped; colour in sRGB (and the colour set to white so it shows
+ * true); roughness and normal as data. A roughness map multiplies the roughness value, so that goes to 1.
+ */
+async function setTexture(mesh, dataUrl, k = "map") {
   const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl; });
   const t = new THREE.Texture(img);
   t.flipY = false;
-  t.colorSpace = THREE.SRGBColorSpace;
+  t.colorSpace = k === "map" ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.needsUpdate = true;
-  [].concat(mesh.material).forEach((m) => { m.map = t; m.color?.set(0xffffff); m.needsUpdate = true; });
+  [].concat(mesh.material).forEach((m) => {
+    m[k] = t;
+    if (k === "map") m.color?.set(0xffffff);
+    if (k === "roughnessMap" && "roughness" in m) m.roughness = 1;
+    m.needsUpdate = true;
+  });
 }
+/**
+ * Roughness or normal from a colour picture (as Materialize and Substance's "from base colour"): its brightness read as
+ * height. Roughness: darker (cracks, grain) is rougher. Normal: the slope of the height (Sobel), as an OpenGL normal map.
+ *
+ * @param img - The colour texture.
+ * @param k - "roughnessMap" or "normalMap".
+ * @returns The new picture.
+ */
+function derive(img, k) {
+  const w = img.width, h = img.height;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.drawImage(img, 0, 0, w, h);
+  const src = g.getImageData(0, 0, w, h), d = src.data;
+  const lum = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) lum[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
+  const out = g.createImageData(w, h), o = out.data;
+  if (k === "roughnessMap") {
+    // Spread to 0.35–0.95, so it never turns into a mirror or into chalk.
+    for (let i = 0; i < w * h; i++) { const v = Math.round((0.95 - lum[i] * 0.6) * 255); o[i * 4] = o[i * 4 + 1] = o[i * 4 + 2] = v; o[i * 4 + 3] = 255; }
+  } else {
+    // Wraps at the edges, so a seamless colour gives a seamless normal.
+    const at = (x, y) => lum[((y + h) % h) * w + ((x + w) % w)];
+    const strength = 2;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+      const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+      let nx = -dx * strength, ny = dy * strength, nz = 1;
+      const len = Math.hypot(nx, ny, nz);
+      nx /= len; ny /= len; nz /= len;
+      const i = (y * w + x) * 4;
+      o[i] = Math.round((nx * 0.5 + 0.5) * 255); o[i + 1] = Math.round((ny * 0.5 + 0.5) * 255); o[i + 2] = Math.round((nz * 0.5 + 0.5) * 255); o[i + 3] = 255;
+    }
+  }
+  g.putImageData(out, 0, 0);
+  return c;
+}
+$("texDerive").onclick = async () => {
+  const mesh = meshOfChosen();
+  if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
+  const img = matOf(mesh)?.map?.image;
+  if (!img) return msg(T("noColorTex", "This part has no colour texture to make it from"), true);
+  remember();
+  await setTexture(mesh, derive(img, kind()).toDataURL("image/png"), kind());
+  showTexture();
+  msg(T("derived", "Made from the colour texture"));
+};
 // A texture from words with the picture model on the computer (Meshy's and Tripo's "retexture", simply): seamless,
-// so it repeats over the part without seams.
+// so it repeats over the part without seams. For roughness and normal: a colour texture first, then made from it.
 $("texAi").onclick = async () => {
   const mesh = meshOfChosen();
   const words = $("texPrompt").value.trim();
@@ -427,14 +498,26 @@ $("texAi").onclick = async () => {
   try {
     const [url] = await kesher.call("image.generate", { prompt: `${words}, seamless tileable texture, flat even lighting, top-down, no shadows, high detail`, width: 1024, height: 1024 });
     remember();
-    await setTexture(mesh, url);
+    const k = kind();
+    if (k === "map") await setTexture(mesh, url);
+    else {
+      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+      await setTexture(mesh, derive(img, k).toDataURL("image/png"), k);
+    }
     showTexture();
     msg(T("texDone", "The new texture is on the part"));
   } catch (e) { msg(e.message, true); } finally { busy(""); }
 };
 $("texEdit").onclick = () => editTexture(false);
 $("texNew").onclick = () => editTexture(true);
-$("texRemove").onclick = () => { const mesh = meshOfChosen(); if (!mesh) return; remember(); [].concat(mesh.material).forEach((m) => { m.map = null; m.needsUpdate = true; }); showTexture(); };
+$("texRemove").onclick = () => {
+  const mesh = meshOfChosen();
+  if (!mesh) return;
+  remember();
+  const k = kind();
+  [].concat(mesh.material).forEach((m) => { m[k] = null; if (k === "roughnessMap" && "roughness" in m) m.roughness = 0.5; m.needsUpdate = true; });
+  showTexture();
+};
 
 // ---------- split into parts (Blender's Separate by loose parts / by material), so each can get its own texture ----------
 /** The triangles of a mesh in groups that share no vertex position (each loose piece), by union-find. */
@@ -793,6 +876,6 @@ kesher.call("storage.get", { key: "keymap" }).then((v) => { if (v === "blender" 
 $("keymap").onchange = () => kesher.call("storage.set", { key: "keymap", value: $("keymap").value }).catch(() => undefined);
 kesher.call("info").then((i) => {
   he = i.locale === "he";
-  if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); }
+  if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); document.querySelectorAll("[data-ta]").forEach((el) => el.setAttribute("aria-label", T(el.dataset.ta, el.getAttribute("aria-label")))); }
 }).catch(() => undefined);
 open();

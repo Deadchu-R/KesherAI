@@ -53,8 +53,15 @@
         <label class="field"><span data-t="metal">Metalness</span><input type="range" id="metal" min="0" max="100" value="0" /></label>
         <div class="muted small" id="size"></div>
         <hr />
-        <!-- The base colour texture, edited in the image editor with the UV layout as a guide (Maya's PSD network, Blender's Edit Externally) -->
-        <b data-t="texH">Texture (base colour)</b>
+        <!-- The part's textures (glTF's PBR slots, as Blender's Principled BSDF and Substance's channels): colour, roughness,
+             normal. Each is edited in the image editor with the UV layout as a guide (Maya's PSD network, Blender's Edit Externally). -->
+        <div class="row"><b class="grow" data-t="texH">Texture</b>
+          <select id="texKind" aria-label="Texture slot" data-ta="texKindL">
+            <option value="map" data-t="kMap">Colour</option>
+            <option value="roughnessMap" data-t="kRough">Roughness</option>
+            <option value="normalMap" data-t="kNormal">Normal (bumps)</option>
+          </select>
+        </div>
         <div class="tex-slot"><img id="texThumb" alt="" hidden /><span class="muted small" id="texInfo" data-t="noTex">No texture</span></div>
         <div class="row">
           <button id="texEdit" class="primary" data-t="texEdit">✎ Edit in the image editor</button>
@@ -62,6 +69,7 @@
           <button id="texRemove" data-t="texRemove">✕</button>
         </div>
         <div class="row"><input id="texPrompt" dir="auto" data-tp="texPromptPh" placeholder="✨ A texture from words: old oak, red velvet…" style="flex:1;min-width:0" /><button id="texAi" data-t="texAi">✨</button></div>
+        <button id="texDerive" hidden data-t="texDerive">◐ Make it from the colour texture</button>
         <hr />
         <!-- Modifiers, as 3ds Max's stack and Blender's modifiers: non-destructive, each on/off, in order -->
         <div class="row"><b class="grow" data-t="modsH">Modifiers</b>
