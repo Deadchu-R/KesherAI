@@ -2522,3 +2522,43 @@ Each AI tool shows which local model it uses and offers to download it the first
   "What's new in 3ds Max 2026", digitalproduction.com on 3ds Max 2026, renderhub.com monthly news (Blender 4.5), plus each
   tool's own key map.
 - Stopped at: research done; next the board update, then stage 1.5.
+
+## Textures for the 3D editor from the image editor, and editors that work alone but together (2026-11-18, 16:40; Roee asked)
+- Roee: the 3D editor should make and edit textures with the image editor; give him the tools; research how it should be
+  done and how every tool stays separate yet works with the others.
+- **How the big tools do textures with a 2D editor:**
+  - **Maya: PSD Network** (Texturing → Create PSD Network): pick the material's channels (colour, bump, specular…), Maya
+    makes a PSD with one layer set per channel, coloured from the material, plus an optional **UV snapshot** layer on top
+    as a guide that does not render; paint in Photoshop, save; **Update PSD Networks** brings each layer set back into its
+    channel.
+  - **Blender:** Image Editor → Image → **Edit Externally** opens the texture in the system's editor, then **Reload**;
+    **UV Editor → Export UV Layout** for a guide; **Texture Paint** mode paints on the model itself. Bridges (Universal
+    Bridge for Photoshop, Affinity Bridge) automate it: **Edit Image** watches the file it sent and reloads it the moment it
+    is saved; **New Texture with UV Guide** makes a blank 512–4096 px document with the UV layout as a guide layer and puts
+    the painted layer on the material's base colour on save; **Edit as Height** wires the result as a bump map; **Keep
+    Versions** saves `_v001`, `_v002` instead of overwriting.
+  - **3ds Max: Viewport Canvas** paints on the model in the viewport, layers like Photoshop's, and **Edit in Photoshop**
+    hands the current layer to Photoshop and takes it back.
+  - **Substance Painter:** paints in layers directly on the model, exports texture sets; to Photoshop by **Send to
+    Photoshop** / PSD export. **Unreal:** a texture is an asset; "Edit in external app" and it reimports when the source
+    file changes. **Meshy / Tripo:** AI texture by a prompt (retexture), the model kept.
+- **What they share:** a texture is a **file linked from the material's slot**; the 2D editor gets the texture **and a UV
+  guide that never renders**; saving brings it back into **the same slot**; versions are kept; the 3D tool decides which
+  channel it is (colour, roughness, normal / height).
+- **Separate yet together** (Photoshop's linked files and Edit Smart Object, Blender's Edit Externally, Figma's plugins,
+  Apple's "Edit with", Windows' OLE before them): each program opens and saves its own files and needs nothing from the
+  other; the hand-off is only **a file + where it came from + a way back**. The first program writes the file, opens the
+  second with a return ticket, the second saves and says "back", the first reloads that file into the place it came from.
+  If the second is not installed, the first still works (and offers to get it).
+- **For KesherAI** (generalising what the video ↔ sound editors do): a hand-off on the plugin bridge —
+  `editor.handoff { to, data, name, slot, guide? }` saves the file in the chat's folder and opens the other editor (offering
+  to turn it on if it is off) with `ret` (the file to go back to), `retp` (the editor to go back to), `slot` (an opaque
+  place, e.g. "Seat:map") and an optional guide; `editor.handBack { data, name }` saves the result and opens the first
+  editor again with `back` and `slot`. The 3D editor: per part, a **Base colour texture** slot (thumbnail; Edit in the
+  image editor; New texture with a UV guide; Remove), the model kept as a working copy while away; the image editor: the
+  UV guide as a top layer that is never exported, and **↩ Back to the 3D model**. Later: roughness / normal slots, AI
+  texture by a prompt (seamless, from the picture model), painting on the model itself (Viewport Canvas / Texture Paint).
+- Sources: Autodesk Maya help "Create a PSD file with layer sets from within Maya" and "Update PSD Networks";
+  superhivemarket.com Universal Bridge: Photoshop docs; versluis.com "How to use an external image editor with Blender";
+  creativebloq.com "How to paint model textures directly in 3ds Max"; polycount threads on Viewport Canvas and Photoshop.
+- Stopped at: research done; next the board, then the hand-off and the texture slot.
