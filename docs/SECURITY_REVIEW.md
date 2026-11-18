@@ -1377,3 +1377,15 @@ S5 an outside scanner's rules for Electron.
 - **Expand with AI, four views**: in the pages only.
 - Checked: lint, typecheck, tests (open-in-app, bg-remove, part-seg), the Blender script with Blender 5.0.1's bpy, the
   pages' new tools in a browser with stub hosts.
+
+## Scan 152 (2026-11-18): a Godot scene without Godot (read, stand-in, write back)
+- **`/api/godot/scenes`, `/api/godot/scene`**: the owner's (guests reach only `/api/guest/`); the folder must hold
+  project.godot; the scene must be `res://….tscn` inside it, checked twice: by path (`..` refused) and, **fixed in this
+  scan**, by the real path too, so a link inside the project cannot lead a read or a write outside it (test).
+- **The write**: only the transform / position lines of the nodes that moved change (tscn.ts, tested byte for byte
+  elsewhere); every number must be finite; at most 5000 changes; a copy of the file as it was is kept
+  (`.tscn.kesher-bak`); refused while the Godot editor is connected, so Godot never reloads under her feet; a clash
+  (it moved in Godot too) is answered as data and written only when she keeps hers.
+- **The page**: `gp` / `gs` are checked in `godotSceneInput` (only `res://….tscn`, no `..`, only for a page that declared
+  `model`), and the bridge sends only that scene's path; the stand-in page cannot name another file.
+- Checked: lint, typecheck, tests (tscn 2, godot-scene 3, page-input), the stand-in in a browser with a stub.

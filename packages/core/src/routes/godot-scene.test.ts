@@ -44,3 +44,13 @@ test("it moved in Godot meanwhile: a conflict, unless she keeps hers; Godot open
   assert.equal((await open.app.inject({ method: "POST", url: "/api/godot/scene", payload: { project: open.dir, scene: "res://levels/a.tscn", changes: [move()] } })).json().code, "godot-open");
   await open.app.close();
 });
+
+test("a link inside the project that leads outside is refused", async () => {
+  const { symlink } = await import("node:fs/promises");
+  const { app, dir } = await setup();
+  const outside = await mkdtemp(join(tmpdir(), "out-"));
+  await writeFile(join(outside, "b.tscn"), SCENE);
+  await symlink(outside, join(dir, "linked"));
+  assert.equal((await app.inject({ url: `/api/godot/scene?project=${encodeURIComponent(dir)}&scene=res://linked/b.tscn` })).statusCode, 400);
+  await app.close();
+});

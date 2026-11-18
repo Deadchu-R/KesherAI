@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
-import { copyFile, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { GodotBridge } from "../godot-bridge.js";
 import { readTscn, writeTscn, type TscnChange, type TscnNode } from "../tscn.js";
@@ -20,6 +20,13 @@ function paths(project: unknown, scene?: unknown): { dir: string; file?: string 
   const file = resolve(dir, rel);
   if (!/\.tscn$/i.test(file) || relative(dir, file).startsWith("..") || relative(dir, file).split(sep).includes("..")) throw Object.assign(new Error("A .tscn inside the project (res://…)."), { statusCode: 400 });
   return { dir, file };
+}
+
+/** The scene must really be inside the project: a link inside the folder may not lead the write elsewhere. */
+async function inside(dir: string, file: string): Promise<void> {
+  const [d, f] = await Promise.all([realpath(dir), realpath(file).catch(() => file)]);
+  const rel = relative(d, f);
+  if (rel.startsWith("..") || rel.split(sep).includes("..")) throw Object.assign(new Error("A .tscn inside the project (res://…)."), { statusCode: 400 });
 }
 
 const same = (a?: number[], b?: number[]) => !!a && !!b && a.length === b.length && a.every((x, i) => Math.abs(x - b[i]!) < 1e-4);
@@ -74,7 +81,8 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
 
   app.get<{ Querystring: { project?: string; scene?: string } }>("/api/godot/scene", async (req, reply) => {
     try {
-      const { file } = paths(req.query.project, req.query.scene);
+      const { dir, file } = paths(req.query.project, req.query.scene);
+      await inside(dir, file!);
       const st = await stat(file!).catch(() => undefined);
       if (!st?.isFile()) return reply.code(404).send({ error: "No such scene." });
       return { nodes: readTscn(await readFile(file!, "utf8")), mtime: st.mtimeMs };
@@ -87,7 +95,8 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
   // (unless `keep: "mine"`); a copy of the scene as it was is kept beside it (.tscn.kesher-bak).
   app.post<{ Body: { project?: string; scene?: string; changes?: StandInChange[]; keep?: "mine" } }>("/api/godot/scene", async (req, reply) => {
     try {
-      const { file } = paths(req.body?.project, req.body?.scene);
+      const { dir, file } = paths(req.body?.project, req.body?.scene);
+      await inside(dir, file!);
       if (g.status().connected) return reply.code(409).send({ error: "Godot is open: close it to save into the scene, or apply the moves there.", code: "godot-open" });
       const changes = Array.isArray(req.body?.changes) ? req.body!.changes.slice(0, 5000) : [];
       const ok = changes.filter((c) => typeof c?.path === "string" && ((Array.isArray(c.transform?.basis) && c.transform!.basis.length === 9 && Array.isArray(c.transform!.origin) && c.transform!.origin.length === 3 && [...c.transform!.basis, ...c.transform!.origin].every(Number.isFinite)) || (Array.isArray(c.position2d) && c.position2d.length === 2 && c.position2d.every(Number.isFinite))));
