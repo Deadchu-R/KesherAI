@@ -8,6 +8,7 @@ import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resol
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import { checkSegments, cutVideo } from "../video-cut.js";
+import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
 const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "build", ".next", ".cache"]);
@@ -88,6 +89,30 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     }
     return { path: relative(root, out).split(sep).join("/") };
+  });
+
+  /**
+   * The video editor's transcript: what is said in a video (or sound) of the chat's folder, in pieces with their
+   * times in seconds (whisper on this computer). 409 `needs-setup` when speech to text is not set up.
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/files/transcript", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    let full: string;
+    try {
+      full = await resolveInWorkspace(root, req.body?.path ?? "");
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    if (!/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(full) || !(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "Video or sound not found" });
+    const local = await s.whisper.status();
+    if (!local.engine || !local.model) return reply.code(409).send({ error: "needs-setup", code: "needs-setup" });
+    try {
+      const wav = await toWav(full, () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }));
+      return { parts: await s.whisper.transcribeParts(wav, s.config.speech?.language ?? "auto") };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
   });
 
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>("/api/conversations/:id/files/download", async (req, reply) => {

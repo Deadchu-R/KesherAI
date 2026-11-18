@@ -15,9 +15,11 @@
     videoTrack: "וידאו", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
+    transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
+    transcribing: "מתמלל במחשב… (whisper)", silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
-    kPlay: "נגן / עצור", kJkl: "אחורה 5 שנ׳ / עצור / קדימה (פעמיים = מהר)", kFrame: "פריים", kSec: "שנייה", kSplit: "פיצול בראש הניגון", kTrim: "קיצוץ ההתחלה / הסוף עד ראש הניגון", kDel: "מחיקת הקליפ (הרווח נסגר)", kUndo: "ביטול / ביצוע שוב", kZoom: "זום בציר הזמן", kMove: "הזזת הקליפ שמאלה / ימינה",
+    cutLine: "לחתוך את זה מהווידאו", kPlay: "נגן / עצור", kJkl: "אחורה 5 שנ׳ / עצור / קדימה (פעמיים = מהר)", kFrame: "פריים", kSec: "שנייה", kSplit: "פיצול בראש הניגון", kTrim: "קיצוץ ההתחלה / הסוף עד ראש הניגון", kDel: "מחיקת הקליפ (הרווח נסגר)", kUndo: "ביטול / ביצוע שוב", kZoom: "זום בציר הזמן", kMove: "הזזת הקליפ שמאלה / ימינה",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -172,6 +174,7 @@
     }));
     const c = clips[chosen];
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
+    if (parts.length) renderTranscript();
     $("undo").disabled = !undoStack.length;
     $("redo").disabled = !redoStack.length;
     drawHead();
@@ -204,6 +207,88 @@
     zoom = Math.max(2, Math.min(400, zoom * k));
     render();
   }
+
+  // ---------- the transcript: what is said, and cutting it out (text-based editing, as Premiere and Descript) ----------
+  let parts = []; // [{ start, end, text }] in seconds of the source
+  /** Cuts a stretch of the source out of every clip it falls in (the rest of each clip stays, in its place). */
+  function cutSource(a, b) {
+    const next = [];
+    for (const c of clips) {
+      if (b <= c.from || a >= c.to) { next.push(c); continue; }
+      if (a - c.from >= 0.1) next.push({ id: nextId++, from: c.from, to: a });
+      if (c.to - b >= 0.1) next.push({ id: nextId++, from: b, to: c.to });
+    }
+    if (next.length) clips = next;
+  }
+  /** Whether a stretch of the source is still in the edit. */
+  const kept = (a, b) => clips.some((c) => c.from < b - 0.05 && c.to > a + 0.05);
+  /** The edit's time of a moment of the source, if it is still in. */
+  function editTimeOf(src) {
+    let at = 0;
+    for (const c of clips) {
+      if (src >= c.from && src < c.to) return at + src - c.from;
+      at += len(c);
+    }
+    return undefined;
+  }
+  /** Long pauses: between the pieces of speech, and before the first and after the last (over 1 second). */
+  function silences() {
+    if (!parts.length || !source) return [];
+    const out = [];
+    const edges = [{ end: 0 }, ...parts, { start: source.duration }];
+    for (let i = 1; i < edges.length; i++) {
+      const a = edges[i - 1].end + 0.25, b = edges[i].start - 0.25;
+      if (b - a >= 1 && kept(a, b)) out.push([a, b]);
+    }
+    return out;
+  }
+  function renderTranscript() {
+    const here = locate(now).src;
+    $("transcript").replaceChildren(...parts.map((p) => {
+      const li = document.createElement("li");
+      const gone = !kept(p.start, p.end);
+      li.className = `${gone ? "gone" : ""}${here >= p.start && here < p.end && !gone ? " here" : ""}`;
+      const t = document.createElement("time");
+      t.textContent = fmt(p.start).replace(/\.\d$/, "");
+      const s = document.createElement("span");
+      s.dir = "auto";
+      s.textContent = p.text;
+      li.append(t, s);
+      if (!gone) {
+        const cut = document.createElement("button");
+        cut.textContent = "✂";
+        cut.title = T("cutLine", "Cut this out of the video");
+        cut.onclick = (e) => { e.stopPropagation(); remember(); cutSource(p.start, p.end); after(); };
+        li.append(cut);
+      }
+      li.onclick = () => { const t2 = editTimeOf(p.start + 0.01); if (t2 !== undefined) seek(t2); };
+      return li;
+    }));
+    const quiet = silences();
+    const b = $("silences");
+    b.hidden = !parts.length;
+    b.disabled = !quiet.length;
+    b.textContent = quiet.length ? (he ? HE.silences(quiet.length) : `Remove ${quiet.length} long silences`) : T("noSilences", "No long silences");
+  }
+  $("silences").onclick = () => {
+    const quiet = silences();
+    if (!quiet.length) return;
+    remember();
+    // From the end, so the earlier stretches keep their places.
+    for (const [a, b] of quiet.reverse()) cutSource(a, b);
+    after();
+  };
+  $("transcribe").onclick = async () => {
+    busy(T("transcribing", "Transcribing on your computer… (whisper)"));
+    try {
+      parts = await kesher.call("video.transcript");
+      renderTranscript();
+    } catch (e) {
+      msg(e.message, true);
+    } finally {
+      busy("");
+    }
+  };
 
   // ---------- open from the chat, export, send ----------
   let busyCount = 0;
@@ -275,7 +360,7 @@
   $("right").onclick = () => moveClip(1);
   $("zoomIn").onclick = () => zoomBy(1.4);
   $("zoomOut").onclick = () => zoomBy(1 / 1.4);
-  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play() })[b.dataset.do]()));
+  document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play(), words: () => $("app").classList.toggle("sheet") })[b.dataset.do]()));
 
   const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom the timeline"]];
   function showKeys() {

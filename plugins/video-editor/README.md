@@ -10,9 +10,11 @@ A video editor that runs inside KesherAI as an app plugin, laid out after CapCut
   the playhead, move a clip left or right, undo and redo.
 - **Keys:** Space play/pause, J/K/L back/stop/forward, ←/→ a frame, Shift+←/→ a second, S split, Q/W trim the start/end
   to the playhead, Delete removes the clip, Ctrl+Z / Ctrl+Y, `+`/`−` zoom the timeline, `?` shows them all.
+- **Transcript:** *Transcribe* runs whisper on your computer; each line shows its time, a tap goes there, and ✂ cuts what
+  it says out of the video. *Remove long silences* cuts the pauses over a second (before, between and after the speech).
 - **Export:** the kept stretches are cut and joined on your computer by FFmpeg (exact frames, H.264 + AAC) into a new file
   in the chat's folder; *Send to the chat* attaches it with an optional message.
 
 How it is built: plain HTML, CSS and JavaScript (`ui/`), no build step. It talks to KesherAI only through `window.kesher`
-(`ui/kesher.js`): `editor.input` (the chat's video, as bytes) and `video.cut` (the export). Next: the transcript beside it
-(delete words to cut), captions from speech, and the AI task bar under a marked stretch.
+(`ui/kesher.js`): `editor.input` (the chat's video, as bytes), `video.transcript` and `video.cut` (the export). Next: captions from
+speech burned in or as a file, and the AI task bar under a marked stretch.

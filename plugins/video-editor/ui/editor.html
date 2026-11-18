@@ -30,8 +30,10 @@
         <div class="row"><button id="trimStart" data-t="trimStart">⇤ Trim start</button><button id="trimEnd" data-t="trimEnd">Trim end ⇥</button></div>
         <div class="row"><button id="left" data-t="moveLeft">◀ Move</button><button id="right" data-t="moveRight">Move ▶</button></div>
         <hr />
-        <b data-t="soonH">Coming next</b>
-        <span class="muted small" data-t="soon">The transcript (delete words to cut), captions from speech, and "What to do here?" with the video model.</span>
+        <div class="row"><b class="grow" data-t="transcriptH">Transcript</b><button id="transcribe" data-t="transcribe">Transcribe</button></div>
+        <button id="silences" hidden></button>
+        <ol class="transcript" id="transcript"></ol>
+        <span class="muted small" data-t="transcriptHint">Tap a line to go there; ✂ cuts what it says out of the video. Whisper runs on your computer.</span>
       </aside>
     </main>
 
@@ -57,6 +59,7 @@
       <button data-do="trimStart"><span>⇤</span><b data-t="trimS">Trim</b></button>
       <button data-do="trimEnd"><span>⇥</span><b data-t="trimE">Trim</b></button>
       <button data-do="delete"><span>⌫</span><b data-t="deleteS">Delete</b></button>
+      <button data-do="words"><span>📝</span><b data-t="wordsS">Words</b></button>
       <button data-do="play"><span>▶</span><b data-t="playS">Play</b></button>
     </nav>
   </div>

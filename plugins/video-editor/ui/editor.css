@@ -48,12 +48,21 @@ dialog { background: var(--panel); color: var(--text); border: 1px solid var(--l
 dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .keys td { padding: 3px 12px 3px 0; }
 .keys kbd { font: 12px ui-monospace, monospace; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.transcript { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.transcript li { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.transcript li:hover { background: var(--panel-2); }
+.transcript li.here { background: #33385e; }
+.transcript li.gone { opacity: 0.4; text-decoration: line-through; }
+.transcript time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.transcript span { flex: 1; }
+.transcript button { padding: 0 6px; flex: none; }
 [hidden] { display: none !important; }
 
 /* Phone (design VideoEditorWorkspacePhone, after CapCut mobile): viewer, timeline, tools at the bottom. */
 @media (max-width: 760px) {
   .app { grid-template-rows: 46px minmax(180px, 40vh) 1fr 56px; }
   .inspector, .hint, #export, #keysBtn { display: none; }
+  .app.sheet .inspector { display: flex; position: fixed; inset-inline: 0; bottom: 56px; width: auto; max-height: 60vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
   .top #toChat { padding: 5px 8px; }
   .timeline { border-top: 0; }
   .lane { height: 64px; }

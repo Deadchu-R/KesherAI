@@ -147,6 +147,15 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           }
           return { path };
         }
+        // What is said in the video the page was opened with, in pieces with their times (whisper on the computer).
+        case "video.transcript": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/transcript`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: input.path }) });
+          const j = (await res.json()) as { parts?: Array<{ start: number; end: number; text: string }>; error?: string };
+          if (!res.ok) throw new Error(j.error === "needs-setup" ? "Speech to text is not set up yet (Settings → Speech)." : j.error ?? String(res.status));
+          return j.parts ?? [];
+        }
         // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
         case "chat.sendFile": {
           if (!input) throw new Error("This page was not opened from a chat.");
