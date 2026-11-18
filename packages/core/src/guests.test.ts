@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GuestInvites, GuestQuota, guestName, guestOf, guestScope } from "./guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, guestName, guestOf, guestScope } from "./guests.js";
 
 test("an invite works once, for its project and role, and only its hash is kept", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kesher-guests-"));
@@ -41,4 +41,17 @@ test("a guest's daily answers run out", () => {
   assert.equal(q.take("g", 2), -1);
   assert.equal(q.left("g", 2), 0);
   assert.equal(q.left("other", 2), 2);
+});
+
+test("the owner hears about a guest going outside, a new address, or a flood; each at most once in 10 minutes", () => {
+  const w = new GuestWatch();
+  assert.deepEqual(w.see("g", "1.1.1.1", 200, 0), [], "the first address is learnt quietly");
+  assert.deepEqual(w.see("g", "1.1.1.1", 403, 1000), ["outside"]);
+  assert.deepEqual(w.see("g", "1.1.1.1", 403, 2000), [], "not again within 10 minutes");
+  assert.deepEqual(w.see("g", "2.2.2.2", 200, 3000), ["new-address"]);
+  assert.deepEqual(w.see("g", "1.1.1.1", 403, 700_000), ["outside"], "again after 10 minutes");
+  const f = new GuestWatch();
+  let said: string[] = [];
+  for (let i = 0; i < 125; i++) said = [...said, ...f.see("h", "3.3.3.3", 200, 1_000_000 + i * 100)];
+  assert.deepEqual(said, ["busy"]);
 });

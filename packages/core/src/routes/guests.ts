@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
-import { GuestInvites, GuestQuota, guestName, guestOf, guestScope, type GuestRole } from "../guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, guestName, guestOf, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
+import { clientAddress } from "../auth.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
 
 /**
@@ -17,6 +18,25 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
   const quota = new GuestQuota();
   const limit = () => s.config.remote.guestDailyLimit;
   const devices = () => s.config.remote.devices;
+  const watch = new GuestWatch();
+
+  // The owner hears about a guest trying to go outside the project, coming from a new address, or flooding requests.
+  app.addHook("onResponse", async (req, reply) => {
+    const id = pairedDeviceIdOf(req);
+    const d = id ? devices().find((x) => x.id === id) : undefined;
+    const g = guestOf(d?.scope);
+    if (!d || !g) return;
+    const project = s.library.getProject(g.projectId)?.name ?? "";
+    const who = d.name.replace(/ \(guest\)$/, "");
+    const say: Record<GuestAlert, string> = {
+      outside: `${who} tried to reach something outside the shared project "${project}" (refused).`,
+      "new-address": `${who} came into "${project}" from a new network address.`,
+      busy: `${who} sent very many requests in a minute to "${project}".`,
+    };
+    for (const a of watch.see(d.id, clientAddress(req), reply.statusCode)) {
+      void s.notifier.send({ title: "KesherAI: a guest", body: say[a], tags: ["warning"], priority: a === "outside" ? 4 : 3 }).catch(() => undefined);
+    }
+  });
 
   /** The guest behind a request (by its device key), or undefined for anyone else. */
   const guestBehind = (req: FastifyRequest) => {

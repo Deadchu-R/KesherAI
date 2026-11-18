@@ -189,6 +189,8 @@ export function registerRemoteAuth(
       }
       // A guest in a shared project: only the guest API (deny by default; routes/guests.ts checks the project).
       if ((device as { scope?: string }).scope?.startsWith("project:") && (!path.startsWith("/api/guest/") || /\/\.\.?(\/|$)/.test(path))) {
+        // Marked first, so the owner's alerts (routes/guests.ts) see who tried to go outside the project.
+        markPairedDevice(request.raw, device.name, device.id);
         await reply.code(403).send({ error: "A guest key opens only the shared project." });
         return;
       }

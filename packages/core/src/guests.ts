@@ -188,3 +188,48 @@ export class GuestQuota {
     return Math.max(0, limit - (u && u.day === new Date().toISOString().slice(0, 10) ? u.n : 0));
   }
 }
+
+/** What the owner is told about a guest (stage 2 of docs/COLLABORATION.md). */
+export type GuestAlert = "outside" | "new-address" | "busy";
+
+/**
+ * Watches guests' requests for what the owner should hear about: a try to reach outside the shared project, a new
+ * network address, or very many requests in a minute. Each kind is said at most once in 10 minutes per guest; the
+ * first address a guest comes from is learnt quietly.
+ */
+export class GuestWatch {
+  private addresses = new Map<string, Set<string>>();
+  private recent = new Map<string, number[]>();
+  private said = new Map<string, number>();
+
+  /**
+   * One request by a guest.
+   *
+   * @param guest - The guest's device id.
+   * @param address - Where it came from.
+   * @param status - The answer's status (403: outside the project).
+   * @param now - The time (for tests).
+   * @returns What to tell the owner, if anything.
+   */
+  see(guest: string, address: string, status: number, now = Date.now()): GuestAlert[] {
+    const out: GuestAlert[] = [];
+    const once = (kind: GuestAlert) => {
+      const key = `${guest}|${kind}`;
+      if (now - (this.said.get(key) ?? -Infinity) < 600_000) return;
+      this.said.set(key, now);
+      out.push(kind);
+    };
+    if (status === 403) once("outside");
+    const known = this.addresses.get(guest);
+    if (!known) this.addresses.set(guest, new Set([address]));
+    else if (!known.has(address)) {
+      if (known.size < 20) known.add(address);
+      once("new-address");
+    }
+    const times = (this.recent.get(guest) ?? []).filter((t) => now - t < 60_000);
+    times.push(now);
+    this.recent.set(guest, times);
+    if (times.length > 120) once("busy");
+    return out;
+  }
+}
