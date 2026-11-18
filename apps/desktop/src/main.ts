@@ -62,8 +62,9 @@ async function runningCore(port: number): Promise<string | undefined> {
 }
 
 async function startCore(): Promise<string> {
-  // KesherAI is already running (e.g. `pnpm dev` or the browser version): show that one.
-  const existing = await runningCore(branding.defaultPort);
+  // KesherAI is already running (e.g. `pnpm dev` or the browser version): show that one. A separate data folder
+  // (KESHER_DATA_DIR, e.g. a test profile with its own port) always starts its own.
+  const existing = process.env.KESHER_DATA_DIR ? undefined : await runningCore(branding.defaultPort);
   if (existing) return existing;
   const root = resourcesDir();
   const host = app.isPackaged ? workerHost({ dataDir: process.env.KESHER_DATA_DIR ?? join(app.getPath("home"), `.${branding.appId}`), version: app.getVersion(), exe: process.execPath, mainUrl: () => `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}` }) : undefined;

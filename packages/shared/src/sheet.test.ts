@@ -51,3 +51,16 @@ test("markdownTableCsv: a comparison table becomes CSV for a sheet", () => {
   assert.equal(markdownTableCsv(md), ',Beta blockers,Calcium blockers\nMechanism,block β1,"block L-type, ""slow"""\nUse,angina,angina');
   assert.equal(markdownTableCsv("no table"), "");
 });
+
+test("MEDIAN, COUNTIF and SUMIF, with criteria parsed by hand", () => {
+  const cells: Record<string, string> = { A1: "90", A2: "70", A3: "85", A4: "done", B1: "1", B2: "2", B3: "3", B4: "4" };
+  const v = (f: string) => computeSheet({ ...cells, C1: f }).C1;
+  assert.equal(v("=MEDIAN(A1:A3)"), 85);
+  assert.equal(v("=MEDIAN(B1:B4)"), 2.5);
+  assert.equal(v('=COUNTIF(A1:A4,">80")'), 2);
+  assert.equal(v('=COUNTIF(A1:A4,"done")'), 1);
+  assert.equal(v('=COUNTIF(A1:A4,"<>done")'), 3);
+  assert.equal(v("=COUNTIF(A1:A4,70)"), 1);
+  assert.equal(v('=SUMIF(A1:A3,">=85",B1:B3)'), 4);
+  assert.equal(v('=SUMIF(A1:A3,"<80")'), 70);
+});

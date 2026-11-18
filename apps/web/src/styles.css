@@ -3716,3 +3716,5 @@ div.slide-list { padding-inline-start: 0; }
 .study-attend-course .warn { color: var(--warn); }
 .study-attend-course .bad { color: var(--bad); }
 .study-attend-rule { display: inline-flex; gap: 6px; align-items: center; }
+.docs-title-wrap { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.docs-title-wrap small { font-size: 0.72rem; padding-inline-start: 4px; }

@@ -10,11 +10,12 @@ test("heavy folders: copied now, a link takes their place at the next start, and
   const other = await mkdtemp(join(tmpdir(), "kesher-heavy-"));
   await mkdir(join(root, "engines", "voice", "bin"), { recursive: true });
   await writeFile(join(root, "engines", "voice", "model.bin"), "x".repeat(5000));
-  await symlink(join("..", "model.bin"), join(root, "engines", "voice", "bin", "python"));
+  // A file link needs special rights on Windows, so it is made only elsewhere.
+  if (process.platform !== "win32") await symlink(join("..", "model.bin"), join(root, "engines", "voice", "bin", "python"));
   // An absolute link inside the folder (like uv's link to its Python) points into the new place after the move.
   await mkdir(join(root, "engines", "py", "cpython-3.11.18"), { recursive: true });
   await writeFile(join(root, "engines", "py", "cpython-3.11.18", "python"), "py");
-  await symlink(join(root, "engines", "py", "cpython-3.11.18"), join(root, "engines", "py", "cpython-3.11"));
+  await symlink(join(root, "engines", "py", "cpython-3.11.18"), join(root, "engines", "py", "cpython-3.11"), process.platform === "win32" ? "junction" : undefined);
   let pending: HeavyPending[] = [];
   const h = new HeavyFolder(root, async (p) => { pending = p; });
   h.start(other, ["engines", "unreal"]);
@@ -29,7 +30,7 @@ test("heavy folders: copied now, a link takes their place at the next start, and
   assert.equal(await readFile(join(root, "engines", "voice", "new.txt"), "utf8"), "late");
   assert.equal((await readFile(join(other, "engines", "voice", "model.bin"))).length, 5000);
   // The links inside work in the new place (on Windows a file link is copied as the file, a folder link is a junction).
-  assert.equal((await readFile(join(other, "engines", "voice", "bin", "python"))).length, 5000);
+  if (process.platform !== "win32") assert.equal((await readFile(join(other, "engines", "voice", "bin", "python"))).length, 5000);
   assert.equal(await readFile(join(other, "engines", "py", "cpython-3.11", "python"), "utf8"), "py");
   assert.equal((await realpath(join(other, "engines", "py", "cpython-3.11"))).startsWith(await realpath(other)), true);
   // The old folder is removed once the link works.

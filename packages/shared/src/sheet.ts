@@ -156,7 +156,38 @@ const FUNCS: Record<string, (args: Val[][], raw: Val[]) => Val> = {
   UPPER: (_a, r) => String(r[0] ?? "").toUpperCase(),
   LOWER: (_a, r) => String(r[0] ?? "").toLowerCase(),
   CONCAT: (a) => a.flat().map(String).join(""),
+  MEDIAN: (a) => {
+    const n = a.flat().filter((v) => v !== "").map(num).sort((x, y) => x - y);
+    if (!n.length) return 0;
+    const mid = Math.floor(n.length / 2);
+    return n.length % 2 ? n[mid]! : (n[mid - 1]! + n[mid]!) / 2;
+  },
+  COUNTIF: (a, r) => (a[0] ?? []).filter((v) => meets(v, r[1])).length,
+  SUMIF: (a, r) => {
+    const range = a[0] ?? [];
+    const sums = a[2] ?? range;
+    return range.reduce((s: number, v, i) => (meets(v, r[1]) && typeof sums[i] === "number" ? s + (sums[i] as number) : s), 0);
+  },
 };
+
+/**
+ * Whether a cell meets a COUNTIF / SUMIF criterion: a value (equal; text ignores case), or a comparison as text like
+ * ">80", "<=3", "<>x", "=done". Parsed by hand (no eval). Numbers compare as numbers.
+ */
+function meets(v: Val | undefined, crit: Val | undefined): boolean {
+  if (typeof crit === "number" || typeof crit === "boolean") return v === crit || (typeof v === "string" && v !== "" && Number(v) === Number(crit));
+  const m = /^(>=|<=|<>|>|<|=)?(.*)$/s.exec(String(crit ?? ""))!;
+  const op = m[1] ?? "=";
+  const want = m[2]!;
+  const wn = Number(want);
+  const vn = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  if (want.trim() !== "" && Number.isFinite(wn) && Number.isFinite(vn)) {
+    return op === ">" ? vn > wn : op === ">=" ? vn >= wn : op === "<" ? vn < wn : op === "<=" ? vn <= wn : op === "<>" ? vn !== wn : vn === wn;
+  }
+  const a = String(v ?? "").toLowerCase();
+  const b = want.toLowerCase();
+  return op === "<>" ? a !== b : op === "=" ? a === b : false;
+}
 const truthy = (v: Val | undefined) => (typeof v === "number" ? v !== 0 : typeof v === "boolean" ? v : !!v);
 function num(v: Val | undefined): number {
   if (typeof v === "number") return v;

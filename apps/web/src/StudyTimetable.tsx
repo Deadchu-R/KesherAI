@@ -55,7 +55,9 @@ export function StudyTimetable({ courses, part, onCourses }: { courses: Course[]
   const now = new Date();
   const cur = classNow(t, now);
   const slots = t.slots.filter((s) => courses.some((c) => c.id === s.courseId));
-  const days = [0, 1, 2, 3, 4, 5].filter((d) => d < 5 || slots.some((s) => s.day === d));
+  // The week starts on Sunday in Hebrew and on Monday in English (t140); a weekend day shows when it has a class.
+  const he = getLocale() === "he";
+  const days = (he ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5, 6, 0]).filter((d) => (he ? d < 5 : d >= 1 && d <= 5) || slots.some((s) => s.day === d));
   const saveSlot = (s: ClassSlot) => {
     save({ ...t, slots: t.slots.some((x) => x.id === s.id) ? t.slots.map((x) => (x.id === s.id ? s : x)) : [...t.slots, s] });
     setEdit(null);

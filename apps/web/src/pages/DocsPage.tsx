@@ -221,11 +221,17 @@ function DocEditor({ id }: { id: string }) {
       toast(L("הועתק כטקסט", "Copied as text"));
     }
   };
+  // A word count and reading time under the title (t137), about 200 words a minute.
+  const words = doc.body.trim().split(/\s+/).filter(Boolean).length;
+  const minutes = Math.max(1, Math.ceil(words / 200));
   return (
     <div className="page docs-editor">
       <div className="slides-bar">
         <a href="#/docs" className="link">‹</a>
-        <input className="docs-title" dir="auto" value={doc.title} onChange={(e) => save({ ...doc, title: e.target.value })} aria-label={L("שם המסמך", "Document name")} />
+        <span className="docs-title-wrap">
+          <input className="docs-title" dir="auto" value={doc.title} onChange={(e) => save({ ...doc, title: e.target.value })} aria-label={L("שם המסמך", "Document name")} />
+          <small className="muted">{L(`${words} מילים · ${minutes} דק' קריאה`, `${words} words · ${minutes} min read`)}</small>
+        </span>
         <span className="muted small">{saving === "saving" ? L("שומר…", "Saving…") : saving === "saved" ? L("נשמר", "Saved") : ""}</span>
         {!!doc.versions?.length && (
           <select aria-label={L("גרסאות", "Versions")} value="" onChange={(e) => e.target.value && void api<Doc>(`/api/docs/${id}/restore`, { method: "POST", body: { rev: Number(e.target.value) } }).then(setDoc, (er: Error) => toast(er.message))}>

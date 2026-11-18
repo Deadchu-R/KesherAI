@@ -77,11 +77,13 @@ export function studyPlus(x) {
         el("button", { type: "button", class: "primary", onclick: () => go({ at: "review", course: c.id }) }, L("1. הכרטיסיות הקשות קודם", "1. Hard cards first")),
         el("button", { type: "button", onclick: () => go({ at: "quiz", course: c.id }) }, L("2. בוחן קצר", "2. A short quiz")),
         el("button", { type: "button", onclick: () => go({ at: "summary", course: c.id }) }, L("3. סיכום הקורס", "3. The course summary"))) : "",
-      ...items.map(([h, e], i) => {
-        const cb = el("input", { type: "checkbox", onchange: () => { done = done.includes(i) ? done.filter((y) => y !== i) : [...done, i]; try { localStorage.setItem(key, JSON.stringify(done)); } catch { /* a convenience */ } } });
-        cb.checked = done.includes(i);
-        return el("label", { class: "ph-row", style: "justify-content: flex-start; gap: 8px" }, cb, L(h, e));
-      }),
+      // One group with a name, so a screen reader says what the boxes are for (t146).
+      el("fieldset", { class: "ph-checklist", style: "border: 0; padding: 0; margin: 0" }, el("legend", { class: "small" }, L("צ'קליסט לפני המבחן", "Before the exam")),
+        ...items.map(([h, e], i) => {
+          const cb = el("input", { type: "checkbox", onchange: () => { done = done.includes(i) ? done.filter((y) => y !== i) : [...done, i]; try { localStorage.setItem(key, JSON.stringify(done)); } catch { /* a convenience */ } } });
+          cb.checked = done.includes(i);
+          return el("label", { class: "ph-row", style: "justify-content: flex-start; gap: 8px" }, cb, L(h, e));
+        })),
       el("button", { type: "button", onclick: (e) => breathe(e.currentTarget) }, L("🫁 דקה של נשימה רגועה", "🫁 A minute of calm breathing")), breath);
   }
 
@@ -146,6 +148,8 @@ export function studyPlus(x) {
   function portions(c, l) {
     if (l.text.length <= 12000) return "";
     const p = readingPortion(l.text, l.readPos || 0);
+    // About 600 characters a minute (t147).
+    const minsLeft = Math.max(1, Math.ceil((l.text.length - p.from) / 600));
     const cardsBtn = el("button", { type: "button" }, L("📇 כרטיסיות מהמנה", "📇 Cards from this portion"));
     cardsBtn.onclick = async () => {
       const r = await need([{ role: "system", content: "Write 5 flashcards from this part of a lecture. Each tests one fact; the front is a question, the back a short answer. Write in the same language as the material. Use only what it says. Answer with JSON only: [{\"front\":\"...\",\"back\":\"...\"}]" }, { role: "user", content: l.text.slice(p.from, p.to).slice(0, 6000) }], cardsBtn);
@@ -156,7 +160,7 @@ export function studyPlus(x) {
       if (commit()) alert(L(`נוצרו ${n} כרטיסיות`, `${n} cards made`));
     };
     const move = (to) => { l.readPos = Math.max(0, Math.min(to, l.text.length)); if (commit()) x.draw(); };
-    return el("details", { class: "api", open: !!l.readPos }, el("summary", {}, L(`📖 קריאה במנות · מנה ${p.part} מתוך ${p.parts}`, `📖 Read in portions · ${p.part} of ${p.parts}`)),
+    return el("details", { class: "api", open: !!l.readPos }, el("summary", {}, L(`📖 קריאה במנות · מנה ${p.part} מתוך ${p.parts} (~${minsLeft} דק' לסיום)`, `📖 Read in portions · ${p.part} of ${p.parts} (~${minsLeft} min left)`)),
       el("div", { dir: "auto", style: "white-space: pre-wrap; line-height: 1.8; max-height: 60vh; overflow-y: auto" }, l.text.slice(p.from, p.to)),
       btns(
         p.to < l.text.length ? el("button", { type: "button", class: "primary", onclick: () => move(p.to) }, L("✓ סיימתי, למנה הבאה", "✓ Done, next portion")) : el("button", { type: "button", class: "primary", onclick: () => move(l.text.length) }, L("✓ סיימתי", "✓ Done")),
@@ -469,6 +473,10 @@ export function studyPlus(x) {
         state.textContent = "";
         if (!text) return alert(L("לא נשמע דיבור.", "No speech was heard."));
         const s = speechStats(text, seconds);
+        // The last 5 runs are kept with the course, to compare (t145).
+        (c.rehearseRuns ??= []).push({ t: Date.now(), text: text.slice(0, 4000), seconds, s });
+        if (c.rehearseRuns.length > 5) c.rehearseRuns.shift();
+        commit();
         const mm = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
         const notes = el("p", { dir: "auto", style: "white-space: pre-wrap" });
         const ask = el("button", { type: "button", class: "primary" }, L("💬 הערות על התוכן והמבנה", "💬 Notes on content and structure"));
