@@ -140,13 +140,13 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.cut": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
-          const { path } = await api<{ path: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}) } });
+          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions } : {}) } });
           if (p.send) {
             const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
-            await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]` } });
+            await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]${captions ? `\n[Attached: ${captions}]` : ""}` } });
             location.hash = `#/c/${input.conversationId}`;
           }
-          return { path };
+          return { path, captions };
         }
         // What is said in the video the page was opened with, in pieces with their times (whisper on the computer).
         case "video.transcript": {

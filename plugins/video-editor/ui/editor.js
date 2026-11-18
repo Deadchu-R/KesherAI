@@ -15,7 +15,7 @@
     videoTrack: "וידאו", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
-    transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
+    withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
     transcribing: "מתמלל במחשב… (whisper)", silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
@@ -325,12 +325,26 @@
       busy("");
     }
   }
+  /** The transcript in the edit's times (what is still in, clip after clip): the captions of the cut. */
+  function captions() {
+    const out = [];
+    let at = 0;
+    for (const c of clips) {
+      for (const p of parts) {
+        const a = Math.max(p.start, c.from), b = Math.min(p.end, c.to);
+        if (b - a > 0.2) out.push({ start: at + a - c.from, end: at + b - c.from, text: p.text });
+      }
+      at += len(c);
+    }
+    return out;
+  }
   async function exportCut(send, text) {
     if (!source) return;
     play(false);
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
-      const r = await kesher.call("video.cut", { segments: clips.map(({ from, to }) => ({ from, to })), send, text });
+      const withCaptions = parts.length > 0 && $("withCaptions").checked;
+      const r = await kesher.call("video.cut", { segments: clips.map(({ from, to }) => ({ from, to })), send, text, ...(withCaptions ? { captions: captions() } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);
@@ -342,6 +356,7 @@
   $("toChat").onclick = () => {
     if (!source) return;
     $("chatSummary").textContent = HE.summary && he ? HE.summary(clips.length, fmt(total())) : `${clips.length} clips · ${fmt(total())}`;
+    $("capRow").hidden = !parts.length;
     $("chatDialog").showModal();
   };
   $("chatDialog").addEventListener("close", () => {

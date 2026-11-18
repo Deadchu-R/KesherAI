@@ -67,3 +67,31 @@ export async function cutVideo(ffmpeg: string, input: string, output: string, se
     await run(false);
   }
 }
+
+/** A caption line, in seconds of the cut video. */
+export interface Caption {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * Captions as an SRT file (the one every player reads beside a video of the same name).
+ *
+ * @param given - What the page sent: up to 5000 lines, each with a start, an end and text.
+ * @returns The SRT text, or undefined when there is nothing usable.
+ */
+export function srtOf(given: unknown): string | undefined {
+  if (!Array.isArray(given) || !given.length) return undefined;
+  const t = (s: number) => {
+    const ms = Math.max(0, Math.round(s * 1000));
+    const p = (n: number, w = 2) => String(n).padStart(w, "0");
+    return `${p(Math.floor(ms / 3_600_000))}:${p(Math.floor(ms / 60_000) % 60)}:${p(Math.floor(ms / 1000) % 60)},${p(ms % 1000, 3)}`;
+  };
+  const lines = given.slice(0, 5000).flatMap((g) => {
+    const start = Number((g as Caption)?.start), end = Number((g as Caption)?.end);
+    const text = String((g as Caption)?.text ?? "").replace(/\r?\n{2,}/g, "\n").replace(/-->/g, "→").trim().slice(0, 500);
+    return Number.isFinite(start) && Number.isFinite(end) && end > start && text ? [{ start, end, text }] : [];
+  });
+  return lines.length ? lines.map((l, i) => `${i + 1}\n${t(l.start)} --> ${t(l.end)}\n${l.text}\n`).join("\n") : undefined;
+}

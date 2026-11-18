@@ -68,6 +68,7 @@
     <form method="dialog" class="stack">
       <strong data-t="toChatH">Send to the chat</strong>
       <span class="muted" id="chatSummary"></span>
+      <label class="row" id="capRow" hidden><input type="checkbox" id="withCaptions" checked /> <span data-t="withCaptions">Captions from the transcript (.srt beside it)</span></label>
       <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
     </form>

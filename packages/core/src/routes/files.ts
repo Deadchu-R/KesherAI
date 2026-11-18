@@ -1,13 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, extname, join, relative, sep } from "node:path";
 import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo } from "../video-cut.js";
+import { checkSegments, cutVideo, srtOf } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -67,7 +67,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
@@ -94,7 +94,10 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     } finally {
       cutting = false;
     }
-    return { path: relative(root, out).split(sep).join("/") };
+    // Captions (from the transcript, in the cut's times) as an .srt of the same name, which players read beside it.
+    const srt = srtOf(req.body?.captions);
+    if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
+    return { path: relative(root, out).split(sep).join("/"), ...(srt ? { captions: relative(root, out.replace(/\.mp4$/, ".srt")).split(sep).join("/") } : {}) };
   });
 
   /**
