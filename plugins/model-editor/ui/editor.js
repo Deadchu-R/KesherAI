@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", toGodot: "שמור לסצנה", standIn: "תחליף של סצנת Godot: מזיזים, ואז \"שמור לסצנה\" (כש-Godot סגור)", noMoves: "עוד לא זז כלום", savingScene: "שומר לסצנה…", clash: "אלה זזו גם ב-Godot:", keepMine: "לשמור את ההזזות שלך?", sceneSaved: "נשמר לסצנה", notFound: "לא נמצאו", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", toUnity: "שמור ל-Unity", standInUnity: "תחליף של סצנת Unity: מזיזים, ואז \"שמור ל-Unity\"; Unity מכניס את זה כשהסצנה פתוחה", unityQueued: "מחכה ל-Unity", unityHow: "Unity מכניס את זה כשהסצנה פתוחה (Ctrl+Z אחד)", toGodot: "שמור לסצנה", standIn: "תחליף של סצנת Godot: מזיזים, ואז \"שמור לסצנה\" (כש-Godot סגור)", noMoves: "עוד לא זז כלום", savingScene: "שומר לסצנה…", clash: "אלה זזו גם ב-Godot:", keepMine: "לשמור את ההזזות שלך?", sceneSaved: "נשמר לסצנה", notFound: "לא נמצאו", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -238,10 +238,59 @@ $("toGodot").onclick = async () => {
     } else msg(r.error, true);
   } catch (e) { msg(e.message, true); } finally { busy(""); }
 };
+// ---------- a Unity scene without Unity: the same stand-in, Unity's left-handed space turned to ours and back ----------
+// Unity: x right, y up, z forward (left-handed); here z points back: z and the quaternion's x and y change sign.
+const fromUnity = (p, q) => ({ p: new THREE.Vector3(p[0], p[1], -p[2]), q: new THREE.Quaternion(-q[0], -q[1], q[2], q[3]) });
+const toUnity = (o) => ({ position: [o.position.x, o.position.y, -o.position.z], rotation: [-o.quaternion.x, -o.quaternion.y, o.quaternion.z, o.quaternion.w], scale: [o.scale.x, o.scale.y, o.scale.z] });
+function loadUnityStandIn(objects) {
+  if (model) { choose(null); model.removeFromParent(); }
+  const root = new THREE.Group();
+  root.name = "Scene";
+  const byId = new Map();
+  const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true, opacity: 0.85 });
+  for (const u of objects) {
+    const o = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(u.prefab ? 0xb48cff : /light/i.test(u.name) ? 0xffd25a : /camera/i.test(u.name) ? 0x6aa8ff : 0xb8bcc8));
+    o.name = u.name;
+    const { p, q } = fromUnity(u.position, u.rotation);
+    o.position.copy(p); o.quaternion.copy(q); o.scale.set(...u.scale);
+    o.userData.unity = { id: u.id, name: u.name, from: { position: u.position, rotation: u.rotation, scale: u.scale } };
+    byId.set(u.id, o);
+  }
+  // Parents after all are made (the file need not list a parent first).
+  for (const u of objects) (byId.get(u.parent) ?? root).add(byId.get(u.id));
+  model = root;
+  scene.add(model);
+  meshes = [];
+  rebuild();
+  $("empty").hidden = true;
+  $("toGodot").hidden = false;
+  $("toGodot").textContent = T("toUnity", "Save for Unity");
+  $("toChat").hidden = true;
+  $("toGodot").onclick = saveUnity;
+  msg(T("standInUnity", "A stand-in of the Unity scene: move things, then \"Save for Unity\"; Unity takes them in when the scene is open"));
+}
+async function saveUnity() {
+  const moves = [];
+  model?.traverse((o) => {
+    const u = o.userData.unity;
+    if (!u) return;
+    const to = toUnity(o);
+    const moved = to.position.some((x, i) => Math.abs(x - u.from.position[i]) > 1e-4) || to.scale.some((x, i) => Math.abs(x - u.from.scale[i]) > 1e-4) || new THREE.Quaternion(...to.rotation).angleTo(new THREE.Quaternion(...u.from.rotation)) > 1e-4;
+    if (moved) moves.push({ id: u.id, name: u.name, from: u.from, to });
+  });
+  if (!moves.length) return msg(T("noMoves", "Nothing moved yet"));
+  busy(T("savingScene", "Saving into the scene…"));
+  try {
+    const r = await kesher.call("unity.saveScene", { moves });
+    model.traverse((o) => { if (o.userData.unity) o.userData.unity.from = toUnity(o); });
+    msg(`${T("unityQueued", "Waiting for Unity")}: ${r.queued} · ${T("unityHow", "Unity takes them in when the scene is open (one Ctrl+Z)")}`);
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+}
 async function open() {
   busy(T("loading", "Loading the model…"));
   try {
     const input = await kesher.call("editor.input");
+    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); frame(model); stats(); return; }
     if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); frame(model); stats(); return; }
     if (!input?.bytes) return;
     name = input.name;

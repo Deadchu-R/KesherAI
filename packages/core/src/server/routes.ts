@@ -33,6 +33,7 @@ import { copilotRoutes } from "../routes/copilot.js";
 import { unityRoutes, unrealRoutes } from "../routes/unreal.js";
 import { godotRoutes } from "../routes/godot.js";
 import { godotSceneRoutes } from "../routes/godot-scene.js";
+import { unitySceneRoutes } from "../routes/unity-scene.js";
 import { stremioRoutes } from "../routes/stremio.js";
 import { sshRoutes } from "../routes/ssh.js";
 import { chatReportRoutes } from "../routes/chat-reports.js";
@@ -184,6 +185,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await godotRoutes(app, services);
   // A Godot scene without Godot: read it, and write the moves made in KesherAI back into its .tscn.
   await godotSceneRoutes(app, services.godot);
+  await unitySceneRoutes(app);
   await stremioRoutes(app, services, apiKeys);
   await sshRoutes(app, services);
   await chatReportRoutes(app, services);

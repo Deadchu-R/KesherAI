@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { UnityCliPanel } from "./UnityCliPanel";
+import { StandInScenes } from "../StandInScenes";
 import { BlueprintCanvas, type GNode } from "../BlueprintCanvas";
 import { Fullscreen } from "../Fullscreen";
 import { BlueprintCode, type Lang } from "../BlueprintCode";
@@ -350,6 +351,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         {st.connected && <CloseEditor kind={unity ? "unity" : "unreal"} onClosed={() => { loadStatus(); loadList(); }} />}
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
+      {unity && <StandInScenes engine="unity" />}
       {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}
       {unity && st.projects.length > 0 && (
         <div className="row ue-projects">

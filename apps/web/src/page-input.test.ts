@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { godotSceneInput, pageInput } from "./page-input.js";
+import { godotSceneInput, pageInput, unitySceneInput } from "./page-input.js";
 
 test("a page gets a chat's file only when it is a picture and the page declared the picture models", () => {
   assert.deepEqual(pageInput("c=abc-1&f=shared%2Fcat.png", ["image"]), { conversationId: "abc-1", path: "shared/cat.png" });
@@ -31,4 +31,10 @@ test("a Godot scene for the 3D editor: only res://….tscn, never with ..; only 
   assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2F..%2Fa.tscn", ["model"]), undefined);
   assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2Fa.gd", ["model"]), undefined);
   assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2Fa.tscn", ["image"]), undefined);
+});
+
+test("a Unity scene for the 3D editor: only Assets/….unity, never with ..", () => {
+  assert.deepEqual(unitySceneInput("up=D%3A%5CGame&us=Assets%2FScenes%2FMain.unity", ["model"]), { project: "D:\\Game", scene: "Assets/Scenes/Main.unity" });
+  assert.equal(unitySceneInput("up=x&us=Assets%2F..%2F..%2Fa.unity", ["model"]), undefined);
+  assert.equal(unitySceneInput("up=x&us=Library%2Fa.unity", ["model"]), undefined);
 });

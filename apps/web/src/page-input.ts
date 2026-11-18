@@ -81,3 +81,26 @@ export function godotSceneInput(query: string, uses: readonly string[] | undefin
   if (!/^res:\/\/[^\0]{1,300}\.tscn$/i.test(scene) || scene.split("/").includes("..")) return undefined;
   return { project, scene };
 }
+
+/** A Unity scene opened without Unity in the 3D editor: the project's folder and the scene ("Assets/….unity"). */
+export interface UnitySceneInput {
+  project: string;
+  scene: string;
+}
+
+/**
+ * A Unity scene a page was opened with (`?up=<project folder>&us=Assets/….unity`), only for a page that declared
+ * `model`; the server checks again that it is a Unity project and the scene is really under its Assets.
+ *
+ * @param query - The part after `?`.
+ * @param uses - The page's declared models.
+ * @returns The project and scene, or undefined.
+ */
+export function unitySceneInput(query: string, uses: readonly string[] | undefined): UnitySceneInput | undefined {
+  const q = new URLSearchParams(query);
+  const project = q.get("up") ?? "";
+  const scene = q.get("us") ?? "";
+  if (!uses?.includes("model") || !project || project.length > 400 || /[\0]/.test(project)) return undefined;
+  if (!/^Assets\/[^\0]{1,300}\.unity$/i.test(scene) || scene.split("/").includes("..")) return undefined;
+  return { project, scene };
+}

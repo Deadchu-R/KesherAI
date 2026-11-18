@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshParts, setParts } from "./parts";
-import type { GodotSceneInput, PageInput } from "./page-input";
+import type { GodotSceneInput, PageInput, UnitySceneInput } from "./page-input";
 import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
@@ -141,7 +141,7 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
  *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot, unity }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput; unity?: UnitySceneInput }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -170,6 +170,12 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             need("model");
             const r = await api<{ nodes: unknown[]; mtime: number }>(`/api/godot/scene?project=${encodeURIComponent(godot.project)}&scene=${encodeURIComponent(godot.scene)}`);
             return { godot: { scene: godot.scene, nodes: r.nodes }, name: godot.scene.split("/").pop() };
+          }
+          // A Unity scene without Unity: its objects (from the scene's YAML).
+          if (unity && !input) {
+            need("model");
+            const r = await api<{ objects: unknown[] }>(`/api/unity/scene?project=${encodeURIComponent(unity.project)}&scene=${encodeURIComponent(unity.scene)}`);
+            return { unity: { scene: unity.scene, objects: r.objects }, name: unity.scene.split("/").pop() };
           }
           if (!input) return null;
           const blob = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.path)}`)).then((x) => {
@@ -328,6 +334,12 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           // A clash or an open Godot comes back as data, so the page can ask what to keep.
           if (!res.ok && res.status !== 409) throw new Error(j.error ?? String(res.status));
           return { ok: res.ok, ...j };
+        }
+        // The 3D editor's moves for the Unity scene it was opened with: queued for the KesherAI package in Unity.
+        case "unity.saveScene": {
+          need("model");
+          if (!unity) throw new Error("This page was not opened with a Unity scene.");
+          return api<{ queued: number; waiting: number }>("/api/unity/scene", { method: "POST", body: { project: unity.project, scene: unity.scene, moves: p.moves } });
         }
         // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
         case "own.file": {
@@ -526,6 +538,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, isRemote, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { desktop, toast } from "../library";
+import { StandInScenes } from "../StandInScenes";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -15,44 +16,6 @@ function TreeLines({ n, depth = 0 }: { n: GodotNode; depth?: number }) {
       <div style={{ paddingInlineStart: depth * 16 }}>{n.name} <span className="muted">({n.type}){n.script ? ` · ${n.script.replace(/^res:\/\//, "")}` : ""}</span></div>
       {n.children?.map((c, i) => <TreeLines key={i} n={c} depth={depth + 1} />)}
     </>
-  );
-}
-
-/** The project folder last used for "a scene without Godot" (per viewer: a convenience, not state). */
-const PROJECT_KEY = "kesher-godot-standin-project";
-const readProject = () => { try { return localStorage.getItem(PROJECT_KEY) ?? ""; } catch { return ""; } };
-
-/**
- * A scene without Godot (SceneStandIn board): the project's scenes, each opened in the 3D editor as a stand-in whose
- * moves are saved back into the .tscn (while Godot is closed). Works from the phone too: the folder is typed there.
- */
-function StandInScenes({ connectedProject }: { connectedProject?: string }) {
-  const [project, setProject] = useState(readProject() || connectedProject || "");
-  const [scenes, setScenes] = useState<string[] | null>(null);
-  const list = (dir: string) => {
-    if (!dir.trim()) return;
-    try { localStorage.setItem(PROJECT_KEY, dir); } catch { /* private window: it is only remembered for next time */ }
-    void api<{ scenes: string[] }>(`/api/godot/scenes?project=${encodeURIComponent(dir)}`).then((r) => setScenes(r.scenes), (e: Error) => { setScenes(null); toast(e.message); });
-  };
-  const pick = async () => {
-    const dir = await desktop()?.pickFolder();
-    if (dir) { setProject(dir); list(dir); }
-  };
-  return (
-    <section className="card">
-      <strong>{L("סצנה בלי Godot", "A scene without Godot")}</strong>
-      <p className="small muted">{L("פותחים סצנה בעורך התלת ממד כתחליף (כל אובייקט כקופסה), מזיזים, ושומרים חזרה לקובץ ה-.tscn כש-Godot סגור.", "Open a scene in the 3D editor as a stand-in (each object a box), move things, and save back into the .tscn while Godot is closed.")}</p>
-      <div className="row wrap">
-        <input className="grow" dir="ltr" value={project} onChange={(e) => setProject(e.target.value)} placeholder={L("תיקיית הפרויקט (עם project.godot)", "The project folder (with project.godot)")} aria-label={L("תיקיית הפרויקט", "The project folder")} style={{ minWidth: 0 }} />
-        {desktop() && !isRemote() && <button type="button" onClick={() => void pick()}>{L("בחירה…", "Pick…")}</button>}
-        <button type="button" className="primary" onClick={() => list(project)}>{L("הצג סצנות", "Show scenes")}</button>
-      </div>
-      {scenes && (scenes.length ? (
-        <div className="standin-scenes">
-          {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={`#/p/model-editor/editor?gp=${encodeURIComponent(project)}&gs=${encodeURIComponent(sc)}`}>{sc.replace(/^res:\/\//, "")}</a>)}
-        </div>
-      ) : <p className="muted small">{L("אין סצנות בפרויקט.", "No scenes in this project.")}</p>)}
-    </section>
   );
 }
 
@@ -106,7 +69,7 @@ export function GodotPage() {
           {log && <pre className="mono small godot-log" dir="ltr">{log}</pre>}
         </section>
       )}
-      <StandInScenes connectedProject={e?.projectFile?.replace(/[\\/]project\.godot$/i, "")} />
+      <StandInScenes engine="godot" connectedProject={e?.projectFile?.replace(/[\\/]project\.godot$/i, "")} />
       <section className="card">
         <strong>{L("לחבר פרויקט", "Connect a project")}</strong>
         <p className="small">{L("KesherAI מוסיף לפרויקט את התוסף addons/kesher_bridge ומפעיל אותו. אפשר להסיר אותו מתי שרוצים, והפרויקט עובד גם בלעדיו.", "KesherAI adds the addon addons/kesher_bridge to the project and turns it on. Remove it any time; the project works without it.")}</p>
