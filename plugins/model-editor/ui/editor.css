@@ -49,12 +49,22 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .keys td { padding: 3px 12px 3px 0; }
 .keys kbd { font: 12px ui-monospace, monospace; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
 .phonebar { display: none; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 5px 9px; }
+.viewcube { position: absolute; top: 8px; inset-inline-end: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.viewcube button, .shading button { padding: 3px 8px; font-size: 12px; background: rgba(38, 39, 43, 0.85); }
+.shading { position: absolute; bottom: 10px; inset-inline-end: 10px; display: flex; gap: 3px; }
+.channels { border-collapse: collapse; font-size: 12px; direction: ltr; }
+.channels th { color: var(--muted); font-weight: 500; }
+.channels td:first-child { color: var(--muted); padding-inline-end: 6px; white-space: nowrap; }
+.channels input { width: 52px; background: var(--well); border: 1px solid var(--line); border-radius: 4px; color: inherit; padding: 2px 4px; font: inherit; }
+.parts li .tw { width: 14px; text-align: center; color: var(--muted); }
 [hidden] { display: none !important; }
 
 /* Phone (after Nomad Sculpt and Spline's viewer): the model gets the screen, tools at the bottom, panels as sheets. */
 @media (max-width: 760px) {
   .app { grid-template-rows: 46px 1fr 64px 56px; }
-  .parts, .inspector, #keysBtn, #export, #light { display: none; }
+  .parts, .inspector, #keysBtn, #export, #light, #keymap, .viewcube { display: none; }
   .app.sheet-parts .parts, .app.sheet-inspector .inspector { display: flex; flex-direction: column; position: fixed; inset-inline: 0; bottom: 120px; width: auto; max-height: 50vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
   .phonebar { display: flex; background: var(--panel); border-top: 1px solid #111; }
   .phonebar button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }

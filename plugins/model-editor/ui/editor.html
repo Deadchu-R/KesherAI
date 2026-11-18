@@ -12,6 +12,11 @@
     <header class="top">
       <button id="undo" title="Undo (Ctrl+Z)">↶</button>
       <b class="grow name" id="name">3D editor</b>
+      <div class="seg" id="modes" title="Move / rotate / scale">
+        <button data-mode="translate" class="on" title="Move">✥</button><button data-mode="rotate" title="Rotate">⟳</button><button data-mode="scale" title="Scale">⤢</button>
+      </div>
+      <button id="snap" title="Snap">🧲</button>
+      <select id="keymap" title="Keys"><option value="maya">W E R (Maya, Max, Unreal)</option><option value="blender">G R S (Blender)</option></select>
       <select id="light" title="Light"><option value="studio" data-t="lStudio">Studio</option><option value="sun" data-t="lSun">Sun</option><option value="evening" data-t="lEvening">Evening</option></select>
       <button id="wire" title="Wireframe (W)">▦</button>
       <button id="keysBtn" title="Shortcuts (?)">?</button>
@@ -20,21 +25,35 @@
     </header>
     <main class="middle">
       <aside class="parts">
-        <b data-t="partsH">Parts</b>
+        <b data-t="sceneH">The scene</b>
         <ul id="partList"></ul>
       </aside>
       <section class="view" id="view">
         <div class="empty" id="empty" data-t="empty">Open a model from a chat: "Edit in the 3D editor" on its preview.</div>
         <div class="stats muted small" id="stats"></div>
+        <!-- After 3ds Max's ViewCube and Blender's header: the views, and the shading -->
+        <div class="viewcube" id="viewcube">
+          <button data-view="front" data-t="vFront">Front</button><button data-view="right" data-t="vRight">Right</button><button data-view="top" data-t="vTop">Top</button><button data-view="persp" data-t="vPersp">Persp</button>
+        </div>
+        <div class="shading" id="shading">
+          <button data-shade="wire" title="Wireframe (4)">▦</button><button data-shade="solid" title="Solid (5)">◐</button><button data-shade="material" class="on" title="Material (6)">◉</button>
+        </div>
       </section>
       <aside class="inspector">
         <b id="partName" data-t="noPart">Choose a part</b>
+        <!-- Maya's Channel Box / Blender's N panel -->
+        <table class="channels" id="channels" dir="ltr">
+          <tr><th></th><th>X</th><th>Y</th><th>Z</th></tr>
+          <tr><td data-t="cMove">Move</td><td><input data-ch="position.x" /></td><td><input data-ch="position.y" /></td><td><input data-ch="position.z" /></td></tr>
+          <tr><td data-t="cRotate">Rotate°</td><td><input data-ch="rotation.x" /></td><td><input data-ch="rotation.y" /></td><td><input data-ch="rotation.z" /></td></tr>
+          <tr><td data-t="cScale">Scale</td><td><input data-ch="scale.x" /></td><td><input data-ch="scale.y" /></td><td><input data-ch="scale.z" /></td></tr>
+        </table>
         <label class="field"><span data-t="color">Colour</span><input type="color" id="color" value="#cccccc" /></label>
         <label class="field"><span data-t="rough">Roughness</span><input type="range" id="rough" min="0" max="100" value="50" /></label>
         <label class="field"><span data-t="metal">Metalness</span><input type="range" id="metal" min="0" max="100" value="0" /></label>
         <div class="muted small" id="size"></div>
         <hr />
-        <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button></div>
+        <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button><button id="dup" data-t="dup">Duplicate</button><button id="del" data-t="del">Delete</button></div>
         <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
       </aside>
     </main>

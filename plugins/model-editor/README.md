@@ -6,11 +6,17 @@ and Meshy's studio (docs/RESEARCH_LOG.md → "The 3D editor's screen"; design Mo
 - **Open it from a chat:** "Edit in the 3D editor" on a chat's model (.glb, or a .gltf with everything inside it).
 - **The view:** turn (left drag), pan (right drag or two fingers), zoom (wheel or pinch); light setups (studio, sun,
   evening); wireframe; a floor grid; F frames the chosen part, Home the whole model.
-- **Parts:** every mesh of the file as a list with 👁 to hide it; a click in the view or the list chooses one.
-- **The chosen part:** colour, roughness and metalness, its size (in the file's units), and its triangles.
+- **The scene** (Blender's Outliner): the file's tree with ▸/▾ to fold, 👁 to hide; a click in the view or the tree chooses.
+- **The chosen object:** a Channel Box like Maya's (move, rotate in degrees, scale; type a number), a gizmo to move,
+  rotate or scale it with axis lock and snapping, colour / roughness / metalness, its size and triangles; duplicate and
+  delete; undo for everything (structure too).
+- **Views and shading:** front / right / top / perspective (3ds Max's ViewCube faces, Blender's 1 / 3 / 7), wireframe /
+  solid / material (Maya's 4 / 5 / 6).
 - **Versions:** "Keep a version" saves the state as a thumbnail in the strip at the bottom; a click goes back to it.
 - **Export / Send to the chat:** a GLB of the model as it is now.
-- **Keys:** F frame, Home all, H hide the part, Alt+H show all, W wireframe, Ctrl+Z undo, `?` shows them all.
+- **Keys, two maps** (chosen in the bar, remembered): Maya / 3ds Max / Unreal — W E R move / rotate / scale, Ctrl+D
+  duplicate, Delete; Blender — G R S, then X / Y / Z to lock an axis, Shift+D duplicate, X delete. Both: F frame, Home or A
+  all, H hide, Alt+H show all, 1 / 3 / 7 views, 4 / 5 / 6 shading, Shift+S snapping, Esc let go, Ctrl+Z, `?` all of them.
 
 It talks to KesherAI only through `window.kesher` (`ui/kesher.js`): `editor.input` (the chat's model, as bytes) and
 `chat.sendFile`. three.js 0.181 (MIT) is vendored in `ui/vendor/three/`. Next: mark a part and "What to do here?" with
