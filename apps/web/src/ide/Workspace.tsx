@@ -7,6 +7,7 @@ import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$, t } from "../i18n";
 import { EditorPane } from "./Editor";
+import { FilePreview, PREVIEW_FIRST, PREVIEW_OR_TEXT } from "../chat/Attachments";
 import { TerminalPane } from "./Terminal";
 import { useSessionEnv } from "../CodeEnvironment";
 import { GitPanel } from "./GitPanel";
@@ -67,6 +68,8 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
   const [files, setFiles] = useState<FileItem[]>([]);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [current, setCurrent] = useState("");
+  /** CSV, TSV and HTML: shown as a table or page, or as text to edit. */
+  const [asText, setAsText] = useState(false);
   // Keep the terminal alive while other tabs are shown.
   const [terminalStarted, setTerminalStarted] = useState(false);
   // A fresh terminal (n) that may start a known command (Antigravity CLI, or its install).
@@ -138,7 +141,15 @@ export function Workspace({ convId, events, refresh, onFixInChat }: { convId: st
           <div className="ws-editor">
             {current ? (
               <>
-                <EditorPane convId={convId} path={current} reloadKey={refresh} />
+                {PREVIEW_OR_TEXT.test(current) && (
+                  <div className="seg-pills ws-view" role="tablist">
+                    <button type="button" role="tab" aria-selected={!asText} className={asText ? "" : "on"} onClick={() => setAsText(false)}>{L("תצוגה", "Preview")}</button>
+                    <button type="button" role="tab" aria-selected={asText} className={asText ? "on" : ""} onClick={() => setAsText(true)}>{L("טקסט", "Text")}</button>
+                  </div>
+                )}
+                {PREVIEW_FIRST.test(current) || (PREVIEW_OR_TEXT.test(current) && !asText)
+                  ? <FilePreview convId={convId} path={current} reloadKey={refresh} />
+                  : <EditorPane convId={convId} path={current} reloadKey={refresh} />}
                 <a className="muted small ws-download" href={withToken(`/api/conversations/${convId}/files/download?path=${encodeURIComponent(current)}`)} download>{t("download")}</a>
               </>
             ) : (

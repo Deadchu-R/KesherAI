@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AttachmentChips } from "./chat/Attachments";
 import { api, withToken } from "./api";
 import { openArtifact } from "./ArtifactPanel";
 import { Diff } from "./ChatCards";
@@ -63,6 +64,8 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
   const mark = { new: L("חדש", "new"), changed: "", deleted: L("נמחק", "deleted") };
   // A page the run wrote opens live beside the chat, like a page written in the answer (ArtifactPanel).
   const pages = ev.files.filter((f) => f.kind !== "deleted" && /\.(html?|svg)$/i.test(f.path));
+  // Office files, tables and PDFs the run made: chips that open a preview (a table, slides, a page), as attachments do.
+  const docs = ev.files.filter((f) => f.kind !== "deleted" && /\.(xlsx|docx|pptx|pdf|csv|tsv)$/i.test(f.path)).map((f) => f.path);
   const openLive = async (path: string) => {
     const r = await fetch(withToken(`/api/conversations/${encodeURIComponent(convId)}/files/download?path=${encodeURIComponent(path)}`)).catch(() => undefined);
     if (!r?.ok) return toast(L("לא הצלחתי לפתוח את הקובץ.", "Could not open the file."));
@@ -86,6 +89,7 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
           </button>
         )}
       </div>
+      {docs.length > 0 && <AttachmentChips convId={convId} files={docs} />}
       {open && (
         <ul className="receipt-files">
           {ev.files.map((f) => (

@@ -2349,6 +2349,10 @@ html.handheld .palette-list button { min-height: 44px; }
 .attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attach-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
 .attach-table-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.ws-editor > .attach-body { padding: 10px; }
+.ws-editor .attach-table-wrap { max-height: none; }
+.ws-editor .attach-frame { flex: 1; min-height: 360px; }
+.ws-view { padding: 6px 10px 0; }
 .attach-table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
 .attach-table th, .attach-table td { border-bottom: 1px solid var(--border); border-inline-end: 1px solid var(--border); padding: 5px 8px; text-align: start; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
 .attach-table th { position: sticky; top: 0; background: var(--panel-2); font-weight: 600; }

@@ -26,3 +26,23 @@ export function fileIcon(path: string): string {
   if (/^(pdf|docx|txt|md)$/.test(ext)) return "page";
   return "paperclip";
 }
+
+/**
+ * Office files, tables and PDFs an answer names (say "Saved it as `out/sales.xlsx`"), for chips under it that open a
+ * preview: files a command made (a Python script, say) are not on the run's receipt. Web addresses are left out; a name
+ * of a file that is not in the chat's folder shows "not found" in its preview.
+ *
+ * @param text - The answer.
+ * @returns Up to six paths, each once.
+ */
+export function namedDocuments(text: string): string[] {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/(?:^|[\s`'"([*])((?:[\w.-]+[\\/])*[\w.-]+\.(?:xlsx|docx|pptx|pdf|csv|tsv))(?=$|[\s`'")\],.:;*!?])/gim)) {
+    const path = m[1]!;
+    const at = m.index ?? 0;
+    if (/[a-z]+:\/\/\S*$/i.test(text.slice(Math.max(0, at - 200), at + 1))) continue;
+    found.add(path.replace(/\\/g, "/"));
+    if (found.size === 6) break;
+  }
+  return [...found];
+}

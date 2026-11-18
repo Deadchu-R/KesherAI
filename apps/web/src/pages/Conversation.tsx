@@ -43,7 +43,7 @@ import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { ShareDialog } from "../chat/ShareDialog";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
-import { splitAttachments } from "../attach-lines";
+import { namedDocuments, splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
 import { LineIcon } from "../ui/Glyph";
 
@@ -847,6 +847,10 @@ export function ConversationPage({ id }: { id: string }) {
                   <div key={e.seq} className="msg">
                     <h3 className="sr-only">{L("תשובה", "Answer")}</h3>
                     <RichText text={e.text} />
+                    {(() => {
+                      const docs = namedDocuments(e.text);
+                      return docs.length ? <AttachmentChips convId={id} files={docs} /> : null;
+                    })()}
                     {e.original && (
                       <details className="translated-note">
                         <summary className="muted small">🗣️ {L("תורגם לשפה שלך. המקור של המודל", "Translated into your language. The model's own words")}</summary>
