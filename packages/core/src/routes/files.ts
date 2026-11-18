@@ -8,7 +8,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo, extractSound, findScenes, SHAPES, srtOf } from "../video-cut.js";
+import { checkSegments, cutVideo, extractSound, findScenes, SHAPES, srtOf, type MusicTrack } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -70,12 +70,13 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean } } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
     let segments;
     let sound: string | undefined;
+    let music: MusicTrack | undefined;
     try {
       full = await resolveInWorkspace(root, req.body?.path ?? "");
       segments = checkSegments(req.body?.segments);
@@ -83,6 +84,13 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       if (req.body?.sound) {
         sound = await resolveInWorkspace(root, req.body.sound);
         if (!/\.(wav|mp3|m4a|flac|ogg)$/i.test(sound) || !(await stat(sound).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "The new sound was not found" });
+      }
+      // A music track under the video: a sound file of the same chat; the numbers are kept in range by musicGraph.
+      const mu = req.body?.music;
+      if (mu?.path) {
+        const file = await resolveInWorkspace(root, mu.path);
+        if (!/\.(wav|mp3|m4a|flac|ogg)$/i.test(file) || !(await stat(file).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "The music was not found" });
+        music = { file, start: Number(mu.start) || 0, volume: mu.volume === undefined ? 0.6 : Number(mu.volume), fadeIn: Number(mu.fadeIn) || 0, fadeOut: Number(mu.fadeOut) || 0, duck: mu.duck !== false };
       }
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
@@ -103,7 +111,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     try {
       if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
       if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined);
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {

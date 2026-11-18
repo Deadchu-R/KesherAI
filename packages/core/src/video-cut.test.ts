@@ -54,3 +54,18 @@ test("a new shape: the middle of the picture at that ratio, before the captions;
   assert.ok(a.includes("[vc]subtitles="));
   assert.throws(() => cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, undefined, "3:2;drawtext"), /Unknown shape/);
 });
+
+test("a music track: from where it starts, faded, ducked under the voice (side-chain), or alone on a silent video", async () => {
+  const { cutArgs, musicGraph } = await import("./video-cut.js");
+  const m = { file: "song.mp3", start: 2, volume: 0.6, fadeIn: 1, fadeOut: 2, duck: true };
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 10 }], true, undefined, undefined, undefined, m);
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.deepEqual(a.filter((x, i) => a[i - 1] === "-i"), ["in.mp4", "song.mp3"]);
+  assert.match(g, /\[1:a\]atrim=0:8\.000,asetpts=PTS-STARTPTS,volume=0\.600,afade=t=in:d=1\.000,afade=t=out:st=6\.000:d=2\.000,adelay=2000\|2000/);
+  assert.match(g, /sidechaincompress/);
+  assert.equal(a[a.lastIndexOf("-map") + 1], "[am]");
+  assert.doesNotMatch(musicGraph({ ...m, duck: false }, 1, 10, "[a]").graph, /sidechain/);
+  assert.equal(musicGraph(m, 1, 10).out, "[mu]");
+  // Odd numbers are kept in range (the page sends them).
+  assert.match(musicGraph({ ...m, volume: 99, start: -5, fadeIn: 1e9 }, 1, 10).graph, /volume=1\.500,afade=t=in:d=5\.000/);
+});

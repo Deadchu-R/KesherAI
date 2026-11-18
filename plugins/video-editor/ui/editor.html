@@ -32,6 +32,15 @@
         <!-- Premiere's Scene Edit Detection, Resolve's Scene Cut Detector: a clip for each shot -->
         <button id="scenes" data-t="scenes">🎬 Split at shot changes</button>
         <hr />
+        <!-- The music under the video: from the chat or the device, its volume, fades, and lowered under the voice -->
+        <div class="row"><b class="grow" data-t="musicH">🎵 Music</b><button id="musicRemove" hidden data-t="musicRemove">✕</button></div>
+        <div class="row"><select id="musicPick" style="flex:1;min-width:0" aria-label="Music from the chat" data-ta="musicPickL"><option value="" data-t="musicNone">＋ From the chat…</option></select><button id="musicFile" data-t="musicFile">From the device…</button><input type="file" id="musicInput" accept="audio/*,.mp3,.wav,.m4a,.flac,.ogg" hidden /></div>
+        <div id="musicTools" hidden>
+          <label class="row small"><span data-t="musicVol">Volume</span><input type="range" id="musicVol" min="0" max="150" value="60" style="flex:1" /><span id="musicVolN" class="mono">60%</span></label>
+          <label class="row small"><span data-t="fadeIn">Fade in</span><input type="number" id="fadeIn" min="0" max="10" step="0.5" value="1" style="width:56px" /><span data-t="fadeOut">Fade out</span><input type="number" id="fadeOut" min="0" max="10" step="0.5" value="2" style="width:56px" /></label>
+          <label class="row small"><input type="checkbox" id="duck" checked /> <span data-t="duck">Lower it while someone speaks</span></label>
+        </div>
+        <hr />
         <div class="row"><b class="grow" data-t="transcriptH">Transcript</b><button id="transcribe" data-t="transcribe">Transcribe</button></div>
         <button id="silences" hidden></button>
         <ol class="transcript" id="transcript"></ol>
@@ -51,6 +60,8 @@
       <div class="tracks" id="tracks">
         <div class="lane"><span class="lab" data-t="videoTrack">Video</span><div class="clips" id="clips"></div></div>
         <div class="lane"><span class="lab" id="soundLab" data-t="soundTrack">Sound</span><div class="clips" id="sounds" title="Double-click: edit in the sound editor"></div></div>
+        <!-- The music lane (CapCut's music, Premiere's Essential Sound "Music"): drag it to where it starts -->
+        <div class="lane"><span class="lab" data-t="musicTrack">🎵 Music</span><div class="clips" id="musicLane"></div></div>
         <div class="playhead" id="playhead"></div>
       </div>
       <p class="hint muted small" data-t="hint">Space play · J/K/L · S split · Q/W trim · Delete · the main track closes gaps</p>

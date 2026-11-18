@@ -12,7 +12,7 @@
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
-    videoTrack: "וידאו", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
+    videoTrack: "וידאו", musicTrack: "🎵 מוזיקה", musicH: "🎵 מוזיקה", musicNone: "＋ מהצ'אט…", musicFile: "מהמכשיר…", musicVol: "עוצמה", fadeIn: "הופעה", fadeOut: "היעלמות", duck: "להנמיך כשמדברים", musicRemove: "✕", musicPickL: "מוזיקה מהצ'אט", musicAdding: "מוסיף את המוזיקה לצ'אט…", musicDrag: "גרירה: מאיפה המוזיקה מתחילה", noMusic: "אין קבצי שמע בצ'אט", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
@@ -213,6 +213,26 @@
       d.ondblclick = (e) => { e.stopPropagation(); openSound(); };
       return d;
     }));
+    // The music lane: one bar from where it starts to the end of the edit (or of the music), dragged to move it.
+    const ml = $("musicLane");
+    ml.style.width = box.style.width;
+    if (music) {
+      const d = document.createElement("div");
+      const m = musicSettings();
+      d.className = "clip mus";
+      d.style.left = `${music.start * zoom}px`;
+      d.style.width = `${Math.max(4, Math.min(music.duration, total() - music.start) * zoom - 2)}px`;
+      d.textContent = `🎵 ${music.name} · ${Math.round(m.volume * 100)}%${m.duck ? " · ⇣" : ""}`;
+      d.title = T("musicDrag", "Drag: where the music starts");
+      d.onpointerdown = (e) => {
+        e.stopPropagation();
+        d.setPointerCapture(e.pointerId);
+        const x0 = e.clientX, s0 = music.start;
+        d.onpointermove = (ev) => { music.start = Math.max(0, Math.min(total() - 0.5, s0 + (ev.clientX - x0) / zoom)); d.style.left = `${music.start * zoom}px`; };
+        d.onpointerup = () => { d.onpointermove = null; render(); };
+      };
+      ml.replaceChildren(d);
+    } else ml.replaceChildren();
     const c = clips[chosen];
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
@@ -224,6 +244,7 @@
     const x = LAB + now * zoom;
     $("playhead").style.left = `${x}px`;
     $("time").textContent = `${fmt(now)} / ${fmt(total())}`;
+    syncMusic(now, playing);
     // Keep the playhead in view while playing (the phone's timeline follows it).
     if (x < tracks.scrollLeft + LAB || x > tracks.scrollLeft + tracks.clientWidth - 30) tracks.scrollLeft = x - tracks.clientWidth / 2;
     const all = total() || 1;
@@ -333,6 +354,66 @@
 
   // ---------- the round trip with the sound editor ----------
   let soundPath = null; // a new sound from the sound editor, when the video came back with one
+  // ---------- the music track ----------
+  // { path, name, start (s of the edit), duration } and the settings in the inspector; heard with the preview, lowered
+  // while a transcript line is spoken (the export does it properly, with FFmpeg's side-chain compressor).
+  let music = null;
+  const musicAudio = document.createElement("audio");
+  const musicSettings = () => ({ volume: Number($("musicVol").value) / 100, fadeIn: Number($("fadeIn").value) || 0, fadeOut: Number($("fadeOut").value) || 0, duck: $("duck").checked });
+  function musicLevel(t) {
+    if (!music) return 0;
+    const m = musicSettings(), rel = t - music.start, end = total() - music.start;
+    if (rel < 0 || rel > end) return 0;
+    let v = m.volume;
+    if (m.fadeIn && rel < m.fadeIn) v *= rel / m.fadeIn;
+    if (m.fadeOut && end - rel < m.fadeOut) v *= Math.max(0, end - rel) / m.fadeOut;
+    // Someone speaking now (a transcript line under the playhead): lower, as the export's ducking does.
+    if (m.duck && captions().some((c) => t >= c.start && t <= c.end)) v *= 0.3;
+    return Math.min(1, v);
+  }
+  function syncMusic(t, playing) {
+    if (!music) return;
+    const rel = t - music.start;
+    musicAudio.volume = musicLevel(t);
+    if (rel < 0 || rel > musicAudio.duration) { musicAudio.pause(); return; }
+    if (Math.abs(musicAudio.currentTime - rel) > 0.3) musicAudio.currentTime = rel;
+    if (playing && musicAudio.paused) musicAudio.play().catch(() => undefined);
+    if (!playing) musicAudio.pause();
+  }
+  async function setMusic(path) {
+    busy(T("loading", "Loading…"));
+    try {
+      const bytes = await kesher.call("video.soundBytes", { path });
+      musicAudio.src = URL.createObjectURL(new Blob([bytes]));
+      await new Promise((res) => { musicAudio.onloadedmetadata = res; musicAudio.onerror = res; });
+      music = { path, name: path.split("/").pop(), start: music?.start ?? 0, duration: musicAudio.duration || total() };
+      $("musicTools").hidden = false;
+      $("musicRemove").hidden = false;
+      render();
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
+  }
+  async function listMusic() {
+    try {
+      const files = await kesher.call("video.sounds", {});
+      const sel = $("musicPick");
+      sel.replaceChildren(sel.options[0], ...files.map((f) => { const o = document.createElement("option"); o.value = f; o.textContent = f.split("/").pop(); return o; }));
+      if (!files.length) sel.options[0].textContent = `${T("musicNone", "＋ From the chat…")} (${T("noMusic", "no sound files in the chat")})`;
+    } catch { /* not opened from a chat */ }
+  }
+  $("musicPick").onchange = () => { if ($("musicPick").value) void setMusic($("musicPick").value); };
+  $("musicFile").onclick = () => $("musicInput").click();
+  $("musicInput").onchange = async () => {
+    const f = $("musicInput").files?.[0];
+    if (!f) return;
+    busy(T("musicAdding", "Adding the music to the chat…"));
+    try {
+      const r = await kesher.call("video.addSound", { name: f.name, bytes: await f.arrayBuffer() });
+      await listMusic();
+      await setMusic(r.path);
+    } catch (e) { msg(e.message, true); } finally { busy(""); $("musicInput").value = ""; }
+  };
+  $("musicRemove").onclick = () => { music = null; musicAudio.pause(); musicAudio.removeAttribute("src"); $("musicTools").hidden = true; $("musicRemove").hidden = true; $("musicPick").value = ""; render(); };
+  for (const id of ["musicVol", "fadeIn", "fadeOut", "duck"]) $(id).oninput = () => { $("musicVolN").textContent = `${$("musicVol").value}%`; render(); };
   const editKey = () => `edit:${source?.path ?? ""}`;
   /** The edit is kept while she is in the sound editor, so coming back finds it as it was. */
   const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, at: Date.now() } }).catch(() => undefined);
@@ -382,6 +463,7 @@
       chosen = 0;
       fitZoom();
       seek(0);
+      void listMusic();
     } catch (e) {
       msg(e.message, true);
     } finally {
@@ -407,7 +489,7 @@
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
-      const r = await kesher.call("video.cut", { segments: clips.map(({ from, to }) => ({ from, to })), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}) });
+      const r = await kesher.call("video.cut", { segments: clips.map(({ from, to }) => ({ from, to })), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);

@@ -18,7 +18,9 @@ hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
 .field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
 
 /* Layout (design VideoEditorWorkspace): bar, viewer + inspector, timeline. */
-.app { display: grid; grid-template-rows: 42px 1fr 210px; height: 100%; }
+.app { display: grid; grid-template-rows: 42px 1fr 210px; grid-template-columns: minmax(0, 1fr); height: 100%; }
+/* The long timeline scrolls inside its own box: it never makes the page wider than the window (RTL cut its start off). */
+.middle, .timeline, .top { min-width: 0; }
 .top { display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid #111; }
 .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .middle { display: flex; min-height: 0; }
@@ -38,6 +40,7 @@ hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
 .clip { position: absolute; top: 0; height: 48px; border-radius: 6px; background: var(--clip); color: var(--accent-ink); font-size: 11.5px; font-weight: 600; padding: 4px 8px; overflow: hidden; white-space: nowrap; cursor: pointer; border: 2px solid transparent; background-size: auto 100%; background-blend-mode: soft-light; }
 .clip.on { border-color: #fff; }
 .clip.snd { background: #7fe0c0; height: 34px; }
+.clip.mus { background: #c9a0ff; height: 34px; cursor: grab; touch-action: none; }
 #sounds { height: 34px; }
 .lane:has(#sounds) { height: 40px; }
 .clip small { display: block; font-weight: 400; opacity: 0.75; }
@@ -63,7 +66,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 
 /* Phone (design VideoEditorWorkspacePhone, after CapCut mobile): viewer, timeline, tools at the bottom. */
 @media (max-width: 760px) {
-  .app { grid-template-rows: 46px minmax(180px, 40vh) 1fr 56px; }
+  .app { grid-template-rows: 46px minmax(180px, 40vh) 1fr 56px; grid-template-columns: minmax(0, 1fr); }
   .inspector, .hint, #export, #keysBtn { display: none; }
   .app.sheet .inspector { display: flex; position: fixed; inset-inline: 0; bottom: 56px; width: auto; max-height: 60vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
   .top #toChat { padding: 5px 8px; }

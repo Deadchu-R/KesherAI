@@ -2655,3 +2655,14 @@ Each AI tool shows which local model it uses and offers to download it the first
   Unity Hierarchy and Inspector, Unreal Outliner and Details).
 - Stopped at: research done; next the SceneStandIn board (2D, the outliner, the phone), then the readers' components and
   the 2D view.
+
+## The video editor's music track (2026-11-18, 19:50)
+- **Premiere Pro** (Essential Sound): clips are tagged Dialogue or Music; on the music, **Ducking** with the trigger
+  (dialogue), **sensitivity**, **duck amount** and **fade duration**, then "Generate Keyframes" writes volume keyframes
+  that can be edited by hand (Adobe help "Automatic audio ducking"). **CapCut**: a music lane under the clips, a volume
+  per clip, fade in / out, beat marks, and "reduce noise / enhance voice" on the voice.
+- **What we take**: one music lane under the sound (CapCut), a file from the chat or the device, where it starts (drag),
+  its volume, fade in and out, and Premiere's ducking as one checkbox: at export FFmpeg's side-chain compressor lowers
+  the music while the video's own sound is loud (no keyframes to edit; the preview lowers it under transcript lines).
+- Next (later): beat marks to snap cuts to, several music clips, a music model to write the track from words.
+- Stopped at: built (video-cut.ts musicGraph, the lane and the inspector); checked with a real FFmpeg run.

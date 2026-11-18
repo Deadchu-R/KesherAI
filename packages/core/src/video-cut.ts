@@ -45,7 +45,47 @@ export const SHAPES = ["9:16", "1:1", "4:5", "16:9"];
  *   phones and Reels, "1:1", "4:5" or "16:9"; none keeps it as it is.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string): string[] {
+/**
+ * A music track under the video (CapCut's music lane, Premiere's Essential Sound "Music"): from where it starts in the
+ * cut video, at a volume, faded in and out, and (as Premiere's auto-ducking) lowered under the voice by a side-chain
+ * compressor that listens to the video's own sound.
+ */
+export interface MusicTrack {
+  /** The music file (FFmpeg's second or third input). */
+  file: string;
+  /** Where it starts in the cut video, in seconds. */
+  start: number;
+  /** 0…1.5 (1 = as recorded). */
+  volume: number;
+  fadeIn: number;
+  fadeOut: number;
+  /** Lowered under the voice. */
+  duck: boolean;
+}
+
+/**
+ * The music track's part of the filter graph.
+ *
+ * @param m - The track.
+ * @param input - Its FFmpeg input index.
+ * @param total - The cut video's length (s).
+ * @param voice - The video's sound label (e.g. "[a]"), or none when the video is silent.
+ * @returns The graph's part, and the label of the sound that comes out.
+ */
+export function musicGraph(m: MusicTrack, input: number, total: number, voice?: string): { graph: string; out: string } {
+  const n = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number.isFinite(x) ? x : 0));
+  const start = n(m.start, 0, total), len = Math.max(0.1, total - start);
+  const fi = n(m.fadeIn, 0, len / 2), fo = n(m.fadeOut, 0, len / 2), vol = n(m.volume, 0, 1.5);
+  const ms = Math.round(start * 1000);
+  let g = `[${input}:a]atrim=0:${len.toFixed(3)},asetpts=PTS-STARTPTS,volume=${vol.toFixed(3)}${fi ? `,afade=t=in:d=${fi.toFixed(3)}` : ""}${fo ? `,afade=t=out:st=${(len - fo).toFixed(3)}:d=${fo.toFixed(3)}` : ""}${ms ? `,adelay=${ms}|${ms}` : ""},apad=whole_dur=${total.toFixed(3)}[mu]`;
+  if (!voice) return { graph: g, out: "[mu]" };
+  // The voice keeps its level; the music is pressed down while the voice is there, and comes back after it.
+  if (m.duck) g += `;${voice}asplit=2[vo][vk];[mu][vk]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[md];[vo][md]amix=inputs=2:duration=first:normalize=0[am]`;
+  else g += `;${voice}[mu]amix=inputs=2:duration=first:normalize=0[am]`;
+  return { graph: g, out: "[am]" };
+}
+
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
@@ -62,8 +102,16 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   const crop = shape ? `;[v]crop='min(iw,ih*${sw}/${sh})':'min(ih,iw*${sh}/${sw})',scale=trunc(iw/2)*2:trunc(ih/2)*2[vc]` : "";
   const pic = shape ? "[vc]" : "[v]";
   const subs = burn ? `;${pic}subtitles=filename=${burn}:force_style='FontName=Arial,FontSize=20,Outline=2,Shadow=0,MarginV=28'[vs]` : "";
-  const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${crop}${subs}`;
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  let graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${crop}${subs}`;
+  // The music track, mixed with the video's sound (or alone, for a silent video).
+  const total = segments.reduce((t, s) => t + (s.to - s.from), 0);
+  let outA = audio ? "[a]" : "";
+  if (music) {
+    const m = musicGraph(music, sound ? 2 : 1, total, audio ? "[a]" : undefined);
+    graph += `;${m.graph}`;
+    outA = m.out;
+  }
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), ...(music ? ["-i", music.file] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(outA ? ["-map", outA, "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -76,11 +124,12 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param sound - A file whose sound replaces the video's.
  * @param burn - An .srt beside the output to burn into the picture (its plain name; FFmpeg runs in that folder).
  * @param shape - One of SHAPES, or none.
+ * @param music - A music track under it.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack): Promise<void> {
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);

@@ -209,7 +209,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.cut": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
-          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, ...(input.sound ? { sound: input.sound } : {}), segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions, burn: p.burn === true } : {}), ...(typeof p.shape === "string" ? { shape: p.shape } : {}) } });
+          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, ...(input.sound ? { sound: input.sound } : {}), segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions, burn: p.burn === true } : {}), ...(typeof p.shape === "string" ? { shape: p.shape } : {}), ...(p.music && typeof p.music === "object" ? { music: p.music } : {}) } });
           if (p.send) {
             const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
             await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]${captions ? `\n[Attached: ${captions}]` : ""}` } });
@@ -405,6 +405,33 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const j = (await res.json()) as { parts?: Array<{ start: number; end: number; text: string }>; error?: string };
           if (!res.ok) throw new Error(j.error === "needs-setup" ? "Speech to text is not set up yet (Settings → Speech)." : j.error ?? String(res.status));
           return j.parts ?? [];
+        }
+        // The music track: the chat's sound files to choose from, one file's bytes to hear it, and a file from the
+        // device put into the chat (so the cut can use it).
+        case "video.sounds": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const r = await api<{ files: Array<{ path: string; size: number }> }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files`);
+          return r.files.filter((f) => /\.(mp3|wav|m4a|flac|ogg)$/i.test(f.path)).slice(0, 200).map((f) => f.path);
+        }
+        case "video.soundBytes": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(String(p.path ?? ""))}`));
+          if (!res.ok) throw new Error(`The sound could not be read (${res.status}).`);
+          return res.arrayBuffer();
+        }
+        case "video.addSound": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const bytes = p.bytes as ArrayBuffer;
+          if (!(bytes instanceof ArrayBuffer) || bytes.byteLength > 200 * 1024 * 1024) throw new Error("A sound file up to 200 MB.");
+          const name = String(p.name ?? "music.mp3").slice(0, 120);
+          if (!/\.(mp3|wav|m4a|flac|ogg)$/i.test(name)) throw new Error("An MP3, WAV, M4A, FLAC or OGG file.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          const j = (await res.json()) as { name?: string; error?: string };
+          if (!res.ok) throw new Error(j.error ?? String(res.status));
+          return { path: `shared/${j.name}` };
         }
         // Where the video the page was opened with changes shot, in seconds (FFmpeg's scene score, on the computer).
         case "video.scenes": {
