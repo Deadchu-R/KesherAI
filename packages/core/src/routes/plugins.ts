@@ -46,6 +46,9 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
         .type(TYPES[extname(file).toLowerCase()] ?? "application/octet-stream")
         // The page may load only its own files and talk to the app through postMessage.
         .header("content-security-policy", "default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'; frame-ancestors 'self'")
+        // A sandboxed page has no origin ("null"), and the browser fetches its module scripts (the 3D editor's three.js)
+        // with CORS: they load only when the answer allows that origin. The key in the path still guards the files.
+        .header("access-control-allow-origin", req.headers.origin === "null" ? "null" : undefined)
         .send(data);
     } catch {
       return reply.code(404).send({ error: "Not found" });
