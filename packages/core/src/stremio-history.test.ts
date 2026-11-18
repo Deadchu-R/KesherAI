@@ -107,3 +107,28 @@ test("a session key from Stremio's own page: its email is shown and the library 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Stremio's link sign-in: a code and Stremio's own address, waiting, then connected", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-stremio-link-"));
+  try {
+    let confirmed = false;
+    const fetcher = (async (url: string) => {
+      if (url.includes("/create?type=Create")) return new Response(JSON.stringify({ result: { success: true, code: "5OQJ", link: "https://link.stremio.com/5OQJ", qrcode: "x" } }));
+      if (url.includes("/read?type=Read&code=5OQJ")) return new Response(JSON.stringify(confirmed ? { result: { authKey: "linksessionkey1" } } : { error: { message: "not yet" } }));
+      if (url.endsWith("/getUser")) return new Response(JSON.stringify({ result: { email: "me@example.com" } }));
+      return new Response(JSON.stringify({ result: [{ name: "Dark", type: "series", state: { timesWatched: 1 } }] }));
+    }) as typeof fetch;
+    const t = new StremioTaste(dir, fetcher);
+    assert.deepEqual(await t.stremioLinkBegin(), { code: "5OQJ", link: "https://link.stremio.com/5OQJ" });
+    assert.deepEqual(await t.stremioLinkCheck("5OQJ"), { waiting: true });
+    confirmed = true;
+    assert.deepEqual(await t.stremioLinkCheck("5OQJ"), { waiting: false, added: 1, total: 1 });
+    assert.equal((await t.load()).stremio?.authKey, "linksessionkey1");
+    await assert.rejects(() => t.stremioLinkCheck("../x"), /No sign-in code/);
+    // An address that is not Stremio's own is never shown.
+    const evil = new StremioTaste(dir, (async () => new Response(JSON.stringify({ result: { code: "AB12", link: "https://evil.example/AB12" } }))) as typeof fetch);
+    await assert.rejects(() => evil.stremioLinkBegin(), /no sign-in code/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

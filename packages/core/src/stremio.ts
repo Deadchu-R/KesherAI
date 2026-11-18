@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { stremioEmail, stremioLibrary, stremioLogin, stremioLogout, traktApp, traktLibrary, traktPoll, traktStart, type TraktApp, type TraktDevice } from "./stremio-history.js";
+import { stremioEmail, stremioLibrary, stremioLinkRead, stremioLinkStart, stremioLogin, stremioLogout, traktApp, traktLibrary, traktPoll, traktStart, type TraktApp, type TraktDevice } from "./stremio-history.js";
 
 /**
  * Movies and series for the user's taste, as a Stremio addon (Roee, 2026-11-16).
@@ -288,11 +288,27 @@ export class StremioTaste {
     return this.stremioSync();
   }
 
+  /** Starts Stremio's link sign-in: the code and Stremio's address for her to open. */
+  async stremioLinkBegin(): Promise<{ code: string; link: string }> {
+    return stremioLinkStart(this.fetcher);
+  }
+
   /**
-   * Uses a session key read from Stremio's own sign-in page (she signed in there; KesherAI never saw a password), and
+   * Once she confirmed the code on Stremio's site: connects and reads her library; until then `{ waiting: true }`.
+   *
+   * @param code - The code from stremioLinkBegin.
+   */
+  async stremioLinkCheck(code: string): Promise<{ waiting: true } | { waiting: false; added: number; total: number }> {
+    const key = await stremioLinkRead(this.fetcher, code);
+    if (!key) return { waiting: true };
+    return { waiting: false, ...(await this.stremioConnectKey(key)) };
+  }
+
+  /**
+   * Uses a session key read from Stremio's own sign-in (its page or its link sign-in) (she signed in there; KesherAI never saw a password), and
    * reads her library once.
    *
-   * @param authKey - The session key from web.stremio.com.
+   * @param authKey - The session key from Stremio.
    * @returns What was added.
    */
   async stremioConnectKey(authKey: string): Promise<{ added: number; total: number }> {

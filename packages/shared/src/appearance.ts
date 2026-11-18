@@ -59,6 +59,8 @@ export interface Appearance {
   homeHide?: HomeSection[];
   /** The phone's bottom bar, start to end. */
   tabsOrder?: PhoneTab[];
+  /** Tabs for open pages (chats, editors, documents) above the page; on unless turned off. */
+  pageTabs?: boolean;
   /** How the graph editors (Unreal Blueprints, Unity graphs, C# as nodes) draw wires, like Electronic Nodes. */
   wires?: GraphWires;
 }
@@ -196,6 +198,7 @@ export function cleanAppearance(input: unknown): Appearance {
   if (hh?.length) out.homeHide = hh;
   const to = pick(o.tabsOrder, PHONE_TABS);
   if (to?.length) out.tabsOrder = [...to, ...PHONE_TABS.filter((t) => !to.includes(t))];
+  if (o.pageTabs === false) out.pageTabs = false;
   if (typeof o.name === "string" && o.name.trim()) out.name = o.name.trim().replace(/[<>]/g, "").slice(0, 60);
   return out;
 }

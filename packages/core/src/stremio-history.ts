@@ -13,6 +13,8 @@ import type { Rated } from "./stremio.js";
 
 const STREMIO_API = "https://api.strem.io/api/";
 const TRAKT_API = "https://api.trakt.tv";
+/** Stremio's "link" sign-in (what its TV apps use): a code, she signs in on Stremio's site and confirms it. */
+const STREMIO_LINK = "https://link.stremio.com/api/v2/";
 
 /** A failure with the HTTP status the route should answer. */
 const fail = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
@@ -33,6 +35,40 @@ async function stremioCall<T>(fetcher: typeof fetch, method: string, body: Recor
   if (j.error) throw fail(typeof j.error.message === "string" ? `Stremio: ${j.error.message.slice(0, 200)}` : "Stremio refused.", 400);
   if (j.result === undefined) throw fail("Stremio gave no answer.", 502);
   return j.result;
+}
+
+/**
+ * Starts a Stremio "link" sign-in (as its TV apps do; found in stremio-core): Stremio gives a short code and an
+ * address on its own site, where she signs in (email, Google or Facebook) and confirms the code. No password reaches
+ * KesherAI, and it works from the phone too.
+ *
+ * @param fetcher - fetch.
+ * @returns The code and the address to open.
+ */
+export async function stremioLinkStart(fetcher: typeof fetch): Promise<{ code: string; link: string }> {
+  const res = await fetcher(`${STREMIO_LINK}create?type=Create`, { redirect: "error", signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) throw fail(`Stremio answered ${res.status}.`, 502);
+  const r = ((await res.json()) as { result?: { code?: unknown; link?: unknown } }).result;
+  const code = typeof r?.code === "string" ? r.code : "";
+  const link = typeof r?.link === "string" ? r.link : "";
+  // Only Stremio's own site is ever shown to her.
+  if (!/^[A-Za-z0-9]{3,12}$/.test(code) || !/^https:\/\/link\.stremio\.com\/[A-Za-z0-9]{3,12}$/.test(link)) throw fail("Stremio gave no sign-in code.", 502);
+  return { code, link };
+}
+
+/**
+ * Whether she has confirmed the code on Stremio's site yet.
+ *
+ * @param fetcher - fetch.
+ * @param code - The code from stremioLinkStart.
+ * @returns The session key once confirmed, else undefined.
+ */
+export async function stremioLinkRead(fetcher: typeof fetch, code: string): Promise<string | undefined> {
+  if (!/^[A-Za-z0-9]{3,12}$/.test(code)) throw fail("No sign-in code.", 400);
+  const res = await fetcher(`${STREMIO_LINK}read?type=Read&code=${encodeURIComponent(code)}`, { redirect: "error", signal: AbortSignal.timeout(20_000) });
+  if (!res.ok) return undefined;
+  const key = ((await res.json().catch(() => ({}))) as { result?: { authKey?: unknown } }).result?.authKey;
+  return typeof key === "string" && /^[\w-]{10,200}$/.test(key) ? key : undefined;
 }
 
 /**

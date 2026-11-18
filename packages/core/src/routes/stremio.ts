@@ -44,6 +44,8 @@ export async function stremioRoutes(app: FastifyInstance, s: KesherServices, key
     if (!r?.key) return { waiting: true };
     return { waiting: false, ...(await taste.stremioConnectKey(r.key)) };
   });
+  // Stremio's link sign-in (works from the phone too): "start" gives the code and Stremio's address; "check" with the code.
+  app.post<{ Body: { op?: string; code?: string } }>("/api/stremio/account/link", async (req) => (req.body?.op === "start" ? taste.stremioLinkBegin() : taste.stremioLinkCheck(String(req.body?.code ?? ""))));
   app.post("/api/stremio/account/sync", async () => taste.stremioSync());
   app.delete("/api/stremio/account", async () => {
     await taste.stremioDisconnect();
