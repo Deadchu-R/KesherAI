@@ -17,6 +17,7 @@
         <button data-persona="pixel" title="Pixel"><span>▦</span><b data-t="pPixel">Pixel</b></button>
         <button data-persona="ai" title="AI"><span>✨</span><b data-t="pAi">AI</b></button>
       </div>
+      <button id="toChat" class="primary to-chat" hidden title="Send to the chat"><span>↩</span> <b data-t="toChat">Send to the chat</b></button>
       <button id="affinity" class="affinity" title="Affinity"><span>◭</span> <b data-t="openAffinity">Open in Affinity</b></button>
     </header>
 
@@ -137,6 +138,15 @@
       <div class="row"><label class="field grow"><span data-t="width">Width</span><input type="number" id="newW" value="1024" min="16" max="8192" /></label><label class="field grow"><span data-t="height">Height</span><input type="number" id="newH" value="1024" min="16" max="8192" /></label></div>
       <label class="row"><input type="checkbox" id="newWhite" checked /> <span data-t="whiteBg">White background</span></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="create">Create</button></div>
+    </form>
+  </dialog>
+  <!-- Send to the chat the picture came from: the flattened PNG, with an optional message (what to do next) -->
+  <dialog id="chatDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="toChatH">Send to the chat</strong>
+      <img id="chatThumb" class="chat-thumb" alt="" />
+      <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto" data-tp="toChatPh" placeholder="e.g. Make the sky warmer"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
     </form>
   </dialog>
   <input type="file" id="file" accept="image/*" hidden />

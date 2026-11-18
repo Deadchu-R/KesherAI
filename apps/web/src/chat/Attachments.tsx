@@ -4,6 +4,7 @@ import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { LineIcon } from "../ui/Glyph";
 import { fileIcon } from "../attach-lines";
+import { usePluginUi } from "../plugins";
 
 // three.js is big: the 3D viewer loads only when a model is opened.
 const ModelViewer = lazy(() => import("../ModelViewer"));
@@ -63,6 +64,18 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
       </div>
     </div>
   );
+}
+
+/**
+ * "Edit" on a chat's picture: opens it in the image editor (a plugin page) as a tab, which can send it back to the chat.
+ * Shown only when the image editor is installed.
+ */
+function EditPicture({ convId, path }: { convId: string; path: string }) {
+  const { pages } = usePluginUi();
+  const editor = pages.find((p) => p.pluginId === "image-editor" && p.uses?.includes("image"));
+  if (!editor) return null;
+  const href = `#/p/${editor.pluginId}/${editor.id}?c=${encodeURIComponent(convId)}&f=${encodeURIComponent(path)}`;
+  return <a className="btn attach-edit" href={href}><LineIcon name="pencil" size={15} /> {L("עריכה בעורך התמונות", "Edit in the image editor")}</a>;
 }
 
 /** Files shown as a preview rather than as text: Office files, PDF and pictures (the Workspace opens these so). */
@@ -127,6 +140,7 @@ export function FilePreview({ convId, path, reloadKey }: { convId: string; path:
       {p?.kind === "html" && <iframe className="attach-frame" sandbox="" srcDoc={framed(p.html)} title={p.name} />}
       {p?.kind === "text" && <pre className="attach-text" dir="auto">{p.text}</pre>}
       {p?.kind === "image" && <img className="attach-img" src={download} alt={p.name} />}
+      {p?.kind === "image" && <EditPicture convId={convId} path={file} />}
       {p?.kind === "model" && <Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={download} name={p.name} /></Suspense>}
       {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <Media kind="video" className="attach-img" src={download} controls preload="metadata" />}
       {p?.kind === "none" && /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <Media kind="audio" src={download} controls preload="metadata" style={{ width: "100%" }} />}

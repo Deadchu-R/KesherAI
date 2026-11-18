@@ -19,6 +19,7 @@
     pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
+    toChat: "שלח לצ'אט", toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתה (לא חובה)", toChatPh: "למשל: תעשה את השמיים חמים יותר", send: "שלח", sending: "שולח…", fromChat: "נפתח מהצ'אט",
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
@@ -777,6 +778,7 @@
       "-",
       ["saveProject", "Save project", "Ctrl+S", () => saveProject()],
       ["export", "Export PNG", "Ctrl+Shift+E", () => exportPng()],
+      ...(fromChat ? [["toChat", "Send to the chat", "Ctrl+Enter", sendToChat]] : []),
       "-",
       ["openAffinity", "Open in Affinity", "", () => openInAffinity()],
     ]],
@@ -903,7 +905,7 @@
     if (e.key === "Escape") closeMenu();
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
-    const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), o: () => $("file").click(), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined) };
+    const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), o: () => $("file").click(), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined), enter: () => fromChat && ($("chatDialog").open ? $("chatDialog").close("ok") : sendToChat()) };
     if (map[k]) { e.preventDefault(); map[k](); }
   });
 
@@ -942,6 +944,43 @@
     }
   };
 
+  // ---------- the chat the picture came from ("Edit" on a chat's picture) ----------
+  let fromChat = null; // { conversationId, path, name } when opened from a chat
+  async function openFromChat() {
+    const input = await kesher.call("editor.input").catch(() => null);
+    if (!input?.data) return;
+    fromChat = input;
+    const img = await loadImage(input.data);
+    docName = input.name.replace(/\.[^.]+$/, "") || "picture";
+    $("docTab").textContent = input.name;
+    newDoc(img.naturalWidth, img.naturalHeight, false);
+    doc.layers[0].name = input.name;
+    doc.layers[0].ctx.drawImage(img, 0, 0);
+    renderLayers();
+    draw();
+    $("toChat").hidden = false;
+    msg(T("fromChat", "Opened from the chat"));
+  }
+  function sendToChat() {
+    if (!fromChat) return;
+    $("chatThumb").src = flatten().toDataURL("image/png");
+    $("chatDialog").showModal();
+    $("chatText").focus();
+  }
+  $("toChat").onclick = sendToChat;
+  $("chatDialog").addEventListener("close", async () => {
+    if ($("chatDialog").returnValue !== "ok") return;
+    busy(T("sending", "Sending…"));
+    try {
+      await kesher.call("chat.sendFile", { name: `${docName}-edited.png`, data: flatten().toDataURL("image/png"), text: $("chatText").value.trim() });
+      $("chatText").value = "";
+    } catch (e) {
+      msg(e.message, true);
+    } finally {
+      busy("");
+    }
+  });
+
   // ---------- start ----------
   buildMenus();
   renderHistory();
@@ -963,4 +1002,5 @@
   setTool("brush");
   newDoc(1024, 1024, true);
   requestAnimationFrame(() => { resize(); fit(); });
+  openFromChat().then(() => fromChat && buildMenus()).catch((e) => msg(e.message, true));
 })();

@@ -44,7 +44,10 @@ input[type="range"] { accent-color: var(--accent); }
 .personas button { border: 0; background: none; padding: 2px 9px; display: flex; gap: 5px; align-items: center; }
 .personas button.on { background: var(--panel-2); color: var(--text); }
 .personas b { font-weight: 500; }
-.affinity b { font-weight: 500; }
+.affinity b, .to-chat b { font-weight: 500; }
+.to-chat { display: inline-flex; gap: 5px; align-items: center; margin-inline-end: 6px; }
+.chat-thumb { max-width: 100%; max-height: 220px; object-fit: contain; border-radius: 6px; background: var(--well); }
+#chatDialog { width: min(420px, calc(100vw - 32px)); }
 .context { grid-column: 1 / 4; display: flex; align-items: center; gap: 12px; padding: 0 10px; background: #222327; border-bottom: 1px solid #111; overflow-x: auto; white-space: nowrap; }
 .context label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
 .context input[type="range"] { width: 110px; }
@@ -111,6 +114,6 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   .dock { grid-column: 1 / 3; grid-row: 4; flex-direction: row; overflow-x: auto; }
   .dock .panel { min-width: 260px; }
   .status { grid-column: 1 / 3; }
-  .personas b, .affinity b { display: none; }
+  .personas b, .affinity b, .to-chat b { display: none; }
 }
 [hidden] { display: none !important; }

@@ -163,6 +163,8 @@ Pages and panels run in a **sandboxed frame**: their scripts run, but they canno
 | `conversation` | – | panels only: `{ title, messages }` of the open conversation |
 | `insertPrompt` | `{ text }` | panels only: puts text in the message box |
 | `toast` | `{ text }` | shows a short message |
+| `editor.input` | – | `uses: image`, pages only · the chat picture the page was opened with ("Edit in the image editor" on a chat's picture, `#/p/<plugin>/<page>?c=<chat>&f=<file>`): `{ conversationId, path, name, data }`, or `null` |
+| `chat.sendFile` | `{ name, data, text? }` | only after `editor.input` gave a picture · attaches the file (`data:` URL, up to 50 MB) to that same chat with an optional message, sends it and goes to the chat |
 | `image.generate` | `{ prompt, width?, height?, steps?, seed?, model? }` | `uses: image` · the pictures, as `data:` URLs (default: the user's picture model) |
 | `image.edit` | `{ prompt, image, mask?, strength? }` | `uses: image` · edits a picture (`data:` URLs); with a mask, only the white part changes |
 | `image.upscale` | `{ image }` | `uses: image` · the picture four times larger |

@@ -87,8 +87,10 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.title - Accessible title.
  * @param props.conversationId - For panels: the open conversation.
  * @param props.onInsertPrompt - For panels: puts text into the composer.
+ * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
+ *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [] }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[] }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: { conversationId: string; path: string } }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -109,7 +111,30 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
       const p = msg.params ?? {};
       switch (msg.method) {
         case "info":
-          return { pluginId, locale: getLocale(), conversationId: conversationId ?? null, uses, apiVersion: 2 };
+          return { pluginId, locale: getLocale(), conversationId: conversationId ?? input?.conversationId ?? null, uses, apiVersion: 3 };
+        // The file the page was opened with (a picture of a chat), as a data URL.
+        case "editor.input": {
+          if (!input) return null;
+          const blob = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.path)}`)).then((x) => {
+            if (!x.ok) throw new Error(`The file could not be read (${x.status}).`);
+            return x.blob();
+          });
+          return { conversationId: input.conversationId, path: input.path, name: input.path.split(/[\\/]/).pop() ?? "", data: await dataUrl(blob) };
+        }
+        // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
+        case "chat.sendFile": {
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const bytes = await fetch(String(p.data ?? "")).then((x) => x.blob());
+          if (!bytes.size || bytes.size > 50 * 1024 * 1024) throw new Error("The file is empty or larger than 50 MB.");
+          const name = String(p.name ?? "edited.png").slice(0, 120);
+          const up = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
+          const { path } = (await up.json()) as { path: string };
+          const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
+          await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]` } });
+          location.hash = `#/c/${input.conversationId}`;
+          return { path };
+        }
         case "image.generate":
         case "image.edit": {
           need("image");
@@ -237,6 +262,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(",")]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" />;
 }
