@@ -2415,3 +2415,24 @@ Each AI tool shows which local model it uses and offers to download it the first
   editors (firecut.ai, morphic.com, massive.io), plus the feature research above.
 - Stopped at: video screen done; next the sound editor's screen (Audition, RX, Descript, Logic on iPad) when there is a
   wait again; then boards for both.
+
+## The sound editor's screen (UI/UX), in depth (2026-11-18, 15:25)
+- **Two views, one switch** (Audition, RX, Logic): the waveform editor (one file, select a stretch and act on it) and the
+  multitrack (clips on tracks). Audition and RX put the spectrogram under or over the waveform with a slider between them;
+  RX's selection tools (time, frequency, lasso, brush) work on the spectrogram; the module list (Repair Assistant, De-noise,
+  Dialogue Isolate…) sits on the right with Preview / Render, and history on the left with "compare" (A/B).
+- **Transport and keys**: Space play, Shift+Space play the selection, loop (L in RX / Q in Audition), markers M, zoom with
+  the wheel on the time ruler and a full overview strip on top (as the video editor's thin strip), fades by dragging the
+  corner handles on a clip, volume by the line across the clip (Audition's rubber band).
+- **Spoken sound** (Descript, Adobe Podcast, Riverside): the transcript is the editor; filler words and long pauses are
+  shown struck through with one "remove all"; Studio Sound is one switch with a strength.
+- **Music** (Logic's Stem Splitter, Suno Studio, Moises): stems as tracks with a solo/mute and a slider each; Moises on the
+  phone shows the stems as a mixer with big sliders, plus key, tempo and chords on top.
+- **Phone** (Ferrite on iPhone, GarageBand, Moises, Dolby On): the waveform large and horizontal, the playhead fixed in the
+  centre (as CapCut), pinch to zoom, a bottom bar that changes with the selection (Cut, Fade, Volume, Clean up, Split);
+  Dolby On is one big "make it sound good" button with a strength and A/B.
+- For KesherAI's stage 1: waveform + spectrogram switch, multitrack, select a stretch → the task bar ("What to do here?":
+  clean, cut, fade, redo in my voice, extend the music), transcript tab for speech, stems for music, A/B on every effect,
+  export, Send to the chat; the phone as Ferrite/CapCut with the fixed playhead.
+- Stopped at: sound screen done; next the 3D editor's screen (Blender, Spline, Meshy's editor, Nomad Sculpt on the phone)
+  at the next wait; then boards for video, sound and 3D screens.
