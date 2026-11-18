@@ -1317,3 +1317,18 @@ S5 an outside scanner's rules for Electron.
 - **The 3D editor**: three.js runs inside the sandboxed page; GLTFLoader parses bytes only (no external URIs are
   fetched: the page's CSP has `connect-src 'none'`).
 - Checked: lint, typecheck, 902 tests.
+
+## Scan 148 (2026-11-18): the hand-off between editors, textures, modifiers, splitting and choosing parts
+- **`editor.handoff`**: only from a page opened from a chat; `to` must be one of the four editors and not the page itself;
+  the slot is short plain text (`[\p{L}\p{N}_:. -]{1,80}`); every file it carries (the file, the guide, the working copy)
+  is decoded from a data URL by the app, checked for size (≤ 300 MB) and saved through the chat's own upload route, which
+  cleans the name and keeps it in `shared/`. It opens the other editor through `offerPart` (asks before turning a part on).
+- **`editor.handBack`**: only for a page opened by a hand-off; it goes back only to the editor and the file in its own
+  validated address (`retp` is one of the editors, `ret` must be that editor's kind of file); `back` must be a picture.
+- **`pageInput`**: the new `ret` / `retp` / `slot` / `back` / `g` are checked one by one (tests: a made-up editor, a
+  `.env` to go back to, a slot with markup — all refused).
+- **The image editor's guide layer** is drawn but left out of every export (`flatten` skips it), so a UV layout never
+  ends up in a texture or in the chat.
+- **3D editor**: modifiers, split and choose-by-click work on geometry in the sandboxed page only; neighbours are worked
+  out once per geometry and kept; a texture is read from a data URL into an `Image`, never fetched.
+- Checked: lint, typecheck, 902 tests; the texture round trip, split and choose-by-click checked in a browser.
