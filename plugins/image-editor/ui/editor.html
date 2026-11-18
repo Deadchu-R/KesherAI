@@ -36,6 +36,12 @@
         <button id="selClear" data-t="clear">Clear</button>
         <button id="selToAi" data-t="toAi">Repaint with AI…</button>
       </div>
+      <div class="ctx" data-for="crop">
+        <label><span data-t="ratio">Ratio</span> <select id="cropRatio"><option value="free" data-t="free">Free</option><option>1:1</option><option>4:3</option><option>3:2</option><option>16:9</option><option>9:16</option><option>4:5</option></select></label>
+        <button id="cropApply" class="primary" data-t="apply2">Apply</button>
+        <button id="cropCancel" data-t="cancel">Cancel</button>
+        <span class="muted" data-t="cropHint">Drag a frame. Enter applies, Esc cancels.</span>
+      </div>
       <div class="ctx" data-for="fill">
         <label><span data-t="tolerance">Tolerance</span> <input type="range" id="tolerance" min="0" max="255" value="32" /></label>
       </div>
@@ -49,6 +55,7 @@
     <!-- Tools (one column, like Photoshop), colors at the bottom -->
     <nav class="tools" aria-label="Tools">
       <button data-tool="move" title="Move (V)">✥</button>
+      <button data-tool="crop" title="Crop (C)">⛶</button>
       <button data-tool="rect" title="Rectangle selection (M)">⬚</button>
       <button data-tool="ellipse" title="Ellipse selection">◌</button>
       <button data-tool="lasso" title="Lasso (L)">➰</button>

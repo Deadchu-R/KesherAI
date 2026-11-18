@@ -19,6 +19,7 @@
     pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
+    hCrop: "חיתוך", crop: "חיתוך", ratio: "יחס", cropHint: "גרור מסגרת. Enter מחיל, Esc מבטל.", apply2: "החל", free: "חופשי",
     taskPh: "מה לעשות כאן? (ריק = מילוי שמתאים לסביבה)", pSelect: "בחירה", keysH: "קיצורים (כמו בפוטושופ)", close: "סגור",
     toChat: "שלח לצ'אט", toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתה (לא חובה)", toChatPh: "למשל: תעשה את השמיים חמים יותר", send: "שלח", sending: "שולח…", fromChat: "נפתח מהצ'אט",
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
@@ -176,6 +177,22 @@
       }
       vctx.setLineDash([]);
     }
+    if (cropBox) {
+      // Crop (Photoshop's C): what goes is dimmed, the kept part has a frame and thirds.
+      const { x, y, w, h } = cropBox;
+      vctx.fillStyle = "rgba(0,0,0,0.55)";
+      vctx.fillRect(0, 0, doc.w, y);
+      vctx.fillRect(0, y + h, doc.w, doc.h - y - h);
+      vctx.fillRect(0, y, x, h);
+      vctx.fillRect(x + w, y, doc.w - x - w, h);
+      vctx.strokeStyle = "#fff";
+      vctx.lineWidth = 1.5 / cam.scale;
+      vctx.strokeRect(x, y, w, h);
+      vctx.lineWidth = 0.75 / cam.scale;
+      vctx.beginPath();
+      for (const k of [1, 2]) { vctx.moveTo(x + (w * k) / 3, y); vctx.lineTo(x + (w * k) / 3, y + h); vctx.moveTo(x, y + (h * k) / 3); vctx.lineTo(x + w, y + (h * k) / 3); }
+      vctx.stroke();
+    }
     $("zoomInfo").textContent = `${Math.round(cam.scale * 100)}%`;
   }
   setInterval(() => {
@@ -216,6 +233,7 @@
   let tool = "brush";
   let strokePreview = null;
   let draftPath = null;
+  let cropBox = null; // { x, y, w, h } while cropping
   let drag = null;
   let spaceDown = false;
   function setTool(t) {
@@ -344,6 +362,9 @@
       draftPath = new Path2D();
       drag.points.forEach((q, i) => (i ? draftPath.lineTo(q.x, q.y) : draftPath.moveTo(q.x, q.y)));
       draw();
+    } else if (drag.t === "crop") {
+      cropBox = cropRect(drag.start, p);
+      draw();
     } else if (drag.t === "picker") pick(p);
     drag.last = p;
   });
@@ -359,6 +380,46 @@
     if (drag.t === "move") renderLayers();
     drag = null;
   });
+  // ---------- crop ----------
+  /** The box from where the drag started to here, inside the picture, in the chosen ratio. */
+  function cropRect(a, b) {
+    const r = $("cropRatio").value;
+    let w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+    if (r !== "free") {
+      const [rw, rh] = r.split(":").map(Number);
+      if (w / h > rw / rh) w = (h * rw) / rh; else h = (w * rh) / rw;
+    }
+    const x = Math.max(0, Math.min(b.x < a.x ? a.x - w : a.x, doc.w)), y = Math.max(0, Math.min(b.y < a.y ? a.y - h : a.y, doc.h));
+    return { x: Math.round(x), y: Math.round(y), w: Math.round(Math.min(w, doc.w - x)), h: Math.round(Math.min(h, doc.h - y)) };
+  }
+  function applyCrop() {
+    if (!cropBox || cropBox.w < 2 || cropBox.h < 2) return;
+    remember(T("hCrop", "Crop"));
+    const { x, y, w, h } = cropBox;
+    for (const l of doc.layers) {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(l.canvas, l.x - x, l.y - y);
+      Object.assign(l, { canvas: c, ctx, x: 0, y: 0 });
+    }
+    doc.w = w;
+    doc.h = h;
+    cropBox = null;
+    selection = null;
+    renderLayers();
+    fit();
+  }
+  const cancelCrop = () => { cropBox = null; draw(); };
+  $("cropApply").onclick = applyCrop;
+  $("cropCancel").onclick = cancelCrop;
+  addEventListener("keydown", (e) => {
+    if (!cropBox || e.target.closest?.("input, textarea")) return;
+    if (e.key === "Enter") { e.preventDefault(); applyCrop(); }
+    if (e.key === "Escape") cancelCrop();
+  });
+
   view.addEventListener("wheel", (e) => {
     e.preventDefault();
     const r = view.getBoundingClientRect();
@@ -714,7 +775,7 @@
     if ((e.ctrlKey || e.metaKey) && k === "d") { e.preventDefault(); $("selNone").click(); return; }
     if (k === " ") { spaceDown = true; stage.style.cursor = "grab"; e.preventDefault(); return; }
     if (k === "delete" || k === "backspace") return clearSelection();
-    const map = { b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
+    const map = { c: "crop", b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
     if (map[k]) setTool(map[k]);
     if (k === "[") $("size").value = String(Math.max(1, +$("size").value - 5));
     if (k === "]") $("size").value = String(+$("size").value + 5);
@@ -1012,7 +1073,7 @@
   }));
 
   // ---------- "?": the shortcuts ----------
-  const KEYS = [["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
+  const KEYS = [["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["C", "crop", "Crop"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
       const tr = document.createElement("tr");
