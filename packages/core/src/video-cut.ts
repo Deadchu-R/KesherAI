@@ -85,6 +85,20 @@ export function musicGraph(m: MusicTrack, input: number, total: number, voice?: 
   return { graph: g, out: "[am]" };
 }
 
+/**
+ * FFmpeg's arguments for a cut: the stretches in order, with the new sound, burned captions, a new shape and a music
+ * track when given.
+ *
+ * @param input - The source video.
+ * @param output - The new video.
+ * @param segments - The stretches to keep.
+ * @param audio - Whether the source has sound.
+ * @param sound - A file whose sound replaces the video's.
+ * @param burn - An .srt's plain name to burn in.
+ * @param shape - One of SHAPES.
+ * @param music - A music track under it.
+ * @returns The arguments.
+ */
 export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
