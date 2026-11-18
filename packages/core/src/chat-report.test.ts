@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PeopleChat } from "./people-chats.js";
@@ -161,9 +161,18 @@ test("a long Brandon report is read in parts when the model's context is small",
   assert.equal((await reports.get(r.id)).report?.findings[0]?.title, "Parts");
   assert.ok(calls.some((c) => c.system.includes("one part of a long")));
   assert.ok(calls.filter((c) => c.system.includes("one part of a long")).every((c) => c.n <= 6_000 || c.n > 8_000));
-  // A model too small even for the smallest parts: a clear 422, not a server error.
+  // A model too small even for the smallest parts: the report says so clearly (the import runs in the background).
   const tiny = async () => { throw new Error("Context size has been exceeded."); };
-  await assert.rejects(reports.importReport(text, "he", tiny), (e: Error & { statusCode?: number }) => e.statusCode === 422);
+  const failed = await reports.importReport(text, "he", tiny);
+  assert.equal(failed.status, "error");
+  assert.match(failed.error ?? "", /too long for the chosen model's memory/);
+  // The steps were shown while it ran, and the import ends with none left.
+  assert.equal(failed.step, undefined);
+  // A report marked as being written that nothing writes (a restart) shows as stopped.
+  await writeFile(join((reports as unknown as { dir: string }).dir, failed.id, "report.json"), JSON.stringify({ ...failed, status: "reading", error: undefined }));
+  const stopped = await reports.live(failed.id);
+  assert.equal(stopped.status, "error");
+  assert.match(stopped.error ?? "", /נעצר/);
 });
 
 test("a long chat is written even when the model's context is small (parts split, notes cut down)", async () => {
@@ -197,4 +206,18 @@ test("a failed report is written again from the chat it has", async () => {
   for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
   assert.equal((await reports.get(r.id)).report?.headline, "שוב");
   await assert.rejects(reports.retry(r.id, good), /Only a report that failed/);
+});
+
+test("the chats already uploaded are listed once each, and a new report can start from one", async () => {
+  const reports = new ChatReports(await mkdtemp(join(tmpdir(), "chat-reports-")));
+  const messages = Array.from({ length: 40 }, (_, i) => ({ at: `2026-03-0${1 + (i % 9)}T10:${String(i).padStart(2, "0")}:00`, sender: i % 2 ? "Roee" : "Dana", text: `הודעה ${i} עם כמה מילים` }));
+  const ask = async () => JSON.stringify({ headline: "h", read: "r", findings: [] });
+  const a = await reports.start({ source: "whatsapp", title: "Dana", messages }, { kind: "couple", voice: "friend", lang: "he" }, ask);
+  await new Promise((ok) => setTimeout(ok, 50));
+  await reports.start(await reports.chatOf(a.id), { kind: "couple", voice: "roast", lang: "he" }, ask);
+  await new Promise((ok) => setTimeout(ok, 50));
+  const chats = await reports.chats();
+  assert.equal(chats.length, 1);
+  assert.equal(chats[0]!.messages, 40);
+  await assert.rejects(reports.chatOf("../x"), /No such chat/);
 });

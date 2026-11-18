@@ -2121,6 +2121,13 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (2026-11-18): computer and phone (designs BackOnTrack / BackOnTrackPhone).
 - Stopped at: built.
 
+## Chat reports: importing with feedback, and chats already uploaded (2026-11-18, Roee from the phone)
+- Roee: importing a Brandon report by link showed only "Importing…" for a long time and no tab opened; he wants a lot of feedback while it runs, and to pick a chat he already uploaded instead of uploading it again.
+- What Brandon Thinks (looked at whatbrandonthinks.com today): the setup is one question a screen, "1 of 7"; the upload screen has a tutorial and an email fallback ("Can't find your chat file? Send it by email instead"); reports live in the account ("Open your account"). The report page is behind a sign-in (email code), so the link only reads when KesherAI's own browser is signed in there.
+- Found: the import was one long request (open the page, then the whole model reading) with no steps; the page opens in KesherAI's browser on the computer, invisible from the phone; and a sign-in page could be read as the "report". The import itself did work (a report was being written, part 5 of 10).
+- Built (design ImportSteps / ChatPick): the import returns at once and the report page shows each step live (open the link → wait for the page, with its length → read → part 3 of 8 → lay it out), says clearly when the site asks to sign in and what to do, and a report left "being written" by a restart shows as stopped with a way forward. In a new report, step 3 lists the chats already uploaded (one per chat) to start from without uploading again.
+- Stopped at: built.
+
 ## Students, part 41: attendance (2026-11-18)
 - Many Israeli courses require attendance (often 80% of the practice sessions or seminars, or "at most 3 absences"); missing one too many can cost the course. Attendance apps (Absentify, AttendMate, MyCollegeMate) mark each class as attended / absent / excused / cancelled, take either a minimum percent or a maximum number of absences per course, and warn before the limit.
 - KesherAI had: the timetable (classes by day, "now" and a reminder to record), nothing on attendance.

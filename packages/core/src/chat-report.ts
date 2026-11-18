@@ -346,6 +346,8 @@ export interface StoredReport {
   createdAt: string;
   status: "reading" | "writing" | "done" | "error";
   progress?: { part: number; parts: number; total: number };
+  /** While an import runs (design ImportSteps): the step it is on, and a detail (e.g. how many characters were read). */
+  step?: { key: ImportStep; detail?: string };
   error?: string;
   numbers: ChatNumbers;
   report?: ChatReport;
@@ -362,6 +364,9 @@ export interface StoredReport {
   /** The report has its chat (an imported one may not, until the chat is added). */
   hasChat?: boolean;
 }
+
+/** The steps of an import, shown live: open the link, wait for the page, read it, read its parts, write. */
+export type ImportStep = "open" | "wait" | "read" | "parts" | "write";
 
 /** The chat with its people renamed (nicknames and emojis to plain names, Brandon's step 5). */
 export function renamed(chat: PeopleChat, names: Record<string, string> = {}): PeopleChat {
@@ -432,6 +437,21 @@ export class ChatReports {
     return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  /**
+   * A report as the screen should show it: one still marked as being read or written that nothing here is writing
+   * (KesherAI restarted, or it crashed) is stopped, and says so, so it can be tried again instead of waiting forever.
+   */
+  async live(id: string): Promise<StoredReport> {
+    const r = await this.get(id);
+    if ((r.status === "reading" || r.status === "writing") && !this.running.has(id) && !this.importing.has(id)) {
+      r.status = "error";
+      r.error = r.lang === "he" ? (r.hasChat === false ? "הייבוא נעצר באמצע (כנראה KesherAI הופעל מחדש). ייבא אותו שוב." : "הכתיבה נעצרה באמצע (כנראה KesherAI הופעל מחדש). אפשר לנסות שוב.") : r.hasChat === false ? "The import stopped halfway (KesherAI probably restarted). Import it again." : "Writing stopped halfway (KesherAI probably restarted). You can try again.";
+      delete r.step;
+      await this.put(r);
+    }
+    return r;
+  }
+
   /** @returns One report. */
   async get(id: string): Promise<StoredReport> {
     // Read again when the file is being replaced at that moment (Windows).
@@ -464,6 +484,32 @@ export class ChatReports {
 
   private async chat(id: string): Promise<PeopleChat> {
     return JSON.parse(await readFile(join(this.folder(id), "chat.json"), "utf8")) as PeopleChat;
+  }
+
+  /**
+   * The chats already uploaded (each report keeps its copy), newest first, one per chat: to start another report from
+   * one without uploading it again.
+   */
+  async chats(): Promise<Array<{ id: string; title: string; source: PeopleChat["source"]; messages: number; from?: string; to?: string; people: number; createdAt: string }>> {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; title: string; source: PeopleChat["source"]; messages: number; from?: string; to?: string; people: number; createdAt: string }> = [];
+    for (const item of await this.list()) {
+      const r = await this.get(item.id).catch(() => undefined);
+      if (!r || r.hasChat === false || !r.numbers.messages) continue;
+      const key = `${r.numbers.messages}|${r.numbers.from ?? ""}|${r.numbers.to ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ id: r.id, title: r.title, source: r.source, messages: r.numbers.messages, ...(r.numbers.from ? { from: r.numbers.from } : {}), ...(r.numbers.to ? { to: r.numbers.to } : {}), people: r.numbers.people.length, createdAt: r.createdAt });
+    }
+    return out;
+  }
+
+  /** The copy of the chat a report keeps (to start another report from it). */
+  async chatOf(id: string): Promise<PeopleChat> {
+    if (!/^[\w-]{1,80}$/.test(id)) throw Object.assign(new Error("No such chat."), { statusCode: 404 });
+    return this.chat(id).catch(() => {
+      throw Object.assign(new Error("No such chat."), { statusCode: 404 });
+    });
   }
 
   /** Deletes a report and its copy of the chat (stops it if it is being written). */
@@ -615,15 +661,74 @@ export class ChatReports {
    * this report's form; quotes stay as the report had them (no chat to check them against until it is added).
    */
   async importReport(text: string, lang: "he" | "en", ask: Ask): Promise<StoredReport> {
-    const body = text.replace(/\s+\n/g, "\n").trim().slice(0, 60_000);
-    if (body.length < 200) throw Object.assign(new Error("That is too short to be a report."), { statusCode: 400 });
+    const r = await this.importStart(async () => text, lang, ask);
+    await this.importing.get(r.id);
+    return this.get(r.id);
+  }
+
+  /** The imports running now (their promises, for tests and for importReport). */
+  private importing = new Map<string, Promise<void>>();
+
+  /**
+   * Starts an import and returns at once (design ImportSteps): the report shows each step live, from opening the link
+   * to writing, and ends done or with an error that says what to do.
+   *
+   * @param source - Gets the report's text; it may say its own steps (opening a link, waiting for the page).
+   * @param lang - The report's language.
+   * @param ask - The model.
+   */
+  async importStart(source: (step: (key: ImportStep, detail?: string) => Promise<void>) => Promise<string>, lang: "he" | "en", ask: Ask): Promise<StoredReport> {
+    const id = randomUUID();
+    const r: StoredReport = { id, title: "What Brandon Thinks", source: "whatsapp", kind: "friends", voice: "friend", lang, createdAt: new Date().toISOString(), status: "reading", step: { key: "read" }, numbers: chatNumbers({ source: "whatsapp", title: "", messages: [] }), followUps: [], version: 1, origin: "brandon", hasChat: false };
+    await mkdir(this.folder(id), { recursive: true });
+    await this.put(r);
+    const step = async (key: ImportStep, detail?: string) => {
+      r.step = { key, ...(detail ? { detail } : {}) };
+      if (key === "write") r.status = "writing";
+      await this.put(r);
+    };
+    const run = (async () => {
+      try {
+        const text = await source(step);
+        const body = text.replace(/\s+\n/g, "\n").trim().slice(0, 60_000);
+        await step("read", String(body.length));
+        if (body.length < 200) throw new Error(lang === "he" ? "מה שנקרא קצר מדי בשביל דוח. נסה PDF או הדבקת הטקסט." : "What was read is too short to be a report. Try a PDF or paste its text.");
+        const done = await this.mapImport(body, lang, ask, async (part, parts) => {
+          r.progress = { part, parts, total: body.length };
+          await step(part > parts ? "write" : "parts");
+        });
+        Object.assign(r, done, { status: "done", imported: body.slice(0, 20_000) });
+        delete r.step;
+        delete r.progress;
+      } catch (e) {
+        r.status = "error";
+        r.error = (e as Error).message;
+        delete r.step;
+      }
+      await this.put(r);
+    })();
+    this.importing.set(id, run);
+    void run.finally(() => this.importing.delete(id));
+    return r;
+  }
+
+  /** Reads an imported report's text into this report's form (in parts when it is long). */
+  private async mapImport(body: string, lang: "he" | "en", ask: Ask, onPart: (part: number, parts: number) => Promise<void>): Promise<Pick<StoredReport, "title" | "report">> {
     // A long report does not fit a local model's context ("Context size has been exceeded" from the phone, 2026-11-18):
     // its parts are read one at a time into notes, and the report is made from the notes. On a context error the parts
     // get smaller.
     const read = async (size: number): Promise<string> => {
-      if (body.length <= size) return ask(IMPORT_PROMPT, body);
+      if (body.length <= size) {
+        await onPart(2, 1);
+        return ask(IMPORT_PROMPT, body);
+      }
       const notes: string[] = [];
-      for (const part of importParts(body, size)) notes.push((await ask(IMPORT_NOTES_PROMPT, part)).trim().slice(0, size));
+      const parts = importParts(body, size);
+      for (const [i, part] of parts.entries()) {
+        await onPart(i + 1, parts.length);
+        notes.push((await ask(IMPORT_NOTES_PROMPT, part)).trim().slice(0, size));
+      }
+      await onPart(parts.length + 1, parts.length);
       return ask(IMPORT_PROMPT, notes.join("\n\n---\n\n").slice(0, size * 2));
     };
     let answer: string | undefined;
@@ -649,11 +754,7 @@ export class ChatReports {
       }).filter((f) => f.title && f.body),
       wouldHelp: [{ ask: lang === "he" ? "הוסף את הצ'אט עצמו (הייצוא), כדי שאוכל לבדוק את הציטוטים, לספור, ולענות על שאלות." : "Add the chat itself (its export) so I can check the quotes, count, and answer questions.", kind: "export" }],
     };
-    const id = randomUUID();
-    const r: StoredReport = { id, title: str(raw.title, 80) || "What Brandon Thinks", source: "whatsapp", kind: "friends", voice: "friend", lang, createdAt: new Date().toISOString(), status: "done", numbers: chatNumbers({ source: "whatsapp", title: "", messages: [] }), report, followUps: [], version: 1, origin: "brandon", imported: body.slice(0, 20_000), hasChat: false };
-    await mkdir(this.folder(id), { recursive: true });
-    await this.put(r);
-    return r;
+    return { title: str(raw.title, 80) || "What Brandon Thinks", report };
   }
 
   /**

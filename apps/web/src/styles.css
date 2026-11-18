@@ -3718,3 +3718,8 @@ div.slide-list { padding-inline-start: 0; }
 .study-attend-rule { display: inline-flex; gap: 6px; align-items: center; }
 .docs-title-wrap { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .docs-title-wrap small { font-size: 0.72rem; padding-inline-start: 4px; }
+/* An import's steps (design ImportSteps) */
+.cr-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cr-steps li { display: flex; gap: 8px; align-items: baseline; }
+.cr-steps li.next { opacity: .55; }
+.cr-steps li.now { font-weight: 600; }

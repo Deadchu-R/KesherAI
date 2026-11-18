@@ -27,22 +27,26 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
   const off = () => s.config.parts?.["chat-reports"] === false;
 
   app.get("/api/chat-reports", async () => ({ reports: off() ? [] : await reports.list() }));
+  /** The chats already uploaded, to start another report from one without uploading it again. */
+  app.get("/api/chat-reports/chats", async () => ({ chats: off() ? [] : await reports.chats() }));
   /** Who is in a chat file and how much (before choosing who "I" am). */
-  app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[] } }>("/api/chat-reports/peek", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[]; fromReport?: string } }>("/api/chat-reports/peek", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
     try {
-      const chat = parse(req.body ?? {});
+      const b = req.body ?? {};
+      // A chat already uploaded (another report's copy), or a new file.
+      const chat = b.fromReport ? await reports.chatOf(String(b.fromReport)) : parse(b);
       const n = chatNumbers(chat);
       return { title: chat.title, messages: n.messages, from: n.from, to: n.to, people: n.people.slice(0, 30).map((p) => ({ name: p.name, messages: p.messages })) };
     } catch (e) {
       return reply.code(400).send({ error: (e as Error).message });
     }
   });
-  app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[]; kind?: string; voice?: string; lang?: string; me?: string; backstory?: string; model?: string; names?: Record<string, string> } }>("/api/chat-reports", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Body: { source?: string; title?: string; text?: string; parts?: unknown[]; fromReport?: string; kind?: string; voice?: string; lang?: string; me?: string; backstory?: string; model?: string; names?: Record<string, string> } }>("/api/chat-reports", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
     if (off()) return reply.code(409).send({ error: "Relationship analysis is off (Settings → Parts)." });
     const b = req.body ?? {};
     let chat: PeopleChat;
     try {
-      chat = parse(b);
+      chat = b.fromReport ? await reports.chatOf(String(b.fromReport)) : parse(b);
     } catch (e) {
       return reply.code(400).send({ error: (e as Error).message });
     }
@@ -52,7 +56,7 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
     const r = await reports.start(chat, { kind, voice, lang, ...(b.me ? { me: String(b.me).slice(0, 80) } : {}), ...(b.backstory ? { backstory: String(b.backstory).slice(0, 1000) } : {}), ...(b.names && typeof b.names === "object" ? { names: Object.fromEntries(Object.entries(b.names).slice(0, 60).map(([k, v]) => [String(k).slice(0, 80), String(v).slice(0, 60)])) } : {}) }, ask(typeof b.model === "string" ? b.model : undefined));
     return { id: r.id };
   });
-  app.get<{ Params: { id: string } }>("/api/chat-reports/:id", async (req) => reports.get(req.params.id));
+  app.get<{ Params: { id: string } }>("/api/chat-reports/:id", async (req) => reports.live(req.params.id));
   // A report that failed (a context error, the model stopped): written again from the chat it has.
   app.post<{ Params: { id: string }; Body: { model?: string } }>("/api/chat-reports/:id/retry", async (req) => reports.retry(req.params.id, ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
   app.post<{ Params: { id: string }; Body: { question?: string; model?: string } }>("/api/chat-reports/:id/ask", async (req) => reports.followUp(req.params.id, String(req.body?.question ?? ""), ask(typeof req.body?.model === "string" ? req.body.model : undefined)));
@@ -75,17 +79,41 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
   app.post<{ Body: { url?: string; pdf?: string; text?: string; lang?: string; model?: string } }>("/api/chat-reports/import", { bodyLimit: 60 * 1024 * 1024 }, async (req, reply) => {
     if (off()) return reply.code(409).send({ error: "Relationship analysis is off (Settings → Parts)." });
     const b = req.body ?? {};
-    let text = String(b.text ?? "");
+    const lang = b.lang === "en" ? "en" : "he";
+    const he = lang === "he";
+    let url = "";
     if (b.url) {
-      const url = String(b.url).trim();
-      if (!/^https:\/\/[^\s]+$/i.test(url)) return reply.code(400).send({ error: "An https link to the report." });
-      if (!s.browser.status().pane) return reply.code(409).send({ error: "Importing from a link needs KesherAI's own browser (the desktop app). Save the report as a PDF instead, or paste its text." });
-      const page = await s.browser.call<{ title?: string; text?: string }>("open", { url });
-      text = `${page.title ?? ""}\n\n${page.text ?? ""}`;
-    } else if (b.pdf) {
-      text = (await documentText(new Uint8Array(Buffer.from(String(b.pdf), "base64")), "report.pdf")).pages.join("\n\n");
-    }
-    const r = await reports.importReport(text, b.lang === "en" ? "en" : "he", ask(typeof b.model === "string" ? b.model : undefined));
+      url = String(b.url).trim();
+      if (!/^https:\/\/[^\s]+$/i.test(url)) return reply.code(400).send({ error: he ? "צריך קישור שמתחיל ב-https." : "An https link to the report." });
+      if (!s.browser.status().pane) return reply.code(409).send({ error: he ? "ייבוא מקישור צריך את הדפדפן של KesherAI במחשב (האפליקציה במחשב פתוחה). אפשר בינתיים לשמור את הדוח כ-PDF או להדביק את הטקסט שלו." : "Importing from a link needs KesherAI's own browser (the desktop app open). Save the report as a PDF instead, or paste its text." });
+    } else if (!b.pdf && String(b.text ?? "").trim().length < 200) return reply.code(400).send({ error: he ? "הטקסט קצר מדי בשביל דוח." : "That is too short to be a report." });
+    // Returns at once; the report page shows each step (design ImportSteps).
+    const r = await reports.importStart(async (step) => {
+      if (url) {
+        await step("open");
+        await s.browser.call("open", { url });
+        // The page is built by script: read until its text stops growing (at most about 45 seconds).
+        await step("wait");
+        let text = "";
+        let title = "";
+        for (let i = 0, same = 0; i < 15 && same < 2; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000));
+          const page = await s.browser.call<{ title?: string; text?: string }>("read", {}).catch(() => undefined);
+          const next = page?.text ?? "";
+          same = next.length > 200 && next.length === text.length ? same + 1 : 0;
+          text = next;
+          title = page?.title ?? title;
+          await step("wait", String(text.length));
+        }
+        // A sign-in page instead of the report: say what to do.
+        if (text.length < 3000 && /sign in|log in|enter your email|send code|התחבר/i.test(text)) {
+          throw new Error(he ? "האתר ביקש להתחבר. במחשב: פתח את KesherAI ← דפדפן, היכנס ל-whatbrandonthinks.com והתחבר לחשבון שלך, ואז ייבא שוב. אפשר גם לשמור את הדוח כ-PDF או להדביק את הטקסט שלו." : "The site asked you to sign in. On the computer: open KesherAI → Browser, go to whatbrandonthinks.com and sign in, then import again. Or save the report as a PDF, or paste its text.");
+        }
+        return `${title}\n\n${text}`;
+      }
+      if (b.pdf) return (await documentText(new Uint8Array(Buffer.from(String(b.pdf), "base64")), "report.pdf")).pages.join("\n\n");
+      return String(b.text ?? "");
+    }, lang, ask(typeof b.model === "string" ? b.model : undefined));
     return { id: r.id };
   });
   app.delete<{ Params: { id: string } }>("/api/chat-reports/:id", async (req) => {

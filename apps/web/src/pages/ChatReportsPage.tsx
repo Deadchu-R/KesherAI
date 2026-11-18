@@ -12,7 +12,9 @@ interface Quote { who: string; at: string; text: string }
 interface Person { name: string; messages: number; words: number; starts: number; replyMinutes?: number; questions: number; laughs: number; love: number; night: number; topEmojis: string[] }
 interface Numbers { messages: number; from: string; to: string; days: number; people: Person[]; hours: number[]; months: Array<{ month: string; messages: number }>; busiestDay?: { day: string; messages: number }; longestSilence?: { from: string; to: string; days: number }; longestStreak: number; topWords: string[] }
 interface Report { mixed?: boolean; headline: string; read: string; kinder?: string; moves?: { keep: string[]; stop: string[]; say: string[] }; askMore: string[]; wouldHelp: Array<{ ask: string; kind: "text" | "export" }>; scores: Array<{ name: string; value: string; measured: boolean; of5?: number }>; findings: Array<{ title: string; body: string; measured: boolean; quotes: Quote[] }>; turningPoint?: { when: string; what: string; quotes: Quote[] }; roles: Array<{ name: string; role: string }>; next: string }
-interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>; version?: number; origin?: "brandon"; hasChat?: boolean }
+/** A chat already uploaded (kept with the report made from it). */
+interface KnownChat { id: string; title: string; source: string; messages: number; from?: string; to?: string; people: number; createdAt: string }
+interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; step?: { key: ImportStepKey; detail?: string }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>; version?: number; origin?: "brandon"; hasChat?: boolean }
 interface Item { id: string; title: string; kind: Kind; status: Stored["status"]; createdAt: string; messages: number }
 interface Body { source: "whatsapp" | "instagram"; title: string; text?: string; parts?: unknown[] }
 interface Peek { title: string; messages: number; from: string; to: string; people: Array<{ name: string; messages: number }> }
@@ -63,6 +65,39 @@ export function ChatReportsPage() {
   );
 }
 
+type ImportStepKey = "open" | "wait" | "read" | "parts" | "write";
+const IMPORT_STEPS: Array<[ImportStepKey, string, string]> = [["open", "פותח את הקישור בדפדפן של KesherAI במחשב", "Opening the link in KesherAI's browser on the computer"], ["wait", "מחכה שהדף ייטען עד הסוף", "Waiting for the page to load fully"], ["read", "קורא את הטקסט של הדוח", "Reading the report's text"], ["parts", "המודל קורא את הדוח, חלק אחרי חלק", "The model reads the report, part by part"], ["write", "מסדר אותו כאן בצורת הדוח", "Laying it out here as a report"]];
+
+/**
+ * An import's steps, live (design ImportSteps): each one ticked when done, the current one with what it found (the
+ * page's length, part 3 of 8), so a long import never looks stuck.
+ */
+function ImportProgress({ r }: { r: Stored }) {
+  const keys = IMPORT_STEPS.map(([k]) => k);
+  const at = r.step ? keys.indexOf(r.step.key) : r.status === "writing" ? 4 : 2;
+  const fromLink = r.step?.key === "open" || r.step?.key === "wait" || at > 1;
+  const detail = (k: ImportStepKey) => {
+    const d = r.step?.key === k ? r.step.detail : undefined;
+    if (k === "wait" && d) return L(`${Number(d).toLocaleString()} תווים עד עכשיו`, `${Number(d).toLocaleString()} characters so far`);
+    if (k === "read" && d) return L(`${Number(d).toLocaleString()} תווים`, `${Number(d).toLocaleString()} characters`);
+    if (k === "parts" && r.progress) return L(`חלק ${Math.min(r.progress.part, r.progress.parts)} מתוך ${r.progress.parts}`, `part ${Math.min(r.progress.part, r.progress.parts)} of ${r.progress.parts}`);
+    return "";
+  };
+  return (
+    <div className="cr-card navy stack" aria-live="polite">
+      <h3>{L("מייבא את הדוח…", "Importing the report…")}</h3>
+      <ol className="cr-steps">
+        {IMPORT_STEPS.filter(([k]) => fromLink || (k !== "open" && k !== "wait")).map(([k, he, en]) => {
+          const i = keys.indexOf(k);
+          const state = i < at ? "done" : i === at ? "now" : "next";
+          return <li key={k} className={state}><span aria-hidden>{state === "done" ? "✓" : state === "now" ? "⏳" : "○"}</span> <span>{L(he, en)}{detail(k) ? ` · ${detail(k)}` : ""}</span>{state === "now" && <span className="sr-only">{L(" (עכשיו)", " (now)")}</span>}</li>;
+        })}
+      </ol>
+      <span className="muted small">{L("המודל על המחשב שלך. אפשר לצאת ולחזור; הייבוא ממשיך.", "The model on your computer. You can leave and come back; the import goes on.")}</span>
+    </div>
+  );
+}
+
 const STEPS = 7;
 const STEP_NAMES: Array<[string, string]> = [["איזה צ'אט", "The chat"], ["האפליקציה", "The app"], ["הייצוא", "The export"], ["מי אתה", "Who you are"], ["השמות", "The names"], ["שפת הדוח", "Language"], ["רקע", "Backstory"]];
 const KIND_ICONS: Record<Kind, string> = { couple: "💞", friends: "🫂", family: "🏠", group: "👥", work: "💼" };
@@ -82,7 +117,25 @@ function NewReport({ onMade }: { onMade: (id: string) => void }) {
   const [backstory, setBackstory] = useState("");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [known, setKnown] = useState<KnownChat[]>([]);
+  useEffect(() => void api<{ chats: KnownChat[] }>("/api/chat-reports/chats").then((r) => setKnown(r.chats), () => undefined), []);
   const go = (n: number) => setStep(Math.max(1, Math.min(STEPS, n)));
+  /** A chat already uploaded: no new upload, the same next steps. */
+  const reuse = async (c: KnownChat) => {
+    setBusy(true);
+    try {
+      const b = { fromReport: c.id } as unknown as Body;
+      const p = await api<Peek>("/api/chat-reports/peek", { method: "POST", body: b });
+      setBody(b);
+      setPeek(p);
+      if (p.people.length > 2 && kind !== "group" && kind !== "family" && kind !== "work") setKind("group");
+      go(4);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const pick = async (files: File[]) => {
     setBusy(true);
     try {
@@ -144,6 +197,10 @@ function NewReport({ onMade }: { onMade: (id: string) => void }) {
           </button>
           <input ref={input} type="file" multiple hidden accept=".txt,.zip,.json,text/plain,application/zip,application/json" onChange={(e) => e.target.files?.length && void pick([...e.target.files])} />
           <p className="muted small">{L("הקובץ נפתח על המחשב הזה. שום הודעה לא יוצאת ממנו.", "The file is opened on this computer. No message leaves it.")}</p>
+          {known.length > 0 && <>
+            <h3 className="small">{L("או צ'אט שכבר העלית", "Or a chat you already uploaded")}</h3>
+            {known.map((c) => opt(false, <span className="grow" style={{ display: "flex", flexDirection: "column", gap: 2 }}><b dir="auto">{c.title}</b><small className="muted">{c.messages.toLocaleString()} {L("הודעות", "messages")}{c.from ? ` · ${monthName(c.from)}–${monthName(c.to ?? c.from)}` : ""}</small></span>, () => void reuse(c)))}
+          </>}
         </>
       )}
       {step === 4 && (
@@ -306,6 +363,7 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
       <div className="cr-hero">
       {rep ? <h1 className="cr-headline" dir="auto">"{rep.headline}"</h1>
         : r.status === "error" ? <div className="stack"><p className="bad" dir="auto">{r.error}</p>{r.hasChat !== false && <button type="button" className="primary" style={{ alignSelf: "flex-start" }} onClick={() => void api(`/api/chat-reports/${id}/retry`, { method: "POST", body: {} }).then(() => window.location.reload(), (e: Error) => toast(e.message))}>{L("↻ לנסות שוב", "↻ Try again")}</button>}</div>
+        : r.origin === "brandon" && !rep ? <ImportProgress r={r} />
         : <div className="cr-card navy stack"><h3>{r.status === "writing" ? L("כותב את הדוח…", "Writing the report…") : L(`קורא חלק ${r.progress?.part ?? 1} מתוך ${r.progress?.parts ?? "?"}…`, `Reading part ${r.progress?.part ?? 1} of ${r.progress?.parts ?? "?"}…`)}</h3><progress max={(r.progress?.parts ?? 1) + 1} value={r.status === "writing" ? r.progress?.parts ?? 1 : (r.progress?.part ?? 1) - 1} /><span className="muted small">{L("המודל על המחשב שלך. אפשר לצאת ולחזור; הדוח ממשיך להיכתב.", "The model on your computer. You can leave and come back; it keeps writing.")}</span></div>}
       {n.people.length > 0 && <div className="row wrap">{n.people.slice(0, 6).map((p) => <span key={p.name}>{who(p.name, p.name === r.me)}</span>)}{n.from && <span className="muted small">· {monthName(n.from)} – {monthName(n.to)}</span>}</div>}
       {rep?.read && <p className="cr-read" dir="auto">{rep.read}</p>}
