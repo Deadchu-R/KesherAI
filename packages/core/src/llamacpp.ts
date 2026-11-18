@@ -8,6 +8,7 @@ import { parseFit, parseFitPrint, type FitPlan } from "./fit-preview.js";
 import { mtpLayers } from "./gguf.js";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
 import { userChoseGpus, type GpuPlan } from "./gpus.js";
+import { withModelArgs } from "@kesher/shared";
 
 /** Platform facts that decide which llama.cpp build to download. */
 export interface PlatformInfo {
@@ -318,7 +319,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
   ) {}
 
   /** @returns The engine's state. */
@@ -637,7 +638,7 @@ export class LlamaEngine {
     // Not hybridArgs: llama-fit-params refuses --checkpoint-min-step (a server-only setting), which made the check
     // fail at once for every Qwen 3.5+ model (found on the PC with Qwen3.8-Flash-Next).
     // Debug level: b12110 writes each card's layers and memory only there (the lines are filtered below).
-    const base = ["-m", modelPath, ...LlamaEngine.fitArgs(LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType))];
+    const base = ["-m", modelPath, ...LlamaEngine.fitArgs(LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.argsFor(modelPath), this.opts.version), false, this.opts.parallel ?? 1, true, this.opts.fitTargetMiB, this.opts.kvType))];
     const t0 = Date.now();
     const keep = (l: string) => /n_layer|MiB used|fit params|failed to fit|error|unknown model architecture|failed to load/i.test(l);
     const first = await runQuiet(tool, ["-lv", "5", ...base], keep);
@@ -709,6 +710,16 @@ export class LlamaEngine {
   }
 
   /**
+   * The engine's arguments with this model's own load settings on top (Models → ⚙).
+   *
+   * @param modelPath - The model file.
+   * @returns The arguments.
+   */
+  private argsFor(modelPath: string): string[] {
+    return withModelArgs(this.opts.args, this.opts.modelArgs?.(modelPath) ?? []);
+  }
+
+  /**
    * Starts llama-server with a model and waits until it answers.
    *
    * @param modelPath - Absolute path of a `.gguf` file.
@@ -719,8 +730,9 @@ export class LlamaEngine {
     this.opts.onLoad?.(modelPath);
     timeoutMs ??= LlamaEngine.loadTimeout((await stat(modelPath).catch(() => undefined))?.size ?? 0);
     const binary = this.opts.binaryPath;
+    const userArgs = this.argsFor(modelPath);
     if (!binary || !existsSync(binary)) throw new Error("The llama.cpp engine is not installed yet. Install it from the Models screen.");
-    const plan = userChoseGpus(this.opts.args) ? undefined : await this.opts.gpuPlan?.(modelPath).catch(() => undefined);
+    const plan = userChoseGpus(userArgs) ? undefined : await this.opts.gpuPlan?.(modelPath).catch(() => undefined);
     this.gpuSummary = plan?.summary ?? "";
     const gpuArgs = plan?.args ?? [];
     await this.track("loading", `Loading ${basename(modelPath)}…${plan?.summary ? ` ${plan.summary}.` : ""}`, async () => {
@@ -729,11 +741,11 @@ export class LlamaEngine {
       // Multi-token prediction: a model that carries its own MTP head (Qwen3.5–3.8 GGUFs with NextN tensors) guesses
       // a few tokens ahead and the main model checks them, so it writes faster. Only on builds that have it, and
       // dropped again if the server will not start with it.
-      let mtp = await LlamaEngine.mtpArgs(modelPath, this.opts.args, this.opts.version, this.opts.mtpDraft);
+      let mtp = await LlamaEngine.mtpArgs(modelPath, userArgs, this.opts.version, this.opts.mtpDraft);
       // Several chats at once need more memory for their context; if that does not fit, one at a time may.
       for (const p of parallel > 1 ? [parallel, 1] : [1]) {
         try {
-          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version), this.opts.fitTargetMiB, this.opts.kvType), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version), ...mtp], timeoutMs, plan?.env);
+          await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(userArgs, this.opts.version), true, p, LlamaEngine.fits(this.opts.version), this.opts.fitTargetMiB, this.opts.kvType), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, userArgs), ...LlamaEngine.hybridArgs(modelPath, userArgs, this.opts.version), ...mtp], timeoutMs, plan?.env);
           this.runningParallel = p;
           return;
         } catch (err) {
@@ -741,7 +753,7 @@ export class LlamaEngine {
           if (mtp.length) {
             mtp = [];
             try {
-              await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
+              await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(userArgs, this.opts.version), true, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, userArgs), ...LlamaEngine.hybridArgs(modelPath, userArgs, this.opts.version)], timeoutMs, plan?.env);
               this.log.push("KesherAI: started without multi-token prediction (the engine refused it).");
               this.runningParallel = p;
               return;
@@ -752,7 +764,7 @@ export class LlamaEngine {
           // Builds that predate --jinja (or where it became the default and the flag was removed) reject it.
           if (!/jinja/i.test(this.log.join("\n"))) continue;
           try {
-            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(this.opts.args, this.opts.version), false, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, this.opts.args), ...LlamaEngine.hybridArgs(modelPath, this.opts.args, this.opts.version)], timeoutMs, plan?.env);
+            await this.start(binary, modelPath, [...LlamaEngine.serverArgs(LlamaEngine.gpuArgs(userArgs, this.opts.version), false, p, LlamaEngine.fits(this.opts.version)), ...gpuArgs, ...LlamaEngine.samplingArgs(modelPath, userArgs), ...LlamaEngine.hybridArgs(modelPath, userArgs, this.opts.version)], timeoutMs, plan?.env);
             this.runningParallel = p;
             return;
           } catch (err2) {

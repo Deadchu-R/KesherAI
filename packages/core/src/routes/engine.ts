@@ -4,7 +4,7 @@ import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { RECOMMENDED_MODELS, suggestModel, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
+import { RECOMMENDED_MODELS, checkLoadSettings, suggestModel, type ModelLoadSettings, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload } from "../llamacpp.js";
@@ -357,6 +357,39 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     const st = s.engine.status();
     if (reload && st.running && st.modelPath) void loadModel(s, st.modelPath, undefined, "reload after a settings change").catch((err) => s.engine.fail(err));
     return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, kvType: s.config.engines.kvType ?? "q8_0" };
+  });
+
+  /**
+   * A model's own load settings (Models → ⚙, as LM Studio keeps them per model): read, and save. Saved by the file's
+   * name and used at each load of it; `reload` loads it again now when it is the running model. Empty settings remove
+   * the entry (back to the engine's own).
+   */
+  app.get<{ Querystring: { path?: string } }>("/api/models/load-settings", async (req, reply) => {
+    const path = req.query.path ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added" });
+    return { settings: s.config.engines.modelSettings[basename(path)] ?? {} };
+  });
+  app.put<{ Body: { path?: string; settings?: ModelLoadSettings; reload?: boolean } }>("/api/models/load-settings", async (req, reply) => {
+    const path = req.body?.path ?? "";
+    if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added" });
+    const raw = req.body?.settings ?? {};
+    const settings: ModelLoadSettings = {
+      ...(raw.ctx !== undefined && raw.ctx !== null ? { ctx: Number(raw.ctx) } : {}),
+      ...(raw.kv ? { kv: raw.kv } : {}),
+      ...(raw.cpuMoe !== undefined && raw.cpuMoe !== null ? { cpuMoe: Number(raw.cpuMoe) } : {}),
+      ...(raw.flash ? { flash: raw.flash } : {}),
+      ...(Array.isArray(raw.extra) && raw.extra.length ? { extra: raw.extra.map(String) } : {}),
+    };
+    const wrong = checkLoadSettings(settings);
+    if (wrong) return reply.code(400).send({ error: wrong });
+    const name = basename(path);
+    if (Object.keys(settings).length) s.config.engines.modelSettings[name] = settings;
+    else delete s.config.engines.modelSettings[name];
+    await s.saveConfig();
+    const st = s.engine.status();
+    const reloading = !!req.body?.reload && st.running && st.modelPath === path;
+    if (reloading) void loadModel(s, path, undefined, "reload after the model's load settings changed").catch((err) => s.engine.fail(err));
+    return { settings, reloading };
   });
 
   /**

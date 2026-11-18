@@ -58,6 +58,7 @@ Requests that arrive through a tunnel or proxy (they carry `cf-connecting-ip`, `
 | `POST /api/models/setup` | "Set it up for me". `{ ids: string[] }` — installs the engine, downloads each model if missing, loads the first. Returns 202 |
 | `POST /api/models/recommended/:id/run` | One click: installs the engine if needed, downloads the model if needed, loads it. Returns 202; follow progress in the engine status |
 | `GET /api/models/suggest?tool=study\|chat-report\|code&lang=he\|en` | `{ suggestion, loaded }`: every model scored 0–100 for the tool on this computer (quality 40, fit for the tool 35, speed here 25); `suggestion` is null unless another model is 8+ higher: `{ loaded?, options: [{ kind: "switch", path } \| { kind: "download", id }] , context? }` |
+| `GET /api/models/load-settings?path=` · `PUT /api/models/load-settings` | A model's own load settings (Models → ⚙), saved by its file name and used at each load: `{ ctx?, kv?: "f16"\|"q8_0"\|"q4_0", cpuMoe?, flash?: "on"\|"off", extra?: string[] }`. `extra` takes only load and sampling flags (no files, ports or keys). PUT `{ path, settings, reload? }` (empty settings: back to automatic) → `{ settings, reloading }` |
 
 ## Built-in engine (llama.cpp)
 

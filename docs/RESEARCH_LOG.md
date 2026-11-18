@@ -2240,3 +2240,9 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (proposal 2): prompt fields with Open WebUI's own syntax (`{{name}}`, `{{x | select:options=[…]:default=…:required}}`,
   number, checkbox, textarea, date), so prompts copy between the two; `@kesher/shared` prompt-fields, a small form above
   the box (SlashMenu), a hint on the Prompts page. Next: Office and CSV previews.
+
+## Load settings per model (2026-11-18, the fourth of the competitor proposals)
+- **LM Studio**: My Models → ⚙ per model: default load settings (GPU offload, context, flash attention), also saved from the load dialog, used by `lms load` too; 0.4.24 added "advanced llama.cpp argument overrides" for GGUF loading. **llama-swap**: a `cmd` line per model in its config. **Ollama**: `PARAMETER` lines in a Modelfile.
+- **Built**: Models → ⚙ next to each GGUF: context, context memory (16/8/4 bit), MoE layers on the processor, flash attention, and more arguments. Saved by file name in config (`engines.modelSettings`) and put on top of the engine's own arguments at each load (the same flag under any spelling is replaced). "Save and reload" loads the running model again.
+- **Safety**: the phone can reach this screen, so more arguments come only from an allowed list of load and sampling flags (no file, port, address or key flags), checked on the server too.
+- Stopped at: built and tested (878 pass); to try on the PC with Qwen3-Coder-Next when the download ends.

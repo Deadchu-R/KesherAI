@@ -7,6 +7,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { detectHardwareCached, type DownloadManager } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
+import { loadSettingsArgs } from "@kesher/shared";
 import { ComfyManager } from "../comfy-manager.js";
 import type { DataPaths, KesherConfig } from "../config.js";
 import type { Runtimes } from "../runtimes.js";
@@ -41,6 +42,8 @@ export function buildLlamaEngine(paths: DataPaths, config: KesherConfig, modelUs
     ...(config.engines.mtpDraft !== undefined ? { mtpDraft: config.engines.mtpDraft } : {}),
     ...(config.engines.fitTargetMiB !== undefined ? { fitTargetMiB: config.engines.fitTargetMiB } : {}),
     ...(config.engines.kvType !== undefined ? { kvType: config.engines.kvType } : {}),
+    // A model's own load settings (Models → ⚙), read at each load so a change needs no restart.
+    modelArgs: (modelPath) => loadSettingsArgs(config.engines.modelSettings[basename(modelPath)]),
     gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)),
     onLoad: (modelPath) => void modelUse.used(modelPath),
   });

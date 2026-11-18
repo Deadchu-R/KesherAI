@@ -3762,3 +3762,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .prompt-fields { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; margin-bottom: 0.5rem; }
 .prompt-field { display: flex; flex-direction: column; gap: 0.2rem; }
 .prompt-field input, .prompt-field select, .prompt-field textarea { width: 100%; box-sizing: border-box; }
+/* A model's load settings (Models → ⚙): two columns on a computer, one on a phone. */
+.load-settings { width: min(560px, calc(100vw - 16px)); }
+.load-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .load-settings-grid { grid-template-columns: 1fr; } }

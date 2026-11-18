@@ -73,7 +73,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Built-in slash commands beside saved prompts: /compact, /fork, /model, /new, /status, /goal, /side, first in the `/` menu (Open WebUI 0.11; built 2026-11-18)
 - ✅ Prompt fields: `{{name}}` and `{{tone | select:options=[…]}}` in a saved prompt open a small form first (Open WebUI's syntax; built 2026-11-18)
 - ✅ Previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (LM Studio Bionic 1.1.8–1.1.9) — attachments had them; now the Workspace opens them as a table, slides or a page (CSV and HTML switch to text to edit), and chips open the ones a run wrote or an answer names (0.6.366). GLB previews still open.
-- ⬜ Engine arguments per model, not one set for all (LM Studio 0.4.24)
+- ✅ Engine arguments per model, not one set for all (LM Studio 0.4.24) — Models → ⚙: context, context memory, MoE layers on the processor, flash attention and more arguments from an allowed list (0.6.366)
 
 - ⬜ The extension asks for a site only when a task needs it (`optional_host_permissions` + `permissions.request`), instead of `<all_urls>` at install: safer, and the Chrome Web Store reviews it faster (its warning on the first submission, 2026-11-18)
 

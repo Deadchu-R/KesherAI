@@ -14,6 +14,7 @@ import { DownloadBar, useDownloads } from "../Downloads";
 import { Select } from "../ui/Select";
 import { ChatsAtOnce } from "../ChatsAtOnce";
 import { CalibrateButton, FitButton } from "../FitPreview";
+import { LoadSettingsButton } from "../ModelLoadSettings";
 import { ModelFolders } from "../ModelFolders";
 
 interface Recommended {
@@ -436,6 +437,7 @@ export function ModelsPage() {
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <CalibrateButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && loadButton(f)}
                     {kindOf(tab) === "chat" && f.gguf && !(f.parts && f.parts.have < f.parts.of) && <BesideButton path={f.path} />}
+                    {kindOf(tab) === "chat" && f.gguf && <LoadSettingsButton path={f.path} name={f.name.split(/[\\/]/).pop() ?? f.name} />}
                   </div>
                 ))}
               </div>
