@@ -77,3 +77,29 @@ mesh = SubResource("Cyl_b")
   assert.equal(n[3]!.model, "res://models/tree.glb");
   assert.equal(n[4]!.scene, "res://door.tscn");
 });
+
+test("the outliner's details and 2D sprites: a node's script, a sprite's picture, a collision shape's kind", async () => {
+  const { readTscn } = await import("./tscn.js");
+  const text = `[gd_scene format=3]
+
+[ext_resource type="Script" path="res://fox.gd" id="1_a"]
+[ext_resource type="Texture2D" path="res://fox.png" id="2_b"]
+
+[sub_resource type="CapsuleShape2D" id="C_1"]
+
+[node name="World" type="Node2D"]
+
+[node name="Fox" type="Sprite2D" parent="."]
+position = Vector2(150, 420)
+texture = ExtResource("2_b")
+script = ExtResource("1_a")
+
+[node name="Hit" type="CollisionShape2D" parent="Fox"]
+shape = SubResource("C_1")
+`;
+  const n = readTscn(text);
+  assert.equal(n[1]!.script, "res://fox.gd");
+  assert.equal(n[1]!.texture, "res://fox.png");
+  assert.deepEqual(n[1]!.position2d, [150, 420]);
+  assert.equal(n[2]!.collision, "CapsuleShape2D");
+});

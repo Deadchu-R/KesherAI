@@ -116,18 +116,19 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
     }
   });
 
-  // A model file the scene uses (res://….glb / .gltf), for the stand-in to show its real shape.
+  // A model file the scene uses (res://….glb / .gltf), or a 2D sprite's picture, for the stand-in to show its real shape.
   app.get<{ Querystring: { project?: string; path?: string } }>("/api/godot/asset", async (req, reply) => {
     try {
       const { dir } = paths(req.query.project);
       const rel = String(req.query.path ?? "").replace(/^res:\/\//, "");
       const file = resolve(dir, rel);
-      if (!/\.(glb|gltf)$/i.test(file) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A .glb or .gltf inside the project." });
+      if (!/\.(glb|gltf|png|jpe?g|webp|svg)$/i.test(file) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model (.glb, .gltf) or a picture (.png, .jpg, .webp, .svg) inside the project." });
       await inside(dir, file);
       const st = await stat(file).catch(() => undefined);
       if (!st?.isFile()) return reply.code(404).send({ error: "No such file." });
       if (st.size > 150 * 1024 * 1024) return reply.code(413).send({ error: "The model is too big to show here." });
-      return reply.type(/\.glb$/i.test(file) ? "model/gltf-binary" : "model/gltf+json").send(await readFile(file));
+      // Sent as bytes (never as a page): an .svg is not run here, the stand-in draws it as a picture.
+      return reply.type(/\.glb$/i.test(file) ? "model/gltf-binary" : /\.gltf$/i.test(file) ? "model/gltf+json" : "application/octet-stream").header("content-disposition", "attachment").send(await readFile(file));
     } catch (e) {
       return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
     }

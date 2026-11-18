@@ -104,6 +104,19 @@ namespace KesherLevel
 			Item->SetArrayField(TEXT("position"), Numbers({P.X, P.Y, P.Z}));
 			Item->SetArrayField(TEXT("rotation"), Numbers({Q.X, Q.Y, Q.Z, Q.W}));
 			Item->SetArrayField(TEXT("scale"), Numbers({S.X, S.Y, S.Z}));
+			// What is attached to it, as Details shows it: its components' classes, and its Blueprint when it is one.
+			TArray<TSharedPtr<FJsonValue>> Parts;
+#if WITH_EDITORONLY_DATA
+			if (Actor->GetClass()->ClassGeneratedBy) Parts.Add(MakeShared<FJsonValueString>(TEXT("Blueprint:") + Actor->GetClass()->ClassGeneratedBy->GetName()));
+#endif
+			TInlineComponentArray<UActorComponent*> Components(Actor);
+			for (const UActorComponent* C : Components)
+			{
+				if (C && Parts.Num() < 40) Parts.Add(MakeShared<FJsonValueString>(C->GetClass()->GetName()));
+			}
+			Item->SetArrayField(TEXT("components"), Parts);
+			// The folder it sits in in the Outliner.
+			if (!Actor->GetFolderPath().IsNone()) Item->SetStringField(TEXT("folder"), Actor->GetFolderPath().ToString());
 			// The shape: the static mesh of its root (a Static Mesh Actor), or of its first mesh component.
 			const UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(Actor->GetRootComponent());
 			if (!MeshComp) MeshComp = Actor->FindComponentByClass<UStaticMeshComponent>();

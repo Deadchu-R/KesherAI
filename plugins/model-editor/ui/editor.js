@@ -25,6 +25,9 @@ const HE = {
   texH: "טקסטורה", toUnity: "שמור ל-Unity", standInUnity: "תחליף של סצנת Unity: מזיזים, ואז \"שמור ל-Unity\"; Unity מכניס את זה כשהסצנה פתוחה", unityQueued: "מחכה ל-Unity", unityHow: "Unity מכניס את זה כשהסצנה פתוחה (Ctrl+Z אחד)", toGodot: "שמור לסצנה", standIn: "תחליף של סצנת Godot: מזיזים, ואז \"שמור לסצנה\" (כש-Godot סגור)", noMoves: "עוד לא זז כלום", savingScene: "שומר לסצנה…", clash: "אלה זזו גם ב-Godot:", keepMine: "לשמור את ההזזות שלך?", sceneSaved: "נשמר לסצנה", notFound: "לא נמצאו", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
+  searchPh: "🔍 חיפוש…", lock: "נעל", unlock: "שחרר", aModel: "מודל", aPicture: "תמונה", aScript: "סקריפט", aScene: "סצנה", aPlaced: "הוצב",
+  toUnreal: "שמור לרמה", standInUnreal: "תחליף של רמת Unreal: מזיזים, ואז \"שמור לרמה\"", standInUnrealKept: "הרמה כפי שנקראה לאחרונה (Unreal סגור): מזיזים, ואז \"שמור לרמה\"",
+  unrealMoved: "זז ב-Unreal", unrealSaved: "נשמר", unrealClash: "זזו גם ב-Unreal, נשארו כמו שם",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
   texPromptPh: "✨ טקסטורה ממילים: עץ אלון ישן, קטיפה אדומה…", texAi: "✨", texMaking: "מודל התמונות מצייר טקסטורה… (במחשב)", texDone: "הטקסטורה החדשה על החלק", needWords: "כתוב איזו טקסטורה",
   partsInstalling: "מנוע החלקים עוד יורד; נסה שוב כשיסיים.", partsWorking: "מחלק לפי משמעות במחשב… (P3-SAM, יכול לקחת דקה)", partsReady: "מנוע החלקים מוכן: בחר חלק ו'לפי משמעות (AI)' שוב.", partsFailed: "ההתקנה של מנוע החלקים נעצרה", partsInstalling2: "מוריד את מנוע החלקים…",
@@ -151,8 +154,29 @@ function frame(obj) {
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3()).length() || 1, center = box.getCenter(new THREE.Vector3());
   controls.target.copy(center);
-  camera.position.copy(center).add(new THREE.Vector3(0.6, 0.45, 0.8).multiplyScalar(size * 1.2));
+  // 2D: straight on, from far with a narrow lens, so it reads as flat (as the engines' 2D views).
+  // The 2D grid sits under the scene (Godot's origin is a corner, not the middle), the 3D one at the origin.
+  grid.position.set(flat2d ? Math.round(center.x) : 0, flat2d ? Math.round(center.y) : 0, flat2d ? -0.01 : 0);
+  if (flat2d) camera.position.copy(center).add(new THREE.Vector3(0, 0, (size * 0.7) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))));
+  else camera.position.copy(center).add(new THREE.Vector3(0.6, 0.45, 0.8).multiplyScalar(size * 1.2));
   camera.near = size / 200; camera.far = size * 50; camera.updateProjectionMatrix();
+}
+// ---------- 2D and 3D (the engines' 2D view: flat, straight on, pan and zoom only) ----------
+let flat2d = false;
+function set2D(on) {
+  flat2d = on;
+  camera.fov = on ? 8 : 45;
+  camera.up.set(0, 1, 0);
+  controls.enableRotate = !on;
+  // One finger / the left button pans in 2D (nothing to turn); the wheel and two fingers zoom.
+  controls.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+  controls.touches.ONE = on ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+  grid.rotation.x = on ? Math.PI / 2 : 0;
+  gizmo.showZ = !on;
+  $("dim2").classList.toggle("on", on);
+  $("dim3").classList.toggle("on", !on);
+  if (model) frame(model);
+  camera.updateProjectionMatrix();
 }
 /** Puts a GLB in the scene in place of the model there (from the chat, or back from Blender). */
 async function load(bytes) {
@@ -196,16 +220,32 @@ function loadStandIn(nodes) {
     if (n.transform) {
       fromGodot(n.transform.basis, n.transform.origin).decompose(o.position, o.quaternion, o.scale);
       o.userData.godot = { path: n.path, from: [...n.transform.basis, ...n.transform.origin] };
-    } else if (n.position2d) {
-      o.position.set(n.position2d[0] / PX, -n.position2d[1] / PX, 0);
-      o.userData.godot = { path: n.path, from: n.position2d, is2d: true };
+    } else if (n.position2d || /2D$|^Sprite|^Node2D|^Control/.test(t)) {
+      const p2 = n.position2d ?? [0, 0];
+      o.position.set(p2[0] / PX, -p2[1] / PX, 0);
+      if (n.rotation2d) o.rotation.z = -n.rotation2d;
+      if (n.scale2d) o.scale.set(n.scale2d[0], n.scale2d[1], 1);
+      o.userData.godot = { path: n.path, from: p2, is2d: true };
     } else o.userData.godot = { path: n.path };
     // Nodes of a scene placed in this one: shown for the shape, never saved (they belong to that other file).
     if (n.inner) o.userData.godot = { path: n.path, inner: true };
+    // The outliner: its kind, and what is attached to it (Godot's Inspector: the node's type, its mesh or model, its
+    // picture, its collision shape, its script, the scene it places).
+    o.userData.icon = iconOf(t);
+    o.userData.attached = [
+      t && [iconOf(t), t, n.shape ? n.shape.kind : ""],
+      n.model && ["🔷", n.model.split("/").pop(), T("aModel", "model")],
+      n.texture && ["🖼", n.texture.split("/").pop(), T("aPicture", "picture")],
+      n.collision && ["🧱", n.collision, ""],
+      n.script && ["📜", n.script.split("/").pop(), T("aScript", "script")],
+      n.scene && ["🎬", n.scene.split("/").pop(), T("aScene", "scene")],
+    ].filter(Boolean);
     parent.add(o);
     byPath.set(n.path, o);
     if (n.model) void showModel(o, n.model);
+    if (n.texture) void showSprite(o, n.texture, PX);
   }
+  is2dScene = !nodes.some((n) => n.transform) && nodes.some((n) => n.position2d || /2D$/.test(n.type ?? ""));
   model = root;
   scene.add(model);
   meshes = [];
@@ -215,6 +255,28 @@ function loadStandIn(nodes) {
   $("toGodot").hidden = false;
   $("toChat").hidden = true;
   msg(T("standIn", "A stand-in of the Godot scene: move things, then \"Save to the scene\" (with Godot closed)"));
+}
+/** An icon for a node / GameObject / actor by its kind, as the engines' outliners show one. */
+function iconOf(kind = "") {
+  return /Light/i.test(kind) ? "💡" : /Camera/i.test(kind) ? "🎥" : /Sprite|Texture/i.test(kind) ? "🖼" : /Collision|Collider|Shape/i.test(kind) ? "🧱" : /Audio|Sound/i.test(kind) ? "🔊" : /Player|Character/i.test(kind) ? "🧍" : /Anim/i.test(kind) ? "🎞" : /Script|MonoBehaviour|\.cs$|\.gd$/i.test(kind) ? "📜" : /TileMap|Tilemap|Grid/i.test(kind) ? "🗺" : /Blueprint/i.test(kind) ? "📘" : /Mesh|Model|instance/i.test(kind) ? "🔷" : /Rigid|Body/i.test(kind) ? "⚙" : /Canvas|Control|UI/i.test(kind) ? "🔲" : "▫";
+}
+let is2dScene = false;
+/** A 2D sprite's picture, drawn on a flat plane at its size in pixels (centred, as Godot and Unity draw it). */
+async function showSprite(o, path, pixelsPerUnit) {
+  try {
+    const bytes = await kesher.call("standin.asset", { path });
+    const url = URL.createObjectURL(new Blob([bytes], { type: /\.svg$/i.test(path) ? "image/svg+xml" : "image/png" }));
+    const tex = await new THREE.TextureLoader().loadAsync(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter; // pixel art stays sharp
+    const w = tex.image.width / pixelsPerUnit, h = tex.image.height / pixelsPerUnit;
+    const sprite = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+    sprite.userData.generated = true;
+    o.material = new THREE.MeshBasicMaterial({ visible: false });
+    o.add(sprite);
+  } catch (e) {
+    msg(`${path}: ${e.message}`, true);
+  }
 }
 /** Godot's built-in meshes as three.js shapes, at the same sizes (Godot's capsule height includes its two caps). */
 function shapeGeo(s) {
@@ -338,9 +400,15 @@ function loadUnityStandIn(objects) {
     o.userData.unity = { id: u.id, name: u.name, from: { position: u.position, rotation: u.rotation, scale: u.scale } };
     byId.set(u.id, o);
     if (u.model) void showModel(o, u.model, true);
+    if (u.sprite) void showSprite(o, u.sprite, 100);
+    // The outliner: Unity's Inspector, its components in order (a script by its file's name).
+    o.userData.icon = iconOf(u.components?.find((c) => c !== "Transform" && c !== "MeshFilter" && c !== "MeshRenderer") ?? (u.model || u.look ? "Mesh" : ""));
+    o.userData.attached = [["↔", "Transform", ""], ...(u.components ?? []).map((c) => [iconOf(c), c, c === "MeshFilter" && u.look?.builtin ? u.look.builtin : ""]), ...(u.model ? [["🔷", u.model.split("/").pop(), u.prefab ? T("aPlaced", "placed") : ""]] : [])];
   }
   // Parents after all are made (the file need not list a parent first).
   for (const u of objects) (byId.get(u.parent) ?? root).add(byId.get(u.id));
+  // A 2D scene: sprites, and no 3D meshes or models.
+  is2dScene = objects.some((u) => u.components?.includes("SpriteRenderer")) && !objects.some((u) => u.model || u.components?.includes("MeshFilter"));
   model = root;
   scene.add(model);
   meshes = [];
@@ -405,6 +473,9 @@ function loadUnrealStandIn(u) {
     const t = fromUnreal(a.position, a.rotation, a.scale);
     o.position.copy(t.p); o.quaternion.copy(t.q); o.scale.copy(t.s);
     o.userData.unreal = { id: a.id, from: { position: a.position, rotation: a.rotation }, scale: a.scale };
+    // The outliner: Unreal's Details, its components (and its Blueprint).
+    o.userData.icon = iconOf(a.components?.find((c) => c.startsWith("Blueprint:")) ? "Blueprint" : a.class);
+    o.userData.attached = (a.components ?? []).map((c) => (c.startsWith("Blueprint:") ? ["📘", c.slice(10), "Blueprint"] : [iconOf(c), c, c === "StaticMeshComponent" && a.mesh ? a.mesh.split("/").pop().split(".")[0] : ""]));
     byId.set(a.id, o);
     if (a.mesh) {
       void unrealMesh(a.mesh).then((g) => {
@@ -416,7 +487,21 @@ function loadUnrealStandIn(u) {
       }, (e) => msg(`${a.mesh}: ${e.message}`, true));
     }
   }
-  for (const a of u.actors) (byId.get(a.parent) ?? root).add(byId.get(a.id));
+  // The Outliner's folders (not saved: only a way to find things), then each actor under its parent or its folder.
+  const folders = new Map();
+  const folder = (path) => {
+    if (!path) return root;
+    if (!folders.has(path)) {
+      const g = new THREE.Group();
+      g.name = path.split("/").pop();
+      g.userData.icon = "📁";
+      folders.set(path, g);
+      folder(path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "").add(g);
+    }
+    return folders.get(path);
+  };
+  for (const a of u.actors) (byId.get(a.parent) ?? folder(a.folder)).add(byId.get(a.id));
+  is2dScene = u.actors.some((a) => /^Paper/.test(a.class)) && !u.actors.some((a) => a.mesh && !/^Paper/.test(a.class));
   model = root;
   scene.add(model);
   rebuild();
@@ -465,9 +550,9 @@ async function open() {
   busy(T("loading", "Loading the model…"));
   try {
     const input = await kesher.call("editor.input");
-    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); frame(model); stats(); return; }
-    if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); frame(model); stats(); return; }
-    if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); frame(model); stats(); return; }
+    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
+    if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
+    if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
     if (!input?.bytes) return;
     name = input.name;
     $("name").textContent = name;
@@ -501,7 +586,10 @@ function stats() { $("stats").textContent = model ? `${meshes.filter((p) => !isG
 const shown = (o) => (o.children.length === 1 && !o.isMesh && o.children[0].isMesh && !o.children[0].children.length ? o.children[0] : o);
 function renderParts() {
   nodes = [];
-  const walk = (o, depth) => { for (const c of o.children) { if (c.userData.generated) continue; const s2 = shown(c); nodes.push({ obj: s2, depth }); if (!folded.has(s2.uuid)) walk(s2, depth + 1); } };
+  // The outliner's search: what matches, with the way down to it (as the engines' Hierarchy search shows it).
+  const q = ($("partSearch")?.value ?? "").trim().toLowerCase();
+  const hit = (o) => !q || label(o).toLowerCase().includes(q) || (o.userData.attached ?? []).some((a) => String(a[1]).toLowerCase().includes(q)) || o.children.some((c) => !c.userData.generated && hit(shown(c)));
+  const walk = (o, depth) => { for (const c of o.children) { if (c.userData.generated) continue; const s2 = shown(c); if (!hit(s2)) continue; nodes.push({ obj: s2, depth }); if (!folded.has(s2.uuid) || q) walk(s2, depth + 1); } };
   if (model) walk(model, 0);
   $("partList").replaceChildren(...nodes.map(({ obj, depth }) => {
     const li = document.createElement("li");
@@ -518,11 +606,26 @@ function renderParts() {
     eye.onclick = (e) => { e.stopPropagation(); remember(); obj.visible = !obj.visible; renderParts(); };
     const n = document.createElement("span");
     n.dir = "auto";
+    n.className = "nm";
     n.textContent = `${kids && !obj.isMesh ? `${label(obj)} (${kids})` : label(obj)}${obj.userData.mods?.some((m) => m.on) ? " ⚙" : ""}`;
-    li.append(tw, eye, n);
+    const ic = document.createElement("span");
+    ic.className = "ic";
+    ic.textContent = obj.userData.icon ?? "";
+    // The lock (Unity's and Unreal's): a locked object is not chosen by a click in the view, nor moved.
+    const lock = document.createElement("button");
+    lock.textContent = obj.userData.locked ? "🔒" : "🔓";
+    lock.title = obj.userData.locked ? T("unlock", "Unlock") : T("lock", "Lock");
+    lock.onclick = (e) => { e.stopPropagation(); obj.userData.locked = !obj.userData.locked; if (obj.userData.locked && chosen === obj) gizmo.detach(); renderParts(); };
+    li.append(tw, ic, n, eye, ...(obj.userData.icon !== undefined ? [lock] : []));
     li.onclick = () => choose(obj);
-    return li;
-  }));
+    if (obj !== chosen || !obj.userData.attached?.length) return [li];
+    // What is attached to the chosen one, under it (the Inspector's components, read only here).
+    const att = document.createElement("li");
+    att.className = "attached";
+    att.style.marginInlineStart = `${20 + depth * 14}px`;
+    att.replaceChildren(...obj.userData.attached.map(([i, a, d]) => { const r = document.createElement("div"); r.dir = "ltr"; r.textContent = `${i} ${a}${d ? ` · ${d}` : ""}`; return r; }));
+    return [li, att];
+  }).flat());
 }
 let glow = null;
 function choose(obj) {
@@ -536,7 +639,7 @@ function choose(obj) {
   // The chosen object is outlined by a box (Blender's orange outline, simply) and gets the gizmo.
   glow = new THREE.BoxHelper(chosen, 0xffa040);
   scene.add(glow);
-  gizmo.attach(chosen);
+  if (!chosen.userData.locked) gizmo.attach(chosen);
   const mesh = chosen.isMesh ? chosen : chosen.getObjectByProperty("isMesh", true);
   const m = mesh && matOf(mesh);
   if (m?.color) $("color").value = `#${m.color.getHexString()}`;
@@ -609,6 +712,8 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   let o = hit?.object ?? null;
   while (o && o.parent && (o.userData.generated || o.parent.userData.generated)) o = o.parent;
   if (o?.name === "⚙ modifiers") o = o.parent;
+  // A locked object (the outliner's lock) is passed through: what is behind it can be chosen.
+  for (let x = o; x; x = x.parent) if (x.userData.locked) return;
   choose(o);
 });
 
@@ -624,6 +729,9 @@ function view(kind) {
 }
 document.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => view(b.dataset.view)));
 $("quad").onclick = () => setQuad(!quad);
+$("dim2").onclick = () => set2D(true);
+$("dim3").onclick = () => set2D(false);
+$("partSearch").oninput = () => renderParts();
 // A double-click on one of the four views: that view alone (Max's Alt+W).
 renderer.domElement.addEventListener("dblclick", (e) => {
   if (!quad) return;

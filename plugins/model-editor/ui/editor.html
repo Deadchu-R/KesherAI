@@ -11,6 +11,7 @@
   <div class="app" id="app">
     <header class="top">
       <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+      <div class="seg" id="dims" hidden title="2D / 3D"><button id="dim2" data-t="dim2">2D</button><button id="dim3" class="on" data-t="dim3">3D</button></div>
       <b class="grow name" id="name">3D editor</b>
       <div class="seg" id="modes" title="Move / rotate / scale">
         <button data-mode="translate" class="on" title="Move">✥</button><button data-mode="rotate" title="Rotate">⟳</button><button data-mode="scale" title="Scale">⤢</button>
@@ -29,6 +30,7 @@
     <main class="middle">
       <aside class="parts">
         <b data-t="sceneH">The scene</b>
+        <input id="partSearch" type="search" dir="auto" autocomplete="off" data-tp="searchPh" placeholder="🔍 Search…" />
         <ul id="partList"></ul>
       </aside>
       <section class="view" id="view">

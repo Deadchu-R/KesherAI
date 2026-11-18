@@ -27,7 +27,16 @@ export interface UnityObject {
   look?: UnityLook;
   /** Set by the route: the model file the look points at ("Assets/….fbx"). */
   model?: string;
+  /** What is attached to it, as Unity's Inspector names them ("MeshRenderer", "BoxCollider", a script's GUID as "script:<guid>"). */
+  components?: string[];
+  /** A 2D sprite's picture: its GUID here, its file ("Assets/….png") once the route resolves it. */
+  sprite?: string;
 }
+
+/** Unity's class ids for the components the outliner names (the Inspector's names). */
+const COMPONENTS: Record<string, string> = {
+  "20": "Camera", "23": "MeshRenderer", "33": "MeshFilter", "50": "Rigidbody2D", "54": "Rigidbody", "58": "CircleCollider2D", "60": "PolygonCollider2D", "61": "BoxCollider2D", "64": "MeshCollider", "65": "BoxCollider", "70": "CapsuleCollider2D", "81": "AudioListener", "82": "AudioSource", "95": "Animator", "108": "Light", "135": "SphereCollider", "136": "CapsuleCollider", "137": "SkinnedMeshRenderer", "143": "CharacterController", "195": "NavMeshAgent", "198": "ParticleSystem", "212": "SpriteRenderer", "222": "CanvasRenderer", "223": "Canvas", "156049354": "Grid", "483693784": "TilemapRenderer", "1839735485": "Tilemap",
+};
 
 /** Unity's built-in meshes (in "Library/unity default resources"), by file id. */
 const BUILTIN: Record<string, "cube" | "sphere" | "cylinder" | "capsule" | "plane" | "quad"> = { "10202": "cube", "10207": "sphere", "10206": "cylinder", "10208": "capsule", "10209": "plane", "10210": "quad" };
@@ -60,6 +69,9 @@ export function readUnityScene(text: string): UnityObject[] {
   const docs = text.split(/^--- !u!/m).slice(1);
   const names = new Map<string, string>();
   const looks = new Map<string, UnityLook>();
+  /** Every document's class, and a MonoBehaviour's script / a SpriteRenderer's sprite, to name each GameObject's components. */
+  const classOf = new Map<string, string>(), scriptOf = new Map<string, string>(), spriteOf = new Map<string, string>();
+  const parts = new Map<string, string[]>();
   /** A stripped Transform (a prefab's, named here only as some object's parent) → its prefab instance. */
   const strippedOf = new Map<string, string>();
   const transforms: Array<Omit<UnityObject, "name"> & { go: string }> = [];
@@ -69,8 +81,12 @@ export function readUnityScene(text: string): UnityObject[] {
     if (!head) continue;
     const [, cls, id, stripped] = head;
     const field = (k: string) => new RegExp(`^\\s+${k}:\\s*(.*)$`, "m").exec(d)?.[1];
+    classOf.set(id!, cls!);
+    if (cls === "114") { const g = ref(field("m_Script"))?.guid; if (g) scriptOf.set(id!, g); }
+    if (cls === "212") { const g = ref(field("m_Sprite"))?.guid; if (g) spriteOf.set(id!, g); }
     if (cls === "1") {
       names.set(id!, (field("m_Name") ?? "").trim());
+      parts.set(id!, [...d.matchAll(/- component:\s*\{fileID:\s*(-?\d+)/g)].map((m) => m[1]!));
     } else if ((cls === "4" || cls === "224") && stripped) {
       const pi = ref(field("m_PrefabInstance"))?.fileID;
       if (pi && pi !== "0") strippedOf.set(id!, pi);
@@ -120,7 +136,16 @@ export function readUnityScene(text: string): UnityObject[] {
   const byInstance = new Map(placed.map((o) => [o.id.split(":")[1]!, o.id]));
   /** A parent that is a prefab's inner Transform: the placed prefab stands for it. */
   const parentOf = (id: string) => (strippedOf.has(id) ? byInstance.get(strippedOf.get(id)!) ?? "0" : id);
-  const own = transforms.map(({ go, ...t }) => ({ ...t, parent: parentOf(t.parent), name: names.get(go) || `Object ${t.id}`, ...(looks.has(go) ? { look: looks.get(go)! } : {}) }));
+  const attached = (go: string) => {
+    const list = (parts.get(go) ?? []).flatMap((c) => {
+      const k = classOf.get(c);
+      if (k === "114") return scriptOf.has(c) ? [`script:${scriptOf.get(c)}`] : ["MonoBehaviour"];
+      return k && COMPONENTS[k] ? [COMPONENTS[k]!] : [];
+    });
+    const sprite = (parts.get(go) ?? []).map((c) => spriteOf.get(c)).find(Boolean);
+    return { ...(list.length ? { components: list } : {}), ...(sprite ? { sprite } : {}) };
+  };
+  const own = transforms.map(({ go, ...t }) => ({ ...t, parent: parentOf(t.parent), name: names.get(go) || `Object ${t.id}`, ...(looks.has(go) ? { look: looks.get(go)! } : {}), ...attached(go) }));
   return [...own, ...placed.map((o) => ({ ...o, parent: parentOf(o.parent) }))];
 }
 

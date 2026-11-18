@@ -32,6 +32,11 @@ Transform:
 const MORE = `%YAML 1.1
 --- !u!1 &100
 GameObject:
+  m_Component:
+  - component: {fileID: 101}
+  - component: {fileID: 102}
+  - component: {fileID: 103}
+  - component: {fileID: 104}
   m_Name: Crate
 --- !u!4 &101
 Transform:
@@ -40,6 +45,13 @@ Transform:
   m_LocalPosition: {x: 2, y: 0, z: -1.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Father: {fileID: 0}
+--- !u!65 &103
+BoxCollider:
+  m_GameObject: {fileID: 100}
+--- !u!114 &104
+MonoBehaviour:
+  m_GameObject: {fileID: 100}
+  m_Script: {fileID: 11500000, guid: abcdefabcdefabcdefabcdefabcdefab, type: 3}
 --- !u!33 &102
 MeshFilter:
   m_GameObject: {fileID: 100}
@@ -88,6 +100,7 @@ test("looks: Unity's built-in meshes; placed models with their overridden place,
   const o = readUnityScene(MORE);
   const by = new Map(o.map((x) => [x.name, x]));
   assert.deepEqual(by.get("Crate")!.look, { builtin: "cube" });
+  assert.deepEqual(by.get("Crate")!.components, ["MeshFilter", "BoxCollider", "script:abcdefabcdefabcdefabcdefabcdefab"]);
   const chair = by.get("Chair")!;
   assert.equal(chair.id, "-8679921383154817045:900");
   assert.equal(chair.parent, "101");

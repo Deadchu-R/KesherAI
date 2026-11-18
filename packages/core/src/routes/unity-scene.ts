@@ -62,7 +62,7 @@ async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, s
  * @param objects - The scene's objects (changed in place).
  */
 async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> {
-  const guids = new Set(objects.flatMap((o) => (o.look && "guid" in o.look ? [o.look.guid] : [])));
+  const guids = new Set(objects.flatMap((o) => [...(o.look && "guid" in o.look ? [o.look.guid] : []), ...(o.sprite ? [o.sprite] : []), ...(o.components ?? []).filter((c) => c.startsWith("script:")).map((c) => c.slice(7))]));
   const files = await assetsOf(dir, guids);
   // Prefabs: their first mesh (a built-in one, or a model), one level deep.
   const inPrefab = new Map<string, UnityObject["look"]>();
@@ -79,6 +79,9 @@ async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> 
   }
   const more = await assetsOf(dir, new Set([...inPrefab.values()].flatMap((l) => (l && "guid" in l ? [l.guid] : []))));
   for (const o of objects) {
+    // Scripts by their file's name (as the Inspector shows them), a sprite by its picture's file.
+    if (o.components) o.components = o.components.map((c) => (c.startsWith("script:") ? (files.get(c.slice(7))?.split("/").pop() ?? "Script") : c));
+    if (o.sprite) { const f = files.get(o.sprite); if (f && /\.(png|jpe?g|webp)$/i.test(f)) o.sprite = f; else delete o.sprite; }
     if (!o.look || !("guid" in o.look)) continue;
     const g = o.look.guid;
     const f = files.get(g);
@@ -140,7 +143,7 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
     try {
       const { dir } = await paths(req.query.project);
       const rel = String(req.query.path ?? "").replace(/\\/g, "/");
-      if (!/^Assets\//.test(rel) || !MODEL.test(rel) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model file under Assets/." });
+      if (!/^Assets\//.test(rel) || !(MODEL.test(rel) || /\.(png|jpe?g|webp)$/i.test(rel)) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model file or a picture under Assets/." });
       const file = resolve(dir, rel);
       const real = relative(await realpath(dir), await realpath(file).catch(() => file));
       if (real.startsWith("..") || real.split(sep).includes("..")) return reply.code(400).send({ error: "A model file under Assets/." });

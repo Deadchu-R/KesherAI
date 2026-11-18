@@ -24,6 +24,12 @@ export interface TscnNode {
   shape?: TscnShape;
   model?: string;
   scene?: string;
+  /** Its script (`res://….gd` / `.cs`), for the outliner. */
+  script?: string;
+  /** A 2D sprite's picture (`res://….png`), drawn in the 2D view. */
+  texture?: string;
+  /** A collision shape's kind (BoxShape3D, CircleShape2D…), for the outliner. */
+  collision?: string;
 }
 
 /** A built-in mesh (BoxMesh, SphereMesh, CylinderMesh, CapsuleMesh, PlaneMesh, PrismMesh, TorusMesh) and its sizes. */
@@ -60,6 +66,7 @@ export function readTscn(text: string): TscnNode[] {
   let curSub: { type: string; props: Map<string, string> } | undefined;
   let cur: TscnNode | undefined;
   const meshOf = new Map<TscnNode, string>();
+  const scripts = new Map<TscnNode, string>(), textures = new Map<TscnNode, string>(), shapes = new Map<TscnNode, string>();
   for (const line of lines) {
     const head = /^\[(\w+)\s*(.*)\]\s*$/.exec(line);
     if (head) {
@@ -91,6 +98,12 @@ export function readTscn(text: string): TscnNode[] {
     if (!cur) continue;
     if (!kv) continue;
     const [, key, value] = kv;
+    if (key === "script" || key === "texture") {
+      const id = /ExtResource\("([^"]+)"\)/.exec(value!)?.[1];
+      if (id) (key === "script" ? scripts : textures).set(cur, id);
+      continue;
+    }
+    if (key === "shape") { const id = /SubResource\("([^"]+)"\)/.exec(value!)?.[1]; if (id) shapes.set(cur, id); continue; }
     if (key === "mesh") { const id = /Resource\("([^"]+)"\)/.exec(value!)?.[1]; if (id) meshOf.set(cur, `${value!.startsWith("Sub") ? "s" : "e"}:${id}`); continue; }
     if (key === "transform" && /^Transform3D\(/.test(value!)) {
       const n = numbers(value!);
@@ -106,6 +119,10 @@ export function readTscn(text: string): TscnNode[] {
   }
   // Each node's look: an instanced model or scene, or the mesh it shows.
   for (const n of out) {
+    const sc = ext.get(scripts.get(n) ?? ""), tx = ext.get(textures.get(n) ?? ""), col = sub.get(shapes.get(n) ?? "");
+    if (sc) n.script = sc;
+    if (tx && /\.(png|jpe?g|webp|svg)$/i.test(tx)) n.texture = tx;
+    if (col) n.collision = col.type;
     if (n.instance) {
       const path = ext.get(n.instance);
       if (path && /\.(glb|gltf)$/i.test(path)) n.model = path;
