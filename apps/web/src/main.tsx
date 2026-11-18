@@ -14,7 +14,7 @@ import { startPhoneShare } from "./phone";
 import { installSlideMenus } from "./slideMenus";
 import { loadAppearance } from "./appearance";
 import { startPlacement } from "./placement";
-import { startTabKeys } from "./ui/tabKeys";
+import { startTabKeys, startTabSwipes } from "./ui/tabKeys";
 import { startPhoneNotify } from "./phoneNotify";
 import { startAppLock } from "./appLock";
 
@@ -31,6 +31,7 @@ setLocale(getLocale());
 loadAppearance();
 startPlacement();
 startTabKeys();
+startTabSwipes();
 
 // After an update the server has the new version's files while this page is still the old one:
 // a part that loads later is gone. Load the page again once (not in a loop) instead of showing an error.
