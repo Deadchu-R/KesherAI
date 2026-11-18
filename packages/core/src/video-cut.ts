@@ -34,16 +34,20 @@ export function checkSegments(given: unknown): Segment[] {
  * @param output - The new video (.mp4).
  * @param segments - The stretches to keep.
  * @param audio - Whether the source has sound.
+ * @param sound - Another file whose sound replaces the video's (the same times as the video).
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string): string[] {
+  // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
+  const a = sound ? "1:a" : "0:a";
   const parts = segments.map((s, i) => {
     const v = `[0:v]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS[v${i}]`;
-    return audio ? `${v};[0:a]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS[a${i}]` : v;
+    return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS[a${i}]` : v;
   });
+  audio = audio || !!sound;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
   const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}`;
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, "-filter_complex", graph, "-map", "[v]", ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", "[v]", ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -53,11 +57,12 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param input - The source video.
  * @param output - The new video.
  * @param segments - The stretches to keep.
+ * @param sound - A file whose sound replaces the video's.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[]): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string): Promise<void> {
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio), { timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound), { timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);
@@ -94,4 +99,26 @@ export function srtOf(given: unknown): string | undefined {
     return Number.isFinite(start) && Number.isFinite(end) && end > start && text ? [{ start, end, text }] : [];
   });
   return lines.length ? lines.map((l, i) => `${i + 1}\n${t(l.start)} --> ${t(l.end)}\n${l.text}\n`).join("\n") : undefined;
+}
+
+/**
+ * FFmpeg's arguments that take a video's sound out as a WAV (44.1 kHz, stereo), for the sound editor.
+ *
+ * @param input - The video.
+ * @param output - The .wav.
+ * @returns The arguments.
+ */
+export const soundArgs = (input: string, output: string): string[] => ["-y", "-hide_banner", "-loglevel", "error", "-i", input, "-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", output];
+
+/**
+ * Takes a video's sound out as a WAV.
+ *
+ * @param ffmpeg - The FFmpeg program.
+ * @param input - The video.
+ * @param output - The .wav.
+ */
+export function extractSound(ffmpeg: string, input: string, output: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(ffmpeg, soundArgs(input, output), { timeout: 30 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _o, stderr) => (err ? reject(new Error(/matches no streams|does not contain any stream/i.test(String(stderr)) ? "This video has no sound." : String(stderr || err.message).slice(0, 400))) : resolve()));
+  });
 }

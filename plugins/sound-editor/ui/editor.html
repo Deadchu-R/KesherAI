@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sound editor</title>
+  <link rel="stylesheet" href="editor.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="top">
+      <button id="undo" title="Undo (Ctrl+Z)">↶</button>
+      <button id="redo" title="Redo (Ctrl+Y)">↷</button>
+      <b class="grow name" id="name">Sound editor</b>
+      <button id="keysBtn" title="Shortcuts (?)">?</button>
+      <button id="export" data-t="export">Export WAV</button>
+      <button id="toChat" class="primary" data-t="toChat">Send to the chat</button>
+      <button id="toVideo" class="primary" hidden data-t="toVideo">↩ Back to the video</button>
+    </header>
+
+    <main class="middle">
+      <section class="wave">
+        <div class="transport">
+          <button id="play" title="Play (Space)">▶</button>
+          <span id="time" class="mono" dir="ltr">0:00.0 / 0:00.0</span>
+          <span id="selInfo" class="muted mono" dir="ltr"></span>
+          <span class="grow"></span>
+          <button id="zoomOut" title="Zoom out (−)">−</button>
+          <button id="zoomIn" title="Zoom in (+)">+</button>
+        </div>
+        <div class="overview" id="overview"><div class="window" id="window"></div></div>
+        <div class="canvas-wrap" id="wrap"><canvas id="canvas"></canvas><div class="empty" id="empty" data-t="empty">Open a sound from a chat: "Edit in the sound editor" on its preview.</div></div>
+        <!-- The selection's tools (the task bar of the other editors) -->
+        <div class="tools" id="tools">
+          <button id="cut" data-t="cut">✂ Delete</button>
+          <button id="keep" data-t="keep">Keep only</button>
+          <button id="silence" data-t="silence">Silence</button>
+          <button id="fadeIn" data-t="fadeIn">◢ Fade in</button>
+          <button id="fadeOut" data-t="fadeOut">◣ Fade out</button>
+          <button id="louder" data-t="louder">+3 dB</button>
+          <button id="quieter" data-t="quieter">−3 dB</button>
+          <button id="normalize" data-t="normalize">Normalize</button>
+        </div>
+        <p class="hint muted small" data-t="hint">Drag to select · Space play · Delete cut · Ctrl+A all · Esc let go</p>
+      </section>
+      <aside class="side">
+        <div class="row"><b class="grow" data-t="transcriptH">Transcript</b><button id="transcribe" data-t="transcribe">Transcribe</button></div>
+        <button id="silences" hidden></button>
+        <ol class="transcript" id="transcript"></ol>
+        <span class="muted small" data-t="transcriptHint">Tap a line to select it; ✂ cuts it. Whisper runs on your computer.</span>
+      </aside>
+    </main>
+
+    <nav class="phonebar" aria-label="Tools">
+      <button data-do="play"><span>▶</span><b data-t="playS">Play</b></button>
+      <button data-do="cut"><span>✂</span><b data-t="cutS">Cut</b></button>
+      <button data-do="fadeIn"><span>◢</span><b data-t="fadeS">Fade</b></button>
+      <button data-do="louder"><span>🔊</span><b data-t="volS">Louder</b></button>
+      <button data-do="words"><span>📝</span><b data-t="wordsS">Words</b></button>
+    </nav>
+  </div>
+
+  <dialog id="chatDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="toChatH">Send to the chat</strong>
+      <span class="muted" id="chatSummary"></span>
+      <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <dialog id="keysDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="keysH">Shortcuts (as in Audition)</strong>
+      <table class="keys" id="keysTable"></table>
+      <div class="row"><span class="grow"></span><button value="ok" class="primary" data-t="close">Close</button></div>
+    </form>
+  </dialog>
+  <div class="busy" id="busy" hidden><span id="busyText">…</span></div>
+  <footer class="status" id="msg" role="status"></footer>
+
+  <script src="kesher.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>

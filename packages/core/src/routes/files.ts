@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo, srtOf } from "../video-cut.js";
+import { checkSegments, cutVideo, extractSound, srtOf } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -67,14 +67,20 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
     let segments;
+    let sound: string | undefined;
     try {
       full = await resolveInWorkspace(root, req.body?.path ?? "");
       segments = checkSegments(req.body?.segments);
+      // A new sound for the video (from the sound editor): a sound file of the same chat.
+      if (req.body?.sound) {
+        sound = await resolveInWorkspace(root, req.body.sound);
+        if (!/\.(wav|mp3|m4a|flac|ogg)$/i.test(sound) || !(await stat(sound).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "The new sound was not found" });
+      }
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -88,7 +94,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     if (cutting) return reply.code(429).send({ error: "Another video is being cut; try again when it is done." });
     cutting = true;
     try {
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments);
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {
@@ -98,6 +104,32 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     const srt = srtOf(req.body?.captions);
     if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
     return { path: relative(root, out).split(sep).join("/"), ...(srt ? { captions: relative(root, out.replace(/\.mp4$/, ".srt")).split(sep).join("/") } : {}) };
+  });
+
+  /**
+   * A video's sound as a WAV in `shared/` (for the sound editor: double-click the sound track in the video editor).
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string } }>("/api/conversations/:id/files/sound", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    let full: string;
+    try {
+      full = await resolveInWorkspace(root, req.body?.path ?? "");
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    if (!/\.(mp4|webm|mov|m4v|mkv)$/i.test(full) || !(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "Video not found" });
+    const dir = join(root, "shared");
+    await mkdir(dir, { recursive: true });
+    const base = basename(full).replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 100) || "video";
+    let out = join(dir, `${base}-sound.wav`);
+    for (let i = 2; existsSync(out); i++) out = join(dir, `${base}-sound (${i}).wav`);
+    try {
+      await extractSound(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out);
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+    return { path: relative(root, out).split(sep).join("/") };
   });
 
   /**

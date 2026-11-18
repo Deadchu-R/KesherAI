@@ -37,6 +37,9 @@ hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
 .clips { position: relative; height: 48px; flex: none; }
 .clip { position: absolute; top: 0; height: 48px; border-radius: 6px; background: var(--clip); color: var(--accent-ink); font-size: 11.5px; font-weight: 600; padding: 4px 8px; overflow: hidden; white-space: nowrap; cursor: pointer; border: 2px solid transparent; background-size: auto 100%; background-blend-mode: soft-light; }
 .clip.on { border-color: #fff; }
+.clip.snd { background: #7fe0c0; height: 34px; }
+#sounds { height: 34px; }
+.lane:has(#sounds) { height: 40px; }
 .clip small { display: block; font-weight: 400; opacity: 0.75; }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--cut); pointer-events: none; z-index: 3; }
 .hint { margin: 0; }

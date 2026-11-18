@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkSegments, cutArgs, srtOf } from "./video-cut.js";
+import { checkSegments, cutArgs, soundArgs, srtOf } from "./video-cut.js";
 
 test("the stretches to keep are checked and rounded", () => {
   assert.deepEqual(checkSegments([{ from: 0, to: 2.00049 }, { from: 5, to: 9 }]), [{ from: 0, to: 2 }, { from: 5, to: 9 }]);
@@ -25,4 +25,12 @@ test("captions become an SRT file; bad lines are left out", () => {
   assert.equal(srtOf([{ start: 0.5, end: 2, text: "שלום" }, { start: 3, end: 2, text: "x" }, { start: 61.25, end: 3725.5, text: "a --> b" }]), "1\n00:00:00,500 --> 00:00:02,000\nשלום\n\n2\n00:01:01,250 --> 01:02:05,500\na → b\n");
   assert.equal(srtOf([]), undefined);
   assert.equal(srtOf("x"), undefined);
+});
+
+test("a new sound from the sound editor replaces the video's, cut at the same times", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 1, to: 2 }], false, "new.wav");
+  assert.deepEqual(a.slice(4, 8), ["-i", "in.mp4", "-i", "new.wav"]);
+  assert.match(a[a.indexOf("-filter_complex") + 1]!, /\[1:a\]atrim=start=1:end=2/);
+  assert.ok(a.includes("aac"));
+  assert.deepEqual(soundArgs("v.mp4", "s.wav").slice(-8), ["-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", "s.wav"]);
 });

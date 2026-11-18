@@ -100,7 +100,7 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
  *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: { conversationId: string; path: string } }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: { conversationId: string; path: string; sound?: string; returnVideo?: string } }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -132,7 +132,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const name = input.path.split(/[\\/]/).pop() ?? "";
           // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
           if (blob.size > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
-          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer() };
+          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer(), ...(input.sound ? { sound: input.sound, soundBytes: await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.sound)}`)).then((x) => (x.ok ? x.arrayBuffer() : undefined)) } : {}), ...(input.returnVideo ? { returnVideo: input.returnVideo } : {}) };
           return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
         }
         // The video editor's export: the kept stretches of the video the page was opened with, as a new file in that
@@ -140,13 +140,36 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.cut": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
-          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions } : {}) } });
+          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, ...(input.sound ? { sound: input.sound } : {}), segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions } : {}) } });
           if (p.send) {
             const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
             await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]${captions ? `\n[Attached: ${captions}]` : ""}` } });
             location.hash = `#/c/${input.conversationId}`;
           }
           return { path, captions };
+        }
+        // The video's sound into the sound editor (double-click the sound track): a WAV of it in the chat's folder,
+        // opened there with the way back to this video.
+        case "video.openSound": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const c = encodeURIComponent(input.conversationId);
+          const { path } = await api<{ path: string }>(`/api/conversations/${c}/files/sound`, { method: "POST", body: { path: input.path } });
+          location.hash = `#/p/sound-editor/editor?c=${c}&f=${encodeURIComponent(path)}&ret=${encodeURIComponent(input.path)}`;
+          return { path };
+        }
+        // Back from the sound editor to the video it came from, with the new sound (a WAV data URL) for it.
+        case "sound.backToVideo": {
+          need("sound");
+          if (!input?.returnVideo) throw new Error("This sound did not come from a video.");
+          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
+          if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The sound is empty or larger than 300 MB.");
+          const c = encodeURIComponent(input.conversationId);
+          const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(String(p.name ?? "sound-edited.wav").slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
+          const { name } = (await up.json()) as { name: string };
+          location.hash = `#/p/video-editor/editor?c=${c}&f=${encodeURIComponent(input.returnVideo)}&a=${encodeURIComponent(`shared/${name}`)}`;
+          return true;
         }
         // What is said in the video the page was opened with, in pieces with their times (whisper on the computer).
         case "video.transcript":
@@ -299,6 +322,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path, input?.sound, input?.returnVideo]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" />;
 }

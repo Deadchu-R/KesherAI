@@ -534,7 +534,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
    * A file sent from another device (shared from the phone): saved in the
    * conversation's own folder under `shared/`. Raw bytes, `?name=`.
    */
-  app.post<{ Params: { id: string }; Querystring: { name?: string } }>("/api/conversations/:id/files", { bodyLimit: 60 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Params: { id: string }; Querystring: { name?: string } }>("/api/conversations/:id/files", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
     const conv = await s.library.getConversation(req.params.id);
     if (!conv) return reply.code(404).send({ error: "Conversation not found" });
     const body = req.body as Buffer;

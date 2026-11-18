@@ -1,0 +1,70 @@
+/* The same dark studio look as the image editor: neutral greys, one accent. */
+:root { --bg: #1d1e21; --well: #0f1012; --panel: #26272b; --panel-2: #2f3035; --line: #3a3c42; --text: #e6e7ea; --muted: #9b9fa8; --accent: #8fa2ff; --accent-ink: #0d1020; --wave: #7fe0c0; --sel: rgba(143, 162, 255, 0.28); --cut: #ff6b6b; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+button, textarea { font: inherit; color: inherit; }
+button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { background: #393b41; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: 0.45; cursor: default; }
+textarea { width: 100%; background: var(--well); border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical; }
+hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.grow { flex: 1; }
+.muted { color: var(--muted); }
+.small { font-size: 11.5px; }
+.mono { font-variant-numeric: tabular-nums; }
+.field { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+
+/* Layout (design SoundEditorWorkspace): bar, waveform + transcript. */
+.app { display: grid; grid-template-rows: 42px 1fr; height: 100%; }
+.top { display: flex; align-items: center; gap: 6px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid #111; }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.middle { display: flex; min-height: 0; }
+.wave { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.transport { display: flex; align-items: center; gap: 8px; }
+.overview { position: relative; height: 10px; border-radius: 4px; background: var(--panel-2); cursor: pointer; }
+.overview .window { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: #4a4f80; }
+.canvas-wrap { position: relative; flex: 1; min-height: 160px; background: var(--well); border-radius: 8px; overflow: hidden; touch-action: none; cursor: text; }
+.canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); padding: 20px; text-align: center; }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.hint { margin: 0; text-align: center; }
+.side { width: 270px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: var(--panel); border-inline-start: 1px solid #111; overflow: auto; }
+.busy { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); font-size: 15px; z-index: 9; }
+.transcript { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.transcript li { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.transcript li:hover { background: var(--panel-2); }
+.transcript time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.transcript span { flex: 1; }
+.transcript button { padding: 0 6px; flex: none; }
+.phonebar { display: none; }
+.status { position: fixed; bottom: 8px; inset-inline-start: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; opacity: 0; transition: opacity 0.2s; pointer-events: none; max-width: 90vw; }
+.status.show { opacity: 1; }
+.status.error { border-color: var(--cut); color: #ffb3b3; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 16px; width: min(420px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.keys td { padding: 3px 12px 3px 0; }
+.keys kbd { font: 12px ui-monospace, monospace; background: var(--well); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.transcript { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.transcript li { display: flex; gap: 6px; align-items: flex-start; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.transcript li:hover { background: var(--panel-2); }
+.transcript li.here { background: #33385e; }
+.transcript li.gone { opacity: 0.4; text-decoration: line-through; }
+.transcript time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.transcript span { flex: 1; }
+.transcript button { padding: 0 6px; flex: none; }
+[hidden] { display: none !important; }
+
+/* Phone (after Ferrite and CapCut): the waveform large, tools at the bottom, the transcript as a sheet. */
+@media (max-width: 760px) {
+  .app { grid-template-rows: 46px 1fr 56px; }
+  .side, .hint, #export, #keysBtn { display: none; }
+  .app.sheet .side { display: flex; position: fixed; inset-inline: 0; bottom: 56px; width: auto; max-height: 60vh; z-index: 5; border-radius: 12px 12px 0 0; border-top: 1px solid var(--line); }
+  .canvas-wrap { min-height: 260px; }
+  .phonebar { display: flex; background: var(--panel); border-top: 1px solid #111; }
+  .phonebar button { flex: 1; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }
+  .phonebar button span { font-size: 18px; color: var(--text); }
+  .phonebar b { font-weight: 500; }
+}

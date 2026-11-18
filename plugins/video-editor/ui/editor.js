@@ -17,6 +17,7 @@
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
     transcribing: "מתמלל במחשב… (whisper)", silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
+    soundTrack: "סאונד", newSound: "סאונד חדש", openingSound: "מוציא את הסאונד לעורך הסאונד…", dbl: "לחיצה כפולה: עריכה בעורך הסאונד (כלי נגינה, קולות…)", replaced: "הסאונד הוחלף מעורך הסאונד",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
     cutLine: "לחתוך את זה מהווידאו", kPlay: "נגן / עצור", kJkl: "אחורה 5 שנ׳ / עצור / קדימה (פעמיים = מהר)", kFrame: "פריים", kSec: "שנייה", kSplit: "פיצול בראש הניגון", kTrim: "קיצוץ ההתחלה / הסוף עד ראש הניגון", kDel: "מחיקת הקליפ (הרווח נסגר)", kUndo: "ביטול / ביצוע שוב", kZoom: "זום בציר הזמן", kMove: "הזזת הקליפ שמאלה / ימינה",
@@ -26,6 +27,11 @@
 
   // ---------- the edit: stretches of the source, in order ----------
   const video = $("video");
+  // The new sound from the sound editor plays in step with the video (which is muted then).
+  const newAudio = document.createElement("audio");
+  video.addEventListener("play", () => { if (soundPath) { newAudio.currentTime = video.currentTime; newAudio.playbackRate = video.playbackRate; newAudio.play().catch(() => undefined); } });
+  video.addEventListener("pause", () => newAudio.pause());
+  video.addEventListener("seeked", () => { if (soundPath) newAudio.currentTime = video.currentTime; });
   let source = null; // { name, duration }
   let clips = []; // [{ id, from, to }] in seconds of the source
   let chosen = -1;
@@ -172,6 +178,19 @@
       };
       return d;
     }));
+    // The sound under each clip; double-click opens the video's sound in the sound editor (asked 2026-11-18).
+    const sb = $("sounds");
+    sb.style.width = box.style.width;
+    sb.replaceChildren(...clips.map((c, i) => {
+      const d = document.createElement("div");
+      d.className = "clip snd";
+      d.style.left = `${startOf(i) * zoom}px`;
+      d.style.width = `${Math.max(4, len(c) * zoom - 2)}px`;
+      d.textContent = soundPath ? `🔊 ${T("newSound", "New sound")}` : "〰〰〰";
+      d.title = T("dbl", "Double-click: edit in the sound editor (instruments, voices…)");
+      d.ondblclick = (e) => { e.stopPropagation(); openSound(); };
+      return d;
+    }));
     const c = clips[chosen];
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
@@ -290,6 +309,19 @@
     }
   };
 
+  // ---------- the round trip with the sound editor ----------
+  let soundPath = null; // a new sound from the sound editor, when the video came back with one
+  const editKey = () => `edit:${source?.path ?? ""}`;
+  /** The edit is kept while she is in the sound editor, so coming back finds it as it was. */
+  const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, at: Date.now() } }).catch(() => undefined);
+  async function openSound() {
+    if (!source) return;
+    play(false);
+    await saveEdit();
+    busy(T("openingSound", "Taking the sound out for the sound editor…"));
+    try { await kesher.call("video.openSound"); } catch (e) { msg(e.message, true); } finally { busy(""); }
+  }
+
   // ---------- open from the chat, export, send ----------
   let busyCount = 0;
   function busy(text) {
@@ -314,8 +346,17 @@
       $("name").textContent = input.name;
       video.src = URL.createObjectURL(new Blob([input.bytes], { type: input.type }));
       await new Promise((resolve, reject) => { video.onloadedmetadata = resolve; video.onerror = () => reject(new Error("The video could not be played here.")); });
-      source = { name: input.name, duration: video.duration };
+      source = { name: input.name, path: input.path, duration: video.duration };
       clips = [{ id: nextId++, from: 0, to: video.duration }];
+      // Back from the sound editor: the edit as she left it (within a day), and the new sound playing instead.
+      const kept = await kesher.call("storage.get", { key: editKey() }).catch(() => null);
+      if (kept?.clips?.length && Date.now() - kept.at < 86_400_000 && kept.clips.every((c) => c.to <= video.duration + 0.01)) { clips = kept.clips; nextId = Math.max(...clips.map((c) => c.id)) + 1; }
+      if (input.sound && input.soundBytes) {
+        soundPath = input.sound;
+        newAudio.src = URL.createObjectURL(new Blob([input.soundBytes], { type: "audio/wav" }));
+        video.muted = true;
+        msg(T("replaced", "The sound was replaced from the sound editor"));
+      }
       chosen = 0;
       fitZoom();
       seek(0);
