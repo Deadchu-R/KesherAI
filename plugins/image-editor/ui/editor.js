@@ -11,7 +11,7 @@
   const HE = {
     new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
-    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
+    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
@@ -52,9 +52,13 @@
     m.width = l.canvas.width;
     m.height = l.canvas.height;
     const g = m.getContext("2d", { willReadFrequently: true });
-    if (fromSelection) g.drawImage(selectionMask(), -l.x, -l.y);
-    else { g.fillStyle = "#fff"; g.fillRect(0, 0, m.width, m.height); }
-    if (fromSelection) { g.globalCompositeOperation = "source-in"; g.fillStyle = "#fff"; g.fillRect(0, 0, m.width, m.height); }
+    if (fromSelection) {
+      // The selection's white becomes what shows: its brightness as the mask's alpha.
+      g.drawImage(selectionMask(), -l.x, -l.y);
+      const d = g.getImageData(0, 0, m.width, m.height);
+      for (let i = 0; i < d.data.length; i += 4) { d.data[i + 3] = d.data[i]; d.data[i] = d.data[i + 1] = d.data[i + 2] = 255; }
+      g.putImageData(d, 0, 0);
+    } else { g.fillStyle = "#fff"; g.fillRect(0, 0, m.width, m.height); }
     return m;
   }
   /** What a layer shows: its pixels, cut by its mask when it has one. */
@@ -200,7 +204,7 @@
       for (const [color, offset] of [["#000", 0], ["#fff", 5]]) {
         vctx.strokeStyle = color;
         vctx.lineDashOffset = (ants + offset) / cam.scale;
-        vctx.stroke(draftPath ?? selection.path);
+        vctx.stroke(draftPath ?? selection.outline ?? selection.path);
       }
       vctx.setLineDash([]);
     }
@@ -377,6 +381,7 @@
       drag.ly = l.y;
     } else if (t === "fill" && l) floodFill(l, p.x, p.y, $("color").value);
     else if (t === "picker") pick(p);
+    else if (t === "tapsel") tapSelect(p, e.shiftKey);
   });
   view.addEventListener("pointermove", (e) => {
     if (!drag) return;
@@ -861,6 +866,69 @@
       fit();
     });
 
+  /**
+   * A mask picture as a selection: the white parts, traced row by row into rectangles (at most 512 across, so the
+   * path stays small), joined with what was selected when `add`.
+   */
+  function maskToSelection(img, add) {
+    const k = Math.min(1, 512 / Math.max(doc.w, doc.h));
+    const w = Math.max(1, Math.round(doc.w * k)), h = Math.max(1, Math.round(doc.h * k));
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(img, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    // White, and opaque (a cut-out's clear parts are not selected).
+    const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && d[(y * w + x) * 4 + 3] > 127 && d[(y * w + x) * 4] > 127;
+    const keep = add && selection && !selection.inverted;
+    const path = keep ? new Path2D(selection.path) : new Path2D();
+    // The marching ants go round the edge only (not round every row), so the outline is drawn from the cells' edges.
+    const outline = keep ? new Path2D(selection.outline ?? selection.path) : new Path2D();
+    let any = false;
+    for (let y = 0; y < h; y++) {
+      let x = 0;
+      while (x < w) {
+        while (x < w && !on(x, y)) x++;
+        const x0 = x;
+        while (x < w && on(x, y)) x++;
+        if (x > x0) { path.rect(x0 / k, y / k, (x - x0) / k, 1 / k + 0.5); any = true; }
+      }
+      // Horizontal edges above this row, joined where they run on.
+      for (let x2 = 0; x2 < w; ) {
+        if (on(x2, y) === on(x2, y - 1)) { x2++; continue; }
+        const s0 = x2;
+        while (x2 < w && on(x2, y) !== on(x2, y - 1)) x2++;
+        outline.moveTo(s0 / k, y / k); outline.lineTo(x2 / k, y / k);
+      }
+    }
+    // Vertical edges, column by column.
+    for (let x = 0; x <= w; x++) {
+      for (let y = 0; y < h; ) {
+        if (on(x, y) === on(x - 1, y)) { y++; continue; }
+        const s0 = y;
+        while (y < h && on(x, y) !== on(x - 1, y)) y++;
+        outline.moveTo(x / k, s0 / k); outline.lineTo(x / k, y / k);
+      }
+    }
+    // The bottom edge of the last row.
+    for (let x2 = 0; x2 < w; x2++) if (on(x2, h - 1)) { outline.moveTo(x2 / k, h / k); outline.lineTo((x2 + 1) / k, h / k); }
+    return any ? { path, outline } : null;
+  }
+
+  // Select an object by tapping it (Photoshop's Object Selection, Segment Anything): SAM on the computer, through the
+  // background remover's engine; Shift adds to the selection.
+  async function tapSelect(p, add) {
+    try {
+      if (!(await bgReady())) return;
+      busy(T("tapWorking", "Finding the object… (Segment Anything on your computer)"));
+      const url = await kesher.call("image.bg.remove", { data: flatten().toDataURL("image/png"), model: "sam", point: [Math.round(p.x), Math.round(p.y)], mask: true });
+      const found = maskToSelection(await loadImage(url), add);
+      if (!found) return msg(T("tapNone", "Nothing found there; tap the middle of the object"), true);
+      selection = { ...found, inverted: false };
+      draw();
+      msg(T("tapDone", "Selected. Shift+tap adds more; the task bar works on it."));
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
+  }
   // Remove background (Photoshop's and Canva's): rembg + BiRefNet on the computer, set up the first time (asks first).
   // The cut-out goes in a new layer above, and the original is hidden, not deleted, so nothing is lost.
   async function bgReady() {

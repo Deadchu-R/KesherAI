@@ -10,3 +10,14 @@ test("the background remover: not set up says so; only known models and real pic
   assert.equal(b.status().installed, false);
   await assert.rejects(b.remove(Buffer.from("89504e47", "hex")), /Set up the background remover/);
 });
+
+test("Segment Anything needs a point", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "bg-"));
+  const py = join(dir, "venv", process.platform === "win32" ? "Scripts" : "bin");
+  await mkdir(py, { recursive: true });
+  await writeFile(join(py, process.platform === "win32" ? "python.exe" : "python"), "");
+  await writeFile(join(dir, "runner.py"), "");
+  const b = new BgRemover(dir, async () => "uv");
+  await assert.rejects(b.remove(Buffer.from("89504e470d0a1a0a", "hex"), "sam"), /Tap a point/);
+});

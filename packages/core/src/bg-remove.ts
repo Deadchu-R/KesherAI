@@ -18,8 +18,11 @@ export interface BgRemoveState {
   log: string[];
 }
 
-/** The models she can pick: BiRefNet (the sharpest edges, hair), and a light one that is quicker on the processor. */
-export const BG_MODELS = ["birefnet-general", "birefnet-general-lite", "isnet-general-use"] as const;
+/**
+ * The models she can pick: BiRefNet (the sharpest edges, hair), a light one that is quicker on the processor, and SAM
+ * (Segment Anything, Apache-2.0) for "select the object I tap", which needs a point.
+ */
+export const BG_MODELS = ["birefnet-general", "birefnet-general-lite", "isnet-general-use", "sam"] as const;
 
 /** Our runner: one picture in, the cut-out PNG out (with the edges of the mask cleaned). */
 const RUNNER = `import json, sys
@@ -27,9 +30,14 @@ from PIL import Image
 from rembg import new_session, remove
 a = json.loads(sys.argv[1])
 s = new_session(a["model"])
-img = Image.open(a["in"])
+img = Image.open(a["in"]).convert("RGB") if a.get("point") else Image.open(a["in"])
 img.load()
-remove(img, session=s, post_process_mask=True).save(a["out"], "PNG")
+kw = {"post_process_mask": True}
+if a.get("point"):
+    kw["sam_prompt"] = [{"type": "point", "data": a["point"], "label": 1}]
+if a.get("mask"):
+    kw["only_mask"] = True
+remove(img, session=s, **kw).save(a["out"], "PNG")
 print("DONE")
 `;
 
@@ -111,15 +119,18 @@ export class BgRemover {
    *
    * @param picture - A PNG, JPEG or WebP.
    * @param model - One of BG_MODELS (BiRefNet by default).
-   * @returns The PNG with the background clear.
+   * @param opts - point: [x, y] in the picture (SAM needs it); mask: the black-and-white mask instead of the cut-out.
+   * @returns The PNG with the background clear (or the mask).
    */
-  async remove(picture: Buffer, model: string = BG_MODELS[0]): Promise<Buffer> {
+  async remove(picture: Buffer, model: string = BG_MODELS[0], opts: { point?: [number, number]; mask?: boolean } = {}): Promise<Buffer> {
     if (!this.status().installed) throw Object.assign(new Error("Set up the background remover first."), { statusCode: 409 });
     if (this.busy) throw Object.assign(new Error("The background remover is busy; try again in a moment."), { statusCode: 409 });
     // With a model already filling the card (self-work's, a chat's), this would crawl in shared memory for minutes: say so.
     const free = this.freeGpuBytes?.();
     if (free !== undefined && free < 2 * 1024 ** 3) throw Object.assign(new Error(`The graphics card is full (${(free / 1024 ** 3).toFixed(1)} GB free; the background remover needs about 2 GB). Unload the model in Models, or wait for self-work to finish.`), { statusCode: 409, code: "gpu-full" });
     if (!(BG_MODELS as readonly string[]).includes(model)) throw Object.assign(new Error("Unknown model."), { statusCode: 400 });
+    if (model === "sam" && !opts.point) throw Object.assign(new Error("Tap a point for Segment Anything."), { statusCode: 400 });
+    const point = opts.point && opts.point.every((n) => Number.isInteger(n) && n >= 0 && n < 100_000) ? opts.point : undefined;
     const kind = picture.subarray(0, 4).toString("hex");
     if (!/^(89504e47|ffd8ff..|52494646)$/.test(kind)) throw Object.assign(new Error("Send a PNG, JPEG or WebP picture."), { statusCode: 400 });
     const work = join(this.dir, "work", randomUUID());
@@ -128,7 +139,7 @@ export class BgRemover {
       await mkdir(work, { recursive: true });
       try {
         await writeFile(join(work, "in"), picture);
-        await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ model, in: join(work, "in"), out: join(work, "out.png") })], 5 * 60_000);
+        await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ model, in: join(work, "in"), out: join(work, "out.png"), ...(point ? { point } : {}), ...(opts.mask ? { mask: true } : {}) })], 5 * 60_000);
         Object.assign(this.state, { phase: undefined, message: "Done." });
         return await readFile(join(work, "out.png"));
       } catch (e) {

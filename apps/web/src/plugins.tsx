@@ -294,7 +294,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "image.bg.setup": {
           need("image");
           const he = getLocale() === "he";
-          if (!confirm(he ? "להסרת רקע KesherAI יוריד את rembg עם BiRefNet (רישיון MIT): Python, onnxruntime והמודל, כ-1 GB פעם אחת. זה רץ במחשב שלך. להוריד?" : "To remove backgrounds, KesherAI downloads rembg with BiRefNet (MIT licence): Python, onnxruntime and the model, about 1 GB once. It runs on your computer. Download?")) return false;
+          if (!confirm(he ? "להסרת רקע ולבחירה בהקשה KesherAI יוריד את rembg עם BiRefNet (רישיון MIT): Python, onnxruntime והמודל, כ-1 GB פעם אחת, ו-Segment Anything (כ-400 MB) בבחירה הראשונה בהקשה. זה רץ במחשב שלך. להוריד?" : "To remove backgrounds and select by tapping, KesherAI downloads rembg with BiRefNet (MIT licence): Python, onnxruntime and the model, about 1 GB once, and Segment Anything (about 400 MB) on the first tap selection. It runs on your computer. Download?")) return false;
           await api("/api/bg-remove/install", { method: "POST" });
           return true;
         }
@@ -302,7 +302,11 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           need("image");
           const bytes = await fromDataUrl(p.data).then((x) => x.blob());
           const model = typeof p.model === "string" ? p.model : "";
-          const res = await fetch(withToken(`/api/bg-remove/remove${model ? `?model=${encodeURIComponent(model)}` : ""}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          const q = new URLSearchParams();
+          if (model) q.set("model", model);
+          if (Array.isArray(p.point) && p.point.length === 2) { q.set("x", String(Math.round(Number(p.point[0])))); q.set("y", String(Math.round(Number(p.point[1])))); }
+          if (p.mask === true) q.set("mask", "1");
+          const res = await fetch(withToken(`/api/bg-remove/remove${q.size ? `?${q}` : ""}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
           if (!res.ok) throw Object.assign(new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status)), { code: res.status });
           const png = new Uint8Array(await res.arrayBuffer());
           let bin = "";
