@@ -51,6 +51,7 @@ async function listFiles(root: string): Promise<ConversationFile[]> {
  * @param s - Services.
  */
 export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+  let cutting = false;
   const folderOf = async (id: string): Promise<string | undefined> => {
     const c = await s.library.getConversation(id);
     return c ? s.conversations.workspaceOf(c) : undefined;
@@ -83,10 +84,15 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     const base = (String(req.body?.name ?? basename(full).replace(/\.[^.]+$/, "") + "-edited").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 100) || "edited").replace(/\.mp4$/i, "");
     let out = join(dir, `${base}.mp4`);
     for (let i = 2; existsSync(out); i++) out = join(dir, `${base} (${i}).mp4`);
+    // One cut at a time: each one keeps the computer's processor busy (security review, scan 146).
+    if (cutting) return reply.code(429).send({ error: "Another video is being cut; try again when it is done." });
+    cutting = true;
     try {
       await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
+    } finally {
+      cutting = false;
     }
     return { path: relative(root, out).split(sep).join("/") };
   });

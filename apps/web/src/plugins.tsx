@@ -131,6 +131,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           });
           const name = input.path.split(/[\\/]/).pop() ?? "";
           // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
+          if (blob.size > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
           if (/\.(mp4|webm|mov|m4v|mkv)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer() };
           return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
         }

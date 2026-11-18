@@ -1285,3 +1285,18 @@ S5 an outside scanner's rules for Electron.
   title, or add our add-on); `file:`, `smb:` and other schemes still never do.
 - Tabs and the report's chapters: display only; the "all on one page" choice is in localStorage (per browser), nothing sent.
 - Checked: lint, typecheck, 896 tests.
+
+## Scan 146 (2026-11-18): the video editor (cut and transcript routes), phone tabs, crop
+- **`POST /api/conversations/:id/files/cut`**: the path goes through `resolveInWorkspace` (the chat's folder only) and
+  must be a video; the stretches are checked numbers (1–400, each ≥ 0.1 s, ≤ 12 h), so the FFmpeg filter graph is built
+  from numbers only; FFmpeg runs by `execFile` with an argument list (no shell), a 60-minute limit and a 4 MB output
+  buffer; the new name is cleaned and kept in `shared/`, never over an existing file. **Added:** one cut at a time
+  (429 otherwise), so a page cannot fill the processor.
+- **`POST …/files/transcript`**: the same path rules; whisper on the computer only (no cloud upload of the video here).
+- **The bridge**: `video.cut` and `video.transcript` need the page's declared `video` use and a video it was opened with;
+  **added:** `editor.input` refuses a file over 2 GB (it is copied into the page's memory).
+- **Phone tabs**: touch listeners on the top bar are passive and removed on change; the long-press menu only navigates
+  or closes tabs (localStorage). **Crop**: canvas work in the sandboxed plugin page only.
+- Performance: the timeline redraws only on edits and the playhead moves by one style change per frame; the transcript
+  list redraws on edits, not per frame.
+- Checked: lint, typecheck, 898 tests; FFmpeg cut verified on a 12 s test clip with and without sound.
