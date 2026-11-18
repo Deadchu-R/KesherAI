@@ -55,11 +55,12 @@ jobs:
       - name: Sign in to Google with the service account
         id: auth
         if: steps.v.outputs.go != 'false' && env.HAS_KEY == 'true'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+        env:
+          GOOGLE_KEY: ${{ secrets.CWS_SERVICE_ACCOUNT }}
+        run: |
+          token=$(node scripts/google-token.mjs https://www.googleapis.com/auth/chromewebstore)
+          echo "::add-mask::$token"
+          echo "access_token=$token" >> "$GITHUB_OUTPUT"
       - name: Check (sign in and read the status only)
         if: steps.v.outputs.go == 'check' && env.HAS_KEY == 'true'
         env:
