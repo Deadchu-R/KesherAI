@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", noUvPaint: "לחלק הזה אין UV, אז אי אפשר לצייר עליו", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -380,6 +380,40 @@ function texCanvas(mesh, size, k = kind(), fresh = false) {
   else { g.fillStyle = blankFill(mesh, k); g.fillRect(0, 0, c.width, c.height); }
   return c;
 }
+/**
+ * UVs for a part that has none, so it can be textured and painted (Blender's Cube Projection, simply): each triangle is
+ * laid flat on the side of the box it faces most, and the six sides sit side by side in a 3×2 grid, so none overlap.
+ * The shape is unchanged; only its corners are split where sides meet.
+ *
+ * @param mesh - A mesh without UVs.
+ * @returns Whether UVs were made.
+ */
+function ensureUV(mesh) {
+  if (mesh.geometry.attributes.uv) return false;
+  const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  g.computeBoundingBox();
+  const b = g.boundingBox, size = b.getSize(new THREE.Vector3()), span = Math.max(size.x, size.y, size.z) || 1;
+  const pos = g.attributes.position, uv = new Float32Array(pos.count * 2);
+  const a = new THREE.Vector3(), c = new THREE.Vector3(), d = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i + 2 < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); c.fromBufferAttribute(pos, i + 1); d.fromBufferAttribute(pos, i + 2);
+    n.subVectors(c, a).cross(d.clone().sub(a));
+    const ax = Math.abs(n.x) >= Math.abs(n.y) && Math.abs(n.x) >= Math.abs(n.z) ? 0 : Math.abs(n.y) >= Math.abs(n.z) ? 1 : 2;
+    const side = ax * 2 + ((ax === 0 ? n.x : ax === 1 ? n.y : n.z) < 0 ? 1 : 0);
+    const cx = (side % 3) / 3, cy = Math.floor(side / 3) / 2;
+    for (let k = 0; k < 3; k++) {
+      const v = [a, c, d][k];
+      const [p, q] = ax === 0 ? [v.z - b.min.z, v.y - b.min.y] : ax === 1 ? [v.x - b.min.x, v.z - b.min.z] : [v.x - b.min.x, v.y - b.min.y];
+      // A small margin inside each cell, so the brush and filtering do not bleed into the next side.
+      uv[(i + k) * 2] = cx + (0.02 + 0.96 * (p / span)) / 3;
+      uv[(i + k) * 2 + 1] = cy + (0.02 + 0.96 * (1 - q / span)) / 2;
+    }
+  }
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  mesh.geometry = g;
+  msg(T("madeUv", "This part had no UVs: made them (box projection)"));
+  return true;
+}
 /** The UV layout as white lines on a clear picture: the guide layer (Maya's UV snapshot). */
 function uvGuide(mesh, w, h) {
   const uv = mesh.geometry.attributes.uv;
@@ -412,6 +446,7 @@ async function editTexture(fresh) {
   const mesh = meshOfChosen();
   if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
   const k = kind();
+  ensureUV(mesh);
   const tex = texCanvas(mesh, 1024, k, fresh);
   const guide = uvGuide(mesh, tex.width, tex.height);
   if (!guide) msg(T("noUv", "This part has no UVs, so there are no guide lines"));
@@ -521,7 +556,7 @@ function paintRay(e) {
   return ray.intersectObjects(meshes.filter((p) => p.mesh.visible && !isGenerated(p.mesh)).map((p) => p.mesh), false)[0];
 }
 function startStroke(mesh) {
-  if (!mesh.geometry.attributes.uv) { msg(T("noUvPaint", "This part has no UVs, so it cannot be painted"), true); return null; }
+  ensureUV(mesh);
   remember();
   const k = kind();
   const c = texCanvas(mesh, 1024, k);
