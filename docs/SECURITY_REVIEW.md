@@ -1405,3 +1405,21 @@ S5 an outside scanner's rules for Electron.
   serves the project the page was opened with.
 - Checked: lint, typecheck, tests (tscn 3, godot-scene 4, unity-scene 3, unity-scene routes 2), the Unity package compiled
   (mcs, stubs), both stand-ins in a browser with stub hosts (shapes, models, a heavy model simplified to ~50 000 triangles).
+
+## Scan 154 (2026-11-18): the Unreal level stand-in, the outliner's details, 2D sprites and 2D writes
+- **`/api/unreal/levels`, `/api/unreal/level`, `/api/unreal/level/mesh`, `POST /api/unreal/level`**: the owner's only; a
+  level must be `/Game/…` and a mesh `/Game/…` or `/Engine/…` (letters, digits, ` ./-_`, no `..`), checked here and
+  again in the plugin (KesherLevel.cpp loads only those roots). The copies kept are under KesherAI's own data folder,
+  named by a hash of the path (never by the path). Moves: at most 5000, ids `[\w.-]{1,200}`, every number finite; the
+  plugin moves only actors of that level, with Undo, leaves those that moved in Unreal, and saves (headless only) just
+  the packages it changed. A mesh's triangles: at most 30 000, else only its bounds.
+- **Sprites' pictures**: `/api/godot/asset` and `/api/unity/asset` now also serve `.png/.jpg/.webp` (Godot also
+  `.svg`) inside the project, with the same path and real-path checks; sent as `application/octet-stream` with
+  `Content-Disposition: attachment`, so an .svg is never shown as a page by KesherAI (the sandboxed plugin page draws
+  it as an image).
+- **The outliner's details** (Godot scripts / textures / collision kinds, Unity components and script names, Unreal
+  components and folders) are shown as text (`textContent`), never as HTML.
+- **2D writes**: rotation and scale must be finite (route), and only the node's `position` / `rotation` / `scale` lines
+  change (tscn test).
+- Checked: lint, typecheck, tests (tscn 6, godot-scene 4, unity-scene 3 + routes 2, unreal-level 1, unreal-bridge),
+  the plugin's C++ read for roots and limits, the three stand-ins in a browser (desktop and 390 px).
