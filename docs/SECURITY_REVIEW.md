@@ -1351,3 +1351,16 @@ S5 an outside scanner's rules for Electron.
   moving it to a worker is on the list if it is felt.
 - Checked: lint, typecheck, tests (video-cut: scene times), the scene finder on a real 3-shot video, the clean-up on a
   noisy tone (noise −9 dB, tone unchanged), the normal and roughness maps' directions in a browser.
+
+## Scan 150 (2026-11-18): burned captions, reframe, painting, auto UVs, chords, full-card checks, stop, layer masks
+- **Burned captions**: the captions go to FFmpeg only as a copy named `.kesher-burn-<uuid>.srt` (checked by
+  `^[\w.-]+\.srt$` in `cutArgs`), and FFmpeg runs in that folder, so no path or text from the page reaches the filter
+  string; the copy is removed in `finally`. **Reframe**: only the four listed shapes reach FFmpeg (tested: `3:2;drawtext`
+  is refused).
+- **Stop (`/api/part-seg/cancel`)**: owner only, like the rest of the engine; it only kills the running split, never the
+  setup (so the venv is not left half-written).
+- **Full card**: read-only use of the GPU guard's last reading; the engines answer 409 instead of starting.
+- **Painting, auto UVs, layer masks, chords**: in the sandboxed pages only, no new bridge calls.
+- **Performance**: a masked layer is composed into a temporary canvas on each redraw (fine at a few layers; a cache is on
+  the list if painting over many masked layers feels slow); painting on the model updates one 1024² texture per move.
+- Checked: lint, typecheck, tests (video-cut 7, part-seg 4), browser runs of every editor's new tools with a stub host.
