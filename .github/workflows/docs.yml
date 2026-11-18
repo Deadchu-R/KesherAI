@@ -32,6 +32,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      # typedoc reads each package through the others' built types.
+      - run: pnpm -w build:packages
       - run: pnpm docs:api
       # Never publish a personal path or address: stop if the site names one.
       - run: "! grep -rIlP 'C:\\\\Users\\\\|/home/(?!runner/)[a-z]+/|@gmail\\.com' docs/api"
