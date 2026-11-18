@@ -75,6 +75,8 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ⬜ Previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (LM Studio Bionic 1.1.8–1.1.9)
 - ⬜ Engine arguments per model, not one set for all (LM Studio 0.4.24)
 
+- ⬜ The extension asks for a site only when a task needs it (`optional_host_permissions` + `permissions.request`), instead of `<all_urls>` at install: safer, and the Chrome Web Store reviews it faster (its warning on the first submission, 2026-11-18)
+
 ## Waiting on the owner 👤
 - 👤 SignPath application and 2FA (signed installer)
 - 👤 The extension in the Edge and Firefox stores
