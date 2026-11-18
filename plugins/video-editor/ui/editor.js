@@ -16,7 +16,7 @@
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
-    transcribing: "מתמלל במחשב… (whisper)", silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
+    transcribing: "מתמלל במחשב… (whisper)", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     soundTrack: "סאונד", newSound: "סאונד חדש", openingSound: "מוציא את הסאונד לעורך הסאונד…", dbl: "לחיצה כפולה: עריכה בעורך הסאונד (כלי נגינה, קולות…)", replaced: "הסאונד הוחלף מעורך הסאונד",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
@@ -90,6 +90,28 @@
     clips.splice(i, 1, { id: nextId++, from: c.from, to: src }, { id: nextId++, from: src, to: c.to });
     chosen = i + 1;
     render();
+  }
+  /**
+   * A clip for each shot: the video's shot changes (FFmpeg's scene score, on the computer) split the clips that hold
+   * them, in source time, so it works after other edits too.
+   */
+  async function splitScenes() {
+    busy(T("findingScenes", "Finding the shot changes… (FFmpeg on your computer)"));
+    try {
+      const times = await kesher.call("video.scenes", { threshold: 0.3 });
+      let n = 0;
+      const next = [];
+      for (const c of clips) {
+        let from = c.from;
+        for (const t of times) if (t > from + 0.1 && t < c.to - 0.1) { next.push({ id: nextId++, from, to: t }); from = t; n++; }
+        next.push(from === c.from ? c : { id: nextId++, from, to: c.to });
+      }
+      if (!n) return msg(T("noScenes", "No shot changes found"));
+      remember();
+      clips = next;
+      after();
+      msg(he ? HE.scenesDone(n) : `Split at ${n} shot changes`);
+    } catch (e) { msg(e.message, true); } finally { busy(""); }
   }
   function remove() {
     const i = chosen >= 0 ? chosen : locate(now).i;
@@ -409,6 +431,7 @@
   $("redo").onclick = redo;
   $("play").onclick = () => play();
   $("splitBtn").onclick = split;
+  $("scenes").onclick = splitScenes;
   $("delBtn").onclick = remove;
   $("trimStart").onclick = () => trim("start");
   $("trimEnd").onclick = () => trim("end");

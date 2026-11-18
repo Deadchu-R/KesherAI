@@ -326,6 +326,15 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (!res.ok) throw new Error(j.error === "needs-setup" ? "Speech to text is not set up yet (Settings → Speech)." : j.error ?? String(res.status));
           return j.parts ?? [];
         }
+        // Where the video the page was opened with changes shot, in seconds (FFmpeg's scene score, on the computer).
+        case "video.scenes": {
+          need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/scenes`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: input.path, threshold: Number(p.threshold) || 0.3 }) });
+          const j = (await res.json()) as { times?: number[]; error?: string };
+          if (!res.ok) throw new Error(j.error ?? String(res.status));
+          return j.times ?? [];
+        }
         // Sends a file (a data URL) to the chat the page was opened from, as an attachment with an optional message.
         case "chat.sendFile": {
           if (!input) throw new Error("This page was not opened from a chat.");

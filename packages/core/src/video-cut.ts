@@ -122,3 +122,43 @@ export function extractSound(ffmpeg: string, input: string, output: string): Pro
     execFile(ffmpeg, soundArgs(input, output), { timeout: 30 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _o, stderr) => (err ? reject(new Error(/matches no streams|does not contain any stream/i.test(String(stderr)) ? "This video has no sound." : String(stderr || err.message).slice(0, 400))) : resolve()));
   });
 }
+
+/**
+ * FFmpeg's arguments to find where the picture changes shot (its scene score, as Premiere's Scene Edit Detection and
+ * Resolve's Scene Cut Detector): every frame scoring over the threshold is printed by showinfo, nothing is written.
+ *
+ * @param input - The video.
+ * @param threshold - How different a frame must be from the one before, 0–1 (0.3 is a cut; lower finds more).
+ * @returns The arguments.
+ */
+export const sceneArgs = (input: string, threshold: number): string[] => ["-hide_banner", "-nostats", "-i", input, "-an", "-vf", `select='gt(scene,${threshold.toFixed(2)})',showinfo`, "-f", "null", "-"];
+
+/**
+ * The times (seconds) of shot changes in showinfo's output, in order, at least half a second apart.
+ *
+ * @param log - FFmpeg's stderr.
+ * @returns The times.
+ */
+export function sceneTimes(log: string): number[] {
+  const times: number[] = [];
+  for (const m of log.matchAll(/pts_time:\s*([0-9.]+)/g)) {
+    const t = Number(m[1]);
+    if (Number.isFinite(t) && t > 0.2 && (!times.length || t - (times.at(-1) ?? 0) >= 0.5)) times.push(Math.round(t * 1000) / 1000);
+  }
+  return times;
+}
+
+/**
+ * Finds where a video changes shot.
+ *
+ * @param ffmpeg - The FFmpeg program.
+ * @param input - The video.
+ * @param threshold - 0.05–0.9 (see sceneArgs).
+ * @returns The times of the changes, in seconds.
+ */
+export function findScenes(ffmpeg: string, input: string, threshold = 0.3): Promise<number[]> {
+  const th = Math.min(0.9, Math.max(0.05, threshold));
+  return new Promise((resolve, reject) => {
+    execFile(ffmpeg, sceneArgs(input, th), { timeout: 30 * 60_000, maxBuffer: 64 * 1024 * 1024, windowsHide: true }, (err, _o, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(-400))) : resolve(sceneTimes(String(stderr)))));
+  });
+}

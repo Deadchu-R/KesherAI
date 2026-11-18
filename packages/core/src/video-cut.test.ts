@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkSegments, cutArgs, soundArgs, srtOf } from "./video-cut.js";
+import { checkSegments, cutArgs, sceneArgs, sceneTimes, soundArgs, srtOf } from "./video-cut.js";
 
 test("the stretches to keep are checked and rounded", () => {
   assert.deepEqual(checkSegments([{ from: 0, to: 2.00049 }, { from: 5, to: 9 }]), [{ from: 0, to: 2 }, { from: 5, to: 9 }]);
@@ -33,4 +33,10 @@ test("a new sound from the sound editor replaces the video's, cut at the same ti
   assert.match(a[a.indexOf("-filter_complex") + 1]!, /\[1:a\]atrim=start=1:end=2/);
   assert.ok(a.includes("aac"));
   assert.deepEqual(soundArgs("v.mp4", "s.wav").slice(-8), ["-vn", "-ac", "2", "-ar", "44100", "-c:a", "pcm_s16le", "s.wav"]);
+});
+
+test("shot changes: FFmpeg's scene score, and the times read from showinfo (too close or at the start are skipped)", () => {
+  assert.ok(sceneArgs("in.mp4", 0.3).includes("select='gt(scene,0.30)',showinfo"));
+  const log = "[Parsed_showinfo_1] n:0 pts:12 pts_time:0.1 \n[Parsed_showinfo_1] n:1 pts:300 pts_time:4.5 \n n:2 pts_time:4.8 \n n:3 pts_time:12.25 ";
+  assert.deepEqual(sceneTimes(log), [4.5, 12.25]);
 });

@@ -7,7 +7,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo, extractSound, srtOf } from "../video-cut.js";
+import { checkSegments, cutVideo, extractSound, findScenes, srtOf } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -130,6 +130,28 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       return reply.code(500).send({ error: (err as Error).message });
     }
     return { path: relative(root, out).split(sep).join("/") };
+  });
+
+  /**
+   * Where a video of the chat's folder changes shot, in seconds (the video editor's "split at shot changes").
+   * `threshold` 0.05–0.9: lower finds more (0.3 by default).
+   */
+  app.post<{ Params: { id: string }; Body: { path?: string; threshold?: number } }>("/api/conversations/:id/files/scenes", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    let full: string;
+    try {
+      full = await resolveInWorkspace(root, req.body?.path ?? "");
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    if (!/\.(mp4|webm|mov|m4v|mkv)$/i.test(full) || !(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "Video not found" });
+    const th = Number(req.body?.threshold);
+    try {
+      return { times: await findScenes(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, Number.isFinite(th) ? th : 0.3) };
+    } catch (err) {
+      return reply.code(500).send({ error: (err as Error).message });
+    }
   });
 
   /**
