@@ -1,7 +1,7 @@
 import { BrandMark } from "./ui/BrandMark";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { askText } from "./ui/askText";
+import { askConfirm, askText } from "./ui/askText";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { Glyph } from "./ui/Glyph";
@@ -175,14 +175,15 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
   const peek = useChatPeek(c);
   // Delete a chat from the list (asked for on Linux: there was no way to remove old chats).
   const remove = async () => {
-    if (!confirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`)) return;
+    // The app's own dialogs, not confirm(): after a system dialog the desktop app took no typing (Roee, 2026-11-18).
+    if (!(await askConfirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`, { yes: he ? "מחק" : "Delete", danger: true }))) return;
     // A session in its own worktree: a clean one goes with it; one with work in it is the user's call.
     let worktree = "";
     if (c.worktree) {
       const w = await api<{ branch: string; changed: number; commits: number } | null>(`/api/conversations/${c.id}/worktree`).catch(() => null);
       if (w && (w.changed || w.commits)) {
         const lose = he ? `${w.changed} קבצים ששונו ו-${w.commits} קומיטים בענף ${w.branch}` : `${w.changed} changed files and ${w.commits} commits on ${w.branch}`;
-        worktree = confirm(he ? `ב-worktree של הסשן יש עבודה: ${lose}.\n\nאישור = למחוק גם אותה. ביטול = להשאיר את ה-worktree והענף בדיסק.` : `The session's worktree holds work: ${lose}.\n\nOK = delete it too. Cancel = keep the worktree and branch on disk.`) ? "?worktree=remove" : "?worktree=keep";
+        worktree = (await askConfirm(he ? `ב-worktree של הסשן יש עבודה: ${lose}.\n\nאישור = למחוק גם אותה. ביטול = להשאיר את ה-worktree והענף בדיסק.` : `The session's worktree holds work: ${lose}.\n\nOK = delete it too. Cancel = keep the worktree and branch on disk.`)) ? "?worktree=remove" : "?worktree=keep";
       }
     }
     try {

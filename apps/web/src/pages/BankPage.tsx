@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { askConfirm } from "../ui/askText";
 import { dHash, hamming } from "../image-hash";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -70,7 +71,7 @@ export function BankPage() {
     if (!ids.length) return;
     const names = ids.slice(0, 12).map((id) => `• ${byId.get(id)?.name ?? id}`).join("\n");
     const more = ids.length > 12 ? `\n${L(`ועוד ${ids.length - 12}`, `and ${ids.length - 12} more`)}` : "";
-    if (!confirm(`${L(`למחוק ${ids.length} קבצים לתמיד? הם ייעלמו גם מהצ׳אטים שמראים אותם.`, `Delete ${ids.length} files for good? They also disappear from the chats that show them.`)}\n\n${names}${more}`)) return;
+    if (!(await askConfirm(`${L(`למחוק ${ids.length} קבצים לתמיד? הם ייעלמו גם מהצ׳אטים שמראים אותם.`, `Delete ${ids.length} files for good? They also disappear from the chats that show them.`)}\n\n${names}${more}`, { yes: L("מחק", "Delete"), danger: true }))) return;
     const r = await api<{ deleted: number }>("/api/bank/delete", { method: "POST", body: { ids } }).catch((e: Error) => (toast(e.message), undefined));
     if (!r) return;
     toast(L(`נמחקו ${r.deleted} קבצים`, `Deleted ${r.deleted} files`));

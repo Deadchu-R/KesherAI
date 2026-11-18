@@ -1,3 +1,4 @@
+import { askConfirm } from "../ui/askText";
 import { usePersonas } from "../Personas";
 import { RunReceipt } from "../RunReceipt";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
@@ -626,6 +627,7 @@ export function ConversationPage({ id }: { id: string }) {
     }
   };
   const remove = async () => {
+    if (!(await askConfirm(t("delete") + ` "${conv.title}"?`, { yes: t("delete"), danger: true }))) return;
     await api(`/api/conversations/${id}`, { method: "DELETE" });
     await refreshLibrary();
     location.hash = "#/";

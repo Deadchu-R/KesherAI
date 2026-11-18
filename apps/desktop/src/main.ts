@@ -424,16 +424,17 @@ async function createWindow(url: string): Promise<void> {
 
   // Links to other sites open in the user's browser, never inside the app. Besides web addresses, only Stremio's
   // own links (a title's page in the Stremio app, `stremio:///detail/…`, and adding the add-on) leave the app.
-  const outside = (target: string) => /^https?:\/\//.test(target) || /^stremio:\/\/[\w./%:#?=&-]*$/.test(target);
+  // (The checks are written where openExternal is called, so the scanner sees each address checked: scan rule
+  // electron-open-external-unchecked.)
   win.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (outside(target)) void shell.openExternal(target);
+    if (/^(https?:\/\/|stremio:\/\/[\w./%:#?=&-]*$)/.test(target)) void shell.openExternal(target);
     return { action: "deny" };
   });
   win.webContents.on("will-navigate", (event, target) => {
     if (!target.startsWith(`${url}/`) && target !== url) {
       event.preventDefault();
       // Only web addresses go to the browser, and Stremio's links to its app (never file:, smb: or other schemes).
-      if (outside(target)) void shell.openExternal(target);
+      if (/^(https?:\/\/|stremio:\/\/[\w./%:#?=&-]*$)/.test(target)) void shell.openExternal(target);
     }
   });
 
@@ -915,6 +916,8 @@ ipcMain.on("kesher:refocus", (event) => {
   win.blur();
   win.focus();
   event.sender.focus();
+  // Once more after the dialog has fully gone (the first try can land while Windows is still giving focus back).
+  setTimeout(() => { if (!win.isDestroyed()) { win.focus(); event.sender.focus(); } }, 120);
 });
 
 ipcMain.handle("kesher:pick-folder", async (event) => {

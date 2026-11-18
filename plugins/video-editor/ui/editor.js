@@ -2,14 +2,14 @@
 // stretches of one source video, split / trim / delete / move with the keys editors know, played back as the edit,
 // and exported by FFmpeg on the computer (video.cut). A plugin page with no build step: it talks to KesherAI only
 // through window.kesher (kesher.js).
-/* global performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
+/* global File, window, performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -536,6 +536,39 @@
       try { const { path, bytes } = await am.takeMedia(it); await addClip(it.name, path, bytes); } finally { busy(""); }
     } catch (e) { msg(e.message || String(e), true); }
   }
+  /** A title card (CapCut's text clip, simply): the words drawn on a dark frame of the video's size, added as a picture. */
+  async function addTitle() {
+    if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
+    const words = window.prompt(T("titleAsk", "What should the card say?"));
+    if (!words?.trim()) return;
+    const w = media[0] && loadedM === 0 && video.videoWidth ? video.videoWidth : 1920, h = loadedM === 0 && video.videoHeight ? video.videoHeight : 1080;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    g.fillStyle = "#111114"; g.fillRect(0, 0, w, h);
+    g.fillStyle = "#ffffff"; g.textAlign = "center"; g.textBaseline = "middle"; g.direction = /[\u0590-\u05FF]/.test(words) ? "rtl" : "ltr";
+    // The words in lines that fit 80 % of the width, as big as fits.
+    let size = Math.round(h / 8), lines = [];
+    for (; size > 12; size -= 4) {
+      g.font = `700 ${size}px Heebo, Arial, sans-serif`;
+      lines = [];
+      let line = "";
+      for (const word of words.trim().split(/\s+/)) { const t = line ? `${line} ${word}` : word; if (g.measureText(t).width > w * 0.8 && line) { lines.push(line); line = word; } else line = t; }
+      lines.push(line);
+      if (lines.length * size * 1.3 < h * 0.7) break;
+    }
+    lines.forEach((l, i) => g.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * size * 1.3));
+    const blob = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
+    const am = await import("./add-media.js");
+    busy(T("loading", "Loading the video…"));
+    try {
+      const file = new File([blob], `title-${Date.now().toString(36)}.png`, { type: "image/png" });
+      const { path, bytes } = await am.uploadMedia(file);
+      await addClip(file.name, path, bytes);
+      const last = clips[chosen];
+      if (last && media[mOf(last)]?.kind === "image") { remember(); last.to = 3; after(); void saveEdit(); }
+    } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
+  }
   async function addMenu(anchor) {
     const am = await import("./add-media.js");
     am.setHebrew(he);
@@ -545,6 +578,7 @@
       { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
       "-",
       { icon: "🖼", label: T("picClip", "A picture as a clip"), hint: T("picHint", "5 s, shorten it with trim"), run: () => addFrom("picture") },
+      { icon: "🔤", label: T("titleCard", "A title card"), hint: T("titleHint", "words on a plain background, 3 s"), run: () => void addTitle() },
     ]);
   }
   $("addBtn").onclick = () => addMenu($("addBtn"));
