@@ -38,7 +38,7 @@ export function StudyWeb({ courseId }: { courseId: string }) {
         {web.nodes.map((node, i) => {
           const p = pos.get(node.id)!;
           return (
-            <g key={node.id} className={`study-web-node${sel === node.id ? " sel" : ""}`} onClick={() => setSel(sel === node.id ? null : node.id)} role="button" tabIndex={0} aria-label={node.title} onKeyDown={(ev) => { if (ev.key === "Enter") setSel(sel === node.id ? null : node.id); }}>
+            <g key={node.id} className={`study-web-node${sel === node.id ? " sel" : ""}`} onClick={() => setSel(sel === node.id ? null : node.id)} role="button" tabIndex={0} aria-label={node.title} onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setSel(sel === node.id ? null : node.id); } }}>
               <circle cx={p.x} cy={p.y} r={8 + Math.min(10, deg(node.id) * 2)} />
               <text x={p.x} y={p.y + 4} textAnchor="middle">{i + 1}</text>
             </g>

@@ -16,6 +16,11 @@ test("parameters from the name or the size", () => {
   assert.equal(paramsOf("Qwen3-Coder-30B-A3B-Instruct", 18), 30);
   assert.equal(paramsOf("Mixtral-8x7B", 26), 56);
   assert.equal(paramsOf("mystery", 6), 10);
+  assert.equal(paramsOf("Llama-3-8B-Instruct", 4.8), 8);
+  assert.equal(paramsOf("mistral-7b-v0.3", 4.2), 7);
+  assert.equal(paramsOf("phi-3-mini-3.8b-instruct", 2.3), 3.8);
+  assert.equal(paramsOf("deepseek-coder-6.7b-base", 3.9), 6.7);
+  assert.equal(paramsOf("yi-9b-chat", 5.4), 9);
 });
 
 test("a mixture of experts is scored by its active part's speed", () => {

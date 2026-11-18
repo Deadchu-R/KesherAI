@@ -77,7 +77,12 @@ export function TextHelper({ hash }: { hash: string }) {
   };
 
   const copy = async () => {
-    await navigator.clipboard.writeText(answer).then(() => toast(L("הועתק", "Copied")), () => toast(L("לא ניתן להעתיק", "Could not copy")));
+    try {
+      await navigator.clipboard.writeText(answer);
+      toast(L("הועתק", "Copied"));
+    } catch {
+      toast(L("לא ניתן להעתיק", "Could not copy"));
+    }
   };
   const replace = async () => {
     const r = await desktop()?.textPaste?.(answer);
