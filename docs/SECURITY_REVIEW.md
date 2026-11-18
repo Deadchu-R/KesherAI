@@ -1123,6 +1123,16 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 139 (2026-11-18): per-change undo, the hosted API docs, documentation rules, the study split
+- **Per-change undo** (`POST …/runs/:run/undo {path, hunk}`): only a file kept for that run can be named (matched against the run's own list, so no path from the request reaches the disk); `hunk` must be a number and a missing or stale one is refused with a message; nothing runs while the agent works. The change is put back with the diff library's own patching (no shell); a file new in the run cannot be undone in parts. The run's fingerprint of the file is updated, so "Undo all" still asks before touching a file the user changed later.
+- **Hosted API docs** (`.github/workflows/docs.yml`): runs only on the release branch or by hand, with `contents: read`, `pages: write` and `id-token: write` only; no secrets. It refuses to publish if the built site names a Windows user folder, a home folder (other than the runner's) or a Gmail address; the local build had none.
+- **Documentation rule for the interface and desktop shell**: lint only, nothing at run time.
+- **shared/study.ts split** (clinical, fields, goals): the same exports through study.ts; the phone's bundle and its study checks pass, and the dose calculations are unchanged (their tests pass).
+- **Lip sync self-test on the PC**: the card was freed through KesherAI (self-work paused, chat and image engines stopped), the check ran (lips move, 24 fps), lip sync was stopped and self-work resumed.
+- **Mermaid 11.6.0 → 11.17.2 (fixed while scanning)**: `pnpm audit --prod` listed 11 advisories (XSS and CSS injection in labels and classDefs, prototype pollution, endless loops in Gantt / XY / radar charts). Diagrams come from model text, so this mattered even with `securityLevel: "strict"`; the same major version, released three months ago. The audit is now clean apart from the one already ignored with its reason (scan 127).
+- **The Study page split** (home cards, lecture view, nursing tools, shared helpers): the same components, typecheck, lint and the interface check at computer and phone width.
+- **Performance**: undoing one change reads and writes one file; the docs build adds a CI job only on releases.
+
 ## Scan 138 (2026-11-18): phone swipes, the lip sync check, Hebrew logit bias
 - **Phone swipes** (`swipe-tabs.js`): passive touch listeners; a swipe only clicks a tab already on the screen (as a tap would), never the Phone/Computer switch or the app's sections, never over fields or sliders.
 - **Lip sync check**: the script prints one JSON line; KesherAI reads it with a parser that takes only numbers and a boolean. The sample face used before her clip is MuseTalk's own file inside its folder (no path from the request). A full graphics card gives a fixed message, not the raw error.
