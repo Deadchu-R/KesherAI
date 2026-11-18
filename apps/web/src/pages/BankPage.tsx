@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -40,7 +40,27 @@ const chatPathOf = (id: string) => {
 function Thumb({ it }: { it: BankItem }) {
   if (it.kind === "image") return <img src={bankFileUrl(it.id)} alt="" loading="lazy" />;
   if (it.kind === "video") return <video src={`${bankFileUrl(it.id)}#t=0.1`} preload="metadata" muted playsInline />;
+  if (it.kind === "model" && /\.(glb|gltf)$/i.test(it.name)) return <ModelThumb id={it.id} />;
   return <span aria-hidden="true">{icon(it.kind)}</span>;
+}
+
+/** A 3D model's still picture, drawn once it is on screen (model-thumb.ts); the icon until then or if it fails. */
+function ModelThumb({ id }: { id: string }) {
+  const [png, setPng] = useState("");
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let alive = true;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e?.isIntersecting) return;
+      io.disconnect();
+      void import("../model-thumb").then((m) => m.modelThumb(bankFileUrl(id))).then((u) => alive && setPng(u), () => undefined);
+    });
+    io.observe(el);
+    return () => { alive = false; io.disconnect(); };
+  }, [id]);
+  return png ? <img src={png} alt="" /> : <span ref={ref} aria-hidden="true">🧊</span>;
 }
 
 /**
