@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
@@ -18,6 +18,9 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
+  texH: "טקסטורה (צבע בסיס)", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
+  splitAi: "חלוקה לפי משמעות (רגל, מושב, ידית) צריכה מודל חלוקה תלת ממדי במחשב (PartField / P3-SAM). הוא עוד לא מותקן, אז בינתיים: 'לפי חלקים נפרדים' מפריד כל חתיכה שלא נוגעת באחרת.", piece: "חתיכה",
   modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
 };
@@ -103,6 +106,11 @@ async function open() {
     grid.scale.setScalar(Math.max(s.x, s.z, 0.1) / 3);
     grid.position.y = box.min.y;
     $("empty").hidden = true;
+    // Back from the image editor: the new texture into the slot it was made for.
+    if (input.back?.data && /^\d+:map$/.test(input.back.slot)) {
+      const mesh = meshes.filter((p) => !isGenerated(p.mesh))[Number(input.back.slot.split(":")[0])]?.mesh;
+      if (mesh) { await setTexture(mesh, input.back.data); msg(T("texBack", "The texture came back from the image editor")); setTimeout(() => choose(mesh), 0); }
+    }
     frame(model);
     stats();
   } catch (e) { msg(e.message || "The model could not be read.", true); } finally { busy(""); }
@@ -167,6 +175,7 @@ function choose(obj) {
   $("metal").value = Math.round((m?.metalness ?? 0) * 100);
   showChannels();
   renderMods();
+  showTexture();
   $("hidePart").textContent = chosen.visible ? T("hide", "Hide") : T("show", "Show");
 }
 /** The Channel Box: the chosen object's position, rotation (degrees) and scale, and its size. */
@@ -338,6 +347,131 @@ $("addMod").onchange = () => {
   renderMods();
   stats();
 };
+
+// ---------- textures: the base colour map, edited in the image editor (a hand-off with the way back) ----------
+/** The mesh a texture belongs to: the chosen one, or the first mesh in the chosen group. */
+const meshOfChosen = () => (chosen?.isMesh ? chosen : chosen?.getObjectByProperty("isMesh", true)) ?? null;
+/** A stable name for a mesh across saving and opening again: its place among the file's meshes. */
+const slotOf = (mesh) => `${meshes.filter((p) => !isGenerated(p.mesh)).findIndex((p) => p.mesh === mesh)}:map`;
+function texCanvas(mesh, size) {
+  const c = document.createElement("canvas");
+  const m = matOf(mesh);
+  const img = m?.map?.image;
+  c.width = img?.width || size;
+  c.height = img?.height || size;
+  const g = c.getContext("2d");
+  if (img) g.drawImage(img, 0, 0, c.width, c.height);
+  else { g.fillStyle = `#${(m?.color ?? new THREE.Color(0xcccccc)).getHexString()}`; g.fillRect(0, 0, c.width, c.height); }
+  return c;
+}
+/** The UV layout as white lines on a clear picture: the guide layer (Maya's UV snapshot). */
+function uvGuide(mesh, w, h) {
+  const uv = mesh.geometry.attributes.uv;
+  if (!uv) return null;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.strokeStyle = "rgba(255,255,255,0.9)";
+  g.lineWidth = Math.max(1, w / 1024);
+  const idx = mesh.geometry.index;
+  const n = idx ? idx.count : uv.count;
+  const at = (i) => { const k = idx ? idx.getX(i) : i; return [uv.getX(k) * w, (1 - uv.getY(k)) * h]; };
+  g.beginPath();
+  for (let i = 0; i + 2 < n; i += 3) { const [a, b, d] = [at(i), at(i + 1), at(i + 2)]; g.moveTo(...a); g.lineTo(...b); g.lineTo(...d); g.closePath(); }
+  g.stroke();
+  return c;
+}
+function showTexture() {
+  const mesh = meshOfChosen();
+  const map = mesh && matOf(mesh)?.map;
+  $("texThumb").hidden = !map;
+  if (map?.image) { const c = texCanvas(mesh, 128); $("texThumb").src = c.toDataURL("image/png"); $("texInfo").textContent = `${map.image.width}×${map.image.height}`; }
+  else $("texInfo").textContent = T("noTex", "No texture");
+  $("texRemove").disabled = !map;
+}
+async function editTexture(fresh) {
+  const mesh = meshOfChosen();
+  if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
+  const size = 1024;
+  const tex = fresh ? (() => { const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d"); g.fillStyle = `#${(matOf(mesh)?.color ?? new THREE.Color(0xffffff)).getHexString()}`; g.fillRect(0, 0, size, size); return c; })() : texCanvas(mesh, size);
+  const guide = uvGuide(mesh, tex.width, tex.height);
+  if (!guide) msg(T("noUv", "This part has no UVs, so there are no guide lines"));
+  busy(T("texSent", "Opening the texture in the image editor…"));
+  try {
+    const working = await new Promise((resolve) => glb().then((b) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(b); }));
+    const part = (label(mesh) || "part").replace(/[^\p{L}\p{N}_-]+/gu, "-").slice(0, 40);
+    await kesher.call("editor.handoff", { to: "image-editor", data: tex.toDataURL("image/png"), name: `${part}-texture.png`, slot: slotOf(mesh), ...(guide ? { guide: guide.toDataURL("image/png"), guideName: `${part}-uv.png` } : {}), working, workingName: `${base().replace(/-edited$/, "")}-working.glb` });
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+}
+/** A picture as the mesh's base colour map (glTF's way: not flipped, sRGB), the colour set to white so it shows true. */
+async function setTexture(mesh, dataUrl) {
+  const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = dataUrl; });
+  const t = new THREE.Texture(img);
+  t.flipY = false;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate = true;
+  [].concat(mesh.material).forEach((m) => { m.map = t; m.color?.set(0xffffff); m.needsUpdate = true; });
+}
+$("texEdit").onclick = () => editTexture(false);
+$("texNew").onclick = () => editTexture(true);
+$("texRemove").onclick = () => { const mesh = meshOfChosen(); if (!mesh) return; remember(); [].concat(mesh.material).forEach((m) => { m.map = null; m.needsUpdate = true; }); showTexture(); };
+
+// ---------- split into parts (Blender's Separate by loose parts / by material), so each can get its own texture ----------
+/** The triangles of a mesh in groups that share no vertex position (each loose piece), by union-find. */
+function loosePieces(geo) {
+  const pos = geo.attributes.position, idx = geo.index;
+  const n = idx ? idx.count : pos.count;
+  const key = (k) => `${pos.getX(k).toFixed(5)},${pos.getY(k).toFixed(5)},${pos.getZ(k).toFixed(5)}`;
+  // Vertices at the same place are one (a seam in UVs or normals still joins the piece).
+  const id = new Map(), at = new Int32Array(pos.count);
+  for (let k = 0; k < pos.count; k++) { const s2 = key(k); if (!id.has(s2)) id.set(s2, id.size); at[k] = id.get(s2); }
+  const parent = new Int32Array(id.size).map((_, i) => i);
+  const find = (a) => { while (parent[a] !== a) a = parent[a] = parent[parent[a]]; return a; };
+  const v = (i) => at[idx ? idx.getX(i) : i];
+  for (let i = 0; i + 2 < n; i += 3) { const a = find(v(i)); parent[find(v(i + 1))] = a; parent[find(v(i + 2))] = a; }
+  const groups = new Map();
+  for (let i = 0; i + 2 < n; i += 3) { const r = find(v(i)); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
+  return [...groups.values()];
+}
+/** A new geometry with only these triangles (every attribute kept: UVs, normals, colours). */
+function subGeometry(geo, tris) {
+  const idx = geo.index, out = new THREE.BufferGeometry();
+  const src = (i) => (idx ? idx.getX(i) : i);
+  for (const [name, attr] of Object.entries(geo.attributes)) {
+    const arr = new attr.array.constructor(tris.length * 3 * attr.itemSize);
+    let o = 0;
+    for (const t of tris) for (let j = 0; j < 3; j++) { const k = src(t + j); for (let c = 0; c < attr.itemSize; c++) arr[o++] = attr.array[k * attr.itemSize + c]; }
+    out.setAttribute(name, new THREE.BufferAttribute(arr, attr.itemSize, attr.normalized));
+  }
+  return out;
+}
+function splitChosen(how) {
+  const mesh = meshOfChosen();
+  if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
+  if (how === "ai") return msg(T("splitAi", "Splitting by meaning (leg, seat, handle) needs a 3D part-segmentation model on the computer (PartField / P3-SAM). It is not installed yet, so for now 'By loose pieces' separates every piece that does not touch another."));
+  const geo = mesh.geometry;
+  let groups;
+  if (how === "material" && Array.isArray(mesh.material) && geo.groups.length > 1) {
+    groups = geo.groups.map((g) => { const t = []; for (let i = g.start; i < g.start + g.count; i += 3) t.push(i); return { tris: t, mat: mesh.material[g.materialIndex] }; });
+  } else groups = loosePieces(geo).map((tris) => ({ tris, mat: matOf(mesh) }));
+  if (groups.length < 2) return msg(T("splitNone", "This part is one piece already"));
+  remember();
+  const holder = new THREE.Group();
+  holder.name = label(mesh);
+  holder.position.copy(mesh.position); holder.quaternion.copy(mesh.quaternion); holder.scale.copy(mesh.scale);
+  groups.forEach((g, i) => {
+    const m = new THREE.Mesh(subGeometry(geo, g.tris), g.mat.clone());
+    m.name = `${label(mesh)} · ${T("piece", "piece")} ${i + 1}`;
+    holder.add(m);
+  });
+  mesh.parent.add(holder);
+  mesh.removeFromParent();
+  rebuild();
+  choose(holder);
+  stats();
+  msg(he ? HE.splitDone(groups.length) : `Split into ${groups.length} parts`);
+}
+$("split").onchange = () => { const how = $("split").value; $("split").value = ""; if (how) splitChosen(how); };
 
 // ---------- duplicate and delete ----------
 function duplicate() {

@@ -10,6 +10,11 @@ and Meshy's studio (docs/RESEARCH_LOG.md → "The 3D editor's screen"; design Mo
 - **The chosen object:** a Channel Box like Maya's (move, rotate in degrees, scale; type a number), a gizmo to move,
   rotate or scale it with axis lock and snapping, colour / roughness / metalness, its size and triangles; duplicate and
   delete; undo for everything (structure too).
+- **Textures** (Maya's PSD Network, Blender's Edit Externally): the chosen part's base colour texture as a thumbnail;
+  *Edit in the image editor* or *New texture* hands it to the image editor with the part's UV layout as a guide layer
+  (never saved), and the model as a working copy; *Back to the 3D model* there brings the picture into the same part.
+- **Split into parts** (Blender's Separate): by loose pieces (triangles that touch nothing else) or by material, so each
+  piece can get its own texture. By meaning (seat, leg, handle) needs a 3D part-segmentation model; it says so for now.
 - **Modifiers** (3ds Max's stack, Blender's modifiers): Mirror (an axis), Array (an axis, a count, a gap) and Smooth
   shading, each on or off, moved up, or removed; they never change the object itself, stack in order, are exported
   with the model, and undo with the rest. An object with modifiers shows ⚙ in the tree.

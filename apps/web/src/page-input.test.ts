@@ -16,6 +16,12 @@ test("a page gets a chat's file only when it is a picture and the page declared 
   assert.deepEqual(pageInput("c=abc&f=clip.mp4&a=shared%2Fs.wav", ["video"]), { conversationId: "abc", path: "clip.mp4", sound: "shared/s.wav" });
   assert.deepEqual(pageInput("c=abc&f=s.wav&ret=clip.mp4", ["sound"]), { conversationId: "abc", path: "s.wav", returnVideo: "clip.mp4" });
   assert.deepEqual(pageInput("c=abc&f=chair.glb", ["model"]), { conversationId: "abc", path: "chair.glb" });
+  // The hand-off between editors: where to go back, the slot, the guide; and the way back.
+  assert.deepEqual(pageInput("c=abc&f=shared%2Fwood.png&ret=shared%2Fchair-working.glb&retp=model-editor&slot=Seat%3Amap&g=shared%2Fuv.png", ["image"]), { conversationId: "abc", path: "shared/wood.png", returnTo: { plugin: "model-editor", path: "shared/chair-working.glb", slot: "Seat:map" }, guide: "shared/uv.png" });
+  assert.equal(pageInput("c=abc&f=w.png&ret=x.glb&retp=evil&slot=s", ["image"])?.returnTo, undefined, "only an editor to go back to");
+  assert.equal(pageInput("c=abc&f=w.png&ret=x.env&retp=model-editor&slot=s", ["image"])?.returnTo, undefined, "only a file of that editor");
+  assert.deepEqual(pageInput("c=abc&f=chair.glb&back=shared%2Fwood-edited.png&slot=Seat%3Amap", ["model"])?.back, { path: "shared/wood-edited.png", slot: "Seat:map" });
+  assert.equal(pageInput("c=abc&f=chair.glb&back=x.png&slot=%3Cscript%3E", ["model"])?.back, undefined);
   assert.equal(pageInput("c=abc&f=chair.glb", ["image"]), undefined);
   assert.deepEqual(pageInput("c=abc&f=s.wav&ret=.env", ["sound"]), { conversationId: "abc", path: "s.wav" }, "only a video to go back to");
 });

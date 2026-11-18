@@ -20,6 +20,7 @@
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
     hCrop: "חיתוך", crop: "חיתוך", ratio: "יחס", cropHint: "גרור מסגרת. Enter מחיל, Esc מבטל.", apply2: "החל", free: "חופשי",
+    uvGuide: "קווי UV (מדריך, לא נשמר)", paintLayer: "ציור", "back_model-editor": "חזרה למודל", fromModel: "הטקסטורה של המודל. כשתסיים: \"חזרה למודל\".",
     taskPh: "מה לעשות כאן? (ריק = מילוי שמתאים לסביבה)", pSelect: "בחירה", keysH: "קיצורים (כמו בפוטושופ)", close: "סגור",
     toChat: "שלח לצ'אט", toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתה (לא חובה)", toChatPh: "למשל: תעשה את השמיים חמים יותר", send: "שלח", sending: "שולח…", fromChat: "נפתח מהצ'אט",
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
@@ -63,7 +64,7 @@
       c.height = l.data.height;
       const ctx = c.getContext("2d", { willReadFrequently: true });
       ctx.putImageData(l.data, 0, 0);
-      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y };
+      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}) };
     });
     renderLayers();
     draw();
@@ -602,7 +603,8 @@
     c.height = doc.h;
     const x = c.getContext("2d", { willReadFrequently: true });
     for (const l of doc.layers) {
-      if (!l.visible) continue;
+      // A guide (a model's UV layout) is shown while painting and never goes into the picture.
+      if (!l.visible || l.guide) continue;
       x.globalAlpha = l.opacity;
       x.globalCompositeOperation = l.blend;
       x.drawImage(l.canvas, l.x, l.y);
@@ -1019,11 +1021,41 @@
     newDoc(img.naturalWidth, img.naturalHeight, false);
     doc.layers[0].name = input.name;
     doc.layers[0].ctx.drawImage(img, 0, 0);
+    // From another editor (a 3D model's texture): its UV layout as a guide layer on top, and the way back.
+    if (input.guide) {
+      const g = await loadImage(input.guide);
+      const l = makeLayer(T("uvGuide", "UV guide (not saved)"));
+      l.ctx.drawImage(g, 0, 0, doc.w, doc.h);
+      l.opacity = 0.6;
+      l.guide = true;
+      doc.layers.push(l);
+      // Painting goes on a layer of its own between the texture and the guide.
+      const paint = makeLayer(T("paintLayer", "Paint"));
+      doc.layers.splice(1, 0, paint);
+      doc.active = 1;
+    }
     renderLayers();
     draw();
-    $("toChat").hidden = false;
-    msg(T("fromChat", "Opened from the chat"));
+    if (input.returnTo) {
+      $("toBack").hidden = false;
+      $("toBack").querySelector("b").textContent = T(`back_${input.returnTo.plugin}`, input.returnTo.plugin === "model-editor" ? "Back to the 3D model" : "Back");
+      msg(T("fromModel", "The model's texture. When you are done: \"Back to the 3D model\"."));
+    } else {
+      $("toChat").hidden = false;
+      msg(T("fromChat", "Opened from the chat"));
+    }
   }
+  $("toBack").onclick = async () => {
+    if (!fromChat?.returnTo) return;
+    busy(T("sending", "Sending…"));
+    try {
+      await kesher.call("editor.handBack", { name: `${docName}-edited.png`, data: flatten().toDataURL("image/png") });
+    } catch (e) {
+      msg(e.message, true);
+    } finally {
+      busy("");
+    }
+  };
   function sendToChat() {
     if (!fromChat) return;
     $("chatThumb").src = flatten().toDataURL("image/png");

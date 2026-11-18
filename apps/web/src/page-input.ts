@@ -1,3 +1,27 @@
+/** What a page was opened with: the file, and the hand-off between editors when there is one. */
+export interface PageInput {
+  conversationId: string;
+  path: string;
+  /** The video editor: a new sound from the sound editor. */
+  sound?: string;
+  /** The sound editor: the video it came from. */
+  returnVideo?: string;
+  /** A hand-off (docs/RESEARCH_LOG "editors that work alone but together"): the editor and file to go back to. */
+  returnTo?: { plugin: string; path: string; slot: string };
+  /** Back from a hand-off: the new file, for the slot it was made for. */
+  back?: { path: string; slot: string };
+  /** A guide drawn over the file and never saved (a model's UV layout over its texture). */
+  guide?: string;
+}
+
+const KINDS: Record<string, RegExp> = {
+  "image-editor": /\.(png|jpe?g|webp|gif|bmp)$/i,
+  "video-editor": /\.(mp4|webm|mov|m4v|mkv)$/i,
+  "sound-editor": /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i,
+  "model-editor": /\.(glb|gltf)$/i,
+};
+const SLOT = /^[\p{L}\p{N}_:.\- ]{1,80}$/u;
+
 /**
  * The chat file a page was opened with (`?c=<chat>&f=<file>`): a picture for a page that declared `image`, a video for
  * one that declared `video`, a sound for one that declared `sound`, a 3D model for `model`. A link cannot hand any page any other file.
@@ -6,7 +30,7 @@
  * @param uses - The page's declared models.
  * @returns The chat and file (and the round trip's other file), or undefined.
  */
-export function pageInput(query: string, uses: readonly string[] | undefined): { conversationId: string; path: string; sound?: string; returnVideo?: string } | undefined {
+export function pageInput(query: string, uses: readonly string[] | undefined): PageInput | undefined {
   const q = new URLSearchParams(query);
   const c = q.get("c");
   const f = q.get("f");
@@ -19,10 +43,18 @@ export function pageInput(query: string, uses: readonly string[] | undefined): {
   // it came from (`ret`). Both are files of the same chat, of the right kind.
   const a = q.get("a");
   const ret = q.get("ret");
+  const retp = q.get("retp");
+  const slot = q.get("slot") ?? "";
+  const back = q.get("back");
+  const g = q.get("g");
+  const handoff = !!(retp && ret && KINDS[retp]?.test(ret) && SLOT.test(slot));
   return {
     conversationId: c,
     path: f,
     ...(video && a && /\.(wav|mp3|m4a|flac|ogg)$/i.test(a) ? { sound: a } : {}),
-    ...(sound && ret && /\.(mp4|webm|mov|m4v|mkv)$/i.test(ret) ? { returnVideo: ret } : {}),
+    ...(sound && ret && !retp && /\.(mp4|webm|mov|m4v|mkv)$/i.test(ret) ? { returnVideo: ret } : {}),
+    ...(handoff ? { returnTo: { plugin: retp!, path: ret!, slot } } : {}),
+    ...(back && SLOT.test(slot) && KINDS["image-editor"]!.test(back) ? { back: { path: back, slot } } : {}),
+    ...(picture && g && KINDS["image-editor"]!.test(g) ? { guide: g } : {}),
   };
 }

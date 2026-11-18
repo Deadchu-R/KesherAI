@@ -53,6 +53,15 @@
         <label class="field"><span data-t="metal">Metalness</span><input type="range" id="metal" min="0" max="100" value="0" /></label>
         <div class="muted small" id="size"></div>
         <hr />
+        <!-- The base colour texture, edited in the image editor with the UV layout as a guide (Maya's PSD network, Blender's Edit Externally) -->
+        <b data-t="texH">Texture (base colour)</b>
+        <div class="tex-slot"><img id="texThumb" alt="" hidden /><span class="muted small" id="texInfo" data-t="noTex">No texture</span></div>
+        <div class="row">
+          <button id="texEdit" class="primary" data-t="texEdit">✎ Edit in the image editor</button>
+          <button id="texNew" data-t="texNew">＋ New texture</button>
+          <button id="texRemove" data-t="texRemove">✕</button>
+        </div>
+        <hr />
         <!-- Modifiers, as 3ds Max's stack and Blender's modifiers: non-destructive, each on/off, in order -->
         <div class="row"><b class="grow" data-t="modsH">Modifiers</b>
           <select id="addMod"><option value="" data-t="addMod">＋ Add…</option><option value="mirror" data-t="mMirror">Mirror</option><option value="array" data-t="mArray">Array</option><option value="smooth" data-t="mSmooth">Smooth shading</option></select>
@@ -60,6 +69,8 @@
         <ol class="mods" id="mods"></ol>
         <hr />
         <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button><button id="dup" data-t="dup">Duplicate</button><button id="del" data-t="del">Delete</button></div>
+        <!-- Split a part into parts (Blender's Separate: by loose parts, by material), to texture each on its own -->
+        <div class="row"><select id="split"><option value="" data-t="splitH">✂ Split into parts…</option><option value="loose" data-t="sLoose">By loose pieces</option><option value="material" data-t="sMaterial">By material</option><option value="ai" data-t="sAi">By meaning (AI)…</option></select></div>
         <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
       </aside>
     </main>

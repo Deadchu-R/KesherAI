@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshParts, setParts } from "./parts";
+import type { PageInput } from "./page-input";
 import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
@@ -140,7 +141,7 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
  *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: { conversationId: string; path: string; sound?: string; returnVideo?: string } }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -170,10 +171,20 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             return x.blob();
           });
           const name = input.path.split(/[\\/]/).pop() ?? "";
+          const fileOf = async (path: string) => {
+            const x = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(path)}`));
+            return x.ok ? x.blob() : undefined;
+          };
+          // The hand-off: where to go back (the page shows "Back to …"), what came back, and a guide layer.
+          const extra = {
+            ...(input.returnTo ? { returnTo: { plugin: input.returnTo.plugin, slot: input.returnTo.slot } } : {}),
+            ...(input.back ? { back: { slot: input.back.slot, name: input.back.path.split("/").pop(), data: await fileOf(input.back.path).then((b) => (b ? dataUrl(b) : undefined)) } } : {}),
+            ...(input.guide ? { guide: await fileOf(input.guide).then((b) => (b ? dataUrl(b) : undefined)) } : {}),
+          };
           // A video goes over as its bytes (the page makes its own blob: address for the player); a picture as a data URL.
           if (blob.size > 2 * 1024 ** 3) throw new Error("This file is over 2 GB, too big to open here.");
-          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus|glb|gltf)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer(), ...(input.sound ? { sound: input.sound, soundBytes: await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.sound)}`)).then((x) => (x.ok ? x.arrayBuffer() : undefined)) } : {}), ...(input.returnVideo ? { returnVideo: input.returnVideo } : {}) };
-          return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob) };
+          if (/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus|glb|gltf)$/i.test(name)) return { conversationId: input.conversationId, path: input.path, name, type: blob.type || "video/mp4", bytes: await blob.arrayBuffer(), ...extra, ...(input.sound ? { sound: input.sound, soundBytes: await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.sound)}`)).then((x) => (x.ok ? x.arrayBuffer() : undefined)) } : {}), ...(input.returnVideo ? { returnVideo: input.returnVideo } : {}) };
+          return { conversationId: input.conversationId, path: input.path, name, data: await dataUrl(blob), ...extra };
         }
         // The video editor's export: the kept stretches of the video the page was opened with, as a new file in that
         // chat's folder (cut by FFmpeg on the computer); with `send`, attached to the chat with an optional message.
@@ -212,6 +223,46 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             : await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, provider: "local", voice: Number(voice.replace("kokoro:", "")) || 3 }) });
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
           return res.arrayBuffer();
+        }
+        // A hand-off to another editor (each editor its own part; they work together through files): saves the file,
+        // and a guide when there is one, in the chat's folder, and opens the other editor with the way back (`ret` = the
+        // file this page will reopen, `slot` = where the result goes in it).
+        case "editor.handoff": {
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const to = String(p.to ?? "");
+          if (!/^(image|video|sound|model)-editor$/.test(to) || to === pluginId) throw new Error("Hand off to another editor.");
+          const slot = String(p.slot ?? "");
+          if (!/^[\p{L}\p{N}_:.\- ]{1,80}$/u.test(slot)) throw new Error("A short slot name.");
+          const c = encodeURIComponent(input.conversationId);
+          const save = async (data: unknown, name: string) => {
+            const bytes = await fromDataUrl(data).then((x) => x.blob());
+            if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The file is empty or larger than 300 MB.");
+            const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(name.slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+            if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
+            return `shared/${((await up.json()) as { name: string }).name}`;
+          };
+          // This page's own state goes along as a working copy, so coming back finds it as it was left.
+          const ret = typeof p.working === "string" ? await save(p.working, String(p.workingName ?? input.path.split("/").pop())) : input.path;
+          const file = await save(p.data, String(p.name ?? "file"));
+          const guide = typeof p.guide === "string" ? await save(p.guide, String(p.guideName ?? "guide.png")) : undefined;
+          const label = getLocale() === "he" ? "כדי לערוך את זה" : "Editing this";
+          if (!(await offerPart(to, label))) return false;
+          location.hash = `#/p/${to}/editor?c=${c}&f=${encodeURIComponent(file)}&ret=${encodeURIComponent(ret)}&retp=${pluginId}&slot=${encodeURIComponent(slot)}${guide ? `&g=${encodeURIComponent(guide)}` : ""}`;
+          return true;
+        }
+        // Back from a hand-off: the result into the chat's folder, and the editor it came from opened again with it.
+        case "editor.handBack": {
+          if (!input?.returnTo) throw new Error("This page was not opened from another editor.");
+          const c = encodeURIComponent(input.conversationId);
+          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
+          if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The file is empty or larger than 300 MB.");
+          const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(String(p.name ?? "edited.png").slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
+          const { name } = (await up.json()) as { name: string };
+          const { plugin, path, slot } = input.returnTo;
+          if (!(await offerPart(plugin, getLocale() === "he" ? "כדי לחזור" : "Going back"))) return false;
+          location.hash = `#/p/${plugin}/editor?c=${c}&f=${encodeURIComponent(path)}&back=${encodeURIComponent(`shared/${name}`)}&slot=${encodeURIComponent(slot)}`;
+          return true;
         }
         // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
         case "own.file": {
@@ -397,6 +448,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path, input?.sound, input?.returnVideo]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }
