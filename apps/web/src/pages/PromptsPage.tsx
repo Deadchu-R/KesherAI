@@ -36,6 +36,7 @@ export function PromptsPage() {
       <div className="page-head">
         <h1>{L("פרומפטים", "Prompts")}</h1>
         <p className="muted">{L("פרומפטים שמורים שמפעילים בהקלדת / בכל תיבת הודעה. {{input}} בפרומפט מוחלף במה שכותבים אחרי הפקודה, למשל: /translate בוקר טוב", "Saved prompts you run by typing / in any message box. {{input}} in a prompt is replaced by what you write after the command, e.g. /translate good morning")}</p>
+        <p className="muted small">{L('שדות: {{שם}} או {{טון | select:options=["רשמי","קליל"]:default="רשמי":required}} פותחים טופס קטן למילוי לפני שהפרומפט נכנס לתיבה. סוגים: text, textarea, select, number, checkbox, date (אותו תחביר כמו ב-Open WebUI).', 'Fields: {{name}} or {{tone | select:options=["formal","casual"]:default="formal":required}} open a small form to fill before the prompt goes into the box. Types: text, textarea, select, number, checkbox, date (the same syntax as Open WebUI).')}</p>
       </div>
       {draft ? (
         <form className="card kb-form" onSubmit={(e) => { e.preventDefault(); void save(draft); }}>

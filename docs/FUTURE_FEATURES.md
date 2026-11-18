@@ -71,7 +71,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 ## Proposed (2026-11-18, from the competitor look; Roee picks)
 - ✅ Built-in slash commands beside saved prompts: /compact, /fork, /model, /new, /status, /goal, /side, first in the `/` menu (Open WebUI 0.11; built 2026-11-18)
-- ⬜ Prompt fields: `{{name}}` and `{{tone:formal|casual}}` in a saved prompt open a small form before sending (Open WebUI chat variables)
+- ✅ Prompt fields: `{{name}}` and `{{tone | select:options=[…]}}` in a saved prompt open a small form first (Open WebUI's syntax; built 2026-11-18)
 - ⬜ Previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (LM Studio Bionic 1.1.8–1.1.9)
 - ⬜ Engine arguments per model, not one set for all (LM Studio 0.4.24)
 

@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type TextareaHTMLAttributes } from "react";
 import { api } from "./api";
+import { fillPromptFields, promptFields, type PromptField } from "@kesher/shared";
 import { getLocale, he$ } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -124,12 +125,21 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
     if (typed === undefined && atTyped === undefined) setClosed(false);
   }, [typed, atTyped]);
 
-  const applyPrompt = (p: SavedPrompt) => {
-    const at = p.text.indexOf("{{input}}");
-    const next = at >= 0 ? p.text.replace("{{input}}", "") : `${p.text.trim()}\n\n`;
+  // A prompt with fields ({{name}}, {{tone | select:…}}) asks for them first, in a small form above the box.
+  const [fill, setFill] = useState<{ text: string; title: string; fields: PromptField[]; values: Record<string, string | boolean> } | null>(null);
+  const insertPrompt = (text: string) => {
+    const at = text.indexOf("{{input}}");
+    const next = at >= 0 ? text.replace("{{input}}", "") : `${text.trim()}\n\n`;
     caret.current = at >= 0 ? at : next.length;
     onValue(next);
   };
+  const applyPrompt = (p: SavedPrompt) => {
+    const fields = promptFields(p.text);
+    if (!fields.length) return insertPrompt(p.text);
+    onValue("");
+    setFill({ text: p.text, title: p.title, fields, values: Object.fromEntries(fields.map((f) => [f.name, f.type === "checkbox" ? false : (f.default ?? "")])) });
+  };
+  const fillMissing = fill?.fields.filter((f) => f.required && f.type !== "checkbox" && !String(fill.values[f.name] ?? "").trim()) ?? [];
   // Put the cursor where {{input}} was, as soon as the new text is in the box.
   const caret = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -142,6 +152,36 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
 
   return (
     <div className="slash-wrap">
+      {fill && (
+        <form
+          className="card prompt-fields"
+          aria-label={fill.title}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (fillMissing.length) return;
+            insertPrompt(fillPromptFields(fill.text, fill.values));
+            setFill(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setFill(null);
+          }}
+        >
+          <b className="small" dir="auto">{fill.title}</b>
+          {fill.fields.map((f, i) => {
+            const set = (v: string | boolean) => setFill({ ...fill, values: { ...fill.values, [f.name]: v } });
+            const v = fill.values[f.name];
+            const label = <span className="small" dir="auto">{f.type === "checkbox" ? null : f.name}{f.required ? " *" : ""}</span>;
+            if (f.type === "checkbox") return <label key={f.name} className="row small"><input type="checkbox" checked={v === true} onChange={(e) => set(e.target.checked)} /> <span dir="auto">{f.label ?? f.name}</span></label>;
+            if (f.type === "select") return <label key={f.name} className="prompt-field">{label}<select autoFocus={i === 0} value={String(v ?? "")} onChange={(e) => set(e.target.value)}>{!f.required && <option value="">—</option>}{f.options!.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>;
+            if (f.type === "textarea") return <label key={f.name} className="prompt-field">{label}<textarea autoFocus={i === 0} rows={3} dir="auto" value={String(v ?? "")} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} /></label>;
+            return <label key={f.name} className="prompt-field">{label}<input autoFocus={i === 0} dir="auto" type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} min={f.min} max={f.max} value={String(v ?? "")} placeholder={f.placeholder} onChange={(e) => set(e.target.value)} /></label>;
+          })}
+          <div className="row">
+            <button type="submit" className="primary small" disabled={fillMissing.length > 0}>{L("הכנס", "Insert")}</button>
+            <button type="button" className="ghost small" onClick={() => setFill(null)}>{L("ביטול", "Cancel")}</button>
+          </div>
+        </form>
+      )}
       {open && (
         <div className="slash-menu" role="listbox" aria-label={L("פרומפטים שמורים", "Saved prompts")}>
           {items.map((p, i) => (

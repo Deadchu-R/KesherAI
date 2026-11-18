@@ -7,6 +7,7 @@
 export * from "./categories.js";
 export * from "./models.js";
 export * from "./model-fit.js";
+export * from "./prompt-fields.js";
 export * from "./chat.js";
 export * from "./media.js";
 export * from "./branding.config.js";

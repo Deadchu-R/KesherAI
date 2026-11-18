@@ -2237,3 +2237,6 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built (proposal 1): the chat's own `/` commands first in the `/` menu (accent colour) before saved prompts:
   /compact (a summary on demand that the model keeps reading while the rest fits; `compactNow`), /fork (a copy from
   the last message), /model (by part of the name), /new, and the existing /status, /goal, /side. Next: prompt fields.
+- Built (proposal 2): prompt fields with Open WebUI's own syntax (`{{name}}`, `{{x | select:options=[…]:default=…:required}}`,
+  number, checkbox, textarea, date), so prompts copy between the two; `@kesher/shared` prompt-fields, a small form above
+  the box (SlashMenu), a hint on the Prompts page. Next: Office and CSV previews.
