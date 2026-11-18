@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type WebSocket from "ws";
@@ -16,7 +16,7 @@ import type WebSocket from "ws";
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.20";
+export const BRIDGE_VERSION = "0.1.21";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -67,7 +67,10 @@ export interface HeadlessAnswer {
 }
 
 /** Commands the headless editor (the editor closed) can run. */
-const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply"]);
+const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move"]);
+
+/** Commands that only read: no "changed" after them. */
+const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "level", "level_mesh"]);
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
 const fileFor = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
@@ -115,7 +118,7 @@ export class UnrealBridge {
     const run = this.headlessChain.then(() => this.headless!(file, commands));
     this.headlessChain = run.catch(() => undefined);
     const answers = await run;
-    if (commands.some((c) => c.cmd !== "list" && c.cmd !== "graph" && c.cmd !== "actions" && c.cmd !== "widget")) {
+    if (commands.some((c) => !READ_ONLY.has(String(c.cmd)))) {
       this.changedAt = Date.now();
       this.emit("changed");
     }
@@ -363,6 +366,52 @@ export class UnrealBridge {
 
   private projectDir(project: string): string {
     return join(this.dir, slug(project));
+  }
+
+  /**
+   * The stand-in's read (a level, its levels, a mesh): from the editor when it is open (and kept here), else the copy
+   * kept, else a headless editor (slow, once: it is kept after).
+   *
+   * @param cmd - levels, level or level_mesh.
+   * @param path - The level or mesh ("" for levels).
+   * @returns The answer, and whether it came from the copy kept.
+   */
+  async standIn<T extends object>(cmd: "levels" | "level" | "level_mesh", path = ""): Promise<T & { cached?: boolean }> {
+    const project = await this.project();
+    if (!project) throw new Error(`KesherAI does not know the project yet: open it once in the ${this.editor} with the KesherAI Bridge plugin.`);
+    const file = join(this.projectDir(project), "standin", `${cmd}-${fileFor(path)}`);
+    if (this.connected) {
+      try {
+        const live = await this.request<T>(cmd, { path }, 120_000);
+        await this.writeJson(file, live);
+        return live as T;
+      } catch (e) {
+        const kept = await this.readJson<T>(file);
+        if (kept) return { ...kept, cached: true };
+        throw e;
+      }
+    }
+    const kept = await this.readJson<T>(file);
+    if (kept) return { ...kept, cached: true };
+    const answer = await this.request<T>(cmd, { path }, 900_000);
+    await this.writeJson(file, answer);
+    return answer as T;
+  }
+
+  /**
+   * The stand-in's moves into the level: in the open editor as one undo step (left for her to save), or with it closed
+   * in a headless editor that saves the level.
+   *
+   * @param path - The level.
+   * @param moves - { id, from: {position, rotation}, to: {position, rotation, scale} } each, in Unreal's units.
+   * @returns How many moved, and those that moved in Unreal meanwhile (left as they are) or are gone.
+   */
+  async moveActors(path: string, moves: unknown[]): Promise<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }> {
+    const r = await this.request<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }>("level_move", { path, moves }, 900_000);
+    // The copy kept is now old: the next read takes the level again.
+    const project = await this.project();
+    if (project) await rm(join(this.projectDir(project), "standin", `level-${fileFor(path)}`), { force: true }).catch(() => undefined);
+    return r;
   }
 
   /**

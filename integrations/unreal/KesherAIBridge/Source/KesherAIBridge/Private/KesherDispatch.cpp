@@ -5,6 +5,7 @@
 #include "Editor.h"
 #include "FileHelpers.h"
 #include "KesherGraph.h"
+#include "KesherLevel.h"
 #include "KesherPlay.h"
 #include "KesherWidget.h"
 #include "Modules/ModuleManager.h"
@@ -134,6 +135,15 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 	}
 	else if (Cmd == TEXT("play_status")) Result = KesherPlay::Status();
 	else if (Cmd == TEXT("play_stop")) Result = KesherPlay::Stop();
+	// The stand-in (a level shown in KesherAI's 3D editor): levels, a level's actors, a mesh's shape, the moves back.
+	else if (Cmd == TEXT("levels")) Result = KesherLevel::Levels();
+	else if (Cmd == TEXT("level")) Result = KesherLevel::Read(Path);
+	else if (Cmd == TEXT("level_mesh")) Result = KesherLevel::Mesh(Path);
+	else if (Cmd == TEXT("level_move"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Moves = nullptr;
+		if (In->TryGetArrayField(TEXT("moves"), Moves)) Result = KesherLevel::Move(Path, *Moves, bOffline);
+	}
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

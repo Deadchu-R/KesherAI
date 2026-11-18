@@ -104,3 +104,21 @@ export function unitySceneInput(query: string, uses: readonly string[] | undefin
   if (!/^Assets\/[^\0]{1,300}\.unity$/i.test(scene) || scene.split("/").includes("..")) return undefined;
   return { project, scene };
 }
+
+/** An Unreal level opened without Unreal in the 3D editor ("/Game/…"); read through the KesherAI Bridge plugin. */
+export interface UnrealLevelInput {
+  level: string;
+}
+
+/**
+ * An Unreal level a page was opened with (`?ul=/Game/…`), only for a page that declared `model`; the server checks again.
+ *
+ * @param query - The part after `?`.
+ * @param uses - The page's declared models.
+ * @returns The level, or undefined.
+ */
+export function unrealLevelInput(query: string, uses: readonly string[] | undefined): UnrealLevelInput | undefined {
+  const level = new URLSearchParams(query).get("ul") ?? "";
+  if (!uses?.includes("model") || !/^\/Game\/[\w ./-]{1,300}$/.test(level) || level.includes("..")) return undefined;
+  return { level };
+}

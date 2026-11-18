@@ -13,7 +13,7 @@ const ENGINES = {
     open: (project: string, scene: string) => `#/p/model-editor/editor?gp=${encodeURIComponent(project)}&gs=${encodeURIComponent(scene)}`,
     label: (scene: string) => scene.replace(/^res:\/\//, ""),
     folder: ["תיקיית הפרויקט (עם project.godot)", "The project folder (with project.godot)"],
-    how: ["פותחים סצנה בעורך התלת ממד כתחליף (כל אובייקט כקופסה), מזיזים, ושומרים חזרה לקובץ ה-.tscn כש-Godot סגור.", "Open a scene in the 3D editor as a stand-in (each object a box), move things, and save back into the .tscn while Godot is closed."],
+    how: ["פותחים סצנה בעורך התלת ממד כתחליף (עם הצורות האמיתיות), מזיזים, ושומרים חזרה לקובץ ה-.tscn כש-Godot סגור.", "Open a scene in the 3D editor as a stand-in (with the real shapes), move things, and save back into the .tscn while Godot is closed."],
   },
   unity: {
     name: "Unity",
@@ -62,6 +62,31 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
           {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={e.open(project, sc)}>{e.label(sc)}</a>)}
         </div>
       ) : <p className="muted small">{L("אין סצנות בפרויקט.", "No scenes in this project.")}</p>)}
+    </section>
+  );
+}
+
+/**
+ * An Unreal level without Unreal: the levels the Bridge plugin knows (kept, so the list opens with Unreal closed),
+ * each opened in the 3D editor as a stand-in.
+ */
+export function StandInLevels() {
+  const [levels, setLevels] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => {
+    setBusy(true);
+    void api<{ levels: string[] }>("/api/unreal/levels").then((r) => setLevels(r.levels), (er: Error) => toast(er.message)).finally(() => setBusy(false));
+  };
+  return (
+    <section className="card">
+      <strong>{L("רמה בלי Unreal", "A level without Unreal")}</strong>
+      <p className="small muted">{L("פותחים רמה בעורך התלת ממד כתחליף, עם הצורות האמיתיות, ומזיזים. כש-Unreal פתוח השינויים נכנסים בצעד ביטול אחד; כשהוא סגור, עורך ברקע שומר אותם (תוסף 0.1.21).", "Open a level in the 3D editor as a stand-in, with the real shapes, and move things. With Unreal open the moves go in as one undo step; with it closed, a background editor saves them (plugin 0.1.21).")}</p>
+      <button type="button" className="primary" disabled={busy} onClick={load}>{busy ? L("קורא…", "Reading…") : L("הצג רמות", "Show levels")}</button>
+      {levels && (levels.length ? (
+        <div className="standin-scenes">
+          {levels.map((l) => <a key={l} className="button" dir="ltr" href={`#/p/model-editor/editor?ul=${encodeURIComponent(l)}`}>{l.replace(/^\/Game\//, "")}</a>)}
+        </div>
+      ) : <p className="muted small">{L("אין רמות בפרויקט.", "No levels in this project.")}</p>)}
     </section>
   );
 }

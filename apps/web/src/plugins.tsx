@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { refreshParts, setParts } from "./parts";
-import type { GodotSceneInput, PageInput, UnitySceneInput } from "./page-input";
+import type { GodotSceneInput, PageInput, UnitySceneInput, UnrealLevelInput } from "./page-input";
 import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
@@ -141,7 +141,7 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
  *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot, unity }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput; unity?: UnitySceneInput }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot, unity, unreal }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput; unity?: UnitySceneInput; unreal?: UnrealLevelInput }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -176,6 +176,12 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             need("model");
             const r = await api<{ objects: unknown[] }>(`/api/unity/scene?project=${encodeURIComponent(unity.project)}&scene=${encodeURIComponent(unity.scene)}`);
             return { unity: { scene: unity.scene, objects: r.objects }, name: unity.scene.split("/").pop() };
+          }
+          // An Unreal level without Unreal: its actors, through the Bridge plugin (kept, so it opens with Unreal closed).
+          if (unreal && !input) {
+            need("model");
+            const r = await api<{ actors: unknown[]; cached?: boolean; partitioned?: boolean }>(`/api/unreal/level?path=${encodeURIComponent(unreal.level)}`);
+            return { unreal: { level: unreal.level, actors: r.actors, cached: !!r.cached, partitioned: !!r.partitioned }, name: unreal.level.split("/").pop() };
           }
           if (!input) return null;
           const blob = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(input.path)}`)).then((x) => {
@@ -338,12 +344,20 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // A model file the stand-in's scene uses (res://….glb), as bytes, so it shows the scene's real shapes.
         case "standin.asset": {
           need("model");
+          // An Unreal mesh's shape: its triangles as JSON (corners in cm, base64 float32).
+          if (unreal) return api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}`);
           if (!godot && !unity) throw new Error("This page was not opened with a game scene.");
           const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)!.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
           return res.arrayBuffer();
         }
         // The 3D editor's moves for the Unity scene it was opened with: queued for the KesherAI package in Unity.
+        // The 3D editor's moves for the Unreal level it was opened with: into the open editor, or saved headless.
+        case "unreal.saveLevel": {
+          need("model");
+          if (!unreal) throw new Error("This page was not opened with an Unreal level.");
+          return api("/api/unreal/level", { method: "POST", body: { path: unreal.level, moves: p.moves } });
+        }
         case "unity.saveScene": {
           need("model");
           if (!unity) throw new Error("This page was not opened with a Unity scene.");
@@ -546,6 +560,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, unreal?.level, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }

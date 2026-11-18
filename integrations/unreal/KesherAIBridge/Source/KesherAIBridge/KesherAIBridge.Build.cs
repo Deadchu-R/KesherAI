@@ -19,6 +19,8 @@ public class KesherAIBridge : ModuleRules
 			"GraphEditor",
 			"KismetCompiler",
 			"AssetRegistry",
+			"MeshDescription",
+			"StaticMeshDescription",
 			"WebSockets",
 			"Json",
 			"JsonUtilities",

@@ -352,13 +352,105 @@ function loadUnityStandIn(objects) {
   $("toGodot").onclick = saveUnity;
   msg(T("standInUnity", "A stand-in of the Unity scene: move things, then \"Save for Unity\"; Unity takes them in when the scene is open"));
 }
+// ---------- an Unreal level without Unreal ----------
+// Unreal: centimetres, Z up, left-handed; three.js: metres, Y up, right-handed. Swapping Y and Z does both turns, and
+// is its own inverse (the same mapping goes back).
+const fromUnreal = (p, q, s) => ({ p: new THREE.Vector3(p[0], p[2], p[1]).multiplyScalar(0.01), q: new THREE.Quaternion(-q[0], -q[2], -q[1], q[3]), s: new THREE.Vector3(s[0], s[2], s[1]) });
+function toUnreal(o) {
+  const p = o.position, q = o.quaternion, s = o.scale;
+  return { position: [p.x * 100, p.z * 100, p.y * 100], rotation: [-q.x, -q.z, -q.y, q.w], scale: [s.x, s.z, s.y] };
+}
+const unrealMeshes = new Map();
+/** A static mesh's shape (its lightest LOD, from the Bridge plugin), once per mesh; too heavy: its bounds as a box. */
+function unrealMesh(path) {
+  if (!unrealMeshes.has(path)) {
+    unrealMeshes.set(path, kesher.call("standin.asset", { path }).then((r) => {
+      if (r.corners) {
+        const bin = atob(r.corners);
+        const f = new Float32Array(bin.length / 4);
+        const v = new DataView(new Uint8Array([...bin].map((c) => c.charCodeAt(0))).buffer);
+        for (let i = 0; i < f.length; i++) f[i] = v.getFloat32(i * 4, true);
+        // Each corner to three.js, and each triangle's winding turned (the swap mirrors).
+        const out = new Float32Array(f.length);
+        for (let t = 0; t < f.length; t += 9) {
+          for (const [k, from] of [[0, 0], [1, 2], [2, 1]]) {
+            out[t + k * 3] = f[t + from * 3] * 0.01;
+            out[t + k * 3 + 1] = f[t + from * 3 + 2] * 0.01;
+            out[t + k * 3 + 2] = f[t + from * 3 + 1] * 0.01;
+          }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.BufferAttribute(out, 3));
+        g.computeVertexNormals();
+        return g;
+      }
+      const [a, b] = [fromUnreal(r.min, [0, 0, 0, 1], [1, 1, 1]).p, fromUnreal(r.max, [0, 0, 0, 1], [1, 1, 1]).p];
+      const size = b.clone().sub(a);
+      return new THREE.BoxGeometry(Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)).translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    }));
+  }
+  return unrealMeshes.get(path);
+}
+function loadUnrealStandIn(u) {
+  if (model) { choose(null); model.removeFromParent(); }
+  const root = new THREE.Group();
+  root.name = "Level";
+  const byId = new Map();
+  // Both sides: a mesh's winding is not always what the mirror makes of it, and a shape seen from inside still reads.
+  const look = new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8, side: THREE.DoubleSide });
+  for (const a of u.actors) {
+    const marker = /Light/.test(a.class) ? 0xffd25a : /Camera|PlayerStart/.test(a.class) ? 0x6aa8ff : 0x8a8e99;
+    const o = new THREE.Mesh(a.mesh ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15), a.mesh ? new THREE.MeshBasicMaterial({ visible: false }) : new THREE.MeshStandardMaterial({ color: marker }));
+    o.name = a.name || a.id;
+    const t = fromUnreal(a.position, a.rotation, a.scale);
+    o.position.copy(t.p); o.quaternion.copy(t.q); o.scale.copy(t.s);
+    o.userData.unreal = { id: a.id, from: { position: a.position, rotation: a.rotation }, scale: a.scale };
+    byId.set(a.id, o);
+    if (a.mesh) {
+      void unrealMesh(a.mesh).then((g) => {
+        const m = new THREE.Mesh(g, look);
+        m.userData.generated = true;
+        if (a.meshAt) { const at = fromUnreal(a.meshAt.position, a.meshAt.rotation, a.meshAt.scale); m.position.copy(at.p); m.quaternion.copy(at.q); m.scale.copy(at.s); }
+        o.add(m);
+        stats();
+      }, (e) => msg(`${a.mesh}: ${e.message}`, true));
+    }
+  }
+  for (const a of u.actors) (byId.get(a.parent) ?? root).add(byId.get(a.id));
+  model = root;
+  scene.add(model);
+  rebuild();
+  $("empty").hidden = true;
+  $("toGodot").hidden = false;
+  $("toGodot").textContent = T("toUnreal", "Save to the level");
+  $("toChat").hidden = true;
+  $("toGodot").onclick = saveUnreal;
+  msg(u.cached ? T("standInUnrealKept", "The level as last read (Unreal is closed): move things, then \"Save to the level\"") : T("standInUnreal", "A stand-in of the Unreal level: move things, then \"Save to the level\""));
+}
+async function saveUnreal() {
+  const moves = [];
+  model?.traverse((o) => {
+    const u = o.userData.unreal;
+    if (!u) return;
+    const to = toUnreal(o);
+    const moved = to.position.some((x, i) => Math.abs(x - u.from.position[i]) > 0.05) || new THREE.Quaternion(...to.rotation).angleTo(new THREE.Quaternion(...u.from.rotation)) > 2e-3 || to.scale.some((x, i) => Math.abs(x - u.scale[i]) > 1e-4);
+    if (moved) moves.push({ id: u.id, from: u.from, to });
+  });
+  if (!moves.length) return msg(T("noMoves", "Nothing moved yet"));
+  busy(T("savingScene", "Saving into the scene…"));
+  try {
+    const r = await kesher.call("unreal.saveLevel", { moves });
+    model.traverse((o) => { if (o.userData.unreal) { const t = toUnreal(o); o.userData.unreal.from = { position: t.position, rotation: t.rotation }; o.userData.unreal.scale = t.scale; } });
+    msg(`${T("unrealMoved", "Moved in Unreal")}: ${r.moved}${r.saved ? ` · ${T("unrealSaved", "saved")}` : ""}${r.clashes?.length ? ` · ${T("unrealClash", "moved in Unreal too, left as they are")}: ${r.clashes.join(", ")}` : ""}`, !!r.clashes?.length);
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+}
 async function saveUnity() {
   const moves = [];
   model?.traverse((o) => {
     const u = o.userData.unity;
     if (!u) return;
     const to = toUnity(o);
-    const moved = to.position.some((x, i) => Math.abs(x - u.from.position[i]) > 1e-4) || to.scale.some((x, i) => Math.abs(x - u.from.scale[i]) > 1e-4) || new THREE.Quaternion(...to.rotation).angleTo(new THREE.Quaternion(...u.from.rotation)) > 1e-4;
+    const moved = to.position.some((x, i) => Math.abs(x - u.from.position[i]) > 1e-4) || to.scale.some((x, i) => Math.abs(x - u.from.scale[i]) > 1e-4) || new THREE.Quaternion(...to.rotation).angleTo(new THREE.Quaternion(...u.from.rotation)) > 2e-3;
     if (moved) moves.push({ id: u.id, name: u.name, from: u.from, to });
   });
   if (!moves.length) return msg(T("noMoves", "Nothing moved yet"));
@@ -374,6 +466,7 @@ async function open() {
   try {
     const input = await kesher.call("editor.input");
     if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); frame(model); stats(); return; }
+    if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); frame(model); stats(); return; }
     if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); frame(model); stats(); return; }
     if (!input?.bytes) return;
     name = input.name;
