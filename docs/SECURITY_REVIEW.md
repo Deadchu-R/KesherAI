@@ -1423,3 +1423,22 @@ S5 an outside scanner's rules for Electron.
   change (tscn test).
 - Checked: lint, typecheck, tests (tscn 6, godot-scene 4, unity-scene 3 + routes 2, unreal-level 1, unreal-bridge),
   the plugin's C++ read for roots and limits, the three stand-ins in a browser (desktop and 390 px).
+
+## Scan 155 (2026-11-18): music track, Godot moves while open, projects menu, chat report resume, idle model
+- **Music track** (`/files/cut` with `music`): the file must be in the same chat's folder (`resolveInWorkspace`) and
+  a sound file; every number is clamped in `musicGraph` (start, volume 0–1.5, fades ≤ half the length) and written as
+  fixed decimals, so nothing from the page reaches FFmpeg's filter text but numbers. `video.addSound` takes only a
+  sound file name and at most 200 MB, into the chat's `shared/`.
+- **Godot open** (`standin_moves`): the addon changes only nodes of the scene it was asked for (a `res://….tscn`), in
+  the open editor, as one undo action, and only `transform` / `position` / `rotation` / `scale`; a node that moved
+  in Godot is left (clash).
+- **Projects menu**: from the phone, the scene routes (`/api/godot/scene(s)`, `/api/godot/asset`, the Unity ones)
+  answer only for a project found on this computer (**fixed in this scan**: a folder typed by path was accepted from
+  the phone); the page hides the typed folder there too. The + menu's projects were already checked the same way.
+- **Chat reports**: the parts read are kept beside the report (`notes.json`) and the imported text (`import.txt`),
+  both in KesherAI's own data folder, removed with the report; resume runs only reports that were being written.
+  The long read's quotes are checked against the chat like every other quote; the page shows them as text.
+- **Idle model**: a model unloaded for being unused stays unloaded after a restart (no card filled by itself).
+- **P3-SAM**: lighter settings (fewer points), and only flags its own script knows.
+- Checked: lint, typecheck, tests (video-cut, godot-scene with the addon path, game-projects with Godot, chat-report 16,
+  chat-report-text), a real FFmpeg run of the music track, the video editor in a browser (desktop and 390 px).
