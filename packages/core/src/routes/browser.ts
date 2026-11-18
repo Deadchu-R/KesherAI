@@ -37,6 +37,13 @@ export async function packExtension(folder: string, target: "chrome" | "firefox"
     manifest.background = { scripts: ["page.js", "background.js"] };
     manifest.browser_specific_settings = { gecko: { id: "kesherai@deadchu-r.github.io", strict_min_version: "128.0", data_collection_permissions: { required: ["none"] } } };
     files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+  } else {
+    // The Chrome Web Store warns about Firefox's own keys (and background.scripts): only Chrome's here.
+    const manifest = JSON.parse(Buffer.from(files["manifest.json"]!).toString("utf8")) as Record<string, unknown>;
+    delete manifest.sidebar_action;
+    delete manifest.browser_specific_settings;
+    manifest.background = { service_worker: "background.js" };
+    files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
   }
   return zipSync(files, { level: 9 });
 }

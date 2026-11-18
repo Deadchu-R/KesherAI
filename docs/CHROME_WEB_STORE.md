@@ -51,4 +51,4 @@ Fee: $5, once, when the developer account is registered (Roee pays it himself). 
 
 ## Screenshots
 
-1280×800: to take on the PC in Chrome with the extension installed (the side panel beside a page, asking about a page, a browser task waiting for approval); the store needs at least one.
+1280×800: two made 2026-11-18 with the real extension loaded in Chromium (the side panel beside a page; the connect popup), in Roee's Google Drive with the zip. More can be taken on the PC (asking about a page, a browser task waiting for approval).
