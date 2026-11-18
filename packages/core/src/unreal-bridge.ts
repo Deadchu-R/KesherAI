@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type WebSocket from "ws";
 
 /**
@@ -111,9 +111,10 @@ export class UnrealBridge {
    * @param commands - { cmd, ...args } each.
    * @returns Their answers, in order.
    */
-  async offline(commands: Array<Record<string, unknown>>): Promise<HeadlessAnswer[]> {
+  async offline(commands: Array<Record<string, unknown>>, projectFile?: string): Promise<HeadlessAnswer[]> {
     await this.project();
-    const file = this.lastProjectFile;
+    // Another project than the last one (the stand-in's projects menu): its own headless editor.
+    const file = projectFile ?? this.lastProjectFile;
     if (!this.headless || !file || !existsSync(file)) throw new Error(`The ${this.editor} is closed and KesherAI does not know the project yet: open it once with the KesherAI Bridge plugin.`);
     const run = this.headlessChain.then(() => this.headless!(file, commands));
     this.headlessChain = run.catch(() => undefined);
@@ -376,10 +377,21 @@ export class UnrealBridge {
    * @param path - The level or mesh ("" for levels).
    * @returns The answer, and whether it came from the copy kept.
    */
-  async standIn<T extends object>(cmd: "levels" | "level" | "level_mesh", path = ""): Promise<T & { cached?: boolean }> {
-    const project = await this.project();
+  async standIn<T extends object>(cmd: "levels" | "level" | "level_mesh", path = "", projectFile?: string): Promise<T & { cached?: boolean }> {
+    // A project chosen from the menu that is not the one open in the editor: read headless from its own .uproject.
+    const other = !!projectFile && !(this.connected && this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase());
+    const project = other ? basename(projectFile!, ".uproject") : await this.project();
     if (!project) throw new Error(`KesherAI does not know the project yet: open it once in the ${this.editor} with the KesherAI Bridge plugin.`);
     const file = join(this.projectDir(project), "standin", `${cmd}-${fileFor(path)}`);
+    if (other) {
+      const kept = await this.readJson<T>(file);
+      if (kept) return { ...kept, cached: true };
+      const [a] = await this.offline([{ cmd, path }], projectFile);
+      if (!a?.ok) throw new Error(a?.error ?? `The ${this.editor} could not do that.`);
+      const answer = a.result as T;
+      if (!(cmd === "levels" && !(answer as { levels?: unknown[] }).levels?.length)) await this.writeJson(file, answer);
+      return answer;
+    }
     if (this.connected) {
       try {
         const live = await this.request<T>(cmd, { path }, 120_000);
@@ -407,10 +419,17 @@ export class UnrealBridge {
    * @param moves - { id, from: {position, rotation}, to: {position, rotation, scale} } each, in Unreal's units.
    * @returns How many moved, and those that moved in Unreal meanwhile (left as they are) or are gone.
    */
-  async moveActors(path: string, moves: unknown[]): Promise<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }> {
-    const r = await this.request<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }>("level_move", { path, moves }, 900_000);
+  async moveActors(path: string, moves: unknown[], projectFile?: string): Promise<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }> {
+    const other = !!projectFile && !(this.connected && this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase());
+    type Moved = { moved: number; clashes: string[]; missing: string[]; saved: boolean };
+    let r: Moved;
+    if (other) {
+      const [a] = await this.offline([{ cmd: "level_move", path, moves }], projectFile);
+      if (!a?.ok) throw new Error(a?.error ?? `The ${this.editor} could not do that.`);
+      r = a.result as Moved;
+    } else r = await this.request<Moved>("level_move", { path, moves }, 900_000);
     // The copy kept is now old: the next read takes the level again.
-    const project = await this.project();
+    const project = other ? basename(projectFile!, ".uproject") : await this.project();
     if (project) await rm(join(this.projectDir(project), "standin", `level-${fileFor(path)}`), { force: true }).catch(() => undefined);
     return r;
   }

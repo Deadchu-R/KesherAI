@@ -87,24 +87,51 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
 }
 
 /**
- * An Unreal level without Unreal: the levels the Bridge plugin knows (kept, so the list opens with Unreal closed),
- * each opened in the 3D editor as a stand-in.
+ * An Unreal level without Unreal: the Unreal projects on the computer, each with its plugin's version; a project with
+ * the plugin shows its levels (read in a background editor when Unreal is closed, then kept), one without it offers
+ * to install it. Each level opens in the 3D editor as a stand-in.
  */
 export function StandInLevels() {
+  const NEED = "0.1.22";
+  const [projects, setProjects] = useState<Array<{ name: string; path: string; engine?: string; plugin: string | null }> | null>(null);
+  const [chosen, setChosen] = useState("");
   const [levels, setLevels] = useState<string[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const load = () => {
-    setBusy(true);
-    void api<{ levels: string[] }>("/api/unreal/levels").then((r) => setLevels(r.levels), (er: Error) => toast(er.message)).finally(() => setBusy(false));
+  const [busy, setBusy] = useState("");
+  const newer = (v: string | null) => !!v && v.split(".").map(Number).reduce((a, x, i) => a || (x !== Number(NEED.split(".")[i]) ? (x > Number(NEED.split(".")[i]) ? 1 : -1) : 0), 0) >= 0;
+  const loadProjects = () => void api<{ projects: Array<{ name: string; path: string; engine?: string; plugin: string | null }> }>("/api/unreal/projects").then((r) => setProjects(r.projects), () => setProjects([]));
+  useEffect(loadProjects, []);
+  const open = (path: string) => {
+    setChosen(path);
+    setLevels(null);
+    setBusy(path);
+    void api<{ levels: string[] }>(`/api/unreal/levels?project=${encodeURIComponent(path)}`).then((r) => setLevels(r.levels), (er: Error) => toast(er.message)).finally(() => setBusy(""));
+  };
+  const install = (path: string) => {
+    setBusy(path);
+    void api("/api/unreal/install", { method: "POST", body: { project: path } }).then(() => toast(L("מתקין את התוסף… (הבנייה לוקחת כמה דקות, אפשר לראות בדף Unreal)", "Installing the plugin… (it builds for a few minutes; see the Unreal page)")), (er: Error) => toast(er.message)).finally(() => { setBusy(""); setTimeout(loadProjects, 5000); });
   };
   return (
     <section className="card">
       <strong>{L("רמה בלי Unreal", "A level without Unreal")}</strong>
-      <p className="small muted">{L("פותחים רמה בעורך התלת ממד כתחליף, עם הצורות האמיתיות, ומזיזים. כש-Unreal פתוח השינויים נכנסים בצעד ביטול אחד; כשהוא סגור, עורך ברקע שומר אותם (תוסף 0.1.22).", "Open a level in the 3D editor as a stand-in, with the real shapes, and move things. With Unreal open the moves go in as one undo step; with it closed, a background editor saves them (plugin 0.1.22).")}</p>
-      <button type="button" className="primary" disabled={busy} onClick={load}>{busy ? L("קורא…", "Reading…") : L("הצג רמות", "Show levels")}</button>
+      <p className="small muted">{L(`פותחים רמה בעורך התלת ממד כתחליף, עם הצורות האמיתיות, ומזיזים. כש-Unreal פתוח השינויים נכנסים בצעד ביטול אחד; כשהוא סגור, עורך ברקע שומר אותם (תוסף ${NEED}).`, `Open a level in the 3D editor as a stand-in, with the real shapes, and move things. With Unreal open the moves go in as one undo step; with it closed, a background editor saves them (plugin ${NEED}).`)}</p>
+      {projects && projects.length > 0 && (
+        <div className="standin-projects" role="list" aria-label={L("הפרויקטים במחשב", "Projects on the computer")}>
+          {projects.map((p) => {
+            const ok = newer(p.plugin);
+            return (
+              <button key={p.path} type="button" role="listitem" className={p.path === chosen ? "on" : ""} title={p.path} disabled={busy === p.path} onClick={() => (ok ? open(p.path) : install(p.path))}>
+                <b dir="auto">{p.name}</b>
+                <span className="muted small" dir="auto">{p.engine ? `Unreal ${p.engine} · ` : ""}{busy === p.path ? "…" : ok ? L(`תוסף ${p.plugin}`, `plugin ${p.plugin}`) : p.plugin ? L(`תוסף ${p.plugin} · לעדכן`, `plugin ${p.plugin} · update`) : L("להתקין את התוסף", "Install the plugin")}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {projects && !projects.length && <p className="muted small">{L("לא מצאתי פרויקטים של Unreal במחשב.", "No Unreal projects found on the computer.")}</p>}
+      {busy && busy === chosen && <p className="muted small">{L("קורא את הרמות… (כש-Unreal סגור זה מריץ אותו ברקע, עד דקה וחצי בפעם הראשונה)", "Reading the levels… (with Unreal closed it runs in the background, up to a minute and a half the first time)")}</p>}
       {levels && (levels.length ? (
         <div className="standin-scenes">
-          {levels.map((l) => <a key={l} className="button" dir="ltr" href={`#/p/model-editor/editor?ul=${encodeURIComponent(l)}`}>{l.replace(/^\/Game\//, "")}</a>)}
+          {levels.map((l) => <a key={l} className="button" dir="ltr" href={`#/p/model-editor/editor?ul=${encodeURIComponent(l)}&upj=${encodeURIComponent(chosen)}`}>{l.replace(/^\/Game\//, "")}</a>)}
         </div>
       ) : <p className="muted small">{L("אין רמות בפרויקט.", "No levels in this project.")}</p>)}
     </section>

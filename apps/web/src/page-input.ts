@@ -108,6 +108,8 @@ export function unitySceneInput(query: string, uses: readonly string[] | undefin
 /** An Unreal level opened without Unreal in the 3D editor ("/Game/…"); read through the KesherAI Bridge plugin. */
 export interface UnrealLevelInput {
   level: string;
+  /** The project's folder, when it was chosen from the projects menu (the server checks it is one found on the computer). */
+  project?: string;
 }
 
 /**
@@ -118,7 +120,9 @@ export interface UnrealLevelInput {
  * @returns The level, or undefined.
  */
 export function unrealLevelInput(query: string, uses: readonly string[] | undefined): UnrealLevelInput | undefined {
-  const level = new URLSearchParams(query).get("ul") ?? "";
+  const q = new URLSearchParams(query);
+  const level = q.get("ul") ?? "";
+  const project = q.get("upj") ?? "";
   if (!uses?.includes("model") || !/^\/Game\/[\w ./-]{1,300}$/.test(level) || level.includes("..")) return undefined;
-  return { level };
+  return { level, ...(project && project.length <= 400 && !project.includes("\0") ? { project } : {}) };
 }

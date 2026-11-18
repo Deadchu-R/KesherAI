@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { join } from "node:path";
+import { findGameProjects } from "../game-projects.js";
 import type { UnrealBridge } from "../unreal-bridge.js";
 
 /**
@@ -23,37 +25,52 @@ const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } },
  * @param b - The Unreal bridge.
  */
 export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): Promise<void> {
-  app.get("/api/unreal/levels", async (_req, reply) => {
+  // A project chosen from the menu: only one found on this computer (from the phone too), as its .uproject.
+  const projectFile = async (project: unknown): Promise<string | undefined | null> => {
+    if (!project) return undefined;
+    const found = (await findGameProjects({ ...(b.projectFile ? { unrealFile: b.projectFile } : {}) })).find((p) => p.kind === "unreal" && p.path.toLowerCase() === String(project).toLowerCase());
+    return found ? join(found.path, `${found.name}.uproject`) : null;
+  };
+  const bad = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(403).send({ error: "Choose one of the Unreal projects found on the computer." });
+  app.get<{ Querystring: { project?: string } }>("/api/unreal/levels", async (req, reply) => {
+    const pf = await projectFile(req.query.project);
+    if (pf === null) return bad(reply);
     try {
-      return await b.standIn<{ levels: string[] }>("levels");
+      return await b.standIn<{ levels: string[] }>("levels", "", pf);
     } catch (e) {
       return fail(reply, e);
     }
   });
 
-  app.get<{ Querystring: { path?: string } }>("/api/unreal/level", async (req, reply) => {
+  app.get<{ Querystring: { path?: string; project?: string } }>("/api/unreal/level", async (req, reply) => {
     const path = String(req.query.path ?? "");
     if (!LEVEL.test(path) || path.includes("..")) return reply.code(400).send({ error: "A level under /Game." });
+    const pf = await projectFile(req.query.project);
+    if (pf === null) return bad(reply);
     try {
-      return await b.standIn("level", path);
+      return await b.standIn("level", path, pf);
     } catch (e) {
       return fail(reply, e);
     }
   });
 
-  app.get<{ Querystring: { path?: string } }>("/api/unreal/level/mesh", async (req, reply) => {
+  app.get<{ Querystring: { path?: string; project?: string } }>("/api/unreal/level/mesh", async (req, reply) => {
     const path = String(req.query.path ?? "");
     if (!MESH.test(path) || path.includes("..")) return reply.code(400).send({ error: "A mesh under /Game or /Engine." });
+    const pf = await projectFile(req.query.project);
+    if (pf === null) return bad(reply);
     try {
-      return await b.standIn("level_mesh", path);
+      return await b.standIn("level_mesh", path, pf);
     } catch (e) {
       return fail(reply, e);
     }
   });
 
-  app.post<{ Body: { path?: string; moves?: unknown[] } }>("/api/unreal/level", async (req, reply) => {
+  app.post<{ Body: { path?: string; moves?: unknown[]; project?: string } }>("/api/unreal/level", async (req, reply) => {
     const path = String(req.body?.path ?? "");
     if (!LEVEL.test(path) || path.includes("..")) return reply.code(400).send({ error: "A level under /Game." });
+    const pf = await projectFile(req.body?.project);
+    if (pf === null) return bad(reply);
     const nums = (a: unknown, n: number) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(x));
     type Move = { id: string; from: { position: number[]; rotation: number[] }; to: { position: number[]; rotation: number[]; scale: number[] } };
     const moves = (Array.isArray(req.body?.moves) ? req.body!.moves.slice(0, 5000) : []).filter((m): m is Move => {
@@ -62,7 +79,7 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
     });
     if (!moves.length) return reply.code(400).send({ error: "Nothing to move." });
     try {
-      return await b.moveActors(path, moves.map((m) => ({ id: m.id, from: m.from, to: m.to })));
+      return await b.moveActors(path, moves.map((m) => ({ id: m.id, from: m.from, to: m.to })), pf);
     } catch (e) {
       return fail(reply, e);
     }

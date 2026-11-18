@@ -180,7 +180,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           // An Unreal level without Unreal: its actors, through the Bridge plugin (kept, so it opens with Unreal closed).
           if (unreal && !input) {
             need("model");
-            const r = await api<{ actors: unknown[]; cached?: boolean; partitioned?: boolean }>(`/api/unreal/level?path=${encodeURIComponent(unreal.level)}`);
+            const r = await api<{ actors: unknown[]; cached?: boolean; partitioned?: boolean }>(`/api/unreal/level?path=${encodeURIComponent(unreal.level)}${unreal.project ? `&project=${encodeURIComponent(unreal.project)}` : ""}`);
             return { unreal: { level: unreal.level, actors: r.actors, cached: !!r.cached, partitioned: !!r.partitioned }, name: unreal.level.split("/").pop() };
           }
           if (!input) return null;
@@ -345,7 +345,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "standin.asset": {
           need("model");
           // An Unreal mesh's shape: its triangles as JSON (corners in cm, base64 float32).
-          if (unreal) return api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}`);
+          if (unreal) return api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}${unreal.project ? `&project=${encodeURIComponent(unreal.project)}` : ""}`);
           if (!godot && !unity) throw new Error("This page was not opened with a game scene.");
           const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)!.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
@@ -356,7 +356,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "unreal.saveLevel": {
           need("model");
           if (!unreal) throw new Error("This page was not opened with an Unreal level.");
-          return api("/api/unreal/level", { method: "POST", body: { path: unreal.level, moves: p.moves } });
+          return api("/api/unreal/level", { method: "POST", body: { path: unreal.level, moves: p.moves, ...(unreal.project ? { project: unreal.project } : {}) } });
         }
         case "unity.saveScene": {
           need("model");
@@ -587,6 +587,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, unreal?.level, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, unreal?.level, unreal?.project, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
   return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }
