@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -74,11 +74,72 @@ const versions = [];
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
   renderer.setSize(w, h, false);
-  camera.aspect = w / Math.max(1, h);
+  camera.aspect = quad ? w / Math.max(1, h) : w / Math.max(1, h);
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(host);
-(function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+// ---------- four views (3ds Max's and Maya's default layout): Top, Front, Left and the perspective ----------
+// The three flat views look at the same point as the perspective one and frame what is there; turning and picking
+// stay in each view; a double-click on a view makes it the only one (Max's Alt+W), and the button brings the four back.
+let quad = false;
+const flat = { top: new THREE.OrthographicCamera(), front: new THREE.OrthographicCamera(), left: new THREE.OrthographicCamera() };
+const QUADS = [["top", 0, 1], ["front", 1, 1], ["left", 0, 0], ["persp", 1, 0]]; // name, column, row (from the bottom)
+function aimFlat() {
+  const t = controls.target;
+  const box = model ? new THREE.Box3().setFromObject(model) : null;
+  const span = (box ? box.getSize(new THREE.Vector3()).length() : 2) * 0.65 || 1;
+  const w = host.clientWidth / 2, h = host.clientHeight / 2, a = w / Math.max(1, h);
+  for (const [k, cam] of Object.entries(flat)) {
+    Object.assign(cam, { left: -span * a, right: span * a, top: span, bottom: -span, near: -span * 20, far: span * 20 });
+    cam.position.copy(t).add(new THREE.Vector3(...{ top: [0, 1, 0], front: [0, 0, 1], left: [-1, 0, 0] }[k]).multiplyScalar(span * 4));
+    if (k === "top") cam.up.set(0, 0, -1); else cam.up.set(0, 1, 0);
+    cam.lookAt(t);
+    cam.updateProjectionMatrix();
+  }
+}
+/** Which view a point on the canvas is in, its camera, and the point in that view (−1…1). */
+function viewAt(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  if (!quad) return { name: "persp", cam: camera, ndc: new THREE.Vector2(x * 2 - 1, -y * 2 + 1) };
+  const col = x < 0.5 ? 0 : 1, row = y < 0.5 ? 1 : 0;
+  const q = QUADS.find(([, c, rr]) => c === col && rr === row);
+  const lx = (x - col * 0.5) * 2, ly = (y - (1 - row) * 0.5) * 2;
+  return { name: q[0], cam: q[0] === "persp" ? camera : flat[q[0]], ndc: new THREE.Vector2(lx * 2 - 1, -ly * 2 + 1) };
+}
+/** A ray from a pointer event, through whichever view it is in. */
+function rayAt(e) {
+  const v = viewAt(e);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(v.ndc, v.cam);
+  return ray;
+}
+function setQuad(on) {
+  quad = on;
+  $("quad").classList.toggle("on", quad);
+  // The gizmo is drawn and dragged in the perspective view only; it hides while four views show (move by numbers).
+  gizmo.enabled = !quad;
+  gizmo.getHelper().visible = !quad && !!gizmo.object;
+  resize();
+}
+(function loop() {
+  controls.update();
+  if (!quad) renderer.render(scene, camera);
+  else {
+    aimFlat();
+    gizmo.getHelper().visible = false;
+    const w = host.clientWidth / 2, h = host.clientHeight / 2;
+    renderer.setScissorTest(true);
+    for (const [k, col, row] of QUADS) {
+      renderer.setViewport(col * w, row * h, w, h);
+      renderer.setScissor(col * w, row * h, w, h);
+      renderer.render(scene, k === "persp" ? camera : flat[k]);
+    }
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, host.clientWidth, host.clientHeight);
+  }
+  requestAnimationFrame(loop);
+})();
 
 // ---------- open ----------
 function frame(obj) {
@@ -245,9 +306,7 @@ let down = null;
 renderer.domElement.addEventListener("pointerdown", (e) => (down = [e.clientX, e.clientY]));
 renderer.domElement.addEventListener("pointerup", (e) => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !model || gizmo.dragging || gizmo.axis) return;
-  const r = renderer.domElement.getBoundingClientRect();
-  const ray = new THREE.Raycaster();
-  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const ray = rayAt(e);
   const hit = ray.intersectObjects(meshes.filter((p) => p.mesh.visible && (!picking || !isGenerated(p.mesh))).map((p) => p.mesh), false)[0];
   if (picking) { if (hit && hit.faceIndex !== undefined) pickAt(hit.object, hit.faceIndex, e.shiftKey); else { picked = null; showPicked(); } return; }
   let o = hit?.object ?? null;
@@ -267,6 +326,15 @@ function view(kind) {
   camera.position.copy(c).add(new THREE.Vector3(...dir).normalize().multiplyScalar(size * 1.4));
 }
 document.querySelectorAll("[data-view]").forEach((b) => (b.onclick = () => view(b.dataset.view)));
+$("quad").onclick = () => setQuad(!quad);
+// A double-click on one of the four views: that view alone (Max's Alt+W).
+renderer.domElement.addEventListener("dblclick", (e) => {
+  if (!quad) return;
+  const v = viewAt(e).name;
+  setQuad(false);
+  view(v === "left" ? "right" : v);
+  if (v === "left") camera.position.x = 2 * controls.target.x - camera.position.x;
+});
 const solidMat = new THREE.MeshStandardMaterial({ color: 0xb8bcc8, roughness: 0.6, metalness: 0 });
 function shade(kind) {
   scene.overrideMaterial = kind === "solid" ? solidMat : null;
@@ -556,9 +624,7 @@ $("texAi").onclick = async () => {
 // texture, so undo brings back the one before.
 let painting = false, stroke = null;
 function paintRay(e) {
-  const r = renderer.domElement.getBoundingClientRect();
-  const ray = new THREE.Raycaster();
-  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const ray = rayAt(e);
   return ray.intersectObjects(meshes.filter((p) => p.mesh.visible && !isGenerated(p.mesh)).map((p) => p.mesh), false)[0];
 }
 function startStroke(mesh) {
@@ -1058,6 +1124,7 @@ addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); return undo(); }
   if ((e.ctrlKey || e.metaKey) && k === "d" && !blender) { e.preventDefault(); return duplicate(); }
   if (e.ctrlKey || e.metaKey) return;
+  if (e.altKey && k === "w") { e.preventDefault(); return setQuad(!quad); }
   if (e.altKey && k === "h") { remember(); model?.traverse((o) => (o.visible = true)); renderParts(); return; }
   if (e.shiftKey && k === "d" && blender) { e.preventDefault(); return duplicate(); }
   if (e.shiftKey && k === "s") { e.preventDefault(); return toggleSnap(); }
