@@ -1123,6 +1123,12 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 138 (2026-11-18): phone swipes, the lip sync check, Hebrew logit bias
+- **Phone swipes** (`swipe-tabs.js`): passive touch listeners; a swipe only clicks a tab already on the screen (as a tap would), never the Phone/Computer switch or the app's sections, never over fields or sliders.
+- **Lip sync check**: the script prints one JSON line; KesherAI reads it with a parser that takes only numbers and a boolean. The sample face used before her clip is MuseTalk's own file inside its folder (no path from the request). A full graphics card gives a fixed message, not the raw error.
+- **Hebrew logit bias**: a fixed list of 492 single letters with a bias of −10, sent only to the local llama.cpp server and only when her message is Hebrew; it can make other alphabets unlikely, never forbidden, and carries nothing of hers. The prompt's Hebrew rule is text only. Checked on the PC: llama.cpp accepted it and answered in clean Hebrew.
+- **Performance**: the bias list is built once at start; tokenizing it on the server costs a few milliseconds a turn.
+
 ## Scan 137 (2026-11-18): imports in the background, chats picked again, swipes, the Study setup's fixes
 - **Imports in the background**: `/api/chat-reports/import` checks its input before it returns (an https link; KesherAI's own browser for a link; at least 200 characters of text), then runs on. The page is read with the browser bridge's own `open`/`read` (no new browser power); the wait is capped (15 reads, 3 seconds apart). A sign-in page is recognised and refused with what to do, so a login form is never "imported". Every step is written to the report file only (the step's name and a number). A report left "being written" after a restart shows as stopped; nothing restarts on its own.
 - **Chats picked again**: `/api/chat-reports/chats` lists only titles, counts and dates of chats already on this computer. `fromReport` loads a report's own `chat.json` by id; the id must be a plain id (letters, digits, `-`, `_`; else 404), so no path can be built from it. Nothing leaves the computer.
