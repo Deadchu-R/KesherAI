@@ -1300,3 +1300,20 @@ S5 an outside scanner's rules for Electron.
 - Performance: the timeline redraws only on edits and the playhead moves by one style change per frame; the transcript
   list redraws on edits, not per frame.
 - Checked: lint, typecheck, 898 tests; FFmpeg cut verified on a 12 s test clip with and without sound.
+
+## Scan 147 (2026-11-18): instruments, voices, editors as parts, the 3D editor, the bridge's data URLs
+- **Found and fixed (important):** a plugin page's own address carried the app's token (`/api/plugin-files/<token>/…`,
+  so its relative links work in a sandbox). Any plugin page could read it from `location` and, with `allow-popups`,
+  open a window to another site with the token in it. Now the address carries `PLUGIN_FILES_KEY`, random for each start,
+  which opens only plugins' files (GET); the token is never in a plugin page. Test: "the plugin files key opens a
+  plugin's files from another device, and nothing else".
+- **`own.file`**: a path inside the plugin's folder only (`[\w-]` segments, no `..`), served by the same route that
+  checks the plugin's own folder.
+- **`sound.say`**: text cut to 2000 characters; a cloned voice's name is checked by the voice engine
+  (`[\p{L}\p{N} _-]{1,40}` and the file must exist); Kokoro takes only a number.
+- **`fromDataUrl`** decodes data URLs itself (the app's CSP rightly blocks fetching them); nothing else is fetched.
+- **Microphone**: only for a plugin frame whose plugin declares `sound`; the browser still asks the person.
+- **Parts**: turning on another editor asks the person first (`confirm`), with what it is and its size.
+- **The 3D editor**: three.js runs inside the sandboxed page; GLTFLoader parses bytes only (no external URIs are
+  fetched: the page's CSP has `connect-src 'none'`).
+- Checked: lint, typecheck, 902 tests.

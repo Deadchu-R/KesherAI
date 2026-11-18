@@ -1,6 +1,7 @@
 import { isLocalRequest } from "../auth.js";
 import { findAffinity, openInAffinity } from "../open-in-app.js";
 import type { FastifyInstance } from "fastify";
+import { PLUGIN_FILES_KEY } from "../auth.js";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
@@ -30,7 +31,7 @@ const TYPES: Record<string, string> = {
  */
 export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   /** Pages, panels, styles and composer buttons from active plugins. */
-  app.get("/api/plugins/ui", async () => s.plugins.ui());
+  app.get("/api/plugins/ui", async () => ({ ...s.plugins.ui(), filesKey: PLUGIN_FILES_KEY }));
 
   /**
    * A plugin's own file (its pages, scripts, styles). The token is part of

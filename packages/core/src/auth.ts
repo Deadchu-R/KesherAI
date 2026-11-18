@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { isLocalRequest, isLoopback, markPairedDevice } from "./request-origin.js";
 
@@ -18,6 +18,12 @@ const OAUTH_CALLBACK = /^\/api\/(google|copilot|onedrive|mcp)\/callback$/;
  * @param path - The path asked for.
  * @returns Whether it is allowed.
  */
+/**
+ * The key in a plugin page's own address (`/api/plugin-files/<key>/…`): random for each start of KesherAI, it opens
+ * nothing but plugins' files, so a plugin page that reads its address learns nothing that opens the rest.
+ */
+export const PLUGIN_FILES_KEY = randomBytes(24).toString("base64url");
+
 export function allowedOrigin(origin: string, host: string | undefined, path: string): boolean {
   if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true;
   if (/^(https?|capacitor):\/\/localhost$/.test(origin)) return true;
@@ -126,6 +132,9 @@ export function registerRemoteAuth(
     // Plugin pages run in a sandboxed frame that cannot add headers or cookies, so their files
     // are served under /api/plugin-files/<token>/…, and relative links keep the token.
     const inPath = /^\/api\/plugin-files\/([^/]+)\//.exec(path)?.[1];
+    // A plugin's own files with the plugin files key: it opens only those (security review, scan 147: a page that
+    // had the real token in its own address could have sent it away through a popup).
+    if (inPath && request.method === "GET" && safeEqual(inPath, PLUGIN_FILES_KEY)) return;
     const given = header ?? query ?? inPath;
     // The kind of key, for the access log (never the value): a device key starts with kd_ (even one
     // no longer paired, so the user sees "an old phone code" instead of a stranger), the shared token

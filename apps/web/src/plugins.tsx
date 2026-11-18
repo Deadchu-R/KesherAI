@@ -67,6 +67,8 @@ export interface PluginUi {
   panels: Array<{ pluginId: string; id: string; title: string; file: string; uses?: string[] }>;
   styles: Array<{ pluginId: string; file: string }>;
   composerActions: Array<{ pluginId: string; id: string; label: string; prompt: string }>;
+  /** The key in plugin pages' addresses: it opens only plugins' files (never the app's token). */
+  filesKey?: string;
 }
 
 const EMPTY: PluginUi = { pages: [], panels: [], styles: [], composerActions: [] };
@@ -106,7 +108,7 @@ export function usePluginUi(): PluginUi {
  * @returns The URL.
  */
 export function pluginFileUrl(pluginId: string, file: string): string {
-  const token = new URL(withToken("/x"), location.href).searchParams.get("token") || "local";
+  const token = cache.filesKey || "local";
   return `/api/plugin-files/${encodeURIComponent(token)}/${pluginId}/${file.split("/").map(encodeURIComponent).join("/")}`;
 }
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { allowedOrigin, clientAddress, isLocalRequest, registerRemoteAuth } from "./auth.js";
+import { PLUGIN_FILES_KEY, allowedOrigin, clientAddress, isLocalRequest, registerRemoteAuth } from "./auth.js";
 
 async function app() {
   const a = Fastify();
@@ -34,6 +34,15 @@ test("other websites cannot use KesherAI's API, even from this computer", async 
   assert.equal((await a.inject({ url: "/api/settings", headers: { host: "localhost:7420", origin: "http://localhost:3000" } })).statusCode, 403);
   // The Android app (http://localhost, no port) may ask; it still needs the token from outside.
   assert.equal((await a.inject({ url: "/api/settings", headers: { host: "localhost:7420", origin: "http://localhost" } })).statusCode, 200);
+  await a.close();
+});
+
+test("the plugin files key opens a plugin's files from another device, and nothing else", async () => {
+  const a = await app();
+  const far = { remoteAddress: "100.64.1.2", headers: { host: "100.64.1.1:7420", origin: "null" } };
+  assert.equal((await a.inject({ url: `/api/plugin-files/${PLUGIN_FILES_KEY}/x.js`, ...far })).statusCode, 200);
+  assert.notEqual((await a.inject({ url: `/api/settings?token=${PLUGIN_FILES_KEY}`, remoteAddress: "100.64.1.2", headers: { host: "100.64.1.1:7420" } })).statusCode, 200);
+  assert.notEqual((await a.inject({ url: "/api/plugin-files/wrong-key-123/x.js", ...far })).statusCode, 200);
   await a.close();
 });
 
