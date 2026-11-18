@@ -12,6 +12,8 @@ test("the Chrome package has only Chrome's manifest keys; Firefox's keeps its ow
   assert.equal(chrome.sidebar_action, undefined);
   assert.equal(chrome.browser_specific_settings, undefined);
   assert.deepEqual(chrome.background, { service_worker: "background.js" });
+  // The Chrome Web Store refuses a description over 132 characters.
+  assert.ok(String(chrome.description).length <= 132);
   const firefox = manifestOf(await packExtension(folder, "firefox"));
   assert.deepEqual(firefox.background, { scripts: ["page.js", "background.js"] });
   assert.ok(firefox.browser_specific_settings);
