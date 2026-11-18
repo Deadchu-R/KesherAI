@@ -2337,3 +2337,19 @@ Each AI tool shows which local model it uses and offers to download it the first
 3. Generative: a picture or words → a model (Hunyuan3D 2.1 or TRELLIS.2 in ComfyUI), mark a part → a sentence → a new version (as Meshy Edit: regenerate the part with the rest kept), auto rig.
 4. Later: an animation library to try a rigged model, 3D printing checks.
 - Stopped at: 3D done; all five editors researched in depth. Next: boards for video, sound and 3D (as the picture editor's), for Roee.
+
+## The picture editor, UI/UX in depth (2026-11-18, Roee: "add the competitors' features and UI/UX")
+**Photoshop desktop**: tools down one side, options of the tool along the top, panels (Layers, Properties, History, Adjustments) docked on the other side; the **Contextual Task Bar** floats under what is selected and offers the next steps for it (no selection: Select subject, Remove background; a selection: Generative fill with a prompt box, Modify, Mask, Invert; after a generation: ‹ 1/3 › to step through the versions, 👍👎, Generate again); results also show as thumbnails in Properties; Generative Fill makes a generative layer with its mask (non-destructive). Keys: B brush, E eraser, L lasso, M marquee, W object select, V move, Ctrl+Z / Ctrl+Shift+Z, [ ] brush size, space-drag to pan, Ctrl+wheel or Ctrl+± to zoom, Ctrl+J duplicate, Ctrl+Shift+I invert.
+**Photoshop on the phone**: undo and redo at the top; a bottom bar with five groups (Layer properties, Select area, Retouch, Paint, Size); layers from a thumbnail in the corner (drag to reorder, ⋯ for merge, duplicate, delete); **tap to select** shows a thumbnail per object found, tap to add, ➖ to take away, ✓ to confirm, then Generative fill (a prompt, or none to extend) or brightness/contrast for the selection; quick actions when a picture opens (hide background, solid colour, black and white); pinch to zoom; the brush keeps its size at any zoom.
+**Affinity 3**: a context toolbar that changes with the tool, studio panels you dock or float, personas (develop, edit, export) for different jobs, live filters and adjustment layers.
+**Photopea**: Photoshop's layout in the browser (familiar to many), with the same keys; history panel; saves to PSD.
+**Canva**: the edit panel of a picture lists Magic Edit, Eraser, Grab, Expand as cards, one tap each.
+
+**What KesherAI's picture editor takes** (added to the boards):
+- The canvas in the middle, tools on the start side, Layers / History / AI on the end side (the phone: undo and redo at the top, a bottom bar of tool groups, layers from a corner thumbnail).
+- A **context bar under the selection** (as Photoshop's): no selection → Select subject · Remove background · Edit by words; a selection → "what to do here" + Fill · Remove · Expand · Mask · Invert; after AI → ‹ 1/3 › versions, Keep, Again.
+- **Tap to select** (SAM 2) with a thumbnail per object found, ➕/➖, ✓ — on the phone and the computer.
+- **Quick actions** when a picture opens: remove background, upscale, edit by words.
+- Non-destructive: every AI result a layer with its own mask; History with every step; Ctrl+Z / Ctrl+Shift+Z.
+- Photoshop's keys (B, E, L, M, W, V, [ ], space-drag, Ctrl+±, Ctrl+J), shown in a "?" sheet.
+- Stopped at: UI/UX research for the picture editor done; next update its boards (computer and phone), then build stage 1.
