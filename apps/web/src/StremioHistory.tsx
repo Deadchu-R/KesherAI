@@ -39,26 +39,55 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
   // (email, Google or Facebook) and confirms it there; KesherAI asks every 3 seconds, for up to 10 minutes.
   const [link, setLink] = useState<{ code: string; link: string } | null>(null);
   const [withEmail, setWithEmail] = useState(false);
-  const waitLink = (code: string, until: number) => {
-    pageTimer.current = setTimeout(() => {
-      void api<{ waiting: boolean; added?: number; total?: number }>("/api/stremio/account/link", { method: "POST", body: { op: "check", code } }).then(
-        (r) => {
-          if (r.waiting) return Date.now() < until ? waitLink(code, until) : (setLink(null), toast(L("לא זוהתה כניסה. אפשר לנסות שוב.", "No sign-in was seen. Try again.")));
-          setLink(null);
-          done({ added: r.added ?? 0, total: r.total ?? 0 });
-          onChange();
-        },
-        (e: Error) => {
-          setLink(null);
-          toast(e.message);
-        },
-      );
-    }, 3000);
+  // What she sees while it waits, and after: "waiting" (with when it last asked), "reading" (Stremio confirmed, her
+  // library is being read), an error to act on, or the result.
+  const [linkState, setLinkState] = useState<{ kind: "waiting"; at: number } | { kind: "reading" } | { kind: "error"; text: string } | null>(null);
+  const [connected, setConnected] = useState<string>("");
+  const check = (code: string, until: number) => {
+    const slow = setTimeout(() => setLinkState({ kind: "reading" }), 1500);
+    void api<{ waiting: boolean; added?: number; total?: number }>("/api/stremio/account/link", { method: "POST", body: { op: "check", code } }).then(
+      (r) => {
+        clearTimeout(slow);
+        if (r.waiting) {
+          setLinkState({ kind: "waiting", at: Date.now() });
+          if (Date.now() < until) waitLink(code, until);
+          else setLinkState({ kind: "error", text: L("לא זוהה אישור ב-10 הדקות האחרונות. קחו קוד חדש ונסו שוב.", "No approval was seen in 10 minutes. Get a new code and try again.") });
+          return;
+        }
+        setLink(null);
+        setLinkState(null);
+        setConnected(L(`✓ התחברת ל-Stremio. נוספו ${r.added ?? 0} סרטים וסדרות (סה״כ ${r.total ?? 0}).`, `✓ Connected to Stremio. ${r.added ?? 0} films and series added (${r.total ?? 0} in all).`));
+        done({ added: r.added ?? 0, total: r.total ?? 0 });
+        onChange();
+      },
+      (e: Error) => {
+        clearTimeout(slow);
+        setLinkState({ kind: "error", text: e.message });
+      },
+    );
   };
+  const waitLink = (code: string, until: number) => {
+    clearTimeout(pageTimer.current);
+    pageTimer.current = setTimeout(() => check(code, until), 3000);
+  };
+  // Back from Stremio's site (the phone paused the page while it was hidden): ask at once.
+  useEffect(() => {
+    if (!link) return;
+    const back = () => {
+      if (document.visibilityState === "visible") {
+        clearTimeout(pageTimer.current);
+        check(link.code, Date.now() + 10 * 60_000);
+      }
+    };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, [link]);
   /** A new code and Stremio's page for it (also "↻ New code" when the last one expired), then waits for her. */
   const startLink = () =>
     api<{ code: string; link: string }>("/api/stremio/account/link", { method: "POST", body: { op: "start" } }).then((r) => {
       setLink(r);
+      setConnected("");
+      setLinkState({ kind: "waiting", at: Date.now() });
       window.open(r.link, "_blank", "noopener");
       waitLink(r.code, Date.now() + 10 * 60_000);
     });
@@ -98,6 +127,7 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
 
       <div className="card stack stremio-conn">
         <div className="row wrap"><b className="grow">🎬 Stremio</b>{st.stremio && <span className="pill small" dir="ltr">✓ {st.stremio.email}</span>}</div>
+        {connected && <p className="small stremio-ok" role="status" dir="auto">{connected}</p>}
         {st.stremio ? (
           <>
             <span className="muted small">{L(`${st.stremio.count} סרטים וסדרות שראית`, `${st.stremio.count} films and series watched`)}{st.stremio.synced ? ` · ${L("עודכן", "updated")} ${when(st.stremio.synced)}` : ""}</span>
@@ -112,7 +142,13 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
               <span className="small">{L("פתח את הדף של Stremio, התחבר שם (גם עם Google או Facebook) ואשר את הקוד:", "Open Stremio's page, sign in there (Google or Facebook work too) and confirm the code:")}</span>
               <b className="trakt-user-code" dir="ltr">{link.code}</b>
               <a className="button primary" href={link.link} target="_blank" rel="noopener noreferrer" dir="ltr">{link.link.replace("https://", "")} ↗</a>
-              <span className="muted small">{L("מחכה לאישור… קשר יזהה את זה לבד. הקוד תקף כמה דקות; אם Stremio כותב שהוא פג, קחו קוד חדש.", "Waiting for you to confirm… KesherAI notices by itself. The code lasts a few minutes; if Stremio says it expired, get a new one.")}</span>
+              {linkState?.kind === "reading" ? (
+                <span className="small" role="status">{L("✓ Stremio אישר. קורא את מה שראית…", "✓ Stremio approved. Reading what you watched…")}</span>
+              ) : linkState?.kind === "error" ? (
+                <span className="error small" role="alert" dir="auto">{linkState.text}</span>
+              ) : (
+                <span className="muted small" role="status">{L("מחכה לאישור שלך באתר של Stremio… קשר בודק כל כמה שניות ויזהה את זה לבד. הקוד תקף כמה דקות; אם Stremio כותב שהוא פג, קחו קוד חדש.", "Waiting for your approval on Stremio's site… KesherAI checks every few seconds and notices by itself. The code lasts a few minutes; if Stremio says it expired, get a new one.")}</span>
+              )}
               <div className="row wrap">
                 <button type="button" disabled={!!busy} onClick={() => void run("s-link", () => { clearTimeout(pageTimer.current); return startLink(); })}>{busy === "s-link" ? "…" : L("↻ קוד חדש", "↻ New code")}</button>
                 <button type="button" className="ghost" onClick={() => { clearTimeout(pageTimer.current); setLink(null); }}>{L("ביטול", "Cancel")}</button>

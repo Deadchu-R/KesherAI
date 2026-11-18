@@ -132,3 +132,22 @@ test("Stremio's link sign-in: a code and Stremio's own address, waiting, then co
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Stremio's link sign-in takes a key ending in \"=\" (as Stremio sends), and says so when the answer is not a key", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-stremio-link2-"));
+  try {
+    const key = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/abcd==";
+    const ok = (async (url: string) => {
+      if (url.includes("/read?")) return new Response(JSON.stringify({ result: { authKey: key, success: true } }));
+      if (url.endsWith("/getUser")) return new Response(JSON.stringify({ result: { email: "me@example.com" } }));
+      return new Response(JSON.stringify({ result: [] }));
+    }) as typeof fetch;
+    const t = new StremioTaste(dir, ok);
+    assert.deepEqual(await t.stremioLinkCheck("UAED"), { waiting: false, added: 0, total: 0 });
+    assert.equal((await t.load()).stremio?.authKey, key);
+    const odd = new StremioTaste(dir, (async () => new Response(JSON.stringify({ result: { authKey: "<script>" } }))) as typeof fetch);
+    await assert.rejects(() => odd.stremioLinkCheck("UAED"), /not a session key/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

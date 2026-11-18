@@ -373,7 +373,7 @@ export class BrowserPane {
     if (!t) return { key: null };
     const code = `(() => { try { const p = JSON.parse(localStorage.getItem("profile") || "null"); const k = p && p.auth && p.auth.key; return typeof k === "string" ? k : null; } catch { return null; } })()`;
     const key = (await t.view.webContents.executeJavaScriptInIsolatedWorld(1003, [{ code }], true)) as unknown;
-    return { key: typeof key === "string" && /^[\w-]{10,200}$/.test(key) ? key : null };
+    return { key: typeof key === "string" && /^[\w+/=-]{10,200}$/.test(key) ? key : null };
   }
 
   /** The fab.com tab KesherAI opened for searching, and when it closes. */

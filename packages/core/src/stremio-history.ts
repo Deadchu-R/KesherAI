@@ -16,6 +16,12 @@ const TRAKT_API = "https://api.trakt.tv";
 /** Stremio's "link" sign-in (what its TV apps use): a code, she signs in on Stremio's site and confirms it. */
 const STREMIO_LINK = "https://link.stremio.com/api/v2/";
 
+/**
+ * A Stremio session key: base64-like (letters, digits, `_ - + / =`; found on the PC: link sign-in keys end with "="),
+ * 10 to 200 characters. Used everywhere a key comes back from Stremio.
+ */
+export const STREMIO_KEY = /^[\w+/=-]{10,200}$/;
+
 /** A failure with the HTTP status the route should answer. */
 const fail = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
 
@@ -68,7 +74,10 @@ export async function stremioLinkRead(fetcher: typeof fetch, code: string): Prom
   const res = await fetcher(`${STREMIO_LINK}read?type=Read&code=${encodeURIComponent(code)}`, { redirect: "error", signal: AbortSignal.timeout(20_000) });
   if (!res.ok) return undefined;
   const key = ((await res.json().catch(() => ({}))) as { result?: { authKey?: unknown } }).result?.authKey;
-  return typeof key === "string" && /^[\w-]{10,200}$/.test(key) ? key : undefined;
+  if (key === undefined) return undefined;
+  // Confirmed, but not a key we can use: say so instead of waiting for ever.
+  if (typeof key !== "string" || !STREMIO_KEY.test(key)) throw fail("Stremio confirmed, but its answer was not a session key KesherAI knows.", 502);
+  return key;
 }
 
 /**
@@ -83,7 +92,7 @@ export async function stremioLogin(fetcher: typeof fetch, email: string, passwor
   const e = email.trim();
   if (!/^[^\s@]{1,64}@[^\s@]{1,190}$/.test(e) || !password || password.length > 512) throw fail("Enter your Stremio email and password.", 400);
   const r = await stremioCall<{ authKey?: unknown }>(fetcher, "login", { type: "Login", email: e, password, facebook: false });
-  if (typeof r.authKey !== "string" || !/^[\w-]{10,200}$/.test(r.authKey)) throw fail("Stremio gave no session.", 502);
+  if (typeof r.authKey !== "string" || !STREMIO_KEY.test(r.authKey)) throw fail("Stremio gave no session.", 502);
   return r.authKey;
 }
 

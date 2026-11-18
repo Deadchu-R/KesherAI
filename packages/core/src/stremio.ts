@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { stremioEmail, stremioLibrary, stremioLinkRead, stremioLinkStart, stremioLogin, stremioLogout, traktApp, traktLibrary, traktPoll, traktStart, type TraktApp, type TraktDevice } from "./stremio-history.js";
+import { STREMIO_KEY, stremioEmail, stremioLibrary, stremioLinkRead, stremioLinkStart, stremioLogin, stremioLogout, traktApp, traktLibrary, traktPoll, traktStart, type TraktApp, type TraktDevice } from "./stremio-history.js";
 
 /**
  * Movies and series for the user's taste, as a Stremio addon (Roee, 2026-11-16).
@@ -312,7 +312,7 @@ export class StremioTaste {
    * @returns What was added.
    */
   async stremioConnectKey(authKey: string): Promise<{ added: number; total: number }> {
-    if (!/^[\w-]{10,200}$/.test(authKey)) throw Object.assign(new Error("Stremio gave no session."), { statusCode: 400 });
+    if (!STREMIO_KEY.test(authKey)) throw Object.assign(new Error("Stremio gave no session."), { statusCode: 400 });
     const email = await stremioEmail(this.fetcher, authKey);
     const s = await this.load();
     s.stremio = { email, authKey };
