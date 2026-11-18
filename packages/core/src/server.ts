@@ -612,7 +612,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await trainingRoutes(app, { training, chatTrainer, vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) });
   // A voice of her own: Chatterbox Multilingual (Hebrew too), from a short clip, in its own Python (voice-clone.ts).
   // The most free memory on any card (the guard's last reading), for the engines that need room on it.
-  const freeGpu = () => { const cards = guard.status().cards; return cards.length ? Math.max(...cards.map((c) => c.memTotal - c.memUsed)) : undefined; };
+  // Read the card now (the guard reads every 15 s when idle: a model unloaded a moment ago still looked loaded).
+  const freeGpu = async () => { await guard.check().catch(() => undefined); const cards = guard.status().cards; return cards.length ? Math.max(...cards.map((c) => c.memTotal - c.memUsed)) : undefined; };
   // uv (installed when first needed): the engines below each set up their own Python with it.
   const uvPath = async () => {
     await runtimes.install("uv");

@@ -107,7 +107,7 @@ export class PartSegmenter {
   constructor(
     private readonly dir: string,
     private readonly uv: () => Promise<string>,
-    private readonly freeGpuBytes?: () => number | undefined,
+    private readonly freeGpuBytes?: () => number | undefined | Promise<number | undefined>,
   ) {}
 
   private get python() {
@@ -215,7 +215,7 @@ export class PartSegmenter {
     if (!this.status().installed) throw Object.assign(new Error("Set up the parts engine first."), { statusCode: 409 });
     if (this.busy) throw Object.assign(new Error("The parts engine is busy; try again in a moment."), { statusCode: 409 });
     // With a model already filling the card (self-work's, a chat's), this would crawl in shared memory for minutes: say so.
-    const free = this.freeGpuBytes?.();
+    const free = await this.freeGpuBytes?.();
     if (free !== undefined && free < 6 * 1024 ** 3) throw Object.assign(new Error(`The graphics card is full (${(free / 1024 ** 3).toFixed(1)} GB free; the parts engine needs about 6 GB). Unload the model in Models, or wait for self-work to finish.`), { statusCode: 409, code: "gpu-full" });
     if (glb.length < 20 || glb.subarray(0, 4).toString() !== "glTF") throw Object.assign(new Error("Send the mesh as a GLB."), { statusCode: 400 });
     const work = join(this.dir, "work", randomUUID());
