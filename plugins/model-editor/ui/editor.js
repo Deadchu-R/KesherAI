@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -701,7 +701,8 @@ async function splitByMeaning(mesh) {
     const tmp = new THREE.Mesh(g, new THREE.MeshStandardMaterial());
     const out = await new GLTFExporter().parseAsync(tmp, { binary: true });
     const data = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(new Blob([out])); });
-    const faces = await kesher.call("model.parts.segment", { data });
+    $("busyStop").hidden = false;
+    const faces = await kesher.call("model.parts.segment", { data }).finally(() => ($("busyStop").hidden = true));
     // Each of our triangles takes the part of the nearest centre that came back (a grid makes it quick).
     const cell = new THREE.Box3().setFromObject(tmp).getSize(new THREE.Vector3()).length() / 64 || 1;
     const grid = new Map();
@@ -980,6 +981,7 @@ document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () 
   else ({ frame: () => $("frame").click(), undo, keep: keepVersion })[d]();
 }));
 let busyCount = 0;
+$("busyStop").onclick = () => kesher.call("model.parts.cancel").catch(() => undefined);
 function busy(text) { busyCount = Math.max(0, busyCount + (text ? 1 : -1)); $("busy").hidden = busyCount <= 0; if (text) $("busyText").textContent = text; }
 let msgTimer;
 function msg(text, error) { const m = $("msg"); m.textContent = text; m.className = `status show${error ? " error" : ""}`; clearTimeout(msgTimer); msgTimer = setTimeout(() => (m.className = "status"), error ? 6000 : 3500); }

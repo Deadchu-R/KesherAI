@@ -9,6 +9,7 @@ export async function partSegRoutes(app: FastifyInstance, p: PartSegmenter): Pro
     void p.install();
     return p.status();
   });
+  app.post("/api/part-seg/cancel", async () => ({ stopped: p.cancel(), ...p.status() }));
   // A GLB of one mesh in; for each triangle its centre and part out.
   app.post("/api/part-seg/segment", { bodyLimit: 200 * 1024 * 1024 }, async (req, reply) => {
     if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: "Send the mesh as model/gltf-binary." });

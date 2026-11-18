@@ -25,3 +25,8 @@ test("a full graphics card: the parts engine says so instead of crawling", async
   const s = new PartSegmenter(dir, async () => "uv", () => 1024 ** 3);
   await assert.rejects(s.segment(Buffer.from("glTF....................")), /graphics card is full \(1\.0 GB free/);
 });
+
+test("stopping: nothing to stop when no split is running", async () => {
+  const s = new PartSegmenter(await mkdtemp(join(tmpdir(), "parts-")), async () => "uv");
+  assert.equal(s.cancel(), false);
+});

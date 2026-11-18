@@ -268,6 +268,9 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "model.parts.status":
           need("model");
           return api("/api/part-seg");
+        case "model.parts.cancel":
+          need("model");
+          return api("/api/part-seg/cancel", { method: "POST" });
         case "model.parts.setup": {
           need("model");
           const he = getLocale() === "he";

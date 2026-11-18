@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -90,6 +90,8 @@ print("FETCHED", len(ck), "code", code_rev, "weights", w_rev)
 export class PartSegmenter {
   private state: PartSegState = { installed: false, log: [] };
   private busy?: Promise<unknown>;
+  /** The program running now (to stop it). */
+  private child?: ChildProcess;
 
   /**
    * @param dir - engines/p3sam.
@@ -119,6 +121,7 @@ export class PartSegmenter {
   private run(cmd: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs = 60 * 60_000): Promise<string> {
     return new Promise((ok, fail) => {
       const p = spawn(cmd, args, { env, windowsHide: true });
+      this.child = p;
       let out = "";
       const on = (b: Buffer) => {
         out += b.toString();
@@ -128,8 +131,20 @@ export class PartSegmenter {
       p.stdout.on("data", on);
       p.stderr.on("data", on);
       p.on("error", (e) => (clearTimeout(timer), fail(e)));
-      p.on("close", (code) => (clearTimeout(timer), code === 0 ? ok(out) : fail(new Error(`${cmd.split(/[\\/]/).pop()} stopped (code ${code}); see the log.`))));
+      p.on("close", (code) => (clearTimeout(timer), (this.child = undefined), code === 0 ? ok(out) : fail(new Error(`${cmd.split(/[\\/]/).pop()} stopped (code ${code}); see the log.`))));
     });
+  }
+
+  /**
+   * Stops a split that is running (the setup is left to finish, so its venv is never half-written).
+   *
+   * @returns Whether something was stopped.
+   */
+  cancel(): boolean {
+    if (this.state.phase !== "working" || !this.child) return false;
+    this.child.kill();
+    this.add("Stopped by the user.");
+    return true;
   }
 
   /**
