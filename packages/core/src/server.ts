@@ -611,6 +611,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   await trainingRoutes(app, { training, chatTrainer, vramGb: async () => Math.max(0, ...(await nvidiaGpus()).map((g) => g.vramTotal / 1024 ** 3)) });
   // A voice of her own: Chatterbox Multilingual (Hebrew too), from a short clip, in its own Python (voice-clone.ts).
+  // The most free memory on any card (the guard's last reading), for the engines that need room on it.
+  const freeGpu = () => { const cards = guard.status().cards; return cards.length ? Math.max(...cards.map((c) => c.memTotal - c.memUsed)) : undefined; };
   // uv (installed when first needed): the engines below each set up their own Python with it.
   const uvPath = async () => {
     await runtimes.install("uv");
@@ -620,9 +622,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   };
   await voiceCloneRoutes(app, new VoiceCloner(join(paths.engines, "chatterbox"), uvPath));
   // Splitting a 3D model into parts by meaning: P3-SAM in its own Python (part-seg.ts), set up when she asks for it.
-  await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), uvPath));
+  await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), uvPath, freeGpu));
   // Removing a picture's background (the image editor): rembg + BiRefNet in its own Python (bg-remove.ts).
-  await bgRemoveRoutes(app, new BgRemover(join(paths.engines, "rembg"), uvPath));
+  await bgRemoveRoutes(app, new BgRemover(join(paths.engines, "rembg"), uvPath, freeGpu));
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });

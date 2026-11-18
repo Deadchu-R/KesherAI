@@ -41,10 +41,12 @@ export class BgRemover {
   /**
    * @param dir - engines/rembg.
    * @param uv - The path to uv (installs it if needed).
+   * @param freeGpuBytes - The most free memory on any graphics card now (the GPU guard's reading), when known.
    */
   constructor(
     private readonly dir: string,
     private readonly uv: () => Promise<string>,
+    private readonly freeGpuBytes?: () => number | undefined,
   ) {}
 
   private get python() {
@@ -114,6 +116,9 @@ export class BgRemover {
   async remove(picture: Buffer, model: string = BG_MODELS[0]): Promise<Buffer> {
     if (!this.status().installed) throw Object.assign(new Error("Set up the background remover first."), { statusCode: 409 });
     if (this.busy) throw Object.assign(new Error("The background remover is busy; try again in a moment."), { statusCode: 409 });
+    // With a model already filling the card (self-work's, a chat's), this would crawl in shared memory for minutes: say so.
+    const free = this.freeGpuBytes?.();
+    if (free !== undefined && free < 2 * 1024 ** 3) throw Object.assign(new Error(`The graphics card is full (${(free / 1024 ** 3).toFixed(1)} GB free; the background remover needs about 2 GB). Unload the model in Models, or wait for self-work to finish.`), { statusCode: 409, code: "gpu-full" });
     if (!(BG_MODELS as readonly string[]).includes(model)) throw Object.assign(new Error("Unknown model."), { statusCode: 400 });
     const kind = picture.subarray(0, 4).toString("hex");
     if (!/^(89504e47|ffd8ff..|52494646)$/.test(kind)) throw Object.assign(new Error("Send a PNG, JPEG or WebP picture."), { statusCode: 400 });

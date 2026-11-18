@@ -14,3 +14,14 @@ test("not set up: it says so; a mesh must be a GLB", async () => {
   assert.equal(s.status().installed, false);
   await assert.rejects(s.segment(Buffer.from("glTF....................")), /Set up the parts engine/);
 });
+
+test("a full graphics card: the parts engine says so instead of crawling", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const dir = await mkdtemp(join(tmpdir(), "parts-"));
+  const py = join(dir, "venv", process.platform === "win32" ? "Scripts" : "bin");
+  await mkdir(py, { recursive: true });
+  await writeFile(join(py, process.platform === "win32" ? "python.exe" : "python"), "");
+  await writeFile(join(dir, "paths.json"), "{}");
+  const s = new PartSegmenter(dir, async () => "uv", () => 1024 ** 3);
+  await assert.rejects(s.segment(Buffer.from("glTF....................")), /graphics card is full \(1\.0 GB free/);
+});
