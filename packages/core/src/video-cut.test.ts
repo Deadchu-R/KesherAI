@@ -95,3 +95,13 @@ test("probeText reads FFmpeg's report", () => {
   assert.deepEqual(probeText(t), { w: 1920, h: 1080, fps: 30, audio: true });
   assert.equal(probeText("Stream #0:0: Video: png, rgba, 640x480").audio, false);
 });
+
+test("a dip to black between clips: fades in after the first and out before the last, never longer than a third", () => {
+  const g = (a: string[]) => a[a.indexOf("-filter_complex") + 1]!;
+  const x = g(cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 3 }, { from: 5, to: 5.6 }], true, undefined, undefined, undefined, undefined, undefined, 0.5));
+  assert.match(x, /\[v0\]/);
+  assert.match(x, /setpts=PTS-STARTPTS,fade=t=out:st=2\.500:d=0\.500\[v0\]/);
+  assert.match(x, /fade=t=in:st=0:d=0\.200\[v1\]/);
+  assert.match(x, /afade=t=out:st=2\.500:d=0\.500\[a0\]/);
+  assert.doesNotMatch(g(cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 3 }], true, undefined, undefined, undefined, undefined, undefined, 0.5)), /fade=/);
+});

@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -681,7 +681,7 @@
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
-      const r = await kesher.call("video.cut", { ...cutPlan(), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
+      const r = await kesher.call("video.cut", { ...cutPlan(), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("dip").checked ? { fade: 0.4 } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);

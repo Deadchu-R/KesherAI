@@ -118,7 +118,7 @@ export function musicGraph(m: MusicTrack, input: number, total: number, voice?: 
  * @param music - A music track under it.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }, fade = 0): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
@@ -129,14 +129,24 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   const first = 1 + (sound ? 1 : 0) + (music ? 1 : 0);
   const fit = extra ? `,scale=${extra.frame.w}:${extra.frame.h}:force_original_aspect_ratio=decrease,pad=${extra.frame.w}:${extra.frame.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${extra.frame.fps},format=yuv420p` : "";
   const af = ",aformat=sample_rates=48000:channel_layouts=stereo";
+  // A dip to black between clips (CapCut's simplest transition): each stretch fades in and out, its sound too; never
+  // longer than a third of the stretch.
+  const dip = (len: number, i: number) => {
+    const d = Math.min(Math.max(0, Number.isFinite(fade) ? fade : 0), 1, len / 3);
+    if (!d || segments.length < 2) return { v: "", a: "" };
+    const first = i === 0, last = i === segments.length - 1;
+    const f = (k: "fade" | "afade") => `${first ? "" : `,${k}=t=in:st=0:d=${d.toFixed(3)}`}${last ? "" : `,${k}=t=out:st=${(len - d).toFixed(3)}:d=${d.toFixed(3)}`}`;
+    return { v: f("fade"), a: f("afade") };
+  };
   const parts = segments.map((s, i) => {
     const c = s.src && extra ? extra.clips[s.src - 1] : undefined;
+    const dp = dip(s.to - s.from, i);
     const vin = c ? `${first + s.src! - 1}:v` : "0:v";
-    const v = `[${vin}]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS${fit}[v${i}]`;
-    if (!extra) return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS[a${i}]` : v;
+    const v = `[${vin}]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS${fit}${dp.v}[v${i}]`;
+    if (!extra) return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${dp.a}[a${i}]` : v;
     const hasSound = c ? c.audio : audio || !!sound;
     const ain = c ? `${first + s.src! - 1}:a` : a;
-    return hasSound ? `${v};[${ain}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${af}[a${i}]` : `${v};anullsrc=r=48000:cl=stereo,atrim=duration=${(s.to - s.from).toFixed(3)}[a${i}]`;
+    return hasSound ? `${v};[${ain}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${af}${dp.a}[a${i}]` : `${v};anullsrc=r=48000:cl=stereo,atrim=duration=${(s.to - s.from).toFixed(3)}[a${i}]`;
   });
   audio = audio || !!sound || !!extra;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
@@ -176,7 +186,7 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param shape - One of SHAPES, or none.
  * @param music - A music track under it.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = []): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0): Promise<void> {
   // With added clips: the opened video's frame, and which added videos have sound (FFmpeg reads their headers).
   let more: { clips: ExtraClip[]; frame: Frame } | undefined;
   if (extras.length) {
@@ -186,7 +196,7 @@ export async function cutVideo(ffmpeg: string, input: string, output: string, se
   }
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more, fade), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);

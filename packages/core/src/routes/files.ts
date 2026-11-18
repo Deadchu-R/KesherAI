@@ -70,7 +70,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown; fade?: number } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
@@ -121,7 +121,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     try {
       if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
       if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras);
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras, Math.min(1, Math.max(0, Number(req.body?.fade) || 0)));
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {
