@@ -102,8 +102,7 @@ export function PageTabs({ hash }: { hash: string }) {
     return (
       <div
         key={placeOf(tb.hash)}
-        role="tab"
-        aria-selected={on}
+        role="presentation"
         className={`page-tab${on ? " on" : ""}${tb.preview ? " preview" : ""}`}
         title={tb.preview ? L(`${title} (תצוגה זמנית: לחיצה כפולה משאירה אותו)`, `${title} (preview: double-click keeps it)`) : title}
         onMouseDown={(e) => {
@@ -114,7 +113,7 @@ export function PageTabs({ hash }: { hash: string }) {
         }}
         onDoubleClick={() => update(pinTab(tabs, tb.hash))}
       >
-        <a href={tb.hash} className="page-tab-link" dir="auto">
+        <a href={tb.hash} role="tab" aria-selected={on} className="page-tab-link" dir="auto">
           <span aria-hidden="true">{icon}</span>
           <span className="page-tab-title">{title}</span>
           {busy && <span className="page-tab-dot" aria-label={L("עונה עכשיו", "Answering now")} />}
@@ -125,9 +124,11 @@ export function PageTabs({ hash }: { hash: string }) {
   };
   return (
     <>
-      <nav className="page-tabs" role="tablist" aria-label={L("טאבים פתוחים", "Open tabs")}>
+      <nav className="page-tabs" aria-label={L("טאבים פתוחים", "Open tabs")}>
+        <div className="page-tabs-list" role="tablist">
         <a href={HOME} role="tab" aria-selected={showing === placeOf(HOME)} className={`page-tab home${showing === placeOf(HOME) ? " on" : ""}`} title={L("בית", "Home")}>⌂</a>
-        <div className="page-tabs-row">{tabs.map(tab)}</div>
+        <div className="page-tabs-row" role="presentation">{tabs.map(tab)}</div>
+        </div>
         <button type="button" className="page-tabs-count" aria-label={L(`${tabs.length + 1} טאבים פתוחים`, `${tabs.length + 1} open tabs`)} aria-expanded={grid} onClick={() => setGrid(!grid)}>
           {tabs.length + 1}
         </button>

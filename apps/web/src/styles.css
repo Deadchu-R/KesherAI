@@ -3785,8 +3785,11 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .page-tab-card { display: flex; align-items: center; gap: 6px; padding: 10px; min-height: 64px; }
 .page-tab-card a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: inherit; text-decoration: none; }
 .page-tab-card.on { border-color: var(--accent); }
+/* On a phone the counter sits in the middle of the top bar (its empty middle), as phone browsers show their tabs. */
 @media (max-width: 760px) {
-  .page-tabs { border-bottom: 0; padding: 4px 10px; background: transparent; }
+  .page-tabs { border-bottom: 0; padding: 0; background: transparent; position: fixed; top: calc((var(--bar-h) - 26px) / 2); left: 50%; transform: translateX(-50%); z-index: 21; }
   .page-tabs .page-tab, .page-tabs-row { display: none; }
-  .page-tabs-count { display: block; }
+  .page-tabs-count { display: block; margin: 0; }
 }
+.page-tabs-list { display: flex; align-items: flex-end; gap: 2px; min-width: 0; flex: 1; }
+@media (max-width: 760px) { .page-tabs-list { display: none; } }
