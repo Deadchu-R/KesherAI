@@ -57,6 +57,7 @@ Requests that arrive through a tunnel or proxy (they carry `cf-connecting-ip`, `
 | `GET /api/models/recommended` | The "Start here" models, each with `downloaded` and a performance `estimate` for this computer |
 | `POST /api/models/setup` | "Set it up for me". `{ ids: string[] }` — installs the engine, downloads each model if missing, loads the first. Returns 202 |
 | `POST /api/models/recommended/:id/run` | One click: installs the engine if needed, downloads the model if needed, loads it. Returns 202; follow progress in the engine status |
+| `GET /api/models/suggest?tool=study\|chat-report\|code&lang=he\|en` | `{ suggestion, loaded }`: every model scored 0–100 for the tool on this computer (quality 40, fit for the tool 35, speed here 25); `suggestion` is null unless another model is 8+ higher: `{ loaded?, options: [{ kind: "switch", path } \| { kind: "download", id }] , context? }` |
 
 ## Built-in engine (llama.cpp)
 
@@ -218,6 +219,17 @@ reply = client.chat.completions.create(model="lmstudio/qwen3-14b", messages=[{"r
 ```
 
 Tool calls, images in messages and embeddings are not supported on `/v1` yet.
+
+## Films and series (Stremio)
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/stremio` | Her taste (counts, her own ratings), the picks, and whether Stremio and Trakt are connected (never a key or token) |
+| `POST /api/stremio/account` | `{ email, password }`: signs in to Stremio (the password goes to api.strem.io only and is not kept) and reads her library's watched items |
+| `POST /api/stremio/account/sync` · `DELETE /api/stremio/account` | Reads the library again · signs out at Stremio and forgets the session |
+| `POST /api/stremio/trakt` | `{ clientId, clientSecret }` (her Trakt app, kept here) or `{}`: starts the device sign-in; `{ userCode, url, expiresIn }` |
+| `POST /api/stremio/trakt/check` | `{ state: "wait" \| "gone" \| "connected", added?, total? }`; on approval reads her watched films and shows and ratings |
+| `POST /api/stremio/trakt/sync` · `DELETE /api/stremio/trakt` | Reads Trakt again · forgets the app and the token |
 
 ## Versioning
 

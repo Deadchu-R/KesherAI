@@ -1,3 +1,4 @@
+import { StremioHistory, type HistoryState } from "../StremioHistory";
 import { useEffect, useState } from "react";
 import { api, isRemote, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -6,7 +7,7 @@ import { toast } from "../library";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Pick { id: string; type: "movie" | "series"; name: string; poster?: string; year?: string; why?: string }
-interface State { rated: number; letterboxd: number; mal?: number; malClient?: boolean; mine: Array<{ title: string; rating?: number }>; picks: { movie: Pick[]; series: Pick[]; anime?: Pick[]; t?: number } }
+interface State extends HistoryState { rated: number; letterboxd: number; mal?: number; malClient?: boolean; mine: Array<{ title: string; rating?: number }>; picks: { movie: Pick[]; series: Pick[]; anime?: Pick[]; t?: number } }
 
 /** A MyAnimeList export as text: the .xml, or the .xml.gz MyAnimeList gives (opened here). */
 async function malText(f: File): Promise<string> {
@@ -46,6 +47,7 @@ export function StremioPage() {
   return (
     <div className="page stremio-page">
       <h1>{L("סרטים וסדרות בשבילך", "Films and series for you")}</h1>
+      <StremioHistory st={st} onChange={load} />
       <section className="card">
         <strong>{L("הטעם שלך", "Your taste")}</strong>
         <p className="small"><span>{L(`${st.letterboxd} מ-Letterboxd`, `${st.letterboxd} from Letterboxd`)}</span> · <span>{L(`${st.mal ?? 0} אנימה מ-MyAnimeList`, `${st.mal ?? 0} anime from MyAnimeList`)}</span> · <span>{L(`${st.rated - st.letterboxd - (st.mal ?? 0)} דירוגים ב-KesherAI`, `${st.rated - st.letterboxd - (st.mal ?? 0)} ratings in KesherAI`)}</span></p>

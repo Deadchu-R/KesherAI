@@ -2178,3 +2178,14 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   short-context warning for long reports. Never switches by itself; "Keep" is remembered per tool and model. Study
   counts the Hebrew model it already loads by itself (course model "auto").
 - Stopped at: built and tested; checking on the PC after the next release.
+
+## Stremio's watch history (2026-11-18)
+- Stremio gives addons nothing of her library. Two ways others use: **Stremio's own API** (api.strem.io `login` →
+  a session key, `datastoreGet` on the `libraryItem` collection: name, type, timesWatched, flaggedWatched,
+  overallTimeWatched, duration; used by stremio-api-client, the Rust `stremio` crate and trakt-stremio-import), and
+  **Trakt** (Stremio's official Trakt integration scrobbles there; Simkl and MyTrakt Sync do the same).
+- Built both (Roee: "both"): sign in to Stremio on the Stremio page (password only to Stremio, only the session key
+  kept, "Sign out" ends it at Stremio), and Trakt with the device code and her own Trakt app. Watched items count as
+  seen (Stremio's have no year: the same title already rated is not added twice); Trakt's 1–10 become stars.
+- Stopped at: built and tested with stand-ins for both services; the real sign-in waits for Roee (he types his own
+  password and approves the Trakt code).

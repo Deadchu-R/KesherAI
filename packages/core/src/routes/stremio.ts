@@ -20,7 +20,33 @@ export async function stremioRoutes(app: FastifyInstance, s: KesherServices, key
   };
   app.get("/api/stremio", async () => {
     const t = await taste.load();
-    return { rated: t.rated.length, letterboxd: t.rated.filter((r) => r.from === "letterboxd").length, mal: t.rated.filter((r) => r.from === "mal").length, malClient: !!t.malClientId, mine: t.rated.filter((r) => r.from === "kesher").slice(0, 50), picks: t.picks };
+    const from = (f: string) => t.rated.filter((r) => r.from === f).length;
+    return {
+      rated: t.rated.length,
+      letterboxd: from("letterboxd"),
+      mal: from("mal"),
+      malClient: !!t.malClientId,
+      // Never the session key, the token or the app secret: only whether each is connected.
+      stremio: t.stremio ? { email: t.stremio.email, synced: t.stremio.synced ?? null, count: t.stremio.count ?? 0, added: from("stremio") } : null,
+      trakt: t.trakt ? { connected: !!t.trakt.token, waiting: !!t.trakt.device, hasApp: true, synced: t.trakt.synced ?? null, count: t.trakt.count ?? 0, added: from("trakt") } : null,
+      mine: t.rated.filter((r) => r.from === "kesher").slice(0, 50),
+      picks: t.picks,
+    };
+  });
+  // Her Stremio library (watched films and series): she signs in here; the password goes to Stremio only.
+  app.post<{ Body: { email?: string; password?: string } }>("/api/stremio/account", { bodyLimit: 4096 }, async (req) => taste.stremioConnect(String(req.body?.email ?? ""), String(req.body?.password ?? "")));
+  app.post("/api/stremio/account/sync", async () => taste.stremioSync());
+  app.delete("/api/stremio/account", async () => {
+    await taste.stremioDisconnect();
+    return { ok: true };
+  });
+  // Trakt (Stremio's official integration sends what she watches there): the device code, then her history and ratings.
+  app.post<{ Body: { clientId?: string; clientSecret?: string } }>("/api/stremio/trakt", { bodyLimit: 4096 }, async (req) => taste.traktBegin(req.body ?? {}));
+  app.post("/api/stremio/trakt/check", async () => taste.traktCheck());
+  app.post("/api/stremio/trakt/sync", async () => taste.traktSync());
+  app.delete("/api/stremio/trakt", async () => {
+    await taste.traktDisconnect();
+    return { ok: true };
   });
   app.post<{ Body: { csv?: string } }>("/api/stremio/letterboxd", { bodyLimit: 20 * 1024 * 1024 }, async (req) => taste.importLetterboxd(String(req.body?.csv ?? "")));
   /** MyAnimeList: the export's .xml, or her public list by user name (with her API client id, kept here). */

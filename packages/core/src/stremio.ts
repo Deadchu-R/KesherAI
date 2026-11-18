@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { stremioLibrary, stremioLogin, stremioLogout, traktApp, traktLibrary, traktPoll, traktStart, type TraktApp, type TraktDevice } from "./stremio-history.js";
 
 /**
  * Movies and series for the user's taste, as a Stremio addon (Roee, 2026-11-16).
@@ -18,7 +19,7 @@ export interface Rated {
   /** 0.5–5 stars. */
   rating?: number;
   kind?: "movie" | "series";
-  from: "letterboxd" | "kesher" | "mal";
+  from: "letterboxd" | "kesher" | "mal" | "stremio" | "trakt";
   /** An anime (from MyAnimeList): its own row in Stremio. */
   anime?: boolean;
 }
@@ -39,6 +40,10 @@ interface Store {
   picks: { movie: Pick[]; series: Pick[]; anime?: Pick[]; t?: number };
   /** Her MyAnimeList API client id (to read her public list by name), kept on this computer only. */
   malClientId?: string;
+  /** Signed in to Stremio: the session key (never the password), and the last sync. */
+  stremio?: { email: string; authKey: string; synced?: number; count?: number };
+  /** Trakt: her app's keys, the access token once she approved, a sign-in waiting for approval, and the last sync. */
+  trakt?: { app: TraktApp; token?: string; device?: TraktDevice & { at: number }; synced?: number; count?: number };
 }
 
 const CINEMETA = "https://v3-cinemeta.strem.io";
@@ -188,7 +193,13 @@ export class StremioTaste {
   async load(): Promise<Store> {
     try {
       const j = JSON.parse(await readFile(this.file(), "utf8")) as Partial<Store>;
-      return { rated: Array.isArray(j.rated) ? j.rated : [], picks: { movie: j.picks?.movie ?? [], series: j.picks?.series ?? [], anime: j.picks?.anime ?? [], ...(j.picks?.t ? { t: j.picks.t } : {}) }, ...(typeof j.malClientId === "string" ? { malClientId: j.malClientId } : {}) };
+      return {
+        rated: Array.isArray(j.rated) ? j.rated : [],
+        picks: { movie: j.picks?.movie ?? [], series: j.picks?.series ?? [], anime: j.picks?.anime ?? [], ...(j.picks?.t ? { t: j.picks.t } : {}) },
+        ...(typeof j.malClientId === "string" ? { malClientId: j.malClientId } : {}),
+        ...(j.stremio?.authKey ? { stremio: j.stremio } : {}),
+        ...(j.trakt?.app ? { trakt: j.trakt } : {}),
+      };
     } catch {
       return { rated: [], picks: { movie: [], series: [] } };
     }
@@ -245,18 +256,114 @@ export class StremioTaste {
     const key = (r: Rated) => `${r.title.toLowerCase()}|${r.year ?? ""}`;
     const have = new Map(s.rated.map((r) => [key(r), r]));
     let added = 0;
+    const byTitle = new Map(s.rated.map((r) => [r.title.toLowerCase(), r]));
     for (const r of list) {
-      const old = have.get(key(r));
+      // Stremio's library has no years: the same title already there (from Letterboxd, with its year) is the same film.
+      const old = have.get(key(r)) ?? (r.year === undefined ? byTitle.get(r.title.toLowerCase()) : undefined);
       if (old) {
         if (r.rating !== undefined) old.rating = r.rating;
       } else {
         have.set(key(r), r);
+        byTitle.set(r.title.toLowerCase(), r);
         added++;
       }
     }
     s.rated = [...have.values()];
     await this.save(s);
     return { added, total: s.rated.length };
+  }
+
+  /**
+   * Signs in to Stremio (the password goes only to Stremio and is not kept) and reads her library once.
+   *
+   * @param email - Her Stremio email.
+   * @param password - Her Stremio password.
+   * @returns What was added.
+   */
+  async stremioConnect(email: string, password: string): Promise<{ added: number; total: number }> {
+    const authKey = await stremioLogin(this.fetcher, email, password);
+    const s = await this.load();
+    s.stremio = { email: email.trim(), authKey };
+    await this.save(s);
+    return this.stremioSync();
+  }
+
+  /** Reads her Stremio library again (watched films and series). */
+  async stremioSync(): Promise<{ added: number; total: number }> {
+    const s = await this.load();
+    if (!s.stremio) throw Object.assign(new Error("Sign in to Stremio first."), { statusCode: 400 });
+    const list = await stremioLibrary(this.fetcher, s.stremio.authKey);
+    const r = await this.add(list);
+    const after = await this.load();
+    if (after.stremio) after.stremio = { ...after.stremio, synced: Date.now(), count: list.length };
+    await this.save(after);
+    return r;
+  }
+
+  /** Signs out of Stremio (at Stremio too) and forgets the session; what was read stays. */
+  async stremioDisconnect(): Promise<void> {
+    const s = await this.load();
+    if (s.stremio) await stremioLogout(this.fetcher, s.stremio.authKey);
+    delete s.stremio;
+    await this.save(s);
+  }
+
+  /**
+   * Starts the Trakt sign-in with her app's keys: the code to type at trakt.tv/activate.
+   *
+   * @param app - The Client ID and Secret as she pasted them (or none: the ones kept).
+   * @returns The code and the address.
+   */
+  async traktBegin(app?: { clientId?: unknown; clientSecret?: unknown }): Promise<{ userCode: string; url: string; expiresIn: number }> {
+    const s = await this.load();
+    const keys = app && (app.clientId || app.clientSecret) ? traktApp(app) : s.trakt?.app;
+    if (!keys) throw Object.assign(new Error("Paste your Trakt app's Client ID and Client Secret first."), { statusCode: 400 });
+    const d = await traktStart(this.fetcher, keys);
+    s.trakt = { ...s.trakt, app: keys, device: { ...d, at: Date.now() } };
+    delete s.trakt.token;
+    await this.save(s);
+    return { userCode: d.userCode, url: d.url, expiresIn: d.expiresIn };
+  }
+
+  /** Asks Trakt once whether she approved; on yes, reads her history and ratings. */
+  async traktCheck(): Promise<{ state: "wait" | "gone" | "connected"; added?: number; total?: number }> {
+    const s = await this.load();
+    const d = s.trakt?.device;
+    if (!s.trakt || !d) return { state: s.trakt?.token ? "connected" : "gone" };
+    if (Date.now() > d.at + d.expiresIn * 1000) {
+      delete s.trakt.device;
+      await this.save(s);
+      return { state: "gone" };
+    }
+    const r = await traktPoll(this.fetcher, s.trakt.app, d.deviceCode);
+    if (r === "wait") return { state: "wait" };
+    delete s.trakt.device;
+    if (r === "gone") {
+      await this.save(s);
+      return { state: "gone" };
+    }
+    s.trakt.token = r.token;
+    await this.save(s);
+    return { state: "connected", ...(await this.traktSync()) };
+  }
+
+  /** Reads her Trakt history and ratings again. */
+  async traktSync(): Promise<{ added: number; total: number }> {
+    const s = await this.load();
+    if (!s.trakt?.token) throw Object.assign(new Error("Connect Trakt first."), { statusCode: 400 });
+    const list = await traktLibrary(this.fetcher, s.trakt.app, s.trakt.token);
+    const r = await this.add(list);
+    const after = await this.load();
+    if (after.trakt) after.trakt = { ...after.trakt, synced: Date.now(), count: list.length };
+    await this.save(after);
+    return r;
+  }
+
+  /** Forgets Trakt (the app keys and the token); what was read stays. */
+  async traktDisconnect(): Promise<void> {
+    const s = await this.load();
+    delete s.trakt;
+    await this.save(s);
   }
 
   /** A rating made in KesherAI (0 removes it). */
