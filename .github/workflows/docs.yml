@@ -1,6 +1,6 @@
 name: API docs
 
-# The API reference (typedoc) as a website, rebuilt after every release (from main: GitHub Pages deploys only from the
+# Roee's KesherAI landing page with the API reference (typedoc) under /api/, rebuilt after every release (from main: GitHub Pages deploys only from the
 # default branch unless told otherwise). GitHub Pages must be set once to "GitHub Actions" (Settings → Pages → Source).
 on:
   workflow_run:
@@ -37,9 +37,20 @@ jobs:
       - run: pnpm docs:api
       # Never publish a personal path or address: stop if the site names one.
       - run: "! grep -rIlP 'C:\\\\Users\\\\|/home/(?!runner/)[a-z]+/|@gmail\\.com' docs/api"
+      # roeetal.com/KesherAI is Roee's landing page (in Deadchu-R.github.io/KesherAI); this project site takes over that
+      # address, so the site is the landing page itself with the API reference under /KesherAI/api/.
+      - uses: actions/checkout@v4
+        with:
+          repository: Deadchu-R/Deadchu-R.github.io
+          path: landing
+          sparse-checkout: KesherAI
+      - run: |
+          mkdir -p _site
+          cp -r landing/KesherAI/. _site/
+          cp -r docs/api _site/api
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/api
+          path: _site
   deploy:
     needs: build
     runs-on: ubuntu-latest
