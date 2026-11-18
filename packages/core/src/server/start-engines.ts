@@ -33,7 +33,12 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
     providers: ["llamacpp"],
     // While the start-up load is still going, a message waits for it instead of failing.
     loaded: () => engine.status().running && !startLoad,
-    unload: () => engine.stop("unused for a while (Settings → graphics card: unload after)"),
+    unload: async () => {
+      await engine.stop("unused for a while (Settings → graphics card: unload after)");
+      // Remembered, so a restart (an update) does not load it again into a card nobody is using.
+      config.engines.lastUnloaded = true;
+      await services.saveConfig().catch(() => undefined);
+    },
     reload: async () => {
       if (startLoad) return void (await startLoad);
       const path = config.engines.lastModel;
@@ -74,7 +79,7 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
   // not loaded) waits for it through the guard instead of failing with "No provider llamacpp" (found on the phone,
   // and on the PC half a minute after an update).
   if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
-  if (config.engines.autoLoadLast && !afterTerminate && last && existsSync(last) && engine.status().installed) {
+  if (config.engines.autoLoadLast && !afterTerminate && !config.engines.lastUnloaded && last && existsSync(last) && engine.status().installed) {
     startLoad = loadModel(services, last, undefined, "the last model, at start-up")
       .catch((err) => engine.fail(err))
       .finally(() => (startLoad = undefined));

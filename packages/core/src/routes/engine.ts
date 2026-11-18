@@ -92,6 +92,7 @@ export async function loadModel(s: KesherServices, modelPath: string, name?: str
   // own load; the engine ended on the user's model but the settings said the old one, which came back after a restart).
   if (s.engine.status().modelPath !== modelPath) return modelId;
   s.config.engines.lastModel = modelPath;
+  s.config.engines.lastUnloaded = false;
   if (!s.config.activeModels.chat || s.config.activeModels.chat.startsWith("llamacpp/")) s.config.activeModels.chat = modelId;
   await s.saveConfig();
   return modelId;
@@ -464,6 +465,9 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   app.post("/api/engines/llamacpp/stop", async () => {
     await s.engine.stop();
+    // Stopped by hand: it stays stopped after a restart too (a request still loads it when it needs it).
+    s.config.engines.lastUnloaded = true;
+    await s.saveConfig();
     return s.engine.status();
   });
 
