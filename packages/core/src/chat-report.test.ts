@@ -288,3 +288,11 @@ test("jsonOf: past a thinking model's reasoning, a fence, and prose with braces"
   assert.deepEqual(jsonOf('use {curly} style: {"b":3}'), { b: 3 });
   assert.equal(jsonOf("no json here"), undefined);
 });
+
+test("storyChapters keeps the chapters a cut-off answer finished", async () => {
+  const { storyChapters } = await import("./chat-report.js");
+  const cut = '{"chapters":[{"title":"איך התחיל","body":"גוף \\"מצוטט\\" {סוגריים}","quotes":[]},{"title":"שני","body":"עוד","quotes":[{"who":"A","text":"x"}]},{"title":"נחתך","body":"באמצע';
+  assert.equal(storyChapters(cut).length, 2);
+  assert.equal(storyChapters('{"chapters":[{"title":"a","body":"b"}]}').length, 1);
+  assert.equal(storyChapters("no json").length, 0);
+});

@@ -287,6 +287,35 @@ export function checkStory(raw: Record<string, unknown> | undefined, msgs: Perso
   }).filter((c) => c.title && c.body.length > 40);
 }
 
+/**
+ * The full report's chapters from a model's answer, also when it stopped in the middle: every chapter object that
+ * closed is kept, the one cut off is left out.
+ *
+ * @param text - The model's answer.
+ * @returns The chapter objects (unchecked; checkStory checks them).
+ */
+export function storyChapters(text: string): unknown[] {
+  const whole = jsonOf(text);
+  if (Array.isArray(whole?.chapters) && whole.chapters.length) return whole.chapters;
+  const plain = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  const at = plain.indexOf('"chapters"');
+  if (at < 0) return [];
+  const start = plain.indexOf("[", at);
+  const out: unknown[] = [];
+  // A small scanner: each top-level {...} in the array, minding strings and their escapes.
+  let depth = 0, from = -1, inStr = false, esc = false;
+  for (let i = start + 1; i > 0 && i < plain.length; i++) {
+    const ch = plain[i]!;
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") { if (depth++ === 0) from = i; }
+    else if (ch === "}" && depth > 0 && --depth === 0) {
+      try { out.push(JSON.parse(plain.slice(from, i + 1))); } catch { /* a broken one is left out */ }
+    } else if (ch === "]" && depth === 0) break;
+  }
+  return out;
+}
+
 /** The first {...} object in a model's answer. */
 export function jsonOf(text: string): Record<string, unknown> | undefined {
   // A thinking model's reasoning (<think>…</think>) can hold braces of its own: it goes first; then a ```json fence.
@@ -659,14 +688,18 @@ export class ChatReports {
       // The full report (the long read in chapters) from the same notes; when the model cannot (its context, its
       // form), the short report still stands.
       let story: ChatReport["story"] = [];
-      for (const cap of [30_000, 15_000]) {
+      const shortText = JSON.stringify({ headline: short.headline, read: short.read, findings: short.findings.map((f) => ({ title: f.title, body: f.body })), turningPoint: short.turningPoint?.what, next: short.next });
+      // A long answer can stop in the middle (the model's length limit): the chapters it finished are kept
+      // (storyChapters), and an answer with none is asked again shorter (found on the PC: "רועי וליזי" v3 had no
+      // full report at all).
+      for (const [cap, extra] of [[30_000, ""], [15_000, ""], [15_000, "\nKeep it shorter this time: 5 or 6 chapters, each 2 short paragraphs."]] as const) {
         if (signal.aborted) return;
         try {
-          story = checkStory(jsonOf(await ask(storyPrompt(r), `${userFor(cap)}\n\nThe short report:\n${JSON.stringify({ headline: short.headline, read: short.read, findings: short.findings.map((f) => ({ title: f.title, body: f.body })), turningPoint: short.turningPoint?.what, next: short.next })}`, signal)), msgs);
-          break;
+          story = checkStory({ chapters: storyChapters(await ask(storyPrompt(r) + extra, `${userFor(cap)}\n\nThe short report:\n${shortText}`, signal)) }, msgs);
+          if (story.length >= 3) break;
         } catch (err) {
           if (signal.aborted) return;
-          if (!CONTEXT_FULL.test((err as Error).message)) break;
+          if (!CONTEXT_FULL.test((err as Error).message)) continue;
         }
       }
       if (r.report) (r.history ??= []).push(r.report);
