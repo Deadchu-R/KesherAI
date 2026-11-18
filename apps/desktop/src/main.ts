@@ -906,6 +906,15 @@ function madeByKesher(path: string): boolean {
 }
 
 // The folder picker for "New code session" and the sync folder setting.
+// After a confirm() or alert(): blur and focus the window so its page takes typing again (Electron on Windows).
+ipcMain.on("kesher:refocus", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  win.blur();
+  win.focus();
+  event.sender.focus();
+});
+
 ipcMain.handle("kesher:pick-folder", async (event) => {
   if (!fromApp(event)) return null;
   const win = BrowserWindow.fromWebContents(event.sender);

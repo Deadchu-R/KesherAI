@@ -17,8 +17,10 @@ import { startPlacement } from "./placement";
 import { startTabKeys, startTabSwipes } from "./ui/tabKeys";
 import { startPhoneNotify } from "./phoneNotify";
 import { startAppLock } from "./appLock";
+import { refocusAfterDialogs } from "./ui/refocus";
 
 setLocale(getLocale());
+refocusAfterDialogs();
 // Pages refresh themselves every few seconds; in a hidden tab (or the phone app in the background)
 // those refreshes wait until it shows again, which saves battery and the computer's work.
 // Short timers (one second, like a recording's clock) keep running.

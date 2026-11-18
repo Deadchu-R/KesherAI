@@ -70,6 +70,8 @@ interface DesktopBridge {
   dictateDone?(text: string): Promise<{ pasted?: boolean; error?: string }>;
   onDictateStop?(fn: () => void): () => void;
   onDictateStart?(fn: () => void): () => void;
+  /** Gives the keyboard back to the page after a system dialog. Missing before 0.6.366. */
+  refocus?(): void;
   /** Global keys: their state, or registered again after Settings → Keyboard changed. Missing before 0.6.209. */
   keys?(reload?: boolean): Promise<Record<string, "ok" | "taken" | "off">>;
 }

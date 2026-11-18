@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld("kesherDesktop", {
     ipcRenderer.on("kesher:dictate-start", on);
     return () => ipcRenderer.removeListener("kesher:dictate-start", on);
   },
+  /**
+   * Gives the keyboard back to the page after a system dialog (confirm, alert): on Windows Electron leaves the page
+   * without keyboard focus once one closes, so nothing could be typed (found by Roee's brother: delete a chat, then
+   * New chat).
+   */
+  refocus: (): void => ipcRenderer.send("kesher:refocus"),
   /** Opens the system folder picker. Resolves with the path, or null if cancelled. */
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke("kesher:pick-folder"),
   /** Start with the computer in the background; pass nothing to read it. */
