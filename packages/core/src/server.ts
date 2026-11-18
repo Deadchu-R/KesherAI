@@ -71,6 +71,7 @@ import { WhisperEngine } from "./whisper.js";
 import { trainingRoutes } from "./routes/training.js";
 import { resetRoutes } from "./routes/reset.js";
 import { remoteDeviceRoutes } from "./routes/remote-devices.js";
+import { guestRoutes } from "./routes/guests.js";
 import { CanvasStore } from "./canvas.js";
 import { GitHubAuth } from "./github.js";
 import { Runtimes } from "./runtimes.js";
@@ -618,6 +619,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.deviceKeys = deviceKeys;
   // Paired devices (their own keys) and how the internet link lets them in: Settings → Phone.
   await remoteDeviceRoutes(app, services, deviceKeys, accessLog);
+  await guestRoutes(app, services);
 
   // Every area's routes, in their order (after the key check for remote access, above).
   await registerRoutes(app, services, { paths, library, apiKeys, chatTimers, canvases, telegram });

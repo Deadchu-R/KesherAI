@@ -48,7 +48,8 @@ export interface NewConversation {
   title?: string;
   personaId?: string;
   /** `telegram`: written from Telegram (fewer tools, always asks). */
-  source?: "telegram" | "routine";
+  /** `guest`: a guest's chat in a shared project (no tools, no memory; guests.ts). */
+  source?: "telegram" | "routine" | "guest";
   /** A code session in its own git worktree and branch (see session-worktrees.ts). */
   worktree?: boolean;
   /** No memory read or filed, left out of search. */
@@ -204,6 +205,9 @@ export class ConversationManager {
     if (id) all.push(this.delegateFor(id, all));
     // Its own problems: the model can look into KesherAI's state and fault log.
     if (this.deps.faults && this.deps.doctorState) all.push(doctorTool({ faults: this.deps.faults, state: this.deps.doctorState, ...(id ? { chatId: id } : {}) }));
+    // A guest's chat in a shared project (docs/COLLABORATION.md, stage 1): no tools at all (no files, computer,
+    // network or memory), only the model's answer.
+    if (id && this.deps.library.summary(id)?.source === "guest") return { tools: [], notes: ["This chat is with a guest the owner invited to one shared project. Answer from the conversation only; you have no tools here."] };
     const result = { tools: all, notes: [...media.notes, ...group.notes] };
     // A chat written from Telegram never controls the screen or the browser, whatever else is on (chat-tool-groups.ts).
     return id && this.deps.library.summary(id)?.source === "telegram" ? forTelegram(result) : result;
@@ -419,7 +423,7 @@ export class ConversationManager {
     if (!memory) return;
     const d = await memory.data();
     const c = this.deps.library.summary(id);
-    if (d.paused || !d.auto || !c || c.incognito || c.source === "telegram" || c.importedFrom) return;
+    if (d.paused || !d.auto || !c || c.incognito || c.source === "telegram" || c.source === "guest" || c.importedFrom) return;
     const user = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
     const answer = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant");
     if (!user || !worthFiling(user.text) || this.filed.get(id) === user.seq) return;
@@ -493,7 +497,7 @@ export class ConversationManager {
       modelId,
       // A chat writes only into its own outputs folder, so file edits need no approval there; commands still ask.
       // Telegram chats always ask (a message from far away should not change files by itself).
-      mode: opts.source === "telegram" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
+      mode: opts.source === "telegram" || opts.source === "guest" ? "ask" : (opts.mode ?? (opts.kind === "code" ? "ask" : "auto-edit")),
       ...(worktree ? { workspace: worktree.path, worktree } : opts.workspace ? { workspace: opts.workspace } : {}),
       ...(folder ? { envFolder: folder } : {}),
       ...(opts.environment && this.namedEnvironment(opts.environment) ? { envId: opts.environment } : {}),

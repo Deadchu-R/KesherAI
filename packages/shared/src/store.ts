@@ -96,7 +96,7 @@ export interface Conversation {
   /** For a branch: the conversation and event it was branched from. */
   branchOf?: { id: string; seq: number; title: string };
   /** Where the chat is from: `telegram` chats ask before every change and get no computer or browser control; `routine` chats were started by a routine (the sidebar keeps them in their own group). */
-  source?: "telegram" | "routine";
+  source?: "telegram" | "routine" | "guest";
   /** For a chat imported from another assistant: which one. */
   importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code" | "phone";
   /** A code chat on an outside agent (Antigravity): its own session id, resumed after a restart. */

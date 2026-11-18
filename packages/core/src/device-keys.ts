@@ -14,8 +14,11 @@ export interface DeviceKey {
   createdAt: string;
   lastSeen?: string;
   lastAddress?: string;
-  /** "mcp": the key opens only /mcp (a connector for an AI app such as Claude), nothing else of KesherAI. */
-  scope?: "mcp";
+  /**
+   * "mcp": the key opens only /mcp (a connector for an AI app such as Claude), nothing else of KesherAI.
+   * `project:<id>:read|edit`: a guest in one shared project; the key opens only /api/guest/* (guests.ts).
+   */
+  scope?: string;
   /** The phone app's UnifiedPush address and Web Push keys (see phone-push.ts). Removed with the device. */
   push?: { endpoint: string; p256dh: string; auth: string };
 }
@@ -37,9 +40,10 @@ export class DeviceKeys {
    * Makes a key for a newly paired device.
    *
    * @param name - What the device called itself.
+   * @param scope - What the key may open (see DeviceKey.scope); none: everything.
    * @returns The key (given to the device once; only its hash is kept).
    */
-  async issue(name: string, scope?: "mcp"): Promise<string> {
+  async issue(name: string, scope?: DeviceKey["scope"]): Promise<string> {
     const key = `kd_${randomBytes(32).toString("base64url")}`;
     this.list().push({ id: randomUUID(), name: name.replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device", hash: hashOf(key), createdAt: new Date().toISOString(), ...(scope ? { scope } : {}) });
     await this.save();

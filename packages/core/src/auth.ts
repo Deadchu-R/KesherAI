@@ -160,6 +160,8 @@ export function registerRemoteAuth(
     if (request.method === "POST" && /^\/api\/quick-approve\/[\w-]{32}$/.test(path)) return;
     // The owner's Allow / Deny buttons for a phone asking to control this computer (the one-time code is the key).
     if (request.method === "POST" && /^\/api\/remote-desktop\/decide\/[0-9a-f]{32}$/.test(path)) return;
+    // A guest opening an invite link (guests.ts): the one-time token is the key; only this route takes it.
+    if (/^\/api\/join\/[A-Za-z0-9_-]{32,64}$/.test(path) && (request.method === "GET" || request.method === "POST")) return;
     if (path === "/api/pair" || /^\/api\/pair\/[0-9a-f-]{36}$/.test(path)) {
       if (request.method === "POST" && path === "/api/pair") return;
       if (request.method === "GET" && path !== "/api/pair") return;
@@ -183,6 +185,11 @@ export function registerRemoteAuth(
       // A connector key (for an AI app) opens KesherAI's MCP server and nothing else.
       if ((device as { scope?: string }).scope === "mcp" && path !== "/mcp") {
         await reply.code(403).send({ error: "This key is only for KesherAI's MCP server (/mcp)." });
+        return;
+      }
+      // A guest in a shared project: only the guest API (deny by default; routes/guests.ts checks the project).
+      if ((device as { scope?: string }).scope?.startsWith("project:") && (!path.startsWith("/api/guest/") || /\/\.\.?(\/|$)/.test(path))) {
+        await reply.code(403).send({ error: "A guest key opens only the shared project." });
         return;
       }
       const idle = devices!.idleDays();

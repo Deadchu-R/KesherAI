@@ -75,3 +75,30 @@ test("clientAddress: a Funnel visitor is counted by their own address, not as th
   assert.equal(clientAddress({ ip: "192.168.1.5", headers: { "tailscale-funnel-request": "?1", "x-forwarded-for": "203.0.113.9" } }), "192.168.1.5");
   assert.equal(clientAddress({ ip: "127.0.0.1", headers: {} }), "127.0.0.1");
 });
+
+test("a guest key opens only /api/guest/*; an invite link needs no key; a guest cannot get past with an encoded path", async () => {
+  const a = Fastify();
+  const guest = { id: "g1", name: "Dani (guest)", scope: "project:p1:edit" };
+  registerRemoteAuth(a, () => "secret-token-123", {}, undefined, {
+    find: (k) => (k === "kd_guest" ? guest : undefined),
+    seen: () => undefined,
+    devicesOnly: () => false,
+    idleDays: () => 0,
+  });
+  for (const p of ["/api/settings", "/api/conversations", "/api/guest/me", "/api/join/:t"]) {
+    a.get(p, async () => ({ ok: true }));
+    a.post(p, async () => ({ ok: true }));
+  }
+  await a.ready();
+  const outside = { remoteAddress: "203.0.113.9", headers: { host: "kesher.example", authorization: "Bearer kd_guest" } };
+  assert.equal((await a.inject({ url: "/api/guest/me", ...outside })).statusCode, 200);
+  assert.equal((await a.inject({ url: "/api/settings", ...outside })).statusCode, 403);
+  assert.equal((await a.inject({ url: "/api/conversations", ...outside })).statusCode, 403);
+  assert.equal((await a.inject({ url: "/api/guest/../settings", ...outside })).statusCode, 403);
+  assert.equal((await a.inject({ url: "/api/%67uest/../settings", ...outside })).statusCode, 403);
+  // The invite link: its token is the key (the route checks it); a short or odd token is not this route.
+  const token = "A".repeat(43);
+  assert.equal((await a.inject({ url: `/api/join/${token}`, remoteAddress: "203.0.113.9", headers: { host: "kesher.example" } })).statusCode, 200);
+  assert.equal((await a.inject({ url: "/api/join/short", remoteAddress: "203.0.113.9", headers: { host: "kesher.example" } })).statusCode, 401);
+  await a.close();
+});
