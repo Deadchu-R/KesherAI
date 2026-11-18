@@ -2257,3 +2257,10 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - **Built** (extension 0.2.6): no sites at install. A task on a site not allowed opens a small window (Allow on this site / on all sites / Not now) and waits up to two minutes; "Ask about this page" and the lens ask for the site in front from the click itself (the site is tracked ahead so the question comes straight from the click). The popup has "Allow on all sites".
 - **Tested** in Chromium with the extension loaded: no sites at install, the window opens on a task, "Not now" gives a clear error.
 - Stopped at: done; Roee uploads 0.2.6 to the store after the current review.
+
+## Editors for every kind of output, part 1: pictures (2026-11-18, Roee asked; FUTURE "Editors for every kind of output")
+- **Krita AI Diffusion** (open source, ComfyUI behind it): select an area → generative fill / expand / add or remove objects only there; live painting (the model redraws as you paint); regions (a prompt per layer); control layers (scribble, line art, depth, pose as an editable vector layer); upscale to 4K+ in tiles; a job queue that keeps working while you paint; a history of results and prompts to pick from.
+- **Invoke** (open source): the canvas with a bounding box (what gets made; drag it outside the picture to extend it), an inpaint mask brush, every result, mask and paint as its own layer, full undo, a gallery that keeps every result.
+- **Photoshop Generative Fill**: lasso → a prompt → three versions to pick from, each as its own generative layer (non-destructive).
+- **For KesherAI**: the picture editor = layers + a selection or mask brush + "what to do here" + several versions to pick from (as Photoshop's three), on top of the ComfyUI and sd.cpp KesherAI already runs; results become layers; "Send to the chat" puts the flattened picture back.
+- Stopped at: pictures done; next video (Premiere, Resolve, CapCut, Runway, Descript), then sound, then 3D, then the tab system.
