@@ -81,3 +81,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
   .phonebar button span { font-size: 18px; color: var(--text); }
   .phonebar b { font-weight: 500; }
 }
+
+/* The chosen part's task bar, low in the middle of the view (as the image editor's). */
+.taskbar { position: absolute; bottom: 14px; inset-inline-start: 50%; transform: translateX(-50%); display: flex; gap: 6px; width: min(560px, calc(100% - 24px)); padding: 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; z-index: 4; }
+[dir="rtl"] .taskbar { transform: translateX(50%); }
+.taskbar input { flex: 1; min-width: 0; }

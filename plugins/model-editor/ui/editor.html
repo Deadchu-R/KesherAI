@@ -31,6 +31,12 @@
       <section class="view" id="view">
         <div class="empty" id="empty" data-t="empty">Open a model from a chat: "Edit in the 3D editor" on its preview.</div>
         <div class="stats muted small" id="stats"></div>
+        <!-- The chosen part's task bar (the image editor's, and Meshy's / Tripo's "edit this part"): in words, the chat model
+             turns it into the editor's own tools (colour, roughness, metal, a texture, a split, hide, duplicate). -->
+        <form class="taskbar" id="taskbar" hidden>
+          <input id="taskIn" dir="auto" autocomplete="off" data-tp="taskPh" placeholder="What to do with this part? (old oak, shiny red, split it…)" />
+          <button id="taskGo" class="primary" title="Do it (Enter)">✦</button>
+        </form>
         <!-- After 3ds Max's ViewCube and Blender's header: the views, and the shading -->
         <div class="viewcube" id="viewcube">
           <button data-view="front" data-t="vFront">Front</button><button data-view="right" data-t="vRight">Right</button><button data-view="top" data-t="vTop">Top</button><button data-view="persp" data-t="vPersp">Persp</button>
@@ -89,7 +95,6 @@
         <div class="row"><button id="pickFaces" data-t="pickFaces">🎯 Choose by click</button><label class="row small"><span data-t="angle">Angle</span> <input type="range" id="pickAngle" min="5" max="90" value="30" style="width:80px" /></label></div>
         <div class="row" id="pickRow" hidden><span class="muted small" id="pickInfo"></span><button id="separate" class="primary" data-t="separate">Separate</button></div>
         <div class="row"><select id="split"><option value="" data-t="splitH">✂ Split into parts…</option><option value="loose" data-t="sLoose">By loose pieces</option><option value="material" data-t="sMaterial">By material</option><option value="ai" data-t="sAi">By meaning (AI)…</option></select></div>
-        <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
       </aside>
     </main>
     <footer class="versions">

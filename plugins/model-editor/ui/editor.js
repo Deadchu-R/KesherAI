@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -164,6 +164,7 @@ function renderParts() {
 let glow = null;
 function choose(obj) {
   chosen = obj ?? null;
+  $("taskbar").hidden = !chosen;
   glow?.removeFromParent(); glow = null;
   gizmo.detach();
   renderParts();
@@ -739,6 +740,59 @@ function watchSetup() {
   };
   tick();
 }
+// ---------- the part's task bar: words → the editor's own tools ----------
+/** The words' plan, from the chat model, else from simple rules (colour words, shiny / matte, split, wood…). */
+async function planOf(words) {
+  const ask = [
+    { role: "system", content: 'You turn a request about one part of a 3D model into JSON only, no other text: {"color":"#rrggbb" or null,"roughness":0..1 or null,"metalness":0..1 or null,"texture":"a short English description of a seamless material texture" or null,"split":"meaning"|"loose"|null,"hide":true|false,"duplicate":true|false}. Shiny/glossy: roughness 0.15; matte: 0.9; metal/chrome/gold: metalness 1. A material (wood, marble, fabric, rust…) is a texture. The request may be in Hebrew.' },
+    { role: "user", content: words },
+  ];
+  try {
+    const text = await kesher.call("chat", { messages: ask, temperature: 0 });
+    const j = JSON.parse(String(text).replace(/^[^{]*/, "").replace(/[^}]*$/, ""));
+    if (j && typeof j === "object") return j;
+  } catch { /* no chat model, or it did not answer JSON: the rules below */ }
+  const w = words.toLowerCase();
+  const plan = {};
+  const COLOURS = { red: "#c0392b", אדום: "#c0392b", blue: "#2e6fd8", כחול: "#2e6fd8", green: "#2e9e57", ירוק: "#2e9e57", yellow: "#f1c40f", צהוב: "#f1c40f", black: "#111111", שחור: "#111111", white: "#f4f4f4", לבן: "#f4f4f4", orange: "#e67e22", כתום: "#e67e22", purple: "#8e44ad", סגול: "#8e44ad", pink: "#e98aa9", ורוד: "#e98aa9", grey: "#888888", gray: "#888888", אפור: "#888888", gold: "#d4af37", זהב: "#d4af37" };
+  for (const [k, v] of Object.entries(COLOURS)) if (w.includes(k)) plan.color = v;
+  if (/shiny|glossy|מבריק|polish/.test(w)) plan.roughness = 0.15;
+  if (/matte|מט( |$)|rough|מחוספס/.test(w)) plan.roughness = 0.9;
+  if (/metal|chrome|gold|מתכת|כרום|זהב/.test(w)) plan.metalness = 1;
+  if (/split|פצל|חלק(ים)?/.test(w)) plan.split = "meaning";
+  if (/hide|הסתר/.test(w)) plan.hide = true;
+  if (/duplicate|copy|שכפל/.test(w)) plan.duplicate = true;
+  if (!Object.keys(plan).length) plan.texture = words;
+  return plan;
+}
+$("taskbar").onsubmit = async (e) => {
+  e.preventDefault();
+  const words = $("taskIn").value.trim();
+  if (!words || !chosen) return;
+  busy(T("taskThinking", "Working out what to do…"));
+  let plan;
+  try { plan = await planOf(words); } finally { busy(""); }
+  const did = [];
+  if (plan.color || typeof plan.roughness === "number" || typeof plan.metalness === "number") {
+    remember();
+    chosen.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = matOf(o);
+      if (plan.color && /^#[0-9a-f]{6}$/i.test(plan.color)) { m.color?.set(plan.color); if (m.map) m.map = null; }
+      if (typeof plan.roughness === "number" && "roughness" in m) m.roughness = Math.min(1, Math.max(0, plan.roughness));
+      if (typeof plan.metalness === "number" && "metalness" in m) m.metalness = Math.min(1, Math.max(0, plan.metalness));
+      m.needsUpdate = true;
+    });
+    did.push(T("tColour", "the look"));
+    choose(chosen);
+  }
+  if (plan.texture) { $("texKind").value = "map"; $("texPrompt").value = String(plan.texture).slice(0, 200); $("texAi").click(); did.push(T("tTexture", "a texture")); }
+  if (plan.hide) { $("hidePart").click(); did.push(T("tHide", "hidden")); }
+  if (plan.duplicate) { duplicate(); did.push(T("tDup", "a copy")); }
+  if (plan.split === "meaning" || plan.split === "loose") { splitChosen(plan.split === "meaning" ? "ai" : "loose"); did.push(T("tSplit", "split")); }
+  msg(did.length ? `${T("tDone", "Done")}: ${did.join(", ")}` : T("tNone", "Not sure what to do; try a colour, a material or \"split it\""), !did.length);
+  if (did.length) $("taskIn").value = "";
+};
 $("split").onchange = () => { const how = $("split").value; $("split").value = ""; if (how) splitChosen(how); };
 
 // ---------- choose by click: the faces linked under the click, until the surface turns (Blender's Select Linked) ----------
