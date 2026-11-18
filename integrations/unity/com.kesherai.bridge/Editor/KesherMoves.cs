@@ -81,8 +81,11 @@ namespace KesherAI.Bridge
             {
                 if (!(item is Dictionary<string, object> m)) continue;
                 var id = Json.Str(m, "id");
-                // A scene object's id: type 2, the scene's GUID, its file id (no prefab part).
-                if (!GlobalObjectId.TryParse($"GlobalObjectId_V1-2-{guid}-{id}-0", out var gid) || !(GlobalObjectId.GlobalObjectIdentifierToObjectSlow(gid) is Transform t))
+                // A scene object's id: type 2, the scene's GUID, its file id, and no prefab part; a placed prefab or
+                // model is "<its Transform's id in the source>:<the prefab instance's id>".
+                var parts = id.Split(':');
+                var target = parts.Length == 2 ? $"{parts[0]}-{parts[1]}" : $"{id}-0";
+                if (!GlobalObjectId.TryParse($"GlobalObjectId_V1-2-{guid}-{target}", out var gid) || !(GlobalObjectId.GlobalObjectIdentifierToObjectSlow(gid) is Transform t))
                 {
                     left.Add(item);
                     continue;

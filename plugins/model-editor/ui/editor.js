@@ -1,9 +1,11 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
@@ -237,9 +239,12 @@ async function loadModel(path) {
   if (!modelCache.has(path)) {
     modelCache.set(path, (async () => {
       const bytes = await kesher.call("standin.asset", { path });
-      const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
+      // glTF / GLB (Godot, Unity with glTFast), FBX and OBJ (Unity's usual models).
+      const shape = /\.fbx$/i.test(path) ? new FBXLoader().parse(bytes, "")
+        : /\.obj$/i.test(path) ? new OBJLoader().parse(new TextDecoder().decode(bytes))
+        : (await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject))).scene;
       const all = [];
-      gltf.scene.traverse((m) => { if (m.isMesh) all.push(m); });
+      shape.traverse((m) => { if (m.isMesh) all.push(m); });
       const total = all.reduce((a, m) => a + tris(m), 0);
       if (total > MAX_TRIS) {
         const keep = MAX_TRIS / total;
@@ -255,14 +260,20 @@ async function loadModel(path) {
         m.material = look;
         if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
       }
-      return gltf.scene;
+      // An FBX in centimetres (most exporters): Unity shows it in metres, so does the stand-in.
+      const size = new THREE.Box3().setFromObject(shape).getSize(new THREE.Vector3());
+      if (/\.fbx$/i.test(path) && Math.max(size.x, size.y, size.z) > 30) shape.scale.multiplyScalar(0.01);
+      return shape;
     })());
   }
   return modelCache.get(path);
 }
-async function showModel(o, path) {
+async function showModel(o, path, turn = false) {
   try {
     const shape = (await loadModel(path)).clone(true);
+    // Unity turns a model to its left-handed space (x mirrored) and the stand-in turns the scene back (z mirrored):
+    // together, half a turn about the up axis.
+    if (turn) shape.rotation.y = Math.PI;
     shape.traverse((c) => (c.userData.generated = true));
     shape.userData.generated = true;
     // The box was only standing in: the node keeps its place and takes the model's look.
@@ -315,13 +326,18 @@ function loadUnityStandIn(objects) {
   root.name = "Scene";
   const byId = new Map();
   const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true, opacity: 0.85 });
+  // Unity's built-in meshes at their sizes (a cylinder and a capsule are 2 high, a plane 10 × 10, a quad faces you).
+  const builtin = { cube: () => new THREE.BoxGeometry(1, 1, 1), sphere: () => new THREE.SphereGeometry(0.5, 24, 12), cylinder: () => new THREE.CylinderGeometry(0.5, 0.5, 2, 24), capsule: () => new THREE.CapsuleGeometry(0.5, 1, 6, 16), plane: () => new THREE.PlaneGeometry(10, 10).rotateX(-Math.PI / 2), quad: () => new THREE.PlaneGeometry(1, 1) };
   for (const u of objects) {
-    const o = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), mat(u.prefab ? 0xb48cff : /light/i.test(u.name) ? 0xffd25a : /camera/i.test(u.name) ? 0x6aa8ff : 0xb8bcc8));
+    const real = u.look?.builtin && builtin[u.look.builtin]?.();
+    const geo = real ?? (u.model ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15));
+    const o = new THREE.Mesh(geo, real ? new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8, side: u.look.builtin === "quad" || u.look.builtin === "plane" ? THREE.DoubleSide : THREE.FrontSide }) : mat(u.prefab ? 0xb48cff : /light/i.test(u.name) ? 0xffd25a : /camera/i.test(u.name) ? 0x6aa8ff : 0x8a8e99));
     o.name = u.name;
     const { p, q } = fromUnity(u.position, u.rotation);
     o.position.copy(p); o.quaternion.copy(q); o.scale.set(...u.scale);
     o.userData.unity = { id: u.id, name: u.name, from: { position: u.position, rotation: u.rotation, scale: u.scale } };
     byId.set(u.id, o);
+    if (u.model) void showModel(o, u.model, true);
   }
   // Parents after all are made (the file need not list a parent first).
   for (const u of objects) (byId.get(u.parent) ?? root).add(byId.get(u.id));

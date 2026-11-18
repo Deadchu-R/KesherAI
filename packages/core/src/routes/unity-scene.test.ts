@@ -24,3 +24,27 @@ test("a Unity scene without Unity: listed, read, and moves queued for the packag
   assert.equal((await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/../x.unity` })).statusCode, 400);
   await app.close();
 });
+
+test("the stand-in's looks: a placed model found through its .meta, a prefab's first mesh, and the model's bytes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "unity-"));
+  await mkdir(join(dir, "Assets", "Models"), { recursive: true });
+  await mkdir(join(dir, "ProjectSettings"));
+  const G1 = "11111111111111111111111111111111", G2 = "22222222222222222222222222222222", G3 = "33333333333333333333333333333333";
+  await writeFile(join(dir, "Assets", "Models", "Chair.fbx"), "FBX");
+  await writeFile(join(dir, "Assets", "Models", "Chair.fbx.meta"), `fileFormatVersion: 2\nguid: ${G1}\n`);
+  await writeFile(join(dir, "Assets", "Lamp.prefab"), "--- !u!33 &1\nMeshFilter:\n  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}\n");
+  await writeFile(join(dir, "Assets", "Lamp.prefab.meta"), `guid: ${G2}\n`);
+  const placed = (id: number, g: string) => `--- !u!1001 &${id}\nPrefabInstance:\n  m_Modification:\n    m_TransformParent: {fileID: 0}\n    m_Modifications:\n    - target: {fileID: 5, guid: ${g}, type: 3}\n      propertyPath: m_LocalPosition.x\n      value: 1\n      objectReference: {fileID: 0}\n  m_SourcePrefab: {fileID: 100100000, guid: ${g}, type: 3}\n`;
+  await writeFile(join(dir, "Assets", "Main.unity"), `%YAML 1.1\n${placed(7, G1)}${placed(8, G2)}${placed(9, G3)}`);
+  const app = Fastify();
+  await unitySceneRoutes(app);
+  const o = (await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/Main.unity` })).json().objects;
+  assert.equal(o[0].model, "Assets/Models/Chair.fbx");
+  assert.deepEqual(o[1].look, { builtin: "sphere" });
+  assert.equal(o[2].look, undefined);
+  const a = await app.inject({ url: `/api/unity/asset?project=${encodeURIComponent(dir)}&path=Assets/Models/Chair.fbx` });
+  assert.equal(a.body, "FBX");
+  assert.equal((await app.inject({ url: `/api/unity/asset?project=${encodeURIComponent(dir)}&path=Assets/../x.fbx` })).statusCode, 400);
+  assert.equal((await app.inject({ url: `/api/unity/asset?project=${encodeURIComponent(dir)}&path=Assets/Lamp.prefab` })).statusCode, 400);
+  await app.close();
+});

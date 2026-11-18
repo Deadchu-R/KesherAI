@@ -2,11 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import { mergeMoves, readUnityScene, type UnityMove } from "../unity-scene.js";
+import { mergeMoves, readUnityScene, type UnityMove, type UnityObject } from "../unity-scene.js";
 
 /**
  * A Unity scene without Unity (SceneStandIn board): its scenes listed, one read for the stand-in, and the moves made in
- * KesherAI queued in KesherAI/pending-moves.json, which the KesherAI Unity package (0.2.8+) applies with Undo when the
+ * KesherAI queued in KesherAI/pending-moves.json, which the KesherAI Unity package (0.2.8+; placed prefabs and models: 0.2.9+) applies with Undo when the
  * scene is open (now, if Unity is open with it).
  */
 
@@ -22,6 +22,72 @@ async function paths(project: unknown, scene?: unknown): Promise<{ dir: string; 
   const real = relative(await realpath(dir), await realpath(file).catch(() => file));
   if (real.startsWith("..") || real.split(sep).includes("..")) throw bad();
   return { dir, file, rel };
+}
+
+/** The model files the stand-in can show (three.js reads these). */
+const MODEL = /\.(fbx|obj|glb|gltf)$/i;
+
+/**
+ * The asset files behind these GUIDs, from the .meta files beside them (Assets/**, stopping once all are found).
+ *
+ * @param dir - The project.
+ * @param wanted - The GUIDs.
+ * @returns GUID → "Assets/…" (the asset, without ".meta").
+ */
+async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  let seen = 0;
+  const walk = async (d: string, depth: number): Promise<void> => {
+    if (depth > 12 || out.size === wanted.size || seen > 200_000) return;
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (out.size === wanted.size) return;
+      if (e.name.startsWith(".")) continue;
+      const f = join(d, e.name);
+      if (e.isDirectory()) await walk(f, depth + 1);
+      else if (e.name.endsWith(".meta")) {
+        seen++;
+        const g = /^guid:\s*([0-9a-f]{32})/m.exec((await readFile(f, "utf8").catch(() => "")).slice(0, 400))?.[1];
+        if (g && wanted.has(g)) out.set(g, relative(dir, f.slice(0, -5)).split(sep).join("/"));
+      }
+    }
+  };
+  if (wanted.size) await walk(join(dir, "Assets"), 0);
+  return out;
+}
+
+/**
+ * The model each object shows: a mesh's file, a placed model itself, or for a placed prefab the first mesh in it.
+ *
+ * @param dir - The project.
+ * @param objects - The scene's objects (changed in place).
+ */
+async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> {
+  const guids = new Set(objects.flatMap((o) => (o.look && "guid" in o.look ? [o.look.guid] : [])));
+  const files = await assetsOf(dir, guids);
+  // Prefabs: their first mesh (a built-in one, or a model), one level deep.
+  const inPrefab = new Map<string, UnityObject["look"]>();
+  for (const [g, f] of files) {
+    if (!/\.prefab$/i.test(f)) continue;
+    const text = await readFile(join(dir, f), "utf8").catch(() => "");
+    const mesh = /m_Mesh:\s*\{fileID:\s*(-?\d+),\s*guid:\s*([0-9a-f]{32})/.exec(text);
+    if (mesh?.[2] === "0000000000000000e000000000000000") {
+      const kind = ({ "10202": "cube", "10207": "sphere", "10206": "cylinder", "10208": "capsule", "10209": "plane", "10210": "quad" } as const)[mesh[1] as "10202"];
+      if (kind) inPrefab.set(g, { builtin: kind });
+    } else if (mesh) inPrefab.set(g, { guid: mesh[2]! });
+  }
+  const more = await assetsOf(dir, new Set([...inPrefab.values()].flatMap((l) => (l && "guid" in l ? [l.guid] : []))));
+  for (const o of objects) {
+    if (!o.look || !("guid" in o.look)) continue;
+    const g = o.look.guid;
+    const f = files.get(g);
+    if (f && MODEL.test(f)) o.model = f;
+    else if (inPrefab.has(g)) {
+      const l = inPrefab.get(g)!;
+      if ("builtin" in l!) o.look = l;
+      else if (more.get(l!.guid) && MODEL.test(more.get(l!.guid)!)) o.model = more.get(l!.guid);
+    }
+    if (o.look && "guid" in o.look) delete o.look;
+  }
 }
 
 const fail = (e: unknown) => ({ code: (e as { statusCode?: number }).statusCode ?? 500, error: (e as Error).message });
@@ -58,7 +124,28 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
       const st = await stat(file!).catch(() => undefined);
       if (!st?.isFile()) return reply.code(404).send({ error: "No such scene." });
       if (st.size > 200 * 1024 * 1024) return reply.code(413).send({ error: "The scene is too big to read here." });
-      return { objects: readUnityScene(await readFile(file!, "utf8")), mtime: st.mtimeMs };
+      const objects = readUnityScene(await readFile(file!, "utf8"));
+      await resolveLooks((await paths(req.query.project)).dir, objects);
+      return { objects, mtime: st.mtimeMs };
+    } catch (e) {
+      const f = fail(e);
+      return reply.code(f.code).send({ error: f.error });
+    }
+  });
+
+  // A model file the scene uses (Assets/….fbx / .obj / .glb / .gltf), for the stand-in to show its real shape.
+  app.get<{ Querystring: { project?: string; path?: string } }>("/api/unity/asset", async (req, reply) => {
+    try {
+      const { dir } = await paths(req.query.project);
+      const rel = String(req.query.path ?? "").replace(/\\/g, "/");
+      if (!/^Assets\//.test(rel) || !MODEL.test(rel) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model file under Assets/." });
+      const file = resolve(dir, rel);
+      const real = relative(await realpath(dir), await realpath(file).catch(() => file));
+      if (real.startsWith("..") || real.split(sep).includes("..")) return reply.code(400).send({ error: "A model file under Assets/." });
+      const st = await stat(file).catch(() => undefined);
+      if (!st?.isFile()) return reply.code(404).send({ error: "No such file." });
+      if (st.size > 150 * 1024 * 1024) return reply.code(413).send({ error: "The model is too big to show here." });
+      return reply.type("application/octet-stream").send(await readFile(file));
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });
@@ -71,7 +158,7 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
     try {
       const { dir, rel } = await paths(req.body?.project, req.body?.scene);
       const nums = (a: unknown, n: number) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(x));
-      const ok = (Array.isArray(req.body?.moves) ? req.body!.moves.slice(0, 5000) : []).filter((m) => /^-?\d{1,20}$/.test(String(m?.id)) && nums(m.to?.position, 3) && nums(m.to?.rotation, 4) && nums(m.to?.scale, 3) && nums(m.from?.position, 3) && nums(m.from?.rotation, 4));
+      const ok = (Array.isArray(req.body?.moves) ? req.body!.moves.slice(0, 5000) : []).filter((m) => /^-?\d{1,20}(:-?\d{1,20})?$/.test(String(m?.id)) && nums(m.to?.position, 3) && nums(m.to?.rotation, 4) && nums(m.to?.scale, 3) && nums(m.from?.position, 3) && nums(m.from?.rotation, 4));
       const file = join(dir, "KesherAI", "pending-moves.json");
       await mkdir(join(dir, "KesherAI"), { recursive: true });
       const waiting = JSON.parse(await readFile(file, "utf8").catch(() => "{}")) as Record<string, UnityMove[]>;

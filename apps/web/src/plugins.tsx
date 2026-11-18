@@ -338,8 +338,8 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // A model file the stand-in's scene uses (res://….glb), as bytes, so it shows the scene's real shapes.
         case "standin.asset": {
           need("model");
-          if (!godot) throw new Error("This page was not opened with a Godot scene.");
-          const res = await fetch(withToken(`/api/godot/asset?project=${encodeURIComponent(godot.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
+          if (!godot && !unity) throw new Error("This page was not opened with a game scene.");
+          const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)!.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
           return res.arrayBuffer();
         }

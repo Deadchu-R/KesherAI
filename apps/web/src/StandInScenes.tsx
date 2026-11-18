@@ -21,7 +21,7 @@ const ENGINES = {
     open: (project: string, scene: string) => `#/p/model-editor/editor?up=${encodeURIComponent(project)}&us=${encodeURIComponent(scene)}`,
     label: (scene: string) => scene.replace(/^Assets\//, ""),
     folder: ["תיקיית הפרויקט (עם Assets)", "The project folder (with Assets)"],
-    how: ["פותחים סצנה בעורך התלת ממד כתחליף, מזיזים, וחבילת KesherAI ב-Unity (0.2.8) מכניסה את השינויים כשהסצנה פתוחה, בצעד ביטול אחד.", "Open a scene in the 3D editor as a stand-in, move things, and the KesherAI package in Unity (0.2.8) brings the moves in when the scene is open, as one undo step."],
+    how: ["פותחים סצנה בעורך התלת ממד כתחליף, מזיזים, וחבילת KesherAI ב-Unity (0.2.9) מכניסה את השינויים כשהסצנה פתוחה, בצעד ביטול אחד.", "Open a scene in the 3D editor as a stand-in, move things, and the KesherAI package in Unity (0.2.9) brings the moves in when the scene is open, as one undo step."],
   },
 } as const;
 

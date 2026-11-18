@@ -4,9 +4,15 @@
  * moves are not written here: they go to a list the KesherAI Unity package applies with Undo when Unity opens.
  */
 
+/** What an object looks like: one of Unity's built-in meshes, or a model file of the project (resolved by the route). */
+export type UnityLook = { builtin: "cube" | "sphere" | "cylinder" | "capsule" | "plane" | "quad" } | { guid: string };
+
 /** A GameObject with its Transform, as the stand-in needs it. */
 export interface UnityObject {
-  /** The Transform's file id: stable for the object in this scene, the key for a move. */
+  /**
+   * The key for a move: the Transform's file id in this scene; for a placed prefab or model, "<the Transform's id in
+   * its source>:<the prefab instance's id>" (the two halves of its GlobalObjectId).
+   */
   id: string;
   name: string;
   /** The parent Transform's id ("0": at the scene's top). */
@@ -15,9 +21,17 @@ export interface UnityObject {
   /** A quaternion (x, y, z, w), Unity's left-handed space. */
   rotation: [number, number, number, number];
   scale: [number, number, number];
-  /** It belongs to a prefab placed in the scene (moving its root is an override there). */
+  /** A placed prefab or model (moving it is an override there). */
   prefab?: boolean;
+  /** Its mesh or source, for the stand-in to show the real shape. */
+  look?: UnityLook;
+  /** Set by the route: the model file the look points at ("Assets/….fbx"). */
+  model?: string;
 }
+
+/** Unity's built-in meshes (in "Library/unity default resources"), by file id. */
+const BUILTIN: Record<string, "cube" | "sphere" | "cylinder" | "capsule" | "plane" | "quad"> = { "10202": "cube", "10207": "sphere", "10206": "cylinder", "10208": "capsule", "10209": "plane", "10210": "quad" };
+const BUILTIN_GUID = "0000000000000000e000000000000000";
 
 /** `{x: 1, y: 2.5, z: -3}` → the numbers, by key. */
 function vec(s: string | undefined, keys: string[], fallback: number[]): number[] {
@@ -28,8 +42,15 @@ function vec(s: string | undefined, keys: string[], fallback: number[]): number[
   });
 }
 
+/** `{fileID: 123, guid: abc, type: 3}` → its parts. */
+function ref(s: string | undefined): { fileID: string; guid?: string } | undefined {
+  const m = /fileID:\s*(-?\d+)(?:,\s*guid:\s*([0-9a-f]{32}))?/.exec(s ?? "");
+  return m ? { fileID: m[1]!, ...(m[2] ? { guid: m[2] } : {}) } : undefined;
+}
+
 /**
- * The scene's objects that have a Transform, with their names.
+ * The scene's objects that have a Transform, with their names and looks; placed prefabs and models too (their place
+ * is in the prefab instance's overrides, their look in their source file).
  *
  * @param text - The .unity file.
  * @returns The objects, parents before children where the file has them so.
@@ -38,30 +59,69 @@ export function readUnityScene(text: string): UnityObject[] {
   if (!/^%YAML/.test(text) || !/--- !u!/.test(text)) throw new Error("This is not a Unity scene saved as text (Edit → Project Settings → Editor → Asset Serialization: Force Text).");
   const docs = text.split(/^--- !u!/m).slice(1);
   const names = new Map<string, string>();
-  const prefabbed = new Set<string>();
+  const looks = new Map<string, UnityLook>();
+  /** A stripped Transform (a prefab's, named here only as some object's parent) → its prefab instance. */
+  const strippedOf = new Map<string, string>();
   const transforms: Array<Omit<UnityObject, "name"> & { go: string }> = [];
+  const placed: UnityObject[] = [];
   for (const d of docs) {
     const head = /^(\d+) &(-?\d+)( stripped)?/.exec(d);
     if (!head) continue;
-    const [, cls, id] = head;
+    const [, cls, id, stripped] = head;
     const field = (k: string) => new RegExp(`^\\s+${k}:\\s*(.*)$`, "m").exec(d)?.[1];
     if (cls === "1") {
       names.set(id!, (field("m_Name") ?? "").trim());
-      if (/m_PrefabInstance:\s*\{fileID:\s*[1-9]/.test(d)) prefabbed.add(id!);
+    } else if ((cls === "4" || cls === "224") && stripped) {
+      const pi = ref(field("m_PrefabInstance"))?.fileID;
+      if (pi && pi !== "0") strippedOf.set(id!, pi);
     } else if (cls === "4" || cls === "224") {
       // Transform, or RectTransform (UI): both have the local position, rotation and scale.
-      const go = /m_GameObject:\s*\{fileID:\s*(-?\d+)/.exec(d)?.[1] ?? "0";
       transforms.push({
         id: id!,
-        go,
-        parent: /m_Father:\s*\{fileID:\s*(-?\d+)/.exec(d)?.[1] ?? "0",
+        go: ref(field("m_GameObject"))?.fileID ?? "0",
+        parent: ref(field("m_Father"))?.fileID ?? "0",
         position: vec(field("m_LocalPosition"), ["x", "y", "z"], [0, 0, 0]) as [number, number, number],
         rotation: vec(field("m_LocalRotation"), ["x", "y", "z", "w"], [0, 0, 0, 1]) as [number, number, number, number],
         scale: vec(field("m_LocalScale"), ["x", "y", "z"], [1, 1, 1]) as [number, number, number],
       });
+    } else if (cls === "33") {
+      // MeshFilter: the object's mesh.
+      const go = ref(field("m_GameObject"))?.fileID;
+      const mesh = ref(field("m_Mesh"));
+      if (go && mesh?.guid === BUILTIN_GUID && BUILTIN[mesh.fileID]) looks.set(go, { builtin: BUILTIN[mesh.fileID]! });
+      else if (go && mesh?.guid) looks.set(go, { guid: mesh.guid });
+    } else if (cls === "1001") {
+      // A placed prefab or model: its place and name are overrides of its root's properties.
+      const src = ref(field("m_SourcePrefab"));
+      const p = [0, 0, 0], r = [0, 0, 0, 1], sc = [1, 1, 1];
+      let target: string | undefined, name: string | undefined;
+      const mods = d.matchAll(/- target:\s*(\{[^}]*\})\s*\n\s*propertyPath:\s*(\S+)\s*\n\s*value:\s*(.*)/g);
+      for (const [, t, path, value] of mods) {
+        const m = /^m_Local(Position|Rotation|Scale)\.([xyzw])$/.exec(path!);
+        if (m) {
+          target ??= ref(t)?.fileID;
+          const arr = m[1] === "Position" ? p : m[1] === "Rotation" ? r : sc;
+          arr["xyzw".indexOf(m[2]!)] = Number(value);
+        } else if (path === "m_Name") name = value!.trim();
+      }
+      if (!target) continue;
+      placed.push({
+        id: `${target}:${id}`,
+        name: name || `Prefab ${id}`,
+        parent: ref(field("m_TransformParent"))?.fileID ?? "0",
+        position: p as [number, number, number],
+        rotation: r as [number, number, number, number],
+        scale: sc as [number, number, number],
+        prefab: true,
+        ...(src?.guid ? { look: { guid: src.guid } } : {}),
+      });
     }
   }
-  return transforms.map(({ go, ...t }) => ({ ...t, name: names.get(go) || `Object ${t.id}`, ...(prefabbed.has(go) ? { prefab: true } : {}) }));
+  const byInstance = new Map(placed.map((o) => [o.id.split(":")[1]!, o.id]));
+  /** A parent that is a prefab's inner Transform: the placed prefab stands for it. */
+  const parentOf = (id: string) => (strippedOf.has(id) ? byInstance.get(strippedOf.get(id)!) ?? "0" : id);
+  const own = transforms.map(({ go, ...t }) => ({ ...t, parent: parentOf(t.parent), name: names.get(go) || `Object ${t.id}`, ...(looks.has(go) ? { look: looks.get(go)! } : {}) }));
+  return [...own, ...placed.map((o) => ({ ...o, parent: parentOf(o.parent) }))];
 }
 
 /** A move for the Unity package to apply (local position, rotation and scale of one Transform). */
