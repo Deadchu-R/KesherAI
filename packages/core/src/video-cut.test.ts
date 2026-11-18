@@ -47,3 +47,10 @@ test("burned captions: the subtitles filter on the joined picture, only from a p
   assert.equal(a[a.indexOf("-map") + 1], "[vs]");
   assert.throws(() => cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, "C:\\x\\a b.srt"), /plain/);
 });
+
+test("a new shape: the middle of the picture at that ratio, before the captions; unknown shapes are refused", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, ".kesher-burn-1.srt", "9:16").join(" ");
+  assert.ok(a.includes("[v]crop='min(iw,ih*9/16)':'min(ih,iw*16/9)'"));
+  assert.ok(a.includes("[vc]subtitles="));
+  assert.throws(() => cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, undefined, "3:2;drawtext"), /Unknown shape/);
+});

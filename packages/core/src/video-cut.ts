@@ -27,6 +27,9 @@ export function checkSegments(given: unknown): Segment[] {
   });
 }
 
+/** The shapes the export can cut the picture to. */
+export const SHAPES = ["9:16", "1:1", "4:5", "16:9"];
+
 /**
  * FFmpeg's arguments that keep the stretches, in this order, and join them (trim + concat; re-encoded so every cut is
  * on the exact frame, as an editor's export is).
@@ -38,9 +41,12 @@ export function checkSegments(given: unknown): Segment[] {
  * @param sound - Another file whose sound replaces the video's (the same times as the video).
  * @param burn - Captions to burn into the picture: a plain file name (letters, digits, -_.) of an .srt in FFmpeg's
  *   working folder, so no path has to be escaped for the filter (Windows' "C:" breaks it).
+ * @param shape - A new shape for the picture, cut from its middle (CapCut's and Premiere's reframe, simply): "9:16" for
+ *   phones and Reels, "1:1", "4:5" or "16:9"; none keeps it as it is.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string): string[] {
+  if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
   const a = sound ? "1:a" : "0:a";
@@ -51,9 +57,13 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   audio = audio || !!sound;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
   // Burned captions (CapCut's and Premiere's "burn in"): white with a dark outline, low in the frame, readable anywhere.
-  const subs = burn ? `;[v]subtitles=filename=${burn}:force_style='FontName=Arial,FontSize=20,Outline=2,Shadow=0,MarginV=28'[vs]` : "";
-  const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${subs}`;
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : "[v]", ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  // The new shape first, so the captions sit inside it: the largest middle part with that ratio, at even sizes for H.264.
+  const [sw, sh] = (shape ?? "1:1").split(":").map(Number) as [number, number];
+  const crop = shape ? `;[v]crop='min(iw,ih*${sw}/${sh})':'min(ih,iw*${sh}/${sw})',scale=trunc(iw/2)*2:trunc(ih/2)*2[vc]` : "";
+  const pic = shape ? "[vc]" : "[v]";
+  const subs = burn ? `;${pic}subtitles=filename=${burn}:force_style='FontName=Arial,FontSize=20,Outline=2,Shadow=0,MarginV=28'[vs]` : "";
+  const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${crop}${subs}`;
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -65,11 +75,12 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param segments - The stretches to keep.
  * @param sound - A file whose sound replaces the video's.
  * @param burn - An .srt beside the output to burn into the picture (its plain name; FFmpeg runs in that folder).
+ * @param shape - One of SHAPES, or none.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string): Promise<void> {
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);
