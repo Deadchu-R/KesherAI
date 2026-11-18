@@ -44,10 +44,11 @@ function useTitles(): (hash: string) => { icon: string; title: string; chatId?: 
 }
 
 /**
- * Tabs for the open pages (design TabsImageEditor): Home first, then chats, editors, documents and pages. Going
+ * Tabs for the open pages (design TabsImageEditor): quiet pills for chats, editors, documents and pages. Going
  * somewhere new opens a preview tab (in italics) that the next place replaces; a double click keeps it. A dot shows
  * while a chat answers. Ctrl+Tab and Ctrl+Shift+Tab go round them, a middle click closes one. On a phone (narrow
- * screens) the row becomes a counter that opens the open tabs as cards. Off in Settings → Appearance.
+ * screens) the row becomes a counter in the corner that opens the open tabs as cards. Shown only from two open
+ * places; off in Settings → Appearance.
  *
  * @param props.hash - The address showing now.
  */
@@ -93,7 +94,9 @@ export function PageTabs({ hash }: { hash: string }) {
     return () => removeEventListener("keydown", key);
   }, [tabs, hash, off]);
 
-  if (off) return null;
+  // With one place open the row says nothing the sidebar does not, so it is not there at all (Safari, VS Code's
+  // "single" mode; asked 2026-11-18). It appears from two places on.
+  if (off || (tabs.length < 2 && !grid)) return null;
   const showing = placeOf(hash);
   const tab = (tb: PageTab) => {
     const { icon, title, chatId } = titleOf(tb.hash);
@@ -125,7 +128,6 @@ export function PageTabs({ hash }: { hash: string }) {
     <>
       <nav className="page-tabs" aria-label={L("טאבים פתוחים", "Open tabs")}>
         <div className="page-tabs-list">
-        <a href={HOME} aria-current={showing === placeOf(HOME) ? "page" : undefined} className={`page-tab home${showing === placeOf(HOME) ? " on" : ""}`} title={L("בית", "Home")}>⌂</a>
         <div className="page-tabs-row">{tabs.map(tab)}</div>
         </div>
         <button type="button" className="page-tabs-count" aria-label={L(`${tabs.length + 1} טאבים פתוחים`, `${tabs.length + 1} open tabs`)} aria-expanded={grid} onClick={() => setGrid(!grid)}>
