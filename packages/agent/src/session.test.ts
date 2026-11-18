@@ -691,3 +691,23 @@ test("tool search: a tool the message names or points at is loaded before the mo
   assert.ok(seen[0]!.includes("make_music"));
   assert.ok(!seen[0]!.includes("generate_video"));
 });
+
+test("one change of a file can be put back; the other change stays and Undo all still works without a conflict", async () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `l${i + 1}`).join("\n") + "\n";
+  const { session, workspace } = await makeSession(
+    [
+      { calls: [{ name: "edit_file", arguments: { path: "a.txt", old_text: "l2\n", new_text: "l2 x\n" } }] },
+      { calls: [{ name: "edit_file", arguments: { path: "a.txt", old_text: "l25\n", new_text: "l25 y\n" } }] },
+      { text: "done" },
+    ],
+    "auto-edit",
+  );
+  await writeFile(join(workspace, "a.txt"), lines);
+  session.send("edit");
+  const r = (await waitFor(session, (e) => e.type === "receipt")) as Extract<AgentEvent, { type: "receipt" }>;
+  assert.deepEqual(await session.undoRunHunk(r.run, "a.txt", 0), { files: [] });
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), lines.replace("l25\n", "l25 y\n"));
+  await assert.rejects(session.undoRunHunk(r.run, "a.txt", 5), /no longer fits/);
+  assert.deepEqual(await session.undoRun(r.run), { files: ["a.txt"], conflicts: [] });
+  assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), lines);
+});

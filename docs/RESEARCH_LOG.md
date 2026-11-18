@@ -2150,3 +2150,12 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - Built: the 12B in "Start here", offered in Study's setup beside a non-Hebrew model. Next (future list): tools suggest a better model when they start; a check that llama.cpp runs Nemotron-H on the PC after the download.
 - Checked on the PC (2026-11-18): llama.cpp b12110 loads the 12B (Nemotron-H) and answers in correct, fluent Hebrew (a CPU-only test beside the busy card: 3.3 tokens a second; on the card it will be far faster).
 - Stopped at: built and checked.
+
+## Per-change undo in the run review, against Zed and Cursor (2026-11-18)
+- **Zed** and **Cursor** both let you reject one hunk of an agent's edit and keep the rest; KesherAI had undo per run
+  and per file only.
+- Built: Review (on a run's receipt) shows ↶ on each "@@" change; it puts back only that change
+  (`undoRunHunk`, `undoHunk` in the agent package; `POST …/runs/:run/undo {path, hunk}`). The file's fingerprint is
+  updated, so "Undo all" later sees no false conflict. A file new in the run is put back whole (no ↶ per change).
+- Follow the agent was already built (👁 Follow in the workspace); FUTURE updated.
+- Stopped at: built and tested; hosted API docs wait for Roee (a public GitHub Pages site).

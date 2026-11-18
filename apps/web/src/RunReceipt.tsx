@@ -47,6 +47,19 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
       setWorking(false);
     }
   };
+  // One change of one file (its ↶ in the review), keeping the rest.
+  const undoHunk = async (path: string, hunk: number) => {
+    setWorking(true);
+    try {
+      await api(`/api/conversations/${convId}/runs/${encodeURIComponent(ev.run)}/undo`, { method: "POST", body: { path, hunk } });
+      toast(L("השינוי הוחזר.", "Change put back."));
+      openReview();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setWorking(false);
+    }
+  };
   const mark = { new: L("חדש", "new"), changed: "", deleted: L("נמחק", "deleted") };
   // A page the run wrote opens live beside the chat, like a page written in the answer (ArtifactPanel).
   const pages = ev.files.filter((f) => f.kind !== "deleted" && /\.(html?|svg)$/i.test(f.path));
@@ -100,7 +113,7 @@ export function RunReceipt({ convId, ev, busy, undoneFiles }: { convId: string; 
                   <div className="row"><span className="mono grow" dir="ltr">{f.path}</span>
                     {undoneFiles?.has(f.path) ? <span className="muted small">{L("הוחזר", "Put back")}</span> : <button type="button" className="ghost small" disabled={busy || working} onClick={() => void undo(f.path).then(openReview)}>↶ {L("החזר", "Put back")}</button>}
                   </div>
-                  <Diff diff={f.diff} />
+                  <Diff diff={f.diff} onHunk={undoneFiles?.has(f.path) || busy || working || /^--- \/dev\/null/m.test(f.diff) ? undefined : (n) => void undoHunk(f.path, n)} hunkLabel={L("להחזיר רק את השינוי הזה", "Put back only this change")} />
                 </section>
               ))}
             </div>

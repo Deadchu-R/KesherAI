@@ -728,10 +728,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       return reply.code(409).send({ error: (err as Error).message });
     }
   });
-  app.post<{ Params: { id: string; run: string }; Body: { force?: boolean; path?: string } }>("/api/conversations/:id/runs/:run/undo", async (req, reply) => {
+  app.post<{ Params: { id: string; run: string }; Body: { force?: boolean; path?: string; hunk?: number } }>("/api/conversations/:id/runs/:run/undo", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
     try {
+      // One change (hunk) of one file, or one file, or every file.
+      if (typeof req.body?.path === "string" && typeof req.body?.hunk === "number") return await opened.session.undoRunHunk(req.params.run, req.body.path, req.body.hunk);
       return await opened.session.undoRun(req.params.run, req.body?.force === true, typeof req.body?.path === "string" ? req.body.path : undefined);
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });

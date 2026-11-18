@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { realpathSync } from "node:fs";
-import { createTwoFilesPatch } from "diff";
+import { applyPatch, createTwoFilesPatch, reversePatch, structuredPatch } from "diff";
 import type { McpAppRef, ToolRisk, ToolSpec } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
 import { buildExecutableTool } from "./build.js";
@@ -130,6 +130,18 @@ export function makeDiff(path: string, before: string | null, after: string): st
     .split("\n")
     .slice(1) // drop the "====" separator line createTwoFilesPatch adds
     .join("\n");
+}
+
+/**
+ * The text with one change put back (per-hunk undo, as Zed's and Cursor's ↶ on a hunk): hunk `index` of the diff
+ * from `before` to `now`, counted as in {@link makeDiff}. Undefined when there is no such hunk or it no longer fits.
+ */
+export function undoHunk(before: string, now: string, index: number): string | undefined {
+  const patch = structuredPatch("a", "b", before, now, "", "", { context: 3 });
+  const hunk = patch.hunks[index];
+  if (!hunk) return undefined;
+  const out = applyPatch(now, reversePatch({ ...patch, hunks: [hunk] }));
+  return out === false ? undefined : out;
 }
 
 async function* walk(root: string, dir: string): AsyncGenerator<string> {

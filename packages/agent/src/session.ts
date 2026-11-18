@@ -16,7 +16,7 @@ import type {
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { ASK_USER_TOOL, makeDiff, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
 const PLAN_NOTE =
@@ -1058,6 +1058,42 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.push({ type: "undo_run", run, files });
     this.messages.push({ role: "user", content: only === undefined && !left.length ? `(The user undid all your changes from one run: ${files.join(", ")}. Those files are as they were before it.)` : `(The user undid your changes to ${files.join(", ")} from one run; that file is as it was before it. Your other changes stay.)` });
     return { files, conflicts };
+  }
+
+  /**
+   * Puts back one change (hunk) of one file of a run, keeping the rest (as Zed's and Cursor's per-hunk reject).
+   * Hunks are counted as in {@link runDiff}'s diff of that file.
+   *
+   * @throws Error while the agent is busy, when the run's files are no longer kept, or the hunk no longer fits.
+   */
+  async undoRunHunk(run: string, only: string, hunk: number): Promise<{ files: string[] }> {
+    if (this.busy) throw new Error("Stop the agent before undoing.");
+    const kept = this.runs.get(run) ?? (await this.undoStore?.load(run).catch(() => undefined));
+    if (!kept) throw new Error("This run's earlier files are no longer kept.");
+    const show = (p: string) => (this.workspace ? displayPath(this.workspace, p) : p);
+    const f = kept.files.find((x) => show(x.path) === only);
+    if (!f) throw new Error("That file is not part of this run.");
+    if (f.before === null) throw new Error("This file is new in this run; put back the whole file instead.");
+    const now = await readFile(f.path, "utf8").catch(() => "");
+    const next = undoHunk(f.before, now, hunk);
+    if (next === undefined) throw new Error("That change no longer fits the file. Open the review again.");
+    await writeFile(f.path, next, "utf8");
+    const back = next === f.before;
+    const files = back ? kept.files.filter((x) => x !== f) : kept.files.map((x) => (x === f ? { ...x, after: print(next) } : x));
+    if (files.length) {
+      const rest = { ...kept, files };
+      this.runs.set(run, rest);
+      await this.undoStore?.save(run, rest).catch(() => undefined);
+    } else {
+      this.runs.delete(run);
+      await this.undoStore?.remove(run).catch(() => undefined);
+    }
+    if (back) {
+      this.changes = this.changes.filter((c) => c.path !== f.path);
+      this.push({ type: "undo_run", run, files: [only] });
+    }
+    this.messages.push({ role: "user", content: `(The user undid one of your changes to ${only} from one run. Read the file again before changing it.)` });
+    return { files: back ? [only] : [] };
   }
 
   /** Runs one tool call, asking for approval when needed. Returns what the model sees. */

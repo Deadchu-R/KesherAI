@@ -26,11 +26,14 @@ type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
  *
  * @param props - `diff` is the text; `onLine` (optional) fires with the line's index and text when a line is clicked.
  */
-export function Diff({ diff, onLine, marks }: { diff: string; onLine?: (i: number, line: string) => void; marks?: Record<number, string[]> }) {
+export function Diff({ diff, onLine, marks, onHunk, hunkLabel }: { diff: string; onLine?: (i: number, line: string) => void; marks?: Record<number, string[]>; onHunk?: (hunk: number) => void; hunkLabel?: string }) {
+  let hunks = -1;
   return (
     <pre className={`code diff${onLine ? " clickable" : ""}`} dir="ltr">
       {diff.split("\n").map((l, i) => (
         <span key={i}>
+          {/* Per-change undo (as Zed's and Cursor's ↶ on a hunk), on each "@@" line. */}
+          {onHunk && l.startsWith("@@") && ((n) => <button type="button" className="ghost small diff-hunk-undo" title={hunkLabel} aria-label={hunkLabel} onClick={() => onHunk(n)}>↶</button>)(++hunks)}
           <span
             className={l.startsWith("+") && !l.startsWith("+++") ? "add" : l.startsWith("-") && !l.startsWith("---") ? "del" : l.startsWith("@@") ? "hunk" : ""}
             onClick={onLine ? () => onLine(i, l) : undefined}
