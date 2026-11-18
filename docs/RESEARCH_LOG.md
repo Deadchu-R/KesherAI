@@ -1848,7 +1848,8 @@ Roee: in code sessions the model should answer in Hebrew like he writes, and sta
 - **Training (LoRA)**: teaching a language is continued pre-training on ~100B tokens (Dicta-LM 3.0), not possible on one GPU; a LoRA on Hebrew coding chats could fix the mixing but risks coding ability and needs a dataset. Last resort.
 - **The model itself**: a 24 GB card runs a 27–31B model fully (Qwen 3.6/3.8 27B: SWE-bench Verified ~77, ~42 tok/s on a 3090; Gemma 4 31B: likely better Hebrew, weaker code). No public Hebrew benchmark for these yet: test on our own Hebrew tasks.
 - **Plan**: (1) a reply-language setting, separate for chat and for code (comments and names stay English unless asked); (2) two short Hebrew examples of a coding answer in the code prompt; (3) the other-alphabets logit bias on local models when the answer is Hebrew; (4) a model test (Hebrew report, a coding task with tools, Hebrew chat) between Qwen 3.8 27B and Gemma 4 31B, with Roee's OK for the downloads.
-- Stopped at: research done; nothing built yet.
+- Built (2026-11-18): (2) the code prompt's Hebrew rule with one short Hebrew example (code, names and paths stay as they are); (3) on a local llama.cpp model, when her message is Hebrew, 492 letters of other alphabets (Arabic, Cyrillic, kana, the most common Chinese characters and Korean syllables) get a logit bias of −10 (very unlikely, not forbidden). Left: (1) a separate reply-language setting, (4) the model comparison.
+- Stopped at: (2) and (3) built; to check on the PC (llama-server asks its key, so through KesherAI after the install).
 
 ## A Claude/Gemini-level main chat, a model team for Hebrew + code, a design canvas (2026-11-17, Roee asked)
 Roee: the main chat should show everything a model can make (images, video, music, links, code, files) like Claude and Gemini; a design canvas like the design doc; "+" for every kind of file; and models that work together so answers are Hebrew and the code stays strong.

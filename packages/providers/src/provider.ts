@@ -59,6 +59,8 @@ export interface ProviderToolChatRequest {
   /** Texts that end the answer. */
   stop?: string[];
   maxTokens?: number;
+  /** llama.cpp only: texts whose tokens get this bias (e.g. other alphabets made unlikely in a Hebrew answer). */
+  logitBias?: Array<[string, number]>;
 }
 
 /** One finished model turn: its text and the tools it wants to call. */

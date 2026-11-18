@@ -5,6 +5,7 @@
  */
 import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
+import { OTHER_SCRIPTS_BIAS } from "@kesher/shared";
 import type { ProviderRegistry } from "@kesher/providers";
 
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
@@ -78,7 +79,11 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
     // A persona's own settings (temperature, top_p, stop), when it has them.
     const sampling = { ...(params?.temperature !== undefined ? { temperature: params.temperature } : {}), ...(params?.topP !== undefined ? { topP: params.topP } : {}), ...(params?.stop?.length ? { stop: params.stop } : {}) };
     if (provider.chatWithTools) {
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling }, signal, onText);
+      // A Hebrew answer from a local llama.cpp model: other alphabets made unlikely (language confusion).
+      const last = [...req.messages].reverse().find((m) => m.role === "user");
+      const he = (last?.content.match(/[\u0590-\u05FF]/g) ?? []).length;
+      const hebrew = provider.id === "llamacpp" && he >= 2 && he >= (last?.content.match(/[A-Za-z]/g) ?? []).length;
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

@@ -63,6 +63,19 @@ test("OpenAI tool calls are assembled from streamed fragments", async () => {
   }
 });
 
+test("a logit bias (other alphabets in a Hebrew answer) is sent only when given", async () => {
+  const srv = await sseServer([{ choices: [{ delta: { content: "שלום" } }] }, "[DONE]"]);
+  try {
+    const p = new OpenAICompatibleProvider({ id: "llamacpp", type: "openai-compatible", baseUrl: `${srv.url}/v1` });
+    await p.chatWithTools({ providerModelId: "m", messages: history, tools: [], logitBias: [["水", -10]] });
+    assert.deepEqual((srv.body() as { logit_bias?: unknown }).logit_bias, [["水", -10]]);
+    await p.chatWithTools({ providerModelId: "m", messages: history, tools: [] });
+    assert.equal((srv.body() as { logit_bias?: unknown }).logit_bias, undefined);
+  } finally {
+    srv.close();
+  }
+});
+
 test("OpenAI requests without tools omit the tools field", () => {
   assert.deepEqual(toOpenAIMessages([{ role: "user", content: "hi" }]), [{ role: "user", content: "hi" }]);
 });
