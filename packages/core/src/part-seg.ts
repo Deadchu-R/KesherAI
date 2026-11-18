@@ -59,8 +59,19 @@ src = open(os.path.join(demo, "auto_mask.py"), encoding="utf-8").read()
 for flag, value in (("--point_num", "30000"), ("--prompt_num", "200"), ("--prompt_bs", "8")):
     if flag in src:
         sys.argv += [flag, value]
+# mesh_sam() sets point_num = 100000 and prompt_num = 400 itself, whatever the flags say: a copy with those two lines
+# lowered runs instead (beside it, so its imports work), and is removed after.
+light = src.replace("point_num = 100000", "point_num = 30000").replace("prompt_num = 400", "prompt_num = 200")
+script = os.path.join(demo, "auto_mask_kesher.py")
+open(script, "w", encoding="utf-8").write(light)
 os.chdir(demo)
-runpy.run_path(os.path.join(demo, "auto_mask.py"), run_name="__main__")
+try:
+    runpy.run_path(script, run_name="__main__")
+finally:
+    try:
+        os.remove(script)
+    except OSError:
+        pass
 ids = sorted(glob.glob(os.path.join(out, "**", "*face_ids.npy"), recursive=True))
 if not ids:
     raise SystemExit("P3-SAM wrote no face ids")
