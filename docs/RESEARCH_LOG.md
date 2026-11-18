@@ -2436,3 +2436,21 @@ Each AI tool shows which local model it uses and offers to download it the first
   export, Send to the chat; the phone as Ferrite/CapCut with the fixed playhead.
 - Stopped at: sound screen done; next the 3D editor's screen (Blender, Spline, Meshy's editor, Nomad Sculpt on the phone)
   at the next wait; then boards for video, sound and 3D screens.
+
+## The 3D editor's screen (UI/UX), in depth (2026-11-18, 15:30)
+- **Blender**: the 3D view in the middle, the Outliner (the scene's parts as a tree, eye to hide) top right, Properties
+  under it (tabs: object, modifiers, material…), the toolbar on the left of the view, a header with modes (Object, Edit,
+  Sculpt, Texture Paint); a gizmo in the corner to turn the view, numpad views, G/R/S move/rotate/scale, Tab edit mode,
+  H hide, / local view, F2 rename, Ctrl+Z.
+- **Spline (web)**: friendlier: the scene list left, the inspector right, the toolbar floating at the top centre, a "Play"
+  preview; AI ("Spline AI") is a prompt box that adds or changes objects in the scene.
+- **Meshy / Tripo studios**: the model in the middle on a turntable, versions as a strip of thumbnails at the bottom
+  (every AI edit is a new version, the original kept), the tools as a left rail (Generate, Texture, Remesh, Rig, Animate),
+  and Meshy Edit: lasso or brush a part on the model + a sentence → a new version.
+- **Phone** (Nomad Sculpt, Shapr3D on iPad, Spline mobile viewer): one finger turns, two pan, pinch zooms; the tools in a
+  bottom or side bar; panels as sheets; a big undo/redo pair always on screen (Nomad).
+- For KesherAI's stage 1: the viewer (done) becomes the editor: parts list with eye and colour, the inspector (material,
+  measurements), a version strip for AI edits, mark a part (click or lasso) → the task bar ("What to do here?": new
+  texture, remove, change by a sentence), export GLB/OBJ, open in Blender/Unreal/Unity, Send to the chat; the phone with
+  the gestures above, tools at the bottom, undo/redo always there.
+- Stopped at: all three editor screens researched; next boards for the video, sound and 3D screens in the design doc.
