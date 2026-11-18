@@ -2710,3 +2710,12 @@ Each AI tool shows which local model it uses and offers to download it the first
   Browser; docs.comfy.org Assets panel and Image Deduplication; docs.midjourney.com "Organizing your creations".
 - Stopped at: research done; next the boards (the Add menu in the three editors, the bank page and its duplicates),
   then the bank's server (list, delete, duplicates) and the Add menus.
+
+## Guiding questions after a report (2026-11-18, 23:25; Roee: "Brandon gave guiding questions after the reports that write a follow-on page")
+- **What Brandon Thinks**: each report comes with three expert-designed follow-up questions to dig into the
+  conversation's dynamics; more questions can be bought (huntscreens.com "What Brandon Thinks"). The answer is read as
+  part of the report, not as a chat reply.
+- **What we take**: our three `askMore` questions become **guiding questions**; each (and a typed one) writes a
+  follow-on page — a title, 2–4 sections with headings, quotes checked against the chat — kept in the report as its
+  own chapter ("🔎 …"), opened when it is ready, and ending with two questions to go on with.
+- Stopped at: built (chat-report.ts followUp page, the chapter, test); board ChatReportGuided.

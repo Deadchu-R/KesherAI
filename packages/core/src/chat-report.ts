@@ -400,7 +400,8 @@ export interface StoredReport {
   error?: string;
   numbers: ChatNumbers;
   report?: ChatReport;
-  followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>;
+  /** Questions asked after the report; a guiding question writes a follow-on page (`page`) with two more to go on. */
+  followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string; page?: { title: string; sections: Array<{ heading: string; body: string; quotes: Quote[] }> }; next?: string[] }>;
   /** 1 for the first report, +1 each time something is added. */
   version?: number;
   /** What the reader added after a report ("want to know more?"), oldest first. */
@@ -885,7 +886,9 @@ export class ChatReports {
     for (const { i } of scored) for (let k = Math.max(0, i - 2); k <= Math.min(msgs.length - 1, i + 2); k++) keep.add(k);
     const lines = keep.size ? chatLines([...keep].sort((a, b) => a - b).map((i) => msgs[i]!)) : chatLines(msgs.slice(-150));
     const reportText = r.report ? `${r.report.headline} ${r.report.read} ${r.report.findings.map((f) => `${f.title}: ${f.body}`).join(" ")}` : "";
-    const system = `${reportPrompt(r).split("\n").slice(0, 3).join("\n")}\nNow answer one question about the same chat in 3-8 sentences, from the lines given. Answer with JSON only: {"answer":"…","quotes":[{"who":"exact name","text":"exact line"}]}.`;
+    // A guiding question (What Brandon Thinks gives three after each report) writes a follow-on page of the report:
+    // a few short sections with quotes, and two questions to go on with.
+    const system = `${reportPrompt(r).split("\n").slice(0, 3).join("\n")}\nNow write a follow-on page of the report that answers one question about the same chat, from the lines given: 2-4 short sections, each with its own heading and 2-4 sentences, quoting exact lines where they show it. Then 2 short questions in the reader's voice that would take it further. Answer with JSON only: {"title":"the page's title, a few words","sections":[{"heading":"…","body":"…","quotes":[{"who":"exact name","text":"exact line"}]}],"next":["…","…"]}.`;
     const userFor = (cap: number) => `Numbers:\n${JSON.stringify(r.numbers)}\n\nThe report: ${reportText.slice(0, Math.min(6000, cap / 5))}\n\n${lines.length ? `Lines from the chat:\n${lines.join("\n").slice(0, cap)}` : "(Only the report; the chat itself was not added.)"}\n\nQuestion: ${q}`;
     // Fewer lines when the model's context is full (as for the report itself).
     let j: Record<string, unknown> | undefined;
@@ -897,9 +900,19 @@ export class ChatReports {
         if (cap === 5_000 || signal?.aborted || !CONTEXT_FULL.test((err as Error).message)) throw err;
       }
     }
-    const answer = str(j?.answer, 3000);
+    const quotesOf = (v: unknown) => arr(v).map((x) => findQuote(msgs, str((x as { text?: unknown }).text, 400), str((x as { who?: unknown }).who, 80) || undefined)).filter((x): x is Quote => !!x).slice(0, 3);
+    const sections = arr(j?.sections).slice(0, 5).map((x) => {
+      const o = x as Record<string, unknown>;
+      return { heading: str(o.heading, 120), body: str(o.body, 1500), quotes: quotesOf(o.quotes) };
+    }).filter((x) => x.body);
+    // A model that answered the old way ({"answer"}) still gives a page of one section.
+    const answer = sections.length ? sections.map((x) => `${x.heading ? `${x.heading}: ` : ""}${x.body}`).join("\n\n") : str(j?.answer, 3000);
     if (!answer) throw new Error("The model did not answer in the expected form; try again.");
-    const f = { q, a: answer, quotes: arr(j?.quotes).map((x) => findQuote(msgs, str((x as { text?: unknown }).text, 400), str((x as { who?: unknown }).who, 80) || undefined)).filter((x): x is Quote => !!x).slice(0, 3), at: new Date().toISOString() };
+    const f: StoredReport["followUps"][number] = {
+      q, a: answer, quotes: sections.length ? sections.flatMap((x) => x.quotes).slice(0, 3) : quotesOf(j?.quotes), at: new Date().toISOString(),
+      ...(sections.length ? { page: { title: str(j?.title, 100) || q.slice(0, 100), sections } } : {}),
+      next: arr(j?.next).map((x) => str(x, 140)).filter(Boolean).slice(0, 2),
+    };
     const fresh = await this.get(id);
     fresh.followUps.push(f);
     await this.put(fresh);

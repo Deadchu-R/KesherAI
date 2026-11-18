@@ -73,6 +73,13 @@ test("a report is written from the model's notes, with checked quotes, and a fol
   assert.equal(done.report?.findings[0]?.quotes[0]?.who, "Dana");
   const f = await reports.followUp(r.id, "מי שואל לשלום?", ask);
   assert.equal(f.quotes.length, 1);
+  // A guiding question writes a follow-on page: sections with checked quotes, and two questions to go on.
+  const page = await reports.followUp(r.id, "מה קורה בבקרים?", async () => JSON.stringify({ title: "הבקרים", sections: [{ heading: "מי פותחת", body: "דנה פותחת כמעט כל בוקר.", quotes: [{ who: "Dana", text: "בוקר טוב" }, { who: "Dana", text: "שורה שלא נכתבה" }] }, { heading: "", body: "" }], next: ["ומה בערב?", "מי סוגר?", "שלישית"] }));
+  assert.equal(page.page?.title, "הבקרים");
+  assert.equal(page.page?.sections.length, 1);
+  assert.equal(page.page?.sections[0]?.quotes.length, 1);
+  assert.deepEqual(page.next, ["ומה בערב?", "מי סוגר?"]);
+  assert.equal((await reports.get(r.id)).followUps.length, 2);
   assert.equal((await reports.list()).length, 1);
   await reports.remove(r.id);
   assert.equal((await reports.list()).length, 0);

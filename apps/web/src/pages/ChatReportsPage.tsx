@@ -16,7 +16,7 @@ interface Numbers { messages: number; from: string; to: string; days: number; pe
 interface Report { mixed?: boolean; headline: string; read: string; kinder?: string; moves?: { keep: string[]; stop: string[]; say: string[] }; askMore: string[]; wouldHelp: Array<{ ask: string; kind: "text" | "export" }>; scores: Array<{ name: string; value: string; measured: boolean; of5?: number }>; findings: Array<{ title: string; body: string; measured: boolean; quotes: Quote[] }>; turningPoint?: { when: string; what: string; quotes: Quote[] }; roles: Array<{ name: string; role: string }>; next: string; story?: Array<{ title: string; body: string; quotes: Quote[] }> }
 /** A chat already uploaded (kept with the report made from it). */
 interface KnownChat { id: string; title: string; source: string; messages: number; from?: string; to?: string; people: number; createdAt: string }
-interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; step?: { key: ImportStepKey; detail?: string }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string }>; version?: number; origin?: "brandon"; hasChat?: boolean; imported?: string }
+interface Stored { id: string; title: string; kind: Kind; voice: Voice; me?: string; createdAt: string; status: "reading" | "writing" | "done" | "error"; progress?: { part: number; parts: number; total: number }; step?: { key: ImportStepKey; detail?: string }; error?: string; numbers: Numbers; report?: Report; followUps: Array<{ q: string; a: string; quotes: Quote[]; at: string; page?: { title: string; sections: Array<{ heading: string; body: string; quotes: Quote[] }> }; next?: string[] }>; version?: number; origin?: "brandon"; hasChat?: boolean; imported?: string }
 interface Item { id: string; title: string; kind: Kind; status: Stored["status"]; createdAt: string; messages: number }
 interface Body { source: "whatsapp" | "instagram"; title: string; text?: string; parts?: unknown[] }
 interface Peek { title: string; messages: number; from: string; to: string; people: Array<{ name: string; messages: number }> }
@@ -350,6 +350,8 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
   const [all, setAll] = useState(() => { try { return localStorage.getItem("kesher-report-all") === "1"; } catch { return false; } });
   const swipe = useRef(0);
   const count = useRef(1);
+  // How many follow-on pages there will be once a guiding question is answered (0: none waited for).
+  const goNew = useRef(0);
   // ← and → turn the pages (in Hebrew ← is the next page), unless she is typing.
   useEffect(() => {
     if (all) return;
@@ -377,7 +379,8 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
     setBusy(true);
     try { await fn(); load(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
-  const ask = (question: string) => run(async () => { await api(`/api/chat-reports/${id}/ask`, { method: "POST", body: { question } }); setQ(""); });
+  // A guiding question writes a follow-on page; the report then opens on it.
+  const ask = (question: string) => run(async () => { await api(`/api/chat-reports/${id}/ask`, { method: "POST", body: { question } }); setQ(""); goNew.current = (r?.followUps.length ?? 0) + 1; });
   const tell = (text: string) => run(async () => { await api(`/api/chat-reports/${id}/add`, { method: "POST", body: { text } }); setQ(""); });
   const addExport = (files: File[]) => run(async () => { const b = await readChat(files); await api(`/api/chat-reports/${id}/add`, { method: "POST", body: { source: b.source, title: b.title, chatText: b.text, parts: b.parts } }); });
   const who = (name: string, me?: boolean) => <span className="cr-who"><span className="cr-av" style={{ background: colorOf(name) }} aria-hidden>{initial(name)}</span><span dir="auto">{name}{me ? L(" (אתה)", " (you)") : ""}</span></span>;
@@ -486,11 +489,27 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
         </div>
       )}
 </> },
-    { id: "more", name: ["עוד", "More"], has: r.followUps.length > 0 || (!!rep && r.status === "done"), body: <>
-      {r.followUps.map((f, i) => <div key={i} className="cr-card beige w6"><h3 dir="auto">{f.q}</h3><p dir="auto">{f.a}</p>{bubbles(f.quotes)}</div>)}
+    // Each follow-on page is a chapter of its own (What Brandon Thinks' guiding questions), with two more to go on.
+    ...r.followUps.map((f, i) => ({ id: `fu${i}`, name: [`🔎 ${f.page?.title ?? f.q}`, `🔎 ${f.page?.title ?? f.q}`] as [string, string], has: true, body: <>
+      <div className="cr-card beige w6 stack">
+        <small className="muted" dir="auto">{f.q}</small>
+        {f.page ? <>
+          <h3 dir="auto">{f.page.title}</h3>
+          {f.page.sections.map((x, k) => <div key={k} className="stack">{x.heading && <h4 dir="auto">{x.heading}</h4>}<p dir="auto">{x.body}</p>{bubbles(x.quotes)}</div>)}
+        </> : <><p dir="auto">{f.a}</p>{bubbles(f.quotes)}</>}
+      </div>
+      {(f.next?.length ?? 0) > 0 && r.status === "done" && (
+        <div className="cr-card navy stack w6">
+          <h3>{L("להמשיך מכאן", "Go on from here")}</h3>
+          <div className="row wrap">{f.next!.map((x) => <button key={x} type="button" className="cr-ask" disabled={busy} onClick={() => void ask(x)} dir="auto">{x}</button>)}</div>
+        </div>
+      )}
+</> })),
+    { id: "more", name: ["עוד", "More"], has: !!rep && r.status === "done", body: <>
       {rep && r.status === "done" && (
         <div className="cr-card navy stack w6">
-          <h3>{L("רוצה לדעת עוד?", "Want to know more?")}</h3>
+          <h3>{L("שאלות מנחות", "Guiding questions")}</h3>
+          <p className="muted small">{L("כל שאלה כותבת עמוד המשך לדוח, מתוך הצ׳אט.", "Each question writes a follow-on page of the report, from the chat.")}</p>
           {rep.askMore.length > 0 && <div className="row wrap">{rep.askMore.map((x) => <button key={x} type="button" className="cr-ask" disabled={busy} onClick={() => void ask(x)} dir="auto">{x}</button>)}</div>}
           {rep.wouldHelp.length > 0 && <><p className="muted small">{L("מה יעזור לי לקרוא טוב יותר:", "What would help me read it better:")}</p><ul className="cr-help">{rep.wouldHelp.map((x) => <li key={x.ask} dir="auto">{x.ask} {x.kind === "export" && <button type="button" className="link small" onClick={() => addInput.current?.click()}>{L("+ הוסף ייצוא", "+ add an export")}</button>}</li>)}</ul></>}
           <form className="row" onSubmit={(e) => { e.preventDefault(); if (q.trim()) void (q.trim().endsWith("?") ? ask(q) : tell(q)); }}>
@@ -506,6 +525,12 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
   ];
   const chapters = all7.filter((c) => c.has);
   count.current = chapters.length;
+  // After a guiding question: open the page it wrote (the last follow-on chapter).
+  if (goNew.current && r.followUps.length >= goNew.current) {
+    goNew.current = 0;
+    const last = chapters.findIndex((c) => c.id === `fu${r.followUps.length - 1}`);
+    if (last >= 0 && last !== page) queueMicrotask(() => setPage(last));
+  }
   const at = Math.min(page, chapters.length - 1);
   const go = (i: number) => { setPage(Math.max(0, Math.min(chapters.length - 1, i))); scrollTo({ top: 0, behavior: "smooth" }); };
   const shown = all ? chapters : [chapters[at]!];
