@@ -68,7 +68,9 @@ async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> 
   const inPrefab = new Map<string, UnityObject["look"]>();
   for (const [g, f] of files) {
     if (!/\.prefab$/i.test(f)) continue;
-    const text = await readFile(join(dir, f), "utf8").catch(() => "");
+    // A prefab is read only when it is of a sensible size (a huge one stays a box).
+    const size = (await stat(join(dir, f)).catch(() => undefined))?.size ?? Infinity;
+    const text = size < 20 * 1024 * 1024 ? await readFile(join(dir, f), "utf8").catch(() => "") : "";
     const mesh = /m_Mesh:\s*\{fileID:\s*(-?\d+),\s*guid:\s*([0-9a-f]{32})/.exec(text);
     if (mesh?.[2] === "0000000000000000e000000000000000") {
       const kind = ({ "10202": "cube", "10207": "sphere", "10206": "cylinder", "10208": "capsule", "10209": "plane", "10210": "quad" } as const)[mesh[1] as "10202"];

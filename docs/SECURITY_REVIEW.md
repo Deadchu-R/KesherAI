@@ -1389,3 +1389,19 @@ S5 an outside scanner's rules for Electron.
 - **The page**: `gp` / `gs` are checked in `godotSceneInput` (only `res://….tscn`, no `..`, only for a page that declared
   `model`), and the bridge sends only that scene's path; the stand-in page cannot name another file.
 - Checked: lint, typecheck, tests (tscn 2, godot-scene 3, page-input), the stand-in in a browser with a stub.
+
+## Scan 153 (2026-11-18): real shapes in the game-scene stand-ins (Godot and Unity)
+- **`/api/godot/asset`, `/api/unity/asset`**: the owner's only; only model files (`.glb`/`.gltf`; Unity also `.fbx`/`.obj`)
+  inside the project (`res://…` / `Assets/…`), checked by path (`..` refused) and by the real path (a link cannot lead
+  outside); at most 150 MB; sent as bytes, never run or parsed on the server.
+- **Nested Godot scenes**: an instanced `.tscn` is read through the same path checks, two levels deep at most (no loop),
+  and its nodes are marked `inner`: the page never sends them back, so a save cannot touch another file.
+- **Unity looks**: GUIDs are found by walking `Assets/**/*.meta` (links not followed, 200 000 files at most, stopping
+  when all are found); a prefab is read for its first mesh only, and only when under 20 MB (**fixed in this scan**).
+- **Placed prefabs' moves**: the id is two numbers (`<source id>:<instance id>`), checked by the route's pattern before it
+  is queued; the package builds a GlobalObjectId from them and moves the object only if it resolves to a Transform in
+  the open scene, with Undo.
+- **The page**: models are parsed in the sandboxed plugin page (three.js loaders), never in KesherAI; `standin.asset` only
+  serves the project the page was opened with.
+- Checked: lint, typecheck, tests (tscn 3, godot-scene 4, unity-scene 3, unity-scene routes 2), the Unity package compiled
+  (mcs, stubs), both stand-ins in a browser with stub hosts (shapes, models, a heavy model simplified to ~50 000 triangles).
