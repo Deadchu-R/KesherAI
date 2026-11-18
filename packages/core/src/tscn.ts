@@ -158,7 +158,10 @@ function shapeOf(type: string, p: Map<string, string>): TscnShape | undefined {
 export interface TscnChange {
   path: string;
   transform?: { basis: number[]; origin: [number, number, number] };
+  /** 2D: position (pixels), rotation (radians) and scale; each is written only when given. */
   position2d?: [number, number];
+  rotation2d?: number;
+  scale2d?: [number, number];
 }
 
 const fmt = (n: number) => {
@@ -168,8 +171,8 @@ const fmt = (n: number) => {
 };
 
 /**
- * Writes moves into the scene's text: the node's `transform = Transform3D(…)` (or `position = Vector2(…)`) line
- * replaced, or added under its heading when it had none (it was at the default). Nothing else changes.
+ * Writes moves into the scene's text: the node's `transform = Transform3D(…)` line (2D: its `position`, `rotation` and
+ * `scale` lines) replaced, or added under its heading when it had none (it was at the default). Nothing else changes.
  *
  * @param text - The .tscn file.
  * @param changes - The moves.
@@ -182,15 +185,26 @@ export function writeTscn(text: string, changes: readonly TscnChange[]): { text:
   const done = new Set<string>();
   const out: string[] = [];
   let cur: TscnChange | undefined;
-  let wrote = false;
+  /** The lines this node needs, by key ("transform", "position", "rotation", "scale"), and those already written. */
+  let need = new Map<string, string>();
+  const wrote = new Set<string>();
   let headAt = -1;
-  const line3d = (c: TscnChange) => `transform = Transform3D(${[...c.transform!.basis, ...c.transform!.origin].map(fmt).join(", ")})`;
-  const line2d = (c: TscnChange) => `position = Vector2(${c.position2d!.map(fmt).join(", ")})`;
+  const linesOf = (c: TscnChange) => {
+    const m = new Map<string, string>();
+    if (c.transform) m.set("transform", `transform = Transform3D(${[...c.transform.basis, ...c.transform.origin].map(fmt).join(", ")})`);
+    if (c.position2d) m.set("position", `position = Vector2(${c.position2d.map(fmt).join(", ")})`);
+    if (c.rotation2d !== undefined) m.set("rotation", `rotation = ${fmt(c.rotation2d)}`);
+    if (c.scale2d) m.set("scale", `scale = Vector2(${c.scale2d.map(fmt).join(", ")})`);
+    return m;
+  };
+  /** A value at Godot's default is not added where the file had none (Godot leaves it out too). */
+  const isDefault = (k: string) => (k === "rotation" && Math.abs(cur!.rotation2d ?? 0) < 1e-9) || (k === "scale" && cur!.scale2d!.every((x) => Math.abs(x - 1) < 1e-9));
   const flush = () => {
-    // The heading had no transform line: one goes right under it (where Godot puts it).
-    if (cur && !wrote) out.splice(headAt + 1, 0, cur.transform ? line3d(cur) : line2d(cur));
+    // The heading had no such line: it goes right under it (where Godot puts it).
+    if (cur) out.splice(headAt + 1, 0, ...[...need].filter(([k]) => !wrote.has(k) && !isDefault(k)).map(([, l]) => l));
     cur = undefined;
-    wrote = false;
+    need = new Map();
+    wrote.clear();
   };
   for (const line of lines) {
     const head = /^\[(\w+)\s*(.*)\]\s*$/.exec(line);
@@ -202,13 +216,13 @@ export function writeTscn(text: string, changes: readonly TscnChange[]): { text:
         const parent = attr(h, "parent")?.[2];
         const path = parent === undefined ? "." : parent === "." ? name : `${parent}/${name}`;
         const c = want.get(path);
-        if (c && (c.transform?.basis.length === 9 || c.position2d)) { cur = c; done.add(path); headAt = out.length; }
+        if (c && (c.transform?.basis.length === 9 || c.position2d || c.rotation2d !== undefined || c.scale2d)) { cur = c; need = linesOf(c); done.add(path); headAt = out.length; }
       }
       out.push(line);
       continue;
     }
-    if (cur && cur.transform && /^transform\s*=\s*Transform3D\(/.test(line)) { out.push(line3d(cur)); wrote = true; continue; }
-    if (cur && cur.position2d && /^position\s*=\s*Vector2\(/.test(line)) { out.push(line2d(cur)); wrote = true; continue; }
+    const key = cur && /^(transform|position|rotation|scale)\s*=/.exec(line)?.[1];
+    if (key && need.has(key) && (key !== "transform" || /Transform3D\(/.test(line)) && (key === "transform" || key === "rotation" || /Vector2\(/.test(line))) { out.push(need.get(key)!); wrote.add(key); continue; }
     out.push(line);
   }
   flush();

@@ -33,6 +33,8 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ The computer's load in remote (CPU, RAM, cards, temperatures) with Terminate
 - ✅ Switching computers: tabs in the top bar for the other computers (desktop app), each in its own window; on the phone, tabs at the top of the side menu
 
+- ⬜ **A phone with a mouse becomes the computer's screen** (Roee, 2026-11-18 19:26): when a mouse (or a keyboard and mouse) is connected to the phone, remote KesherAI can switch to the desktop layout, as from a laptop, and everything works as on the computer (hover, right-click, drag, the editors' mouse tools); the switch is offered on its own when a fine pointer appears (`(pointer: fine)` / `any-hover`), and can be chosen by hand.
+
 ## Looks and personalization
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
 - ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try

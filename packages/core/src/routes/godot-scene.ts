@@ -142,7 +142,7 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
       await inside(dir, file!);
       if (g.status().connected) return reply.code(409).send({ error: "Godot is open: close it to save into the scene, or apply the moves there.", code: "godot-open" });
       const changes = Array.isArray(req.body?.changes) ? req.body!.changes.slice(0, 5000) : [];
-      const ok = changes.filter((c) => typeof c?.path === "string" && ((Array.isArray(c.transform?.basis) && c.transform!.basis.length === 9 && Array.isArray(c.transform!.origin) && c.transform!.origin.length === 3 && [...c.transform!.basis, ...c.transform!.origin].every(Number.isFinite)) || (Array.isArray(c.position2d) && c.position2d.length === 2 && c.position2d.every(Number.isFinite))));
+      const ok = changes.filter((c) => typeof c?.path === "string" && ((Array.isArray(c.transform?.basis) && c.transform!.basis.length === 9 && Array.isArray(c.transform!.origin) && c.transform!.origin.length === 3 && [...c.transform!.basis, ...c.transform!.origin].every(Number.isFinite)) || (Array.isArray(c.position2d) && c.position2d.length === 2 && c.position2d.every(Number.isFinite) && (c.rotation2d === undefined || Number.isFinite(c.rotation2d)) && (c.scale2d === undefined || (Array.isArray(c.scale2d) && c.scale2d.length === 2 && c.scale2d.every(Number.isFinite))))));
       const text = await readFile(file!, "utf8");
       const clash = req.body?.keep === "mine" ? [] : clashes(readTscn(text), ok);
       if (clash.length) return reply.code(409).send({ error: "These moved in Godot too.", code: "conflict", conflicts: clash });

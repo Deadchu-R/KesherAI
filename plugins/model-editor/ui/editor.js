@@ -225,7 +225,7 @@ function loadStandIn(nodes) {
       o.position.set(p2[0] / PX, -p2[1] / PX, 0);
       if (n.rotation2d) o.rotation.z = -n.rotation2d;
       if (n.scale2d) o.scale.set(n.scale2d[0], n.scale2d[1], 1);
-      o.userData.godot = { path: n.path, from: p2, is2d: true };
+      o.userData.godot = { path: n.path, from: p2, is2d: true, rot: n.rotation2d ?? 0, scl: n.scale2d ?? [1, 1] };
     } else o.userData.godot = { path: n.path };
     // Nodes of a scene placed in this one: shown for the shape, never saved (they belong to that other file).
     if (n.inner) o.userData.godot = { path: n.path, inner: true };
@@ -355,7 +355,11 @@ function godotChanges() {
     o.updateMatrix();
     if (g.is2d) {
       const p = [Math.round(o.position.x * PX * 1000) / 1000, Math.round(-o.position.y * PX * 1000) / 1000];
-      if (Math.abs(p[0] - g.from[0]) > 1e-3 || Math.abs(p[1] - g.from[1]) > 1e-3) out.push({ path: g.path, from: g.from, position2d: p });
+      // Turned or resized in 2D too: Godot's rotation (radians, clockwise on screen) and scale.
+      const rot = Math.round(-o.rotation.z * 1e6) / 1e6, scl = [Math.round(o.scale.x * 1e6) / 1e6, Math.round(o.scale.y * 1e6) / 1e6];
+      const moved = Math.abs(p[0] - g.from[0]) > 1e-3 || Math.abs(p[1] - g.from[1]) > 1e-3;
+      const turned = Math.abs(rot - g.rot) > 1e-5, resized = scl.some((x, i) => Math.abs(x - g.scl[i]) > 1e-5);
+      if (moved || turned || resized) out.push({ path: g.path, from: g.from, position2d: p, ...(turned ? { rotation2d: rot } : {}), ...(resized ? { scale2d: scl } : {}) });
       return;
     }
     const now = toGodot(o.matrix).map((x) => Math.round(x * 1e6) / 1e6);
@@ -373,7 +377,7 @@ $("toGodot").onclick = async () => {
     if (r.code === "conflict" && confirm(`${T("clash", "These moved in Godot too:")} ${r.conflicts.join(", ")}. ${T("keepMine", "Keep your moves?")}`)) r = await kesher.call("godot.saveScene", { changes, keep: "mine" });
     if (r.ok) {
       // What is in the file now is the new "before".
-      model.traverse((o) => { const g = o.userData.godot; if (!g || g.path === ".") return; g.from = g.is2d ? [o.position.x * PX, -o.position.y * PX] : toGodot(o.matrix); });
+      model.traverse((o) => { const g = o.userData.godot; if (!g || g.path === ".") return; if (g.is2d) { g.from = [o.position.x * PX, -o.position.y * PX]; g.rot = -o.rotation.z; g.scl = [o.scale.x, o.scale.y]; } else g.from = toGodot(o.matrix); });
       msg(`${T("sceneSaved", "Saved into the scene")}: ${r.written}${r.missing?.length ? ` · ${T("notFound", "not found")}: ${r.missing.join(", ")}` : ""}`);
     } else msg(r.error, true);
   } catch (e) { msg(e.message, true); } finally { busy(""); }

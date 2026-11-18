@@ -103,3 +103,12 @@ shape = SubResource("C_1")
   assert.deepEqual(n[1]!.position2d, [150, 420]);
   assert.equal(n[2]!.collision, "CapsuleShape2D");
 });
+
+test("2D: rotation and scale written too, added where the file left them at the default", async () => {
+  const { writeTscn } = await import("./tscn.js");
+  const text = `[gd_scene format=3]\n\n[node name="W" type="Node2D"]\n\n[node name="Fox" type="Sprite2D" parent="."]\nposition = Vector2(1, 2)\nscale = Vector2(2, 2)\n\n[node name="Coin" type="Sprite2D" parent="."]\n`;
+  const out = writeTscn(text, [{ path: "Fox", position2d: [5, 6], rotation2d: 0.5, scale2d: [1, 1] }, { path: "Coin", position2d: [3, 4], rotation2d: 0, scale2d: [1, 1] }]).text;
+  assert.match(out, /\[node name="Fox"[^\n]*\]\nrotation = 0\.5\nposition = Vector2\(5, 6\)\nscale = Vector2\(1, 1\)/);
+  assert.match(out, /\[node name="Coin"[^\n]*\]\nposition = Vector2\(3, 4\)\n/);
+  assert.doesNotMatch(out, /Coin[^[]*rotation/);
+});
