@@ -4,6 +4,12 @@ import { isLocalRequest, isLoopback, markPairedDevice } from "./request-origin.j
 
 export { isLocalRequest, isLoopback, localHost, pairedDeviceIdOf, pairedDeviceOf } from "./request-origin.js";
 
+/**
+ * The key in a plugin page's own address (`/api/plugin-files/<key>/…`): random for each start of KesherAI, it opens
+ * nothing but plugins' files, so a plugin page that reads its address learns nothing that opens the rest.
+ */
+export const PLUGIN_FILES_KEY = randomBytes(24).toString("base64url");
+
 /** Where sign-ins come back to (each checks its own one-time state). */
 const OAUTH_CALLBACK = /^\/api\/(google|copilot|onedrive|mcp)\/callback$/;
 
@@ -18,12 +24,6 @@ const OAUTH_CALLBACK = /^\/api\/(google|copilot|onedrive|mcp)\/callback$/;
  * @param path - The path asked for.
  * @returns Whether it is allowed.
  */
-/**
- * The key in a plugin page's own address (`/api/plugin-files/<key>/…`): random for each start of KesherAI, it opens
- * nothing but plugins' files, so a plugin page that reads its address learns nothing that opens the rest.
- */
-export const PLUGIN_FILES_KEY = randomBytes(24).toString("base64url");
-
 export function allowedOrigin(origin: string, host: string | undefined, path: string): boolean {
   if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true;
   if (/^(https?|capacitor):\/\/localhost$/.test(origin)) return true;
