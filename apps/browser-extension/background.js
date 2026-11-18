@@ -80,10 +80,32 @@ function waitLoaded(tabId, ms = 20000) {
   });
 }
 
+/**
+ * Makes sure KesherAI may use the tab's site. The extension asks for sites only when a task needs one (not all sites
+ * at install): a small window asks her, and the task waits for her answer (up to two minutes).
+ */
+async function ensureSite(tabId) {
+  const tab = await chrome.tabs.get(tabId);
+  const url = tab.url || tab.pendingUrl || "";
+  if (!/^https?:/.test(url)) return;
+  const origin = new URL(url).origin;
+  if (await chrome.permissions.contains({ origins: [`${origin}/*`] })) return;
+  const answered = new Promise((resolve) => {
+    const done = (ok) => { chrome.permissions.onAdded.removeListener(added); chrome.windows.onRemoved.removeListener(closed); clearTimeout(timer); resolve(ok); };
+    const added = () => void chrome.permissions.contains({ origins: [`${origin}/*`] }).then((ok) => ok && done(true));
+    const closed = (id) => id === win?.id && setTimeout(() => void chrome.permissions.contains({ origins: [`${origin}/*`] }).then(done), 300);
+    const timer = setTimeout(() => done(false), 120000);
+    chrome.permissions.onAdded.addListener(added);
+    chrome.windows.onRemoved.addListener(closed);
+  });
+  const win = await chrome.windows.create({ url: chrome.runtime.getURL(`allow.html?origin=${encodeURIComponent(origin)}`), type: "popup", width: 380, height: 300, focused: true });
+  if (!(await answered)) throw new Error(`KesherAI is not allowed on ${new URL(origin).host} ("Not now", or no answer).`);
+}
+
 async function inPage(tabId, func, args = []) {
-  // Firefox gives an extension its sites only when the person allows them (not at install): say so plainly.
+  await ensureSite(tabId);
   const [r] = await chrome.scripting.executeScript({ target: { tabId }, func, args }).catch((err) => {
-    if (/permission|host/i.test(String(err?.message))) throw new Error("The browser has not allowed KesherAI on this site. In Firefox: click KesherAI's button and press Connect (it asks to allow all sites), or Extensions → KesherAI → Permissions → allow all sites.");
+    if (/permission|host/i.test(String(err?.message))) throw new Error("The browser has not allowed KesherAI on this site. Click KesherAI's button in the browser and allow the site.");
     throw err;
   });
   // Errors inside the page come back as { error } (the browser does not pass thrown errors on).
@@ -118,6 +140,7 @@ async function run(action, a) {
     return inPage(tab.id, readPage);
   }
   if (action === "screenshot") {
+    await ensureSite(tab.id);
     await chrome.tabs.update(tab.id, { active: true });
     await new Promise((r) => setTimeout(r, 400));
     return { dataUrl: await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }) };

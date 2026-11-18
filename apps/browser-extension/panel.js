@@ -16,11 +16,21 @@ if (he) {
 }
 document.getElementById("home").onclick = () => (frame.src = `${origin}/#/`);
 // The page in front: its title, address, text and anything selected on it (sites must be allowed in Firefox).
+// The site in front, kept up to date so a click can ask the browser for it at once (the question must come straight
+// from the click, before anything else is awaited).
+let front = "";
+async function trackFront() {
+  const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  front = t?.url && /^https?:/.test(t.url) ? new URL(t.url).origin : "";
+}
+chrome.tabs.onActivated.addListener(() => void trackFront());
+chrome.tabs.onUpdated.addListener((_id, info) => info.url && void trackFront());
+chrome.windows.onFocusChanged.addListener(() => void trackFront());
+void trackFront();
 async function readTab() {
-  try {
-    if (chrome.permissions?.request) await chrome.permissions.request({ origins: ["<all_urls>"] });
-  } catch {
-    // already allowed
+  if (front) {
+    const asked = chrome.permissions.request({ origins: [`${front}/*`] });
+    if (!(await asked.catch(() => false))) return undefined;
   }
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab?.id || !/^https?:/.test(tab.url || "")) return undefined;

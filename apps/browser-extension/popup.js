@@ -14,12 +14,6 @@ function show(state) {
 chrome.storage.local.get({ key: "", port: 7420 }).then((s) => { $("key").value = s.key; $("port").value = s.port; });
 chrome.runtime.sendMessage("state").then((r) => show(r?.state));
 $("save").onclick = async () => {
-  // Firefox gives an extension its sites only when asked (from this click); Chrome already has them.
-  try {
-    if (chrome.permissions?.request) await chrome.permissions.request({ origins: ["<all_urls>"] });
-  } catch {
-    // already allowed, or the browser has no such question
-  }
   await chrome.storage.local.set({ key: $("key").value.trim(), port: Number($("port").value) || 7420, enabled: true });
   show("connecting");
   setTimeout(() => chrome.runtime.sendMessage("state").then((r) => show(r?.state)), 1500);
@@ -33,3 +27,13 @@ $("panel").onclick = async () => {
   else if (globalThis.browser?.sidebarAction?.open) await globalThis.browser.sidebarAction.open();
   window.close();
 };
+
+// Sites: by default KesherAI asks for each site when a task needs it; this allows all of them at once (from this click).
+$("all").onclick = () => void chrome.permissions.request({ origins: ["<all_urls>"] }).catch(() => false).then(showAll);
+function showAll() {
+  void chrome.permissions.contains({ origins: ["<all_urls>"] }).then((all) => {
+    $("all").hidden = all;
+    $("sites").textContent = all ? "Allowed on all sites." : "KesherAI asks you for each site the first time a task needs it.";
+  });
+}
+showAll();

@@ -2251,3 +2251,9 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - **Competitors**: Mei/Amori ("why my ex ghosted me"), and the shared "AI read my texts with my ex" analyses: compatibility, attachment and communication styles, the best moments, why it would not work. Texts From My Ex is a humour archive, not analysis.
 - **Built**: a sixth kind, "Exes" 💔: the report tells the story over time (start, best period, where it turned, the patterns on both sides) and what to take into the next relationship and how to close this one; it never advises getting back together or contacting the other person, and never blames one side alone.
 - Stopped at: built (0.6.366).
+
+## The extension asks per site (2026-11-18, from the Chrome Web Store's warning)
+- **Pattern**: Claude in Chrome and most agent extensions ask per site; Chrome MV3 `optional_host_permissions` plus `permissions.request`, which needs a click (so a background task cannot ask by itself).
+- **Built** (extension 0.2.6): no sites at install. A task on a site not allowed opens a small window (Allow on this site / on all sites / Not now) and waits up to two minutes; "Ask about this page" and the lens ask for the site in front from the click itself (the site is tracked ahead so the question comes straight from the click). The popup has "Allow on all sites".
+- **Tested** in Chromium with the extension loaded: no sites at install, the window opens on a task, "Not now" gives a clear error.
+- Stopped at: done; Roee uploads 0.2.6 to the store after the current review.

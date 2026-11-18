@@ -41,8 +41,9 @@ Fee: $5, once, when the developer account is registered (Roee pays it himself). 
   - `storage`: keep the connection key and port.
   - `alarms`: keep the connection to the local app alive.
   - `sidePanel`: show KesherAI's chat beside the page.
-  - Host permission `<all_urls>`: browser tasks can be on any site the user asks for; nothing runs on a page until a
-    task does.
+  - Optional host permission `<all_urls>` (from 0.2.6; nothing at install): the extension asks for one site the first
+    time a task needs it (a small window with "Allow on this site", "Allow on all sites", "Not now"), or for all sites
+    when the user presses "Allow on all sites" in its popup. Nothing runs on a page until a task does.
 - **Remote code:** No. All code is in the package.
 - **Data usage:** Website content is read only for the user's own requests and sent only to the KesherAI app on the
   same computer (127.0.0.1). Not sold, not shared, not used for anything unrelated, ads or creditworthiness. Tick:
