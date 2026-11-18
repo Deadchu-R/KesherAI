@@ -833,7 +833,7 @@ export function ConversationPage({ id }: { id: string }) {
                   </form>
                 ) : (
                   <div key={e.seq} className="msg user" dir="auto">
-                    <h3 className="sr-only">{L("ההודעה שלך", "You")}</h3>
+                    <h2 className="sr-only">{L("ההודעה שלך", "You")}</h2>
                     {(() => {
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
                       const { body, files } = splitAttachments(e.text);
@@ -845,7 +845,7 @@ export function ConversationPage({ id }: { id: string }) {
               case "assistant":
                 return (
                   <div key={e.seq} className="msg">
-                    <h3 className="sr-only">{L("תשובה", "Answer")}</h3>
+                    <h2 className="sr-only">{L("תשובה", "Answer")}</h2>
                     <RichText text={e.text} />
                     {(() => {
                       const docs = namedDocuments(e.text);
