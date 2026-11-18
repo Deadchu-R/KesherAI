@@ -2599,3 +2599,28 @@ Each AI tool shows which local model it uses and offers to download it the first
 - **P3-SAM on Windows**: its requirements are Linux-first (flash-attention from Git, PyG wheels without an index, Sonata
   at /root/sonata); Sonata's authors give enable_flash=False with patches of 1024 for when flash-attention is missing.
 - Stopped at: all built and checked in a browser here; on the PC waiting until Roee frees it (a Switch 2 build runs).
+
+## A game scene edited in KesherAI without its engine, synced by our plugin (2026-11-18, 19:25; Roee: "load a stand-in of an Unreal, Unity or Godot scene, move things without the engine, and it syncs when the engine opens")
+- **Godot**: scenes are text (.tscn, format=3): `[node name= type= parent="A/B" unique_id=…]` then `transform =
+  Transform3D(basis x, basis y, basis z, origin)` (12 numbers; 2D: `position = Vector2(…)`, `rotation`, `scale`);
+  `unique_id` (4.6+) follows a node through renames; instanced scenes are `instance=ExtResource("id")`. So KesherAI can
+  read and write a closed scene directly (only the transform lines change; Godot reloads it), and through our addon
+  when the editor is open (the same change as an undo step).
+- **Unity**: scenes and prefabs are YAML (Force Text, the default): each GameObject has a Transform with
+  `m_LocalPosition / m_LocalRotation (quaternion) / m_LocalScale` and `m_Father`; objects inside a prefab are changed
+  as `m_Modifications` of the PrefabInstance. Writing YAML by hand is fragile (fileIDs, prefab overrides), so: read the
+  YAML for the stand-in, and apply moves through the Unity package when Unity opens (Undo.RecordObject), never by hand.
+- **Unreal**: .umap is binary; only the engine reads it. Our KesherAIBridge already exports Blueprints for offline work
+  (UnrealOfflineSync): the same way, it would write a snapshot of the level's actors (name, class, transform, mesh) on
+  save, and on the next start apply the moves made in KesherAI as one transaction (FScopedTransaction), reporting any
+  actor that also moved in the engine. Epic's own Multi-User Editing and the Remote Control API do this live (with the
+  editor running); USD / Omniverse "live layers" keep the changes as a layer over the scene, the model for our list.
+- **The stand-in**: each object a box of its bounds (or its mesh, exported to GLB where the engine can), named as in the
+  engine, in the 3D editor; changes kept as a list (object id, new transform, the transform it had), so a conflict is
+  "it moved in the engine too".
+- **Order**: Godot first (text, no engine needed, the addon exists), then Unity (read YAML, apply through the package),
+  then Unreal (snapshot and apply through the bridge, needs a plugin release).
+- Sources: Godot docs "TSCN file format" (godot-docs engine_details/file_formats/tscn.rst); Unity Manual "Format of
+  Text Serialized files" and "UnityYAML"; Unreal docs "Multi-User Editing" and "Remote Control API"; NVIDIA Omniverse
+  "Live layers"; KesherAI's UnrealOfflineSync board.
+- Stopped at: research done; next the design board, then the Godot reader / writer with tests.
