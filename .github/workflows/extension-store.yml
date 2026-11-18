@@ -1,0 +1,74 @@
+name: Extension to the Chrome Web Store
+
+# Uploads and publishes the browser extension when its version in apps/browser-extension/manifest.json changes on
+# main (or when run by hand), through the Chrome Web Store API (V2) with a service account, so Chrome updates it for
+# everyone by itself. Chrome still reviews each version; nothing is published from outside the store.
+# Set once (docs/CHROME_WEB_STORE.md, "Automatic updates"): the secrets CWS_SERVICE_ACCOUNT (the service account's
+# JSON key), CWS_PUBLISHER_ID and CWS_ITEM_ID. Without them this workflow only says so and stops.
+on:
+  push:
+    branches: [main]
+    paths: [apps/browser-extension/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-store
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.CWS_SERVICE_ACCOUNT != '' && secrets.CWS_PUBLISHER_ID != '' && secrets.CWS_ITEM_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Version changed?
+        id: v
+        run: |
+          now=$(jq -r .version apps/browser-extension/manifest.json)
+          before=$(git show HEAD~1:apps/browser-extension/manifest.json 2>/dev/null | jq -r .version || echo "")
+          echo "version=$now" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$now" != "$before" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$HAS_KEY" != "true" ]; then echo "::notice::The Chrome Web Store secrets are not set yet (docs/CHROME_WEB_STORE.md, Automatic updates): not publishing."; fi
+      - uses: pnpm/action-setup@v4
+        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Pack
+        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+        run: |
+          pnpm install --frozen-lockfile
+          node --conditions=source --import tsx scripts/pack-extension.ts chrome extension.zip
+      - name: Sign in to Google with the service account
+        id: auth
+        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+      - name: Upload and publish
+        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+        env:
+          TOKEN: ${{ steps.auth.outputs.access_token }}
+          ITEM: publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_ITEM_ID }}
+        run: |
+          api=https://chromewebstore.googleapis.com
+          curl -sS --fail-with-body -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/zip" \
+            --data-binary @extension.zip "$api/upload/v2/$ITEM:upload" | tee upload.json
+          # A big package can still be processing: wait for it (up to two minutes) before publishing.
+          for i in $(seq 1 24); do
+            grep -q IN_PROGRESS upload.json || break
+            sleep 5
+            curl -sS --fail-with-body -H "Authorization: Bearer $TOKEN" "$api/v2/$ITEM:fetchStatus" | tee upload.json
+          done
+          curl -sS --fail-with-body -X POST -H "Authorization: Bearer $TOKEN" "$api/v2/$ITEM:publish" | tee publish.json
+          echo "::notice::Extension ${{ steps.v.outputs.version }} sent to the Chrome Web Store; it goes live after Chrome's review."

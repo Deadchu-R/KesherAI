@@ -53,3 +53,22 @@ Fee: $5, once, when the developer account is registered (Roee pays it himself). 
 ## Screenshots
 
 1280×800: two made 2026-11-18 with the real extension loaded in Chromium (the side panel beside a page; the connect popup), in Roee's Google Drive with the zip. More can be taken on the PC (asking about a page, a browser task waiting for approval).
+
+## Automatic updates (set once)
+
+After the first version is in the store, every change of the extension's version on `main` is uploaded and published
+by the workflow `.github/workflows/extension-store.yml` (the Chrome Web Store API V2), and Chrome updates the
+extension for everyone by itself. Chrome still reviews each version. A store extension cannot update itself from
+anywhere else (Manifest V3 forbids code from outside the package), so this is the way.
+
+1. Google Cloud Console → a project (new or existing) → APIs & Services → enable **Chrome Web Store API**.
+2. IAM & Admin → Service accounts → **Create service account** (no roles needed) → its Keys → **Add key → JSON**
+   (a file downloads; keep it private).
+3. Chrome Web Store Developer Dashboard → **Account** → add the service account's email (one per publisher).
+4. GitHub → KesherAI → Settings → Secrets and variables → Actions → New repository secret, three times:
+   - `CWS_SERVICE_ACCOUNT`: the whole JSON file's text.
+   - `CWS_PUBLISHER_ID`: the publisher id (in the dashboard's address: `.../devconsole/<publisher id>/...`).
+   - `CWS_ITEM_ID`: the extension's id (32 letters, on its page in the dashboard).
+5. Then delete the JSON file from the computer.
+
+To publish now without a version change: Actions → "Extension to the Chrome Web Store" → Run workflow.
