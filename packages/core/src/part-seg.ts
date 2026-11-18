@@ -19,17 +19,42 @@ export interface PartSegState {
   log: string[];
 }
 
-/** Our own runner around P3-SAM's demo: runs it on one mesh, then writes each face's centre and part as JSON. */
-const RUNNER = `import glob, json, os, subprocess, sys
+/**
+ * Our own runner around P3-SAM's demo: runs it on one mesh, then writes each face's centre and part as JSON.
+ * It runs the demo in this same Python, so it can adjust Sonata (the point backbone) for Windows first: its weights go
+ * to our folder instead of Linux's /root/sonata, and without flash-attention (which does not build on Windows) it uses
+ * plain attention, the setting Sonata's authors give for that (enable_flash=False, patches of 1024).
+ */
+const RUNNER = `import glob, json, os, runpy, sys
 import numpy as np, trimesh
 a = json.loads(sys.argv[1])
-demo = os.path.join(a["code"], "P3-SAM", "demo")
+p3 = os.path.join(a["code"], "P3-SAM")
+demo = os.path.join(p3, "demo")
 out = a["out"]
 os.makedirs(out, exist_ok=True)
-args = [sys.executable, "auto_mask.py", "--mesh_path", a["mesh"], "--output_path", out, "--parallel", "0", "--post_process", "0", "--clean_mesh", "0", "--save_mid_res", "0", "--show_info", "0", "--show_time_info", "0"]
+for extra in (os.path.join(a["code"], "XPart", "partgen"), p3, demo):
+    if os.path.isdir(extra) and extra not in sys.path:
+        sys.path.insert(0, extra)
+try:
+    from models import sonata
+    _load = sonata.load
+    def load(*args, **kw):
+        kw["download_root"] = a["sonata"]
+        try:
+            import flash_attn  # noqa: F401
+        except ImportError:
+            cc = dict(kw.get("custom_config") or {})
+            cc.update(enable_flash=False, enc_patch_size=[1024] * 5)
+            kw["custom_config"] = cc
+        return _load(*args, **kw)
+    sonata.load = load
+except Exception as e:
+    print("sonata not adjusted:", e)
+sys.argv = ["auto_mask.py", "--mesh_path", a["mesh"], "--output_path", out, "--parallel", "0", "--post_process", "0", "--clean_mesh", "0", "--save_mid_res", "0", "--show_info", "0", "--show_time_info", "0"]
 if a.get("ckpt"):
-    args += ["--ckpt_path", a["ckpt"]]
-subprocess.run(args, cwd=demo, check=True)
+    sys.argv += ["--ckpt_path", a["ckpt"]]
+os.chdir(demo)
+runpy.run_path(os.path.join(demo, "auto_mask.py"), run_name="__main__")
 ids = sorted(glob.glob(os.path.join(out, "**", "*face_ids.npy"), recursive=True))
 if not ids:
     raise SystemExit("P3-SAM wrote no face ids")
@@ -116,7 +141,7 @@ export class PartSegmenter {
     return text
       .split(/\r?\n/)
       .map((l) => l.replace(/#.*$/, "").trim())
-      .filter((l) => l && !/^(-|torch\b|torchvision\b|torchaudio\b|flash[-_]attn|gradio|spaces\b|xformers|spconv)/i.test(l) && !/^(git\+)?https?:|\.whl\b|@\s*(git\+)?https?:|flash-attention/i.test(l));
+      .filter((l) => l && !/^(-|torch\b(?![-_])|torchvision\b|torchaudio\b|torch[-_](scatter|cluster)\b|flash[-_]attn|gradio|spaces\b|xformers|spconv)/i.test(l) && !/^(git\+)?https?:|\.whl\b|@\s*(git\+)?https?:|flash-attention/i.test(l));
   }
 
   /** Installs Python 3.10, PyTorch with CUDA, P3-SAM's code, its requirements and its weights (a few GB, once). */
@@ -129,15 +154,21 @@ export class PartSegmenter {
         await mkdir(this.dir, { recursive: true });
         if (!existsSync(this.python)) await this.run(uv, ["venv", "--python", "3.10", "--seed", join(this.dir, "venv")], env);
         await this.run(uv, ["pip", "install", "--python", this.python, "torch==2.5.1", "torchvision==0.20.1", "--index-url", "https://download.pytorch.org/whl/cu124"], env);
-        await this.run(uv, ["pip", "install", "--python", this.python, "huggingface_hub", "trimesh", "numpy<2", "scikit-learn", "fpsample", "numba", "tqdm", "addict", "timm", "spconv-cu124"], env);
-        // torch-scatter for this torch and CUDA, from PyG's wheels (Sonata's point backbone uses it).
-        await this.run(uv, ["pip", "install", "--python", this.python, "torch-scatter", "-f", "https://data.pyg.org/whl/torch-2.5.1+cu124.html"], env).catch((e) => this.add(`torch-scatter: ${(e as Error).message}`));
+        await this.run(uv, ["pip", "install", "--python", this.python, "huggingface_hub", "trimesh", "scikit-learn", "fpsample", "numba", "tqdm", "addict", "timm"], env);
+        // spconv (Sonata's sparse convolutions): the build for CUDA 12.4, else the one for 12.0 (it runs on newer drivers).
+        await this.run(uv, ["pip", "install", "--python", this.python, "spconv-cu124"], env).catch(() => this.run(uv, ["pip", "install", "--python", this.python, "spconv-cu120"], env)).catch((e) => this.add(`spconv: ${(e as Error).message}`));
+        // torch-scatter and torch-cluster built for this torch and CUDA, from PyG's wheels (Windows too), never from source.
+        await this.run(uv, ["pip", "install", "--python", this.python, "--only-binary", ":all:", "torch-scatter", "torch-cluster", "-f", "https://data.pyg.org/whl/torch-2.5.1+cu124.html"], env).catch((e) => this.add(`torch-scatter / torch-cluster: ${(e as Error).message}`));
         await writeFile(join(this.dir, "fetch.py"), FETCH);
         await this.run(this.python, [join(this.dir, "fetch.py"), this.dir], env);
         const paths = JSON.parse(await readFile(join(this.dir, "paths.json"), "utf8")) as { code: string };
         const req = await readFile(join(paths.code, "requirements.txt"), "utf8").catch(() => "");
         const lines = PartSegmenter.requirements(req);
-        if (lines.length) await this.run(uv, ["pip", "install", "--python", this.python, ...lines], env).catch((e) => this.add(`requirements: ${(e as Error).message}`));
+        // All at once; if one will not install here, the others one by one, so a single package does not stop the rest.
+        if (lines.length)
+          await this.run(uv, ["pip", "install", "--python", this.python, ...lines], env).catch(async () => {
+            for (const l of lines) await this.run(uv, ["pip", "install", "--python", this.python, l], env).catch(() => this.add(`skipped: ${l}`));
+          });
         await writeFile(join(this.dir, "runner.py"), RUNNER);
         Object.assign(this.state, { phase: undefined, message: "Ready." });
       } catch (e) {
@@ -167,7 +198,7 @@ export class PartSegmenter {
         await writeFile(join(work, "in.glb"), glb);
         const paths = JSON.parse(await readFile(join(this.dir, "paths.json"), "utf8")) as { code: string; ckpt?: string };
         const env = { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONIOENCODING: "utf-8" };
-        await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ code: paths.code, ckpt: paths.ckpt ?? null, mesh: join(work, "in.glb"), out: join(work, "out") })], env, 20 * 60_000);
+        await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ code: paths.code, ckpt: paths.ckpt ?? null, mesh: join(work, "in.glb"), out: join(work, "out"), sonata: join(this.dir, "sonata") })], env, 20 * 60_000);
         const r = JSON.parse(await readFile(join(work, "out", "parts.json"), "utf8")) as { faces: Array<[number, number, number, number]> };
         Object.assign(this.state, { phase: undefined, message: `Split into ${new Set(r.faces.map((f) => f[3]).filter((l) => l >= 0)).size} parts.` });
         return r.faces;
