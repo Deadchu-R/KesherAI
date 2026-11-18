@@ -2300,3 +2300,17 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 4. Later: live painting (Krita), control layers (pose, depth), regions, Magic Layers (a flat picture into layers).
 Each AI tool shows which local model it uses and offers to download it the first time (as the model score does), and the phone gets the same tools (a bottom tool bar, tap to select).
 - Stopped at: picture editor research done; next build step 1 (the editor) after the tabs, with its design boards updated for steps 1–2 first.
+
+## The video editor, in depth (2026-11-18)
+**Premiere Pro (2025–2026)**: text-based editing (a rough cut from the transcript, pauses and filler words removed in bulk), speech to text with speakers and captions, caption translation (27 languages), Media Intelligence (find shots by describing them), scene edit detection (a long video into its shots), Generative Extend (frames, and matching sound, added at a clip's start or end), AI object mask (hover and click, tracked), Enhance Speech, auto ducking, Remix (music retimed to the video's length), auto reframe (16:9 → 9:16 following the action), auto colour, colour match, morph cut, audio tagging (music, dialogue, effects), an assistant that organises footage and syncs multicam.
+**DaVinci Resolve 20**: IntelliScript (the transcript matched to a script → a timeline of the best takes), IntelliCut (silences removed, one track per speaker), Multicam SmartSwitch (the angle follows who speaks, by sound and lips), Magic Mask 2 (track people or things from points, refine with a brush), Depth Map 2, Set Extender (missing parts of the frame from a prompt), SuperScale (×3, ×4), UltraNR (denoise), Dialogue Separator, Dialogue Matcher, VoiceConvert, Audio Assistant (a finished mix), beat markers for cuts.
+**CapCut**: a simple timeline, auto captions with styles, background removal, a long video into shorts, templates. **Descript**: the transcript is the editor, filler words, Underlord does edits asked in words. **Runway**: a clip changed by a prompt (Aleph: restyle, add or remove things), effects.
+
+**What runs locally for KesherAI**: transcript and speakers = whisper (already) + speaker split; scene detection, cuts, silence removal, reframe, captions burned in = ffmpeg; find shots by describing them = a vision model on key frames (KesherAI's own); object mask tracked = SAM 2 (video); extend a clip or fill a gap = Wan (first/last frame) in ComfyUI; restyle by a prompt = Wan video-to-video; upscale = Real-ESRGAN per frame; smoother motion = RIFE; dialogue separated from music = Demucs; beat markers = an onset detector; denoise = ffmpeg's filters.
+
+**The plan**:
+1. The editor: a timeline (video, sound and caption tracks), cut, trim, move, split, speed, fade; the transcript beside it, where deleting words cuts the video; open from a chat's clip as a tab; export with ffmpeg; Send to the chat.
+2. Plain AI: remove silences and filler words, captions (and translated), scene detection, reframe for the phone, find a shot by describing it, beat markers.
+3. Generative: mark a stretch → "what to do" (restyle, remove a thing, extend the end) with Wan; object masks with SAM 2.
+4. Later: multicam by who speaks, a script to a rough cut (IntelliScript), a finished mix.
+- Stopped at: video done; next sound in depth (Audition, Logic/Ableton AI, iZotope RX, Descript, ElevenLabs, Suno Studio), then 3D in depth (Blender, Substance, Meshy, Tripo, Spline); boards for Roee after each.
