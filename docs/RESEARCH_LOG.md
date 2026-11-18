@@ -2353,3 +2353,16 @@ Each AI tool shows which local model it uses and offers to download it the first
 - Non-destructive: every AI result a layer with its own mask; History with every step; Ctrl+Z / Ctrl+Shift+Z.
 - Photoshop's keys (B, E, L, M, W, V, [ ], space-drag, Ctrl+±, Ctrl+J), shown in a "?" sheet.
 - Stopped at: UI/UX research for the picture editor done; next update its boards (computer and phone), then build stage 1.
+
+## Tabs that stay out of the way, and a report in chapters (2026-11-18, afternoon)
+- Roee: the tab row covers the screen when only one tab is open; wants something more elegant, as competitors do.
+- Safari hid the tab bar with one tab for years (users complained when Safari 26 made it always visible); Obsidian users ask
+  for "hide the tab bar with one tab"; VS Code has `workbench.editor.showTabs: single`; Firefox once had it (bug 903720).
+  Arc, Zed and Linear draw tabs as quiet pills: no boxes, no rule under them, a soft fill on the open one.
+- Done: no row with one open place (Home is in the sidebar), pills of 26px, the phone counter only from two tabs, in the
+  corner of the top bar rather than over the title.
+- Roee: the relationship report should move between pages, "as steps or chapters", like What Brandon Thinks. Brandon's
+  report reads as a story one part at a time (as Spotify Wrapped and Instagram stories): progress segments on top, the
+  next part by a button or a swipe. Done: seven chapters (empty ones left out), segments and names on top, ← → keys, swipe,
+  and "All on one page".
+- Stopped at: checking both on the PC after 0.6.373.
