@@ -121,6 +121,8 @@
           <label class="field"><span data-t="strength">How much to change</span><input type="range" id="strength" min="20" max="100" value="80" /></label>
           <button id="aiUpscale" data-t="aiUpscale">Enlarge ×4</button>
           <button id="aiNoBg" data-t="aiNoBg">✂ Remove background</button>
+          <!-- Photoshop's Generative Expand: a bigger canvas, the new edges painted to match -->
+          <div class="row"><select id="expandTo" aria-label="Expand to"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:3">4:3</option><option value="all" data-t="expandAll">+25% all round</option></select><button id="aiExpand" data-t="aiExpand" style="flex:1">⤢ Expand with AI</button></div>
         </div>
       </section>
 

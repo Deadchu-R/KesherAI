@@ -11,7 +11,7 @@
   const HE = {
     new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
-    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
+    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", aiExpand: "⤢ הרחבה ב-AI", expandAll: "‎+25% מכל הצדדים", expandSame: "התמונה כבר בצורה הזאת", hExpand: "הרחבה", expandLayer: "הקצוות שהורחבו", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
@@ -851,6 +851,46 @@
       l.ctx.drawImage(img, 0, 0, doc.w, doc.h);
       l.ctx.restore();
       addLayer(l, doc.layers.length);
+    });
+  };
+  // Generative Expand (Photoshop's, and Firefly's / Canva's Magic Expand): the canvas grows to the shape asked for, the
+  // picture stays in the middle, and the picture model paints only the new edges (a mask of them), blended back below.
+  $("aiExpand").onclick = () => {
+    const to = $("expandTo").value;
+    let W = doc.w, H = doc.h;
+    if (to === "all") { W = Math.round(doc.w * 1.25); H = Math.round(doc.h * 1.25); }
+    else {
+      const [a, b] = to.split(":").map(Number);
+      if (doc.w / doc.h < a / b) W = Math.round((doc.h * a) / b); else H = Math.round((doc.w * b) / a);
+    }
+    if (W === doc.w && H === doc.h) return msg(T("expandSame", "The picture is that shape already"), true);
+    ai(async () => {
+      const dx = Math.round((W - doc.w) / 2), dy = Math.round((H - doc.h) / 2);
+      // The picture as it is, in the middle of the new size, and the mask: white where there is nothing yet.
+      const big = document.createElement("canvas");
+      big.width = W; big.height = H;
+      big.getContext("2d").drawImage(flatten(), dx, dy);
+      const mask = document.createElement("canvas");
+      mask.width = W; mask.height = H;
+      const mg = mask.getContext("2d");
+      mg.fillStyle = "#fff"; mg.fillRect(0, 0, W, H);
+      // A few pixels of overlap into the picture, so the seam is painted over too.
+      const o = Math.max(4, Math.round(Math.min(doc.w, doc.h) * 0.02));
+      mg.fillStyle = "#000"; mg.fillRect(dx + o, dy + o, doc.w - 2 * o, doc.h - 2 * o);
+      const k = Math.min(1, 1536 / Math.max(W, H));
+      const w = snap(W * k), h = snap(H * k);
+      const [url] = await kesher.call("image.edit", { prompt: $("prompt").value.trim() || "continue the picture naturally beyond its edges, same style, light and perspective", image: scaled(big, w, h), mask: scaled(mask, w, h), strength: 1 });
+      const img = await loadImage(url);
+      remember(T("hExpand", "Expand"));
+      for (const l of doc.layers) { l.x += dx; l.y += dy; }
+      doc.w = W; doc.h = H;
+      // The painted edges as a layer under everything, so the picture's own layers stay as they were.
+      const l = makeLayer(T("expandLayer", "Expanded edges"));
+      l.ctx.drawImage(img, 0, 0, W, H);
+      doc.layers.unshift(l);
+      doc.active = Math.min(doc.layers.length - 1, doc.active + 1);
+      renderLayers();
+      fit();
     });
   };
   $("aiUpscale").onclick = () =>
