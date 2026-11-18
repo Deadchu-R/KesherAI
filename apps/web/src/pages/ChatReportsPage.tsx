@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { ModelSuggest } from "../ModelSuggest";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -318,6 +318,21 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const addInput = useRef<HTMLInputElement>(null);
+  const [page, setPage] = useState(0);
+  const [all, setAll] = useState(() => { try { return localStorage.getItem("kesher-report-all") === "1"; } catch { return false; } });
+  const swipe = useRef(0);
+  const count = useRef(1);
+  // ← and → turn the pages (in Hebrew ← is the next page), unless she is typing.
+  useEffect(() => {
+    if (all) return;
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.("input, textarea, select") || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+      const next = (e.key === "ArrowLeft") === (getLocale() === "he") ? 1 : -1;
+      setPage((p) => Math.max(0, Math.min(count.current - 1, p + next)));
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [all]);
   const load = () => void api<Stored>(`/api/chat-reports/${id}`).then(setR, () => onGone());
   useEffect(load, [id]);
   useEffect(() => {
@@ -355,13 +370,11 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
   const emojis = [...new Set(n.people.flatMap((p) => p.topEmojis))].slice(0, 6);
   const laughs = n.people.reduce((s, p) => s + p.laughs, 0);
   const tones = ["lav", "pink", "peach", "mint", "yel", "navy"];
-  return (
-    <div className="cr-story">
-      <div className="row"><span className="cr-narrator" aria-hidden>{r.voice === "roast" ? "🌶️" : r.voice === "coach" ? "🧭" : "🦉"}</span>
-        <div className="grow"><b>{r.origin === "brandon" ? L("דוח מ-What Brandon Thinks", "A report from What Brandon Thinks") : L(`הקורא של קשר · ${VOICES.find((v) => v[0] === r.voice)![1]}`, `KesherAI's reader · ${VOICES.find((v) => v[0] === r.voice)![2]}`)}</b>
-          <div className="muted small" dir="auto">{n.messages ? `${L("קרא", "Read")} ${n.messages.toLocaleString()} ${L("הודעות", "messages")} · ` : ""}{r.title}{(r.version ?? 1) > 1 ? ` · ${L("גרסה", "version")} ${r.version}` : ""}</div></div>
-        <button type="button" className="ghost small" onClick={() => { if (confirm(L("למחוק את הדוח ואת העותק של הצ'אט?", "Delete the report and its copy of the chat?"))) void api(`/api/chat-reports/${id}`, { method: "DELETE" }).then(onGone); }}>{L("מחק", "Delete")}</button>
-      </div>
+  // The report in chapters, as What Brandon Thinks (asked 2026-11-18): one at a time, with the chapters on top,
+  // ← → and swipe; or all on one page. A chapter with nothing in it is left out.
+  type Chapter = { id: string; name: [string, string]; has: boolean; body: ReactNode };
+  const all7: Chapter[] = [
+    { id: "open", name: ["פתיחה", "Opening"], has: true, body: (
       <div className="cr-hero">
       {rep ? <h1 className="cr-headline" dir="auto">"{rep.headline}"</h1>
         : r.status === "error" ? <div className="stack"><p className="bad" dir="auto">{r.error}</p>{r.hasChat !== false && <button type="button" className="primary" style={{ alignSelf: "flex-start" }} onClick={() => void api(`/api/chat-reports/${id}/retry`, { method: "POST", body: {} }).then(() => window.location.reload(), (e: Error) => toast(e.message))}>{L("↻ לנסות שוב", "↻ Try again")}</button>}</div>
@@ -372,7 +385,8 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
       {rep?.mixed && <p className="cr-kinder">{L("המודל ערבב כאן אותיות משפות אחרות, כלומר העברית שלו חלשה. מודל צ'אט כללי (לא מודל קוד) יכתוב עברית טובה יותר: בחר אחד בעמוד ", "The model mixed in letters of other languages here: its Hebrew is weak. A general chat model (not a coding one) writes better Hebrew: choose one on the ")}<a href="#/models">{L("המודלים", "Models page")}</a>{L(" ושלח שוב מ'רוצה לדעת עוד'.", " and send again from \"Want to know more\".")}</p>}
       {rep?.kinder && <p className="cr-kinder" dir="auto">{L("ובקריאה רכה יותר: ", "Read more kindly: ")}{rep.kinder}</p>}
       </div>
-      <div className="cr-grid">
+    ) },
+    { id: "numbers", name: ["המספרים", "The numbers"], has: n.messages > 0 || n.people.length > 1, body: <>
       {n.people.length > 1 && (
         <div className="cr-card lav w2">
           <h3>{L("מי מדבר כמה", "Who talks how much")}</h3>
@@ -401,6 +415,9 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
             : n.longestStreak > 1 && <div className="cr-card navy"><h3>{L("הרצף הכי ארוך", "The longest streak")}</h3><p className="cr-big">{n.longestStreak} {L("ימים", "days")}<small>{L("ברצף בלי יום שקט", "in a row without a quiet day")}</small></p></div>}
         </div>
       )}
+      {(emojis.length > 0 || laughs > 0) && <div className="cr-card mint w2"><h3>{L("האמוג'ים שלכם", "Your emojis")}</h3>{emojis.length > 0 && <div className="cr-emojis">{emojis.join(" ")}</div>}{laughs > 0 && <p className="cr-note">{L(`צחקתם ${laughs.toLocaleString()} פעמים בכתב.`, `You laughed in writing ${laughs.toLocaleString()} times.`)}</p>}{n.topWords.length > 0 && <p className="muted small" dir="auto">{L("מילים שחוזרות: ", "Words that come back: ")}{n.topWords.slice(0, 8).join(" · ")}</p>}</div>}
+</> },
+    { id: "reads", name: ["הקריאות שלי", "My reads"], has: !!rep && (rep.scores.length > 0 || rep.roles.length > 0) || prizes.length > 0, body: <>
       {rep && rep.scores.length > 0 && (
         <div className="cr-card beige w3">
           <h3>{L("הקריאות שלי", "My reads")}</h3>
@@ -411,6 +428,10 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
             </div>))}</div>
         </div>
       )}
+      {rep && rep.roles.length > 0 && <div className="cr-card beige w2"><h3>{L("מי מה בצ'אט", "Who is who")}</h3><div className="stack">{rep.roles.map((x) => <div key={x.name}>{who(x.name)} <span dir="auto">{x.role}</span></div>)}</div></div>}
+      {prizes.length > 0 && <div className="cr-card lav w3"><h3>{L("פרסים", "Awards")}</h3><div className="cr-awards">{prizes.map((a) => <div key={a.title}><span aria-hidden>{a.icon}</span> <b>{a.title}</b><br />{who(a.who)}</div>)}</div></div>}
+</> },
+    { id: "findings", name: ["ממצאים", "Findings"], has: !!rep?.findings.length, body: <>
       {rep?.findings.map((f, i) => (
         <div key={i} className={`cr-card w3 ${tones[(i + 1) % tones.length]}`}>
           <h3 dir="auto">{f.title} {tag(f.measured)}</h3>
@@ -418,10 +439,11 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
           {bubbles(f.quotes)}
         </div>
       ))}
+</> },
+    { id: "turning", name: ["נקודת המפנה", "The turning point"], has: !!rep?.turningPoint, body: <>
       {rep?.turningPoint && <div className="cr-card navy w6"><h3>{L("נקודת המפנה", "The turning point")} <small className="muted">{rep.turningPoint.when}</small></h3><p dir="auto">{rep.turningPoint.what}</p>{bubbles(rep.turningPoint.quotes)}</div>}
-      {(emojis.length > 0 || laughs > 0) && <div className="cr-card mint w2"><h3>{L("האמוג'ים שלכם", "Your emojis")}</h3>{emojis.length > 0 && <div className="cr-emojis">{emojis.join(" ")}</div>}{laughs > 0 && <p className="cr-note">{L(`צחקתם ${laughs.toLocaleString()} פעמים בכתב.`, `You laughed in writing ${laughs.toLocaleString()} times.`)}</p>}{n.topWords.length > 0 && <p className="muted small" dir="auto">{L("מילים שחוזרות: ", "Words that come back: ")}{n.topWords.slice(0, 8).join(" · ")}</p>}</div>}
-      {prizes.length > 0 && <div className="cr-card lav w3"><h3>{L("פרסים", "Awards")}</h3><div className="cr-awards">{prizes.map((a) => <div key={a.title}><span aria-hidden>{a.icon}</span> <b>{a.title}</b><br />{who(a.who)}</div>)}</div></div>}
-      {rep && rep.roles.length > 0 && <div className="cr-card beige w2"><h3>{L("מי מה בצ'אט", "Who is who")}</h3><div className="stack">{rep.roles.map((x) => <div key={x.name}>{who(x.name)} <span dir="auto">{x.role}</span></div>)}</div></div>}
+</> },
+    { id: "next", name: ["הצעד הבא", "Your next move"], has: !!rep && !!(rep.moves || rep.next), body: <>
       {rep && (rep.moves || rep.next) && (
         <div className="cr-card yel w2">
           <h3>{L("הצעד הבא", "Your next move")}</h3>
@@ -432,6 +454,8 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
           </div> : <p dir="auto">{rep.next}</p>}
         </div>
       )}
+</> },
+    { id: "more", name: ["עוד", "More"], has: r.followUps.length > 0 || (!!rep && r.status === "done"), body: <>
       {r.followUps.map((f, i) => <div key={i} className="cr-card beige w6"><h3 dir="auto">{f.q}</h3><p dir="auto">{f.a}</p>{bubbles(f.quotes)}</div>)}
       {rep && r.status === "done" && (
         <div className="cr-card navy stack w6">
@@ -447,7 +471,42 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
           <span className="muted small">{L("שאלה מקבלת תשובה מהצ'אט. מידע חדש או עוד ייצוא מעדכנים את הדוח לגרסה הבאה.", "A question is answered from the chat. New context or another export updates the report to its next version.")}</span>
         </div>
       )}
+</> },
+  ];
+  const chapters = all7.filter((c) => c.has);
+  count.current = chapters.length;
+  const at = Math.min(page, chapters.length - 1);
+  const go = (i: number) => { setPage(Math.max(0, Math.min(chapters.length - 1, i))); scrollTo({ top: 0, behavior: "smooth" }); };
+  const shown = all ? chapters : [chapters[at]!];
+  return (
+    <div className="cr-story">
+      <div className="row"><span className="cr-narrator" aria-hidden>{r.voice === "roast" ? "🌶️" : r.voice === "coach" ? "🧭" : "🦉"}</span>
+        <div className="grow"><b>{r.origin === "brandon" ? L("דוח מ-What Brandon Thinks", "A report from What Brandon Thinks") : L(`הקורא של קשר · ${VOICES.find((v) => v[0] === r.voice)![1]}`, `KesherAI's reader · ${VOICES.find((v) => v[0] === r.voice)![2]}`)}</b>
+          <div className="muted small" dir="auto">{n.messages ? `${L("קרא", "Read")} ${n.messages.toLocaleString()} ${L("הודעות", "messages")} · ` : ""}{r.title}{(r.version ?? 1) > 1 ? ` · ${L("גרסה", "version")} ${r.version}` : ""}</div></div>
+        <button type="button" className="ghost small" onClick={() => { if (confirm(L("למחוק את הדוח ואת העותק של הצ'אט?", "Delete the report and its copy of the chat?"))) void api(`/api/chat-reports/${id}`, { method: "DELETE" }).then(onGone); }}>{L("מחק", "Delete")}</button>
       </div>
+      {!all && chapters.length > 1 && (
+        <nav className="cr-chapters" aria-label={L("פרקי הדוח", "The report's chapters")}>
+          <div className="cr-segs" aria-hidden>{chapters.map((c, i) => <span key={c.id} className={i < at ? "done" : i === at ? "on" : ""} />)}</div>
+          <div className="cr-chapter-names">{chapters.map((c, i) => <button key={c.id} type="button" className={i === at ? "on" : ""} aria-current={i === at ? "step" : undefined} onClick={() => go(i)}>{L(...c.name)}</button>)}</div>
+        </nav>
+      )}
+      <div className="cr-pages" onTouchStart={(e) => { swipe.current = e.touches[0]!.clientX; }} onTouchEnd={(e) => {
+        const dx = e.changedTouches[0]!.clientX - swipe.current;
+        // A swipe of 60px turns the page; in Hebrew the next page is to the left, as in a book.
+        if (!all && Math.abs(dx) > 60) go(at + ((dx < 0) === (getLocale() === "he") ? 1 : -1));
+      }}>
+      {shown.map((c) => c.id === "open" ? <Fragment key={c.id}>{c.body}</Fragment> : <div key={c.id} className="cr-grid">{all && <h2 className="cr-chapter-title w6">{L(...c.name)}</h2>}{c.body}</div>)}
+      </div>
+      {chapters.length > 1 && (
+        <div className="row cr-turn">
+          {!all && <button type="button" disabled={at === 0} onClick={() => go(at - 1)}>{getLocale() === "he" ? "→" : "←"} <span className="cr-turn-name">{at > 0 ? L(...chapters[at - 1]!.name) : ""}</span></button>}
+          <span className="grow" />
+          <button type="button" className="link small" onClick={() => { setAll(!all); try { localStorage.setItem("kesher-report-all", all ? "0" : "1"); } catch { /* this visit */ } }}>{all ? L("בפרקים", "In chapters") : L("הכל בעמוד אחד", "All on one page")}</button>
+          <span className="grow" />
+          {!all && <button type="button" className="primary" disabled={at === chapters.length - 1} onClick={() => go(at + 1)}>{at < chapters.length - 1 ? L(...chapters[at + 1]!.name) : L("סוף", "The end")} {getLocale() === "he" ? "←" : "→"}</button>}
+        </div>
+      )}
       <p className="muted small cr-foot">{L("פרשנות של הודעות, לא הוכחה ולא ייעוץ מקצועי. כל ציטוט נבדק מול הצ'אט.", "A reading of messages, not proof and not professional advice. Every quote is checked against the chat.")}</p>
     </div>
   );
