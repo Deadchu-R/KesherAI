@@ -16,7 +16,7 @@
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Audition)", close: "סגור",
     toVideo: "↩ חזרה לווידאו", fromVideo: "הסאונד של הווידאו. כשתסיים: \"חזרה לווידאו\".", lengthChanged: "האורך השתנה, אז הסאונד לא יתאים לווידאו בדיוק. להמשיך?", backing: "מחזיר לווידאו…",
     rec: "הקלטה", stopRec: "עצור", toInst: "🎻 לכלי נגינה…", instH: "לכלי נגינה", snapKey: "לסולם", snapBeat: "על הקצב", octave: "אוקטבה", listen: "האזנה", origVol: "המקור",
-    instMix: "ערבב מעל הסאונד", instReplace: "החלף בכלי", instS: "כלי", instHint: "זמזם או שרוק צלילים נפרדים (\"טה טה\" עוזר); ביטבוקס הופך לתופים. הכלים: FluidR3 (CC BY 3.0, Frank Wen).",
+    instMix: "ערבב מעל הסאונד", withChords: "אקורדים מתחת", cPiano: "פסנתר", cGuitar: "גיטרה", cStrings: "כלי קשת", cChoir: "מקהלה", instReplace: "החלף בכלי", instS: "כלי", instHint: "זמזם או שרוק צלילים נפרדים (\"טה טה\" עוזר); ביטבוקס הופך לתופים. הכלים: FluidR3 (CC BY 3.0, Frank Wen).",
     found: (n) => `נמצאו ${n} תווים`, hitsFound: (n) => `נמצאו ${n} מכות`, none: "לא נמצאו תווים ברורים. נסה לזמזם חזק וברור יותר.", rendering: "מנגן את הכלי…", countIn: "ספירה…", recording: "מקליט… (R או עצור)", micNo: "אין גישה למיקרופון",
     keyName: (k) => `לסולם: ${k}`,
     toVoice: "🗣 בקול אחר…", voiceH: "בקול אחר", voiceText: "מה להגיד (מהשורה שנבחרה, או לכתוב)", voicePick: "הקול", voiceNone: "אין עדיין קולות: צור קול משלך בקול ← \"קול משלך\", או הפעל את הקול הטבעי בהגדרות ← דיבור.",
@@ -413,9 +413,18 @@
   };
   ["snapKey", "snapBeat", "bpm", "octave"].forEach((id) => ($(id).onchange = drawRoll));
   /** The stretch as the instrument plays it (mono samples). */
-  const played = () => {
+  const played = async () => {
     const n = found.to - found.from;
-    return inst === "drums" ? K.renderDrums(found.hits, rate, n) : K.render(shaped(), inst, rate, n);
+    if (inst === "drums") return K.renderDrums(found.hits, rate, n);
+    const melody = shaped();
+    const out = await K.render(melody, inst, rate, n);
+    // Chords under the melody, a bar (four beats at the tempo) each, in the instrument chosen for them.
+    if ($("withChords").checked && found.key) {
+      const bar = 240 / Math.max(40, +$("bpm").value || 100);
+      const under = await K.render(K.chords(melody, found.key, bar, n / rate), $("chordInst").value, rate, n);
+      for (let i = 0; i < out.length; i++) out[i] = Math.max(-1, Math.min(1, out[i] + under[i] * 0.7));
+    }
+    return out;
   };
   let previewSrc = null;
   $("instPreview").onclick = async () => {

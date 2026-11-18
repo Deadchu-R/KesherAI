@@ -125,6 +125,45 @@
     return { ...n, start: s, end: Math.max(s + step, Math.round(n.end / step) * step) };
   });
 
+  // ---------- chords under the melody (Hookpad's and Band-in-a-Box's "harmonize", simply) ----------
+  /**
+   * A chord for each bar: the key's triad (I ii iii IV V vi, or the minor key's i iv v VI III VII) whose notes the
+   * melody sings most in that bar, the main chords (I, IV, V) a little preferred, and the first and last bar on the home
+   * chord when it fits. Played low and soft, as block chords for the whole bar.
+   *
+   * @param ns - The melody (in the key, ideally).
+   * @param key - From keyOf.
+   * @param bar - A bar's length in seconds (four beats).
+   * @param length - How long the stretch is, in seconds.
+   * @returns The chord notes ({ midi, start, end, vel }).
+   */
+  function chords(ns, key, bar, length) {
+    const sc = SCALE[key.minor];
+    // Triads on the degrees, as pitch classes from the root; diminished ones (vii°, ii° in minor) are left out.
+    const degrees = key.minor ? [0, 3, 4, 5, 2, 6] : [0, 1, 2, 3, 4, 5];
+    const triad = (d) => [sc[d], sc[(d + 2) % 7] + (d + 2 >= 7 ? 12 : 0), sc[(d + 4) % 7] + (d + 4 >= 7 ? 12 : 0)];
+    const main = new Set(key.minor ? [0, 3, 4] : [0, 3, 4]);
+    const out = [];
+    const bars = Math.max(1, Math.ceil(length / bar));
+    for (let b = 0; b < bars; b++) {
+      const t0 = b * bar, t1 = Math.min(length, t0 + bar);
+      const w = new Array(12).fill(0);
+      ns.forEach((n) => { const o = Math.min(n.end, t1) - Math.max(n.start, t0); if (o > 0) w[(((n.midi - key.root) % 12) + 12) % 12] += o; });
+      let best = degrees[0], score = -1;
+      for (const d of degrees) {
+        const pcs = triad(d).map((x) => x % 12);
+        let sum = pcs.reduce((a, pc) => a + w[pc], 0) * (main.has(d) ? 1.15 : 1);
+        if ((b === 0 || b === bars - 1) && d === 0) sum *= 1.3;
+        if (sum > score) { score = sum; best = d; }
+      }
+      if (score <= 0 && b > 0) { const prev = out.length ? out.slice(-3) : []; prev.forEach((n) => out.push({ ...n, start: t0, end: t1 })); continue; }
+      // The triad from C3 up, its root doubled an octave below as the bass.
+      const root = 48 + ((key.root + sc[best]) % 12);
+      triad(best).forEach((x, i) => out.push({ midi: root + (x - sc[best]) + (i === 0 ? -12 : 0), start: t0, end: Math.max(t0 + 0.2, t1 - 0.05), vel: i === 0 ? 0.5 : 0.38 }));
+    }
+    return out;
+  }
+
   // ---------- a beatbox: hits and what they are ----------
   /**
    * The hits of a beatbox: where the energy jumps, and whether it is low (kick), noisy and bright (hat) or between
@@ -226,5 +265,5 @@
     return (await ctx.startRendering()).getChannelData(0);
   }
 
-  window.KInstrument = { notes, keyOf, toKey, toBeat, hits, render, renderDrums, INSTRUMENTS, noteName };
+  window.KInstrument = { notes, keyOf, toKey, toBeat, hits, render, renderDrums, chords, INSTRUMENTS, noteName };
 })();
