@@ -716,7 +716,21 @@ export class LlamaEngine {
    * @returns The arguments.
    */
   private argsFor(modelPath: string): string[] {
-    return withModelArgs(this.opts.args, this.opts.modelArgs?.(modelPath) ?? []);
+    return LlamaEngine.userArgs(this.opts.args, this.opts.modelArgs?.(modelPath) ?? [], this.opts.version);
+  }
+
+  /**
+   * The engine's arguments, cleaned for this build (gpuArgs: the old "-ngl 99" default dropped on builds that fit by
+   * themselves), with a model's own on top. Cleaned first: with a model's "-c" added, the old default no longer looked
+   * like itself and stayed, which put a 38 GB model all on a 24 GB card (found on the PC with Qwen3-Coder-Next).
+   *
+   * @param engine - The engine's arguments (config).
+   * @param model - The model's own (Models → ⚙).
+   * @param version - The build tag.
+   * @returns The arguments.
+   */
+  static userArgs(engine: readonly string[], model: readonly string[], version?: string): string[] {
+    return withModelArgs(LlamaEngine.gpuArgs(engine, version), model);
   }
 
   /**

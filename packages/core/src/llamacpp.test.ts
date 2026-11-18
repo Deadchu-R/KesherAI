@@ -143,3 +143,9 @@ test("llama-server gets its own key, and KesherAI's own provider sends it (no ot
     await server.app.close();
   }
 });
+
+test("a model's own settings do not bring the old -ngl 99 back on builds that fit by themselves", () => {
+  assert.deepEqual(LlamaEngine.userArgs(["-ngl", "99"], ["-c", "65536"], "b12110"), ["-c", "65536"]);
+  assert.deepEqual(LlamaEngine.userArgs(["-ngl", "99"], ["--n-cpu-moe", "20"], "b6000"), ["-ngl", "99", "--n-cpu-moe", "20"], "older builds keep it");
+  assert.deepEqual(LlamaEngine.userArgs(["-ngl", "40"], ["-ngl", "30"], "b12110"), ["-ngl", "30"], "the model's own wins");
+});
