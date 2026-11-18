@@ -148,6 +148,34 @@ try {
     await press(1); // B
     if (await padPage.evaluate(() => !!document.querySelector(".osk"))) problems.push("pad: B did not close the on-screen keyboard");
   }
+  // Every main screen with the pad: the D-pad moves the focus to something on the screen, and on (a stuck focus or one
+  // that goes off-screen means the pad cannot reach the page).
+  for (const hash of PAGES) {
+    await padPage.goto(`${base}/${hash}`);
+    await padPage.waitForTimeout(700);
+    // A new hash keeps the page: start each screen with nothing chosen, as on arriving there.
+    await padPage.evaluate(() => {
+      document.activeElement?.blur?.();
+      window.dispatchEvent(new Event("gamepadconnected"));
+    });
+    const seen = new Set();
+    let offscreen = "";
+    for (let k = 0; k < 4; k++) {
+      await press(13);
+      const f = await padPage.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return null;
+        const r = el.getBoundingClientRect();
+        return { id: el.outerHTML.slice(0, 80), visible: r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth };
+      });
+      if (f) {
+        seen.add(f.id);
+        if (!f.visible && !offscreen) offscreen = f.id;
+      }
+    }
+    if (seen.size < 2) problems.push(`pad ${hash}: the D-pad did not move the focus (${[...seen].join(" | ") || "nothing focused"})`);
+    if (offscreen) problems.push(`pad ${hash}: the focus went off the screen (${offscreen})`);
+  }
   await padPage.close();
 
   // Speed (docs/DESIGN_RESEARCH.md §5): start to first screen, typing lag in a 200-message chat, and the time to draw

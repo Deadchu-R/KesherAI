@@ -53,7 +53,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Training a chat model (LoRA with unsloth on a dataset made from her chats and documents, Models → Training); ✅ a voice of her own (Models → Training: Chatterbox Multilingual, Hebrew too, from a 10–30 s clip kept only with consent); checked on the PC 2026-11-17: Hebrew WAV on the graphics card after the setuptools<81 fix; the engines moved to E:
 - ✅ Game helper over a running game
 - ✅ ROG Ally: controller hints, rumble when an answer is ready, an on-screen keyboard
-- ⬜ A check on a real controller after each interface change (C6)
+- ✅ A check on a controller after each interface change (C6): the interface check walks every main screen with a simulated pad (2026-11-18)
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
 - ✅ A CPU and RAM limit for KesherAI's own engines (Settings → Computer: off by default, with a one-tap suggestion of 85% memory and 80% processor)
 - ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
