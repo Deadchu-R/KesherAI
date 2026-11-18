@@ -8,6 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
+    trackHere: "לערוץ משלו", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
@@ -45,6 +46,23 @@
   const secs = (n) => n / rate;
   const fmt = (n) => { const s = secs(n); return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`; };
 
+  // More tracks (Audacity's and Descript's lanes): a sound added "on a track of its own" stays apart, moved and
+  // muted freely, and is mixed in only when played, exported or merged. [{ id, name, samples, at, muted }]
+  let layers = [];
+  let nextLayer = 1;
+  /** The sound with its tracks mixed in (what is played and exported). */
+  function mixed() {
+    const live = layers.filter((l) => !l.muted);
+    if (!live.length) return chans;
+    const n = Math.max(length(), ...live.map((l) => l.at + l.samples[0].length));
+    return chans.map((c, i) => {
+      const out = new Float32Array(n);
+      out.set(c);
+      for (const l of live) { const x = l.samples[Math.min(i, l.samples.length - 1)]; for (let j = 0; j < x.length; j++) out[l.at + j] += x[j]; }
+      for (let j = 0; j < n; j++) out[j] = Math.max(-1, Math.min(1, out[j]));
+      return out;
+    });
+  }
   function remember() {
     undoStack.push(chans.map((c) => c.slice()));
     if (undoStack.length > 20) undoStack.shift();
@@ -53,6 +71,7 @@
   function undo() { if (undoStack.length) { redoStack.push(chans); chans = undoStack.pop(); after(); } }
   function redo() { if (redoStack.length) { undoStack.push(chans); chans = redoStack.pop(); after(); } }
   function after() {
+    renderLayers();
     head = Math.min(head, length());
     if (sel && (sel[1] > length() || sel[0] >= sel[1])) sel = null;
     draw();
@@ -120,12 +139,13 @@
     if (!length()) return;
     if (src) return stop();
     ctx ??= new AudioContext();
-    const buf = ctx.createBuffer(chans.length, length(), rate);
-    chans.forEach((c, i) => buf.copyToChannel(c, i));
+    const all = mixed();
+    const buf = ctx.createBuffer(all.length, all[0].length, rate);
+    all.forEach((c, i) => buf.copyToChannel(c, i));
     src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(ctx.destination);
-    const [a, b] = sel ?? [head >= length() - 10 ? 0 : head, length()];
+    const [a, b] = sel ?? [head >= all[0].length - 10 ? 0 : head, all[0].length];
     startedFrom = a; endAt = b; startedAt = ctx.currentTime;
     src.start(0, secs(a), secs(b - a));
     src.onended = () => { src = null; $("play").textContent = "▶"; draw(); };
@@ -146,7 +166,10 @@
   // ---------- drawing: peaks per pixel, the selection, the playhead ----------
   const wrap = $("wrap");
   const canvas = $("canvas");
+  let laneView = "";
   function draw() {
+    // The tracks' lanes follow the wave's zoom and scroll (rebuilt only when those change, not on every frame).
+    if (layers.length && laneView !== `${view.start}|${view.perPx}`) { laneView = `${view.start}|${view.perPx}`; renderLayers(); }
     const w = wrap.clientWidth, h = wrap.clientHeight, d = devicePixelRatio || 1;
     canvas.width = w * d; canvas.height = h * d;
     const g = canvas.getContext("2d");
@@ -260,13 +283,14 @@
 
   // ---------- WAV out ----------
   function wav() {
-    const n = length(), ch = chans.length, bytes = 44 + n * ch * 2;
+    const all = mixed();
+    const n = all[0]?.length ?? 0, ch = all.length, bytes = 44 + n * ch * 2;
     const buf = new ArrayBuffer(bytes), v = new DataView(buf);
     const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
     str(0, "RIFF"); v.setUint32(4, bytes - 8, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
     v.setUint32(24, rate, true); v.setUint32(28, rate * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * ch * 2, true);
     let o = 44;
-    for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const s = Math.max(-1, Math.min(1, chans[c][i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+    for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const s = Math.max(-1, Math.min(1, all[c][i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
     return new Blob([buf], { type: "audio/wav" });
   }
   const base = () => name.replace(/\.[^.]+$/, "") + "-edited";
@@ -583,6 +607,7 @@
     am.openMenu(anchor, TT("howH", "How should it go in?"), [
       { icon: "⇥", label: TT("insertHere", "Insert at the playhead"), hint: TT("insertHint", "the rest moves on"), run: () => { putAt(d.samples, at, false); msg(addedMsg(fileName)); } },
       { icon: "⇅", label: TT("mixHere", "Mix over, from the playhead"), hint: TT("mixHint", "the length stays"), run: () => { putAt(d.samples, at, true); msg(addedMsg(fileName)); } },
+      { icon: "☰", label: TT("trackHere", "On a track of its own"), hint: TT("trackHint", "move it and mute it freely"), run: () => { layers.push({ id: nextLayer++, name: fileName, samples: d.samples, at, muted: false }); after(); msg(addedMsg(fileName)); } },
     ]);
   }
   async function addFrom(from, anchor) {
@@ -614,6 +639,38 @@
     ]);
   }
   $("addBtn").onclick = () => addMenu($("addBtn"));
+  /** The tracks' lanes under the wave, in the wave's own scale: drag a bar to move it, mute, merge or remove it. */
+  function renderLayers() {
+    const box = $("layers");
+    if (!box) return;
+    box.hidden = !layers.length;
+    box.replaceChildren(...layers.map((l, k) => {
+      const row = document.createElement("div");
+      row.className = `layer${l.muted ? " muted" : ""}`;
+      const bar = document.createElement("div");
+      bar.className = "layer-bar";
+      bar.textContent = `☰ ${he ? HE.trackN(k + 2) : `Track ${k + 2}`} · ${l.name}`;
+      bar.title = TT("dragT", "Drag: when it starts");
+      bar.style.left = `${(l.at - view.start) / view.perPx}px`;
+      bar.style.width = `${Math.max(6, l.samples[0].length / view.perPx)}px`;
+      bar.onpointerdown = (e) => {
+        bar.setPointerCapture(e.pointerId);
+        const x0 = e.clientX, a0 = l.at;
+        bar.onpointermove = (ev) => { l.at = Math.max(0, Math.round(a0 + (ev.clientX - x0) * view.perPx)); bar.style.left = `${(l.at - view.start) / view.perPx}px`; };
+        bar.onpointerup = () => { bar.onpointermove = null; };
+      };
+      const tools = document.createElement("span");
+      tools.className = "layer-tools";
+      const b = (txt, title, fn) => { const x = document.createElement("button"); x.textContent = txt; x.title = title; x.setAttribute("aria-label", title); x.onclick = fn; return x; };
+      tools.append(
+        b(l.muted ? "🔇" : "🔊", l.muted ? TT("unmute", "Unmute") : TT("mute", "Mute"), () => { l.muted = !l.muted; renderLayers(); }),
+        b("⤓", TT("mergeT", "Merge into the sound"), () => { putAt(l.samples, Math.min(l.at, length()), true); layers = layers.filter((x) => x !== l); after(); }),
+        b("✕", TT("removeT", "Remove the track"), () => { layers = layers.filter((x) => x !== l); after(); }),
+      );
+      row.append(bar, tools);
+      return row;
+    }));
+  }
   $("wrap").addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
   $("wrap").addEventListener("drop", async (e) => {
     const f = e.dataTransfer?.files?.[0];
