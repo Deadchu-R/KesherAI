@@ -105,7 +105,7 @@ function LoadSettingsDialog({ path, name, onClose }: { path: string; name: strin
             <label className="stack">
               <span className="small">{L("ארגומנטים נוספים ל-llama.cpp", "More llama.cpp arguments")}</span>
               <input dir="ltr" className="mono" placeholder="--temp 0.7 --top-k 20" value={extra} onChange={(e) => setExtra(e.target.value)} aria-invalid={!!extraWrong} />
-              <span className={extraWrong ? "error small" : "muted small"} dir={extraWrong ? "ltr" : "auto"}>{extraWrong ?? L("רק הגדרות של טעינה ודגימה; קבצים, פורטים ומפתחות נדחים.", "Only load and sampling settings; files, ports and keys are refused.")}</span>
+              <span className={extraWrong ? "error small" : "muted small"} dir="auto">{extraWrong ? <>{L("יש כאן ארגומנט שלא מותר, או בלי ערך: ", "")}<span dir="ltr">{extraWrong}</span></> : L("רק הגדרות של טעינה ודגימה; קבצים, פורטים ומפתחות נדחים.", "Only load and sampling settings; files, ports and keys are refused.")}</span>
             </label>
             <div className="row wrap">
               <button type="submit" className="primary" disabled={busy || !!extraWrong}>{L("שמור וטען מחדש", "Save and reload")}</button>
