@@ -92,7 +92,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
  * to install it. Each level opens in the 3D editor as a stand-in.
  */
 export function StandInLevels() {
-  const NEED = "0.1.22";
+  const NEED = "0.1.23";
   const [projects, setProjects] = useState<Array<{ name: string; path: string; engine?: string; plugin: string | null }> | null>(null);
   const [chosen, setChosen] = useState("");
   const [levels, setLevels] = useState<string[] | null>(null);

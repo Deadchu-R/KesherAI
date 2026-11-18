@@ -11,6 +11,9 @@
 #include "FileHelpers.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/WorldSettings.h"
+#include "HAL/FileManager.h"
+#include "Misc/PackageName.h"
+#include "Misc/Paths.h"
 #include "Misc/Base64.h"
 #include "ScopedTransaction.h"
 #include "StaticMeshAttributes.h"
@@ -74,12 +77,25 @@ namespace KesherLevel
 		if (IsRunningCommandlet() || Registry.IsLoadingAssets()) Registry.SearchAllAssets(true);
 		TArray<FAssetData> Assets;
 		Registry.GetAssetsByClass(UWorld::StaticClass()->GetClassPathName(), Assets, true);
-		TArray<TSharedPtr<FJsonValue>> Items;
+		TSet<FString> Found;
 		for (const FAssetData& A : Assets)
 		{
 			const FString Package = A.PackageName.ToString();
-			if (Package.StartsWith(TEXT("/Game/"))) Items.Add(MakeShared<FJsonValueString>(Package));
+			if (Package.StartsWith(TEXT("/Game/"))) Found.Add(Package);
 		}
+		// And the .umap files in Content/ themselves: the headless editor's registry can still come back without the
+		// maps (found on the PC: no levels, with plugin 0.1.22, in a project that has them).
+		TArray<FString> Files;
+		IFileManager::Get().FindFilesRecursive(Files, *FPaths::ProjectContentDir(), TEXT("*.umap"), true, false);
+		for (const FString& F : Files)
+		{
+			FString Package;
+			if (FPackageName::TryConvertFilenameToLongPackageName(F, Package) && Package.StartsWith(TEXT("/Game/")) && !Package.Contains(TEXT("/__ExternalActors__/")) && !Package.Contains(TEXT("/__ExternalObjects__/"))) Found.Add(Package);
+		}
+		TArray<FString> Sorted = Found.Array();
+		Sorted.Sort();
+		TArray<TSharedPtr<FJsonValue>> Items;
+		for (const FString& P : Sorted) Items.Add(MakeShared<FJsonValueString>(P));
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetArrayField(TEXT("levels"), Items);
 		return Out;
