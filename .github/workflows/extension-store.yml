@@ -10,6 +10,11 @@ on:
     branches: [main]
     paths: [apps/browser-extension/**]
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: Only sign in and read the extension's status in the store (nothing is uploaded)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,7 +38,7 @@ jobs:
           now=$(jq -r .version apps/browser-extension/manifest.json)
           before=$(git show HEAD~1:apps/browser-extension/manifest.json 2>/dev/null | jq -r .version || echo "")
           echo "version=$now" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$now" != "$before" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "${{ inputs.check_only }}" = "true" ]; then echo "go=check" >> "$GITHUB_OUTPUT"; elif [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$now" != "$before" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
           if [ "$HAS_KEY" != "true" ]; then echo "::notice::The Chrome Web Store secrets are not set yet (docs/CHROME_WEB_STORE.md, Automatic updates): not publishing."; fi
       - uses: pnpm/action-setup@v4
         if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
@@ -49,12 +54,19 @@ jobs:
           node --conditions=source --import tsx scripts/pack-extension.ts chrome extension.zip
       - name: Sign in to Google with the service account
         id: auth
-        if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
+        if: steps.v.outputs.go != 'false' && env.HAS_KEY == 'true'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.CWS_SERVICE_ACCOUNT }}
           token_format: access_token
           access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+      - name: Check (sign in and read the status only)
+        if: steps.v.outputs.go == 'check' && env.HAS_KEY == 'true'
+        env:
+          TOKEN: ${{ steps.auth.outputs.access_token }}
+          ITEM: publishers/${{ secrets.CWS_PUBLISHER_ID }}/items/${{ secrets.CWS_ITEM_ID }}
+        run: |
+          curl -sS --fail-with-body -H "Authorization: Bearer $TOKEN" "https://chromewebstore.googleapis.com/v2/$ITEM:fetchStatus"
       - name: Upload and publish
         if: steps.v.outputs.go == 'true' && env.HAS_KEY == 'true'
         env:
