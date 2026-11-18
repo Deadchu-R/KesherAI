@@ -12,6 +12,7 @@ import { GuardBanner } from "./GuardSection";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
 import { PhoneTabs } from "./PhoneTabs";
+import { PageTabs } from "./PageTabs";
 import { AppBar } from "./AppBar";
 import { useWebSearch } from "./WebToggle";
 import { ComputerBanner } from "./ComputerSection";
@@ -387,6 +388,7 @@ export function App() {
             <button type="button" onClick={() => location.reload()}>{t("reconnectNow")}</button>
           </p>
         )}
+        <PageTabs hash={hash} />
         <PageBoundary page={hash}><Suspense fallback={<div className="page-loading" aria-busy="true" />}>{page}</Suspense></PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}

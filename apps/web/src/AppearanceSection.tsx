@@ -328,6 +328,11 @@ export function AppearanceSection() {
         })}
       </ol>
 
+      <label className="row">
+        <input type="checkbox" checked={look.pageTabs !== false} onChange={(e) => patch({ pageTabs: e.target.checked ? undefined : false }, true)} />
+        <span>{L("טאבים לעמודים הפתוחים (צ'אטים, עורכים, מסמכים)", "Tabs for open pages (chats, editors, documents)")}</span>
+      </label>
+
       <h3>{L("הפס התחתון בטלפון", "The phone's bottom bar")}</h3>
       <ol className="look-order">
         {tabsOrder.map((id, i) => (
