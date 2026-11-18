@@ -63,6 +63,8 @@ By contributing you agree that your contribution is licensed under the [Apache L
 
 ## Good first contributions
 
+Issues ready for a first change carry the [`good first issue`](https://github.com/Deadchu-R/KesherAI/labels/good%20first%20issue) label, and ones where a hand is especially welcome carry [`help wanted`](https://github.com/Deadchu-R/KesherAI/labels/help%20wanted). Some ideas to start with:
+
 - A new provider preset (a server with an OpenAI-compatible API): one entry in `packages/providers/src/presets.ts`.
 - AMD or Intel GPU detection in `packages/downloads/src/hardware.ts`.
 - A UI translation: one object in `apps/web/src/i18n.ts`.
