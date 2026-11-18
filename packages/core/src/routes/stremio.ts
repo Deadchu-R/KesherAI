@@ -35,6 +35,15 @@ export async function stremioRoutes(app: FastifyInstance, s: KesherServices, key
   });
   // Her Stremio library (watched films and series): she signs in here; the password goes to Stremio only.
   app.post<{ Body: { email?: string; password?: string } }>("/api/stremio/account", { bodyLimit: 4096 }, async (req) => taste.stremioConnect(String(req.body?.email ?? ""), String(req.body?.password ?? "")));
+  // Signing in on Stremio's own page, in KesherAI's browser (the desktop app): "signin" opens it, "check" reads the
+  // session key once she is signed in there (waiting until then).
+  app.post<{ Body: { op?: string } }>("/api/stremio/account/page", async (req, reply) => {
+    if (!s.browser.status().pane) return reply.code(409).send({ error: "Signing in on Stremio's page works in the desktop app on the computer. Here, use your email and password." });
+    if (req.body?.op === "signin") return s.browser.call("stremio", { op: "signin" });
+    const r = await s.browser.call<{ key?: string | null }>("stremio", { op: "check" });
+    if (!r?.key) return { waiting: true };
+    return { waiting: false, ...(await taste.stremioConnectKey(r.key)) };
+  });
   app.post("/api/stremio/account/sync", async () => taste.stremioSync());
   app.delete("/api/stremio/account", async () => {
     await taste.stremioDisconnect();

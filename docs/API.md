@@ -227,6 +227,7 @@ Tool calls, images in messages and embeddings are not supported on `/v1` yet.
 |---|---|
 | `GET /api/stremio` | Her taste (counts, her own ratings), the picks, and whether Stremio and Trakt are connected (never a key or token) |
 | `POST /api/stremio/account` | `{ email, password }`: signs in to Stremio (the password goes to api.strem.io only and is not kept) and reads her library's watched items |
+| `POST /api/stremio/account/page` | `{ op: "signin" }` opens Stremio's own sign-in page (web.stremio.com) in KesherAI's browser (desktop app); `{ op: "check" }` reads only the session key that page keeps once she signed in there: `{ waiting }` or `{ waiting: false, added, total }` |
 | `POST /api/stremio/account/sync` · `DELETE /api/stremio/account` | Reads the library again · signs out at Stremio and forgets the session |
 | `POST /api/stremio/trakt` | `{ clientId, clientSecret }` (her Trakt app, kept here) or `{}`: starts the device sign-in; `{ userCode, url, expiresIn }` |
 | `POST /api/stremio/trakt/check` | `{ state: "wait" \| "gone" \| "connected", added?, total? }`; on approval reads her watched films and shows and ratings |

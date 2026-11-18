@@ -246,6 +246,7 @@ export class BrowserPane {
     }
     if (action === "fab-search") return this.fabSearch(String(a.path ?? ""));
     if (action === "moodle") return this.moodle(a);
+    if (action === "stremio") return this.stremio(String(a.op ?? ""));
     if (action === "site-cookies") return this.siteCookies(String(a.url ?? ""));
     const t = this.tab(a.tabId);
     if (action === "read") return this.inPage(t, "readPage()");
@@ -349,6 +350,30 @@ export class BrowserPane {
       return d === u.hostname || u.hostname.endsWith(`.${d}`) || d.endsWith(`.${base}`) || d === base;
     });
     return ["# Netscape HTTP Cookie File", ...mine.map((c) => [c.domain?.startsWith(".") ? c.domain : (c.hostOnly ? c.domain : `.${c.domain}`), c.hostOnly ? "FALSE" : "TRUE", c.path ?? "/", c.secure ? "TRUE" : "FALSE", String(Math.floor(c.expirationDate ?? 0)), c.name, c.value].join("\t"))].join("\n");
+  }
+
+  /**
+   * Stremio's own sign-in page (web.stremio.com) in a tab, so she signs in there however she likes (Google, Facebook,
+   * email); then only the session key Stremio's page keeps (`localStorage.profile.auth.key`) is read back. Nothing else
+   * of the page is read, and nothing is typed or clicked.
+   */
+  private async stremio(op: string): Promise<{ opened?: boolean; key?: string | null }> {
+    const isStremio = (x: Tab) => {
+      try {
+        return new URL(x.view.webContents.getURL()).origin === "https://web.stremio.com";
+      } catch {
+        return false;
+      }
+    };
+    if (op === "signin") {
+      await this.open("https://web.stremio.com/#/intro?form=login", undefined, true);
+      return { opened: true };
+    }
+    const t = this.tabs.find(isStremio);
+    if (!t) return { key: null };
+    const code = `(() => { try { const p = JSON.parse(localStorage.getItem("profile") || "null"); const k = p && p.auth && p.auth.key; return typeof k === "string" ? k : null; } catch { return null; } })()`;
+    const key = (await t.view.webContents.executeJavaScriptInIsolatedWorld(1003, [{ code }], true)) as unknown;
+    return { key: typeof key === "string" && /^[\w-]{10,200}$/.test(key) ? key : null };
   }
 
   /** The fab.com tab KesherAI opened for searching, and when it closes. */

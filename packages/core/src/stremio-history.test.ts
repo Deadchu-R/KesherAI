@@ -89,3 +89,21 @@ test("Trakt sign-in: the device code, waiting, then her history", async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a session key from Stremio's own page: its email is shown and the library is read", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-stremio-page-"));
+  try {
+    const fetcher = (async (url: string) => {
+      if (url.endsWith("/getUser")) return new Response(JSON.stringify({ result: { email: "me@example.com" } }));
+      return new Response(JSON.stringify({ result: [{ name: "Heat", type: "movie", state: { timesWatched: 1 } }] }));
+    }) as typeof fetch;
+    const t = new StremioTaste(dir, fetcher);
+    await assert.rejects(() => t.stremioConnectKey("bad key!"), /no session/);
+    assert.deepEqual(await t.stremioConnectKey("pagesessionkey1"), { added: 1, total: 1 });
+    const s = await t.load();
+    assert.equal(s.stremio?.email, "me@example.com");
+    assert.equal(s.stremio?.authKey, "pagesessionkey1");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

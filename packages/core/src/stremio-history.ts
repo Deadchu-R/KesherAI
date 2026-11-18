@@ -52,6 +52,18 @@ export async function stremioLogin(fetcher: typeof fetch, email: string, passwor
 }
 
 /**
+ * The email of a Stremio session (to show which account is connected), or "Stremio" when it cannot be read.
+ *
+ * @param fetcher - fetch.
+ * @param authKey - The session key.
+ * @returns The account's email.
+ */
+export async function stremioEmail(fetcher: typeof fetch, authKey: string): Promise<string> {
+  const r = await stremioCall<{ email?: unknown }>(fetcher, "getUser", { type: "GetUser", authKey }).catch(() => undefined);
+  return typeof r?.email === "string" && r.email.length <= 254 ? r.email : "Stremio";
+}
+
+/**
  * Ends the Stremio session (best effort).
  *
  * @param fetcher - fetch.

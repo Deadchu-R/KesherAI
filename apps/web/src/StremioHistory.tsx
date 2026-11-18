@@ -4,7 +4,7 @@
  * the device code, approved on trakt.tv). Both feed the taste the recommendations come from.
  */
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
@@ -33,7 +33,28 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
   const [secret, setSecret] = useState("");
   const [code, setCode] = useState<{ userCode: string; url: string } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const pageTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(pageTimer.current); }, []);
+  // Signing in on Stremio's own page (Google, Facebook or email, all on Stremio's site), in KesherAI's browser on the
+  // computer; the email form is the way from the phone.
+  const [onPage, setOnPage] = useState(false);
+  const [withEmail, setWithEmail] = useState(isRemote());
+  const waitPage = (until: number) => {
+    pageTimer.current = setTimeout(() => {
+      void api<{ waiting: boolean; added?: number; total?: number }>("/api/stremio/account/page", { method: "POST", body: { op: "check" } }).then(
+        (r) => {
+          if (r.waiting) return Date.now() < until ? waitPage(until) : (setOnPage(false), toast(L("לא זוהתה כניסה. אפשר לנסות שוב.", "No sign-in was seen. Try again.")));
+          setOnPage(false);
+          done({ added: r.added ?? 0, total: r.total ?? 0 });
+          onChange();
+        },
+        (e: Error) => {
+          setOnPage(false);
+          toast(e.message);
+        },
+      );
+    }, 3000);
+  };
   const run = async (what: string, f: () => Promise<void>) => {
     setBusy(what);
     try {
@@ -78,6 +99,18 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
               <button type="button" className="ghost" disabled={!!busy} onClick={() => void run("s-out", () => api("/api/stremio/account", { method: "DELETE" }).then(() => undefined))}>{L("התנתק", "Sign out")}</button>
             </div>
           </>
+        ) : !withEmail ? (
+          onPage ? (
+            <div className="card trakt-code" role="status">
+              <span className="small">{L("דף הכניסה של Stremio נפתח בדפדפן של קשר. התחבר שם (גם עם Google או Facebook), וקשר יזהה את זה לבד.", "Stremio's sign-in page opened in KesherAI's browser. Sign in there (Google or Facebook work too); KesherAI notices by itself.")}</span>
+              <span className="muted small">{L("מחכה לכניסה…", "Waiting for you to sign in…")}</span>
+            </div>
+          ) : (
+            <div className="row wrap">
+              <button type="button" className="primary" disabled={!!busy} onClick={() => void run("s-page", () => api("/api/stremio/account/page", { method: "POST", body: { op: "signin" } }).then(() => { setOnPage(true); waitPage(Date.now() + 10 * 60_000); }))}>{L("התחבר בדף של Stremio", "Sign in on Stremio's page")}</button>
+              <button type="button" className="ghost small" onClick={() => setWithEmail(true)}>{L("או עם אימייל וסיסמה", "Or with email and password")}</button>
+            </div>
+          )
         ) : (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); void run("s-in", () => api<{ added: number; total: number }>("/api/stremio/account", { method: "POST", body: { email, password } }).then((r) => { setPassword(""); done(r); })); }}>
             <div className="row wrap">
