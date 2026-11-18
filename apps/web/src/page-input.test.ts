@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pageInput } from "./page-input.js";
+import { godotSceneInput, pageInput } from "./page-input.js";
 
 test("a page gets a chat's file only when it is a picture and the page declared the picture models", () => {
   assert.deepEqual(pageInput("c=abc-1&f=shared%2Fcat.png", ["image"]), { conversationId: "abc-1", path: "shared/cat.png" });
@@ -24,4 +24,11 @@ test("a page gets a chat's file only when it is a picture and the page declared 
   assert.equal(pageInput("c=abc&f=chair.glb&back=x.png&slot=%3Cscript%3E", ["model"])?.back, undefined);
   assert.equal(pageInput("c=abc&f=chair.glb", ["image"]), undefined);
   assert.deepEqual(pageInput("c=abc&f=s.wav&ret=.env", ["sound"]), { conversationId: "abc", path: "s.wav" }, "only a video to go back to");
+});
+
+test("a Godot scene for the 3D editor: only res://….tscn, never with ..; only for a page that declared model", () => {
+  assert.deepEqual(godotSceneInput("gp=C%3A%5CGames%5CMyGame&gs=res%3A%2F%2Flevels%2Fa.tscn", ["model"]), { project: "C:\\Games\\MyGame", scene: "res://levels/a.tscn" });
+  assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2F..%2Fa.tscn", ["model"]), undefined);
+  assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2Fa.gd", ["model"]), undefined);
+  assert.equal(godotSceneInput("gp=x&gs=res%3A%2F%2Fa.tscn", ["image"]), undefined);
 });

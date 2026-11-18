@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", toGodot: "שמור לסצנה", standIn: "תחליף של סצנת Godot: מזיזים, ואז \"שמור לסצנה\" (כש-Godot סגור)", noMoves: "עוד לא זז כלום", savingScene: "שומר לסצנה…", clash: "אלה זזו גם ב-Godot:", keepMine: "לשמור את ההזזות שלך?", sceneSaved: "נשמר לסצנה", notFound: "לא נמצאו", quadT: "ארבעה מבטים (Alt+W)", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -167,10 +167,82 @@ async function load(bytes) {
   grid.position.y = box.min.y;
   $("empty").hidden = true;
 }
+// ---------- a Godot scene without Godot (SceneStandIn board): a stand-in of its nodes, moved here, saved back ----------
+/** Godot writes a Transform3D's basis row by row, then the origin. */
+const fromGodot = (b, o) => new THREE.Matrix4().set(b[0], b[1], b[2], o[0], b[3], b[4], b[5], o[1], b[6], b[7], b[8], o[2], 0, 0, 0, 1);
+const toGodot = (m) => { const e = m.elements; return [e[0], e[4], e[8], e[1], e[5], e[9], e[2], e[6], e[10], e[12], e[13], e[14]]; };
+const PX = 64; // 2D: pixels per unit, so a 2D scene sits flat at a sensible size
+/** Each node as something to see and move: a box (a light as a small sun, a camera as a cone), in Godot's tree. */
+function loadStandIn(nodes) {
+  if (model) { choose(null); model.removeFromParent(); }
+  const root = new THREE.Group();
+  root.name = nodes[0]?.name || "Scene";
+  root.userData.godot = { path: "." };
+  const byPath = new Map([[".", root]]);
+  const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true, opacity: 0.85 });
+  for (const n of nodes.slice(1)) {
+    const parent = byPath.get(n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : ".") ?? root;
+    const t = n.type ?? (n.instance ? "instance" : "");
+    const geo = /Light/.test(t) ? new THREE.SphereGeometry(0.12, 12, 8) : /Camera/.test(t) ? new THREE.ConeGeometry(0.15, 0.3, 12).rotateX(-Math.PI / 2) : new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const o = new THREE.Mesh(geo, mat(/Light/.test(t) ? 0xffd25a : /Camera/.test(t) ? 0x6aa8ff : n.instance ? 0xb48cff : 0xb8bcc8));
+    o.name = n.name;
+    if (n.transform) {
+      fromGodot(n.transform.basis, n.transform.origin).decompose(o.position, o.quaternion, o.scale);
+      o.userData.godot = { path: n.path, from: [...n.transform.basis, ...n.transform.origin] };
+    } else if (n.position2d) {
+      o.position.set(n.position2d[0] / PX, -n.position2d[1] / PX, 0);
+      o.userData.godot = { path: n.path, from: n.position2d, is2d: true };
+    } else o.userData.godot = { path: n.path };
+    parent.add(o);
+    byPath.set(n.path, o);
+  }
+  model = root;
+  scene.add(model);
+  meshes = [];
+  rebuild();
+  $("empty").hidden = true;
+  // No chat here: the scene is where it goes back to.
+  $("toGodot").hidden = false;
+  $("toChat").hidden = true;
+  msg(T("standIn", "A stand-in of the Godot scene: move things, then \"Save to the scene\" (with Godot closed)"));
+}
+/** The nodes that moved, as Godot wants them, with what they were (to see whether they moved in Godot too). */
+function godotChanges() {
+  const out = [];
+  model?.traverse((o) => {
+    const g = o.userData.godot;
+    if (!g || g.path === ".") return;
+    o.updateMatrix();
+    if (g.is2d) {
+      const p = [Math.round(o.position.x * PX * 1000) / 1000, Math.round(-o.position.y * PX * 1000) / 1000];
+      if (Math.abs(p[0] - g.from[0]) > 1e-3 || Math.abs(p[1] - g.from[1]) > 1e-3) out.push({ path: g.path, from: g.from, position2d: p });
+      return;
+    }
+    const now = toGodot(o.matrix).map((x) => Math.round(x * 1e6) / 1e6);
+    const was = g.from ?? [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0];
+    if (now.some((x, i) => Math.abs(x - was[i]) > 1e-4)) out.push({ path: g.path, ...(g.from ? { from: g.from } : {}), transform: { basis: now.slice(0, 9), origin: now.slice(9) } });
+  });
+  return out;
+}
+$("toGodot").onclick = async () => {
+  const changes = godotChanges();
+  if (!changes.length) return msg(T("noMoves", "Nothing moved yet"));
+  busy(T("savingScene", "Saving into the scene…"));
+  try {
+    let r = await kesher.call("godot.saveScene", { changes });
+    if (r.code === "conflict" && confirm(`${T("clash", "These moved in Godot too:")} ${r.conflicts.join(", ")}. ${T("keepMine", "Keep your moves?")}`)) r = await kesher.call("godot.saveScene", { changes, keep: "mine" });
+    if (r.ok) {
+      // What is in the file now is the new "before".
+      model.traverse((o) => { const g = o.userData.godot; if (!g || g.path === ".") return; g.from = g.is2d ? [o.position.x * PX, -o.position.y * PX] : toGodot(o.matrix); });
+      msg(`${T("sceneSaved", "Saved into the scene")}: ${r.written}${r.missing?.length ? ` · ${T("notFound", "not found")}: ${r.missing.join(", ")}` : ""}`);
+    } else msg(r.error, true);
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+};
 async function open() {
   busy(T("loading", "Loading the model…"));
   try {
     const input = await kesher.call("editor.input");
+    if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); frame(model); stats(); return; }
     if (!input?.bytes) return;
     name = input.name;
     $("name").textContent = name;

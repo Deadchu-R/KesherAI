@@ -58,3 +58,26 @@ export function pageInput(query: string, uses: readonly string[] | undefined): P
     ...(picture && g && KINDS["image-editor"]!.test(g) ? { guide: g } : {}),
   };
 }
+
+/** A Godot scene opened without Godot in the 3D editor (SceneStandIn board): the project's folder and the scene. */
+export interface GodotSceneInput {
+  project: string;
+  scene: string;
+}
+
+/**
+ * A Godot scene a page was opened with (`?gp=<project folder>&gs=res://….tscn`), only for a page that declared
+ * `model`; the server checks again that the folder is a Godot project and the scene is inside it.
+ *
+ * @param query - The part after `?`.
+ * @param uses - The page's declared models.
+ * @returns The project and scene, or undefined.
+ */
+export function godotSceneInput(query: string, uses: readonly string[] | undefined): GodotSceneInput | undefined {
+  const q = new URLSearchParams(query);
+  const project = q.get("gp") ?? "";
+  const scene = q.get("gs") ?? "";
+  if (!uses?.includes("model") || !project || project.length > 400 || /[\0]/.test(project)) return undefined;
+  if (!/^res:\/\/[^\0]{1,300}\.tscn$/i.test(scene) || scene.split("/").includes("..")) return undefined;
+  return { project, scene };
+}

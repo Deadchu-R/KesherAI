@@ -1,6 +1,6 @@
 import { PluginFrame, usePluginUi } from "../plugins";
 import { t } from "../i18n";
-import { pageInput } from "../page-input";
+import { godotSceneInput, pageInput } from "../page-input";
 
 /**
  * A page a plugin adds (`#/p/<plugin>/<page>`), shown full size.
@@ -14,10 +14,11 @@ export function PluginPage({ route }: { route: string }) {
   const [pluginId, id] = place!.split("/");
   const page = pages.find((p) => p.pluginId === pluginId && p.id === id);
   const input = pageInput(query, page?.uses);
+  const godot = godotSceneInput(query, page?.uses);
   if (!page) return <div className="page"><p className="muted">{t("plPageMissing")}</p></div>;
   return (
     <div className={page.layout === "app" ? "plugin-page plugin-app" : "plugin-page"}>
-      <PluginFrame pluginId={page.pluginId} file={page.file} title={page.title} uses={page.uses ?? []} input={input} />
+      <PluginFrame pluginId={page.pluginId} file={page.file} title={page.title} uses={page.uses ?? []} input={input} godot={godot} />
     </div>
   );
 }
