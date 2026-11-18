@@ -486,6 +486,10 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           return api<{ mtime: number; size: number }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}?stat=1`).catch(() => null);
         case "files.openInAffinity":
           return api<{ app: string }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}/open`, { method: "POST" });
+        case "files.openInBlender":
+          return api<{ app: string }>(`/api/plugins/${pluginId}/files/${encodeURIComponent(String(p.name))}/open?app=blender`, { method: "POST" });
+        case "apps.blender":
+          return api<{ installed: boolean; platform: string }>("/api/apps/blender");
         case "apps.affinity":
           return api<{ installed: boolean; platform: string }>("/api/apps/affinity");
         case "toast":

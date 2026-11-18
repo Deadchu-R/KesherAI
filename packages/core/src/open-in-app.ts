@@ -65,3 +65,48 @@ export async function openInAffinity(file: string, own?: string): Promise<{ app:
   } else run("xdg-open", [file]);
   return { app: found ? "affinity" : "default" };
 }
+
+/** Where Blender is: the newest under Program Files (Windows), the app (macOS), or `blender` on the PATH (Linux). */
+export async function findBlender(): Promise<string | undefined> {
+  if (process.platform === "win32") {
+    const base = join(process.env.ProgramFiles ?? "C:\\Program Files", "Blender Foundation");
+    const dirs = (await readdir(base, { withFileTypes: true }).catch(() => [])).filter((d) => d.isDirectory() && /^blender/i.test(d.name));
+    // "Blender 4.5", "Blender 5.0"…: the newest first.
+    const ver = (n: string) => (n.match(/\d+(\.\d+)?/)?.[0] ?? "0").split(".").map(Number);
+    dirs.sort((a, b) => { const x = ver(a.name), y = ver(b.name); return (y[0] ?? 0) - (x[0] ?? 0) || (y[1] ?? 0) - (x[1] ?? 0); });
+    for (const d of dirs) if (existsSync(join(base, d.name, "blender.exe"))) return join(base, d.name, "blender.exe");
+    return undefined;
+  }
+  if (process.platform === "darwin") return existsSync("/Applications/Blender.app/Contents/MacOS/Blender") ? "/Applications/Blender.app/Contents/MacOS/Blender" : undefined;
+  for (const dir of (process.env.PATH ?? "").split(":")) if (dir && existsSync(join(dir, "blender"))) return join(dir, "blender");
+  return undefined;
+}
+
+/**
+ * Blender's start-up script for a round trip: an empty scene, the GLB imported, and every save (Ctrl+S) also writes
+ * the scene back over the same GLB, so the 3D editor sees the change. The file comes in an environment variable, so
+ * no path is ever written into the script.
+ */
+export const BLENDER_ROUND_TRIP = [
+  "import bpy, os",
+  "f = os.environ['KESHER_GLB']",
+  "bpy.ops.wm.read_factory_settings(use_empty=True)",
+  "bpy.ops.import_scene.gltf(filepath=f)",
+  "bpy.ops.wm.save_as_mainfile(filepath=os.path.splitext(f)[0] + '.blend')",
+  "def back(*_):",
+  "    bpy.ops.export_scene.gltf(filepath=f, export_format='GLB')",
+  "bpy.app.handlers.save_post.append(back)",
+].join("\n");
+
+/**
+ * Opens a GLB in Blender for a round trip (see BLENDER_ROUND_TRIP).
+ *
+ * @param file - The .glb (in the plugin's own folder).
+ * @returns Whether Blender was found and started.
+ */
+export async function openInBlender(file: string): Promise<{ app: "blender" | "none" }> {
+  const exe = await findBlender();
+  if (!exe) return { app: "none" };
+  spawn(exe, ["--python-expr", BLENDER_ROUND_TRIP], { detached: true, stdio: "ignore", windowsHide: false, env: { ...process.env, KESHER_GLB: file } }).unref();
+  return { app: "blender" };
+}

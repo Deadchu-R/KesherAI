@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", blender: "פתח ב-Blender", fromBlender: "⟲ להביא מ-Blender", toBlender: "פותח ב-Blender…", noBlender: "Blender לא מותקן במחשב (blender.org, חינם).", inBlender: "נפתח ב-Blender. שמור שם (Ctrl+S) והוא חוזר לכאן.", fromBlenderDone: "המודל חזר מ-Blender", taskPh: "מה לעשות עם החלק? (עץ אלון ישן, אדום מבריק, פצל אותו…)", taskThinking: "מבין מה לעשות…", tColour: "המראה", tTexture: "טקסטורה", tHide: "הוסתר", tDup: "עותק", tSplit: "פיצול", tDone: "בוצע", tNone: "לא ברור מה לעשות; נסה צבע, חומר או \"פצל אותו\"", stop: "עצור", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", madeUv: "לחלק הזה לא היו UV: נוצרו (הטלת קופסה)", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -89,6 +89,23 @@ function frame(obj) {
   camera.position.copy(center).add(new THREE.Vector3(0.6, 0.45, 0.8).multiplyScalar(size * 1.2));
   camera.near = size / 200; camera.far = size * 50; camera.updateProjectionMatrix();
 }
+/** Puts a GLB in the scene in place of the model there (from the chat, or back from Blender). */
+async function load(bytes) {
+  const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
+  if (model) { choose(null); model.removeFromParent(); }
+  model = gltf.scene;
+  scene.add(model);
+  // Each mesh gets its own material, so changing one part does not change others that shared it.
+  meshes = [];
+  model.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); });
+  rebuild();
+  // The floor under the model, scaled to it.
+  const box = new THREE.Box3().setFromObject(model);
+  const s = box.getSize(new THREE.Vector3());
+  grid.scale.setScalar(Math.max(s.x, s.z, 0.1) / 3);
+  grid.position.y = box.min.y;
+  $("empty").hidden = true;
+}
 async function open() {
   busy(T("loading", "Loading the model…"));
   try {
@@ -96,19 +113,7 @@ async function open() {
     if (!input?.bytes) return;
     name = input.name;
     $("name").textContent = name;
-    const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(input.bytes, "", resolve, reject));
-    model = gltf.scene;
-    scene.add(model);
-    // Each mesh gets its own material, so changing one part does not change others that shared it.
-    meshes = [];
-    model.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); });
-    rebuild();
-    // The floor under the model, scaled to it.
-    const box = new THREE.Box3().setFromObject(model);
-    const s = box.getSize(new THREE.Vector3());
-    grid.scale.setScalar(Math.max(s.x, s.z, 0.1) / 3);
-    grid.position.y = box.min.y;
-    $("empty").hidden = true;
+    await load(input.bytes);
     // Back from the image editor: the new texture into the slot it was made for.
     const back = /^(\d+):(map|roughnessMap|normalMap)$/.exec(input.back?.data ? input.back.slot : "");
     if (back) {
@@ -972,6 +977,45 @@ const toggleWire = () => shade($("wire").classList.contains("on") ? "material" :
 $("wire").onclick = toggleWire;
 
 // ---------- out: GLB, the chat ----------
+// ---------- Blender round trip (as the image editor's Affinity one): open it there, and each save comes back ----------
+let linked = null; // { name, mtime } of the GLB Blender has
+$("blender").onclick = async () => {
+  if (!model) return;
+  const file = `${base().replace(/[^\w .()-]/g, "_") || "model"}.glb`;
+  busy(T("toBlender", "Opening in Blender…"));
+  try {
+    const data = await new Promise((resolve) => glb().then((b) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(b); }));
+    const w = await kesher.call("files.write", { name: file, data });
+    const r = await kesher.call("files.openInBlender", { name: file });
+    if (r.app !== "blender") return msg(T("noBlender", "Blender is not on this computer (blender.org, free)."), true);
+    linked = { name: file, mtime: w.mtime };
+    msg(T("inBlender", "Opened in Blender. Save there (Ctrl+S) and it comes back here."));
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+};
+setInterval(async () => {
+  if (!linked) return;
+  const st = await kesher.call("files.stat", { name: linked.name }).catch(() => null);
+  if (st && st.mtime > linked.mtime + 500) $("fromBlender").hidden = false;
+}, 2000);
+$("fromBlender").onclick = async () => {
+  if (!linked) return;
+  busy(T("loading", "Loading the model…"));
+  try {
+    const f = await kesher.call("files.read", { name: linked.name });
+    // A version of how it was first, so the Blender changes can be undone from the strip.
+    keepVersion();
+    const bin = atob(String(f.data).split(",")[1] ?? "");
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    await load(bytes.buffer);
+    frame(model);
+    stats();
+    linked.mtime = f.mtime;
+    $("fromBlender").hidden = true;
+    msg(T("fromBlenderDone", "The model came back from Blender"));
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+};
+
 async function glb() {
   glow?.removeFromParent();
   scene.overrideMaterial = null;
