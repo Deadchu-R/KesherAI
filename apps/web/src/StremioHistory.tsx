@@ -31,7 +31,9 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
   const [password, setPassword] = useState("");
   const [clientId, setClientId] = useState("");
   const [secret, setSecret] = useState("");
-  const [code, setCode] = useState<{ userCode: string; url: string } | null>(null);
+  // The code waiting for her approval, and when it ends (from Trakt's expires_in), shown quietly under it.
+  const [code, setCode] = useState<{ userCode: string; url: string; endsAt?: number } | null>(null);
+  const [, tick] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pageTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => { clearTimeout(timer.current); clearTimeout(pageTimer.current); }, []);
@@ -107,7 +109,7 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
     timer.current = setTimeout(() => {
       void api<{ state: "wait" | "gone" | "connected"; added?: number; total?: number }>("/api/stremio/trakt/check", { method: "POST" }).then(
         (r) => {
-          if (r.state === "wait") return wait();
+          if (r.state === "wait") { tick((n) => n + 1); return wait(); }
           setCode(null);
           if (r.state === "connected") done({ added: r.added ?? 0, total: r.total ?? 0 });
           else toast(L("הקוד פג. אפשר להתחבר שוב.", "The code ended. Connect again."));
@@ -187,6 +189,7 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
             <span className="small">{L("היכנס ל-", "Go to ")}<a href={code.url} target="_blank" rel="noreferrer" dir="ltr">{code.url.replace(/^https:\/\//, "")}</a>{L(" והקלד:", " and type:")}</span>
             <b className="trakt-user-code" dir="ltr">{code.userCode}</b>
             <span className="muted small">{L("מחכה לאישור…", "Waiting for approval…")}</span>
+            {code.endsAt && <span className="muted small">{((m) => L(`נותרו ${m} דקות`, `${m} minutes left`))(Math.max(0, Math.ceil((code.endsAt - Date.now()) / 60_000)))}</span>}
           </div>
         ) : (
           <>
@@ -194,7 +197,7 @@ export function StremioHistory({ st, onChange }: { st: HistoryState; onChange: (
             <div className="row wrap">
               {!st.trakt?.hasApp && <input dir="ltr" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID" aria-label="Trakt Client ID" />}
               {!st.trakt?.hasApp && <input dir="ltr" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Client Secret" aria-label="Trakt Client Secret" />}
-              <button type="button" className="primary" disabled={!!busy || (!st.trakt?.hasApp && (!clientId.trim() || !secret.trim()))} onClick={() => void run("t-in", () => api<{ userCode: string; url: string }>("/api/stremio/trakt", { method: "POST", body: st.trakt?.hasApp ? {} : { clientId, clientSecret: secret } }).then((r) => { setCode(r); setSecret(""); wait(); }))}>{busy === "t-in" ? "…" : L("התחבר", "Connect")}</button>
+              <button type="button" className="primary" disabled={!!busy || (!st.trakt?.hasApp && (!clientId.trim() || !secret.trim()))} onClick={() => void run("t-in", () => api<{ userCode: string; url: string; expiresIn?: number }>("/api/stremio/trakt", { method: "POST", body: st.trakt?.hasApp ? {} : { clientId, clientSecret: secret } }).then((r) => { setCode({ userCode: r.userCode, url: r.url, ...(r.expiresIn ? { endsAt: Date.now() + r.expiresIn * 1000 } : {}) }); setSecret(""); wait(); }))}>{busy === "t-in" ? "…" : L("התחבר", "Connect")}</button>
             </div>
           </>
         )}

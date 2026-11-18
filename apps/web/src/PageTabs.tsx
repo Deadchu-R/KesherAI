@@ -189,6 +189,7 @@ export function PageTabs({ hash }: { hash: string }) {
         <span className="page-tabs-quick card" role="menu" onPointerLeave={() => setQuick(false)}>
           <button type="button" role="menuitem" onClick={() => { setQuick(false); void createConversation({ kind: "chat" }).then((id) => { if (id) location.hash = `#/c/${id}`; }); }}>＋ {L("צ'אט חדש", "New chat")}</button>
           {showing !== placeOf(HOME) && <button type="button" role="menuitem" onClick={() => { setQuick(false); close(hash); }}>✕ {L("סגירת הטאב הזה", "Close this tab")}</button>}
+          {tabs.length > 1 && <button type="button" role="menuitem" onClick={() => { setQuick(false); update(tabs.filter((t) => placeOf(t.hash) === showing)); }}>⊟ {L("סגירת שאר הטאבים", "Close the other tabs")}</button>}
         </span>
       )}
     </span>
