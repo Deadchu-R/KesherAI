@@ -40,3 +40,10 @@ test("shot changes: FFmpeg's scene score, and the times read from showinfo (too 
   const log = "[Parsed_showinfo_1] n:0 pts:12 pts_time:0.1 \n[Parsed_showinfo_1] n:1 pts:300 pts_time:4.5 \n n:2 pts_time:4.8 \n n:3 pts_time:12.25 ";
   assert.deepEqual(sceneTimes(log), [4.5, 12.25]);
 });
+
+test("burned captions: the subtitles filter on the joined picture, only from a plainly named .srt", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, ".kesher-burn-1.srt");
+  assert.ok(a.join(" ").includes("[v]subtitles=filename=.kesher-burn-1.srt:"));
+  assert.equal(a[a.indexOf("-map") + 1], "[vs]");
+  assert.throws(() => cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 1 }], true, undefined, "C:\\x\\a b.srt"), /plain/);
+});

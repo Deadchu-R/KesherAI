@@ -191,7 +191,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.cut": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
-          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, ...(input.sound ? { sound: input.sound } : {}), segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions } : {}) } });
+          const { path, captions } = await api<{ path: string; captions?: string }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/cut`, { method: "POST", body: { path: input.path, ...(input.sound ? { sound: input.sound } : {}), segments: p.segments, ...(typeof p.name === "string" ? { name: p.name } : {}), ...(Array.isArray(p.captions) ? { captions: p.captions, burn: p.burn === true } : {}) } });
           if (p.send) {
             const text = typeof p.text === "string" ? p.text.slice(0, 4000) : "";
             await api(`/api/conversations/${encodeURIComponent(input.conversationId)}/messages`, { method: "POST", body: { text: `${text}${text ? "\n\n" : ""}[Attached: ${path}]${captions ? `\n[Attached: ${captions}]` : ""}` } });

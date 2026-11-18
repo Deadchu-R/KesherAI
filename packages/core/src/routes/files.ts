@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { basename, extname, join, relative, sep } from "node:path";
 import { zipSync } from "fflate";
@@ -69,7 +70,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
@@ -95,16 +96,20 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     // One cut at a time: each one keeps the computer's processor busy (security review, scan 146).
     if (cutting) return reply.code(429).send({ error: "Another video is being cut; try again when it is done." });
     cutting = true;
+    // Captions (from the transcript, in the cut's times) as an .srt of the same name, which players read beside it;
+    // with `burn`, also burned into the picture (from a plainly named copy, removed after).
+    const srt = srtOf(req.body?.captions);
+    const burn = srt && req.body?.burn ? `.kesher-burn-${randomUUID()}.srt` : undefined;
     try {
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound);
+      if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
+      if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {
       cutting = false;
+      if (burn) await rm(join(dir, burn), { force: true }).catch(() => undefined);
     }
-    // Captions (from the transcript, in the cut's times) as an .srt of the same name, which players read beside it.
-    const srt = srtOf(req.body?.captions);
-    if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
     return { path: relative(root, out).split(sep).join("/"), ...(srt ? { captions: relative(root, out.replace(/\.mp4$/, ".srt")).split(sep).join("/") } : {}) };
   });
 

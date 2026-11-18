@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { dirname } from "node:path";
 
 /** A kept stretch of the source video, in seconds. */
 export interface Segment {
@@ -35,9 +36,12 @@ export function checkSegments(given: unknown): Segment[] {
  * @param segments - The stretches to keep.
  * @param audio - Whether the source has sound.
  * @param sound - Another file whose sound replaces the video's (the same times as the video).
+ * @param burn - Captions to burn into the picture: a plain file name (letters, digits, -_.) of an .srt in FFmpeg's
+ *   working folder, so no path has to be escaped for the filter (Windows' "C:" breaks it).
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string): string[] {
+  if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
   const a = sound ? "1:a" : "0:a";
   const parts = segments.map((s, i) => {
@@ -46,8 +50,10 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   });
   audio = audio || !!sound;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
-  const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}`;
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", "[v]", ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  // Burned captions (CapCut's and Premiere's "burn in"): white with a dark outline, low in the frame, readable anywhere.
+  const subs = burn ? `;[v]subtitles=filename=${burn}:force_style='FontName=Arial,FontSize=20,Outline=2,Shadow=0,MarginV=28'[vs]` : "";
+  const graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${subs}`;
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), "-filter_complex", graph, "-map", burn ? "[vs]" : "[v]", ...(audio ? ["-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -58,11 +64,12 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param output - The new video.
  * @param segments - The stretches to keep.
  * @param sound - A file whose sound replaces the video's.
+ * @param burn - An .srt beside the output to burn into the picture (its plain name; FFmpeg runs in that folder).
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string): Promise<void> {
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound), { timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);
