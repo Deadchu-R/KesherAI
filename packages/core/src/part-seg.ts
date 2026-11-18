@@ -50,7 +50,7 @@ try:
     sonata.load = load
 except Exception as e:
     print("sonata not adjusted:", e)
-sys.argv = ["auto_mask.py", "--mesh_path", a["mesh"], "--output_path", out, "--parallel", "0", "--post_process", "0", "--clean_mesh", "0", "--save_mid_res", "0", "--show_info", "0", "--show_time_info", "0"]
+sys.argv = ["auto_mask.py", "--mesh_path", a["mesh"], "--output_path", out, "--parallel", "0", "--post_process", "0", "--clean_mesh", "0", "--save_mid_res", "0", "--show_info", "0", "--show_time_info", "1"]
 if a.get("ckpt"):
     sys.argv += ["--ckpt_path", a["ckpt"]]
 # Lighter than the demo's defaults (100 000 points, 400 prompts), which filled a 24 GB card and spilled into the
