@@ -2489,3 +2489,36 @@ Each AI tool shows which local model it uses and offers to download it the first
   Converter, VoiceDrums), basicpitch.spotify.com/about, elephorm.com on humming in Suno Studio, the gleitz
   midi-js-soundfonts README (FluidR3_GM, CC BY 3.0).
 - Stopped at: research done; next the board, then stage A.
+
+## The 3D editor after Blender, 3ds Max and Maya (2026-11-18, 16:20; Roee: "a lot of inspiration and research from Blender, 3ds Max, Maya")
+- **What the three share** (and so what a 3D person expects): an Outliner / Scene Explorer as a tree of the scene's
+  objects with eye (hide) and select toggles; a numeric panel for the chosen object — Maya's **Channel Box** (Translate,
+  Rotate, Scale X/Y/Z, editable by typing or dragging the label), Blender's **N panel** (Location / Rotation / Scale /
+  Dimensions), 3ds Max's **Transform Type-In** (F12); a **transform gizmo** with move / rotate / scale; **frame the
+  selection** (F in all three; A frames all in Maya, Home in Blender, Z in Max); shading modes; duplicate and delete;
+  undo for everything; snapping.
+- **Keys** (each its own): Maya / 3ds Max **W E R** = move / rotate / scale (Q select), Blender **G R S** (then X/Y/Z to
+  lock an axis, a number to type the amount); Blender Shift+D duplicate, X delete, H hide, Alt+H show all, numpad 1 / 3 / 7
+  front / right / top, 5 perspective ↔ orthographic, / local view; Maya 4 / 5 / 6 wireframe / shaded / textured, F frame,
+  Space tap = the four views, Ctrl+D duplicate; 3ds Max F / L / T / P = front / left / top / perspective views, Alt+W
+  maximise a view, F3 wireframe, F4 edges on faces, S snaps.
+- **Views**: 3ds Max's **ViewCube** (top-right: click a face, an edge or a corner for that view, drag to turn), Blender's
+  **navigation gizmo** (X/Y/Z axis balls), the quad views (top / front / side / perspective) in Max and Maya; shading as
+  four buttons in Blender's header (wireframe, solid, material preview, rendered).
+- **Non-destructive changes**: 3ds Max's modifier stack (Smart Extrude, Boolean with history in the stack), Blender's
+  modifiers (Mirror, Subdivision, Bevel, Array), Maya's construction history: every change can be turned off, reordered
+  or removed later.
+- **2026 news**: 3ds Max 2026 — topology-aware retopology loops, a steadier Boolean, Smart Extrude in the stack, viewport
+  culling (a large scene from about 10 to 22 FPS), real-time material preview; Maya at SIGGRAPH 2026 — MotionMaker
+  trained on your own rigs and animation (AI motion), Arnold's render in the viewport; 3ds Max edits Gaussian splats as
+  points and takes World Labs Marble worlds (AI environments).
+- **For KesherAI's 3D editor (stage 1.5, now)**: the outliner as a tree of the file's nodes; a Channel-Box-style panel
+  (position, rotation, scale, by typing); a transform gizmo with both key sets (W E R and G R S), axis lock and snapping;
+  shading modes (Maya's 4 / 5 / 6 and Blender's buttons); view buttons like Max's ViewCube faces (front / right / top /
+  perspective, numpad 1 / 3 / 7 and F / L / T / P); duplicate (Shift+D / Ctrl+D) and delete (X / Delete); undo for all of
+  it. Later: modifiers (mirror, subdivide, bevel, array) as a stack, quad views, edit mode on vertices, and the AI task
+  bar on a part (texture, change by a sentence, retopology).
+- Sources: Autodesk news on SIGGRAPH 2026 (MotionMaker, Arnold in the viewport, 3DGS in 3ds Max), superrendersfarm.com
+  "What's new in 3ds Max 2026", digitalproduction.com on 3ds Max 2026, renderhub.com monthly news (Blender 4.5), plus each
+  tool's own key map.
+- Stopped at: research done; next the board update, then stage 1.5.
