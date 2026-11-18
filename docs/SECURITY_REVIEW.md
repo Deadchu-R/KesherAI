@@ -1123,6 +1123,13 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 143 (2026-11-18): Stremio's link sign-in, tabs, three.js and 3D previews
+- **Found and fixed**: a `.gltf` model can name textures and buffers at any web address; the viewer now loads only this app's own addresses and `data:`/`blob:` (a LoadingManager URL filter), so previewing a model (one the agent downloaded, say) never contacts another server. GLB files embed everything.
+- **three.js 0.181.0** (pinned, with @types/three): loaded only when a model opens (a lazy chunk), no network of its own.
+- **Stremio's link sign-in**: only `link.stremio.com` addresses that match the code are shown; the code is checked before it goes into the request; the key is checked against a token pattern. "New code" just starts again.
+- **Tabs**: addresses kept in the browser (localStorage), read back only if they start with `#/` and are under 500 characters; nothing reaches the server.
+- No secret, email, user name or personal path in the changed files.
+
 ## Scan 142 (2026-11-18): the extension per site, publishing it from GitHub, load settings per model, exes
 - **Extension 0.2.6**: no sites at install (`optional_host_permissions`). `allow.html` asks only for an http(s) origin it checks with a pattern (built by background.js from the tab's own address, never from the app's command); "Not now" or no answer in two minutes stops the task with a plain error. The side panel asks for the site in front from the click. Tested in Chromium.
 - **Publishing from GitHub**: the service account has no Google Cloud roles; it can only act on this publisher's items in the Chrome Web Store (added there by Roee). Its JSON key lives only in the repository secret `CWS_SERVICE_ACCOUNT`; `scripts/google-token.mjs` signs a 10-minute JWT and prints only the access token, which the workflow masks (`::add-mask::`). The workflow runs on main and by hand only (not on pull requests, so no fork reaches the secrets), and has `contents: read` only. The status check printed the item's public key (public by design) and no secret.

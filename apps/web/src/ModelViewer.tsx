@@ -46,7 +46,11 @@ export default function ModelViewer({ src, name }: { src: string; name: string }
     const ro = new ResizeObserver(size);
     ro.observe(el);
     let alive = true;
-    new GLTFLoader().load(
+    // A .gltf can name textures and data anywhere on the web: only this app's own addresses and embedded data load,
+    // so opening a model never reaches someone else's server (security scan 143).
+    const manager = new THREE.LoadingManager();
+    manager.setURLModifier((u) => (u.startsWith(`${location.origin}/`) || /^(data|blob):/.test(u) ? u : "data:,"));
+    new GLTFLoader(manager).load(
       src,
       (gltf) => {
         if (!alive) return;
