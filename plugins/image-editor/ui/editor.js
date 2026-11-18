@@ -1068,7 +1068,7 @@
     const what = b.dataset.phone;
     if (what === "fit") return fit();
     // Select: rectangle, then lasso, then rectangle again.
-    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : "brush");
+    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" ? "crop" : "brush");
     document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", x === b));
   }));
 
