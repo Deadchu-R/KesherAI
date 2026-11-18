@@ -11,7 +11,7 @@
   const HE = {
     new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
-    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
+    aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
@@ -44,6 +44,32 @@
     return { id: nextId++, name, canvas: c, ctx: c.getContext("2d", { willReadFrequently: true }), visible: true, opacity: 1, blend: "source-over", x: 0, y: 0 };
   }
   const active = () => doc.layers[doc.active];
+  // ---------- layer masks (Photoshop's): where the mask is clear, the layer is hidden; painting on it hides or shows ----------
+  // The mask is a canvas of the layer's size whose alpha is how much shows (opaque white: all of it).
+  let onMask = false; // the brush paints on the active layer's mask instead of its pixels
+  function makeMask(l, fromSelection) {
+    const m = document.createElement("canvas");
+    m.width = l.canvas.width;
+    m.height = l.canvas.height;
+    const g = m.getContext("2d", { willReadFrequently: true });
+    if (fromSelection) g.drawImage(selectionMask(), -l.x, -l.y);
+    else { g.fillStyle = "#fff"; g.fillRect(0, 0, m.width, m.height); }
+    if (fromSelection) { g.globalCompositeOperation = "source-in"; g.fillStyle = "#fff"; g.fillRect(0, 0, m.width, m.height); }
+    return m;
+  }
+  /** What a layer shows: its pixels, cut by its mask when it has one. */
+  function shown(l) {
+    if (!l.mask) return l.canvas;
+    const c = document.createElement("canvas");
+    c.width = l.canvas.width;
+    c.height = l.canvas.height;
+    const g = c.getContext("2d");
+    g.drawImage(l.canvas, 0, 0);
+    g.globalCompositeOperation = "destination-in";
+    g.drawImage(l.mask, 0, 0);
+    return c;
+  }
+  const copyCanvas = (src) => { const c = document.createElement("canvas"); c.width = src.width; c.height = src.height; c.getContext("2d", { willReadFrequently: true }).drawImage(src, 0, 0); return c; };
 
   // ---------- undo ----------
   const undoStack = [];
@@ -51,7 +77,7 @@
   function snapshot() {
     return {
       w: doc.w, h: doc.h, active: doc.active,
-      layers: doc.layers.map((l) => ({ ...l, data: l.ctx.getImageData(0, 0, l.canvas.width, l.canvas.height) })),
+      layers: doc.layers.map((l) => ({ ...l, data: l.ctx.getImageData(0, 0, l.canvas.width, l.canvas.height), mask: l.mask ? copyCanvas(l.mask) : undefined })),
     };
   }
   function restore(s) {
@@ -64,7 +90,7 @@
       c.height = l.data.height;
       const ctx = c.getContext("2d", { willReadFrequently: true });
       ctx.putImageData(l.data, 0, 0);
-      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}) };
+      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}), ...(l.mask ? { mask: copyCanvas(l.mask) } : {}) };
     });
     renderLayers();
     draw();
@@ -163,7 +189,7 @@
       if (!l.visible) continue;
       vctx.globalAlpha = l.opacity;
       vctx.globalCompositeOperation = l.blend;
-      vctx.drawImage(l.canvas, l.x, l.y);
+      vctx.drawImage(shown(l), l.x, l.y);
     }
     vctx.globalAlpha = 1;
     vctx.globalCompositeOperation = "source-over";
@@ -276,6 +302,20 @@
     const l = active();
     if (!l || !strokePreview) return;
     remember(tool === "eraser" ? T("hEraser", "Eraser") : T("hBrush", "Brush"));
+    if (onMask && l.mask) {
+      // On a mask: the brush shows (white) and the eraser hides, as black and white paint on Photoshop's mask.
+      const g = l.mask.getContext("2d", { willReadFrequently: true });
+      g.save();
+      clipToSelection(g, l);
+      g.globalAlpha = +$("flow").value / 100;
+      g.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+      g.drawImage(strokePreview.canvas, -l.x, -l.y);
+      g.restore();
+      strokePreview = null;
+      renderLayers();
+      draw();
+      return;
+    }
     const ctx = l.ctx;
     ctx.save();
     clipToSelection(ctx, l);
@@ -403,6 +443,7 @@
       c.height = h;
       const ctx = c.getContext("2d", { willReadFrequently: true });
       ctx.drawImage(l.canvas, l.x - x, l.y - y);
+      if (l.mask) { const m = document.createElement("canvas"); m.width = w; m.height = h; m.getContext("2d", { willReadFrequently: true }).drawImage(l.mask, l.x - x, l.y - y); l.mask = m; }
       Object.assign(l, { canvas: c, ctx, x: 0, y: 0 });
     }
     doc.w = w;
@@ -471,8 +512,25 @@
       const del = document.createElement("button");
       del.textContent = "✕";
       del.onclick = (e) => { e.stopPropagation(); if (doc.layers.length > 1) { remember(T("deleteLayer", "Delete layer")); doc.layers.splice(i, 1); doc.active = Math.min(doc.active, doc.layers.length - 1); renderLayers(); draw(); } };
-      row.append(thumb, name, eye, up, down, del);
-      row.onclick = () => { doc.active = i; renderLayers(); };
+      const parts = [thumb];
+      if (l.mask) {
+        // The mask's own thumbnail: tap it to paint on the mask, tap the picture to paint on the pixels.
+        const mt = document.createElement("canvas");
+        mt.width = 80;
+        mt.height = 60;
+        const g = mt.getContext("2d");
+        g.fillStyle = "#000";
+        g.fillRect(0, 0, 80, 60);
+        g.drawImage(l.mask, 0, 0, 80, 60);
+        mt.className = `mask${i === doc.active && onMask ? " target" : ""}`;
+        mt.title = T("maskThumb", "The mask: white shows, clear hides. Tap to paint on it");
+        mt.onclick = (e) => { e.stopPropagation(); doc.active = i; onMask = true; renderLayers(); };
+        thumb.onclick = (e) => { e.stopPropagation(); doc.active = i; onMask = false; renderLayers(); };
+        if (i === doc.active && !onMask) thumb.classList.add("target");
+        parts.push(mt);
+      }
+      row.append(...parts, name, eye, up, down, del);
+      row.onclick = () => { if (doc.active !== i) onMask = false; doc.active = i; renderLayers(); };
       box.append(row);
     });
     const l = active();
@@ -480,6 +538,7 @@
       $("blend").value = l.blend;
       $("layerOpacity").value = String(Math.round(l.opacity * 100));
     }
+    $("maskTools").hidden = !l?.mask;
     $("docInfo").textContent = `${doc.w} × ${doc.h}`;
   }
   function move(i, dir) {
@@ -498,13 +557,53 @@
     draw();
   }
   $("addLayer").onclick = () => { remember(T("newLayer", "New layer")); addLayer(makeLayer(`${T("layer", "Layer")} ${doc.layers.length + 1}`)); };
+  // Add a mask: from the selection when there is one (only it shows), else showing all; a second press removes it.
+  $("maskLayer").onclick = () => {
+    const l = active();
+    if (!l) return;
+    if (l.mask) { onMask = true; renderLayers(); return; }
+    remember(T("hMask", "Add mask"));
+    l.mask = makeMask(l, !!selection);
+    onMask = true;
+    renderLayers();
+    draw();
+    msg(T("maskHint", "Painting on the mask now: the brush shows, the eraser hides. Tap the picture thumbnail to paint on it again."));
+  };
+  /** The active layer's mask tools: apply it into the pixels, invert it, or delete it. */
+  function maskDo(what) {
+    const l = active();
+    if (!l?.mask) return;
+    if (what === "apply") {
+      remember(T("hMaskApply", "Apply mask"));
+      const c = shown(l);
+      l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height);
+      l.ctx.drawImage(c, 0, 0);
+      delete l.mask;
+    } else if (what === "invert") {
+      remember(T("hMaskInvert", "Invert mask"));
+      const g = l.mask.getContext("2d", { willReadFrequently: true });
+      const d = g.getImageData(0, 0, l.mask.width, l.mask.height);
+      for (let i = 3; i < d.data.length; i += 4) { d.data[i] = 255 - d.data[i]; d.data[i - 1] = d.data[i - 2] = d.data[i - 3] = 255; }
+      g.putImageData(d, 0, 0);
+    } else {
+      remember(T("hMaskDelete", "Delete mask"));
+      delete l.mask;
+    }
+    if (!l.mask) onMask = false;
+    renderLayers();
+    draw();
+  }
+  $("maskApply").onclick = () => maskDo("apply");
+  $("maskInvert").onclick = () => maskDo("invert");
+  $("maskDelete").onclick = () => maskDo("delete");
+
   $("dupLayer").onclick = () => {
     const l = active();
     if (!l) return;
     remember(T("duplicate", "Duplicate layer"));
     const c = makeLayer(`${l.name} copy`, l.canvas.width, l.canvas.height);
     c.ctx.drawImage(l.canvas, 0, 0);
-    Object.assign(c, { opacity: l.opacity, blend: l.blend, x: l.x, y: l.y });
+    Object.assign(c, { opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.mask ? { mask: copyCanvas(l.mask) } : {}) });
     addLayer(c);
   };
   $("mergeDown").onclick = () => {
@@ -515,7 +614,7 @@
     below.ctx.save();
     below.ctx.globalAlpha = top.opacity;
     below.ctx.globalCompositeOperation = top.blend;
-    below.ctx.drawImage(top.canvas, top.x - below.x, top.y - below.y);
+    below.ctx.drawImage(shown(top), top.x - below.x, top.y - below.y);
     below.ctx.restore();
     doc.layers.splice(i, 1);
     doc.active = i - 1;
@@ -607,7 +706,7 @@
       if (!l.visible || l.guide) continue;
       x.globalAlpha = l.opacity;
       x.globalCompositeOperation = l.blend;
-      x.drawImage(l.canvas, l.x, l.y);
+      x.drawImage(shown(l), l.x, l.y);
     }
     return c;
   }

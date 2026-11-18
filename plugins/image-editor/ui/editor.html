@@ -135,9 +135,11 @@
             <input type="range" id="layerOpacity" min="0" max="100" value="100" aria-label="Opacity" />
           </div>
           <div class="layers" id="layers"></div>
+          <div class="row" id="maskTools" hidden><span class="muted small grow" data-t="maskH">Mask</span><button id="maskApply" data-t="maskApply">Apply</button><button id="maskInvert" data-t="maskInvert">Invert</button><button id="maskDelete" data-t="maskDelete">Delete</button></div>
           <div class="row layer-actions">
             <button id="addLayer" title="New layer">＋</button>
             <button id="dupLayer" title="Duplicate">⧉</button>
+            <button id="maskLayer" title="Layer mask: from the selection, or showing all">◐</button>
             <button id="mergeDown" title="Merge down">⤓</button>
             <button id="delLayer" title="Delete layer">🗑</button>
           </div>
