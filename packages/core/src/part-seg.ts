@@ -61,7 +61,11 @@ for flag, value in (("--point_num", "30000"), ("--prompt_num", "200"), ("--promp
         sys.argv += [flag, value]
 # mesh_sam() sets point_num = 100000 and prompt_num = 400 itself, whatever the flags say: a copy with those two lines
 # lowered runs instead (beside it, so its imports work), and is removed after.
-light = src.replace("point_num = 100000", "point_num = 30000").replace("prompt_num = 400", "prompt_num = 200")
+import re
+light, n1 = re.subn(r"\\bpoint_num\\s*=\\s*100000\\b", "point_num = 30000", src)
+light, n2 = re.subn(r"\\bprompt_num\\s*=\\s*400\\b", "prompt_num = 200", light)
+# Said in the log, so a run on the PC shows whether the lighter settings took.
+print(f"kesher: lighter run (points lowered in {n1} place(s), prompts in {n2})", flush=True)
 script = os.path.join(demo, "auto_mask_kesher.py")
 open(script, "w", encoding="utf-8").write(light)
 os.chdir(demo)
@@ -135,6 +139,9 @@ export class PartSegmenter {
     if (this.state.log.length > 300) this.state.log.splice(0, 100);
   }
 
+  /** Set by {@link cancel}, so the run's end is not shown as an error. */
+  private stopped = false;
+
   private run(cmd: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs = 60 * 60_000): Promise<string> {
     return new Promise((ok, fail) => {
       const p = spawn(cmd, args, { env, windowsHide: true });
@@ -159,6 +166,7 @@ export class PartSegmenter {
    */
   cancel(): boolean {
     if (this.state.phase !== "working" || !this.child) return false;
+    this.stopped = true;
     this.child.kill();
     this.add("Stopped by the user.");
     // The screen leaves "Splitting…" at once (the run's own end may take a moment to arrive).
@@ -242,9 +250,12 @@ export class PartSegmenter {
         Object.assign(this.state, { phase: undefined, message: `Split into ${new Set(r.faces.map((f) => f[3]).filter((l) => l >= 0)).size} parts.` });
         return r.faces;
       } catch (e) {
-        Object.assign(this.state, { phase: "error", message: (e as Error).message });
+        // Stopped by her: not an error on the screen.
+        if (this.stopped) Object.assign(this.state, { phase: undefined, message: "Stopped." });
+        else Object.assign(this.state, { phase: "error", message: (e as Error).message });
         throw e;
       } finally {
+        this.stopped = false;
         await rm(work, { recursive: true, force: true }).catch(() => undefined);
       }
     })();
