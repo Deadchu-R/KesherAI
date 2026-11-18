@@ -1123,6 +1123,13 @@ S5 an outside scanner's rules for Electron.
 - **Moed B, pass/fail, reading font, exam eve, card timer**: computed in the page or our own code from her numbers; the exam-eve checklist is kept in this browser only (a convenience).
 - **Formulas in a card's question**: the question now goes through the same RichText (KaTeX with its safe defaults, no raw HTML) as the answer already did.
 
+## Scan 142 (2026-11-18): the extension per site, publishing it from GitHub, load settings per model, exes
+- **Extension 0.2.6**: no sites at install (`optional_host_permissions`). `allow.html` asks only for an http(s) origin it checks with a pattern (built by background.js from the tab's own address, never from the app's command); "Not now" or no answer in two minutes stops the task with a plain error. The side panel asks for the site in front from the click. Tested in Chromium.
+- **Publishing from GitHub**: the service account has no Google Cloud roles; it can only act on this publisher's items in the Chrome Web Store (added there by Roee). Its JSON key lives only in the repository secret `CWS_SERVICE_ACCOUNT`; `scripts/google-token.mjs` signs a 10-minute JWT and prints only the access token, which the workflow masks (`::add-mask::`). The workflow runs on main and by hand only (not on pull requests, so no fork reaches the secrets), and has `contents: read` only. The status check printed the item's public key (public by design) and no secret.
+- **Load settings per model**: the fix keeps the engine's arguments cleaned for the build before a model's own go on top; arguments still only from the allowed list, checked on the server.
+- **Exes in the relationship analysis**: prompt text only; the report never advises contacting the other person.
+- No secret, email, user name or personal path in the changed files.
+
 ## Scan 141 (2026-11-18): slash commands, prompt fields, the icon, recovery from a broken answer, focus after dialogs, file previews
 - **Built-in slash commands** (`/compact`, `/fork`, `/new`, `/model`): run only from the chat box by the user; they call the existing routes (compact, branch, create, model switch), so no new access. `/model` takes only a name from KesherAI's own list.
 - **Prompt fields**: the `{{…}}` fields are filled into the text before sending; nothing is run or fetched from them. The form escapes nothing into HTML (React text only).
