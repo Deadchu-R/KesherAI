@@ -2383,3 +2383,35 @@ Each AI tool shows which local model it uses and offers to download it the first
 - Sources: ssims.co.uk "Mobile Browser Tab Switching and Affordance" (2023), gadgethacks "Swipe Chrome's address bar to
   switch tabs", PCWorld "6 great Chrome gestures for Android and iOS", connect.mozilla.org "Swipe between open tabs on iOS".
 - Stopped at: checking on the phone (remote) after the release.
+
+## The video editor's screen (UI/UX), in depth (2026-11-18, 15:20; before building it, as for the picture editor)
+- **One layout everywhere** (Premiere, Resolve's Cut and Edit pages, Final Cut, CapCut desktop, Clipchamp): the viewer on
+  top, the timeline across the bottom, media on one side and the inspector (the chosen clip's settings) on the other.
+  CapCut desktop puts the kinds of things to add as a rail of tabs over the media (Media, Audio, Text, Stickers,
+  Effects, Transitions, Captions, Filters, Adjust); Clipchamp the same as a left rail. Resolve's Cut page shows the
+  whole video as a thin strip over a zoomed timeline (no zooming by hand).
+- **The timeline**: video tracks over sound tracks, captions as their own track; a magnetic main track (Final Cut,
+  CapCut): deleting a clip closes the gap (ripple), pull it off to keep the gap. Snap to the playhead, to cuts and to
+  beat markers. Thumbnails on video clips, the waveform on sound.
+- **Keys everyone knows**: Space play, J/K/L back/stop/forward (twice = faster), I/O in and out, S or Ctrl+K split
+  (Premiere C = razor, Resolve B = blade), Q/W trim to the playhead (ripple), Delete / Shift+Delete (ripple),
+  ←/→ a frame, Shift+←/→ five frames, +/− zoom the timeline, Ctrl+Z.
+- **Phone (CapCut mobile, the model to follow; also VN, InShot)**: the preview on top, the timeline in the middle with
+  the playhead fixed in the centre while the clips slide under it, pinch to zoom the timeline, and a bottom bar that
+  changes with what is chosen: with nothing chosen it shows what to add (Edit, Audio, Text, Captions, Effects, Ratio),
+  with a clip chosen its tools (Split, Speed, Volume, Animation, Crop, Replace, Delete). Handles on the chosen clip to
+  trim; long press to reorder.
+- **Text-based editing** (Premiere, Descript): a transcript panel beside the viewer; selecting words selects that
+  stretch of video; deleting them cuts it; "remove filler words / pauses" in one press, with a list to review first.
+- **Where the AI sits in their screens**: captions are a tab with styles (CapCut) and become a track; Generative Extend
+  is dragging a clip's end past its last frame (Premiere); Resolve's AI tools are items on the clip's right-click menu
+  and the inspector; Descript's Underlord is a chat panel that edits. For KesherAI: the same task bar as the picture
+  editor under a marked stretch ("What to do here?": restyle, remove a thing, extend), the transcript tab, and the
+  chat beside it (Send to the chat).
+- For KesherAI's stage 1: viewer + timeline (video, sound, captions), magnetic main track, split/trim/delete/move,
+  speed and volume, the keys above, transcript with delete-to-cut, captions from speech (whisper), export by ffmpeg,
+  Send to the chat; the phone as CapCut mobile.
+- Sources: Engadget on DaVinci Resolve 20 (IntelliScript, SmartSwitch, beat markers), the 2026 round-ups of AI video
+  editors (firecut.ai, morphic.com, massive.io), plus the feature research above.
+- Stopped at: video screen done; next the sound editor's screen (Audition, RX, Descript, Logic on iPad) when there is a
+  wait again; then boards for both.
