@@ -167,18 +167,22 @@ export class LipSync {
   /**
    * Starts it (the avatar camera is on); resolves when it listens.
    *
-   * @param test - The self-test: MuseTalk's sample recording plays instead of the microphone.
+   * @param test - The self-test: MuseTalk's sample recording plays instead of the microphone (and, before her clip is
+   * recorded, on MuseTalk's sample face).
    */
   async start(test = false): Promise<void> {
     if (this.proc) return;
     const st = await this.status();
     const script = this.script();
     if (!st.installed || !script) throw Object.assign(new Error("Lip sync is not installed."), { statusCode: 409 });
-    if (!existsSync(this.clip)) throw Object.assign(new Error("Record the avatar clip first."), { statusCode: 409 });
     const mt = join(this.dir, "MuseTalk");
+    // The self-test before her own clip is recorded: MuseTalk's sample face, so she can see it work first.
+    const sample = join(mt, "data", "video", "sun.mp4");
+    const clip = existsSync(this.clip) ? this.clip : test && existsSync(sample) ? sample : undefined;
+    if (!clip) throw Object.assign(new Error("Record the avatar clip first."), { statusCode: 409 });
     await copyFile(script, join(mt, "kesher_lipsync.py"));
     this.port = 28700 + Math.floor(Math.random() * 200);
-    const args = ["kesher_lipsync.py", "--clip", this.clip, "--work", join(this.dir, "avatars"), "--port", String(this.port), "--token", this.token];
+    const args = ["kesher_lipsync.py", "--clip", clip, "--work", join(this.dir, "avatars"), "--port", String(this.port), "--token", this.token];
     if (st.cable) args.push("--cable", st.cable);
     if (st.mic) args.push("--mic", st.mic);
     if (test) {
@@ -208,7 +212,10 @@ export class LipSync {
       });
       p.on("exit", () => {
         clearTimeout(timer);
-        this.error = `Lip sync stopped: ${tail.trim().split("\n").slice(-2).join(" ").slice(0, 300)}`;
+        // A full graphics card (a big chat model loaded) is the common case: say what to do.
+        this.error = /out of memory|CUDA error: out|OutOfMemory/i.test(tail)
+          ? "The graphics card is full (a large model is loaded). Unload it on the Models page, or wait until it is free, then test again."
+          : `Lip sync stopped: ${tail.trim().split("\n").slice(-2).join(" ").slice(0, 300)}`;
         fail(new Error(this.error));
       });
     });
