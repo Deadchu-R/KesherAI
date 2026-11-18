@@ -2326,3 +2326,14 @@ Each AI tool shows which local model it uses and offers to download it the first
 3. Generative: "fix this line" in her voice, mark a stretch of music → redo / extend / replace in a style, a backing track from a melody.
 4. Later: paint on the spectrogram to remove a sound, session players, a repair assistant that suggests the chain.
 - Stopped at: sound done; next 3D in depth (Blender, Substance 3D, Meshy, Tripo, Spline, Rodin), then boards for video, sound and 3D for Roee.
+
+## The 3D editor, in depth (2026-11-18)
+**Commercial AI 3D in 2026**: Meshy 6 → 7.1 (image to 3D, geometry aligned to the picture) and Meshy Edit (lasso or brush a part + a sentence → a new version, the original kept), Meshy N1 texturing; Tripo P1/H3.1 → P2.0 (native 3D diffusion), Tripo Studio (AI parts, retopology to quads or low poly, AI textures and a magic brush, auto rigging with an animation library, Blender bridge) and its Agentic Canvas; Rodin Gen-2.5 with Agentic Mode and rigging edited by a prompt. **Substance 3D Painter 2026**: no AI in the painter itself; Warp to Geometry (decals on curved or holed surfaces), ribbon assets along a path, texture generators, OpenPBR. **Blender**: the full tool; AI arrives through add-ons (generation, textures, MCP bridges).
+**Open models that run on Roee's card (RTX 3090, 24 GB)**: Hunyuan3D 2.1 (shape + PBR textures, Tencent licence), TRELLIS.2 (a picture to a PBR mesh, MIT, about 24 GB), Pixal3D (MIT, single and multi view), Hi3D (refines a rough mesh with a reference picture); for the steps after: part segmentation (PartField-style), retopology (Instant Meshes / QuadriFlow), rigging (UniRig), textures (Hunyuan3D-Paint).
+
+**The plan**:
+1. The viewer (done in 0.6.369: turn, zoom, wireframe, triangles) → the editor: parts as a list (from the file's meshes), hide, colour or material per part, a light setup, measurements, export GLB/OBJ/FBX, Send to the chat, "open in Blender / Unreal / Unity" (KesherAI already drives Unreal and Unity).
+2. Plain AI: low poly / retopology, re-texture from words or a picture (Hunyuan3D-Paint), a picture of the model from any angle for the chat.
+3. Generative: a picture or words → a model (Hunyuan3D 2.1 or TRELLIS.2 in ComfyUI), mark a part → a sentence → a new version (as Meshy Edit: regenerate the part with the rest kept), auto rig.
+4. Later: an animation library to try a rigged model, 3D printing checks.
+- Stopped at: 3D done; all five editors researched in depth. Next: boards for video, sound and 3D (as the picture editor's), for Roee.
