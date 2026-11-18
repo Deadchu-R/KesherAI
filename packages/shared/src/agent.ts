@@ -133,7 +133,7 @@ export type AgentEvent = EventBase &
      * Older messages (before index `upTo` of the model messages) were too long
      * for the model and are sent as this summary instead. Nothing is deleted.
      */
-    | { type: "compacted"; upTo: number; summary: string }
+    | { type: "compacted"; upTo: number; summary: string; manual?: boolean }
     /** The message queue changed (not saved; the info that follows has the queue). */
     | { type: "queue" }
     /** The session may now read and change files under `path` (given by the user, or approved when the agent asked). */

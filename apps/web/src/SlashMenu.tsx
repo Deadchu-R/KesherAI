@@ -51,7 +51,15 @@ export interface AtOptions {
   onModel?: (id: string) => void;
 }
 
-type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> & { value: string; onValue: (v: string) => void; at?: AtOptions };
+/** A command the chat itself runs (`/compact`, `/fork`…), offered in the `/` menu before the saved prompts. */
+export interface SlashCommand {
+  command: string;
+  title: string;
+  /** It takes words after it (`/model qwen`): choosing it leaves the cursor after a space. */
+  arg?: boolean;
+}
+
+type Props = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange"> & { value: string; onValue: (v: string) => void; at?: AtOptions; commands?: SlashCommand[] };
 
 /** One line of the `@` menu. */
 interface AtItem { group: string; key: string; label: string; hint?: string; pick: () => void | Promise<void> }
@@ -78,7 +86,7 @@ export function atQuery(value: string): string | undefined {
  * A message box that offers the prompt library when the user types `/`:
  * arrows to choose, Enter or Tab to use one, Escape to close.
  */
-export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function PromptTextarea({ value, onValue, onKeyDown, at, ...rest }, outer) {
+export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function PromptTextarea({ value, onValue, onKeyDown, at, commands, ...rest }, outer) {
   const prompts = usePrompts();
   const ref = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(outer, () => ref.current!);
@@ -102,7 +110,12 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
       onValue(`${without()}[${L("דף", "Page")}: ${pg.title ?? pg.name ?? pg.id}]\n${text}${(page?.content?.length ?? 0) > 6000 ? "\n…" : ""}\n`);
     } })),
   ].filter((x) => !atTyped || x.label.toLowerCase().includes(atTyped)).filter((x, i, all) => all.slice(0, i).filter((y) => y.group === x.group).length < 4);
-  const open = typed !== undefined && !closed && (matches.length > 0 || prompts.length === 0);
+  // The chat's own commands first, then the saved prompts (as Open WebUI's and Claude Code's `/` menu).
+  const items: Array<{ key: string; command: string; title: string; builtin: boolean; pick: () => void }> = typed === undefined || closed ? [] : [
+    ...(commands ?? []).filter((c) => c.command.startsWith(typed)).map((c) => ({ key: `b:${c.command}`, command: c.command, title: c.title, builtin: true, pick: () => onValue(`/${c.command}${c.arg ? " " : ""}`) })),
+    ...matches.map((p) => ({ key: p.id, command: p.command, title: p.title, builtin: false, pick: () => applyPrompt(p) })),
+  ];
+  const open = typed !== undefined && !closed && (items.length > 0 || prompts.length === 0);
   const atOpen = atTyped !== undefined && !closed;
   useEffect(() => {
     setActive(0);
@@ -111,7 +124,7 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
     if (typed === undefined && atTyped === undefined) setClosed(false);
   }, [typed, atTyped]);
 
-  const use = (p: SavedPrompt) => {
+  const applyPrompt = (p: SavedPrompt) => {
     const at = p.text.indexOf("{{input}}");
     const next = at >= 0 ? p.text.replace("{{input}}", "") : `${p.text.trim()}\n\n`;
     caret.current = at >= 0 ? at : next.length;
@@ -131,14 +144,14 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
     <div className="slash-wrap">
       {open && (
         <div className="slash-menu" role="listbox" aria-label={L("פרומפטים שמורים", "Saved prompts")}>
-          {matches.map((p, i) => (
+          {items.map((p, i) => (
             <button
-              key={p.id}
+              key={p.key}
               type="button"
               role="option"
               aria-selected={i === active}
-              className={i === active ? "on" : ""}
-              onMouseDown={(e) => { e.preventDefault(); use(p); }}
+              className={`${i === active ? "on" : ""}${p.builtin ? " slash-builtin" : ""}`}
+              onMouseDown={(e) => { e.preventDefault(); p.pick(); }}
               onMouseEnter={() => setActive(i)}
             >
               <span className="slash-cmd" dir="ltr">/{p.command}</span>
@@ -192,15 +205,17 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
             setClosed(true);
             return;
           }
-          if (open && matches.length) {
+          if (open && items.length) {
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
-              setActive((a) => (a + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+              setActive((a) => (a + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
               return;
             }
-            if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+            // A command typed out in full runs on Enter (`/compact`), instead of being picked again from the menu.
+            const exact = items[active]!.builtin && value.trim() === `/${items[active]!.command}`;
+            if (((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") && !(exact && e.key === "Enter")) {
               e.preventDefault();
-              use(matches[active]!);
+              items[Math.min(active, items.length - 1)]!.pick();
               return;
             }
           }

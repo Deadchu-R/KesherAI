@@ -714,6 +714,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         ? { ...m, content: `${m.content.slice(0, Math.floor(cap * 0.65))}\n… [${m.content.length - Math.floor(cap * 0.95)} characters left out: too long for this model's context. Read the part you need (read_file with offset and limit, or search for it).] …\n${m.content.slice(-Math.floor(cap * 0.3))}` }
         : m,
     );
+    // "/compact": the user asked for the earlier part as a summary; it stays in use while the rest fits.
+    const pinned = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
+    if (pinned?.manual && pinned.upTo <= msgs.length && sizeOf(msgs.slice(pinned.upTo)) <= budget) {
+      return [{ role: "system", content: `${system.content}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${pinned.summary}` }, ...msgs.slice(pinned.upTo)];
+    }
     if (sizeOf(msgs) <= budget) return [system, ...msgs];
     // A long run inside one message (self-work, a big task) cannot be cut at a user message: shorten all but the last
     // tool output instead.
@@ -741,6 +746,32 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
     const recent = msgs.slice(cut);
     return [{ role: "system", content: `${this.systemPrompt}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${summary}` }, ...(sizeOf(recent) > budget * 0.8 ? shortenOldToolOutputs(recent, 1) : recent)];
+  }
+
+  /**
+   * "/compact" (as Claude Code and Open WebUI): everything before the last message of the user's becomes a summary the
+   * model reads instead, to free the context now rather than when it is full. The user still sees the whole chat.
+   *
+   * @returns The summary.
+   * @throws Error while the agent works, when there is nothing earlier to summarise, or when the model gives none.
+   */
+  async compactNow(): Promise<{ summary: string }> {
+    if (this.busy) throw new Error("Wait until the agent is done, then compact.");
+    const cut = this.messages.map((m, i) => (m.role === "user" ? i : -1)).filter((i) => i > 0).at(-1) ?? 0;
+    const last = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
+    if (cut <= 0 || (last && last.upTo >= cut)) throw new Error("There is nothing earlier to summarise yet.");
+    const from = last ? last.upTo : 0;
+    const earlier = last ? `Earlier summary:\n${last.summary}\n\nThen:\n` : "";
+    const budget = this.contextTokens * this.charsPerToken;
+    const r = await this.model(
+      { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(this.messages.slice(from, cut), Math.floor(budget * 0.8)) }], tools: [] },
+      AbortSignal.timeout(300_000),
+      () => undefined,
+    );
+    const summary = r.text.trim();
+    if (!summary) throw new Error("The model gave no summary. Try again.");
+    this.push({ type: "compacted", upTo: cut, summary, manual: true });
+    return { summary };
   }
 
   /**

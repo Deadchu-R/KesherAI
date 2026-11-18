@@ -70,7 +70,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
   - Part 1 done (RESEARCH_LOG): ✅ a plugin dev mode (development folders reload on save, Plugins → Development; `pnpm plugin:check`); ✅ the GitHub labels exist and CONTRIBUTING links them (2026-11-18); 👤 publishing small board tasks as issues (asks Roee first); ✅ a devcontainer and the 6 GB build note in CONTRIBUTING (2026-11-17); ✅ a safe development profile (`--data-dir`) in CONTRIBUTING (2026-11-17); ✅ hosted API docs (GitHub Pages workflow on every release, with a guard against personal paths; 2026-11-18). Part 2 done: ✅ undo per file in the run receipt (↶ on each file); ✅ per hunk (↶ on each change in Review, 2026-11-18); ✅ one review view of all a run's changes (Review, like Zed); ✅ follow the agent in the editor pane (👁 Follow in the workspace); per-change review stays the default.
 
 ## Proposed (2026-11-18, from the competitor look; Roee picks)
-- ⬜ Built-in slash commands beside saved prompts: /compact, /fork, /model, /new, /status (Open WebUI 0.11)
+- ✅ Built-in slash commands beside saved prompts: /compact, /fork, /model, /new, /status, /goal, /side, first in the `/` menu (Open WebUI 0.11; built 2026-11-18)
 - ⬜ Prompt fields: `{{name}}` and `{{tone:formal|casual}}` in a saved prompt open a small form before sending (Open WebUI chat variables)
 - ⬜ Previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (LM Studio Bionic 1.1.8–1.1.9)
 - ⬜ Engine arguments per model, not one set for all (LM Studio 0.4.24)

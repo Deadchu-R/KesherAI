@@ -2234,3 +2234,6 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   with a monochrome layer, copied in by CI) and a white status-bar icon for KesherAI's notifications, and BrandMark
   in the sidebar and the welcome screen (deeper colours on light themes through light-dark()).
 - Stopped at: built; the landing page's icon (roeetal.com/KesherAI/media/icon.svg) is in Roee's site repo.
+- Built (proposal 1): the chat's own `/` commands first in the `/` menu (accent colour) before saved prompts:
+  /compact (a summary on demand that the model keeps reading while the rest fits; `compactNow`), /fork (a copy from
+  the last message), /model (by part of the name), /new, and the existing /status, /goal, /side. Next: prompt fields.

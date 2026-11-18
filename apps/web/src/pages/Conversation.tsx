@@ -14,7 +14,7 @@ import { chatStatus, kTokens } from "../chat-status";
 import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
-import { PromptTextarea, expandSlash } from "../SlashMenu";
+import { PromptTextarea, expandSlash, type SlashCommand } from "../SlashMenu";
 import { SideChat } from "../chat/SideChat";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -522,7 +522,47 @@ export function ConversationPage({ id }: { id: string }) {
       setError((e as Error).message);
     }
   };
+  // The chat's own `/` commands (shown first in the `/` menu; Open WebUI 0.11 and Claude Code have the same).
+  const slashCommands: SlashCommand[] = [
+    { command: "compact", title: L("לסכם את החלק המוקדם ולפנות מקום בהקשר", "Summarise the earlier part to free the context") },
+    { command: "fork", title: L("להמשיך בעותק של הצ'אט מכאן", "Carry on in a copy of this chat from here") },
+    { command: "model", title: L("להחליף מודל (למשל /model qwen)", "Switch the model (e.g. /model qwen)"), arg: true },
+    { command: "new", title: L("צ'אט חדש", "A new chat") },
+    { command: "status", title: L("המודל, ההקשר והטוקנים עד עכשיו", "The model, the context and the tokens so far") },
+    { command: "goal", title: L("להמשיך עד שהמטרה הושגה", "Keep going until the goal is reached"), arg: true },
+    { command: "side", title: L("שאלה בצד, שלא נכנסת לצ'אט", "A question on the side that stays out of the chat"), arg: true },
+  ];
   const send = async () => {
+    // "/compact", "/fork", "/new" and "/model …": run here; nothing is sent to the model.
+    const cmd = /^\/(compact|fork|new|model)(?:\s+([\s\S]*))?$/i.exec(input.trim());
+    if (cmd) {
+      const name = cmd[1]!.toLowerCase();
+      const arg = (cmd[2] ?? "").trim();
+      setInput("");
+      setError("");
+      if (name === "new") {
+        location.hash = conv.kind === "code" ? "#/code" : "#/";
+      } else if (name === "fork") {
+        const seq = events.at(-1)?.seq;
+        if (seq) await branchAt(seq);
+      } else if (name === "compact") {
+        toast(L("מסכם את החלק המוקדם…", "Summarising the earlier part…"));
+        await api<{ summary: string }>(`/api/conversations/${id}/compact`, { method: "POST" }).then(
+          () => toast(L("סוכם. המודל קורא עכשיו את הסיכום ואת ההודעה האחרונה; כל השיחה נשארת כאן.", "Done. The model now reads the summary and the last message; the whole chat stays here.")),
+          (e: Error) => setError(e.message),
+        );
+      } else {
+        const options = modelOptions.filter((m) => !m.id.startsWith("agent/"));
+        const q = arg.toLowerCase();
+        const hit = q ? options.find((m) => (m.name || m.id).toLowerCase() === q) ?? options.find((m) => `${m.name} ${m.id}`.toLowerCase().includes(q)) : undefined;
+        if (!hit) toast(q ? L(`אין מודל בשם "${arg}". אפשר לבחור מהרשימה עם @.`, `No model called "${arg}". Pick one with @.`) : L("כתבו אחרי /model חלק מהשם, למשל /model qwen.", "Type part of a name after /model, e.g. /model qwen."));
+        else {
+          await patch({ modelId: hit.id });
+          toast(L(`עברנו ל-${shortModelName(hit.name || hit.id)}.`, `Switched to ${shortModelName(hit.name || hit.id)}.`));
+        }
+      }
+      return;
+    }
     // "/goal …": keep going until it is done (checked each time the agent stops); "/goal" alone stops it.
     const goal = /^\/goal(?:\s+([\s\S]*))?$/i.exec(input.trim());
     if (goal) {
@@ -989,6 +1029,7 @@ export function ConversationPage({ id }: { id: string }) {
               placeholder={conv.kind === "code" ? t("codePlaceholder") : t("messagePlaceholder")}
               aria-label={t("messagePlaceholder")}
               onValue={setInput}
+              commands={slashCommands}
               at={{ models: modelOptions.filter((m) => !m.id.startsWith("agent/")).map((m) => ({ id: m.id, name: shortModelName(m.name || m.id) })), onModel: (mid) => void patch({ modelId: mid }) }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {

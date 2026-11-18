@@ -711,3 +711,21 @@ test("one change of a file can be put back; the other change stays and Undo all 
   assert.deepEqual(await session.undoRun(r.run), { files: ["a.txt"], conflicts: [] });
   assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), lines);
 });
+
+test("/compact: the earlier part becomes a summary the model reads, while the user still sees everything", async () => {
+  const { session, seen } = await makeSession([{ text: "first answer" }, { text: "second answer" }, { text: "Summary: they said hello twice." }, { text: "third answer" }]);
+  await assert.rejects(session.compactNow(), /nothing earlier/);
+  session.send("hello one");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  session.send("hello two");
+  await new Promise<void>((resolve) => { const on = (e: AgentEvent) => { if (e.type === "status" && e.status === "idle") { session.off("event", on); resolve(); } }; session.on("event", on); });
+  assert.deepEqual(await session.compactNow(), { summary: "Summary: they said hello twice." });
+  assert.ok(session.events.some((e) => e.type === "compacted" && e.manual === true));
+  await assert.rejects(session.compactNow(), /nothing earlier/);
+  session.send("hello three");
+  await new Promise<void>((resolve) => { const on = (e: AgentEvent) => { if (e.type === "status" && e.status === "idle") { session.off("event", on); resolve(); } }; session.on("event", on); });
+  const last = seen.at(-1)!;
+  assert.match(String(last.messages[0]?.content), /Summary: they said hello twice\./);
+  assert.ok(!last.messages.some((m) => m.role === "user" && m.content === "hello one"));
+  assert.ok(last.messages.some((m) => m.role === "user" && m.content === "hello three"));
+});

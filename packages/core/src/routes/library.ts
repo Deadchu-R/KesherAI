@@ -685,6 +685,19 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /** "/compact": the earlier part of the chat as a summary for the model, now. */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/compact", async (req, reply) => {
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    try {
+      const r = await opened.session.compactNow();
+      await s.conversations.saveNow(req.params.id);
+      return r;
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   /** What the model reads on its next turn: system prompt, tools, messages, with sizes. */
   app.get<{ Params: { id: string } }>("/api/conversations/:id/context", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);

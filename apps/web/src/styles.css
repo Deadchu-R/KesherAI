@@ -900,6 +900,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .slash-menu button { display: flex; gap: 12px; align-items: baseline; justify-content: flex-start; text-align: start; border: 0; background: transparent; padding: 8px 10px; border-radius: calc(8px * var(--r-scale, 1)); }
 .slash-menu button.on { background: var(--raised); }
 .slash-cmd { font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+.slash-builtin .slash-cmd { color: var(--accent); }
 .slash-empty { padding: 8px 10px; }
 
 /* Context explorer */
