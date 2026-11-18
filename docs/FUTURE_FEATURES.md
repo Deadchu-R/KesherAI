@@ -85,6 +85,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ The extension asks for a site only when a task needs it (`optional_host_permissions` + `permissions.request`), instead of `<all_urls>` at install: safer, and the Chrome Web Store reviews it faster (its warning on the first submission, 2026-11-18) — extension 0.2.6: a small window asks per site, "Allow on all sites" in the popup; tested in Chromium
 
 ## Waiting on the owner 👤
+- 👤 Google sign-in for email invites to shared projects (saved for later, 2026-11-18; about 3 minutes): Google Cloud → project KesherAI (kesherai-514019) → APIs & Services → Credentials → Create credentials → OAuth client ID (if asked: consent screen External, name KesherAI, his email) → type "TVs and Limited Input devices", name "KesherAI guests" → copy the Client ID and secret into KesherAI (⇪ on a project → "Set up sign-in with Google"), never into a chat. Until then, one-time links with a name work.
 - 👤 SignPath application and 2FA (signed installer)
 - 👤 The extension in the Edge and Firefox stores
 - 👤 OneDrive app ID
