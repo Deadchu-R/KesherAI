@@ -1364,3 +1364,16 @@ S5 an outside scanner's rules for Electron.
 - **Performance**: a masked layer is composed into a temporary canvas on each redraw (fine at a few layers; a cache is on
   the list if painting over many masked layers feels slow); painting on the model updates one 1024² texture per move.
 - Checked: lint, typecheck, tests (video-cut 7, part-seg 4), browser runs of every editor's new tools with a stub host.
+
+## Scan 151 (2026-11-18): tap select (SAM), the 3D task bar, the Blender round trip, expand with AI, four views
+- **Tap select**: the point reaches Python only when both numbers are whole and 0–99 999, and only through JSON in an
+  argument (no shell); `sam` is one of the fixed models; the download of SAM is named in the setup's question.
+- **3D task bar**: the chat model's answer is data: parsed as JSON, then only known keys are used, the colour must match
+  `^#[0-9a-f]{6}$`, numbers are clamped to 0–1, the texture words are cut to 200 characters; nothing it says is run.
+- **Blender round trip**: only Blender found where it installs (Program Files\Blender Foundation, /Applications, the
+  PATH) is started, with a fixed script; the file goes in `KESHER_GLB`, never into the script; the file must be a .glb
+  in the plugin's own folder (`okName`, now with .glb). The 3D editor asks for the plugin "filesystem" permission, which
+  is only that folder. Blender gets the app's environment, as any program the user starts.
+- **Expand with AI, four views**: in the pages only.
+- Checked: lint, typecheck, tests (open-in-app, bg-remove, part-seg), the Blender script with Blender 5.0.1's bpy, the
+  pages' new tools in a browser with stub hosts.
