@@ -63,7 +63,7 @@ export class BgRemover {
 
   private get env(): NodeJS.ProcessEnv {
     // The models are kept in the engine's folder, not in the user's home.
-    return { ...process.env, UV_PYTHON_INSTALL_DIR: join(this.dir, "python"), UV_CACHE_DIR: join(this.dir, "uv-cache"), U2NET_HOME: join(this.dir, "models"), PYTHONIOENCODING: "utf-8" };
+    return { ...process.env, UV_PYTHON_INSTALL_DIR: join(this.dir, "python"), UV_CACHE_DIR: join(this.dir, "uv-cache"), U2NET_HOME: join(this.dir, "models"), PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" };
   }
 
   private run(cmd: string, args: string[], timeoutMs = 30 * 60_000): Promise<void> {

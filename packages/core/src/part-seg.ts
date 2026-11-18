@@ -197,7 +197,7 @@ export class PartSegmenter {
       try {
         await writeFile(join(work, "in.glb"), glb);
         const paths = JSON.parse(await readFile(join(this.dir, "paths.json"), "utf8")) as { code: string; ckpt?: string };
-        const env = { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONIOENCODING: "utf-8" };
+        const env = { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" };
         await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ code: paths.code, ckpt: paths.ckpt ?? null, mesh: join(work, "in.glb"), out: join(work, "out"), sonata: join(this.dir, "sonata") })], env, 20 * 60_000);
         const r = JSON.parse(await readFile(join(work, "out", "parts.json"), "utf8")) as { faces: Array<[number, number, number, number]> };
         Object.assign(this.state, { phase: undefined, message: `Split into ${new Set(r.faces.map((f) => f[3]).filter((l) => l >= 0)).size} parts.` });
