@@ -3844,3 +3844,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .project-row:hover .project-share-btn, .project-share-btn:focus-visible { opacity: 1; }
 .project-share { width: min(560px, calc(100vw - 16px)); max-height: calc(100vh - 32px); overflow: auto; }
 .project-share-person { padding: 8px 10px; gap: 8px; align-items: center; }
+
+/* Godot: the project's scenes for the stand-in, as buttons that wrap on a phone. */
+.standin-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.standin-scenes .button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
