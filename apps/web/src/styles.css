@@ -82,6 +82,19 @@ button.primary:hover { background: var(--accent); filter: brightness(1.08); }
 button > .glyph:first-child, .btn > .glyph:first-child { margin-inline-end: 6px; }
 .retry-btn { display: inline-flex; align-items: center; }
 button:disabled { opacity: 0.5; cursor: default; }
+/* A label or a link that acts as a button (a file chooser, "open"): the same look. It had none, so "📷 All my courses
+   from a photo" in the Study setup read as plain text (found testing a fresh profile, 2026-11-18). */
+.button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 14px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--panel-2); color: var(--text);
+  font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; transition: background-color .12s, border-color .12s;
+}
+@media (pointer: coarse) { .button { min-height: 40px; } }
+.button:hover { border-color: rgb(255 255 255 / 0.2); background: var(--raised); }
+.button.primary { background: var(--accent); color: var(--accent-ink); border: none; font-weight: 600; }
+.button.primary:hover { background: var(--accent); filter: brightness(1.08); }
+.button.disabled { opacity: 0.5; cursor: default; pointer-events: none; }
+.button:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 input, select, textarea {
   height: 40px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
   background: var(--bg); color: var(--text); font: inherit; font-size: 14px;
@@ -3188,7 +3201,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .study-welcome-opts { display: flex; flex-wrap: wrap; gap: 6px; }
 .study-welcome-opts button { padding: 5px 13px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; }
 .study-welcome-opts button.on, .study-welcome-choice.on { border-color: var(--accent); color: var(--accent); }
-.study-welcome-choice { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong); background: transparent; }
+.study-welcome-choice { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: start; padding: 10px 12px; height: auto; min-height: 56px; border-radius: 12px; border: 1px solid var(--border-strong); background: transparent; }
 .study-welcome-choice b { color: inherit; }
 .study-more { margin: 8px 0; }
 .study-more > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
@@ -3723,3 +3736,5 @@ div.slide-list { padding-inline-start: 0; }
 .cr-steps li { display: flex; gap: 8px; align-items: baseline; }
 .cr-steps li.next { opacity: .55; }
 .cr-steps li.now { font-weight: 600; }
+/* A heading focused by the page (a new wizard step, for screen readers) shows no ring to a mouse or finger user. */
+h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-visible), h3[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }

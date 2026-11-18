@@ -38,8 +38,10 @@ export function useModelStatus(on = true): [ModelStatus | null, () => void] {
       const active = settings.activeModels?.chat;
       const ready = !!dicta || !!active;
       const rank = (r?: string) => (r === "good" ? 0 : r === "ok" ? 1 : 9);
-      const pick = [...rec].filter((m) => !m.downloaded && rank(m.estimate?.rating) < 9).sort((a, b) => rank(a.estimate?.rating) - rank(b.estimate?.rating) || b.sizeGb - a.sizeGb)[0];
       const dictaOffer = rec.find((m) => m.id === "dictalm-12b" && !m.downloaded && rank(m.estimate?.rating) < 9);
+      // A Hebrew student with no model yet: Dicta's Hebrew model first, when it runs here (a fresh profile was offered
+      // gpt-oss 20B, 12 GB, while DictaLM 12B is smaller and writes far better Hebrew; 2026-11-18).
+      const pick = (getLocale() === "he" ? dictaOffer : undefined) ?? [...rec].filter((m) => !m.downloaded && rank(m.estimate?.rating) < 9).sort((a, b) => rank(a.estimate?.rating) - rank(b.estimate?.rating) || b.sizeGb - a.sizeGb)[0];
       const stt = kinds?.["speech-to-text"];
       setSt({
         chat: { ready, ...(dicta || active ? { name: dicta?.name ?? active!.split("/").pop()! } : {}), hebrew: !!dicta },
@@ -79,7 +81,7 @@ function ModelCheck({ st, reload }: { st: ModelStatus | null; reload: () => void
           </>
         ) : st.suggest ? (
           <>
-            <span className="small">{L(`מוצע: ${st.suggest.name} · ‏${st.suggest.sizeGb}GB. ירוץ טוב במחשב הזה.`, `Suggested: ${st.suggest.name} · ${st.suggest.sizeGb} GB. It runs well on this computer.`)}</span>
+            <span className="small">{/dictalm/i.test(st.suggest.id) ? L(`מוצע: ${st.suggest.name} של דיקטה, הכי טוב בעברית · ‏${st.suggest.sizeGb}GB. ירוץ טוב במחשב הזה.`, `Suggested: Dicta's ${st.suggest.name}, the best in Hebrew · ${st.suggest.sizeGb} GB. It runs well on this computer.`) : L(`מוצע: ${st.suggest.name} · ‏${st.suggest.sizeGb}GB. ירוץ טוב במחשב הזה.`, `Suggested: ${st.suggest.name} · ${st.suggest.sizeGb} GB. It runs well on this computer.`)}</span>
             <button type="button" disabled={started.includes("chat")} onClick={() => void start("chat", `/api/models/recommended/${st.suggest!.id}/run`)}>{started.includes("chat") ? L("✓ יורד ברקע", "✓ Downloading") : L(`⬇ להוריד (${st.suggest.sizeGb}GB)`, `⬇ Download (${st.suggest.sizeGb} GB)`)}</button>
           </>
         ) : (
@@ -115,7 +117,7 @@ function DownloadButton({ url, sizeGb, onStarted }: { url: string; sizeGb: numbe
  * (models), and the first lecture. Every step can be skipped (it stays on the "Getting started" list); the step is
  * saved, so leaving and coming back resumes there. The goal, the phone and the view are on the list afterwards.
  */
-export function StudyWelcome({ prefs, onPrefs, onSkip }: { prefs: StudyPrefs; onPrefs: (p: StudyPrefs) => void; onSkip: () => void }) {
+export function StudyWelcome({ prefs, onPrefs, onSkip, onDone }: { prefs: StudyPrefs; onPrefs: (p: StudyPrefs) => void; onSkip: () => void; onDone?: () => void }) {
   const [step, setStepState] = useState(prefs.setupStep);
   const [field, setField] = useState(prefs.field ?? "");
   const [year, setYear] = useState(prefs.year ?? 0);
@@ -181,8 +183,9 @@ export function StudyWelcome({ prefs, onPrefs, onSkip }: { prefs: StudyPrefs; on
     await save({ simple: true, welcomed: true, setupStep: 0 });
     setBusy(false);
     const first = courses[0];
-    if (!first) { location.hash = "#/study"; return; }
-    if (to === "later") { location.hash = "#/study"; return; }
+    // Staying on Study's home: its course list is reloaded (the hash does not change, so nothing else would; a fresh
+    // profile ended on the empty "how it works" page with its new course missing, 2026-11-18).
+    if (!first || to === "later") { onDone?.(); location.hash = "#/study"; return; }
     location.hash = to === "record" ? `#/study/${first.id}?record=1` : `#/study/${first.id}`;
   };
   const total = SETUP_STEPS.length;

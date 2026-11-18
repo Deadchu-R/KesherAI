@@ -203,7 +203,7 @@ function StudyHome() {
     return (
       <div className="page study-page">
         <h1>{L("לימודים", "Study")}</h1>
-        <StudyWelcome prefs={prefs} onPrefs={setPrefs} onSkip={() => { setPrefs({ ...prefs, welcomed: true }); void api("/api/study/prefs", { method: "PUT", body: { welcomed: true } }).catch(() => undefined); }} />
+        <StudyWelcome prefs={prefs} onPrefs={setPrefs} onDone={load} onSkip={() => { setPrefs({ ...prefs, welcomed: true }); void api("/api/study/prefs", { method: "PUT", body: { welcomed: true } }).catch(() => undefined); }} />
       </div>
     );
   }
