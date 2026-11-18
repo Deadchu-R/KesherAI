@@ -32,6 +32,13 @@ export type ModelTurn = (
   onText: (delta: string) => void,
 ) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number } }>;
 
+/**
+ * A local server (llama.cpp) refusing the model's whole answer because a tool call in it was not in the model's own
+ * format ("The model produced output that does not match the expected peg-native format"; seen after
+ * many web searches in one chat). Asking again usually works.
+ */
+const BROKEN_FORMAT = /does not match the expected [\w-]+ format|failed to parse (?:the )?(?:tool call|model output)/i;
+
 /** A helper model, already resolved to something the session can call. */
 export interface TeamMember {
   role: TeamRole;
@@ -522,6 +529,27 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * After the server rejected a malformed answer: ask the same thing once more, and if it breaks again, ask for a
+   * plain answer without tools from what the steps already found (so the chat ends with an answer, not an error).
+   *
+   * @param conversation - What was sent.
+   * @param signal - Stops it with the session.
+   * @param onText - Streams the new answer.
+   * @returns The model's turn.
+   */
+  private async recoverBrokenFormat(conversation: AgentMessage[], signal: AbortSignal, onText: (delta: string) => void): ReturnType<ModelTurn> {
+    this.push({ type: "note", text: "The model wrote a step in a broken format; KesherAI asked it again." });
+    try {
+      return await this.model({ messages: conversation, tools: this.specs() }, signal, onText);
+    } catch (again) {
+      if (!BROKEN_FORMAT.test((again as Error).message) || signal.aborted) throw again;
+    }
+    this.push({ type: "note", text: "It broke again, so it answers from what it already found, without more steps." });
+    const plain: AgentMessage = { role: "user", content: "[KesherAI] Your last reply could not be read (a tool call in a broken format). Do not call tools now: answer the user in plain text from what you already found." };
+    return await this.model({ messages: [...conversation, plain], tools: [] }, signal, onText);
+  }
+
+  /**
    * Asks a teammate model (no tools) and shows its answer in the chat.
    *
    * @param member - The teammate.
@@ -925,6 +953,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
               }
             }
             result = result!;
+          } else if (BROKEN_FORMAT.test((err as Error).message) && !abort.signal.aborted) {
+            result = await this.recoverBrokenFormat(conversation, abort.signal, onText);
           } else
           // Many local models reject the `tools` field. Retry once without tools.
           if (!this.toolsUnsupported && /tool|function/i.test((err as Error).message) && !abort.signal.aborted) {

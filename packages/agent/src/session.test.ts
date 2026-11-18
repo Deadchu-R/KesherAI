@@ -729,3 +729,24 @@ test("/compact: the earlier part becomes a summary the model reads, while the us
   assert.ok(!last.messages.some((m) => m.role === "user" && m.content === "hello one"));
   assert.ok(last.messages.some((m) => m.role === "user" && m.content === "hello three"));
 });
+
+test("a server refusing a malformed tool call: asked again, then answered without tools", async () => {
+  const broken = new Error("The model produced output that does not match the expected peg-native format");
+  for (const failures of [1, 2]) {
+    const seen: Array<Parameters<ModelTurn>[0]> = [];
+    let n = 0;
+    const model: ModelTurn = async (req) => {
+      seen.push(structuredClone(req));
+      if (n++ < failures) throw broken;
+      return { text: "Boeing 787", toolCalls: [] };
+    };
+    const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+    const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+    session.send("which planes?");
+    const answer = await waitFor(session, (e) => e.type === "assistant");
+    assert.equal((answer as { text: string }).text, "Boeing 787");
+    assert.equal(seen.length, failures + 1);
+    assert.equal(seen.at(-1)!.tools.length === 0, failures === 2, "the last try has no tools only after two breaks");
+    assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
+  }
+});
