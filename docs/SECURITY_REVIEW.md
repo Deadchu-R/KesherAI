@@ -1332,3 +1332,21 @@ S5 an outside scanner's rules for Electron.
 - **3D editor**: modifiers, split and choose-by-click work on geometry in the sandboxed page only; neighbours are worked
   out once per geometry and kept; a texture is read from a data URL into an `Image`, never fetched.
 - Checked: lint, typecheck, 902 tests; the texture round trip, split and choose-by-click checked in a browser.
+
+## Scan 149 (2026-11-18): texture from words, the parts engine (P3-SAM), PBR slots, noise clean-up, shot changes
+- **Parts engine (`/api/part-seg`)**: owner only (a guest key reaches only `/api/guest/`; plugin pages cannot fetch, and
+  `model.parts.setup` asks before installing). Programs run with `spawn` and an argument list, never a shell; the mesh is
+  checked to be a GLB (magic bytes, ≤ 200 MB) and written to a random folder under `engines/p3sam/work`, removed after.
+  One job at a time (409 while busy); every run has a timeout. **Known risk, accepted by Roee:** the setup downloads and
+  runs Tencent's Hunyuan3D-Part code from its Hugging Face Space (its latest version, not pinned) and the PyG / PyTorch
+  wheels; it runs in its own venv, with the app's user rights. Pinning a Space revision is on the list.
+- **`video.scenes` / `POST …/files/scenes`**: the path goes through `resolveInWorkspace` and must be a video; the
+  threshold is clamped to 0.05–0.9 and written with `toFixed`, so nothing else reaches FFmpeg's filter; `execFile`, no
+  shell. **Fixed in this scan:** it decodes the whole video, so it is now one at a time (429), like cutting.
+- **PBR slots**: the slot coming back from the image editor must match `^\d+:(map|roughnessMap|normalMap)$`, so a hand-off
+  cannot set any other material property. Roughness / normal are made in the page from pixels only.
+- **Noise clean-up**: in the page only (no bridge, no network); a minute of sound in about 0.3 s.
+- **Performance:** the clean-up runs on the page's thread with a busy sign (a 10-minute recording takes a few seconds);
+  moving it to a worker is on the list if it is felt.
+- Checked: lint, typecheck, tests (video-cut: scene times), the scene finder on a real 3-shot video, the clean-up on a
+  noisy tone (noise −9 dB, tone unchanged), the normal and roughness maps' directions in a browser.

@@ -52,6 +52,8 @@ async function listFiles(root: string): Promise<ConversationFile[]> {
  */
 export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   let cutting = false;
+  // Finding shot changes decodes the whole video, so one at a time too.
+  let scanning = false;
   const folderOf = async (id: string): Promise<string | undefined> => {
     const c = await s.library.getConversation(id);
     return c ? s.conversations.workspaceOf(c) : undefined;
@@ -147,10 +149,14 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     }
     if (!/\.(mp4|webm|mov|m4v|mkv)$/i.test(full) || !(await stat(full).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "Video not found" });
     const th = Number(req.body?.threshold);
+    if (scanning) return reply.code(429).send({ error: "Another video is being scanned; try again when it is done." });
+    scanning = true;
     try {
       return { times: await findScenes(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, Number.isFinite(th) ? th : 0.3) };
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
+    } finally {
+      scanning = false;
     }
   });
 
