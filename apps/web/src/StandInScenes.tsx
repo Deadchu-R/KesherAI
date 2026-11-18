@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
@@ -39,6 +39,13 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
   const remembered = () => { try { return localStorage.getItem(key) ?? ""; } catch { return ""; } };
   const [project, setProject] = useState(remembered() || connectedProject || "");
   const [scenes, setScenes] = useState<string[] | null>(null);
+  // The engine's projects found on the computer (its own project list, Unity Hub, the usual folders): one tap shows
+  // their scenes, instead of typing a folder each time (asked 2026-11-18); a folder can still be typed below.
+  const [found, setFound] = useState<Array<{ name: string; path: string; engine?: string }> | null>(null);
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    void api<{ projects: Array<{ kind: string; name: string; path: string; engine?: string }> }>("/api/game-projects").then((r) => setFound(r.projects.filter((p) => p.kind === engine)), () => setFound([]));
+  }, [engine]);
   const list = (dir: string) => {
     if (!dir.trim()) return;
     try { localStorage.setItem(key, dir); } catch { /* private window: only remembered for next time */ }
@@ -52,11 +59,24 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
     <section className="card">
       <strong>{L(`סצנה בלי ${e.name}`, `A scene without ${e.name}`)}</strong>
       <p className="small muted">{L(e.how[0], e.how[1])}</p>
+      {found && found.length > 0 && (
+        <div className="standin-projects" role="list" aria-label={L("הפרויקטים במחשב", "Projects on the computer")}>
+          {found.map((p) => (
+            <button key={p.path} type="button" role="listitem" className={p.path === project ? "on" : ""} title={p.path} onClick={() => { setProject(p.path); list(p.path); }}>
+              <b dir="auto">{p.name}</b>{p.engine && <span className="muted small" dir="ltr">{p.engine}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {found && !found.length && <p className="muted small">{isRemote() ? L(`לא מצאתי פרויקטים של ${e.name} במחשב. פתח אחד במחשב פעם אחת, והוא יופיע כאן.`, `No ${e.name} projects found on the computer. Open one there once and it shows here.`) : L(`לא מצאתי פרויקטים של ${e.name} במחשב. אפשר לכתוב תיקייה:`, `No ${e.name} projects found on the computer. Type a folder:`)}</p>}
+      {/* From the phone only the projects found on the computer (the server checks too); a folder by path is for the computer. */}
+      {isRemote() ? null : found && found.length > 0 && !typing ? <button type="button" className="link small" onClick={() => setTyping(true)}>{L("תיקייה אחרת…", "Another folder…")}</button> : (
       <div className="row wrap">
         <input className="grow" dir="ltr" value={project} onChange={(ev) => setProject(ev.target.value)} placeholder={L(e.folder[0], e.folder[1])} aria-label={L("תיקיית הפרויקט", "The project folder")} style={{ minWidth: 0 }} />
         {desktop() && !isRemote() && <button type="button" onClick={() => void pick()}>{L("בחירה…", "Pick…")}</button>}
         <button type="button" className="primary" onClick={() => list(project)}>{L("הצג סצנות", "Show scenes")}</button>
       </div>
+      )}
       {scenes && (scenes.length ? (
         <div className="standin-scenes">
           {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={e.open(project, sc)}>{e.label(sc)}</a>)}

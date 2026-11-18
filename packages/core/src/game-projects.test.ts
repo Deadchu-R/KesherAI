@@ -28,6 +28,28 @@ test("Unity and Unreal projects on the computer are found for a chat", async () 
   }
 });
 
+test("Godot projects: the project manager's list and the usual folders, with their Godot version", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kesher-home-"));
+  const listed = join(home, "Games", "Deep", "Platformer");
+  await mkdir(listed, { recursive: true });
+  await writeFile(join(listed, "project.godot"), 'config_version=5\n[application]\nconfig/features=PackedStringArray("4.6", "Forward Plus")\n');
+  const usual = join(home, "Projects", "Puzzle");
+  await mkdir(usual, { recursive: true });
+  await writeFile(join(usual, "project.godot"), "config_version=5\n");
+  const cfg = join(home, ".local", "share", "godot");
+  await mkdir(cfg, { recursive: true });
+  await writeFile(join(cfg, "projects.cfg"), `[${listed.split("\\").join("/")}]\n\nfavorite=false\n\n[${join(home, "Gone").split("\\").join("/")}]\n\nfavorite=false\n`);
+  const old = process.env.APPDATA;
+  process.env.APPDATA = join(home, "nope");
+  try {
+    const found = (await findGameProjects({ home })).filter((p) => p.kind === "godot");
+    assert.deepEqual(found.map((p) => `${p.name}:${p.engine ?? ""}`).sort(), ["Platformer:Godot 4.6", "Puzzle:"]);
+  } finally {
+    if (old === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = old;
+  }
+});
+
 test("scripts are found by name in the chat's folders, skipping generated ones", async () => {
   const root = await mkdtemp(join(tmpdir(), "kesher-scripts-"));
   await mkdir(join(root, "Assets", "Scripts"), { recursive: true });

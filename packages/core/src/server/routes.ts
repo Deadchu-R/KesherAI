@@ -184,6 +184,27 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   await godotRoutes(app, services);
+  // From the phone (remote), a scene's project must be one found on this computer (its engine's project list or the
+  // usual folders): a folder typed by path is for this computer only (the stand-in's projects menu, 2026-11-18).
+  {
+    const { findGameProjects } = await import("../game-projects.js");
+    const { isLocalRequest } = await import("../request-origin.js");
+    const { resolve: resolvePath, dirname: dirOf } = await import("node:path");
+    let cache: { at: number; paths: Set<string> } | undefined;
+    const known = async () => {
+      if (!cache || Date.now() - cache.at > 60_000) {
+        const godotFile = services.godot.status().editor?.projectFile;
+        const list = await findGameProjects({ unity: (await services.unity.status().catch(() => ({ projects: [] as string[] }))).projects, ...(godotFile ? { godot: [dirOf(godotFile)] } : {}) });
+        cache = { at: Date.now(), paths: new Set(list.map((p) => p.path.toLowerCase())) };
+      }
+      return cache.paths;
+    };
+    app.addHook("preHandler", async (req, reply) => {
+      if (!/^\/api\/(godot\/(scenes?|asset)|unity\/(scenes?|asset))(\?|$)/.test(req.url) || isLocalRequest(req)) return;
+      const raw = String((req.query as { project?: unknown })?.project ?? (req.body as { project?: unknown } | undefined)?.project ?? "").replace(/[\\/]project\.godot$/i, "");
+      if (!raw || !(await known()).has(resolvePath(raw).toLowerCase())) return reply.code(403).send({ error: "From the phone, choose one of the projects found on the computer." });
+    });
+  }
   // A Godot scene without Godot: read it, and write the moves made in KesherAI back into its .tscn.
   await godotSceneRoutes(app, services.godot);
   await unitySceneRoutes(app);

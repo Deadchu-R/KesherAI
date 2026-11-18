@@ -3,7 +3,7 @@ import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { createReadStream, existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
@@ -595,7 +595,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
    * project (its tools work on it through the CLI), an Unreal project is opened to the chat's file tools
    * and the Blueprint tools; any other folder is opened to the file tools. Only on this computer.
    */
-  const gameProjects = async () => findGameProjects({ unity: (await s.unity.status().catch(() => ({ projects: [] as string[] }))).projects, ...(s.unreal.projectFile ? { unrealFile: s.unreal.projectFile } : {}) });
+  const gameProjects = async () => {
+    const godotFile = s.godot.status().editor?.projectFile;
+    return findGameProjects({ unity: (await s.unity.status().catch(() => ({ projects: [] as string[] }))).projects, ...(s.unreal.projectFile ? { unrealFile: s.unreal.projectFile } : {}), ...(godotFile ? { godot: [dirname(godotFile)] } : {}) });
+  };
   /** The Unity and Unreal projects found on this computer, to add to a chat (also from the phone). */
   app.get("/api/game-projects", async () => ({ projects: await gameProjects() }));
 

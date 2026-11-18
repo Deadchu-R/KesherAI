@@ -6,13 +6,35 @@ import { readProject } from "./unreal-install.js";
 
 /** A Unity or Unreal project found on this computer. */
 export interface GameProject {
-  kind: "unity" | "unreal";
+  kind: "unity" | "unreal" | "godot";
   name: string;
   path: string;
   engine?: string;
 }
 
 const isUnity = (dir: string) => existsSync(join(dir, "Assets")) && existsSync(join(dir, "ProjectSettings"));
+
+const isGodot = (dir: string) => existsSync(join(dir, "project.godot"));
+
+/**
+ * The Godot project manager's list (projects.cfg: one `[path]` section per project), on Windows, macOS and Linux.
+ *
+ * @param home - The home folder.
+ * @returns The projects' folders.
+ */
+export async function godotManagerProjects(home: string): Promise<string[]> {
+  const files = [
+    join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "Godot", "projects.cfg"),
+    join(home, "Library", "Application Support", "Godot", "projects.cfg"),
+    join(home, ".local", "share", "godot", "projects.cfg"),
+  ];
+  const out: string[] = [];
+  for (const f of files) {
+    const raw = await readFile(f, "utf8").catch(() => "");
+    for (const m of raw.matchAll(/^\[(.+)\]\s*$/gm)) out.push(resolve(m[1]!));
+  }
+  return out;
+}
 
 /** Unity Hub's list of projects (Windows, macOS, Linux). */
 async function unityHubProjects(home: string): Promise<GameProject[]> {
@@ -46,7 +68,7 @@ async function unityHubProjects(home: string): Promise<GameProject[]> {
  * @param extra.unrealFile - The .uproject of the connected Unreal Editor.
  * @param extra.home - The home folder (tests).
  */
-export async function findGameProjects(extra: { unity?: string[]; unrealFile?: string; home?: string } = {}): Promise<GameProject[]> {
+export async function findGameProjects(extra: { unity?: string[]; unrealFile?: string; godot?: string[]; home?: string } = {}): Promise<GameProject[]> {
   const home = extra.home ?? homedir();
   const found = new Map<string, GameProject & { at: number }>();
   const add = async (p: GameProject) => {
@@ -60,6 +82,8 @@ export async function findGameProjects(extra: { unity?: string[]; unrealFile?: s
   for (const u of await unityHubProjects(home)) if (isUnity(u.path)) await add(u);
   // Unity projects Unity Hub does not list: the usual places, two folder levels deep (like Unreal's "Unreal Projects").
   for (const dir of await unityFolders(home)) await add({ kind: "unity", name: basename(dir), path: resolve(dir), ...(await unityVersion(dir)) });
+  // Godot: the projects KesherAI knows (the connected one), the project manager's list, and the usual folders.
+  for (const g of [...(extra.godot ?? []), ...(await godotManagerProjects(home)), ...(await projectFolders(home, isGodot))]) if (isGodot(g)) await add({ kind: "godot", name: basename(g), path: resolve(g), ...(await godotVersion(g)) });
   const unreal = new Set<string>();
   if (extra.unrealFile) unreal.add(dirname(extra.unrealFile));
   for (const root of [join(home, "Documents", "Unreal Projects"), join(home, "Unreal Projects"), join(home, "OneDrive", "Documents", "Unreal Projects")]) {
@@ -82,18 +106,36 @@ const UNITY_ROOTS = ["Unity Projects", "UnityProjects", "Documents", join("Docum
  * @param home - The home folder.
  */
 export async function unityFolders(home: string): Promise<string[]> {
+  return projectFolders(home, isUnity);
+}
+
+/**
+ * Game projects of one engine in the usual folders, two levels deep, at most 3,000 folders looked at.
+ *
+ * @param home - The home folder.
+ * @param is - Whether a folder is such a project.
+ * @returns Their folders.
+ */
+async function projectFolders(home: string, is: (dir: string) => boolean): Promise<string[]> {
   const out: string[] = [];
   let seen = 0;
   const look = async (dir: string, depth: number) => {
     for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
       if (!d.isDirectory() || d.name.startsWith(".") || /^(node_modules|Library|Temp|Logs|obj|Builds?|AppData)$/i.test(d.name) || ++seen > 3000) continue;
       const full = join(dir, d.name);
-      if (isUnity(full)) out.push(full);
+      if (is(full)) out.push(full);
       else if (depth > 1) await look(full, depth - 1);
     }
   };
   for (const r of UNITY_ROOTS) await look(join(home, r), 2);
   return out;
+}
+
+/** The Godot version a project was saved with (project.godot's config/features, e.g. "4.6"). */
+async function godotVersion(dir: string): Promise<{ engine?: string }> {
+  const t = await readFile(join(dir, "project.godot"), "utf8").catch(() => "");
+  const v = /config\/features=PackedStringArray\("(\d+\.\d+)/.exec(t)?.[1];
+  return v ? { engine: `Godot ${v}` } : {};
 }
 
 /** The editor version a Unity project was made with (ProjectSettings/ProjectVersion.txt). */

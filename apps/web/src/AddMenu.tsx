@@ -167,7 +167,7 @@ export function AddMenu(p: AddMenuProps) {
         <MenuSub icon="📁" label={L("קוד או פרויקט", "Code or a project")} {...subProps("projects")}>
           {games === null ? <MenuNote>…</MenuNote> : games.length === 0 ? <MenuNote>{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</MenuNote> : games.map((g) => (
             <MenuItem key={g.path} dir="auto" title={g.path} onSelect={() => p.onGameProject?.(g.path)} end={g.engine}>
-              {g.kind === "unity" ? "◼ Unity" : "◆ Unreal"} · {g.name}
+              {g.kind === "unity" ? "◼ Unity" : g.kind === "godot" ? "◇ Godot" : "◆ Unreal"} · {g.name}
             </MenuItem>
           ))}
           {p.onProject && <MenuItem icon="📁" onSelect={p.onProject}>{L("תיקייה אחרת…", "Another folder…")}</MenuItem>}
