@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { STUDY_FIELDS, SETUP_STEPS, type ReadClass, type SetupStep, type StudyCourse, type StudyPrefs } from "@kesher/shared";
 import { api, isRemote } from "./api";
-import { getLocale, he$ } from "./i18n";
+import { getAddress, getLocale, he$ } from "./i18n";
+import { AboutYou } from "./AboutYou";
 import { toast } from "./library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -119,6 +120,15 @@ function DownloadButton({ url, sizeGb, onStarted }: { url: string; sizeGb: numbe
  */
 export function StudyWelcome({ prefs, onPrefs, onSkip, onDone }: { prefs: StudyPrefs; onPrefs: (p: StudyPrefs) => void; onSkip: () => void; onDone?: () => void }) {
   const [step, setStepState] = useState(prefs.setupStep);
+  // In Hebrew, how to address her comes first: until it is chosen the text is written in one form (a fresh profile
+  // straight to Study never saw the home screen's question, 2026-11-18). Choosing reloads the page in that form.
+  const [askAddress, setAskAddress] = useState(() => {
+    try {
+      return getLocale() === "he" && !getAddress() && localStorage.getItem("kesher-about-later") !== "1";
+    } catch {
+      return false;
+    }
+  });
   const [field, setField] = useState(prefs.field ?? "");
   const [year, setYear] = useState(prefs.year ?? 0);
   const [moreFields, setMoreFields] = useState(!!prefs.field && !FIRST_FIELDS.includes(prefs.field));
@@ -203,6 +213,7 @@ export function StudyWelcome({ prefs, onPrefs, onSkip, onDone }: { prefs: StudyP
         <ol aria-hidden="true">{SETUP_STEPS.map((s, i) => <li key={s} className={i <= step ? "on" : ""} />)}</ol>
         <button type="button" className="link small" onClick={onSkip}>{L("לסגור, אסתדר לבד", "Close, I'll find my way")}</button>
       </div>
+      {step === 0 && askAddress && <AboutYou compact onDone={() => setAskAddress(false)} />}
       {step === 0 && (
         <div className="study-setup-body">
           <h2 tabIndex={-1}>🎓 {L("מה את לומדת?", "What do you study?")}</h2>
