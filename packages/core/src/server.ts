@@ -436,7 +436,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
   });
   void chatTimers.start();
-  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine });
+  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine, othersBusy: () => guard.othersBusy() });
   void routines.start();
   const { unityCli, unrealBridge } = buildGameEngines(paths, config, persist);
   // The Godot editor's link (KesherAI Bridge addon); Godot editors are looked for once, for the chat's tools.

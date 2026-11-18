@@ -298,6 +298,17 @@ export class GpuGuard {
     void tick();
   }
 
+  /**
+   * Whether another program is working the graphics card hard now (a game, a shader build, a render): a card at 60 %
+   * or more while no local work of ours runs. Background routines wait while it is (found on the PC: the "feature
+   * research" routine loaded the chat model while a game was being built).
+   *
+   * @returns True when the card is busy with something else.
+   */
+  othersBusy(): boolean {
+    return this.running === 0 && this.cards.some((c) => c.util >= 60);
+  }
+
   /** Stops watching. */
   stop(): void {
     clearTimeout(this.timer);

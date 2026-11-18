@@ -134,3 +134,13 @@ test("memory, processor and processor temperature limits hold new work, with roo
   assert.equal(ran, true);
   assert.match(notes.join("\n"), /New local work waits: memory/);
 });
+
+test("othersBusy: the card working hard with none of our work running means another program uses it", async () => {
+  let util = 90;
+  const g = new GpuGuard(() => ({ ...GUARD_DEFAULTS }), async () => `0, RTX, 60, ${util}, 1000, 24000, 200, 350`);
+  await g.check();
+  assert.equal(g.othersBusy(), true);
+  util = 10;
+  await g.check();
+  assert.equal(g.othersBusy(), false);
+});
