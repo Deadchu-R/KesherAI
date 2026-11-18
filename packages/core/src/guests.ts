@@ -190,7 +190,7 @@ export class GuestQuota {
 }
 
 /** What the owner is told about a guest (stage 2 of docs/COLLABORATION.md). */
-export type GuestAlert = "outside" | "new-address" | "busy";
+export type GuestAlert = "outside" | "new-address" | "busy" | "night";
 
 /**
  * Watches guests' requests for what the owner should hear about: a try to reach outside the shared project, a new
@@ -209,9 +209,10 @@ export class GuestWatch {
    * @param address - Where it came from.
    * @param status - The answer's status (403: outside the project).
    * @param now - The time (for tests).
+   * @param night - Whether to say so when it is 23:00–07:00 here (the owner's "quiet hours" switch).
    * @returns What to tell the owner, if anything.
    */
-  see(guest: string, address: string, status: number, now = Date.now()): GuestAlert[] {
+  see(guest: string, address: string, status: number, now = Date.now(), night = false): GuestAlert[] {
     const out: GuestAlert[] = [];
     const once = (kind: GuestAlert) => {
       const key = `${guest}|${kind}`;
@@ -230,6 +231,8 @@ export class GuestWatch {
     times.push(now);
     this.recent.set(guest, times);
     if (times.length > 120) once("busy");
+    const hour = new Date(now).getHours();
+    if (night && (hour >= 23 || hour < 7)) once("night");
     return out;
   }
 }

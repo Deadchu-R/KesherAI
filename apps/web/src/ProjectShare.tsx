@@ -9,6 +9,7 @@ interface Guests {
   people: Array<{ id: string; name: string; role: "read" | "edit"; joinedAt: string; lastSeen: string | null; left: number }>;
   invites: Array<{ id: string; role: "read" | "edit"; createdAt: string; expiresAt: string; usedAt?: string; usedBy?: string }>;
   dailyLimit: number;
+  nightAlert: boolean;
 }
 
 const ago = (iso: string | null) => {
@@ -97,6 +98,13 @@ export function ProjectShare({ projectId, name, onClose }: { projectId: string; 
           </>
         )}
         {g && <p className="muted small">{L(`עד ${g.dailyLimit} תשובות ביום לכל אורח (המחשב שלך עונה להם).`, `Up to ${g.dailyLimit} answers a day for each guest (your computer answers them).`)}</p>}
+        {g && (
+          <label className="row small">
+            <input type="checkbox" checked={g.nightAlert} onChange={(e) => void api("/api/guests/settings", { method: "PUT", body: { nightAlert: e.target.checked } }).then(load, (er: Error) => toast(er.message))} />
+            <span>{L("התראה כשאורח משתמש בשעות שקטות (23:00–07:00)", "Tell me when a guest uses it in quiet hours (23:00–07:00)")}</span>
+          </label>
+        )}
+        <p className="muted small">{L("תמיד מקבלים התראה כשמישהו מצטרף, מנסה לצאת מהפרויקט, נכנס מכתובת רשת חדשה או שולח הרבה בקשות.", "You are always told when someone joins, tries to go outside the project, comes from a new network address, or sends very many requests.")}</p>
         <div className="row"><span className="grow" /><button type="button" onClick={onClose}>{L("סגירה", "Close")}</button></div>
       </div>
     </div>

@@ -295,6 +295,8 @@ export const KesherConfigSchema = z.object({
       anywhereDevicesOnly: z.boolean().default(false),
       /** Guests in a shared project (docs/COLLABORATION.md): answers a day for each, on this computer. */
       guestDailyLimit: z.number().int().min(1).max(10_000).default(100),
+      /** Tell the owner when a guest uses a shared project at night (23:00–07:00 on this computer). */
+      guestNightAlert: z.boolean().default(false),
       /** Through the internet link, a device key not used for this many days stops working (0 = never). */
       anywhereIdleDays: z.number().int().min(0).max(365).default(30),
       /** The internet address, encrypted for each paired phone, in an ntfy topic only that phone can name, so it finds the computer after the address changes (link-beacon.ts). */

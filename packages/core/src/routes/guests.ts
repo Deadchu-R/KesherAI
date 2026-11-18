@@ -32,8 +32,9 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
       outside: `${who} tried to reach something outside the shared project "${project}" (refused).`,
       "new-address": `${who} came into "${project}" from a new network address.`,
       busy: `${who} sent very many requests in a minute to "${project}".`,
+      night: `${who} is using "${project}" during your quiet hours (23:00–07:00).`,
     };
-    for (const a of watch.see(d.id, clientAddress(req), reply.statusCode)) {
+    for (const a of watch.see(d.id, clientAddress(req), reply.statusCode, Date.now(), s.config.remote.guestNightAlert)) {
       void s.notifier.send({ title: "KesherAI: a guest", body: say[a], tags: ["warning"], priority: a === "outside" ? 4 : 3 }).catch(() => undefined);
     }
   });
@@ -66,7 +67,20 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     const people = devices()
       .filter((d) => guestOf(d.scope)?.projectId === req.params.id)
       .map((d) => ({ id: d.id, name: d.name, role: guestOf(d.scope)!.role, joinedAt: d.createdAt, lastSeen: d.lastSeen ?? null, left: quota.left(d.id, limit()) }));
-    return { people, invites: await invites.list(req.params.id), dailyLimit: limit() };
+    return { people, invites: await invites.list(req.params.id), dailyLimit: limit(), nightAlert: s.config.remote.guestNightAlert };
+  });
+
+  /** The guests' daily answers and the quiet-hours alert (for every shared project). */
+  app.put<{ Body: { dailyLimit?: number; nightAlert?: boolean } }>("/api/guests/settings", async (req, reply) => {
+    const b = req.body ?? {};
+    if (b.dailyLimit !== undefined) {
+      const n = Number(b.dailyLimit);
+      if (!Number.isInteger(n) || n < 1 || n > 10_000) return reply.code(400).send({ error: "Answers a day: 1 to 10,000." });
+      s.config.remote.guestDailyLimit = n;
+    }
+    if (typeof b.nightAlert === "boolean") s.config.remote.guestNightAlert = b.nightAlert;
+    await s.saveConfig();
+    return { dailyLimit: s.config.remote.guestDailyLimit, nightAlert: s.config.remote.guestNightAlert };
   });
 
   /** Removes a guest: their key stops at once. */

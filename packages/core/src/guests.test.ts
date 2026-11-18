@@ -55,3 +55,11 @@ test("the owner hears about a guest going outside, a new address, or a flood; ea
   for (let i = 0; i < 125; i++) said = [...said, ...f.see("h", "3.3.3.3", 200, 1_000_000 + i * 100)];
   assert.deepEqual(said, ["busy"]);
 });
+
+test("quiet hours: said only when the owner turned it on, and only at night", () => {
+  const w = new GuestWatch();
+  const at = (h: number) => new Date(2026, 10, 18, h, 30).getTime();
+  assert.deepEqual(w.see("g", "1.1.1.1", 200, at(23), false), []);
+  assert.deepEqual(w.see("g", "1.1.1.1", 200, at(14), true), []);
+  assert.deepEqual(w.see("g", "1.1.1.1", 200, at(2) + 86_400_000, true), ["night"]);
+});
