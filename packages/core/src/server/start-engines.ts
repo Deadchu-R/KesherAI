@@ -42,7 +42,12 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
     reload: async () => {
       if (startLoad) return void (await startLoad);
       const path = config.engines.lastModel;
-      if (path && existsSync(path) && engine.status().installed) await loadModel(services, path, undefined, "a request needed the model");
+      if (!path || !existsSync(path) || !engine.status().installed) return;
+      // Which part asked, so the engine's line says it (Roee, 2026-11-18: "loaded again in the background" with nothing
+      // of his running; it was a start-up routine's chat).
+      const busy = Object.keys(services.conversations.activity());
+      const titles = busy.map((id) => services.library.listConversations().find((c) => c.id === id)?.title).filter(Boolean).slice(0, 2);
+      await loadModel(services, path, undefined, titles.length ? `needed by the chat "${titles.join('", "')}"` : "a request needed the model (not a chat: a title, a report, a pipeline or the phone)");
     },
     pids: () => (engine.pid ? [engine.pid] : []),
   });
