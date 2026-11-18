@@ -69,6 +69,9 @@ export interface HeadlessAnswer {
 /** Commands the headless editor (the editor closed) can run. */
 const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move"]);
 
+/** A stand-in answer kept on disk, unless it is an empty level list (a scan that was not ready, kept by 0.6.383). */
+const usable = <T>(cmd: string, v: T | undefined): T | undefined => (cmd === "levels" && v && !(v as { levels?: unknown[] }).levels?.length ? undefined : v);
+
 /** Commands that only read: no "changed" after them. */
 const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "level", "level_mesh"]);
 
@@ -375,6 +378,7 @@ export class UnrealBridge {
    *
    * @param cmd - levels, level or level_mesh.
    * @param path - The level or mesh ("" for levels).
+   * @param projectFile - A project chosen from the menu (its .uproject), when not the one open.
    * @returns The answer, and whether it came from the copy kept.
    */
   async standIn<T extends object>(cmd: "levels" | "level" | "level_mesh", path = "", projectFile?: string): Promise<T & { cached?: boolean }> {
@@ -384,7 +388,7 @@ export class UnrealBridge {
     if (!project) throw new Error(`KesherAI does not know the project yet: open it once in the ${this.editor} with the KesherAI Bridge plugin.`);
     const file = join(this.projectDir(project), "standin", `${cmd}-${fileFor(path)}`);
     if (other) {
-      const kept = await this.readJson<T>(file);
+      const kept = usable(cmd, await this.readJson<T>(file));
       if (kept) return { ...kept, cached: true };
       const [a] = await this.offline([{ cmd, path }], projectFile);
       if (!a?.ok) throw new Error(a?.error ?? `The ${this.editor} could not do that.`);
@@ -398,12 +402,12 @@ export class UnrealBridge {
         if (!(cmd === "levels" && !(live as { levels?: unknown[] }).levels?.length)) await this.writeJson(file, live);
         return live as T;
       } catch (e) {
-        const kept = await this.readJson<T>(file);
+        const kept = usable(cmd, await this.readJson<T>(file));
         if (kept) return { ...kept, cached: true };
         throw e;
       }
     }
-    const kept = await this.readJson<T>(file);
+    const kept = usable(cmd, await this.readJson<T>(file));
     if (kept) return { ...kept, cached: true };
     const answer = await this.request<T>(cmd, { path }, 900_000);
     // An empty list is not kept (a scan that was not ready would stick): the next read asks again.
