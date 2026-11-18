@@ -18,6 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
+  modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
 };
 let he = false;
@@ -114,15 +115,17 @@ const label = (o) => o.name || (o.isMesh ? T("unnamed", "Part") : "·");
 function rebuild() {
   meshes = [];
   model?.traverse((o) => { if (o.isMesh) meshes.push({ mesh: o, name: label(o) }); });
+  // A click on a piece a modifier made chooses the object it belongs to.
   renderParts();
 }
 function tris(obj) { let n = 0; obj.traverse((o) => { if (o.isMesh) { const g = o.geometry; n += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return Math.round(n); }
-function stats() { $("stats").textContent = model ? `${meshes.length} ${T("parts", "parts")} · ${tris(model).toLocaleString()} ${T("tris", "triangles")}` : ""; }
+const isGenerated = (o) => { for (let x = o; x; x = x.parent) if (x.userData.generated) return true; return false; };
+function stats() { $("stats").textContent = model ? `${meshes.filter((p) => !isGenerated(p.mesh)).length} ${T("parts", "parts")} · ${tris(model).toLocaleString()} ${T("tris", "triangles")}` : ""; }
 /** Groups that hold a single mesh and nothing else are shown as that mesh (files often wrap each mesh in a node). */
 const shown = (o) => (o.children.length === 1 && !o.isMesh && o.children[0].isMesh && !o.children[0].children.length ? o.children[0] : o);
 function renderParts() {
   nodes = [];
-  const walk = (o, depth) => { for (const c of o.children) { const s2 = shown(c); nodes.push({ obj: s2, depth }); if (!folded.has(s2.uuid)) walk(s2, depth + 1); } };
+  const walk = (o, depth) => { for (const c of o.children) { if (c.userData.generated) continue; const s2 = shown(c); nodes.push({ obj: s2, depth }); if (!folded.has(s2.uuid)) walk(s2, depth + 1); } };
   if (model) walk(model, 0);
   $("partList").replaceChildren(...nodes.map(({ obj, depth }) => {
     const li = document.createElement("li");
@@ -130,7 +133,8 @@ function renderParts() {
     li.style.paddingInlineStart = `${6 + depth * 14}px`;
     const tw = document.createElement("span");
     tw.className = "tw";
-    tw.textContent = obj.children.length ? (folded.has(obj.uuid) ? "▸" : "▾") : "";
+    const kids = obj.children.filter((c) => !c.userData.generated).length;
+    tw.textContent = kids ? (folded.has(obj.uuid) ? "▸" : "▾") : "";
     tw.onclick = (e) => { e.stopPropagation(); if (folded.has(obj.uuid)) folded.delete(obj.uuid); else folded.add(obj.uuid); renderParts(); };
     const eye = document.createElement("button");
     eye.textContent = obj.visible ? "👁" : "◌";
@@ -138,7 +142,7 @@ function renderParts() {
     eye.onclick = (e) => { e.stopPropagation(); remember(); obj.visible = !obj.visible; renderParts(); };
     const n = document.createElement("span");
     n.dir = "auto";
-    n.textContent = obj.children.length && !obj.isMesh ? `${label(obj)} (${obj.children.length})` : label(obj);
+    n.textContent = `${kids && !obj.isMesh ? `${label(obj)} (${kids})` : label(obj)}${obj.userData.mods?.some((m) => m.on) ? " ⚙" : ""}`;
     li.append(tw, eye, n);
     li.onclick = () => choose(obj);
     return li;
@@ -151,7 +155,7 @@ function choose(obj) {
   gizmo.detach();
   renderParts();
   $("partName").textContent = chosen ? label(chosen) : T("noPart", "Choose a part");
-  if (!chosen) { document.querySelectorAll("[data-ch]").forEach((inp) => (inp.value = "")); $("size").textContent = ""; return; }
+  if (!chosen) { document.querySelectorAll("[data-ch]").forEach((inp) => (inp.value = "")); $("size").textContent = ""; renderMods(); return; }
   // The chosen object is outlined by a box (Blender's orange outline, simply) and gets the gizmo.
   glow = new THREE.BoxHelper(chosen, 0xffa040);
   scene.add(glow);
@@ -162,6 +166,7 @@ function choose(obj) {
   $("rough").value = Math.round((m?.roughness ?? 0.5) * 100);
   $("metal").value = Math.round((m?.metalness ?? 0) * 100);
   showChannels();
+  renderMods();
   $("hidePart").textContent = chosen.visible ? T("hide", "Hide") : T("show", "Show");
 }
 /** The Channel Box: the chosen object's position, rotation (degrees) and scale, and its size. */
@@ -224,7 +229,10 @@ renderer.domElement.addEventListener("pointerup", (e) => {
   const ray = new THREE.Raycaster();
   ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
   const hit = ray.intersectObjects(meshes.filter((p) => p.mesh.visible).map((p) => p.mesh), false)[0];
-  choose(hit ? hit.object : null);
+  let o = hit?.object ?? null;
+  while (o && o.parent && (o.userData.generated || o.parent.userData.generated)) o = o.parent;
+  if (o?.name === "⚙ modifiers") o = o.parent;
+  choose(o);
 });
 
 // ---------- views (3ds Max's ViewCube faces, Blender's numpad) and shading (Maya's 4 / 5 / 6) ----------
@@ -247,6 +255,89 @@ function shade(kind) {
   $("wire").classList.toggle("on", kind === "wire");
 }
 document.querySelectorAll("[data-shade]").forEach((b) => (b.onclick = () => shade(b.dataset.shade)));
+
+// ---------- modifiers: generated from the object, never changing it (3ds Max's stack, Blender's modifiers) ----------
+/** What each modifier adds or changes, in the stack's order; the results live in a child group named "⚙ modifiers". */
+const MOD_NAMES = { mirror: ["mMirror", "Mirror"], array: ["mArray", "Array"], smooth: ["mSmooth", "Smooth shading"] };
+function applyMods(obj) {
+  obj.getObjectByName("⚙ modifiers")?.removeFromParent();
+  const mods = (obj.userData.mods ?? []).filter((m) => m.on);
+  // Shading first: it changes the object's own normals (and is undone by turning it off).
+  obj.traverse((o) => { if (o.isMesh && o.name !== "⚙ modifiers") [].concat(o.material).forEach((m) => { m.flatShading = !mods.some((x) => x.kind === "smooth") && !!o.userData.wasFlat; m.needsUpdate = true; }); });
+  const gen = mods.filter((m) => m.kind !== "smooth");
+  if (!gen.length) return;
+  const out = new THREE.Group();
+  out.name = "⚙ modifiers";
+  out.userData.generated = true;
+  // Each modifier works on what the ones before it made (the object itself first).
+  let copies = [obj];
+  const base = () => { const c = obj.clone(); c.getObjectByName("⚙ modifiers")?.removeFromParent(); c.position.set(0, 0, 0); c.rotation.set(0, 0, 0); c.scale.set(1, 1, 1); return c; };
+  const box = new THREE.Box3();
+  obj.traverse((o) => { if (o.isMesh) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox); } });
+  const size = box.getSize(new THREE.Vector3());
+  for (const m of gen) {
+    const made = [];
+    for (const src of copies) {
+      if (m.kind === "mirror") {
+        const c = src === obj ? base() : src.clone();
+        c.scale[m.axis] *= -1;
+        // About the object's own centre plane (Blender's Mirror about the origin).
+        c.position[m.axis] = src === obj ? 0 : -src.position[m.axis];
+        made.push(c);
+      } else if (m.kind === "array") {
+        for (let i = 1; i < m.count; i++) {
+          const c = src === obj ? base() : src.clone();
+          c.position[m.axis] = (src === obj ? 0 : src.position[m.axis]) + i * (size[m.axis] + m.gap);
+          made.push(c);
+        }
+      }
+    }
+    made.forEach((c) => { c.userData.generated = true; out.add(c); });
+    copies = [...copies, ...made];
+  }
+  obj.add(out);
+}
+function renderMods() {
+  const box = $("mods");
+  if (!chosen) return box.replaceChildren();
+  const mods = chosen.userData.mods ?? [];
+  box.replaceChildren(...mods.map((m, i) => {
+    const li = document.createElement("li");
+    li.className = m.on ? "" : "off";
+    const head = document.createElement("div");
+    head.className = "head";
+    const name = document.createElement("b");
+    name.textContent = T(...MOD_NAMES[m.kind]);
+    const mk = (txt, title, fn) => { const b = document.createElement("button"); b.textContent = txt; b.title = title; b.onclick = () => { remember(); fn(); applyMods(chosen); renderMods(); stats(); }; return b; };
+    head.append(name, mk(m.on ? "👁" : "◌", T("on", "On"), () => (m.on = !m.on)), mk("↑", T("up", "Up"), () => { if (i) [mods[i - 1], mods[i]] = [mods[i], mods[i - 1]]; }), mk("✕", T("remove", "Remove"), () => mods.splice(i, 1)));
+    li.append(head);
+    const field = (key, labelText, el) => { const l = document.createElement("label"); l.append(labelText, el); el.onchange = () => { remember(); m[key] = el.type === "number" ? Number(el.value) : el.value; applyMods(chosen); stats(); }; li.append(l); };
+    if (m.kind !== "smooth") {
+      const ax = document.createElement("select");
+      ["x", "y", "z"].forEach((a) => { const o = document.createElement("option"); o.value = a; o.textContent = a.toUpperCase(); ax.append(o); });
+      ax.value = m.axis;
+      field("axis", T("axis", "Axis"), ax);
+    }
+    if (m.kind === "array") {
+      const n = document.createElement("input"); n.type = "number"; n.min = "2"; n.max = "50"; n.value = String(m.count);
+      field("count", T("count", "Count"), n);
+      const g = document.createElement("input"); g.type = "number"; g.step = "0.01"; g.value = String(m.gap);
+      field("gap", T("gap", "Gap"), g);
+    }
+    return li;
+  }));
+}
+$("addMod").onchange = () => {
+  const kind = $("addMod").value;
+  $("addMod").value = "";
+  if (!chosen || !kind) return;
+  remember();
+  chosen.traverse((o) => { if (o.isMesh && o.userData.wasFlat === undefined) o.userData.wasFlat = !![].concat(o.material)[0]?.flatShading; });
+  (chosen.userData.mods ??= []).push(kind === "array" ? { kind, on: true, axis: "x", count: 3, gap: 0.05 } : kind === "mirror" ? { kind, on: true, axis: "x" } : { kind, on: true });
+  applyMods(chosen);
+  renderMods();
+  stats();
+};
 
 // ---------- duplicate and delete ----------
 function duplicate() {
@@ -276,9 +367,9 @@ $("del").onclick = remove;
 function snap() {
   const out = [];
   model?.traverse((o) => {
-    if (o === model) return;
+    if (o === model || o.userData.generated) return;
     const m = o.isMesh ? matOf(o) : null;
-    out.push({ o, parent: o.parent, i: o.parent.children.indexOf(o), p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone(), v: o.visible, c: m?.color?.getHex(), r: m?.roughness, mt: m?.metalness });
+    out.push({ o, parent: o.parent, i: o.parent.children.indexOf(o), p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone(), v: o.visible, c: m?.color?.getHex(), r: m?.roughness, mt: m?.metalness, mods: o.userData.mods ? JSON.parse(JSON.stringify(o.userData.mods)) : undefined });
   });
   return out;
 }
@@ -286,7 +377,7 @@ function apply(state) {
   const keep = new Set(state.map((x) => x.o));
   // What is not in the state (a duplicate made after it) goes; what was deleted comes back to its place.
   const extra = [];
-  model.traverse((o) => { if (o !== model && !keep.has(o)) extra.push(o); });
+  model.traverse((o) => { if (o !== model && !keep.has(o) && !o.userData.generated) extra.push(o); });
   extra.forEach((o) => o.removeFromParent());
   for (const x of state) {
     if (x.o.parent !== x.parent) x.parent.add(x.o);
@@ -295,6 +386,7 @@ function apply(state) {
     if (m?.color && x.c !== undefined) m.color.setHex(x.c);
     if (m && x.r !== undefined) m.roughness = x.r;
     if (m && x.mt !== undefined) m.metalness = x.mt;
+    if (x.mods || x.o.userData.mods) { x.o.userData.mods = x.mods; applyMods(x.o); }
   }
   rebuild();
   choose(chosen && keep.has(chosen) ? chosen : null);

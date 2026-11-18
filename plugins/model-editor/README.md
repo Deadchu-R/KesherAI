@@ -10,6 +10,9 @@ and Meshy's studio (docs/RESEARCH_LOG.md → "The 3D editor's screen"; design Mo
 - **The chosen object:** a Channel Box like Maya's (move, rotate in degrees, scale; type a number), a gizmo to move,
   rotate or scale it with axis lock and snapping, colour / roughness / metalness, its size and triangles; duplicate and
   delete; undo for everything (structure too).
+- **Modifiers** (3ds Max's stack, Blender's modifiers): Mirror (an axis), Array (an axis, a count, a gap) and Smooth
+  shading, each on or off, moved up, or removed; they never change the object itself, stack in order, are exported
+  with the model, and undo with the rest. An object with modifiers shows ⚙ in the tree.
 - **Views and shading:** front / right / top / perspective (3ds Max's ViewCube faces, Blender's 1 / 3 / 7), wireframe /
   solid / material (Maya's 4 / 5 / 6).
 - **Versions:** "Keep a version" saves the state as a thumbnail in the strip at the bottom; a click goes back to it.

@@ -53,6 +53,12 @@
         <label class="field"><span data-t="metal">Metalness</span><input type="range" id="metal" min="0" max="100" value="0" /></label>
         <div class="muted small" id="size"></div>
         <hr />
+        <!-- Modifiers, as 3ds Max's stack and Blender's modifiers: non-destructive, each on/off, in order -->
+        <div class="row"><b class="grow" data-t="modsH">Modifiers</b>
+          <select id="addMod"><option value="" data-t="addMod">＋ Add…</option><option value="mirror" data-t="mMirror">Mirror</option><option value="array" data-t="mArray">Array</option><option value="smooth" data-t="mSmooth">Smooth shading</option></select>
+        </div>
+        <ol class="mods" id="mods"></ol>
+        <hr />
         <div class="row"><button id="hidePart" data-t="hide">Hide</button><button id="frame" data-t="frameBtn">Frame (F)</button><button id="dup" data-t="dup">Duplicate</button><button id="del" data-t="del">Delete</button></div>
         <span class="muted small" data-t="soon">Next: mark a part and "What to do here?" with the 3D models.</span>
       </aside>
