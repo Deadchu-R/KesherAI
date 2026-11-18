@@ -129,7 +129,10 @@ export function toolFit(name: string, need: ToolNeed): number {
  * @returns The score and its parts.
  */
 export function scoreModel(name: string, sizeGb: number, need: ToolNeed, speed: SpeedEstimate, activeFraction?: number): ModelScore {
-  const est = speed(sizeGb, activeFraction);
+  // A mixture of experts names its active part ("30B-A3B"): only that is read per token, so it writes much faster.
+  const active = /(?<![a-z])a(\d+(?:\.\d+)?)b(?![a-z])/i.exec(name);
+  const share = activeFraction ?? (active ? Math.min(1, Number(active[1]) / paramsOf(name, sizeGb)) : undefined);
+  const est = speed(sizeGb, share);
   if (est.tokensPerSecond <= 0) return { total: 0, quality: 0, fit: 0, speed: 0, tokensPerSecond: 0, fitsGpu: false };
   const quality = Math.round(Math.min(40, 13 + 17 * Math.log2(paramsOf(name, sizeGb) / 4) / Math.log2(7.5)));
   const fit = toolFit(name, need);

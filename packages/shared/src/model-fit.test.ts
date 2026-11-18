@@ -18,6 +18,12 @@ test("parameters from the name or the size", () => {
   assert.equal(paramsOf("mystery", 6), 10);
 });
 
+test("a mixture of experts is scored by its active part's speed", () => {
+  const moe = scoreModel("Qwen3-Coder-30B-A3B-Instruct-Q4_K_M", 18.6, toolNeed("code", false), pc);
+  const dense = scoreModel("Qwen3-Coder-30B-Instruct-Q4_K_M", 18.6, toolNeed("code", false), pc);
+  assert.ok(moe.tokensPerSecond > dense.tokensPerSecond * 5);
+});
+
 test("a score adds quality, fit for the tool and speed here; too big scores 0", () => {
   const s = scoreModel(dicta.name, 7.4, toolNeed("chat-report", true), pc);
   assert.deepEqual([s.quality, s.fit, s.fitsGpu], [22, 35, true]);
