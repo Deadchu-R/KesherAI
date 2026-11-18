@@ -1,3 +1,4 @@
+import { guestFileTools } from "./guests.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
@@ -207,7 +208,16 @@ export class ConversationManager {
     if (this.deps.faults && this.deps.doctorState) all.push(doctorTool({ faults: this.deps.faults, state: this.deps.doctorState, ...(id ? { chatId: id } : {}) }));
     // A guest's chat in a shared project (docs/COLLABORATION.md, stage 1): no tools at all (no files, computer,
     // network or memory), only the model's answer.
-    if (id && this.deps.library.summary(id)?.source === "guest") return { tools: [], notes: ["This chat is with a guest the owner invited to one shared project. Answer from the conversation only; you have no tools here."] };
+    const guestChat = id ? this.deps.library.summary(id) : undefined;
+    if (guestChat?.source === "guest") {
+      // Stage 3: read only, in the project's own folder (the chat was made there), secret files left out.
+      const folder = guestChat.projectId ? this.deps.library.getProject(guestChat.projectId)?.workspace : undefined;
+      const reading = folder && guestChat.workspace === folder;
+      return {
+        tools: reading ? guestFileTools(CODE_TOOLS) : [],
+        notes: [`This chat is with a guest the owner invited to one shared project. ${reading ? "You can list, read and search the project's files (read only); you cannot change files, run anything, or use the web." : "Answer from the conversation only; you have no tools here."}`],
+      };
+    }
     const result = { tools: all, notes: [...media.notes, ...group.notes] };
     // A chat written from Telegram never controls the screen or the browser, whatever else is on (chat-tool-groups.ts).
     return id && this.deps.library.summary(id)?.source === "telegram" ? forTelegram(result) : result;

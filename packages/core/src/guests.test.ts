@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GuestInvites, GuestQuota, GuestWatch, guestName, guestOf, guestScope } from "./guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, guestFileTools, guestName, guestOf, guestScope } from "./guests.js";
 
 test("an invite works once, for its project and role, and only its hash is kept", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kesher-guests-"));
@@ -62,4 +62,22 @@ test("quiet hours: said only when the owner turned it on, and only at night", ()
   assert.deepEqual(w.see("g", "1.1.1.1", 200, at(23), false), []);
   assert.deepEqual(w.see("g", "1.1.1.1", 200, at(14), true), []);
   assert.deepEqual(w.see("g", "1.1.1.1", 200, at(2) + 86_400_000, true), ["night"]);
+});
+
+test("a guest reads the project's files but never its secrets, and gets no tool that writes or runs", async () => {
+  const fake = (name: string, out: string) => ({ spec: { name }, run: async () => out });
+  const tools = guestFileTools([
+    fake("list_files", "src/a.ts\n.env\nconfig/.env.local\nkeys/server.pem\n.git/config\nREADME.md"),
+    fake("read_file", "1: hello"),
+    fake("search", "src/a.ts:3: token\n.env:1: TOKEN=x\nsecrets.yaml:2: key"),
+    fake("write_file", "x"),
+    fake("run_command", "x"),
+  ] as never);
+  assert.deepEqual(tools.map((t) => t.spec.name), ["list_files", "read_file", "search"]);
+  const run = (n: string, input: Record<string, unknown> = {}) => tools.find((t) => t.spec.name === n)!.run(input, undefined as never);
+  assert.equal(await run("list_files"), "src/a.ts\nREADME.md");
+  assert.equal(await run("search"), "src/a.ts:3: token");
+  assert.equal(await run("read_file", { path: ".env" }), "This file is private to the project's owner.");
+  assert.equal(await run("read_file", { path: "keys/id_rsa" }), "This file is private to the project's owner.");
+  assert.equal(await run("read_file", { path: "src/a.ts" }), "1: hello");
 });

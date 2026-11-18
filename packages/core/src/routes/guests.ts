@@ -150,7 +150,9 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (!g) return refuse(reply);
     if (g.role !== "edit") return reply.code(403).send({ error: "You can read this project, not write in it." });
     try {
-      const c = await s.conversations.create({ kind: "chat", projectId: g.projectId, source: "guest", incognito: true, title: `${g.name.replace(/ \(guest\)$/, "")}: new chat` });
+      // In the project's folder when it has one: the guest's chat may read its files (read only, guests.ts).
+      const folder = s.library.getProject(g.projectId)?.workspace;
+      const c = await s.conversations.create({ kind: "chat", projectId: g.projectId, source: "guest", incognito: true, title: `${g.name.replace(/ \(guest\)$/, "")}: new chat`, ...(folder ? { workspace: folder } : {}) });
       return { id: c.id };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });

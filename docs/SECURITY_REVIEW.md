@@ -1128,7 +1128,9 @@ S5 an outside scanner's rules for Electron.
 - **The invite**: 32 random bytes; only its SHA-256 is stored (guest-invites.json, mode 600); one use, 1 hour to 7 days; the only route that takes it as a key is `/api/join/:token` (GET to see the project's name, POST with a name). A name is cut to letters, digits and a few marks (40).
 - **What a guest can do**: read the project's chats as text (no tool output, no files); with edit, start chats of their own (`source: "guest"`, incognito, mode ask) and write only in those — never in the owner's chats, which can use tools, so a guest's words never reach a chat with tools. Guest chats get **no tools at all** (no files, computer, network, memory), and memory never files from them. A daily allowance (default 100 answers) per guest.
 - **The owner**: is notified when someone joins; sees who has access, when they joined and were last seen; Remove deletes the key at once (tested).
-- **Still to come** (COLLABORATION stages 2–4): ban an email, alerts on unusual use, Google sign-in for email invites, tools for guests behind the owner's approval.
+- **Stage 2 (same day)**: the owner is told when a guest tries to go outside the project (a 403 on a guest key; the auth hook marks the device first), comes from a new network address, or sends over 120 requests a minute; optionally during quiet hours. Each kind at most once in 10 minutes per guest.
+- **Stage 3 (same day, read only)**: a guest's chat made in the project's own folder gets list_files, read_file and search, nothing else. Secret files (.env*, keys and certificates, id_*, .npmrc/.pypirc/.netrc, credentials, secrets.*, anything in .git or .ssh) are left out of every answer and refused by name, including through `..` (tested). The tools stay inside the folder (the agent's own path check).
+- **Still to come**: ban an email and email invites with Google sign-in (stage 4).
 - 891 tests pass; lint and typecheck clean. No secret, email, user name or personal path in the changed files.
 
 ## Scan 143 (2026-11-18): Stremio's link sign-in, tabs, three.js and 3D previews

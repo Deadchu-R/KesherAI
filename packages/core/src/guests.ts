@@ -236,3 +236,30 @@ export class GuestWatch {
     return out;
   }
 }
+
+/**
+ * Files a guest never sees in a shared project's folder: environment files, keys and certificates, credentials,
+ * and anything under .git or .ssh.
+ */
+export const GUEST_SECRET = /(^|[\\/])(\.env(\.[\w.-]*)?|[^\\/]*\.(pem|key|p12|pfx|keystore|jks|kdbx)|id_(rsa|ed25519|ecdsa|dsa)(\.pub)?|\.npmrc|\.pypirc|\.netrc|credentials(\.json)?|secrets?(\.[\w-]+)?\.(json|ya?ml|toml|env)|\.git([\\/].*)?|\.ssh([\\/].*)?)$/i;
+
+/**
+ * A guest's tools in a shared project (stage 3, read only): list, read and search the project's files, with secret
+ * files left out of every answer and refused when asked for by name. Nothing writes, runs or reaches the network.
+ *
+ * @param tools - KesherAI's code tools (the ones named list_files, read_file and search are taken).
+ * @returns The guest's tools.
+ */
+export function guestFileTools<T extends { spec: { name: string }; run(input: Record<string, unknown>, ctx: never): Promise<unknown> }>(tools: readonly T[]): T[] {
+  const pathOf = (line: string) => line.split(/:\d+[:-]/)[0]!.trim();
+  const clean = (out: unknown) => (typeof out === "string" ? out.split("\n").filter((l) => !GUEST_SECRET.test(pathOf(l))).join("\n") : out);
+  return tools
+    .filter((t) => t.spec.name === "list_files" || t.spec.name === "read_file" || t.spec.name === "search")
+    .map((t) => ({
+      ...t,
+      async run(input: Record<string, unknown>, ctx: never) {
+        if (t.spec.name === "read_file" && GUEST_SECRET.test(String(input.path ?? "").trim())) return "This file is private to the project's owner.";
+        return clean(await t.run(input, ctx));
+      },
+    }));
+}
