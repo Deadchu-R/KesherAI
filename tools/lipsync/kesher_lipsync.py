@@ -257,6 +257,42 @@ def blend_encode(av, k, face):
     return jpg.tobytes() if ok else None
 
 
+class LipCheck:
+    """The self-test's proof (board t131): over a few seconds of the sample recording, how much the made mouths differ
+    from the clip's own mouth, and from each other. Lips that really move change both; a face pasted back unchanged, or
+    one frozen mouth, does not. Printed once as {"lipcheck": {...}}."""
+
+    def __init__(self, seconds=4.0):
+        self.need = int(seconds * FPS / STEP)
+        self.steps = 0
+        self.vs_clip = []
+        self.between = []
+        self.done = False
+
+    def add(self, av, faces):
+        if self.done:
+            return
+        mouths = []
+        for k, face in faces:
+            x1, y1, x2, y2 = av.coords[k]
+            made = cv2.resize(face.astype(np.uint8), (x2 - x1, y2 - y1)).astype(np.float32)
+            own = av.frames[k][y1:y2, x1:x2].astype(np.float32)
+            h = made.shape[0]
+            # The lower half of the face is where the mouth is.
+            mouth, own_mouth = made[h // 2:], own[h // 2:]
+            self.vs_clip.append(float(np.mean(np.abs(mouth - own_mouth))))
+            mouths.append(cv2.resize(mouth, (64, 32)))
+        for a, b in zip(mouths, mouths[1:]):
+            self.between.append(float(np.mean(np.abs(a - b))))
+        self.steps += 1
+        if self.steps >= self.need:
+            self.done = True
+            vs = float(np.mean(self.vs_clip)) if self.vs_clip else 0.0
+            bt = float(np.mean(self.between)) if self.between else 0.0
+            # In pixel levels (0-255): a moving mouth differs from the clip and from frame to frame by a few levels.
+            log(json.dumps({"lipcheck": {"moving": vs > 2.5 and bt > 0.8, "vsClip": round(vs, 2), "between": round(bt, 2), "frames": len(self.vs_clip)}}))
+
+
 def features(m, audio):
     f = m.audio.feature_extractor(audio, return_tensors="pt", sampling_rate=SR).input_features.to(dtype=m.dtype)
     return [f], len(audio)
@@ -295,6 +331,7 @@ async def main():
     if a.prepare_only:
         return
     mic = FileMic(a.test_audio) if a.test_audio else Mic(mic_device(a.mic), a.cable)
+    check = LipCheck() if a.test_audio else None
     clients = Clients()
 
     async def handler(ws):
@@ -342,11 +379,14 @@ async def main():
             if talking != was:
                 was = talking
                 await clients.send(json.dumps({"talking": talking}))
-            if not talking or not clients.all:
+            # The self-test makes the mouths even when no page watches, to check them.
+            if not talking or (not clients.all and not (check and not check.done)):
                 idx = (idx + STEP) % av.n
                 continue
             t0 = time.perf_counter()
             faces = await loop.run_in_executor(gpu, make_faces, m, av, mic.last(1.2), idx)
+            if check and not check.done:
+                await loop.run_in_executor(cpu, check.add, av, faces)
             idx = (idx + STEP) % av.n
             # Blending and JPEG run on several threads while the card makes the next step; frames go out in order.
             jobs = [loop.run_in_executor(cpu, blend_encode, av, k, f) for k, f in faces]

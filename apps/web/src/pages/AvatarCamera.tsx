@@ -231,7 +231,7 @@ function CameraMode() {
   );
 }
 
-interface LipSyncStatus { possible: boolean; installed: boolean; installing?: string; running: boolean; enabled: boolean; cable?: string; mic?: string; error?: string }
+interface LipSyncStatus { possible: boolean; installed: boolean; installing?: string; running: boolean; enabled: boolean; cable?: string; mic?: string; error?: string; check?: { moving: boolean; vsClip: number; between: number; frames: number; at: number } }
 
 const INSTALL_STEP: Record<string, [string, string]> = {
   starting: ["מתחיל", "Starting"],
@@ -290,6 +290,11 @@ function LipSyncCard() {
             </label>
           )}
           {!st.running && <button type="button" onClick={() => void act({ action: "test" })}>{L("בדיקה: האווטאר מדבר הקלטה לדוגמה (20 שניות)", "Test: the avatar speaks a sample recording (20 seconds)")}</button>}
+          {/* The self-test's proof (t131): the made mouths measured against the clip's own and from frame to frame. */}
+          {st.running && !st.check && <p className="muted small" aria-live="polite">{L("בודק שהשפתיים באמת זזות…", "Checking that the lips really move…")}</p>}
+          {st.check && <p className={`small ${st.check.moving ? "good" : "bad"}`} aria-live="polite">{st.check.moving
+            ? L(`✓ השפתיים זזות: הפה שונה מהסרטון המקורי ב-${st.check.vsClip} ומשתנה בין תמונות ב-${st.check.between} (${st.check.frames} תמונות).`, `✓ The lips move: the mouth differs from the original clip by ${st.check.vsClip} and changes between frames by ${st.check.between} (${st.check.frames} frames).`)
+            : L(`✗ השפתיים כמעט לא זזו (${st.check.vsClip} / ${st.check.between}). נסי סרטון שבו הפנים קרובות וגלויות, באור טוב, ואז בדיקה שוב.`, `✗ The lips barely moved (${st.check.vsClip} / ${st.check.between}). Try a clip with the face close and clear, in good light, then test again.`)}</p>}
           {st.running && <p className="good small">{L("● פועל: השפתיים יזוזו כשתדברי.", "● On: the lips move when you talk.")}</p>}
           <details>
             <summary>{L("שפתיים בדיוק בזמן (כבל שמע וירטואלי)", "Lips exactly on time (a virtual audio cable)")}</summary>

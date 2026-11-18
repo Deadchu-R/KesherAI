@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { installScript, LipSync } from "./lipsync.js";
+import { installScript, LipSync, parseLipCheck } from "./lipsync.js";
 
 test("the lip sync install carries the Windows fixes found when testing it", () => {
   const s = installScript("E:\\K's\\engines\\lipsync");
@@ -31,4 +31,10 @@ test("lip sync is offered only with a strong NVIDIA card, and keeps her choices"
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("the self-test's lip check line is read, with its time", () => {
+  assert.deepEqual(parseLipCheck('07:51:02 {"lipcheck": {"moving": true, "vsClip": 6.3, "between": 2.1, "frames": 96}}', 5), { moving: true, vsClip: 6.3, between: 2.1, frames: 96, at: 5 });
+  assert.equal(parseLipCheck('07:51:02 {"ready": true, "port": 28790}'), undefined);
+  assert.equal(parseLipCheck('{"lipcheck": oops'), undefined);
 });

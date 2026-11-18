@@ -26,6 +26,30 @@ export interface LipSyncStatus {
   /** The microphone it listens to (Windows' default when absent). */
   mic?: string;
   error?: string;
+  /** The last self-test's proof (t131): whether the made mouths really moved, and by how much (pixel levels). */
+  check?: LipCheck;
+}
+
+/** The self-test's measure: the mouth against the clip's own, and from frame to frame. */
+export interface LipCheck { moving: boolean; vsClip: number; between: number; frames: number; at: number }
+
+/**
+ * Reads the script's {"lipcheck": …} line.
+ *
+ * @param line - One line of its output.
+ * @returns The check, or undefined when the line is not one.
+ */
+export function parseLipCheck(line: string, at = Date.now()): LipCheck | undefined {
+  const i = line.indexOf('{"lipcheck"');
+  if (i < 0) return undefined;
+  try {
+    const c = (JSON.parse(line.slice(i)) as { lipcheck?: Record<string, unknown> }).lipcheck;
+    if (!c) return undefined;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+    return { moving: c.moving === true, vsClip: n(c.vsClip), between: n(c.between), frames: n(c.frames), at };
+  } catch {
+    return undefined;
+  }
 }
 
 const MUSETALK = "https://github.com/TMElyralab/MuseTalk";
@@ -72,6 +96,7 @@ export class LipSync {
   private token = randomBytes(16).toString("hex");
   private installing?: string;
   private error?: string;
+  private check?: LipCheck;
 
   /**
    * @param dir - Its folder (in KesherAI's engines folder).
@@ -103,6 +128,7 @@ export class LipSync {
       ...(set.cable ? { cable: set.cable } : {}),
       ...(set.mic ? { mic: set.mic } : {}),
       ...(this.error ? { error: this.error } : {}),
+      ...(this.check ? { check: this.check } : {}),
     };
   }
 
@@ -155,7 +181,10 @@ export class LipSync {
     const args = ["kesher_lipsync.py", "--clip", this.clip, "--work", join(this.dir, "avatars"), "--port", String(this.port), "--token", this.token];
     if (st.cable) args.push("--cable", st.cable);
     if (st.mic) args.push("--mic", st.mic);
-    if (test) args.push("--test-audio", join(mt, "data", "audio", "eng.wav"));
+    if (test) {
+      args.push("--test-audio", join(mt, "data", "audio", "eng.wav"));
+      this.check = undefined;
+    }
     const p = spawn(this.python, args, { cwd: mt, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
     this.proc = p;
     this.error = undefined;
@@ -168,6 +197,10 @@ export class LipSync {
     await new Promise<void>((done, fail) => {
       const timer = setTimeout(() => fail(new Error("Lip sync did not start in time.")), 5 * 60_000);
       p.stdout?.on("data", (b: Buffer) => {
+        for (const line of b.toString().split("\n")) {
+          const c = parseLipCheck(line);
+          if (c) this.check = c;
+        }
         if (/"ready": true/.test(b.toString())) {
           clearTimeout(timer);
           done();
