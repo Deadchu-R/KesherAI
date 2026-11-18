@@ -2624,3 +2624,34 @@ Each AI tool shows which local model it uses and offers to download it the first
   Text Serialized files" and "UnityYAML"; Unreal docs "Multi-User Editing" and "Remote Control API"; NVIDIA Omniverse
   "Live layers"; KesherAI's UnrealOfflineSync board.
 - Stopped at: research done; next the design board, then the Godot reader / writer with tests.
+
+## The scene stand-in, part 2: 2D, the phone, a full outliner; Unity Studio (2026-11-18, 19:30; Roee: "2D and 3D, from the phone too, an outliner with the hierarchy and what is attached to each object, ideas from Unity's browser tool that works as a group")
+- **Unity Studio** (Unity's in-browser, no-code 3D editor, shipped March 2026, $799/seat/year): the engine's own layout
+  in a browser (Hierarchy, Project, Scene view, Inspector, a Camera Preview), imports GLB/FBX/OBJ (big files shown
+  through a lighter "preview GLB"), a node-based Logic editor, a shared timeline for animation, publish to a web link.
+  **Working as a group**: up to 12 people in one draft; each has a colour; their **named cursors and cameras** show in
+  the view; what each has **selected is outlined in their colour**, and a **coloured dot marks it in the Hierarchy**; a
+  value someone is editing in the Inspector is lit in their colour; **follow** someone's camera for a guided review; a
+  script being edited is locked to one person. Drafts keep a browsable **version history**.
+- **The outliner in the engines**: Godot's Scene dock is the node tree itself (a node's script and children shown on its
+  row, a signal icon; the Inspector has the node's properties by class); Unity's Hierarchy lists GameObjects, and the
+  Inspector lists each one's **components** (Transform, Mesh Filter, Mesh Renderer, Collider, Light, scripts), each
+  with a checkbox; Unreal's Outliner lists actors in folders, and Details shows each actor's **component tree**
+  (DefaultSceneRoot, StaticMeshComponent, PointLight…). Common: search, an eye (hide), a lock, a type icon per row,
+  prefab / instance marked (Unity blue, Godot a "scene" icon, Unreal a Blueprint link).
+- **2D**: Godot's Node2D / Control (`position`, `rotation`, `scale` in pixels, Y down) and Sprite2D's texture; Unity 2D
+  is the same scene format with SpriteRenderer (class 212) and an orthographic camera; Unreal 2D is Paper2D
+  (PaperSpriteActor, flipbooks) in a 3D level, seen from the side. The usual view: an orthographic canvas, pan with the
+  middle button / two fingers, zoom on the wheel / pinch, the sprites as their pictures, a grid in pixels.
+- **What we take**:
+  - The outliner as the engines show it: the tree with a type icon, eye and lock per row, search, prefab / instance
+    marked. Under a chosen object, what is attached to it (components / child nodes: mesh, collider, light, script,
+    sprite), read-only for now. On the phone, the outliner is a bottom sheet.
+  - A **2D view**: a scene that is all 2D opens in it on its own; a switch moves between 2D and 3D.
+  - Unity Studio's **group work**, later and on our own share links: the colour per person, their selection outlined,
+    the dot in the outliner, follow their view. The stand-in already works remotely (the phone on the same KesherAI).
+- Sources: unity.com/blog "Unity Studio real-time collaboration"; Digital Production "Unity ships Unity Studio for
+  in-browser 3D" (2026-03-23); unity.com/products/unity-studio; the engines' manuals (Godot Scene dock and Inspector,
+  Unity Hierarchy and Inspector, Unreal Outliner and Details).
+- Stopped at: research done; next the SceneStandIn board (2D, the outliner, the phone), then the readers' components and
+  the 2D view.
