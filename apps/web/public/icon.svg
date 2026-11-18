@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#121213"/>
-  <circle cx="196" cy="256" r="98" fill="none" stroke="#8B9CFF" stroke-width="36"/>
-  <circle cx="316" cy="256" r="98" fill="none" stroke="#8B9CFF" stroke-width="36"/>
-</svg>
+<!-- KesherAI's icon: two linked rings, lit where they meet (the connection). Edit here, then: node scripts/brand-icons.mjs -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#20223a"/><stop offset="1" stop-color="#0d0e14"/></linearGradient>
+<radialGradient id="glow" cx="0.5" cy="0.42" r="0.6"><stop offset="0" stop-color="#8b9cff" stop-opacity=".22"/><stop offset="1" stop-color="#8b9cff" stop-opacity="0"/></radialGradient>
+<linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".18"/><stop offset=".5" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+<linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="218" y1="316" x2="610" y2="708"><stop offset="0" stop-color="#c7d0ff"/><stop offset="1" stop-color="#7f8fff"/></linearGradient>
+<linearGradient id="r2" gradientUnits="userSpaceOnUse" x1="806" y1="316" x2="414" y2="708"><stop offset="0" stop-color="#d9ccff"/><stop offset="1" stop-color="#8f7dff"/></linearGradient>
+<linearGradient id="lens" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cdd5ff"/></linearGradient></defs><rect width="1024" height="1024" rx="228" fill="url(#bg)"/><rect width="1024" height="1024" rx="228" fill="url(#glow)"/><rect x="3" y="3" width="1018" height="1018" rx="225" fill="none" stroke="url(#edge)" stroke-width="6"/><path d="M512 342.25902085825 A196 196 0 0 1 512 681.74097914175 A196 196 0 0 1 512 342.25902085825Z" fill="url(#lens)"/><circle cx="414" cy="512" r="196" fill="none" stroke="url(#r1)" stroke-width="72"/><circle cx="610" cy="512" r="196" fill="none" stroke="url(#r2)" stroke-width="72"/></svg>

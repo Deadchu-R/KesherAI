@@ -46,6 +46,15 @@ public final class Notes {
     }
 
     /** Creates the four channels once (Android keeps the user's choices for each). */
+    /**
+     * KesherAI's own status-bar icon (ic_stat_kesher, from scripts/brand-icons.mjs), or Android's chat icon when the
+     * app was built without it.
+     */
+    static int brandIcon(Context c) {
+        int id = c.getResources().getIdentifier("ic_stat_kesher", "drawable", c.getPackageName());
+        return id != 0 ? id : android.R.drawable.stat_notify_chat;
+    }
+
     static void channels(Context c) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = c.getSystemService(NotificationManager.class);
@@ -91,7 +100,7 @@ public final class Notes {
         String path = m.has("path") ? m.optString("path") : null;
         int code = id.hashCode();
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, channel)
-            .setSmallIcon("downloads".equals(ch) ? android.R.drawable.stat_sys_download_done : android.R.drawable.stat_notify_chat)
+            .setSmallIcon("downloads".equals(ch) ? android.R.drawable.stat_sys_download_done : brandIcon(c))
             .setContentTitle(m.optString("title", "KesherAI"))
             .setContentText(m.optString("body", ""))
             .setStyle(new NotificationCompat.BigTextStyle().bigText(m.optString("body", "")))
@@ -153,7 +162,7 @@ public final class Notes {
         }
         try {
             NotificationManagerCompat.from(c).notify(SUMMARY_ID, new NotificationCompat.Builder(c, DONE)
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
+                .setSmallIcon(brandIcon(c))
                 .setContentTitle("KesherAI")
                 .setContentText(t(count + " עדכונים", count + " updates"))
                 .setGroup(GROUP)

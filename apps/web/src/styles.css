@@ -31,6 +31,13 @@
   color: var(--text);
   background: var(--bg);
   color-scheme: dark;
+  /* The mark's colours (ui/BrandMark.tsx, assets/brand): lighter rings on dark, deeper ones on light. */
+  --brand-a1: light-dark(#6d7cf5, #c7d0ff);
+  --brand-a2: light-dark(#4a52d9, #7f8fff);
+  --brand-b1: light-dark(#9a7cf7, #d9ccff);
+  --brand-b2: light-dark(#6a49e0, #8f7dff);
+  --brand-l1: light-dark(#b9c2ff, #ffffff);
+  --brand-l2: light-dark(#8f9cff, #cdd5ff);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1286,12 +1293,9 @@ label.biz-toggle .grow { flex: 1; }
 .welcome-body h2 { font-size: 24px; margin: 0; }
 .welcome-lead { color: var(--muted); margin: 0; max-width: 60ch; line-height: 1.55; }
 .welcome-hello { align-items: flex-start; padding-top: 34px; }
-.welcome-mark { position: relative; width: 64px; height: 40px; }
-.welcome-mark span { position: absolute; top: 4px; width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--accent); }
-.welcome-mark span:first-child { inset-inline-start: 0; }
-.welcome-mark span:last-child { inset-inline-start: 22px; border-color: color-mix(in srgb, var(--accent) 55%, white); animation: welcome-link 1.6s ease-out 1; }
-@keyframes welcome-link { from { inset-inline-start: 34px; opacity: 0; } to { inset-inline-start: 22px; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .welcome-mark span:last-child { animation: none; } }
+.welcome-mark { width: 72px; height: 72px; animation: welcome-link 1.2s ease-out 1; }
+@keyframes welcome-link { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .welcome-mark { animation: none; } }
 .welcome-points { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
 /* Plain lines, not cards: nothing here is tappable, so nothing looks like a button. */
 .welcome-points li { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 2px 0; padding-inline-start: 12px; border-inline-start: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); color: var(--muted); font-size: 13.5px; line-height: 1.45; }

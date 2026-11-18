@@ -91,6 +91,7 @@ apps/
   android/               ‏Capacitor: האפליקציה לטלפון
   browser-extension/     תוסף לדפדפן
 plugins/                 דוגמאות לתוספים
+assets/brand/            האייקון של KesherAI (SVG). אחרי שינוי: node scripts/brand-icons.mjs מייצר את כל הגדלים
 docs/                    התיעוד, כולל המדריך הזה
 ```
 

@@ -2218,3 +2218,19 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   form; (3) previews of Word, Excel, PowerPoint and CSV files in the chat and the workspace (attached or written by
   the agent); (4) engine arguments per model (today one set for all models).
 - Stopped at: the list above, waiting for Roee's pick.
+
+## A new icon for KesherAI (2026-11-18, Roee: "at the level of our competitors, in our design lines")
+- AI brands converge on circles, gradients and neural shapes ("blanding"); the advice is to keep the shared frame and
+  stand out by one detail of shape (proportion, angle, negative space), not by colour. Each platform also needs its
+  own form: Android adaptive layers with a monochrome layer (themed icons, Android 13+), a white status-bar icon,
+  Windows 16/24 px legibility, a one-colour tray icon, macOS's rounded square, maskable web icons.
+- Three directions on our rings (periwinkle on deep ink), checked on an Android home screen, themed icons, the
+  Windows taskbar and tray, the Mac dock, Chrome's toolbar and the sidebar in dark and light (design AppIcon).
+  Roee chose **B, the lit lens**: where the two rings meet, it lights up.
+- Found while placing it: the desktop installer had no icon (Electron's default), the Android app had Capacitor's
+  default launcher icon, notifications used system icons, and the extension used a different blue icon.
+- Built: assets/brand/ (the drawings) and scripts/brand-icons.mjs (every size from them): web and PWA icons,
+  build/icon.png for electron-builder, the extension's 16–128, the Android launcher icons (legacy, round, adaptive
+  with a monochrome layer, copied in by CI) and a white status-bar icon for KesherAI's notifications, and BrandMark
+  in the sidebar and the welcome screen (deeper colours on light themes through light-dark()).
+- Stopped at: built; the landing page's icon (roeetal.com/KesherAI/media/icon.svg) is in Roee's site repo.

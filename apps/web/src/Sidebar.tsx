@@ -1,3 +1,4 @@
+import { BrandMark } from "./ui/BrandMark";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { askText } from "./ui/askText";
@@ -549,13 +550,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
         <a className="icon-btn foot-btn" href="#/settings" title={t("settings")} aria-label={t("settings")} aria-current={hash.startsWith("#/settings") ? "page" : undefined}>⚙</a>
       </div>
       <div className="brand small-brand">
-        {/* The knot: two rings linked, one passing over the other. */}
-        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true" className="knot">
-          <circle cx="10" cy="14" r="6" fill="none" stroke="var(--accent)" strokeWidth="2.4" />
-          <circle cx="18" cy="14" r="6" fill="none" stroke="var(--text)" strokeWidth="2.4" />
-          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--panel)" strokeWidth="5" />
-          <path d="M14.2 9.4 A6 6 0 0 1 16 14" fill="none" stroke="var(--accent)" strokeWidth="2.4" strokeLinecap="round" />
-        </svg>
+        <BrandMark size={28} className="knot" />
         <span>{branding.productName}<small dir="ltr"><span style={{ color: online ? "var(--good)" : "var(--bad)" }}>●</span> {location.host} · {version}</small></span>
       </div>
 

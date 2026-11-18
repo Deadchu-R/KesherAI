@@ -1,3 +1,4 @@
+import { BrandMark } from "./ui/BrandMark";
 import { useEffect, useState } from "react";
 import { ROLES, partsForRole, type RoleDefinition } from "@kesher/shared";
 import { api } from "./api";
@@ -123,10 +124,7 @@ export function Welcome({ onLocale }: { onLocale: () => void }) {
 
         {step === "hello" && (
           <section className="welcome-body welcome-hello">
-            <div className="welcome-mark" aria-hidden="true">
-              <span />
-              <span />
-            </div>
+            <BrandMark size={72} className="welcome-mark" />
             <h1>{L("כל המודלים שלך, במחשב שלך", "All your AI models, on your own computer")}</h1>
             <p className="welcome-lead">{L("צ'אט, קוד, תמונות, קול, מוזיקה ותלת-ממד — במקום אחד, בחינם, והקבצים שלך נשארים אצלך.", "Chat, code, pictures, voice, music and 3D — in one place, free, and your files stay with you.")}</p>
             <ul className="welcome-points">

@@ -229,7 +229,8 @@ public class KesherUpdaterPlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(new NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent tap = PendingIntent.getActivity(ctx, 7, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification note = new NotificationCompat.Builder(ctx, CHANNEL)
-            .setSmallIcon(ctx.getApplicationInfo().icon)
+            // KesherAI's white status-bar icon (the colour launcher icon shows as a blank square there).
+            .setSmallIcon(ctx.getResources().getIdentifier("ic_stat_kesher", "drawable", ctx.getPackageName()) != 0 ? ctx.getResources().getIdentifier("ic_stat_kesher", "drawable", ctx.getPackageName()) : android.R.drawable.stat_sys_download_done)
             .setContentTitle("KesherAI")
             .setContentText("The update is ready. Tap to install.")
             .setContentIntent(tap)

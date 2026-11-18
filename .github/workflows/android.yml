@@ -92,6 +92,8 @@ jobs:
           GSECRET: ${{ secrets.KESHER_GOOGLE_CLIENT_SECRET }}
         run: |
           npx cap add android
+          # KesherAI's icon (scripts/brand-icons.mjs): the launcher icon in every density, adaptive with a themed layer.
+          cp -r icon/res/. android/app/src/main/res/
           # The computer serves KesherAI over plain HTTP on the home network or Tailscale.
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
           # kesherai://connect?server=… links (the QR code in Settings → Phone) open the app and connect.
