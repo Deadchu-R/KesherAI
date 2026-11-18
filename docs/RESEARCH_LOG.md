@@ -2581,3 +2581,21 @@ Each AI tool shows which local model it uses and offers to download it the first
 - Sources: huggingface.co/tencent/Hunyuan3D-Part (P3-SAM, X-Part), arXiv 2509.06784 (P3-SAM), arXiv 2509.12815
   (Hunyuan3D Studio), themoonlight.io review of P3-SAM; Blender, 3ds Max and Maya manuals for Separate / Detach / Extract.
 - Stopped at: research done; next "Choose by click" and Separate in the 3D editor.
+
+## The editors' next tools, from how the known tools do them (2026-11-18, 17:00–18:10)
+- **Texture slots** (Blender's Principled BSDF, Substance's channels, glTF PBR): colour (sRGB), roughness and normal
+  (data, linear); roughness / normal made from the colour's brightness as Materialize and Substance's "from base colour"
+  do (Sobel for the normal, OpenGL green-up as glTF asks).
+- **Painting on the model** (Blender's Texture Paint, Substance Painter, 3D-Coat): the brush draws through the UVs; a
+  part without UVs gets Blender's Cube Projection (each face on the box side it faces, six cells, no overlap).
+- **Noise clean-up** (Audacity's Noise Reduction; iZotope RX and Adobe Podcast as the AI versions): learn the noise from
+  a stretch (or the quietest tenth), gate each frequency, smooth the gain so it does not twinkle.
+- **Chords under a hummed melody** (Hookpad's and Band-in-a-Box's harmonize): the key's triad per bar that holds most of
+  the melody's notes, I / IV / V preferred, home chord at the ends.
+- **Shot changes** (Premiere's Scene Edit Detection, Resolve's Scene Cut Detector, CapCut's auto cut): FFmpeg's scene
+  score. **Burned captions and reframe** (CapCut, Premiere's Auto Reframe): libass with right-to-left Hebrew; the middle
+  of the frame at 9:16 / 1:1 / 4:5 (subject tracking left for later).
+- **Remove background** (Photoshop, Canva): rembg with BiRefNet (MIT), not RMBG (BRIA's licence is non-commercial).
+- **P3-SAM on Windows**: its requirements are Linux-first (flash-attention from Git, PyG wheels without an index, Sonata
+  at /root/sonata); Sonata's authors give enable_flash=False with patches of 1024 for when flash-attention is missing.
+- Stopped at: all built and checked in a browser here; on the PC waiting until Roee frees it (a Switch 2 build runs).
