@@ -2562,3 +2562,22 @@ Each AI tool shows which local model it uses and offers to download it the first
   superhivemarket.com Universal Bridge: Photoshop docs; versluis.com "How to use an external image editor with Blender";
   creativebloq.com "How to paint model textures directly in 3ds Max"; polycount threads on Viewport Canvas and Photoshop.
 - Stopped at: research done; next the board, then the hand-off and the texture slot.
+
+## Choosing exact parts of a model, and splitting it by meaning with AI (2026-11-18, 16:50; Roee: "really choose specific parts and change their texture; ask the AI to split it")
+- **Without AI, what the tools give**: Blender's **Separate** (P: by selection, by material, by loose parts) and **Select
+  Linked** (L under the mouse; "delimit" by seam, sharp edge, material, or by the angle between faces); 3ds Max's
+  **Element** sub-object level and **Detach**; Maya's **Extract** and **Separate**. So: a click picks the faces under it
+  and grows across edges until the surface turns more than an angle (a chair's leg ends where it meets the seat), then
+  "Separate" makes it a part of its own.
+- **With AI (2025–2026)**: **P3-SAM** (Tencent Hunyuan3D-Part): native 3D part segmentation of any mesh into parts and
+  their boxes, automatic or from a point clicked on the model, the step before X-Part makes the parts whole; demos on
+  Hugging Face, Colab and Kaggle; Tencent's community licence. **PartField** (NVIDIA, 2025): a feature field that
+  clusters a mesh into parts at any number of parts. **SAMPart3D** / **SAMesh**: SAM's 2D masks lifted onto the mesh.
+  All need a GPU (Roee's 24 GB is enough) and a Python engine, like KesherAI's voice engine.
+- **The plan**: now — "Choose by click" (faces linked under the click, stopping at an angle, 10–90°), shown in orange, then
+  "Separate" into a new part, plus the split by loose pieces / by material already built; next — "By meaning (AI)" as a
+  download Roee agrees to (P3-SAM in KesherAI's engines, the mesh in, a part for each face out), with a click on the
+  model as the prompt for "this part"; the parts then get textures through the image editor.
+- Sources: huggingface.co/tencent/Hunyuan3D-Part (P3-SAM, X-Part), arXiv 2509.06784 (P3-SAM), arXiv 2509.12815
+  (Hunyuan3D Studio), themoonlight.io review of P3-SAM; Blender, 3ds Max and Maya manuals for Separate / Detach / Extract.
+- Stopped at: research done; next "Choose by click" and Separate in the 3D editor.
