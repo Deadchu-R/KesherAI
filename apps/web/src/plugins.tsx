@@ -335,6 +335,14 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (!res.ok && res.status !== 409) throw new Error(j.error ?? String(res.status));
           return { ok: res.ok, ...j };
         }
+        // A model file the stand-in's scene uses (res://….glb), as bytes, so it shows the scene's real shapes.
+        case "standin.asset": {
+          need("model");
+          if (!godot) throw new Error("This page was not opened with a Godot scene.");
+          const res = await fetch(withToken(`/api/godot/asset?project=${encodeURIComponent(godot.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
+          if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
+          return res.arrayBuffer();
+        }
         // The 3D editor's moves for the Unity scene it was opened with: queued for the KesherAI package in Unity.
         case "unity.saveScene": {
           need("model");

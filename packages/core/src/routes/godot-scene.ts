@@ -32,6 +32,30 @@ async function inside(dir: string, file: string): Promise<void> {
 const same = (a?: number[], b?: number[]) => !!a && !!b && a.length === b.length && a.every((x, i) => Math.abs(x - b[i]!) < 1e-4);
 const flatOf = (n?: TscnNode) => (n?.transform ? [...n.transform.basis, ...n.transform.origin] : n?.position2d);
 
+/**
+ * Scenes inside the scene (a door scene placed five times): their nodes come along under the node that places them,
+ * marked `inner` (shown for the shape, never saved: they belong to the other file), two levels deep at most.
+ */
+async function expand(dir: string, nodes: TscnNode[], depth: number): Promise<Array<TscnNode & { inner?: boolean }>> {
+  const out: Array<TscnNode & { inner?: boolean }> = [];
+  for (const n of nodes) {
+    out.push(n);
+    if (!n.scene || depth >= 2) continue;
+    try {
+      const { file } = paths(dir, n.scene);
+      await inside(dir, file!);
+      const innerNodes = await expand(dir, readTscn(await readFile(file!, "utf8")), depth + 1);
+      const root = innerNodes[0];
+      // The placed scene's root is this node itself: its look comes over, its children hang under it.
+      if (root && !n.shape && !n.model) Object.assign(n, root.shape ? { shape: root.shape } : {}, root.model ? { model: root.model } : {});
+      for (const c of innerNodes.slice(1)) out.push({ ...c, path: `${n.path}/${c.path}`, inner: true });
+    } catch {
+      // A scene that is missing or outside: the node stays a box.
+    }
+  }
+  return out;
+}
+
 /** A move and what the node looked like when the stand-in was made, to see whether it moved in Godot too. */
 export interface StandInChange extends TscnChange {
   /** The transform it had (12 numbers, or 2 for a 2D position); none: the node was at the default. */
@@ -84,8 +108,26 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
       const { dir, file } = paths(req.query.project, req.query.scene);
       await inside(dir, file!);
       const st = await stat(file!).catch(() => undefined);
+      if (st && st.size > 50 * 1024 * 1024) return reply.code(413).send({ error: "The scene is too big to read here." });
       if (!st?.isFile()) return reply.code(404).send({ error: "No such scene." });
-      return { nodes: readTscn(await readFile(file!, "utf8")), mtime: st.mtimeMs };
+      return { nodes: await expand(dir, readTscn(await readFile(file!, "utf8")), 0), mtime: st.mtimeMs };
+    } catch (e) {
+      return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
+    }
+  });
+
+  // A model file the scene uses (res://….glb / .gltf), for the stand-in to show its real shape.
+  app.get<{ Querystring: { project?: string; path?: string } }>("/api/godot/asset", async (req, reply) => {
+    try {
+      const { dir } = paths(req.query.project);
+      const rel = String(req.query.path ?? "").replace(/^res:\/\//, "");
+      const file = resolve(dir, rel);
+      if (!/\.(glb|gltf)$/i.test(file) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A .glb or .gltf inside the project." });
+      await inside(dir, file);
+      const st = await stat(file).catch(() => undefined);
+      if (!st?.isFile()) return reply.code(404).send({ error: "No such file." });
+      if (st.size > 150 * 1024 * 1024) return reply.code(413).send({ error: "The model is too big to show here." });
+      return reply.type(/\.glb$/i.test(file) ? "model/gltf-binary" : "model/gltf+json").send(await readFile(file));
     } catch (e) {
       return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
     }

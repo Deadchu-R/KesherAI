@@ -47,3 +47,33 @@ test("moves are written into only the transform lines; a node at the default get
   assert.equal(text.split("\n").length, SCENE.split("\n").length + 1);
   assert.deepEqual(readTscn(text).map((x) => x.path), readTscn(SCENE).map((x) => x.path));
 });
+
+test("each node's look: Godot's built-in meshes with their sizes (defaults when left out), models and scenes it instances", () => {
+  const n = readTscn(`[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://models/tree.glb" id="1_t"]
+[ext_resource type="PackedScene" path="res://door.tscn" id="2_d"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_a"]
+size = Vector3(2, 0.5, 3)
+
+[sub_resource type="CylinderMesh" id="Cyl_b"]
+height = 4.0
+
+[node name="Level" type="Node3D"]
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_a")
+
+[node name="Pillar" type="MeshInstance3D" parent="."]
+mesh = SubResource("Cyl_b")
+
+[node name="Tree" parent="." instance=ExtResource("1_t")]
+
+[node name="Door" parent="." instance=ExtResource("2_d")]
+`);
+  assert.deepEqual(n[1]!.shape, { kind: "box", size: [2, 0.5, 3] });
+  assert.deepEqual(n[2]!.shape, { kind: "cylinder", topRadius: 0.5, bottomRadius: 0.5, height: 4 });
+  assert.equal(n[3]!.model, "res://models/tree.glb");
+  assert.equal(n[4]!.scene, "res://door.tscn");
+});

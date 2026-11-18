@@ -19,6 +19,24 @@ export interface TscnNode {
   position2d?: [number, number];
   rotation2d?: number;
   scale2d?: [number, number];
+  /** Its look, so the stand-in has the scene's real shape: one of Godot's built-in meshes with its sizes, a model file
+   * (`res://….glb`) the node instances or shows, or another scene it instances (`res://….tscn`). */
+  shape?: TscnShape;
+  model?: string;
+  scene?: string;
+}
+
+/** A built-in mesh (BoxMesh, SphereMesh, CylinderMesh, CapsuleMesh, PlaneMesh, PrismMesh, TorusMesh) and its sizes. */
+export interface TscnShape {
+  kind: "box" | "sphere" | "cylinder" | "capsule" | "plane" | "prism" | "torus";
+  /** Box / prism: x, y, z; plane: x, y (on the ground). */
+  size?: number[];
+  radius?: number;
+  height?: number;
+  topRadius?: number;
+  bottomRadius?: number;
+  innerRadius?: number;
+  outerRadius?: number;
 }
 
 const NUM = String.raw`-?\d+(?:\.\d+)?(?:e[-+]?\d+)?`;
@@ -36,11 +54,29 @@ export function readTscn(text: string): TscnNode[] {
   if (!/^\[gd_scene\b[^\]]*format=3/m.test(text)) throw new Error("This is not a Godot 4 scene (.tscn, format 3).");
   const out: TscnNode[] = [];
   const lines = text.split(/\r?\n/);
+  // The scene's resources: files (id → path) and its own sub-resources (id → type and properties).
+  const ext = new Map<string, string>();
+  const sub = new Map<string, { type: string; props: Map<string, string> }>();
+  let curSub: { type: string; props: Map<string, string> } | undefined;
   let cur: TscnNode | undefined;
+  const meshOf = new Map<TscnNode, string>();
   for (const line of lines) {
     const head = /^\[(\w+)\s*(.*)\]\s*$/.exec(line);
     if (head) {
       cur = undefined;
+      curSub = undefined;
+      const h0 = head[2] ?? "";
+      if (head[1] === "ext_resource") {
+        const id = attr(h0, "id")?.[2], path = attr(h0, "path")?.[2];
+        if (id && path) ext.set(id, path);
+        continue;
+      }
+      if (head[1] === "sub_resource") {
+        const id = attr(h0, "id")?.[2];
+        curSub = { type: attr(h0, "type")?.[2] ?? "", props: new Map() };
+        if (id) sub.set(id, curSub);
+        continue;
+      }
       if (head[1] !== "node") continue;
       const h = head[2] ?? "";
       const name = attr(h, "name")?.[2] ?? "";
@@ -50,10 +86,12 @@ export function readTscn(text: string): TscnNode[] {
       out.push(cur);
       continue;
     }
-    if (!cur) continue;
     const kv = /^(\w+)\s*=\s*(.*)$/.exec(line);
+    if (curSub && kv) { curSub.props.set(kv[1]!, kv[2]!); continue; }
+    if (!cur) continue;
     if (!kv) continue;
     const [, key, value] = kv;
+    if (key === "mesh") { const id = /Resource\("([^"]+)"\)/.exec(value!)?.[1]; if (id) meshOf.set(cur, `${value!.startsWith("Sub") ? "s" : "e"}:${id}`); continue; }
     if (key === "transform" && /^Transform3D\(/.test(value!)) {
       const n = numbers(value!);
       if (n.length === 12) cur.transform = { basis: n.slice(0, 9), origin: [n[9]!, n[10]!, n[11]!] };
@@ -66,7 +104,37 @@ export function readTscn(text: string): TscnNode[] {
       cur.scale2d = [n[0] ?? 1, n[1] ?? 1];
     }
   }
+  // Each node's look: an instanced model or scene, or the mesh it shows.
+  for (const n of out) {
+    if (n.instance) {
+      const path = ext.get(n.instance);
+      if (path && /\.(glb|gltf)$/i.test(path)) n.model = path;
+      else if (path && /\.tscn$/i.test(path)) n.scene = path;
+    }
+    const m = meshOf.get(n);
+    if (!m) continue;
+    if (m.startsWith("e:")) { const path = ext.get(m.slice(2)); if (path && /\.(glb|gltf)$/i.test(path)) n.model = path; continue; }
+    const r = sub.get(m.slice(2));
+    const shape = r && shapeOf(r.type, r.props);
+    if (shape) n.shape = shape;
+  }
   return out;
+}
+
+/** A built-in mesh's sizes, with Godot's defaults where the file leaves them out (it writes only what changed). */
+function shapeOf(type: string, p: Map<string, string>): TscnShape | undefined {
+  const num = (k: string, d: number) => (p.has(k) ? Number(p.get(k)) : d);
+  const vec = (k: string, d: number[]) => (p.has(k) ? numbers(p.get(k)!) : d);
+  switch (type) {
+    case "BoxMesh": return { kind: "box", size: vec("size", [1, 1, 1]) };
+    case "SphereMesh": return { kind: "sphere", radius: num("radius", 0.5), height: num("height", 1) };
+    case "CylinderMesh": return { kind: "cylinder", topRadius: num("top_radius", 0.5), bottomRadius: num("bottom_radius", 0.5), height: num("height", 2) };
+    case "CapsuleMesh": return { kind: "capsule", radius: num("radius", 0.5), height: num("height", 2) };
+    case "PlaneMesh": return { kind: "plane", size: vec("size", [2, 2]) };
+    case "PrismMesh": return { kind: "prism", size: vec("size", [1, 1, 1]) };
+    case "TorusMesh": return { kind: "torus", innerRadius: num("inner_radius", 0.5), outerRadius: num("outer_radius", 1) };
+    default: return undefined;
+  }
 }
 
 /** A move made in the stand-in, for one node. */

@@ -54,3 +54,18 @@ test("a link inside the project that leads outside is refused", async () => {
   assert.equal((await app.inject({ url: `/api/godot/scene?project=${encodeURIComponent(dir)}&scene=res://linked/b.tscn` })).statusCode, 400);
   await app.close();
 });
+
+test("scenes placed in the scene come along (inner, not saved), and the models it uses can be fetched", async () => {
+  const { app, dir } = await setup();
+  await writeFile(join(dir, "door.tscn"), `[gd_scene format=3]\n\n[sub_resource type="BoxMesh" id="b"]\nsize = Vector3(1, 2, 0.1)\n\n[node name="Door" type="MeshInstance3D"]\nmesh = SubResource("b")\n\n[node name="Handle" type="Node3D" parent="."]\n`);
+  await writeFile(join(dir, "levels", "b.tscn"), `[gd_scene format=3]\n\n[ext_resource type="PackedScene" path="res://door.tscn" id="1"]\n\n[node name="L" type="Node3D"]\n\n[node name="Door1" parent="." instance=ExtResource("1")]\n`);
+  await writeFile(join(dir, "tree.glb"), "glTF....");
+  const r = (await app.inject({ url: `/api/godot/scene?project=${encodeURIComponent(dir)}&scene=res://levels/b.tscn` })).json();
+  assert.deepEqual(r.nodes.map((n: { path: string; inner?: boolean }) => [n.path, !!n.inner]), [[".", false], ["Door1", false], ["Door1/Handle", true]]);
+  assert.deepEqual(r.nodes[1].shape, { kind: "box", size: [1, 2, 0.1] });
+  const a = await app.inject({ url: `/api/godot/asset?project=${encodeURIComponent(dir)}&path=res://tree.glb` });
+  assert.equal(a.statusCode, 200);
+  assert.equal(a.headers["content-type"], "model/gltf-binary");
+  assert.equal((await app.inject({ url: `/api/godot/asset?project=${encodeURIComponent(dir)}&path=res://project.godot` })).statusCode, 400);
+  await app.close();
+});

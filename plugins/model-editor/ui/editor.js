@@ -7,6 +7,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
+import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
+import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
@@ -183,8 +185,11 @@ function loadStandIn(nodes) {
   for (const n of nodes.slice(1)) {
     const parent = byPath.get(n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : ".") ?? root;
     const t = n.type ?? (n.instance ? "instance" : "");
-    const geo = /Light/.test(t) ? new THREE.SphereGeometry(0.12, 12, 8) : /Camera/.test(t) ? new THREE.ConeGeometry(0.15, 0.3, 12).rotateX(-Math.PI / 2) : new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const o = new THREE.Mesh(geo, mat(/Light/.test(t) ? 0xffd25a : /Camera/.test(t) ? 0x6aa8ff : n.instance ? 0xb48cff : 0xb8bcc8));
+    // The real shape where the scene says it: Godot's own meshes at their sizes; a model file is loaded below; a node
+    // with nothing to show (a group, a marker) is a small grey cube, so it can still be found and moved.
+    const real = shapeGeo(n.shape);
+    const geo = real ?? (/Light/.test(t) ? new THREE.SphereGeometry(0.12, 12, 8) : /Camera/.test(t) ? new THREE.ConeGeometry(0.15, 0.3, 12).rotateX(-Math.PI / 2) : n.model || n.scene || /MeshInstance/.test(t) ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15));
+    const o = new THREE.Mesh(geo, mat(real ? 0xc8ccd6 : /Light/.test(t) ? 0xffd25a : /Camera/.test(t) ? 0x6aa8ff : n.instance ? 0xb48cff : 0x8a8e99));
     o.name = n.name;
     if (n.transform) {
       fromGodot(n.transform.basis, n.transform.origin).decompose(o.position, o.quaternion, o.scale);
@@ -193,8 +198,11 @@ function loadStandIn(nodes) {
       o.position.set(n.position2d[0] / PX, -n.position2d[1] / PX, 0);
       o.userData.godot = { path: n.path, from: n.position2d, is2d: true };
     } else o.userData.godot = { path: n.path };
+    // Nodes of a scene placed in this one: shown for the shape, never saved (they belong to that other file).
+    if (n.inner) o.userData.godot = { path: n.path, inner: true };
     parent.add(o);
     byPath.set(n.path, o);
+    if (n.model) void showModel(o, n.model);
   }
   model = root;
   scene.add(model);
@@ -206,12 +214,71 @@ function loadStandIn(nodes) {
   $("toChat").hidden = true;
   msg(T("standIn", "A stand-in of the Godot scene: move things, then \"Save to the scene\" (with Godot closed)"));
 }
+/** Godot's built-in meshes as three.js shapes, at the same sizes (Godot's capsule height includes its two caps). */
+function shapeGeo(s) {
+  if (!s) return null;
+  const [x = 1, y = 1, z = 1] = s.size ?? [];
+  switch (s.kind) {
+    case "box": return new THREE.BoxGeometry(x, y, z);
+    case "sphere": return new THREE.SphereGeometry(s.radius, 24, 12).scale(1, (s.height ?? 2 * s.radius) / (2 * s.radius), 1);
+    case "cylinder": return new THREE.CylinderGeometry(s.topRadius, s.bottomRadius, s.height, 24);
+    case "capsule": return new THREE.CapsuleGeometry(s.radius, Math.max(0, s.height - 2 * s.radius), 6, 16);
+    case "plane": return new THREE.PlaneGeometry(x, y).rotateX(-Math.PI / 2);
+    case "prism": { const g = new THREE.CylinderGeometry(0, 0.5, 1, 3, 1).rotateY(Math.PI / 6); g.scale(x, y, z); return g; }
+    case "torus": return new THREE.TorusGeometry((s.innerRadius + s.outerRadius) / 2, (s.outerRadius - s.innerRadius) / 2, 12, 32).rotateX(Math.PI / 2);
+    default: return null;
+  }
+}
+// The models the scene uses, loaded once each (a tree placed 40 times is read once) and kept light: a heavy one is
+// simplified to about 50 000 triangles, which is enough to see where things are.
+const MAX_TRIS = 50000;
+const modelCache = new Map();
+async function loadModel(path) {
+  if (!modelCache.has(path)) {
+    modelCache.set(path, (async () => {
+      const bytes = await kesher.call("standin.asset", { path });
+      const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
+      const all = [];
+      gltf.scene.traverse((m) => { if (m.isMesh) all.push(m); });
+      const total = all.reduce((a, m) => a + tris(m), 0);
+      if (total > MAX_TRIS) {
+        const keep = MAX_TRIS / total;
+        for (const m of all) {
+          const g = m.geometry.index ? m.geometry : mergeVertices(m.geometry);
+          const remove = Math.floor(g.attributes.position.count * (1 - keep));
+          if (remove > 0) m.geometry = new SimplifyModifier().modify(g, remove);
+        }
+      }
+      // One quiet material, so the scene reads as shapes and stays quick (no textures to load).
+      const look = new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8 });
+      for (const m of all) {
+        m.material = look;
+        if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
+      }
+      return gltf.scene;
+    })());
+  }
+  return modelCache.get(path);
+}
+async function showModel(o, path) {
+  try {
+    const shape = (await loadModel(path)).clone(true);
+    shape.traverse((c) => (c.userData.generated = true));
+    shape.userData.generated = true;
+    // The box was only standing in: the node keeps its place and takes the model's look.
+    o.material = new THREE.MeshBasicMaterial({ visible: false });
+    o.add(shape);
+    stats();
+  } catch (e) {
+    msg(`${path}: ${e.message}`, true);
+  }
+}
 /** The nodes that moved, as Godot wants them, with what they were (to see whether they moved in Godot too). */
 function godotChanges() {
   const out = [];
   model?.traverse((o) => {
     const g = o.userData.godot;
-    if (!g || g.path === ".") return;
+    if (!g || g.path === "." || g.inner) return;
     o.updateMatrix();
     if (g.is2d) {
       const p = [Math.round(o.position.x * PX * 1000) / 1000, Math.round(-o.position.y * PX * 1000) / 1000];
