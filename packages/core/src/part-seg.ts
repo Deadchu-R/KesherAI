@@ -243,6 +243,9 @@ export class PartSegmenter {
       await mkdir(work, { recursive: true });
       try {
         await writeFile(join(work, "in.glb"), glb);
+        // The runner is written again before every split: written only at setup, the lighter settings of later versions
+        // never reached a computer set up before them (found on the PC: 24 GB filled, no "kesher: lighter run" line).
+        await writeFile(join(this.dir, "runner.py"), RUNNER);
         const paths = JSON.parse(await readFile(join(this.dir, "paths.json"), "utf8")) as { code: string; ckpt?: string };
         const env = { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONIOENCODING: "utf-8", PYTHONUNBUFFERED: "1" };
         await this.run(this.python, [join(this.dir, "runner.py"), JSON.stringify({ code: paths.code, ckpt: paths.ckpt ?? null, mesh: join(work, "in.glb"), out: join(work, "out"), sonata: join(this.dir, "sonata") })], env, 20 * 60_000);
