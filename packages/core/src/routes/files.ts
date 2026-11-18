@@ -99,6 +99,8 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     const rel = relative(root, full).split(sep).join("/");
     try {
       if (/^\.(png|jpe?g|webp|gif|bmp)$/.test(ext)) return { kind: "image", name, path: rel };
+      // A 3D model: the page draws it (three.js) from the download address.
+      if (ext === ".glb" || ext === ".gltf") return { kind: "model", name, path: rel };
       const data = await readFile(full);
       if (ext === ".xlsx") return { kind: "table", name, sheets: xlsxSheets(data, 300) };
       if (ext === ".csv" || ext === ".tsv") {

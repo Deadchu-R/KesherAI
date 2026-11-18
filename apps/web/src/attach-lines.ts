@@ -37,7 +37,7 @@ export function fileIcon(path: string): string {
  */
 export function namedDocuments(text: string): string[] {
   const found = new Set<string>();
-  for (const m of text.matchAll(/(?:^|[\s`'"([*])((?:[\w.-]+[\\/])*[\w.-]+\.(?:xlsx|docx|pptx|pdf|csv|tsv))(?=$|[\s`'")\],.:;*!?])/gim)) {
+  for (const m of text.matchAll(/(?:^|[\s`'"([*])((?:[\w.-]+[\\/])*[\w.-]+\.(?:xlsx|docx|pptx|pdf|csv|tsv|glb))(?=$|[\s`'")\],.:;*!?])/gim)) {
     const path = m[1]!;
     const at = m.index ?? 0;
     if (/[a-z]+:\/\/\S*$/i.test(text.slice(Math.max(0, at - 200), at + 1))) continue;

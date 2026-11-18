@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Media } from "../MediaSpeed";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { LineIcon } from "../ui/Glyph";
 import { fileIcon } from "../attach-lines";
 
+// three.js is big: the 3D viewer loads only when a model is opened.
+const ModelViewer = lazy(() => import("../ModelViewer"));
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Preview =
@@ -12,7 +14,7 @@ type Preview =
   | { kind: "slides"; name: string; slides: string[] }
   | { kind: "html"; name: string; html: string }
   | { kind: "text"; name: string; text: string }
-  | { kind: "image" | "none"; name: string; path: string };
+  | { kind: "image" | "model" | "none"; name: string; path: string };
 
 /** A Word or HTML page in a frame with no scripts, no forms and nothing from outside (only its own styles and pictures). */
 const framed = (html: string) =>
@@ -64,7 +66,7 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
 }
 
 /** Files shown as a preview rather than as text: Office files, PDF and pictures (the Workspace opens these so). */
-export const PREVIEW_FIRST = /\.(xlsx|docx|pptx|pdf|png|jpe?g|webp|gif|bmp)$/i;
+export const PREVIEW_FIRST = /\.(xlsx|docx|pptx|pdf|png|jpe?g|webp|gif|bmp|glb|gltf)$/i;
 /** Files that can be read either way: a table or a page, or their text to edit. */
 export const PREVIEW_OR_TEXT = /\.(csv|tsv|html?)$/i;
 
@@ -125,6 +127,7 @@ export function FilePreview({ convId, path, reloadKey }: { convId: string; path:
       {p?.kind === "html" && <iframe className="attach-frame" sandbox="" srcDoc={framed(p.html)} title={p.name} />}
       {p?.kind === "text" && <pre className="attach-text" dir="auto">{p.text}</pre>}
       {p?.kind === "image" && <img className="attach-img" src={download} alt={p.name} />}
+      {p?.kind === "model" && <Suspense fallback={<p className="muted">{L("טוען…", "Loading…")}</p>}><ModelViewer src={download} name={p.name} /></Suspense>}
       {p?.kind === "none" && /\.(mp4|webm|mov|m4v|mkv)$/i.test(file) && <Media kind="video" className="attach-img" src={download} controls preload="metadata" />}
       {p?.kind === "none" && /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <Media kind="audio" src={download} controls preload="metadata" style={{ width: "100%" }} />}
       {p?.kind === "none" && !/\.(mp4|webm|mov|m4v|mkv|mp3|wav|m4a|ogg|flac|aac|opus)$/i.test(file) && <p className="muted">{L("אין תצוגה מקדימה לסוג הקובץ הזה. אפשר להוריד אותו.", "No preview for this kind of file. You can download it.")}</p>}
