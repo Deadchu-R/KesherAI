@@ -42,6 +42,7 @@
           <button id="quieter" data-t="quieter">−3 dB</button>
           <button id="normalize" data-t="normalize">Normalize</button>
           <button id="toInst" class="primary" data-t="toInst">🎻 To an instrument…</button>
+          <button id="toVoice" data-t="toVoice">🗣 In another voice…</button>
         </div>
         <p class="hint muted small" data-t="hint">Drag to select · Space play · Delete cut · Ctrl+A all · Esc let go</p>
       </section>
@@ -92,6 +93,22 @@
         <button type="button" id="instReplace" class="primary" data-t="instReplace">Replace with the instrument</button>
       </div>
       <span class="muted small" data-t="instHint">Hum or whistle separate notes ("ta ta" helps); a beatbox becomes drums. Instruments: FluidR3 (CC BY 3.0, Frank Wen).</span>
+    </form>
+  </dialog>
+  <!-- The words in another voice: a cloned voice (yours, any language) or a natural one on this computer -->
+  <dialog id="voiceDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="voiceH">In another voice</strong>
+      <label class="field"><span data-t="voiceText">What to say (from the selected line, or write it)</span><textarea id="voiceText" rows="3" maxlength="2000" dir="auto"></textarea></label>
+      <label class="field"><span data-t="voicePick">The voice</span><select id="voicePick"></select></label>
+      <span class="muted small" id="voiceNone" hidden data-t="voiceNone">No voices yet: make your own in Voice → "Your own voice", or set up the natural voice in Settings → Speech.</span>
+      <div class="row">
+        <button type="button" id="voiceListen">▶ <span data-t="listen">Listen</span></button>
+        <span class="grow"></span>
+        <button value="cancel" data-t="cancel">Cancel</button>
+        <button type="button" id="voiceInsert" data-t="voiceInsert">Insert at the playhead</button>
+        <button type="button" id="voiceReplace" class="primary" data-t="voiceReplace">Replace the selection</button>
+      </div>
     </form>
   </dialog>
   <dialog id="keysDialog">

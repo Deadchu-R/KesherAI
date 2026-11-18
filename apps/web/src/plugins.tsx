@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { refreshParts, setParts } from "./parts";
 import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
@@ -12,6 +13,33 @@ function fromDataUrl(given: unknown): Promise<Response> {
   const url = String(given ?? "");
   if (!url.startsWith("data:")) return Promise.reject(new Error("Send the file as a data: URL."));
   return fetch(url);
+}
+
+/**
+ * Each editor is a part of its own (asked 2026-11-18): when one editor needs another (the video editor's sound into the
+ * sound editor), the other may be off. This offers to turn it on, says what it is and its size, and waits for the
+ * plugin to load.
+ *
+ * @param part - The part's id (packages/shared/src/parts.ts).
+ * @param why - What she was doing, for the question.
+ * @returns Whether it is on now.
+ */
+export async function offerPart(part: string, why: string): Promise<boolean> {
+  const parts = await refreshParts();
+  const it = parts.find((x) => x.id === part);
+  if (!it) return false;
+  if (it.on) return true;
+  const he = getLocale() === "he";
+  const title = he ? it.title.he : it.title.en;
+  const size = it.downloadGb ? (he ? ` (הורדה של ${it.downloadGb} GB)` : ` (a ${it.downloadGb} GB download)`) : he ? " (בלי הורדה)" : " (nothing to download)";
+  if (!confirm(he ? `${why}: צריך את ${title}, חלק נפרד של KesherAI${size}. להפעיל אותו עכשיו?` : `${why} needs the ${title}, a separate part of KesherAI${size}. Turn it on now?`)) return false;
+  await setParts({ parts: { [part]: true } });
+  for (let i = 0; i < 20; i++) {
+    await refreshPluginUi();
+    if (cache.pages.some((pg) => pg.pluginId === part)) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
 }
 
 function dataUrl(blob: Blob): Promise<string> {
@@ -148,6 +176,31 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           }
           return { path, captions };
         }
+        // Voices on this computer for the sound editor's "In another voice": the cloned ones (any language, Hebrew too)
+        // and Kokoro's (English).
+        case "sound.voices": {
+          need("sound");
+          const [clone, kokoro] = await Promise.all([
+            api<{ voices?: string[]; installed?: boolean }>("/api/voice-clone").catch(() => ({ voices: [] as string[] })),
+            api<{ ready?: boolean; voices?: Array<{ id: number; name: string }> }>("/api/speech/tts/local").catch(() => ({ ready: false, voices: [] })),
+          ]);
+          return [
+            ...(clone.voices ?? []).map((v) => ({ id: `clone:${v}`, name: v, kind: "clone" })),
+            ...(kokoro.ready ? (kokoro.voices ?? []).map((v) => ({ id: `kokoro:${v.id}`, name: v.name, kind: "kokoro" })) : []),
+          ];
+        }
+        // Text said by one of those voices, as WAV bytes.
+        case "sound.say": {
+          need("sound");
+          const voice = String(p.voice ?? "");
+          const text = String(p.text ?? "").slice(0, 2000);
+          if (!text.trim()) throw new Error("Write what to say.");
+          const res = voice.startsWith("clone:")
+            ? await fetch(withToken("/api/voice-clone/say"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice: voice.slice(6), text, lang: typeof p.lang === "string" ? p.lang : getLocale() === "he" ? "he" : "en" }) })
+            : await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, provider: "local", voice: Number(voice.replace("kokoro:", "")) || 3 }) });
+          if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
+          return res.arrayBuffer();
+        }
         // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
         case "own.file": {
           const path = String(p.path ?? "");
@@ -161,6 +214,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.openSound": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
+          if (!(await offerPart("sound-editor", getLocale() === "he" ? "כדי לשנות את הסאונד" : "Changing the sound"))) return { offered: false };
           const c = encodeURIComponent(input.conversationId);
           const { path } = await api<{ path: string }>(`/api/conversations/${c}/files/sound`, { method: "POST", body: { path: input.path } });
           location.hash = `#/p/sound-editor/editor?c=${c}&f=${encodeURIComponent(path)}&ret=${encodeURIComponent(input.path)}`;
@@ -176,6 +230,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(String(p.name ?? "sound-edited.wav").slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
           if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
           const { name } = (await up.json()) as { name: string };
+          if (!(await offerPart("video-editor", getLocale() === "he" ? "כדי לחזור לווידאו" : "Going back to the video"))) return false;
           location.hash = `#/p/video-editor/editor?c=${c}&f=${encodeURIComponent(input.returnVideo)}&a=${encodeURIComponent(`shared/${name}`)}`;
           return true;
         }

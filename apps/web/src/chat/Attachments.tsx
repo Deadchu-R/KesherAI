@@ -4,7 +4,7 @@ import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { LineIcon } from "../ui/Glyph";
 import { fileIcon } from "../attach-lines";
-import { usePluginUi } from "../plugins";
+import { offerPart, usePluginUi } from "../plugins";
 
 // three.js is big: the 3D viewer loads only when a model is opened.
 const ModelViewer = lazy(() => import("../ModelViewer"));
@@ -74,9 +74,22 @@ function EditIn({ convId, path, kind }: { convId: string; path: string; kind: "i
   const { pages } = usePluginUi();
   const id = `${kind}-editor`;
   const editor = pages.find((p) => p.pluginId === id && p.uses?.includes(kind));
-  if (!editor) return null;
-  const href = `#/p/${editor.pluginId}/${editor.id}?c=${encodeURIComponent(convId)}&f=${encodeURIComponent(path)}`;
-  return <a className="btn attach-edit" href={href}><LineIcon name="pencil" size={15} /> {kind === "image" ? L("עריכה בעורך התמונות", "Edit in the image editor") : kind === "video" ? L("עריכה בעורך הווידאו", "Edit in the video editor") : L("עריכה בעורך הסאונד", "Edit in the sound editor")}</a>;
+  const href = `#/p/${id}/${editor?.id ?? "editor"}?c=${encodeURIComponent(convId)}&f=${encodeURIComponent(path)}`;
+  const label = kind === "image" ? L("עריכה בעורך התמונות", "Edit in the image editor") : kind === "video" ? L("עריכה בעורך הווידאו", "Edit in the video editor") : L("עריכה בעורך הסאונד", "Edit in the sound editor");
+  // Each editor is its own part: when it is off, the button offers to turn it on first.
+  return (
+    <a
+      className="btn attach-edit"
+      href={href}
+      onClick={(e) => {
+        if (editor) return;
+        e.preventDefault();
+        void offerPart(id, label).then((on) => { if (on) location.hash = href; });
+      }}
+    >
+      <LineIcon name="pencil" size={15} /> {label}
+    </a>
+  );
 }
 
 /** Files shown as a preview rather than as text: Office files, PDF and pictures (the Workspace opens these so). */

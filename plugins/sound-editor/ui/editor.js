@@ -2,7 +2,7 @@
 // a waveform with a selection, edits on the samples (cut, keep, silence, fades, gain, normalize) with undo, the
 // transcript from whisper, and a WAV sent back to the chat. A plugin page with no build step: it talks to KesherAI
 // only through window.kesher (kesher.js).
-/* global confirm, navigator, window, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio */
+/* global confirm, navigator, window, OfflineAudioContext, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -19,6 +19,8 @@
     instMix: "ערבב מעל הסאונד", instReplace: "החלף בכלי", instS: "כלי", instHint: "זמזם או שרוק צלילים נפרדים (\"טה טה\" עוזר); ביטבוקס הופך לתופים. הכלים: FluidR3 (CC BY 3.0, Frank Wen).",
     found: (n) => `נמצאו ${n} תווים`, hitsFound: (n) => `נמצאו ${n} מכות`, none: "לא נמצאו תווים ברורים. נסה לזמזם חזק וברור יותר.", rendering: "מנגן את הכלי…", countIn: "ספירה…", recording: "מקליט… (R או עצור)", micNo: "אין גישה למיקרופון",
     keyName: (k) => `לסולם: ${k}`,
+    toVoice: "🗣 בקול אחר…", voiceH: "בקול אחר", voiceText: "מה להגיד (מהשורה שנבחרה, או לכתוב)", voicePick: "הקול", voiceNone: "אין עדיין קולות: צור קול משלך בקול ← \"קול משלך\", או הפעל את הקול הטבעי בהגדרות ← דיבור.",
+    voiceInsert: "הכנס בראש הניגון", voiceReplace: "החלף את הבחירה", speaking: "הקול מדבר… (במחשב)", clone: "הקול שלך", kokoro: "טבעי (אנגלית)",
     emptyRec: "פתח צליל מצ'אט, או לחץ ● הקלטה וזמזם או שרוק.",
     loading: "טוען את הצליל…", transcribing: "מתמלל במחשב… (whisper)", sending: "שולח…", needSel: "קודם בחר קטע (גרירה על הגל)", tooBig: "הקובץ גדול מ-50MB; ייצא קטע קצר יותר",
     silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות", cutLine: "לחתוך את השורה", sel: "בחירה",
@@ -431,6 +433,64 @@
   }
   $("instReplace").onclick = () => apply(false);
   $("instMix").onclick = () => apply(true);
+
+  // ---------- in another voice: the words said again by a cloned or a natural voice ----------
+  let said = null; // { text, voice, samples } of the last thing said, so Listen then Replace does not say it twice
+  async function say() {
+    const text = $("voiceText").value.trim(), voice = $("voicePick").value;
+    if (said && said.text === text && said.voice === voice) return said.samples;
+    busy(T("speaking", "The voice is speaking… (on your computer)"));
+    try {
+      const bytes = await kesher.call("sound.say", { voice, text });
+      ctx ??= new AudioContext();
+      const a = await ctx.decodeAudioData(bytes);
+      // At the editor's rate and channels, so it can go straight into the sound.
+      const off = new OfflineAudioContext(chans.length || 1, Math.ceil(a.duration * (length() ? rate : a.sampleRate)), length() ? rate : a.sampleRate);
+      const src = off.createBufferSource();
+      src.buffer = a;
+      src.connect(off.destination);
+      src.start();
+      const r = await off.startRendering();
+      said = { text, voice, samples: Array.from({ length: r.numberOfChannels }, (_, i) => r.getChannelData(i)), rate: r.sampleRate };
+      return said.samples;
+    } finally { busy(""); }
+  }
+  $("toVoice").onclick = async () => {
+    const line = sel && parts.find((p) => Math.abs(p.start * rate - sel[0]) < rate * 0.3);
+    if (line) $("voiceText").value = line.text;
+    const voices = await kesher.call("sound.voices").catch(() => []);
+    $("voicePick").replaceChildren(...voices.map((v) => { const o = document.createElement("option"); o.value = v.id; o.textContent = `${v.name} · ${T(v.kind, v.kind)}`; return o; }));
+    $("voiceNone").hidden = voices.length > 0;
+    ["voiceListen", "voiceInsert", "voiceReplace"].forEach((id) => ($(id).disabled = !voices.length));
+    $("voiceDialog").showModal();
+  };
+  $("voiceListen").onclick = async () => {
+    try {
+      const out = await say();
+      const buf = ctx.createBuffer(out.length, out[0].length, said.rate);
+      out.forEach((c, i) => buf.copyToChannel(c, i));
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.connect(ctx.destination); src.start();
+    } catch (e) { msg(e.message, true); }
+  };
+  /** Puts the words into the sound: instead of the selection (or at the playhead), the rest moving to make room. */
+  async function putVoice(replace) {
+    try {
+      const out = await say();
+      if (!length()) { rate = said.rate; chans = out.map((c) => c.slice()); }
+      else {
+        remember();
+        const [a, b] = replace && sel ? sel : [head, head];
+        chans = chans.map((c, i) => { const v = out[Math.min(i, out.length - 1)]; const n = new Float32Array(c.length - (b - a) + v.length); n.set(c.subarray(0, a)); n.set(v, a); n.set(c.subarray(b), a + v.length); return n; });
+        sel = [a, a + out[0].length];
+      }
+      $("empty").hidden = true;
+      $("voiceDialog").close();
+      after();
+    } catch (e) { msg(e.message, true); }
+  }
+  $("voiceReplace").onclick = () => putVoice(true);
+  $("voiceInsert").onclick = () => putVoice(false);
 
   // ---------- open ----------
   let busyCount = 0;
