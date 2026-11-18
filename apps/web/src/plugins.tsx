@@ -11,8 +11,18 @@ import { getLocale } from "./i18n";
  */
 function fromDataUrl(given: unknown): Promise<Response> {
   const url = String(given ?? "");
-  if (!url.startsWith("data:")) return Promise.reject(new Error("Send the file as a data: URL."));
-  return fetch(url);
+  const m = /^data:([^,;]*)((?:;[^,;]*)*?)(;base64)?,/.exec(url);
+  if (!m) return Promise.reject(new Error("Send the file as a data: URL."));
+  // Read here, not with fetch: the app's own CSP (connect-src 'self') does not let it fetch data: addresses, which
+  // is what made "Send to the chat" do nothing in the desktop app (found on the PC, 0.6.375).
+  const body = url.slice(m[0].length);
+  let bytes: Uint8Array<ArrayBuffer>;
+  if (m[3]) {
+    const bin = atob(body);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } else bytes = new Uint8Array(new TextEncoder().encode(decodeURIComponent(body)));
+  return Promise.resolve(new Response(new Blob([bytes], { type: m[1] || "application/octet-stream" })));
 }
 
 /**
