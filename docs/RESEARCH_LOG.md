@@ -2159,3 +2159,7 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   updated, so "Undo all" later sees no false conflict. A file new in the run is put back whole (no ↶ per change).
 - Follow the agent was already built (👁 Follow in the workspace); FUTURE updated.
 - Stopped at: built and tested; hosted API docs wait for Roee (a public GitHub Pages site).
+- Checked on the PC (0.6.361, card freed): the lip sync self-test moves the lips: vsClip 10.5, between frames 2.3,
+  96 frames in 4 s (24 fps). Qwen3-Coder-Next is not downloaded (download waits for Roee).
+- Hosted API docs: `.github/workflows/docs.yml` builds typedoc on every release and deploys it to GitHub Pages; it
+  stops if the site names a Windows user folder, a home folder or a Gmail address (the local build had none).
