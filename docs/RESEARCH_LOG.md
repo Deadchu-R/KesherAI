@@ -2189,3 +2189,16 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
   seen (Stremio's have no year: the same title already rated is not added twice); Trakt's 1–10 become stars.
 - Stopped at: built and tested with stand-ins for both services; the real sign-in waits for Roee (he types his own
   password and approves the Trakt code).
+
+## Magic Tab, step 2: reading the text at the caret on the PC (2026-11-18)
+- Tried from KesherAI's terminal with Windows' own UI Automation (no new dependency): a small test window of its own
+  (never one of Roee's apps), then another process finding it and reading the text before the caret and the caret's
+  box through TextPattern.
+- Found: a WinForms window is found by name, but its text box shows only as a "Pane" with no text support from that
+  process; a WPF window started the same way did not appear in time (the terminal's hidden child). Starting test
+  windows from the terminal is not a fair test of a real app.
+- Next (at the keyboard, with Roee): a small C# helper started by the desktop app in his session, reading the focused
+  element (`AutomationElement.FocusedElement`, TextPattern / TextPattern2 caret range) in Notepad, Word and Chrome
+  (Chrome exposes UIA once an accessibility client asks), measuring the time per read; then the overlay and the key
+  hook. Step 1 (a small model's speed beside the big one) can be measured any time the card is free.
+- Stopped at: step 2's first try (above); continue at the keyboard.

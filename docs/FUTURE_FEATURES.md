@@ -57,7 +57,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Graphics card guard (temperature limit, unloading, low priority); ✅ a second, small side model
 - ✅ A CPU and RAM limit for KesherAI's own engines (Settings → Computer: off by default, with a one-tap suggestion of 85% memory and 80% processor)
 - ✅ Heavy data on the 4 TB drive: the models folder and the self-work copies' folder can be chosen, and the models already there move over in the background
-- ⬜ As-you-type suggestions in any app (Magic Tab): designed (RESEARCH_LOG: UI Automation + a key hook + a small model), needs a native piece and testing at the keyboard
+- 🔧 As-you-type suggestions in any app (Magic Tab): designed (RESEARCH_LOG: UI Automation + a key hook + a small model); a first try at reading the caret from the terminal (2026-11-18, RESEARCH_LOG) showed it needs a helper in his session and testing at the keyboard
 - ✅ Phone build targets chosen by phone model (Settings → For developers → Target phones; Unity and Unreal builds use them; a plugged-in phone is read by USB)
 
 ## Content and import
