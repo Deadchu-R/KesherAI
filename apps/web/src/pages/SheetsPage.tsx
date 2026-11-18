@@ -116,6 +116,17 @@ function SheetEditor({ id }: { id: string }) {
   const onKey = (e: React.KeyboardEvent) => {
     if (editing !== null) return;
     const k = e.key;
+    // Ctrl+C / Ctrl+V copy and paste the chosen cell, as in Excel (self-work, t160).
+    if ((e.ctrlKey || e.metaKey) && (k === "c" || k === "C")) {
+      e.preventDefault();
+      navigator.clipboard.writeText(sheet.cells[cur] ?? "").then(() => toast(L("התא הועתק", "Cell copied")), () => toast(L("ההעתקה נכשלה", "Copy failed")));
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (k === "v" || k === "V")) {
+      e.preventDefault();
+      navigator.clipboard.readText().then((text) => set(cur, text), () => toast(L("ההדבקה נכשלה", "Paste failed")));
+      return;
+    }
     if (k === "ArrowDown") move(0, 1);
     else if (k === "ArrowUp") move(0, -1);
     else if (k === "ArrowRight") move(rtl ? -1 : 1, 0);

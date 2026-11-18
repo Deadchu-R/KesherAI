@@ -3529,6 +3529,10 @@ div.slide-list { padding-inline-start: 0; }
 .lens-bar { position: absolute; z-index: 3; width: min(420px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 6px; cursor: default; user-select: text; }
 .lens-bar .row { flex-wrap: wrap; gap: 5px; }
 .lens-bar input { width: 100%; box-sizing: border-box; }
+@media (max-width: 480px) {
+  .lens-bar { width: min(320px, calc(100vw - 16px)); }
+  .lens-bar .row button { font-size: 13px; padding: 6px 8px; }
+}
 .lens-card { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-height: 40vh; }
 .lens-text { white-space: pre-wrap; overflow: auto; line-height: 1.6; }
 .lens-pick label.button { align-self: flex-start; }

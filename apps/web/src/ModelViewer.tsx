@@ -18,6 +18,7 @@ export default function ModelViewer({ src, name }: { src: string; name: string }
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [wire, setWire] = useState(false);
+  const [progress, setProgress] = useState(0);
   const scene = useRef<THREE.Scene | null>(null);
 
   useEffect(() => {
@@ -50,6 +51,8 @@ export default function ModelViewer({ src, name }: { src: string; name: string }
     // so opening a model never reaches someone else's server (security scan 143).
     const manager = new THREE.LoadingManager();
     manager.setURLModifier((u) => (u.startsWith(`${location.origin}/`) || /^(data|blob):/.test(u) ? u : "data:,"));
+    // How much of a big model has come, while it loads (self-work t-run 202611181155).
+    manager.onProgress = (_item, loaded, total) => { if (alive) setProgress(total > 0 ? Math.round((loaded / total) * 100) : 0); };
     new GLTFLoader(manager).load(
       src,
       (gltf) => {
@@ -71,6 +74,7 @@ export default function ModelViewer({ src, name }: { src: string; name: string }
           if (g) tris += (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3;
         });
         setInfo(L(`${Math.round(tris).toLocaleString()} משולשים`, `${Math.round(tris).toLocaleString()} triangles`));
+        setProgress(100);
       },
       undefined,
       (e) => alive && setError(String((e as Error)?.message ?? e)),
@@ -103,7 +107,7 @@ export default function ModelViewer({ src, name }: { src: string; name: string }
     <div className="model-viewer">
       <div ref={box} className="model-viewer-canvas" role="img" aria-label={L(`מודל תלת ממד: ${name}`, `3D model: ${name}`)} />
       <div className="row wrap small">
-        <span className="muted grow">{error ? <span className="error">{error}</span> : info || L("טוען…", "Loading…")}</span>
+        <span className="muted grow">{error ? <span className="error">{error}</span> : progress > 0 && progress < 100 ? `${progress}%` : info || L("טוען…", "Loading…")}</span>
         <label className="row"><input type="checkbox" checked={wire} onChange={(e) => setWire(e.target.checked)} /> {L("רשת", "Wireframe")}</label>
         <span className="muted">{L("גרירה מסובבת, גלגלת מקרבת", "Drag to turn, wheel to zoom")}</span>
       </div>
