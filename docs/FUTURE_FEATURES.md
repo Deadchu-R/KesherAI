@@ -14,6 +14,13 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Depth and normals turned into styled frames (Nodes → ready flows: "A styled frame from the engine's depth and normals", ControlNet 1.1 depth + normals on SD 1.5; how to export the passes from Unreal and Unity). 🔧 Not yet run on the PC (the card was busy tonight)
 - ✅ Music as a chat tool (make_music, ACE-Step 1.5 / XL)
 - ✅ Known engine bugs checked before each build (known-issues.ts)
+- ⬜ **A scene from Unreal, Unity or Godot, opened in KesherAI without the engine (Roee, 2026-11-18).** A stand-in of the
+  level (each actor or node as a box, or its real mesh where it can be exported to GLB) in the 3D editor; move, rotate
+  and scale things there, from the PC or the phone; the changes wait as a list, and when the engine is opened, our
+  plugin (KesherAIBridge / the Unity package / the Godot addon) applies them as one undo step (and reports conflicts:
+  something moved in the engine too). Builds on Unreal's offline sync (UnrealOfflineSync board), the 3D editor and the
+  bridges' scene reading. Research first: Unreal's Multi-User Editing and Remote Control API, Unity's Scene Template and
+  Prefab overrides, Godot's .tscn (text, so it can be read and written directly); how Omniverse / USD live layers do it.
 
 ## Remote control and several computers
 - ✅ Remote desktop: the computer's screen from the phone, PIN protected (remote-desktop.ts)
