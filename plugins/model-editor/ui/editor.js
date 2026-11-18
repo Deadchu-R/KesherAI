@@ -18,7 +18,7 @@ const HE = {
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
   sceneH: "מבנה הסצנה", cMove: "מיקום", cRotate: "סיבוב°", cScale: "גודל", dup: "שכפל", del: "מחק", vFront: "חזית", vRight: "ימין", vTop: "עליון", vPersp: "פרספקטיבה",
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
-  texH: "טקסטורה", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
+  texH: "טקסטורה", paint: "🖌 ציור על המודל", paintColorL: "צבע המכחול", paintSizeL: "גודל", paintHint: "צייר על המודל; גרירה מחוץ לו מסובבת את המבט", noUvPaint: "לחלק הזה אין UV, אז אי אפשר לצייר עליו", texKindL: "סוג הטקסטורה", kMap: "צבע", kRough: "חספוס", kNormal: "נורמל (בליטות)", texDerive: "◐ ליצור מטקסטורת הצבע", noColorTex: "אין לחלק טקסטורת צבע ליצור ממנה", derived: "נוצר מטקסטורת הצבע", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
   piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
@@ -371,8 +371,10 @@ function blankFill(mesh, k) {
 function texCanvas(mesh, size, k = kind(), fresh = false) {
   const c = document.createElement("canvas");
   const img = fresh ? null : matOf(mesh)?.[k]?.image;
-  c.width = img?.width || size;
-  c.height = img?.height || size;
+  // A tiny texture (a 2×2 colour from an exporter) grows to the asked size, so it can be painted and edited.
+  const k2 = img && img.width < size ? size / img.width : 1;
+  c.width = img ? Math.round(img.width * k2) : size;
+  c.height = img ? Math.round(img.height * k2) : size;
   const g = c.getContext("2d");
   if (img) g.drawImage(img, 0, 0, c.width, c.height);
   else { g.fillStyle = blankFill(mesh, k); g.fillRect(0, 0, c.width, c.height); }
@@ -507,6 +509,77 @@ $("texAi").onclick = async () => {
     showTexture();
     msg(T("texDone", "The new texture is on the part"));
   } catch (e) { msg(e.message, true); } finally { busy(""); }
+};
+// Painting on the model (Blender's Texture Paint, Substance Painter's brush, simply): the brush draws into the chosen
+// slot's texture where it touches the surface, through the surface's UVs. Each stroke starts on a new copy of the
+// texture, so undo brings back the one before.
+let painting = false, stroke = null;
+function paintRay(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  return ray.intersectObjects(meshes.filter((p) => p.mesh.visible && !isGenerated(p.mesh)).map((p) => p.mesh), false)[0];
+}
+function startStroke(mesh) {
+  if (!mesh.geometry.attributes.uv) { msg(T("noUvPaint", "This part has no UVs, so it cannot be painted"), true); return null; }
+  remember();
+  const k = kind();
+  const c = texCanvas(mesh, 1024, k);
+  const t = new THREE.CanvasTexture(c);
+  t.flipY = false;
+  t.colorSpace = k === "map" ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  [].concat(mesh.material).forEach((m) => {
+    if (k === "map" && !m.map) m.color?.set(0xffffff);
+    if (k === "roughnessMap" && !m.roughnessMap && "roughness" in m) m.roughness = 1;
+    m[k] = t;
+    m.needsUpdate = true;
+  });
+  return { mesh, t, g: c.getContext("2d"), w: c.width, h: c.height, last: null };
+}
+/** The brush's colour for the slot: the colour as is; for roughness its brightness (light = rough); for normal, flat. */
+function brushColour() {
+  const hex = $("paintColor").value;
+  if (kind() === "map") return hex;
+  if (kind() === "normalMap") return "rgb(128,128,255)";
+  const n = parseInt(hex.slice(1), 16), v = Math.round(0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255));
+  return `rgb(${v},${v},${v})`;
+}
+function dab(hit) {
+  if (!stroke || hit?.object !== stroke.mesh || !hit.uv) { if (stroke) stroke.last = null; return; }
+  const u = ((hit.uv.x % 1) + 1) % 1, v = ((hit.uv.y % 1) + 1) % 1;
+  const x = u * stroke.w, y = v * stroke.h, size = (+$("paintSize").value / 100) * stroke.w * 0.08;
+  const g = stroke.g;
+  g.fillStyle = g.strokeStyle = brushColour();
+  g.lineCap = "round";
+  g.lineWidth = size * 2;
+  // Joined to the last dab when it is near (not across a UV seam), so a quick stroke has no gaps.
+  if (stroke.last && Math.hypot(x - stroke.last[0], y - stroke.last[1]) < stroke.w * 0.1) { g.beginPath(); g.moveTo(...stroke.last); g.lineTo(x, y); g.stroke(); }
+  g.beginPath(); g.arc(x, y, size, 0, Math.PI * 2); g.fill();
+  stroke.last = [x, y];
+  stroke.t.needsUpdate = true;
+}
+// Before the view's own handlers (capture), so a stroke on the model does not also turn the view.
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  if (!painting || !model) return;
+  const hit = paintRay(e);
+  if (!hit) return;
+  e.stopImmediatePropagation();
+  stroke = startStroke(hit.object);
+  if (!stroke) return;
+  renderer.domElement.setPointerCapture(e.pointerId);
+  dab(hit);
+}, { capture: true });
+renderer.domElement.addEventListener("pointermove", (e) => { if (painting && stroke) { e.stopImmediatePropagation(); dab(paintRay(e)); } }, { capture: true });
+const endStroke = () => { if (!stroke) return; stroke = null; showTexture(); };
+renderer.domElement.addEventListener("pointerup", (e) => { if (painting && stroke) { e.stopImmediatePropagation(); endStroke(); } }, { capture: true });
+renderer.domElement.addEventListener("pointercancel", endStroke);
+$("paint").onclick = () => {
+  painting = !painting;
+  $("paint").classList.toggle("on", painting);
+  $("paintTools").hidden = !painting;
+  if (painting && picking) $("pickFaces").click();
+  if (painting) msg(T("paintHint", "Paint on the model; drag off it to turn the view"));
 };
 $("texEdit").onclick = () => editTexture(false);
 $("texNew").onclick = () => editTexture(true);
@@ -685,6 +758,7 @@ function showPicked() {
 $("pickFaces").onclick = () => {
   picking = !picking;
   $("pickFaces").classList.toggle("on", picking);
+  if (picking && painting) $("paint").click();
   if (picking) msg(T("pickHint", "Click the model: the choice spreads until a sharp corner. Shift adds.")); else { picked = null; showPicked(); }
 };
 /** The chosen faces become a part of their own (Blender's Separate → Selection), the rest stays. */
@@ -741,7 +815,7 @@ function snap() {
   model?.traverse((o) => {
     if (o === model || o.userData.generated) return;
     const m = o.isMesh ? matOf(o) : null;
-    out.push({ o, parent: o.parent, i: o.parent.children.indexOf(o), p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone(), v: o.visible, c: m?.color?.getHex(), r: m?.roughness, mt: m?.metalness, mods: o.userData.mods ? JSON.parse(JSON.stringify(o.userData.mods)) : undefined });
+    out.push({ o, parent: o.parent, i: o.parent.children.indexOf(o), p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone(), v: o.visible, c: m?.color?.getHex(), r: m?.roughness, mt: m?.metalness, maps: m ? [m.map, m.roughnessMap, m.normalMap] : undefined, mods: o.userData.mods ? JSON.parse(JSON.stringify(o.userData.mods)) : undefined });
   });
   return out;
 }
@@ -758,6 +832,8 @@ function apply(state) {
     if (m?.color && x.c !== undefined) m.color.setHex(x.c);
     if (m && x.r !== undefined) m.roughness = x.r;
     if (m && x.mt !== undefined) m.metalness = x.mt;
+    // Textures too: each change (and each paint stroke) works on a new copy, so the one kept here is as it was.
+    if (m && x.maps) { [m.map, m.roughnessMap, m.normalMap] = x.maps; m.needsUpdate = true; }
     if (x.mods || x.o.userData.mods) { x.o.userData.mods = x.mods; applyMods(x.o); }
   }
   rebuild();

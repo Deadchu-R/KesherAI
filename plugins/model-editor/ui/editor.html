@@ -70,6 +70,12 @@
         </div>
         <div class="row"><input id="texPrompt" dir="auto" data-tp="texPromptPh" placeholder="✨ A texture from words: old oak, red velvet…" style="flex:1;min-width:0" /><button id="texAi" data-t="texAi">✨</button></div>
         <button id="texDerive" hidden data-t="texDerive">◐ Make it from the colour texture</button>
+        <!-- Paint on the model (Blender's Texture Paint): into the chosen slot, through the UVs -->
+        <button id="paint" data-t="paint">🖌 Paint on the model</button>
+        <div class="row" id="paintTools" hidden>
+          <input type="color" id="paintColor" value="#c0392b" aria-label="Brush colour" data-ta="paintColorL" />
+          <span class="muted small" data-t="paintSizeL">Size</span><input type="range" id="paintSize" min="2" max="100" value="25" style="flex:1;min-width:0" aria-label="Brush size" data-ta="paintSizeL" />
+        </div>
         <hr />
         <!-- Modifiers, as 3ds Max's stack and Blender's modifiers: non-destructive, each on/off, in order -->
         <div class="row"><b class="grow" data-t="modsH">Modifiers</b>
