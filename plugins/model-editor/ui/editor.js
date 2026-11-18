@@ -20,9 +20,10 @@ const HE = {
   kMove: "הזזה / סיבוב / שינוי גודל", kAxis: "נעילה לציר (אחרי מקש הכלי)", kDup: "שכפול", kDel: "מחיקה", kViews: "חזית / ימין / עליון", kShade: "תיל / מוצק / חומר", kSnap: "הצמדה", kEsc: "ביטול בחירה",
   texH: "טקסטורה (צבע בסיס)", noTex: "אין טקסטורה", texEdit: "✎ עריכה בעורך התמונות", texNew: "＋ טקסטורה חדשה", texRemove: "✕", texSent: "פותח את הטקסטורה בעורך התמונות…", texBack: "הטקסטורה חזרה מעורך התמונות", needMesh: "בחר חלק עם צורה", noUv: "לחלק הזה אין UV, אז אין קווים מנחים",
   splitH: "✂ חלוקה לחלקים…", sLoose: "לפי חלקים נפרדים", sMaterial: "לפי חומר", sAi: "לפי משמעות (AI)…", splitDone: (n) => `חולק ל-${n} חלקים`, splitNone: "החלק הזה הוא כבר חתיכה אחת",
-  splitAi: "חלוקה לפי משמעות (רגל, מושב, ידית) צריכה מודל חלוקה תלת ממדי במחשב (PartField / P3-SAM). הוא עוד לא מותקן, אז בינתיים: 'לפי חלקים נפרדים' מפריד כל חתיכה שלא נוגעת באחרת.", piece: "חתיכה",
+  piece: "חתיכה",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
   texPromptPh: "✨ טקסטורה ממילים: עץ אלון ישן, קטיפה אדומה…", texAi: "✨", texMaking: "מודל התמונות מצייר טקסטורה… (במחשב)", texDone: "הטקסטורה החדשה על החלק", needWords: "כתוב איזו טקסטורה",
+  partsInstalling: "מנוע החלקים עוד יורד; נסה שוב כשיסיים.", partsWorking: "מחלק לפי משמעות במחשב… (P3-SAM, יכול לקחת דקה)", partsReady: "מנוע החלקים מוכן: בחר חלק ו'לפי משמעות (AI)' שוב.", partsFailed: "ההתקנה של מנוע החלקים נעצרה", partsInstalling2: "מוריד את מנוע החלקים…",
   modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
 };
@@ -467,19 +468,23 @@ function subGeometry(geo, tris) {
 function splitChosen(how) {
   const mesh = meshOfChosen();
   if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);
-  if (how === "ai") return msg(T("splitAi", "Splitting by meaning (leg, seat, handle) needs a 3D part-segmentation model on the computer (PartField / P3-SAM). It is not installed yet, so for now 'By loose pieces' separates every piece that does not touch another."));
+  if (how === "ai") return splitByMeaning(mesh);
   const geo = mesh.geometry;
   let groups;
   if (how === "material" && Array.isArray(mesh.material) && geo.groups.length > 1) {
     groups = geo.groups.map((g) => { const t = []; for (let i = g.start; i < g.start + g.count; i += 3) t.push(i); return { tris: t, mat: mesh.material[g.materialIndex] }; });
   } else groups = loosePieces(geo).map((tris) => ({ tris, mat: matOf(mesh) }));
   if (groups.length < 2) return msg(T("splitNone", "This part is one piece already"));
+  separateInto(mesh, groups);
+}
+/** A mesh becomes a group of meshes, one for each set of triangles (its place, materials and names kept). */
+function separateInto(mesh, groups) {
   remember();
   const holder = new THREE.Group();
   holder.name = label(mesh);
   holder.position.copy(mesh.position); holder.quaternion.copy(mesh.quaternion); holder.scale.copy(mesh.scale);
   groups.forEach((g, i) => {
-    const m = new THREE.Mesh(subGeometry(geo, g.tris), g.mat.clone());
+    const m = new THREE.Mesh(subGeometry(mesh.geometry, g.tris), g.mat.clone());
     m.name = `${label(mesh)} · ${T("piece", "piece")} ${i + 1}`;
     holder.add(m);
   });
@@ -489,6 +494,58 @@ function splitChosen(how) {
   choose(holder);
   stats();
   msg(he ? HE.splitDone(groups.length) : `Split into ${groups.length} parts`);
+}
+/** Split by meaning with P3-SAM on the computer: the mesh goes in world space, each triangle's part comes back. */
+async function splitByMeaning(mesh) {
+  const st = await kesher.call("model.parts.status").catch(() => null);
+  if (!st?.installed) {
+    if (st?.phase === "installing") return msg(T("partsInstalling", "The parts engine is still downloading; try again when it is done."));
+    if (await kesher.call("model.parts.setup").catch((e) => msg(e.message, true))) watchSetup();
+    return;
+  }
+  busy(T("partsWorking", "Splitting by meaning on your computer… (P3-SAM, can take a minute)"));
+  try {
+    // One mesh, as it sits in the world, so the centres that come back are in the same place as ours.
+    const g = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    const tmp = new THREE.Mesh(g, new THREE.MeshStandardMaterial());
+    const out = await new GLTFExporter().parseAsync(tmp, { binary: true });
+    const data = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(new Blob([out])); });
+    const faces = await kesher.call("model.parts.segment", { data });
+    // Each of our triangles takes the part of the nearest centre that came back (a grid makes it quick).
+    const cell = new THREE.Box3().setFromObject(tmp).getSize(new THREE.Vector3()).length() / 64 || 1;
+    const grid = new Map();
+    const k = (x, y, z) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+    for (const f of faces) { const key = k(f[0], f[1], f[2]); if (!grid.has(key)) grid.set(key, []); grid.get(key).push(f); }
+    const pos = g.attributes.position, idx = g.index, n = idx ? idx.count : pos.count;
+    const byPart = new Map();
+    const v = new THREE.Vector3();
+    for (let t = 0; t + 2 < n; t += 3) {
+      let cx = 0, cy = 0, cz = 0;
+      for (let j = 0; j < 3; j++) { const q = idx ? idx.getX(t + j) : t + j; v.fromBufferAttribute(pos, q); cx += v.x / 3; cy += v.y / 3; cz += v.z / 3; }
+      let best = -1, bd = Infinity;
+      const [gx, gy, gz] = [Math.floor(cx / cell), Math.floor(cy / cell), Math.floor(cz / cell)];
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (const f of grid.get(`${gx + dx},${gy + dy},${gz + dz}`) ?? []) {
+        const d = (f[0] - cx) ** 2 + (f[1] - cy) ** 2 + (f[2] - cz) ** 2;
+        if (d < bd) { bd = d; best = f[3]; }
+      }
+      if (!byPart.has(best)) byPart.set(best, []);
+      byPart.get(best).push(t);
+    }
+    const groups = [...byPart.entries()].sort((a, b) => a[0] - b[0]).map(([, tris]) => ({ tris, mat: matOf(mesh) }));
+    if (groups.length < 2) return msg(T("splitNone", "This part is one piece already"));
+    separateInto(mesh, groups);
+  } catch (e) { msg(e.message, true); } finally { busy(""); }
+}
+/** While the parts engine downloads, its progress in the status line, and "ready" when it is. */
+function watchSetup() {
+  const tick = async () => {
+    const st = await kesher.call("model.parts.status").catch(() => null);
+    if (st?.installed && !st.phase) return msg(T("partsReady", "The parts engine is ready: choose a part and 'By meaning (AI)' again."));
+    if (st?.phase === "error") return msg(`${T("partsFailed", "Setting up the parts engine stopped")}: ${st.message ?? ""}`, true);
+    msg(`${T("partsInstalling2", "Downloading the parts engine…")} ${st?.log?.at(-1)?.slice(0, 80) ?? ""}`);
+    setTimeout(tick, 4000);
+  };
+  tick();
 }
 $("split").onchange = () => { const how = $("split").value; $("split").value = ""; if (how) splitChosen(how); };
 

@@ -264,6 +264,25 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           location.hash = `#/p/${plugin}/editor?c=${c}&f=${encodeURIComponent(path)}&back=${encodeURIComponent(`shared/${name}`)}&slot=${encodeURIComponent(slot)}`;
           return true;
         }
+        // The parts engine (P3-SAM) for the 3D editor: its state; setting it up (asks first: a few GB); splitting a mesh.
+        case "model.parts.status":
+          need("model");
+          return api("/api/part-seg");
+        case "model.parts.setup": {
+          need("model");
+          const he = getLocale() === "he";
+          if (!confirm(he ? "לחלוקה לפי משמעות KesherAI יוריד את P3-SAM של Tencent (Hunyuan3D-Part): Python עם PyTorch, הקוד והמשקלים, כמה GB פעם אחת. זה רץ במחשב שלך. להוריד?" : "To split by meaning, KesherAI downloads Tencent's P3-SAM (Hunyuan3D-Part): Python with PyTorch, its code and weights, a few GB once. It runs on your computer. Download?")) return false;
+          await api("/api/part-seg/install", { method: "POST" });
+          return true;
+        }
+        case "model.parts.segment": {
+          need("model");
+          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
+          const res = await fetch(withToken("/api/part-seg/segment"), { method: "POST", headers: { "content-type": "model/gltf-binary" }, body: bytes });
+          const j = (await res.json()) as { faces?: Array<[number, number, number, number]>; error?: string };
+          if (!res.ok) throw Object.assign(new Error(j.error ?? String(res.status)), { code: res.status });
+          return j.faces ?? [];
+        }
         // A file of the plugin's own folder as bytes (its page may not fetch; the sound editor's instrument samples).
         case "own.file": {
           const path = String(p.path ?? "");
