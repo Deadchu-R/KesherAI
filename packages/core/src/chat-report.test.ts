@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PeopleChat } from "./people-chats.js";
-import { ChatReports, chatNumbers, chatParts, checkReport, findQuote, realMessages, numbersFrom, mostlyLatin } from "./chat-report.js";
+import { ChatReports, chatNumbers, chatParts, checkReport, findQuote, realMessages, numbersFrom, mostlyLatin, reportPrompt } from "./chat-report.js";
 
 const chat = (): PeopleChat => {
   const messages = [];
@@ -220,4 +220,11 @@ test("the chats already uploaded are listed once each, and a new report can star
   assert.equal(chats.length, 1);
   assert.equal(chats[0]!.messages, 40);
   await assert.rejects(reports.chatOf("../x"), /No such chat/);
+});
+
+test("an ex: the story over time and what to take on, never a push back to them", () => {
+  const p = reportPrompt({ kind: "ex", voice: "coach", lang: "he" });
+  assert.match(p, /were a couple and are not any more/);
+  assert.match(p, /Never advise getting back together or contacting the other person/);
+  assert.doesNotMatch(reportPrompt({ kind: "couple", voice: "coach", lang: "he" }), /has ended/);
 });

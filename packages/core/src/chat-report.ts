@@ -14,7 +14,7 @@ import type { PeopleChat, PersonMessage } from "./people-chats.js";
  */
 
 /** What chat it is. */
-export type ChatKind = "couple" | "friends" | "family" | "group" | "work";
+export type ChatKind = "couple" | "ex" | "friends" | "family" | "group" | "work";
 /** The report's voice. */
 export type ReportVoice = "coach" | "friend" | "roast";
 
@@ -225,7 +225,7 @@ const VOICE: Record<ReportVoice, string> = {
   roast: "a playful roaster: sharp jokes about habits and patterns, never about looks, identity or anything painful, and never mean",
 };
 
-const KIND: Record<ChatKind, string> = { couple: "a couple", friends: "friends", family: "a family", group: "a group", work: "people at work" };
+const KIND: Record<ChatKind, string> = { couple: "a couple", ex: "two people who were a couple and are not any more", friends: "friends", family: "a family", group: "a group", work: "people at work" };
 
 /** What the model is told when reading one part of the chat. */
 export const NOTES_PROMPT =
@@ -240,6 +240,13 @@ export function reportPrompt(o: { kind: ChatKind; voice: ReportVoice; lang: "he"
   return [
     `You write a report about a chat between ${KIND[o.kind]}, in the voice of ${VOICE[o.voice]}.`,
     `Write in ${o.lang === "he" ? "Hebrew" : "English"}.${o.me ? ` The person reading it is ${o.me} in the chat: speak to them as "you".` : ""}${o.backstory ? ` What they told you: ${o.backstory.slice(0, 1000)}` : ""}`,
+    ...(o.kind === "ex"
+      ? [
+          // Asked by Roee (2026-11-18). As the ex readings people share (Mei, the "texts with my ex" analyses): the story
+          // over time, where it turned, the patterns on both sides, and what to take on; never a push back to them.
+          "The relationship has ended. Tell its story over time: how it started, its best period, when and how things turned (the turningPoint), and the patterns on both sides that kept coming back. In \"next\" and \"moves\": what the reader can take into their next relationship and how to close this one for themselves, not how to win the other person back. Never advise getting back together or contacting the other person; never blame one side alone; be kind about the hard parts.",
+        ]
+      : []),
     "Use the exact numbers you are given (never change or invent numbers); interpretations must follow from the notes and lines. No therapy, no diagnosis, no predictions of breaking up or percentages of anything you did not get as a number.",
     'Answer with JSON only: {"headline":"one striking sentence","read":"3-5 sentences","kinder":"a kinder second reading of the same pattern, 1-2 sentences","scores":[{"name":"Warmth","of5":4,"value":"a short phrase"},{"name":"Repair after tension","of5":3,"value":"…"},{"name":"Directness","of5":4,"value":"…"},{"name":"Playfulness","of5":5,"value":"…"},{"name":"Private language","of5":4,"value":"…"}],"findings":[{"title":"short","body":"2-3 sentences","measured":false,"quotes":[{"who":"exact name","text":"exact line from the chat"}]}],"turningPoint":{"when":"YYYY-MM-DD or a period","what":"1-2 sentences","quotes":[{"who":"…","text":"…"}]},"roles":[{"name":"exact name","role":"their part in the chat, one line"}],"next":"what to say or do next, 1-3 sentences","moves":{"keep":["…"],"stop":["…"],"say":["a sentence to try saying"]},"askMore":["3 questions worth asking next about this chat, short"],"wouldHelp":[{"ask":"what would help you read it better, from what is missing or unclear (a date where things changed, a gap, an earlier period, the other side of a story)","kind":"text or export"}]}',
     "askMore: 3 short questions in the reader's voice (\"What changed after March?\"). wouldHelp: at most 3, each about something specific you saw (a date, a silence, a person); kind export when another chat export would help, else text.",

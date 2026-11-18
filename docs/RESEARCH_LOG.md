@@ -2246,3 +2246,8 @@ Sources: Fora Soft's "Best AI study tools 2026" (Gemini Notebook, ChatGPT Study 
 - **Built**: Models → ⚙ next to each GGUF: context, context memory (16/8/4 bit), MoE layers on the processor, flash attention, and more arguments. Saved by file name in config (`engines.modelSettings`) and put on top of the engine's own arguments at each load (the same flag under any spelling is replaced). "Save and reload" loads the running model again.
 - **Safety**: the phone can reach this screen, so more arguments come only from an allowed list of load and sampling flags (no file, port, address or key flags), checked on the server too.
 - Stopped at: built and tested (878 pass); to try on the PC with Qwen3-Coder-Next when the download ends.
+
+## Relationship analysis: exes (2026-11-18, Roee asked)
+- **Competitors**: Mei/Amori ("why my ex ghosted me"), and the shared "AI read my texts with my ex" analyses: compatibility, attachment and communication styles, the best moments, why it would not work. Texts From My Ex is a humour archive, not analysis.
+- **Built**: a sixth kind, "Exes" 💔: the report tells the story over time (start, best period, where it turned, the patterns on both sides) and what to take into the next relationship and how to close this one; it never advises getting back together or contacting the other person, and never blames one side alone.
+- Stopped at: built (0.6.366).

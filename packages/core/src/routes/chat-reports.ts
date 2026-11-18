@@ -50,7 +50,7 @@ export async function chatReportRoutes(app: FastifyInstance, s: KesherServices):
     } catch (e) {
       return reply.code(400).send({ error: (e as Error).message });
     }
-    const kind = (["couple", "friends", "family", "group", "work"].includes(String(b.kind)) ? b.kind : "friends") as ChatKind;
+    const kind = (["couple", "ex", "friends", "family", "group", "work"].includes(String(b.kind)) ? b.kind : "friends") as ChatKind;
     const voice = (["coach", "friend", "roast"].includes(String(b.voice)) ? b.voice : "friend") as ReportVoice;
     const lang = b.lang === "en" ? "en" : "he";
     const r = await reports.start(chat, { kind, voice, lang, ...(b.me ? { me: String(b.me).slice(0, 80) } : {}), ...(b.backstory ? { backstory: String(b.backstory).slice(0, 1000) } : {}), ...(b.names && typeof b.names === "object" ? { names: Object.fromEntries(Object.entries(b.names).slice(0, 60).map(([k, v]) => [String(k).slice(0, 80), String(v).slice(0, 60)])) } : {}) }, ask(typeof b.model === "string" ? b.model : undefined));

@@ -7,7 +7,7 @@ import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-type Kind = "couple" | "friends" | "family" | "group" | "work";
+type Kind = "couple" | "ex" | "friends" | "family" | "group" | "work";
 type Voice = "coach" | "friend" | "roast";
 interface Quote { who: string; at: string; text: string }
 interface Person { name: string; messages: number; words: number; starts: number; replyMinutes?: number; questions: number; laughs: number; love: number; night: number; topEmojis: string[] }
@@ -20,7 +20,7 @@ interface Item { id: string; title: string; kind: Kind; status: Stored["status"]
 interface Body { source: "whatsapp" | "instagram"; title: string; text?: string; parts?: unknown[] }
 interface Peek { title: string; messages: number; from: string; to: string; people: Array<{ name: string; messages: number }> }
 
-const KINDS: Array<[Kind, string, string]> = [["couple", "זוג", "Couple"], ["friends", "חברים", "Friends"], ["family", "משפחה", "Family"], ["group", "קבוצה", "Group"], ["work", "עבודה", "Work"]];
+const KINDS: Array<[Kind, string, string]> = [["couple", "זוג", "Couple"], ["ex", "אקסים", "Exes"], ["friends", "חברים", "Friends"], ["family", "משפחה", "Family"], ["group", "קבוצה", "Group"], ["work", "עבודה", "Work"]];
 const VOICES: Array<[Voice, string, string]> = [["coach", "מאמן", "Coach"], ["friend", "חבר כן", "Honest friend"], ["roast", "צולה", "Roaster"]];
 const kindName = (k: Kind) => { const x = KINDS.find((y) => y[0] === k)!; return L(x[1], x[2]); };
 const when = (at: string) => (at ? new Date(at).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
@@ -101,7 +101,7 @@ function ImportProgress({ r }: { r: Stored }) {
 
 const STEPS = 7;
 const STEP_NAMES: Array<[string, string]> = [["איזה צ'אט", "The chat"], ["האפליקציה", "The app"], ["הייצוא", "The export"], ["מי אתה", "Who you are"], ["השמות", "The names"], ["שפת הדוח", "Language"], ["רקע", "Backstory"]];
-const KIND_ICONS: Record<Kind, string> = { couple: "💞", friends: "🫂", family: "🏠", group: "👥", work: "💼" };
+const KIND_ICONS: Record<Kind, string> = { couple: "💞", ex: "💔", friends: "🫂", family: "🏠", group: "👥", work: "💼" };
 
 /** Brandon's setup, one question a screen (RESEARCH_LOG "Brandon's whole path"). */
 function NewReport({ onMade }: { onMade: (id: string) => void }) {
