@@ -270,6 +270,9 @@
   function setTool(t) {
     tool = t;
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
+    // The phone bar shows it too, whether it was chosen there or by a key.
+    const phone = t === "rect" || t === "lasso" ? "select" : t === "brush" ? "brush" : t === "crop" ? "crop" : "";
+    document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", !!phone && x.dataset.phone === phone));
     // The context bar shows this tool's options (Photoshop's options bar).
     document.querySelectorAll(".ctx").forEach((c) => c.classList.toggle("show", c.dataset.for.split(" ").includes(t)));
     $("ctxTool").textContent = document.querySelector(`[data-tool="${t}"]`)?.textContent ?? "";
@@ -1343,7 +1346,6 @@
     if (what === "fit") return fit();
     // Select: rectangle, then lasso, then rectangle again.
     setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" ? "crop" : "brush");
-    document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", x === b));
   }));
 
   // ---------- "?": the shortcuts ----------

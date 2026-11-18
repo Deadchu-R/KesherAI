@@ -8,6 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
+    kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
     cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
@@ -545,7 +546,7 @@
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
   document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : b.dataset.do === "inst" ? $("toInst").click() : ops[b.dataset.do]())));
-  const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"], ["R", "rec", "Record"]];
+  const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"], ["Home / End", "kHomeEnd", "The start / the end"], ["R", "rec", "Record"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => { const tr = document.createElement("tr"); const a = document.createElement("td"); const kbd = document.createElement("kbd"); kbd.textContent = k; a.append(kbd); const b = document.createElement("td"); b.textContent = T(key, en); tr.append(a, b); return tr; }));
     $("keysDialog").showModal();
@@ -558,7 +559,7 @@
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); return redo(); }
     if ((e.ctrlKey || e.metaKey) && k === "a") { e.preventDefault(); sel = length() ? [0, length()] : null; return draw(); }
     if (e.ctrlKey || e.metaKey) return;
-    const map = { " ": play, delete: ops.cut, backspace: ops.cut, escape: () => { sel = null; draw(); }, "+": () => zoomBy(1.5), "=": () => zoomBy(1.5), "-": () => zoomBy(1 / 1.5), arrowleft: () => { head = Math.max(0, head - rate); draw(); }, arrowright: () => { head = Math.min(length(), head + rate); draw(); }, "?": showKeys, r: record };
+    const map = { " ": play, delete: ops.cut, backspace: ops.cut, escape: () => { sel = null; draw(); }, "+": () => zoomBy(1.5), "=": () => zoomBy(1.5), "-": () => zoomBy(1 / 1.5), arrowleft: () => { head = Math.max(0, head - rate); draw(); }, arrowright: () => { head = Math.min(length(), head + rate); draw(); }, home: () => { head = 0; draw(); }, end: () => { head = length(); draw(); }, "?": showKeys, r: record };
     if (map[k]) { e.preventDefault(); map[k](); }
   });
   new ResizeObserver(() => draw()).observe(wrap);

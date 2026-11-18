@@ -625,6 +625,8 @@ function renderParts() {
     lock.onclick = (e) => { e.stopPropagation(); obj.userData.locked = !obj.userData.locked; if (obj.userData.locked && chosen === obj) gizmo.detach(); renderParts(); };
     li.append(tw, ic, n, eye, ...(obj.userData.icon !== undefined ? [lock] : []));
     li.onclick = () => choose(obj);
+    // A double-click frames it (Blender's and Unity's outliner).
+    li.ondblclick = () => { choose(obj); frame(obj); };
     if (obj !== chosen || !obj.userData.attached?.length) return [li];
     // What is attached to the chosen one, under it (the Inspector's components, read only here).
     const att = document.createElement("li");

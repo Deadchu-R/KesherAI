@@ -12,7 +12,7 @@
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
-    videoTrack: "וידאו", musicTrack: "🎵 מוזיקה", musicH: "🎵 מוזיקה", musicNone: "＋ מהצ'אט…", musicFile: "מהמכשיר…", musicVol: "עוצמה", fadeIn: "הופעה", fadeOut: "היעלמות", duck: "להנמיך כשמדברים", musicRemove: "✕", musicPickL: "מוזיקה מהצ'אט", musicAdding: "מוסיף את המוזיקה לצ'אט…", musicDrag: "גרירה: מאיפה המוזיקה מתחילה", noMusic: "אין קבצי שמע בצ'אט", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
+    kHomeEnd: "התחלה / סוף", videoTrack: "וידאו", musicTrack: "🎵 מוזיקה", musicH: "🎵 מוזיקה", musicNone: "＋ מהצ'אט…", musicFile: "מהמכשיר…", musicVol: "עוצמה", fadeIn: "הופעה", fadeOut: "היעלמות", duck: "להנמיך כשמדברים", musicRemove: "✕", musicPickL: "מוזיקה מהצ'אט", musicAdding: "מוסיף את המוזיקה לצ'אט…", musicDrag: "גרירה: מאיפה המוזיקה מתחילה", noMusic: "אין קבצי שמע בצ'אט", hint: "Space נגן · J/K/L · S פיצול · Q/W קיצוץ · Delete · המסלול הראשי סוגר רווחים",
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "מילים",
@@ -524,7 +524,7 @@
   $("zoomOut").onclick = () => zoomBy(1 / 1.4);
   document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play(), words: () => $("app").classList.toggle("sheet") })[b.dataset.do]()));
 
-  const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom the timeline"]];
+  const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Home / End", "kHomeEnd", "The start / the end"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom the timeline"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
       const tr = document.createElement("tr");
@@ -553,6 +553,8 @@
       k: () => { rate = 1; play(false); },
       l: () => { rate = playing && rate < 4 ? rate * 2 : 1; play(true); },
       j: () => seek(now - 5),
+      home: () => seek(0),
+      end: () => seek(total()),
       arrowleft: () => seek(now - (e.shiftKey ? 1 : frame)),
       arrowright: () => seek(now + (e.shiftKey ? 1 : frame)),
       s: split,
