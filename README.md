@@ -117,7 +117,7 @@ Each package has its own README explaining what it owns.
 | [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md) | see the code signing policy (who signs the Windows installer, and privacy) |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | send a pull request |
 
-API reference generated from the code comments: `pnpm docs:api` (published to GitHub Pages by CI).
+API reference generated from the code comments: `pnpm docs:api`, published after every release at [roeetal.com/KesherAI/api](https://www.roeetal.com/KesherAI/api/).
 
 ## Roadmap
 

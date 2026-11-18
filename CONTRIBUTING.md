@@ -39,7 +39,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first. In short: `packages/cor
 
 - **Every exported function, class, interface and type** in `packages/` and `plugins/` has a TSDoc comment: what it does, its parameters, what it returns, and an `@example` when usage is not obvious. `pnpm lint` fails otherwise.
 - **Every exported function and class** in the interface (`apps/web`) and the desktop shell (`apps/desktop`) has one too: at least a line saying what it is. `pnpm lint` checks this as well.
-- **The API reference** is built from these comments (`pnpm docs:api`) and published to GitHub Pages on every release.
+- **The API reference** is built from these comments (`pnpm docs:api`) and published after every release at roeetal.com/KesherAI/api/.
 - **Every package has a README** saying what it owns and what it exposes. Update it when that changes.
 - **A shape that crosses a boundary** (HTTP, plugin API, config file) has a zod schema in `@kesher/shared`, and its TypeScript type comes from `z.infer`.
 - **A new HTTP endpoint** is added to [docs/API.md](docs/API.md) in the same pull request.
