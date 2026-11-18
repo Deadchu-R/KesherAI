@@ -40,22 +40,47 @@ interface Chat {
 
 /** Joining from an invite link: what it is for, a name, and the guest's own key kept in this browser. */
 function Join({ token }: { token: string }) {
-  const [info, setInfo] = useState<{ project: string; role: "read" | "edit" } | null>(null);
+  const [info, setInfo] = useState<{ project: string; role: "read" | "edit"; google?: boolean; emailHint?: string } | null>(null);
+  const [code, setCode] = useState<{ userCode: string; url: string } | null>(null);
+  const poll = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(poll.current), []);
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    void api<{ project: string; role: "read" | "edit" }>(`/api/join/${encodeURIComponent(token)}`).then(setInfo, (e: Error) => setError(e.message));
+    void api<{ project: string; role: "read" | "edit"; google?: boolean; emailHint?: string }>(`/api/join/${encodeURIComponent(token)}`).then(setInfo, (e: Error) => setError(e.message));
   }, [token]);
+  const signedIn = (key: string) => {
+    localStorage.setItem(TOKEN_KEY, key);
+    localStorage.setItem(GUEST_KEY, "1");
+    location.hash = "#/";
+    location.reload();
+  };
+  // An email invite: Google's sign-in as on a TV (a code at google.com/device), asked every 5 seconds.
+  const google = async () => {
+    setError("");
+    try {
+      const r = await api<{ userCode: string; url: string }>(`/api/join/${encodeURIComponent(token)}/google`, { method: "POST", body: { op: "start" } });
+      setCode(r);
+      const ask = () => {
+        poll.current = setTimeout(() => {
+          void api<{ waiting: boolean; key?: string }>(`/api/join/${encodeURIComponent(token)}/google`, { method: "POST", body: { op: "check" } }).then(
+            (c) => (c.key ? signedIn(c.key) : ask()),
+            (e: Error) => { setCode(null); setError(e.message); },
+          );
+        }, 5000);
+      };
+      ask();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   const join = async () => {
     setBusy(true);
     setError("");
     try {
       const r = await api<{ key: string }>(`/api/join/${encodeURIComponent(token)}`, { method: "POST", body: { name } });
-      localStorage.setItem(TOKEN_KEY, r.key);
-      localStorage.setItem(GUEST_KEY, "1");
-      location.hash = "#/";
-      location.reload();
+      signedIn(r.key);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -67,7 +92,23 @@ function Join({ token }: { token: string }) {
         <strong className="guest-title">KesherAI</strong>
         {error && <p className="error" role="alert" dir="auto">{error}</p>}
         {!info && !error && <p className="muted">{L("טוען…", "Loading…")}</p>}
-        {info && (
+        {info?.google && (
+          <div className="stack">
+            <p dir="auto">{L(`הוזמנת לפרויקט "${info.project}" (${info.role === "edit" ? "צפייה וכתיבה" : "צפייה"}).`, `You are invited to the project "${info.project}" (${info.role === "edit" ? "read and write" : "read"}).`)}</p>
+            <p className="muted small" dir="auto">{L("ההזמנה לחשבון Google: ", "The invite is for the Google account ")}<span dir="ltr">{info.emailHint}</span></p>
+            {code ? (
+              <div className="card stack" role="status">
+                <span className="small">{L("פתח את הדף של Google, התחבר עם החשבון המוזמן והקלד את הקוד:", "Open Google's page, sign in with the invited account and type the code:")}</span>
+                <b className="trakt-user-code" dir="ltr">{code.userCode}</b>
+                <a className="button primary" href={code.url} target="_blank" rel="noopener noreferrer" dir="ltr">{code.url.replace("https://", "")} ↗</a>
+                <span className="muted small">{L("מחכה לאישור של Google… זה יזוהה לבד.", "Waiting for Google… it is noticed by itself.")}</span>
+              </div>
+            ) : (
+              <button type="button" className="primary" onClick={() => void google()}>{L("התחבר עם Google", "Sign in with Google")}</button>
+            )}
+          </div>
+        )}
+        {info && !info.google && (
           <form className="stack" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void join(); }}>
             <p dir="auto">{L(`הוזמנת לפרויקט "${info.project}" (${info.role === "edit" ? "צפייה וכתיבה" : "צפייה"}).`, `You are invited to the project "${info.project}" (${info.role === "edit" ? "read and write" : "read"}).`)}</p>
             <label className="stack">

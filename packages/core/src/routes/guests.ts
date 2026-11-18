@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
-import { GuestInvites, GuestQuota, GuestWatch, guestName, guestOf, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, googlePoll, googleStart, guestName, guestOf, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
 import { clientAddress } from "../auth.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
 
@@ -51,11 +51,14 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
   // ---- The owner's (a guest key cannot reach these: auth.ts sends it only to /api/guest/*). ----
 
   /** A one-time invite link's token for a project: `{ role, hours }`. */
-  app.post<{ Params: { id: string }; Body: { role?: GuestRole; hours?: number } }>("/api/projects/:id/invites", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { role?: GuestRole; hours?: number; email?: string } }>("/api/projects/:id/invites", async (req, reply) => {
     if (!s.library.getProject(req.params.id)) return reply.code(404).send({ error: "No such project." });
+    const email = typeof req.body?.email === "string" && req.body.email.trim() ? req.body.email.trim().toLowerCase() : undefined;
+    if (email && !s.config.remote.guestGoogle) return reply.code(400).send({ error: "Set up Google sign-in first (below), so only that account can accept." });
+    if (email && s.config.remote.guestBanned.includes(email)) return reply.code(400).send({ error: "That email is banned. Lift the ban first." });
     try {
-      const { token, invite } = await invites.create(req.params.id, req.body?.role ?? "read", Number(req.body?.hours ?? 24));
-      return { token, expiresAt: invite.expiresAt, role: invite.role };
+      const { token, invite } = await invites.create(req.params.id, req.body?.role ?? "read", Number(req.body?.hours ?? (email ? 720 : 24)), email);
+      return { token, expiresAt: invite.expiresAt, role: invite.role, ...(invite.email ? { email: invite.email } : {}) };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
@@ -66,8 +69,8 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (!s.library.getProject(req.params.id)) return reply.code(404).send({ error: "No such project." });
     const people = devices()
       .filter((d) => guestOf(d.scope)?.projectId === req.params.id)
-      .map((d) => ({ id: d.id, name: d.name, role: guestOf(d.scope)!.role, joinedAt: d.createdAt, lastSeen: d.lastSeen ?? null, left: quota.left(d.id, limit()) }));
-    return { people, invites: await invites.list(req.params.id), dailyLimit: limit(), nightAlert: s.config.remote.guestNightAlert };
+      .map((d) => ({ id: d.id, name: d.name, role: guestOf(d.scope)!.role, joinedAt: d.createdAt, lastSeen: d.lastSeen ?? null, left: quota.left(d.id, limit()), ...(d.email ? { email: d.email } : {}) }));
+    return { people, invites: await invites.list(req.params.id), dailyLimit: limit(), nightAlert: s.config.remote.guestNightAlert, google: !!s.config.remote.guestGoogle, banned: s.config.remote.guestBanned };
   });
 
   /** The guests' daily answers and the quiet-hours alert (for every shared project). */
@@ -91,6 +94,36 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     return { ok: true };
   });
 
+  /** Bans a guest who signed in with Google: removed now, and their email can no longer join any shared project. */
+  app.post<{ Params: { id: string; guest: string } }>("/api/projects/:id/guests/:guest/ban", async (req, reply) => {
+    const d = devices().find((x) => x.id === req.params.guest);
+    if (!d || guestOf(d.scope)?.projectId !== req.params.id) return reply.code(404).send({ error: "No such guest." });
+    if (d.email && !s.config.remote.guestBanned.includes(d.email)) s.config.remote.guestBanned.push(d.email);
+    await s.deviceKeys?.remove(d.id);
+    await s.saveConfig();
+    return { ok: true, banned: d.email ?? null };
+  });
+  /** Lifts a ban. */
+  app.delete<{ Params: { email: string } }>("/api/guests/banned/:email", async (req) => {
+    s.config.remote.guestBanned = s.config.remote.guestBanned.filter((e) => e !== req.params.email.toLowerCase());
+    await s.saveConfig();
+    return { banned: s.config.remote.guestBanned };
+  });
+  /** Google sign-in for email invites: the owner's own OAuth client (type "TVs and Limited Input devices"); null removes it. */
+  app.put<{ Body: { clientId?: string; clientSecret?: string } | null }>("/api/guests/google", { bodyLimit: 4096 }, async (req, reply) => {
+    const b = req.body;
+    if (!b) {
+      delete s.config.remote.guestGoogle;
+    } else {
+      const clientId = String(b.clientId ?? "").trim();
+      const clientSecret = String(b.clientSecret ?? "").trim();
+      if (!/^[\w-]{5,100}\.apps\.googleusercontent\.com$/.test(clientId) || !/^[\w-]{10,100}$/.test(clientSecret)) return reply.code(400).send({ error: "The client ID ends with .apps.googleusercontent.com, and the secret is the client's secret (both from Google Cloud → Credentials)." });
+      s.config.remote.guestGoogle = { clientId, clientSecret };
+    }
+    await s.saveConfig();
+    return { google: !!s.config.remote.guestGoogle };
+  });
+
   /** Cancels an invite that was not used yet. */
   app.delete<{ Params: { id: string; invite: string } }>("/api/projects/:id/invites/:invite", async (req, reply) => ((await invites.cancel(req.params.invite)) ? { ok: true } : reply.code(404).send({ error: "No such invite." })));
 
@@ -101,19 +134,55 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     const i = await invites.open(req.params.token);
     const p = i && s.library.getProject(i.projectId);
     if (!i || !p) return reply.code(404).send({ error: "This invite link was used already or has ended. Ask for a new one." });
-    return { project: p.name, role: i.role, expiresAt: i.expiresAt };
+    // An email invite: only that Google account; the address is shown half hidden.
+    const hint = i.email ? i.email.replace(/^(.)(.*)(@.*)$/, (_m, a: string, b: string, c: string) => `${a}${"•".repeat(Math.min(8, b.length))}${c}`) : undefined;
+    return { project: p.name, role: i.role, expiresAt: i.expiresAt, google: !!i.email, ...(hint ? { emailHint: hint } : {}) };
   });
 
   /** Joins: the guest's own key (given once), and the owner is told. */
   app.post<{ Params: { token: string }; Body: { name?: string } }>("/api/join/:token", { bodyLimit: 2048 }, async (req, reply) => {
     const name = guestName(String(req.body?.name ?? ""));
     if (!name) return reply.code(400).send({ error: "Write your name." });
+    if ((await invites.open(req.params.token))?.email) return reply.code(403).send({ error: "This invite is for one Google account: sign in with Google." });
     const i = await invites.use(req.params.token, name);
     const p = i && s.library.getProject(i.projectId);
     if (!i || !p || !s.deviceKeys) return reply.code(404).send({ error: "This invite link was used already or has ended. Ask for a new one." });
     const key = await s.deviceKeys.issue(`${name} (guest)`, guestScope(i.projectId, i.role));
     void s.notifier.send({ title: "KesherAI", body: `${name} joined the project "${p.name}" (${i.role === "edit" ? "read and write" : "read"}).`, tags: ["busts_in_silhouette"] }).catch(() => undefined);
     return { key, project: p.name, role: i.role };
+  });
+
+  // Google sign-in for an email invite (as on a TV: the guest types a code at google.com/device, nothing comes back
+  // to this computer's address): "start" gives the code, "check" asks Google (at its own pace) and, when the verified
+  // email is the invited one and not banned, uses the invite and gives the key.
+  const signIns = new Map<string, { deviceCode: string; interval: number; expiresAt: number; asked: number }>();
+  app.post<{ Params: { token: string }; Body: { op?: string } }>("/api/join/:token/google", { bodyLimit: 1024 }, async (req, reply) => {
+    const client = s.config.remote.guestGoogle;
+    const i = await invites.open(req.params.token);
+    const p = i && s.library.getProject(i.projectId);
+    if (!i || !p || !i.email || !client || !s.deviceKeys) return reply.code(404).send({ error: "This invite link was used already or has ended. Ask for a new one." });
+    if (req.body?.op === "start") {
+      const g = await googleStart(fetch, client.clientId).catch((err: Error) => err);
+      if (g instanceof Error) return reply.code(502).send({ error: g.message });
+      signIns.set(req.params.token, { deviceCode: g.deviceCode, interval: g.interval, expiresAt: g.expiresAt, asked: 0 });
+      return { userCode: g.userCode, url: g.url, expiresAt: new Date(g.expiresAt).toISOString() };
+    }
+    const w = signIns.get(req.params.token);
+    if (!w || Date.now() > w.expiresAt) return reply.code(410).send({ error: "The sign-in code ended. Start again." });
+    // Google's own pace: asking faster than its interval only earns "slow down".
+    if (Date.now() - w.asked < w.interval * 1000) return { waiting: true };
+    w.asked = Date.now();
+    const r = await googlePoll(fetch, client, w.deviceCode).catch(() => "wait" as const);
+    if (r === "wait") return { waiting: true };
+    signIns.delete(req.params.token);
+    if (r === "gone") return reply.code(410).send({ error: "Google did not confirm the sign-in. Start again." });
+    if (s.config.remote.guestBanned.includes(r.email)) return reply.code(403).send({ error: "This account cannot join." });
+    if (r.email !== i.email) return reply.code(403).send({ error: `You signed in as ${r.email}, but this invite is for another account. Start again and pick the invited account.` });
+    const used = await invites.use(req.params.token, r.name);
+    if (!used) return reply.code(404).send({ error: "This invite link was used already or has ended. Ask for a new one." });
+    const key = await s.deviceKeys.issue(`${guestName(r.name) || "Guest"} (guest)`, guestScope(used.projectId, used.role), r.email);
+    void s.notifier.send({ title: "KesherAI", body: `${r.name} (${r.email}) joined the project "${p.name}" (${used.role === "edit" ? "read and write" : "read"}).`, tags: ["busts_in_silhouette"] }).catch(() => undefined);
+    return { waiting: false, key, project: p.name, role: used.role };
   });
 
   // ---- The guest's (the only routes a guest key opens). ----

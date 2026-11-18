@@ -26,7 +26,7 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 ## Looks and personalization
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
 - ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try
-- 🔧 Figma-like sharing and collaboration: designed (docs/COLLABORATION.md), approved by Roee 2026-11-18; stage 1 built (0.6.371: invite links, guests read and write their own chats, Share and Remove); stages 2–3 built (alerts: outside, new address, flood, quiet hours; guests read the project's files, secrets hidden); next: ban an email and email invites with Google sign-in; read-only chat links that expire already exist
+- 🔧 Figma-like sharing and collaboration: designed (docs/COLLABORATION.md), approved by Roee 2026-11-18; stage 1 built (0.6.371: invite links, guests read and write their own chats, Share and Remove); stages 2–3 built (alerts: outside, new address, flood, quiet hours; guests read the project's files, secrets hidden); stage 4 built (email invites with Google's device sign-in, ban and lift); read-only chat links that expire already exist
 - ✅ Reset to defaults and reinstall the latest version, from Settings
 
 ## Agents and automation

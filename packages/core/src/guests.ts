@@ -21,6 +21,8 @@ export interface GuestInvite {
   role: GuestRole;
   createdAt: string;
   expiresAt: string;
+  /** An email invite: only this Google account (verified) may accept it. */
+  email?: string;
   /** When it was used, and the name the guest gave. */
   usedAt?: string;
   usedBy?: string;
@@ -81,16 +83,20 @@ export class GuestInvites {
    *
    * @param projectId - The project shared.
    * @param role - Read or edit.
-   * @param hours - How long the link works: 1 to 168.
+   * @param hours - How long the link works: 1 to 168 (an email invite: to 8760).
+   * @param email - For an email invite: only this Google account may accept it.
    * @returns The token (for the link; only its hash is kept) and the invite.
    */
-  async create(projectId: string, role: GuestRole, hours: number): Promise<{ token: string; invite: GuestInvite }> {
+  async create(projectId: string, role: GuestRole, hours: number, email?: string): Promise<{ token: string; invite: GuestInvite }> {
     if (!/^[\w-]{1,80}$/.test(projectId)) throw new Error("No such project.");
     if (role !== "read" && role !== "edit") throw new Error("Role: read or edit.");
+    const mail = email?.trim().toLowerCase();
+    if (mail !== undefined && !/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(mail)) throw new Error("That is not an email address.");
     const h = Math.round(hours);
-    if (!(h >= 1 && h <= 168)) throw new Error("The link can work 1 hour to 7 days.");
+    // A link works up to 7 days; an email invite (only that Google account can use it) up to a year.
+    if (!(h >= 1 && h <= (mail ? 8760 : 168))) throw new Error(mail ? "An email invite can work 1 hour to a year." : "The link can work 1 hour to 7 days.");
     const token = randomBytes(32).toString("base64url");
-    const invite: GuestInvite = { id: randomUUID(), hash: hashOf(token), projectId, role, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + h * 3_600_000).toISOString() };
+    const invite: GuestInvite = { id: randomUUID(), hash: hashOf(token), projectId, role, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + h * 3_600_000).toISOString(), ...(mail ? { email: mail } : {}) };
     const list = await this.read();
     list.push(invite);
     await this.write(list);
@@ -262,4 +268,54 @@ export function guestFileTools<T extends { spec: { name: string }; run(input: Re
         return clean(await t.run(input, ctx));
       },
     }));
+}
+
+/** Google's device sign-in (as on a TV): no address of this computer is needed, the guest signs in at google.com/device. */
+const GOOGLE_DEVICE = "https://oauth2.googleapis.com/device/code";
+const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
+
+/**
+ * Starts a guest's Google sign-in.
+ *
+ * @param fetcher - fetch.
+ * @param clientId - The owner's OAuth client (TVs and Limited Input devices).
+ * @returns The code to type at Google's address, and what KesherAI keeps to ask with.
+ */
+export async function googleStart(fetcher: typeof fetch, clientId: string): Promise<{ userCode: string; url: string; deviceCode: string; interval: number; expiresAt: number }> {
+  const res = await fetcher(GOOGLE_DEVICE, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: clientId, scope: "email profile" }), redirect: "error", signal: AbortSignal.timeout(20_000) });
+  const j = (await res.json().catch(() => ({}))) as { device_code?: unknown; user_code?: unknown; verification_url?: unknown; interval?: unknown; expires_in?: unknown; error?: unknown };
+  if (!res.ok || typeof j.device_code !== "string" || typeof j.user_code !== "string") throw new Error(`Google refused to start the sign-in${typeof j.error === "string" ? ` (${j.error})` : ""}. Check the client in Settings.`);
+  const url = typeof j.verification_url === "string" && /^https:\/\/(www\.)?google\.com\/device$/.test(j.verification_url) ? j.verification_url : "https://www.google.com/device";
+  return { userCode: j.user_code.slice(0, 20), url, deviceCode: j.device_code, interval: Math.max(5, Number(j.interval) || 5), expiresAt: Date.now() + Math.min(1800, Number(j.expires_in) || 1800) * 1000 };
+}
+
+/**
+ * Asks Google whether the guest finished signing in.
+ *
+ * @param fetcher - fetch.
+ * @param client - The owner's OAuth client.
+ * @param deviceCode - From googleStart.
+ * @returns "wait", "gone" (denied or ended), or who signed in (Google's own id, the verified email, the name).
+ */
+export async function googlePoll(fetcher: typeof fetch, client: { clientId: string; clientSecret: string }, deviceCode: string): Promise<"wait" | "gone" | { sub: string; email: string; name: string }> {
+  const res = await fetcher(GOOGLE_TOKEN, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: client.clientId, client_secret: client.clientSecret, code: deviceCode, grant_type: "http://oauth.net/grant_type/device/1.0" }), redirect: "error", signal: AbortSignal.timeout(20_000) });
+  const j = (await res.json().catch(() => ({}))) as { id_token?: unknown; error?: unknown };
+  if (j.error === "authorization_pending" || j.error === "slow_down") return "wait";
+  if (!res.ok || typeof j.id_token !== "string") return "gone";
+  // Straight from Google over TLS (not from the guest), so its claims are read without a signature check; the
+  // audience and the verified email are checked.
+  const claims = idTokenClaims(j.id_token);
+  if (!claims || claims.aud !== client.clientId || claims.email_verified !== true || typeof claims.email !== "string" || typeof claims.sub !== "string") return "gone";
+  return { sub: claims.sub, email: claims.email.toLowerCase(), name: typeof claims.name === "string" ? claims.name : claims.email.split("@")[0]! };
+}
+
+/** The claims of an ID token (its middle part), or undefined. */
+export function idTokenClaims(idToken: string): Record<string, unknown> | undefined {
+  try {
+    const part = idToken.split(".")[1];
+    const v = part ? (JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as unknown) : undefined;
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }

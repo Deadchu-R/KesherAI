@@ -161,7 +161,7 @@ export function registerRemoteAuth(
     // The owner's Allow / Deny buttons for a phone asking to control this computer (the one-time code is the key).
     if (request.method === "POST" && /^\/api\/remote-desktop\/decide\/[0-9a-f]{32}$/.test(path)) return;
     // A guest opening an invite link (guests.ts): the one-time token is the key; only this route takes it.
-    if (/^\/api\/join\/[A-Za-z0-9_-]{32,64}$/.test(path) && (request.method === "GET" || request.method === "POST")) return;
+    if (/^\/api\/join\/[A-Za-z0-9_-]{32,64}(\/google)?$/.test(path) && (request.method === "GET" || request.method === "POST")) return;
     if (path === "/api/pair" || /^\/api\/pair\/[0-9a-f-]{36}$/.test(path)) {
       if (request.method === "POST" && path === "/api/pair") return;
       if (request.method === "GET" && path !== "/api/pair") return;

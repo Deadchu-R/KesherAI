@@ -247,3 +247,43 @@ test("a shared project: invite, join from outside, read, write in their own chat
     await server.close();
   }
 });
+
+test("an email invite: only that Google account joins; the wrong account and a banned one cannot", async () => {
+  const server = await makeServer();
+  const realFetch = globalThis.fetch;
+  let who = "dani@example.com";
+  const idToken = (email: string) => `x.${Buffer.from(JSON.stringify({ aud: "abc123.apps.googleusercontent.com", sub: `s-${email}`, email, email_verified: true, name: "Dani K" })).toString("base64url")}.sig`;
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    if (u === "https://oauth2.googleapis.com/device/code") return new Response(JSON.stringify({ device_code: "dev1", user_code: "ABCD-EFGH", verification_url: "https://www.google.com/device", interval: 5, expires_in: 1800 }));
+    if (u === "https://oauth2.googleapis.com/token") return new Response(JSON.stringify({ id_token: idToken(who), access_token: "a" }));
+    return realFetch(url, init);
+  }) as typeof fetch;
+  try {
+    const project = (await server.app.inject({ method: "POST", url: "/api/projects", payload: { name: "Game" } })).json() as { id: string };
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/invites`, payload: { role: "read", email: "Dani@Example.com" } })).statusCode, 400, "Google must be set up first");
+    assert.equal((await server.app.inject({ method: "PUT", url: "/api/guests/google", payload: { clientId: "abc123.apps.googleusercontent.com", clientSecret: "GOCSPX-secret12345" } })).statusCode, 200);
+    const away = { remoteAddress: "203.0.113.8", headers: { host: "kesher.example" } };
+    const join = async () => {
+      const inv = (await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/invites`, payload: { role: "read", email: "Dani@Example.com" } })).json() as { token: string };
+      const info = (await server.app.inject({ url: `/api/join/${inv.token}`, ...away })).json() as { google: boolean; emailHint: string };
+      assert.equal(info.google, true);
+      assert.match(info.emailHint, /^d•+@example\.com$/);
+      assert.equal((await server.app.inject({ method: "POST", url: `/api/join/${inv.token}`, payload: { name: "Anyone" }, ...away })).statusCode, 403, "a name is not enough");
+      assert.equal(((await server.app.inject({ method: "POST", url: `/api/join/${inv.token}/google`, payload: { op: "start" }, ...away })).json() as { userCode: string }).userCode, "ABCD-EFGH");
+      return server.app.inject({ method: "POST", url: `/api/join/${inv.token}/google`, payload: { op: "check" }, ...away });
+    };
+    who = "someone@else.com";
+    assert.equal((await join()).statusCode, 403, "the wrong account");
+    who = "dani@example.com";
+    const ok = (await join()).json() as { key: string };
+    assert.match(ok.key, /^kd_/);
+    const g = (await server.app.inject({ url: `/api/projects/${project.id}/guests` })).json() as { people: Array<{ id: string; email: string }> };
+    assert.equal(g.people[0]!.email, "dani@example.com");
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/guests/${g.people[0]!.id}/ban` })).statusCode, 200);
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/invites`, payload: { role: "read", email: "dani@example.com" } })).statusCode, 400, "banned: no new invite");
+  } finally {
+    globalThis.fetch = realFetch;
+    await server.close();
+  }
+});

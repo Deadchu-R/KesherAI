@@ -278,6 +278,10 @@ Settings → "API and app access keys" makes a key per app (`kai-…`, shown onc
 | `POST /api/projects/:id/invites` | `{ role: "read"\|"edit", hours: 1–168 }` → `{ token, expiresAt, role }`: a one-time invite; the link is `<address>/#/join/<token>` |
 | `GET /api/projects/:id/guests` | `{ people: [{ id, name, role, joinedAt, lastSeen, left }], invites, dailyLimit }` |
 | `DELETE /api/projects/:id/guests/:guest` · `DELETE /api/projects/:id/invites/:invite` | Remove a guest (their key stops at once) · cancel an unused invite |
+| `POST /api/projects/:id/invites` with `email` | An email invite (needs Google set up): only that Google account can accept it; works up to a year (30 days by default) |
+| `POST /api/projects/:id/guests/:guest/ban` · `DELETE /api/guests/banned/:email` | Ban a Google-signed guest (removed, and the email cannot join again) · lift a ban |
+| `PUT /api/guests/google` | `{ clientId, clientSecret }` (an OAuth client of type "TVs and Limited Input devices"), or null to remove |
+| `POST /api/join/:token/google` | `{ op: "start" }` → `{ userCode, url }` (google.com/device); `{ op: "check" }` → `{ waiting }` or `{ waiting: false, key, project, role }` |
 | `PUT /api/guests/settings` | `{ dailyLimit?, nightAlert? }`: guests' answers a day, and the quiet-hours alert (the owner is always told of a join, a try to go outside the project, a new address, a flood) |
 | `GET /api/join/:token` · `POST /api/join/:token` | No key (the token is one): the project's name and role · `{ name }` → `{ key, project, role }` (once) |
 | `GET /api/guest/me` · `GET /api/guest/chats` · `GET /api/guest/chats/:id` | A guest key only: who and what is left today · the project's chats · one chat's messages as text |

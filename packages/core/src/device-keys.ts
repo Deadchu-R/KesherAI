@@ -19,6 +19,8 @@ export interface DeviceKey {
    * `project:<id>:read|edit`: a guest in one shared project; the key opens only /api/guest/* (guests.ts).
    */
   scope?: string;
+  /** A guest who signed in with Google: their verified email (guests.ts). */
+  email?: string;
   /** The phone app's UnifiedPush address and Web Push keys (see phone-push.ts). Removed with the device. */
   push?: { endpoint: string; p256dh: string; auth: string };
 }
@@ -41,11 +43,12 @@ export class DeviceKeys {
    *
    * @param name - What the device called itself.
    * @param scope - What the key may open (see DeviceKey.scope); none: everything.
+   * @param email - A guest's verified email (Google sign-in).
    * @returns The key (given to the device once; only its hash is kept).
    */
-  async issue(name: string, scope?: DeviceKey["scope"]): Promise<string> {
+  async issue(name: string, scope?: DeviceKey["scope"], email?: string): Promise<string> {
     const key = `kd_${randomBytes(32).toString("base64url")}`;
-    this.list().push({ id: randomUUID(), name: name.replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device", hash: hashOf(key), createdAt: new Date().toISOString(), ...(scope ? { scope } : {}) });
+    this.list().push({ id: randomUUID(), name: name.replace(/[^\p{L}\p{N} ._()-]/gu, "").slice(0, 40) || "Device", hash: hashOf(key), createdAt: new Date().toISOString(), ...(scope ? { scope } : {}), ...(email ? { email } : {}) });
     await this.save();
     return key;
   }
