@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PartSegmenter } from "./part-seg.js";
 
 test("the Space's requirements leave out PyTorch, Linux wheels, flash-attn, spconv (ours is for CUDA 12.4) and Gradio", () => {
-  assert.deepEqual(PartSegmenter.requirements("torch==2.5.1\ntrimesh # meshes\nhttps://x/flash_attn-2.whl\nflash-attn\ngradio==4\nspconv-cu120\nfoo @ https://x/foo.whl\n-f https://idx\nfpsample\n"), ["trimesh", "fpsample"]);
+  assert.deepEqual(PartSegmenter.requirements("torch==2.5.1\ntrimesh # meshes\nhttps://x/flash_attn-2.whl\nflash-attn\ngradio==4\nspconv-cu120\nfoo @ https://x/foo.whl\n-f https://idx\ngit+https://github.com/Dao-AILab/flash-attention.git\nbar @ git+https://github.com/x/bar\nfpsample\n"), ["trimesh", "fpsample"]);
 });
 
 test("not set up: it says so; a mesh must be a GLB", async () => {

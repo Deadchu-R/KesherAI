@@ -116,7 +116,7 @@ export class PartSegmenter {
     return text
       .split(/\r?\n/)
       .map((l) => l.replace(/#.*$/, "").trim())
-      .filter((l) => l && !/^(-|torch\b|torchvision\b|torchaudio\b|flash[-_]attn|gradio|spaces\b|xformers|spconv)/i.test(l) && !/^https?:|\.whl\b|@\s*https?:/i.test(l));
+      .filter((l) => l && !/^(-|torch\b|torchvision\b|torchaudio\b|flash[-_]attn|gradio|spaces\b|xformers|spconv)/i.test(l) && !/^(git\+)?https?:|\.whl\b|@\s*(git\+)?https?:|flash-attention/i.test(l));
   }
 
   /** Installs Python 3.10, PyTorch with CUDA, P3-SAM's code, its requirements and its weights (a few GB, once). */
