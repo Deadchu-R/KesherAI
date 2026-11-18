@@ -48,3 +48,20 @@ test("the stand-in's looks: a placed model found through its .meta, a prefab's f
   assert.equal((await app.inject({ url: `/api/unity/asset?project=${encodeURIComponent(dir)}&path=Assets/Lamp.prefab` })).statusCode, 400);
   await app.close();
 });
+
+test("a package's script (TextMeshPro…) is named from the packages' own files", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "unity-"));
+  await mkdir(join(dir, "Assets"), { recursive: true });
+  await mkdir(join(dir, "ProjectSettings"));
+  const pkg = join(dir, "Library", "PackageCache", "com.unity.textmeshpro@3.0.6", "Scripts", "Runtime");
+  await mkdir(pkg, { recursive: true });
+  const G = "f4688fdb7df04437aeb418b961361dc5";
+  await writeFile(join(pkg, "TextMeshProUGUI.cs"), "//");
+  await writeFile(join(pkg, "TextMeshProUGUI.cs.meta"), `guid: ${G}\n`);
+  await writeFile(join(dir, "Assets", "Main.unity"), `%YAML 1.1\n--- !u!1 &1\nGameObject:\n  m_Component:\n  - component: {fileID: 2}\n  - component: {fileID: 3}\n  m_Name: Title\n--- !u!4 &2\nTransform:\n  m_GameObject: {fileID: 1}\n--- !u!114 &3\nMonoBehaviour:\n  m_GameObject: {fileID: 1}\n  m_Script: {fileID: 11500000, guid: ${G}, type: 3}\n`);
+  const app = Fastify();
+  await unitySceneRoutes(app);
+  const o = (await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/Main.unity` })).json().objects;
+  assert.deepEqual(o[0].components, ["TextMeshProUGUI.cs"]);
+  await app.close();
+});

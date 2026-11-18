@@ -52,7 +52,40 @@ async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, s
     }
   };
   if (wanted.size) await walk(join(dir, "Assets"), 0);
+  // Not in Assets (a package's script: TextMeshPro, UI…): the packages' own .meta files, read once per project.
+  if (out.size < wanted.size) {
+    const packs = await packageAssets(dir);
+    for (const g of wanted) if (!out.has(g) && packs.has(g)) out.set(g, packs.get(g)!);
+  }
   return out;
+}
+
+/** The packages' GUIDs per project (Library/PackageCache and Packages/), read once: they change only with Unity. */
+const packageCache = new Map<string, Promise<Map<string, string>>>();
+function packageAssets(dir: string): Promise<Map<string, string>> {
+  if (!packageCache.has(dir)) {
+    packageCache.set(dir, (async () => {
+      const out = new Map<string, string>();
+      let seen = 0;
+      const walk = async (d: string, depth: number): Promise<void> => {
+        if (depth > 10 || seen > 100_000) return;
+        for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+          const f = join(d, e.name);
+          if (e.isDirectory()) { if (!e.name.startsWith(".") && e.name !== "Tests" && e.name !== "Documentation~") await walk(f, depth + 1); }
+          // Scripts only: what a scene's component names.
+          else if (e.name.endsWith(".cs.meta")) {
+            seen++;
+            const g = /^guid:\s*([0-9a-f]{32})/m.exec((await readFile(f, "utf8").catch(() => "")).slice(0, 400))?.[1];
+            if (g) out.set(g, relative(dir, f.slice(0, -5)).split(sep).join("/"));
+          }
+        }
+      };
+      await walk(join(dir, "Library", "PackageCache"), 0);
+      await walk(join(dir, "Packages"), 0);
+      return out;
+    })());
+  }
+  return packageCache.get(dir)!;
 }
 
 /**
