@@ -528,7 +528,7 @@ export function studyPlus(x) {
           if (a !== undefined) answer.textContent = String(a).trim();
         };
         found.replaceChildren(...(list.length ? [withAbs.length > 1 ? el("div", {}, say, answer) : "", ...list.map((p) => el("div", { class: "ph-row", style: "flex-direction: column; align-items: stretch" },
-          el("b", { dir: "auto" }, `${withAbs.includes(p) ? `[${withAbs.indexOf(p) + 1}] ` : ""}${p.title}`), el("small", { class: "muted", dir: "auto" }, [p.authors.slice(0, 3).join(", "), p.year, p.venue].filter(Boolean).join(" · ")),
+          el("b", { dir: "auto" }, `${withAbs.includes(p) ? `[${withAbs.indexOf(p) + 1}] ` : ""}${p.title}`), el("small", { class: "muted", dir: "auto" }, [p.authors.slice(0, 3).join(", "), p.year, p.venue, p.cited !== undefined ? `${L("מצוטט על ידי", "Cited by")} ${p.cited}` : null].filter(Boolean).join(" · ")),
           btns(el("button", { type: "button", onclick: () => save(p) }, L("שמירה למקורות", "Save to sources")), p.pdf ? el("a", { class: "button", href: p.pdf, target: "_blank", rel: "noreferrer" }, "PDF ↗") : "")))] : [el("p", { class: "muted" }, L("לא נמצאו מאמרים (צריך אינטרנט). נסי מילים אחרות.", "No papers found (needs internet). Try other words."))]));
       } catch {
         found.replaceChildren(el("p", { class: "muted" }, L("אין חיבור לאינטרנט.", "No internet connection.")));
@@ -570,7 +570,7 @@ export function studyPlus(x) {
     x.root.append(section("", el("div", { class: "ph-filter" }, q, go2), found),
       section(L(`המקורות של הקורס (${src.length})`, `The course's sources (${src.length})`),
         btns(pick, el("button", { type: "button", onclick: () => pick.click() }, L("📥 ייבוא מ-Zotero (BibTeX / RIS)", "📥 Import from Zotero (BibTeX / RIS)")), styleSel),
-        ...src.map((s) => el("div", { class: "ph-row", style: "flex-direction: column; align-items: stretch" }, el("small", { dir: "ltr", style: "text-align: left" }, ref(s)),
+        ...src.map((s) => el("div", { class: "ph-row", style: "flex-direction: column; align-items: stretch" }, el("small", { dir: "ltr", style: "text-align: left" }, ref(s)), s.cited !== undefined ? el("small", { class: "muted" }, `${L("מצוטט על ידי", "Cited by")} ${s.cited}`) : null,
           btns(el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(ref(s)) }, L("העתקה", "Copy")), el("button", { type: "button", onclick: () => void navigator.clipboard?.writeText(cite(s)) }, cite(s)),
             el("button", { type: "button", "aria-label": L("להסיר", "Remove"), onclick: () => { c.sources = (c.sources ?? []).filter((y) => y.id !== s.id); c.removed = [...(c.removed ?? []), s.id]; if (commit()) x.draw(); } }, "✕")))),
         src.length ? btns(el("button", { type: "button", onclick: () => share(toBibtex(src), "sources.bib", "text/plain") }, "BibTeX"), el("button", { type: "button", onclick: () => share(toRis(src), "sources.ris", "text/plain") }, "RIS")) : el("p", { class: "muted small" }, L("מאמרים ששומרים מגיעים לכאן, עם הפניה ב-APA 7.", "Saved papers come here, with an APA 7 reference."))));

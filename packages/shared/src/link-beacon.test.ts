@@ -13,6 +13,8 @@ test("link beacon: the phone's key opens what the computer sealed; another key d
   assert.match(await beaconTopic(secret), /^kai[0-9a-f]{40}$/);
   // Not an https address (a page could try to send the phone somewhere else): refused.
   assert.equal(await openLink(secret, await sealLink(secret, { url: "http://evil.example/x?y", t: 1 })), undefined);
+  // Not a plain host (a page could try to send the phone to a specific path): refused.
+  assert.equal(await openLink(secret, await sealLink(secret, { url: "https://example.com/path", t: 1 })), undefined);
 });
 
 test("link beacon: the phone app's copy (www/link-beacon.js) agrees with this one", async () => {

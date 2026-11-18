@@ -51,7 +51,7 @@ function Bite({ it, courseId, i, n }: { it: FeedItem; courseId: string; i: numbe
         <>
           <b dir="auto">{it.q}</b>
           {it.options.map((o, k) => <button key={k} type="button" dir="auto" className={`vl-option${pick === null ? "" : k === it.answer ? " right" : k === pick ? " wrong" : ""}`} disabled={pick !== null} onClick={() => setPick(k)}>{o}</button>)}
-          {pick !== null && it.explain && <p className="muted small" dir="auto">{it.explain}</p>}
+          {pick !== null && it.explain && <p className="muted small" dir="auto" aria-live="polite">{it.explain}</p>}
         </>
       )}
       {it.kind === "line" && <p className="study-bite-line" dir="auto">{it.text}</p>}

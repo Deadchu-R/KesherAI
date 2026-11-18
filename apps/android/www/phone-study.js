@@ -615,7 +615,7 @@ export function renderPhoneStudy(root, ask, search, speech, sync, extract, say) 
         el("button", { type: "button", onclick: () => go({ at: "terms", course: c.id }) }, L("מילון", "Glossary")),
         clinicalField(c.field) && el("button", { type: "button", onclick: () => go({ at: "drugs", course: c.id }) }, L("תרופות", "Drugs")),
         el("button", { type: "button", onclick: () => go({ at: "progress", course: c.id }) }, L("מה עובד בשבילי", "What works for me"))),
-      plus.courseButtons(c), plus.examEve(c),
+      plus.courseButtons(c), plus.hardCards(c), plus.examEve(c),
       el("label", { class: "ph-filter" }, L("תחום: ", "Field: "), (() => {
         const sel = el("select", { onchange: (e) => { const v = e.target.value; if (v) { c.field = v; c.fieldChosen = true; } else { delete c.fieldChosen; c.field = detectField(c.name, c.lectures.map((x) => `${x.title} ${x.text.slice(0, 3000)}`).join(" ")); } if (commit()) draw(); } },
           el("option", { value: "" }, c.field && !c.fieldChosen ? L("זוהה: ", "Recognised: ") + (STUDY_FIELDS.find((f) => f.id === c.field)?.[he() ? "he" : "en"] ?? "") : L("לזהות לבד", "Recognise by itself")),

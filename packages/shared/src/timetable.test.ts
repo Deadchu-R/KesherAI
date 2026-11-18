@@ -90,6 +90,14 @@ test("attendance: marks and rules are checked, unmarked classes listed, sums and
   assert.equal(attendanceFor(tt, "none").held, 0);
 });
 
+test("cleanTimetable keeps a positive time stamp t and drops a bad one", () => {
+  assert.equal(cleanTimetable({ t: 123 }).t, 123);
+  assert.equal(cleanTimetable({ t: "123" }).t, 123);
+  assert.equal(cleanTimetable({ t: 0 }).t, undefined);
+  assert.equal(cleanTimetable({ t: -1 }).t, undefined);
+  assert.equal(cleanTimetable({ t: "abc" }).t, undefined);
+});
+
 test("attendanceAskNow: 5–15 minutes after a class of a course with a rule, once unmarked", () => {
   const tt = cleanTimetable({ slots: [{ id: "a", courseId: "anat", day: 0, start: "10:00", end: "12:00" }, { id: "p", courseId: "pharm", day: 0, start: "12:00", end: "13:00" }], limits: { anat: { absences: 2 } }, trackSince: 1 });
   assert.equal(attendanceAskNow(tt, new Date(2026, 10, 15, 12, 3)), undefined);
