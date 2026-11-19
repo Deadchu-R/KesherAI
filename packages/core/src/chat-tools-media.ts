@@ -303,7 +303,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     return st.ready || st.downloading ? undefined : `Downloads a model of about ${st.missingGb} GB.`;
   };
   notes.push(
-    "make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI; check the lyrics' spelling and rhythm before calling it (a song sung from clumsy lyrics sounds clumsy). make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
+    "make_sound makes a sound effect or ambiance from a description (Stable Audio 3 Small-SFX), seconds long; make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI; check the lyrics' spelling and rhythm before calling it (a song sung from clumsy lyrics sounds clumsy). make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
   );
   // ACE-Step 1.5 XL when it is here (better, above all in languages it saw less), else 1.5; the first ACE-Step only
   // when it is already here and 1.5 is not (no second download needed).
@@ -365,6 +365,41 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       return { output: `Made the song (${seconds} s${v15 ? "" : ", with the first ACE-Step: ACE-Step 1.5 sings in more languages, on the Nodes page"}); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
     },
   };
+  // Sound effects (Stable Audio 3 Small-SFX): rain, a door, footsteps, an engine, a crowd — not songs (make_music).
+  const sfxId = "sfx-stable-audio-3-small";
+  const sound: AgentTool = {
+    risk: "safe",
+    askFirst: askDownload(sfxId),
+    spec: {
+      name: "make_sound",
+      description: "Make a sound effect or ambiance from a description (Stable Audio 3 Small-SFX in ComfyUI): rain, a door creaking, footsteps, an engine, a crowd, birds; 1 second to 2 minutes. Not for songs or music (use make_music). The user gets a player. Takes seconds to a minute.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "The sound in English, concrete: what makes it, where, how near, how it changes. E.g. 'heavy rain on a tin roof, distant thunder, close'." },
+          seconds: { type: "number", description: "Length in seconds, 1–120 (default 10)." },
+          download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing (about 3.5 GB)." },
+        },
+        required: ["prompt"],
+      },
+    },
+    run: async (input, ctx) => {
+      const blocked = gate(sfxId, input.download);
+      if (blocked) return { output: blocked };
+      const seconds = Math.min(120, Math.max(1, Math.round(Number(input.seconds ?? 10) || 10)));
+      // Bounded (as make_music): the words go into ComfyUI's text encoder and the sound's saved details.
+      const prompt = String(input.prompt ?? "").slice(0, 1000);
+      const files = await flows.run(sfxId, (flow) => {
+        flow["3"]!.inputs.text = prompt;
+        flow["5"]!.inputs.seconds = seconds;
+        flow["6"]!.inputs.seed = randomInt(2 ** 31);
+      }, ctx.signal);
+      const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
+      if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
+      const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: "comfyui/stable-audio-3-small-sfx", meta: { prompt } })));
+      return { output: `Made the sound (${seconds} s); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
+    },
+  };
   const model3d: AgentTool = {
     risk: "safe",
     askFirst: askDownload("3d-hunyuan3d"),
@@ -403,7 +438,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       return { output: `Made the 3D model ${out} (GLB, shape only); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
     },
   };
-  return [music, model3d];
+  return [music, sound, model3d];
 }
 
 /**

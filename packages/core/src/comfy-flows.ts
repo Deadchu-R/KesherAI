@@ -205,6 +205,35 @@ export function readyFlows(): ReadyFlow[] {
       },
     },
     {
+      // Stable Audio 3.0 Small-SFX (Stability AI, May 2026), as ComfyUI's Stable Audio 3.0 templates load it (ComfyUI
+      // 0.22+): the distilled model, 8 steps, cfg 1, lcm; a 459M model for sound effects and short ambiance, up to two
+      // minutes, light enough for a processor without a graphics card. Premiere's "generate sound effects" in a range.
+      id: "sfx-stable-audio-3-small",
+      icon: "🔊",
+      title: { en: "Sound effects from words (Stable Audio 3 Small-SFX)", he: "אפקטים קוליים ממילים (Stable Audio 3 Small-SFX)" },
+      description: {
+        en: "Describe a sound (rain on a tin roof, a door creaking open, footsteps on gravel); a small model made for sound effects and ambiance makes it, up to two minutes. Runs even without a graphics card. Needs ComfyUI 0.22 or newer.",
+        he: "מתארים צליל (גשם על גג פח, דלת חורקת, צעדים על חצץ) ומודל קטן שנבנה לאפקטים ולאווירה יוצר אותו, עד שתי דקות. רץ גם בלי כרטיס גרפי. צריך ComfyUI 0.22 ומעלה.",
+      },
+      license: { name: "Stability AI Community License (free under $1M a year in revenue)", url: "https://stability.ai/license" },
+      files: [
+        { label: "Stable Audio 3 Small-SFX", repo: "Comfy-Org/stable-audio-3", path: "checkpoints/stable_audio_3_small_sfx.safetensors", rel: "music/stable_audio_3_small_sfx.safetensors", gb: 2.3 },
+        { label: "Stable Audio 3 text encoder (T5Gemma)", repo: "Comfy-Org/stable-audio-3", path: "text_encoders/t5gemma_b_b_ul2.safetensors", rel: "text_encoders/t5gemma_b_b_ul2.safetensors", gb: 1.2 },
+      ],
+      checkpoints: { "1": "stable_audio_3_small_sfx.safetensors" },
+      names: [{ node: "2", input: "clip_name", folder: "text_encoders", file: "t5gemma_b_b_ul2.safetensors" }],
+      flow: {
+        "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "stable_audio_3_small_sfx.safetensors" }, _meta: { title: "Stable Audio 3 Small-SFX" } },
+        "2": { class_type: "CLIPLoader", inputs: { clip_name: "t5gemma_b_b_ul2.safetensors", type: "stable_audio", device: "default" }, _meta: { title: "Text encoder" } },
+        "3": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: "heavy rain on a tin roof, distant thunder" }, _meta: { title: "The sound" } },
+        "4": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: "" } },
+        "5": { class_type: "EmptyLatentAudio", inputs: { seconds: 10, batch_size: 1 }, _meta: { title: "Length (seconds)" } },
+        "6": { class_type: "KSampler", inputs: { model: ["1", 0], positive: ["3", 0], negative: ["4", 0], latent_image: ["5", 0], seed: seed(), steps: 8, cfg: 1, sampler_name: "lcm", scheduler: "simple", denoise: 1 } },
+        "7": { class_type: "VAEDecodeAudio", inputs: { samples: ["6", 0], vae: ["1", 2] } },
+        "8": { class_type: "SaveAudioMP3", inputs: { audio: ["7", 0], filename_prefix: "audio/KesherAI-sfx", quality: "V0" } },
+      },
+    },
+    {
       id: "3d-hunyuan3d",
       icon: "🧊",
       title: { en: "3D object from a picture (Hunyuan3D 2)", he: "אובייקט תלת-ממד מתמונה (Hunyuan3D 2)" },

@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; המוזיקה תיכנס לבד כשתהיה מוכנה (כמה דקות)", aiLate: "המוזיקה לא הגיעה תוך 20 דקות; הוסף אותה מקבצי הצ׳אט כשתגיע", aiIn: "המוזיקה נכנסה", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiSfx: "אפקט קולי בשבילו (גשם, דלת, צעדים…; כמה שניות עד דקה; נכנס לבד)", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הצליל ייכנס לבד כשיהיה מוכן", aiLate: "הצליל לא הגיע תוך 20 דקות; הוסף אותו מבנק היצירות כשיגיע", aiIn: "הצליל נכנס", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -661,7 +661,7 @@
     // Other words: the voice dialog does it (a voice, Listen, then instead of the selection or under it).
     if (kind === "voice") { $("voiceText").value = words; return void $("toVoice").click(); }
     if (!words) return msg(T("aiNoWords", "Write what it should be"), true);
-    void musicFor(words, [...sel], $("aiMix").checked);
+    void musicFor(words, [...sel], $("aiMix").checked, kind === "sfx");
   });
   /**
    * Music for the selection: asked through the chat (which asks first), at least 10 s (the song model's shortest);
@@ -671,17 +671,18 @@
   let waitingSong = null;
   // A song the chat makes is kept in the bank (the asset store); a file saved into the chat is in its folder: both.
   const allSounds = async () => (await Promise.all(["chat", "bank"].map((from) => kesher.call("media.list", { from, kind: "audio" }).catch(() => [])))).flat();
-  async function musicFor(words, [a, b], mix) {
-    const seconds = Math.max(10, Math.ceil(secs(b - a)));
+  async function musicFor(words, [a, b], mix, sfx = false) {
+    // A sound effect is 1–120 s (Stable Audio 3 Small-SFX); a song at least 10 s (ACE-Step).
+    const seconds = sfx ? Math.min(120, Math.max(1, Math.ceil(secs(b - a)))) : Math.max(10, Math.ceil(secs(b - a)));
     const before = new Set((await allSounds()).map((x) => x.id));
     try {
-      await kesher.call("chat.ask", { text: `Make music for a ${seconds}-second part of my sound: ${words}. Use make_music with seconds ${seconds}, no lyrics unless I asked for singing, and cover false.` });
+      await kesher.call("chat.ask", { text: sfx ? `Make a sound effect for a ${seconds}-second part of my sound: ${words}. Use make_sound with seconds ${seconds}.` : `Make music for a ${seconds}-second part of my sound: ${words}. Use make_music with seconds ${seconds}, no lyrics unless I asked for singing, and cover false.` });
     } catch (e) { return msg(e.message || String(e), true); }
     clearInterval(waitingSong);
     const until = Date.now() + 20 * 60_000;
-    msg(T("aiWaiting", "Asked the chat; the music goes in by itself when it is ready (a few minutes)"));
+    msg(T("aiWaiting", "Asked the chat; the sound goes in by itself when it is ready"));
     waitingSong = setInterval(async () => {
-      if (Date.now() > until) { clearInterval(waitingSong); return msg(T("aiLate", "The music did not come in 20 minutes; add it from the chat's files when it does"), true); }
+      if (Date.now() > until) { clearInterval(waitingSong); return msg(T("aiLate", "The sound did not come in 20 minutes; add it from everything made when it does"), true); }
       const list = await allSounds();
       const fresh = list.find((x) => !before.has(x.id));
       if (!fresh) return;
@@ -701,7 +702,7 @@
         });
         sel = [a, a + n];
         after();
-        msg(T("aiIn", "The music is in"));
+        msg(T("aiIn", "The sound is in"));
       } catch (e) { msg(e.message || String(e), true); }
     }, 10_000);
   }

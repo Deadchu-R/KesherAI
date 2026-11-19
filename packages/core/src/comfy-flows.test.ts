@@ -63,3 +63,16 @@ test("the XL flow's loaders get ComfyUI's own names from each folder (sub-folder
   const base: Record<string, string> = { diffusion_models: "video/", text_encoders: "text_encoders/", vae: "vae/" };
   for (const n of xl.names!) assert.ok(xl.files.some((f) => f.rel.startsWith(base[n.folder]!) && f.rel.endsWith(n.file)), n.file);
 });
+
+test("sound effects (Stable Audio 3 Small-SFX): the distilled settings, and the loaders get ComfyUI's names", () => {
+  const f = readyFlows().find((x) => x.id === "sfx-stable-audio-3-small")!;
+  assert.ok(f);
+  assert.equal(f.files.length, 2);
+  assert.match(f.license.url, /^https:\/\/stability\.ai\//);
+  const out = withCheckpoints(f, ["music\\stable_audio_3_small_sfx.safetensors"], { text_encoders: ["sa3\\t5gemma_b_b_ul2.safetensors"] });
+  assert.equal(out["1"]!.inputs.ckpt_name, "music\\stable_audio_3_small_sfx.safetensors");
+  assert.equal(out["2"]!.inputs.clip_name, "sa3\\t5gemma_b_b_ul2.safetensors");
+  assert.equal(out["2"]!.inputs.type, "stable_audio");
+  assert.deepEqual([out["6"]!.inputs.steps, out["6"]!.inputs.cfg, out["6"]!.inputs.sampler_name], [8, 1, "lcm"]);
+  assert.equal(out["5"]!.class_type, "EmptyLatentAudio");
+});
