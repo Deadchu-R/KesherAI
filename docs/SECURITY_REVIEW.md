@@ -1549,3 +1549,16 @@ S5 an outside scanner's rules for Electron.
   6 Mb/s is about 1–5 MB; it can run once at a time (`turning`), and the camera and helpers come back after.
 - **Picture size**: clamped to 16–8192 px a side, as New; one canvas per layer and mask, as crop and rotate.
 - **Silence**: one second per press, a copy of the channels (as cut). Nothing to fix.
+
+## Scan 164 (2026-11-19): ✦ With AI in video and sound, transitions, turntable options, typing text on the picture
+- **✦ With AI**: the editors ask the chat through `chat.ask`, which still shows the person the exact words and asks
+  first; the prompt is cut to 600 characters in the page and 2000 at the bridge. The editors then only *read* the
+  chat's file list every 10 s (for at most 20 minutes, one wait at a time per editor) and take a new file through
+  `media.take` / `media.bytes` (inside the chat's folder). A picture comes from `image.generate` / `image.edit` as before.
+- **Transitions** (the one server change): `/files/cut` takes `transition.kind` only from TRANSITIONS and its length
+  only as a number clamped to 0.1–1.5 s; only those reach FFmpeg (`xfade=transition=<listed>:duration=<number>`). Each
+  blend is at most half the clip it goes into; the dip is not added on top. Tests: video-cut.test.ts (17 pass).
+- **Turntable at 1080p**: renders at 1920×1080 while recording, and gives back the view's size and pixel ratio after.
+- **Text on the picture**: a textarea in the page; the words reach the picture only through `fillText`.
+- Performance: the 10 s polls are one small list request each and stop when the file arrives or after 20 minutes.
+  Nothing to fix.

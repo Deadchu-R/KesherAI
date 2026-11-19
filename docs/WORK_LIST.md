@@ -18,8 +18,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   player yet (only in the export).
 - ⬜ Video: show the transition in the editor's player too (a preview of the blend at each cut).
 - ✅ 3D turntable: its length (6, 12, 20 s) and size (the view's, or 1920×1080) from the 🎞 button's menu.
-- 🔨 Pictures: edit a text layer's words in place on the picture (instead of a question box).
-- ⬜ Security scan 164 (after 5 changes since scan 163; 4 so far: ✦ With AI ×2, transitions, turntable options).
+- ✅ Pictures: type text on the picture (a box by the words, the typing shows at once; Esc puts it back).
+- ✅ Security scan 164: nothing to fix.
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
