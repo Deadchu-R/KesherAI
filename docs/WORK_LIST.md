@@ -30,7 +30,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
-- 🔨 0.6.399 was sent to GitHub before "no builds" (10:13); it will finish by itself. No new builds until Roee says.
+- ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
 
 ## Waiting on Roee 👤
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).
@@ -40,5 +40,5 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 A stronger model for writing chat reports.
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
 
-## Later (agreed, not started)
-- ⬜ A 3D model from words without going through the chat.
+## Later (agreed)
+- 🔨 A 3D model from words without going through the chat (the 3D editor's ✦: a picture from words, then Hunyuan3D).
