@@ -16,7 +16,7 @@ import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } fr
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
-  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
+  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
@@ -1504,8 +1504,13 @@ async function glb() {
   glow?.removeFromParent();
   scene.overrideMaterial = null;
   try {
-    const out = await new GLTFExporter().parseAsync(model, { binary: true, onlyVisible: true });
-    return new Blob([out], { type: "model/gltf-binary" });
+    // Reference pictures are for modelling only (Blender's reference images): hidden while the model is written.
+    const refs = [];
+    model.traverse((o) => { if (o.userData.reference && o.visible) { refs.push(o); o.visible = false; } });
+    try {
+      const out = await new GLTFExporter().parseAsync(model, { binary: true, onlyVisible: true });
+      return new Blob([out], { type: "model/gltf-binary" });
+    } finally { refs.forEach((o) => (o.visible = true)); }
   } finally { if (glow) scene.add(glow); if (document.querySelector('[data-shade="solid"].on')) scene.overrideMaterial = solidMat; }
 }
 const base = () => name.replace(/\.[^.]+$/, "") + "-edited";
@@ -1615,6 +1620,23 @@ function addCamera() {
   addAndSay(cam, T("aCamera", "Camera"));
   cam.position.z += fitSize() * 2;
 }
+/**
+ * A reference picture (Blender's reference image): half see-through, standing behind the middle of the view, locked so
+ * clicks go to the model, and left out of what is saved and exported.
+ */
+async function addReference(fileName, bytes) {
+  const tex = await new THREE.TextureLoader().loadAsync(URL.createObjectURL(new Blob([bytes])));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const u = fitSize() * 4, a = tex.image.width / tex.image.height || 1;
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(a >= 1 ? u : u * a, a >= 1 ? u / a : u), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+  panel.userData.reference = true;
+  panel.userData.locked = true;
+  panel.userData.icon = "🖼";
+  panel.renderOrder = -1;
+  addAndSay(panel, `${T("aRef", "Reference")}: ${fileName.replace(/\.[^.]+$/, "")}`);
+  panel.position.z -= fitSize() * 1.5;
+  gizmo.detach();
+}
 /** A model or a picture's bytes, added: a model as it is, a picture on a flat panel in its proportions. */
 async function addFile(fileName, bytes) {
   if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName)) {
@@ -1644,10 +1666,11 @@ async function addFile(fileName, bytes) {
 }
 async function addFrom(from) {
   try {
-    if (from === "device") {
-      for (const f of await pickDevice(".glb,.gltf,.fbx,.obj,image/*")) {
+    if (from === "device" || from === "reference") {
+      for (const f of await pickDevice(from === "reference" ? "image/*" : ".glb,.gltf,.fbx,.obj,image/*")) {
         busy(T("loading", "Loading the model…"));
-        try { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } finally { busy(""); }
+        // A reference stays here only (it is not part of the model); a model or a picture goes into the chat too.
+        try { if (from === "reference") await addReference(f.name, await f.arrayBuffer()); else { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } } finally { busy(""); }
       }
       return;
     }
@@ -1675,6 +1698,7 @@ function addMenu(anchor) {
     ...["cube", "sphere", "cylinder", "cone", "plane", "torus"].map((k) => ({ icon: { cube: "⬛", sphere: "⚪", cylinder: "🛢", cone: "🔺", plane: "▭", torus: "◯" }[k], label: T(`a${k[0].toUpperCase()}${k.slice(1)}`, k[0].toUpperCase() + k.slice(1)), run: () => addShape(k) })),
     { icon: "💡", label: T("aLight", "Light"), run: addLight },
     { icon: "🎥", label: T("aCamera", "Camera"), run: addCamera },
+    { icon: "🖼", label: T("aRef", "Reference picture"), hint: T("aRefHint", "behind the model, not exported"), run: () => addFrom("reference") },
     "-",
     { icon: "✨", label: T("aWords", "A model from words"), hint: T("aWordsHint", "through the chat"), run: addFromWords },
   ]);
