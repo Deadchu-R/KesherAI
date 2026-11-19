@@ -19,6 +19,12 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 3D turntable: its length (6, 12, 20 s) and size (the view's, or 1920×1080) from the 🎞 button's menu.
 - ✅ Pictures: type text on the picture (a box by the words, the typing shows at once; Esc puts it back).
 - ✅ Security scan 164: nothing to fix.
+- ✅ The design doc: boards for transitions and typing text on the picture.
+- 🔨 Sound: sound effects from words (Premiere makes them for a chosen range; KesherAI has only the song model) —
+  research which local model fits (small, runs on the PC), then the code; nothing downloaded on the PC without asking.
+- ⬜ Video: "continue this shot": the video model starts from the clip's last frame (Premiere's reference frames;
+  Wan 2.1 image-to-video).
+- ⬜ Video: a different transition at each cut (now one for all, as Apply all).
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
