@@ -25,7 +25,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Fixed: ✦ With AI now finds the new song or video in the bank too (the chat keeps them there, not in its folder).
 - ✅ Video: "continue this shot" (✦ With AI → Continue): the clip's last frame is set in motion through the chat's new
   animate_picture (Wan 2.2 5B), and goes in after it. Not run in ComfyUI on the PC yet.
-- 🔨 Video: a different transition at each cut (now one for all, as Apply all).
+- ✅ Video: a different transition at each cut (the clip's "Comes in with"; plain cut or any kind; seen in the player).
+- ✅ Security scan 165: nothing to fix.
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.

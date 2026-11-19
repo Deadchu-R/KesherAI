@@ -1562,3 +1562,14 @@ S5 an outside scanner's rules for Electron.
 - **Text on the picture**: a textarea in the page; the words reach the picture only through `fillText`.
 - Performance: the 10 s polls are one small list request each and stop when the file arrives or after 20 minutes.
   Nothing to fix.
+
+## Scan 165 (2026-11-19): sound effects, animate a picture, a transition per cut, the bank in ✦ With AI's wait
+- **make_sound** and **animate_picture** (new chat tools): both run ready flows whose files come only from the listed
+  Hugging Face repos, and download nothing without the person's yes (`askFirst` as make_music and make_3d). The words
+  are cut to 1000 characters; lengths are clamped (1–120 s; 1–5 s, 4n+1 frames). animate_picture reads its picture only
+  inside the chat's folder (the same `relative(...).startsWith("..")` check as make_3d); `pictureSize` reads at most a
+  JPEG's segment headers within the buffer (no loop past its end; unknown files give undefined).
+- **A transition per cut**: `checkSegments` keeps a stretch's `into` only for "cut" or a listed kind, its length clamped
+  to 0.1–1.5 s; nothing else from the page reaches FFmpeg. Tests: video-cut (18), comfy-flows, chat-tools-media pass.
+- **✦ With AI's wait** now also lists the bank (`/api/bank`, the same route the editors' Add uses); still one wait at a
+  time, every 10 s, for 20 minutes at most. Nothing to fix.
