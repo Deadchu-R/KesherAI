@@ -1521,3 +1521,13 @@ S5 an outside scanner's rules for Electron.
 - **Image editor**: `media.*` now also open to the `image` use. The same checks hold: ids are `chat:` paths resolved
   inside the chat's folder or bank ids (asset-bank.ts pathOf refuses `..`, absolute and drive paths, code sessions).
 - No new routes, no new dependencies. Tests 951 pass; lint and typecheck clean. Nothing to fix.
+
+## Scan 161 (2026-11-19): freeze frame, the clip's marks, rotate and flip pictures, reverse and speed in sound
+- All five are in the editors' own pages: no new bridge methods, no new routes, no `innerHTML`, `eval` or `fetch`
+  added (the diff has none). The freeze frame draws the editor's own video (a blob URL from bytes it already has) and
+  uploads the PNG through the existing `media.upload` (the chat's folder only).
+- Performance: rotate/flip allocate one canvas per layer (and mask) at the picture's size, as crop does; Undo keeps
+  20 steps as before. Speed in sound is one linear pass over the selection per channel; Reverse is in place.
+- The phone: the video editor's clip settings are reachable (⚙ Clip), and the sound editor's Speed and Reverse fit at
+  390 px with no sideways scroll (checked in a headless browser).
+- Nothing to fix.
