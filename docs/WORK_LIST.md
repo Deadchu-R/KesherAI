@@ -52,6 +52,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security.
 - ⬜ Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
   own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building.
+- ⬜ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
+  hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens.
 - ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
 - ⬜ Design doc: guests in a scene, helpers in chat, the task inbox; then build helpers + inbox (Opus helper).
 
