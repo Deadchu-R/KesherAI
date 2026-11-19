@@ -3675,3 +3675,99 @@ only for code in git. None routes between a PC, a local model and several cloud 
   - Safest design: one user press per message (as built), no `-p` loops, no routines or hub automation for Antigravity (hub tasks to Antigravity stay "prepared, waits for Run on the PC"), no sharing, show the quota note, and offer API-key or Jules-API routes for unattended work. Revisit if Google publishes an official automation answer.
 - Stopped at: clause 6, FAQ, ACP page and forum answers read; not read: Google One Additional Terms, Gemini Apps terms, Code Assist terms page, Jules ToS, the Oct 16 "violates" reply (not shown), the other ACP-client threads (T3 Code, Railway, Hermes).
 - Sources: antigravity.google/terms; antigravity.google/docs/faq; antigravity.google/docs/ide/extensions/acp; geminicli.com/docs/resources/tos-privacy; github.com/google-gemini/gemini-cli/discussions/20632; policies.google.com/terms/generative-ai/use-policy; discuss.ai.google.dev threads 186246, 198889, 188220, 181088, 190756, 200615; zentor.ai/blog/antigravity-account-suspended-third-party; theregister.com/2026/02/20/anthropic_clarifies_ban_third_party_claude_access; jules.google/docs, /docs/usage-limits, /docs/api/reference.
+
+## Live agent activity in the Kesher Cloud hub: what others show and how it travels (2026-11-19, Roee asked)
+Question: the hub and the phone's Cloud tab must see all agents (chat helpers `helper-runs.ts`, inbox runs incl. Antigravity
+`inbox-runner.ts`, Claude cloud runs fired by `apps/hub/src/claude-cloud.ts`) and show what each is doing, live. Builds on the
+hub entry (sealed envelopes, `HubAgent` = kind/state/label/link, `progress` and `approval_*` bodies already exist).
+
+### 1. How others do it (read 2026-11-19)
+- **Claude Code Remote Control** (code.claude.com/docs/en/remote-control): the local session makes **outbound HTTPS only**, registers
+  with the API, polls for work; while a viewer is connected a **streaming connection** carries messages both ways. Short-lived,
+  single-purpose credentials; trusted-devices list with revoke. claude.ai/code and the app show a **session list** (computer icon,
+  green dot when online), progress of subagents and workflows in sync on all devices, permission prompts answerable from the phone;
+  a "Requires Action" state in the list is reported in issues but not in the docs. Known limit: a session drops from the list
+  ~10-15 min after the viewer leaves (issue 77340, undocumented). Lesson: presence by held connection, files and tools stay on the PC.
+- **GitHub Copilot cloud agent** (docs.github.com .../track-copilot-sessions): agents panel + mobile "Agent sessions" list; the session
+  page shows a log of reasoning and tools used, token use and session length; a prompt box **steers** (applied after the current tool
+  call); **Stop session** ends the run, pushed commits stay. No documented state enum (stopped/archived only).
+- **Cursor cloud agents** (docs.cursor.com background-agent API; forum thread 167711): v0 polling `GET /agents/{id}` (terminal states
+  FINISHED, ERROR, STOPPED) and webhooks; v1 run **SSE stream** with event types `status`, `assistant`/`thinking`, `tool_call`,
+  `interaction_update`, `result`, `heartbeat`, `error`, `done`, resume with `Last-Event-ID`, expired stream = 410. Gaps users complain
+  about: no changed-files summary, no webhooks on v1, agents that freeze and never reach a terminal state (forum 168957) so a
+  **heartbeat/stale timer** is needed.
+- **OpenAI Codex mobile** (openai.com/index/work-with-codex-from-anywhere): phone sees active threads, approvals, terminal output,
+  diffs, test results, screenshots as they stream; talks to the machine through a **relay** that syncs session state; "files,
+  credentials, permissions and local setup stay on the machine". Controls: answer questions, approve, redirect, switch model, start threads.
+- **Devin SDK** (docs.devin.ai/sdk/guides/watching-sessions): statuses `working` / `blocked` / `finished`, `userActionRequired`,
+  events `status`, `plan` (entries with status), `pull_request`; **streamed**; the cloud replays only the latest transition, so seed
+  from a list call then stay attached. OpenHands: an append-only event stream (action/observation) over WebSocket (docs.openhands.dev
+  SDK events; seen in search only, not read in depth). Jules: `GetSession` polling (from the hub entry).
+- **Observability tools** (LangSmith, Langfuse, AgentOps; OTel GenAI conventions, read as summaries only): a trace = run with nested
+  spans (llm call, tool call, step), each with start/end, status, token in/out, cost, model, error; prompts/outputs are **opt-in
+  content** and a known PII risk (dev.to "OpenTelemetry GenAI: tracing AI agents without leaking PII"). They are pull dashboards, not
+  live control surfaces. Take: span fields and the "metadata always, content opt-in" rule. Leave: a trace backend.
+- **Warp Agent Mode**: not researched (no source read).
+
+### 2. Can the hub read a Claude Code cloud session started by an API trigger?
+- **Only a link, as far as documented.** The `/fire` reply holds `claude_code_session_id` and `claude_code_session_url`; docs say
+  "open the session URL ... to watch the run in real time". The routines page documents no endpoint to read a session's status,
+  events or result: run history (Succeeded / Failed / Cancelled, via the routine's page or `/schedule` in the CLI v2.1.227+) exists
+  only in the claude.ai UI and the CLI. `/fire` is "available to claude.ai users only and not part of the Platform API", and the token
+  is per task and can only fire. A permission prompt in a run "waits until someone answers it" in the session on claude.ai.
+  Remote-Control internals (v1 sessions/events) are undocumented and the hub must not use them (also a terms risk).
+- So for cloud Claude runs the hub shows: started (time, task, link), **"in Claude, open to watch"**, and a status the **run reports
+  itself**: the routine's saved prompt tells it to push progress/result to `kesher-inbox` (a `results/<id>.md` file) and a signed
+  GitHub push webhook turns that into `done`/`failed` in the hub. Otherwise status = unknown after N hours. Never fake "live".
+
+### 3. Plan for KesherAI
+**Event model** (one sealed body `agent_event`, same envelope as `progress`; metadata only unless the PC's opt-in allows more):
+`{runId, agentKey (device+kind+id), seq, t, type, ...}`; types: `started{title, source: chat-helper|inbox|antigravity|claude-cloud,
+model, parentTaskId?}` · `step{n, of?, label}` (label = tool name + short verb, <=80 chars) · `tool{name, ok, ms}` · `file{path
+relative, op: read|edit|create|delete}` (path names only, no content) · `usage{tokensIn, tokensOut, costNote?}` · `waiting{reason:
+approval|ask|run-press, requestId, summary<=200}` (links to the existing `approval_request`) · `done{summary<=500, branch?, link?}` ·
+`failed{reason<=200}` · `cancelled`. `agent_state` snapshot `{runId, state: queued|running|waiting|done|failed|cancelled|stale,
+step, lastEventAt}` carried in `HubAgent` so the list works without history. Content (prompts, diffs, file text) is a separate
+`detail` kind, sealed to the phone only on request, never in events.
+**Flow PC -> hub -> viewers**: a small `agent-activity.ts` in core subscribes to `HelperRuns` "change/end", inbox-runner state
+changes and cloud-run records; it **coalesces** (latest step per run, at most 1 event/s/run, 1 batched frame/2 s per device, file
+events merged into counts + last 5 names), seals each batch to the owner's phone/hub-page keys, sends over the existing socket
+(120 msg/min device limit stays). The hub DO keeps only the **last 50 events per run, 7 days, ciphertext** (SQLite), pushes batches to
+open viewer sockets (WebSocket, hibernation API) and serves `GET /api/agents?since=seq` for catch-up after reconnect (like
+`Last-Event-ID`). Heartbeat 25 s while running; no heartbeat for 90 s -> `stale` (the Cursor freeze lesson). Cloud runs: the hub
+itself writes `started` (it holds the fire result) and the webhook writes `done/failed`; those are the only plaintext facts it
+knows (title, time, link), already shown in the task list.
+**Hub page and phone Cloud tab**: (a) agents list grouped by device (PC on/off, phone, cloud), each card = state dot, title, source
+icon, current step label, elapsed, steps count, tokens; waiting runs pinned on top with a badge; (b) detail view = step timeline
+(step/tool/file rows with times, newest first, "files touched" count + names, usage), summary and branch/link at the end,
+"Open in Claude/Antigravity" for vendor links; (c) buttons: **Stop** (sealed `cancel` to the PC -> `HelperControl.signal`),
+**Approve / Deny** (sealed `approval_answer`, expires in 30 min, already built), "Run" for waiting Antigravity tasks (one press = one
+message, per the Antigravity verdict), later "Send a follow-up" (steer). Offline PC: cards turn "PC off, last seen X", Stop/Approve
+disabled. RTL Hebrew + English, 390 px, same component in `apps/web` Cloud tab and the hub's small page.
+**Privacy**: event bodies carry labels, tool names, relative paths, counts; **no prompts, no file contents, no diffs, no model
+output** unless the user taps "Load details" (phone asks the PC, answer sealed to the phone, not stored in the hub). Per-device
+opt-in `reportActivity` (off by default, like `reportLinks`) and a finer `reportFileNames`. Paths pass through the existing secret/
+path scrubber (no home paths, no usernames) before sealing. Hub sees only ciphertext + run id + size + time; a purge button deletes
+all events.
+**Free Cloudflare limits** (figures from the hub entry; Durable Objects Free: 100k requests/day, 100k rows written/day, WebSocket
+incoming messages count 20:1, outgoing free): 1 PC sending 1 batch/2 s while busy = 1,800 msgs/h -> 90 billed requests/h; 4 busy
+hours/day = ~360 + ~50 DO writes/h of ring-buffer rows if batched (one row per batch) = ~7,200 writes/day, i.e. 7% of the free
+write quota; viewers' receives are free. Keep batches <= 12 KB sealed (`ctChars`), store at most 7,200 batches/day, prune with an
+alarm. Over the quota the operation fails: the PC then drops to 1 batch/10 s and the page shows "live updates paused, check later".
+Workers CPU 10 ms/request is enough (no parsing of content).
+**Build steps**: (1) `hub-protocol.ts`: `agent_event`/`agent_state` bodies, `reportActivity` opt-in, parse + size limits + tests;
+(2) core `agent-activity.ts`: adapters for helper-runs (step/hold/ask), inbox-runner (state, Antigravity "waiting for Run"), cloud
+records; coalescer + tests; (3) hub DO: ring buffer, catch-up endpoint, stale timer, purge; (4) cancel/approve wiring to
+`HelperControl.signal`/`ask`; (5) shared Vue/JS `AgentCards` component for hub page + Cloud tab, list + detail + buttons, design doc
+first; (6) cloud runs: saved-prompt convention + signed GitHub push webhook -> `done/failed`; (7) check in remote (phone to PC) and
+on the free plan with a quota counter in the hub page.
+- Open questions: whether Anthropic will expose a session status API (re-check the routines page and platform docs each release);
+  whether a cloud run may push to `kesher-inbox` unattended under auto mode (needs one test run); how much file-name detail Roee wants
+  shown by default; Warp not researched.
+- Stopped at: Claude/Cursor/Copilot/Codex/Devin docs read; OpenHands event schema, Jules polling fields and the LangSmith/Langfuse/
+  AgentOps docs themselves were not read (search summaries only); nothing built.
+- Sources: code.claude.com/docs/en/remote-control; code.claude.com/docs/en/routines; claudeissues.com issue 77340 (search snippet);
+  docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/track-copilot-sessions; forum.cursor.com thread 167711 and 168957
+  (title only), docs.cursor.com/en/background-agent/api/list-agents (search); openai.com/index/work-with-codex-from-anywhere;
+  docs.devin.ai/sdk/guides/watching-sessions; docs.openhands.dev/sdk/api-reference/openhands.sdk.event (search); langfuse.com/guides/cookbook/otel_integration_python_sdk (search);
+  dev.to OpenTelemetry GenAI without leaking PII (search); developers.cloudflare.com/durable-objects/platform/pricing (via hub entry).
