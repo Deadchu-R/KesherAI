@@ -786,10 +786,12 @@
    * if it is shorter). It waits up to 20 minutes; the editor can be used meanwhile.
    */
   let waitingVideo = null;
+  // What the chat makes is kept in the bank (the asset store) and what is saved into the chat is in its folder: both.
+  const allMedia = async (kind) => (await Promise.all(["chat", "bank"].map((from) => kesher.call("media.list", { from, kind }).catch(() => [])))).flat();
   async function videoFromWords(words) {
     const id = clips[chosen]?.id;
     const seconds = Math.max(1, Math.min(5, Math.round(len(clips[chosen]))));
-    const before = new Set((await kesher.call("media.list", { from: "chat", kind: "video" }).catch(() => [])).map((x) => x.id));
+    const before = new Set((await allMedia("video")).map((x) => x.id));
     try {
       await kesher.call("chat.ask", { text: `Make a video clip for my edit: ${words}. Use generate_video with seconds ${seconds}.` });
     } catch (e) { return msg(e.message || String(e), true); }
@@ -798,7 +800,7 @@
     msg(T("aiWaiting", "Asked the chat; the clip goes in by itself when it is ready (a few minutes)"));
     waitingVideo = setInterval(async () => {
       if (Date.now() > until) { clearInterval(waitingVideo); return msg(T("aiLate", "The clip did not come in 20 minutes; add it from the chat's files when it does"), true); }
-      const now = await kesher.call("media.list", { from: "chat", kind: "video" }).catch(() => []);
+      const now = await allMedia("video");
       const fresh = now.find((x) => !before.has(x.id) && !/-edited|clip-edited/.test(x.name));
       if (!fresh) return;
       clearInterval(waitingVideo);

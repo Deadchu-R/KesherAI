@@ -8,7 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
-    musicWords: "מוזיקה ממילים", musicWordsHint: "דרך הצ׳אט", musicAsk: "איזו מוזיקה? (למשל: פופ שמח עם גיטרה, 40 שניות)", musicSent: "ביקשתי מהצ׳אט. כשהשיר מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
+    musicWords: "מוזיקה ממילים", musicWordsHint: "דרך הצ׳אט", musicAsk: "איזו מוזיקה? (למשל: פופ שמח עם גיטרה, 40 שניות)", musicSent: "ביקשתי מהצ׳אט. כשהשיר מוכן (כמה דקות), הוסף אותו מ״מבנק היצירות״.", trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
@@ -669,9 +669,11 @@
    * over half a second, under what is there or instead of it. It waits up to 20 minutes.
    */
   let waitingSong = null;
+  // A song the chat makes is kept in the bank (the asset store); a file saved into the chat is in its folder: both.
+  const allSounds = async () => (await Promise.all(["chat", "bank"].map((from) => kesher.call("media.list", { from, kind: "audio" }).catch(() => [])))).flat();
   async function musicFor(words, [a, b], mix) {
     const seconds = Math.max(10, Math.ceil(secs(b - a)));
-    const before = new Set((await kesher.call("media.list", { from: "chat", kind: "audio" }).catch(() => [])).map((x) => x.id));
+    const before = new Set((await allSounds()).map((x) => x.id));
     try {
       await kesher.call("chat.ask", { text: `Make music for a ${seconds}-second part of my sound: ${words}. Use make_music with seconds ${seconds}, no lyrics unless I asked for singing, and cover false.` });
     } catch (e) { return msg(e.message || String(e), true); }
@@ -680,7 +682,7 @@
     msg(T("aiWaiting", "Asked the chat; the music goes in by itself when it is ready (a few minutes)"));
     waitingSong = setInterval(async () => {
       if (Date.now() > until) { clearInterval(waitingSong); return msg(T("aiLate", "The music did not come in 20 minutes; add it from the chat's files when it does"), true); }
-      const list = await kesher.call("media.list", { from: "chat", kind: "audio" }).catch(() => []);
+      const list = await allSounds();
       const fresh = list.find((x) => !before.has(x.id));
       if (!fresh) return;
       clearInterval(waitingSong);
@@ -709,7 +711,7 @@
     if (!words?.trim()) return;
     try {
       await kesher.call("chat.ask", { text: `Make music: ${words.trim()}. Use make_music.` });
-      msg(TT("musicSent", "Asked the chat. When the song is ready (a few minutes), add it from \"From this chat\"."));
+      msg(TT("musicSent", "Asked the chat. When the song is ready (a few minutes), add it from \"From everything made\"."));
     } catch (e) { msg(e.message || String(e), true); }
   }
   async function addMenu(anchor) {
