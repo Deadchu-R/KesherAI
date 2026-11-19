@@ -2802,3 +2802,12 @@ Each AI tool shows which local model it uses and offers to download it the first
   task box) already had it.
 - Stopped at: built on main (not in a build: Roee asked for no builds for now). Open: a sound effect model (Premiere's
   sound effects; KesherAI has only the song model), and reference frames for the video model (Wan 2.1 image-to-video).
+
+## Transitions between clips (2026-11-19)
+- CapCut: drag a transition between two clips (or its +); its longest is half of the shorter clip; "Apply all" puts it
+  between every clip; dragging a new one over replaces it.
+- FFmpeg's xfade has 57 kinds (fade, wipes, slides, circles, dissolve, pixelize, zoomin…); it overlaps the two clips,
+  which would shorten the edit and move every later time (texts, captions, music).
+- KesherAI: one transition for every cut (as Apply all), 0.3–1.2 s, chosen in Send to the chat; made without overlap:
+  each clip's last frame is held (tpad) and blended into the next clip's start (xfade), so the length and every time
+  stay. Stopped at: built and checked with FFmpeg; open: showing it in the editor's player, and one per cut.
