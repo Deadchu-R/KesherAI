@@ -2746,3 +2746,12 @@ Each AI tool shows which local model it uses and offers to download it the first
   kept in the bank of everything made (where the video editor takes it). Consent stays as it is (a voice is kept only
   with a yes).
 - Stopped at: built (voice-clone.ts splitScript, the route keeps it, VoiceCloneSection); board VoiceScript.
+
+## Clip speed, volume and freeze frame in the video editor (2026-11-19)
+- CapCut: a clip's Speed (Normal 0.1×–100×, with "keep the pitch"), Volume (0–1000 %), and Freeze (the frame under
+  the playhead as a 3 s still clip). Premiere: Speed/Duration and Frame Hold; DaVinci Resolve: Change Clip Speed and
+  Freeze Frame. All three show the speed on the clip in the timeline.
+- KesherAI: speed 0.25×–4× (FFmpeg setpts and atempo, so the sound keeps its pitch), volume 0–200 %, both shown on the
+  clip ("2× 🔊150%"); freeze frame from ＋ Add, 2 s (shortened or lengthened with trim). On the phone the clip's settings
+  open from the bottom bar's ⚙ Clip.
+- Stopped at: built (video-cut.ts speed/volume, editor.js); board VideoClipSpeed; to check on the PC in 0.6.398.
