@@ -2,7 +2,7 @@
 // stretches of one source video, split / trim / delete / move with the keys editors know, played back as the edit,
 // and exported by FFmpeg on the computer (video.cut). A plugin page with no build step: it talks to KesherAI only
 // through window.kesher (kesher.js).
-/* global File, window, performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
+/* global fetch, File, window, performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
