@@ -26,7 +26,7 @@
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
-    hBrush: "מברשת", hText: "טקסט", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
+    hBrush: "מברשת", hText: "טקסט", sizeH: "גודל התמונה…", sizeT: "גודל התמונה", sizeLock: "שמור על הפרופורציות", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -592,6 +592,45 @@
     });
   }
   $("color").addEventListener("change", () => { const l = active(); if (tool === "text" && l?.text) { remember(T("hText", "Text")); l.text.color = $("color").value; drawText(l); draw(); } });
+
+  // ---------- picture size (Photoshop's Image Size): every layer and mask scaled, high-quality smoothing ----------
+  function openSize() {
+    $("sizeW").value = String(doc.w);
+    $("sizeH").value = String(doc.h);
+    $("sizeDialog").showModal();
+  }
+  const ratio = () => doc.w / doc.h;
+  $("sizeW").addEventListener("input", () => { if ($("sizeLock").checked) $("sizeH").value = String(Math.max(1, Math.round(+$("sizeW").value / ratio()))); });
+  $("sizeH").addEventListener("input", () => { if ($("sizeLock").checked) $("sizeW").value = String(Math.max(1, Math.round(+$("sizeH").value * ratio()))); });
+  document.querySelectorAll("#sizeDialog [data-pct]").forEach((b) => (b.onclick = () => { const k = +b.dataset.pct / 100; $("sizeW").value = String(Math.round(doc.w * k)); $("sizeH").value = String(Math.round(doc.h * k)); }));
+  $("sizeDialog").addEventListener("close", () => {
+    if ($("sizeDialog").returnValue !== "ok") return;
+    const w = Math.max(16, Math.min(8192, Math.round(+$("sizeW").value))), h = Math.max(16, Math.min(8192, Math.round(+$("sizeH").value)));
+    if (!w || !h || (w === doc.w && h === doc.h)) return;
+    remember(T("sizeT", "Picture size"));
+    const kx = w / doc.w, ky = h / doc.h;
+    const scaled = (src) => {
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(src.width * kx));
+      c.height = Math.max(1, Math.round(src.height * ky));
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.imageSmoothingQuality = "high";
+      g.drawImage(src, 0, 0, c.width, c.height);
+      return { c, g };
+    };
+    for (const l of doc.layers) {
+      const { c, g } = scaled(l.canvas);
+      if (l.mask) l.mask = scaled(l.mask).c;
+      Object.assign(l, { canvas: c, ctx: g, x: Math.round(l.x * kx), y: Math.round(l.y * ky) });
+      // A text layer keeps its words, at the new size.
+      if (l.text) { Object.assign(l.text, { x: Math.round(l.text.x * kx), y: Math.round(l.text.y * ky), size: Math.max(4, Math.round(l.text.size * Math.min(kx, ky))) }); drawText(l); }
+    }
+    doc.w = w;
+    doc.h = h;
+    selection = null;
+    renderLayers();
+    fit();
+  });
 
   // ---------- rotate and flip (Photoshop's Image → Image Rotation, and Edit → Transform → Flip for one layer) ----------
   /**
@@ -1321,6 +1360,7 @@
       "-",
       ["clear", "Clear", "Del", clearSelection],
       "-",
+      ["sizeH", "Picture size…", "Alt+Ctrl+I", openSize],
       ["h_cw", "Rotate 90° clockwise", "", () => turnImage("cw")],
       ["h_ccw", "Rotate 90° counter-clockwise", "", () => turnImage("ccw")],
       ["h_h", "Flip picture horizontally", "", () => turnImage("h")],
@@ -1446,6 +1486,7 @@
     if (e.key === "Escape") closeMenu();
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
+    if (e.altKey && k === "i") { e.preventDefault(); return openSize(); }
     const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), o: () => $("file").click(), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined), enter: () => fromChat && ($("chatDialog").open ? $("chatDialog").close("ok") : sendToChat()) };
     if (map[k]) { e.preventDefault(); map[k](); }
   });

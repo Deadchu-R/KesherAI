@@ -188,6 +188,16 @@
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="create">Create</button></div>
     </form>
   </dialog>
+  <!-- Image Size (Photoshop's Alt+Ctrl+I): the whole picture, every layer, resampled smoothly -->
+  <dialog id="sizeDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="sizeT">Picture size</strong>
+      <div class="row"><label class="field grow"><span data-t="width">Width</span><input type="number" id="sizeW" min="16" max="8192" /></label><label class="field grow"><span data-t="height">Height</span><input type="number" id="sizeH" min="16" max="8192" /></label></div>
+      <label class="row"><input type="checkbox" id="sizeLock" checked /> <span data-t="sizeLock">Keep the proportions</span></label>
+      <div class="row"><button type="button" data-pct="50">50%</button><button type="button" data-pct="200">200%</button><span class="grow"></span></div>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="apply2">Apply</button></div>
+    </form>
+  </dialog>
   <!-- Send to the chat the picture came from: the flattened PNG, with an optional message (what to do next) -->
   <dialog id="chatDialog">
     <form method="dialog" class="stack">
