@@ -11,6 +11,8 @@ export interface Segment {
   speed?: number;
   /** Its sound louder or quieter (0 to 2). */
   volume?: number;
+  /** How it comes in after the stretch before it, instead of the edit's transition: "cut" or one of TRANSITIONS. */
+  into?: { kind: string; seconds: number };
 }
 
 /** A file added to the edit (the editors' "Add"): a video, or a picture shown for its stretch. */
@@ -59,7 +61,10 @@ export function checkSegments(given: unknown, extras = 0): Segment[] {
     if (!Number.isFinite(speed) || speed < 0.25 || speed > 4) throw new Error("A stretch's speed is 0.25 to 4.");
     const volume = Number((g as Segment)?.volume ?? 1);
     if (!Number.isFinite(volume) || volume < 0 || volume > 2) throw new Error("A stretch's volume is 0 to 2.");
-    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000, ...(src ? { src } : {}), ...(speed !== 1 ? { speed: Math.round(speed * 100) / 100 } : {}), ...(volume !== 1 ? { volume: Math.round(volume * 100) / 100 } : {}) };
+    // Its own way in: only "cut" or a listed transition, 0.1–1.5 s (anything else is dropped).
+    const ik = String((g as Segment)?.into?.kind ?? "");
+    const into = ik === "cut" || TRANSITIONS.includes(ik) ? { kind: ik, seconds: Math.min(1.5, Math.max(0.1, Number((g as Segment)?.into?.seconds) || 0.5)) } : undefined;
+    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000, ...(src ? { src } : {}), ...(speed !== 1 ? { speed: Math.round(speed * 100) / 100 } : {}), ...(volume !== 1 ? { volume: Math.round(volume * 100) / 100 } : {}), ...(into ? { into } : {}) };
   });
 }
 
@@ -164,7 +169,10 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   // A transition between clips, without overlapping them (so every time in the edit stays where it was): each clip's
   // last frame is held for the transition's length and blends into the start of the next one (FFmpeg's tpad + xfade).
   // Every stretch is then made the same frame size, rate and time base, which xfade needs.
-  const tr = transition && segments.length > 1 && TRANSITIONS.includes(transition.kind) && more ? { kind: transition.kind, d: Math.min(1.5, Math.max(0.1, Number(transition.seconds) || 0.5)), frame: more.frame } : undefined;
+  const all = transition && TRANSITIONS.includes(transition.kind) ? { kind: transition.kind, d: Math.min(1.5, Math.max(0.1, Number(transition.seconds) || 0.5)) } : undefined;
+  // Each cut's way in: the stretch's own (a transition or a plain cut), else the edit's, else a cut.
+  const ways = segments.map((g, i) => (i === 0 ? undefined : g.into ? (g.into.kind === "cut" ? undefined : { kind: g.into.kind, d: g.into.seconds }) : all));
+  const tr = segments.length > 1 && more && ways.some(Boolean) ? { frame: more.frame } : undefined;
   const first = 1 + (sound ? 1 : 0) + (music ? 1 : 0);
   const frame = extra?.frame ?? tr?.frame;
   const fit = frame ? `,scale=${frame.w}:${frame.h}:force_original_aspect_ratio=decrease,pad=${frame.w}:${frame.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${frame.fps},format=yuv420p${tr ? ",settb=AVTB" : ""}` : "";
@@ -221,9 +229,15 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     let cur = "v0", at = lens[0]!;
     const steps: string[] = [];
     for (let i = 1; i < segments.length; i++) {
-      const d = Math.max(0.04, Math.min(tr.d, lens[i]! / 2)).toFixed(3);
+      const way = ways[i];
       const out = i === segments.length - 1 ? joined : `x${i}`;
-      steps.push(`[${cur}]tpad=stop_mode=clone:stop_duration=${d}[p${i}];[p${i}][v${i}]xfade=transition=${tr.kind}:duration=${d}:offset=${at.toFixed(3)}[${out}]`);
+      if (!way) {
+        // A plain cut at this one.
+        steps.push(`[${cur}][v${i}]concat=n=2:v=1:a=0[${out}]`);
+      } else {
+        const d = Math.max(0.04, Math.min(way.d, lens[i]! / 2)).toFixed(3);
+        steps.push(`[${cur}]tpad=stop_mode=clone:stop_duration=${d}[p${i}];[p${i}][v${i}]xfade=transition=${way.kind}:duration=${d}:offset=${at.toFixed(3)}[${out}]`);
+      }
       cur = out;
       at += lens[i]!;
     }
@@ -263,7 +277,7 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
 export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0, texts: readonly TextOverlay[] = [], look: ExportLook = {}, transition?: Transition): Promise<void> {
   // With added clips: the opened video's frame, and which added videos have sound (FFmpeg reads their headers).
   let more: { clips: ExtraClip[]; frame: Frame } | undefined;
-  if (extras.length || transition) {
+  if (extras.length || transition || segments.some((g) => g.into && g.into.kind !== "cut")) {
     const main = await probeMedia(ffmpeg, input);
     const clips = await Promise.all(extras.map(async (c) => ({ ...c, audio: c.kind === "video" && (await probeMedia(ffmpeg, c.file)).audio })));
     more = { clips, frame: { w: main.w || 1920, h: main.h || 1080, fps: main.fps || 30 } };

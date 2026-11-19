@@ -17,7 +17,7 @@
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "קליפ",
-    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", transHint: "נראה בנגן בכל חיתוך, וגם בייצוא", between: "בין הקליפים", tCut: "חיתוך", tDip: "דהייה לשחור", tDissolve: "המסה", tFade: "מעבר הדרגתי", tWhite: "דרך לבן", tSlide: "החלקה", tWipe: "ניגוב", tCircle: "עיגול", tZoom: "זום פנימה", tPixel: "פיקסלים", dup: "⧉ שכפול", kDup: "שכפול הקליפ", outSize: "גודל", sizeKeep: "כמו שהוא", outQuality: "איכות", qHigh: "גבוהה", qNormal: "רגילה", qSmall: "קובץ קטן", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
+    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", transHint: "נראה בנגן בכל חיתוך, וגם בייצוא", between: "בין הקליפים", tCut: "חיתוך", intoL: "כניסה לקליפ", intoAll: "כמו בין כל הקליפים", tDip: "דהייה לשחור", tDissolve: "המסה", tFade: "מעבר הדרגתי", tWhite: "דרך לבן", tSlide: "החלקה", tWipe: "ניגוב", tCircle: "עיגול", tZoom: "זום פנימה", tPixel: "פיקסלים", dup: "⧉ שכפול", kDup: "שכפול הקליפ", outSize: "גודל", sizeKeep: "כמו שהוא", outQuality: "איכות", qHigh: "גבוהה", qNormal: "רגילה", qSmall: "קובץ קטן", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     soundTrack: "סאונד", newSound: "סאונד חדש", openingSound: "מוציא את הסאונד לעורך הסאונד…", dbl: "לחיצה כפולה: עריכה בעורך הסאונד (כלי נגינה, קולות…)", replaced: "הסאונד הוחלף מעורך הסאונד",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
@@ -52,8 +52,9 @@
   veil.className = "veil";
   veil.hidden = true;
   still.after(veil);
-  function showTransition() {
-    const kind = $("trans").value;
+  function showTransition(next) {
+    const own = next?.into;
+    const kind = own ? (own.kind === "cut" ? "" : own.kind) : $("trans").value;
     if (!kind) return;
     const from = still.hidden ? video : still;
     const w = from.videoWidth || from.naturalWidth, h = from.videoHeight || from.naturalHeight;
@@ -61,7 +62,7 @@
     veil.width = w;
     veil.height = h;
     veil.getContext("2d").drawImage(from, 0, 0, w, h);
-    const d = Number($("transSec").value) * 1000 / rate;
+    const d = (own?.seconds ?? Number($("transSec").value)) * 1000 / rate;
     const end = {
       dip: [{ opacity: 1, filter: "brightness(1)" }, { opacity: 1, filter: "brightness(0)", offset: 0.5 }, { opacity: 0, filter: "brightness(0)" }],
       fadewhite: [{ opacity: 1, filter: "brightness(1)" }, { opacity: 1, filter: "brightness(3)", offset: 0.5 }, { opacity: 0, filter: "brightness(3)" }],
@@ -70,7 +71,7 @@
       circleopen: [{ clipPath: "circle(150% at 50% 50%)" }, { clipPath: "circle(0% at 50% 50%)" }],
       zoomin: [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }],
       pixelize: [{ filter: "blur(0)", opacity: 1 }, { filter: "blur(18px)", opacity: 0 }],
-    }[kind] ?? [{ opacity: 1 }, { opacity: 0 }];
+    }[kind === "fadeblack" ? "dip" : kind] ?? [{ opacity: 1 }, { opacity: 0 }];
     veil.hidden = false;
     veil.getAnimations().forEach((a) => a.cancel());
     veil.animate(end, { duration: d, easing: "ease-in-out", fill: "forwards" }).onfinish = () => (veil.hidden = true);
@@ -258,7 +259,7 @@
         // The end of this stretch: on to the next one (another file is loaded first), or stop at the end.
         if (i + 1 < clips.length) {
           const n = clips[i + 1];
-          showTransition();
+          showTransition(n);
           now = start + len(c);
           if (mOf(n) === mOf(c) && !pic) video.currentTime = n.from;
           else void setMedia(mOf(n)).then(() => { if (media[mOf(n)]?.kind !== "image") { video.currentTime = n.from; if (playing) video.play().catch(() => undefined); } });
@@ -373,6 +374,9 @@
     $("clipVolV").textContent = `${$("clipVol").value}%`;
     $("clipVol").disabled = !c || media[mOf(c)]?.kind === "image";
     $("speed").disabled = !c || media[mOf(c)]?.kind === "image";
+    // Its own way in (CapCut lets each cut have its own transition): the first clip has none.
+    $("intoRow").hidden = !c || chosen === 0;
+    $("into").value = c?.into?.kind ?? "";
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
     $("undo").disabled = !undoStack.length;
@@ -909,6 +913,16 @@
     after();
     void saveEdit();
   };
+  // The chosen clip's own way in: as the edit's "Between clips", a plain cut, or another transition.
+  $("into").onchange = () => {
+    const c = clips[chosen];
+    if (!c) return;
+    remember();
+    const k = $("into").value;
+    if (!k) delete c.into; else c.into = { kind: k, seconds: Number($("transSec").value) };
+    after();
+    void saveEdit();
+  };
   // The chosen clip's speed (its sound keeps its pitch: FFmpeg's atempo).
   $("speed").onchange = () => {
     const c = clips[chosen];
@@ -1062,7 +1076,7 @@
   function cutPlan() {
     const used = [];
     const segments = clips.map((c) => {
-      const sp = { ...(spd(c) !== 1 ? { speed: spd(c) } : {}), ...((c.vol ?? 1) !== 1 ? { volume: c.vol } : {}) };
+      const sp = { ...(spd(c) !== 1 ? { speed: spd(c) } : {}), ...((c.vol ?? 1) !== 1 ? { volume: c.vol } : {}), ...(c.into ? { into: c.into } : {}) };
       if (!mOf(c)) return { from: c.from, to: c.to, ...sp };
       let k = used.indexOf(mOf(c));
       if (k < 0) k = used.push(mOf(c)) - 1;

@@ -156,3 +156,19 @@ test("a transition between clips holds each clip's end and blends it into the ne
   const b = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }, { from: 3, to: 4 }], true, undefined, undefined, undefined, undefined, { clips: [], frame }, 0, [], {}, { kind: "nope", seconds: 1 });
   assert.doesNotMatch(b[b.indexOf("-filter_complex") + 1]!, /xfade/);
 });
+
+test("each cut can have its own way in: a plain cut, another transition, or the edit's", () => {
+  const frame = { w: 640, h: 360, fps: 30 };
+  const segs = checkSegments([{ from: 0, to: 2 }, { from: 2, to: 4, into: { kind: "cut", seconds: 1 } }, { from: 4, to: 6, into: { kind: "slideleft", seconds: 0.4 } }, { from: 6, to: 8 }, { from: 8, to: 9, into: { kind: "rm -rf", seconds: 1 } }]);
+  assert.equal(segs[4]!.into, undefined); // not a listed one: dropped
+  const a = cutArgs("in.mp4", "out.mp4", segs, true, undefined, undefined, undefined, undefined, { clips: [], frame }, 0, [], {}, { kind: "dissolve", seconds: 0.6 });
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.match(g, /\[v0\]\[v1\]concat=n=2:v=1:a=0\[x1\]/);
+  assert.match(g, /xfade=transition=slideleft:duration=0\.400:offset=4\.000\[x2\]/);
+  assert.match(g, /xfade=transition=dissolve:duration=0\.600:offset=6\.000\[x3\]/);
+  assert.match(g, /xfade=transition=dissolve:duration=0\.500:offset=8\.000\[v\]/);
+  // Without an edit-wide one, only the cut that has its own.
+  const b = cutArgs("in.mp4", "out.mp4", segs.slice(0, 4), true, undefined, undefined, undefined, undefined, { clips: [], frame });
+  const h = b[b.indexOf("-filter_complex") + 1]!;
+  assert.equal((h.match(/xfade/g) ?? []).length, 1);
+});
