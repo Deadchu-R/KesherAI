@@ -8,7 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
-    trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
+    musicWords: "מוזיקה ממילים", musicWordsHint: "דרך הצ׳אט", musicAsk: "איזו מוזיקה? (למשל: פופ שמח עם גיטרה, 40 שניות)", musicSent: "ביקשתי מהצ׳אט. כשהשיר מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
@@ -626,6 +626,15 @@
       try { const { bytes } = await am.takeMedia(it); await addBytes(it.name, bytes, anchor); } finally { busy(""); }
     } catch (e) { msg(e.message || String(e), true); }
   }
+  /** Music from words: the chat makes it with its song model (ACE-Step), and it comes back through "From this chat". */
+  async function musicFromWords() {
+    const words = window.prompt(TT("musicAsk", "What music? (happy pop with a guitar, 40 seconds…)"));
+    if (!words?.trim()) return;
+    try {
+      await kesher.call("chat.ask", { text: `Make music: ${words.trim()}. Use make_music.` });
+      msg(TT("musicSent", "Asked the chat. When the song is ready (a few minutes), add it from \"From this chat\"."));
+    } catch (e) { msg(e.message || String(e), true); }
+  }
   async function addMenu(anchor) {
     const am = await import("./add-media.js");
     am.setHebrew(he);
@@ -636,6 +645,7 @@
       "-",
       { icon: "⏺", label: TT("recHere", "Record here"), hint: TT("micToo", "from the microphone"), run: () => { recordInto = true; record(); } },
       { icon: "🗣", label: TT("voiceWords", "A voice from words"), run: () => $("toVoice").click() },
+      { icon: "🎵", label: TT("musicWords", "Music from words"), hint: TT("musicWordsHint", "through the chat"), run: () => void musicFromWords() },
     ]);
   }
   $("addBtn").onclick = () => addMenu($("addBtn"));
