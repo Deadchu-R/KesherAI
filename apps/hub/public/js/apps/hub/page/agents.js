@@ -94,7 +94,7 @@ function card(v, c, now, pc) {
     const st = shownState(c, now);
     const src = SOURCE[c.state.source];
     const key = `${c.deviceId}/${c.runId}`;
-    const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : "";
+    const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : "";
     return h("div", { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e) => e.key === "Enter" && v.setOpen(key) }, h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, c.state.title), stateTag(st)), h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))), line ? h("div", { class: `sm ell${st === "waiting" ? " warn" : ""}` }, line) : null, st === "waiting" ? actions(v, c, pc) : null);
 }
 /** Claude cloud runs this device started (from its own task list): the hub fired them, so only "started" is known. */

@@ -111,7 +111,7 @@ function card(v: AgentsView, c: AgentCard, now: number, pc: HubPresence | undefi
   const st = shownState(c, now);
   const src = SOURCE[c.state.source];
   const key = `${c.deviceId}/${c.runId}`;
-  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : "";
+  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : "";
   return h(
     "div",
     { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
