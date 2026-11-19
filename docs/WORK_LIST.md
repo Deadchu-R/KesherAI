@@ -17,9 +17,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   through white, fade to black; 0.3–1.2 s). Without overlap, so every time in the edit stays. Not shown in the editor's
   player yet (only in the export).
 - ⬜ Video: show the transition in the editor's player too (a preview of the blend at each cut).
-- ⬜ 3D turntable: choose its length (6–20 s) and size (the view, 1080p).
-- ⬜ Pictures: edit a text layer's words in place on the picture (instead of a question box).
-- ⬜ Security scan 164 (after 5 changes since scan 163; 3 so far: ✦ With AI ×2, transitions).
+- ✅ 3D turntable: its length (6, 12, 20 s) and size (the view's, or 1920×1080) from the 🎞 button's menu.
+- 🔨 Pictures: edit a text layer's words in place on the picture (instead of a question box).
+- ⬜ Security scan 164 (after 5 changes since scan 163; 4 so far: ✦ With AI ×2, transitions, turntable options).
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
