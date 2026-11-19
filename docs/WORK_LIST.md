@@ -28,6 +28,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Video: a different transition at each cut (the clip's "Comes in with"; plain cut or any kind; seen in the player).
 - ✅ Security scan 165: nothing to fix.
 
+- 🔨 3D models with colours (Roee chose, 11:xx): a model from words/a picture with its colours and texture, not only its
+  shape — research the local options first (Hunyuan3D 2 paint, others), then the code.
+
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
