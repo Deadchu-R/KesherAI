@@ -26,7 +26,7 @@
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
-    hBrush: "מברשת", hText: "טקסט", sizeH: "גודל התמונה…", sizeT: "גודל התמונה", sizeLock: "שמור על הפרופורציות", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
+    hBrush: "מברשת", hText: "טקסט", textType: "כתוב כאן · Ctrl+Enter שומר · Esc מבטל", sizeH: "גודל התמונה…", sizeT: "גודל התמונה", sizeLock: "שמור על הפרופורציות", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -386,7 +386,7 @@
       drag.lx = l.x;
       drag.ly = l.y;
     } else if (t === "fill" && l) { delete l.text; floodFill(l, p.x, p.y, $("color").value); }
-    else if (t === "text") { drag = null; void textAt(p); }
+    else if (t === "text") { drag = null; e.preventDefault(); textAt(p); }
     else if (t === "shape") {
       const c = document.createElement("canvas");
       c.width = doc.w;
@@ -556,29 +556,66 @@
   /** The text bar's look, as a text layer keeps it. */
   const textLook = () => ({ size: +$("textSize").value, font: $("textFont").value, bold: $("textBold").checked, outline: $("textOutline").checked, color: $("color").value });
   /** The Text tool's click: on the active text layer's words it changes them, elsewhere it starts a new text layer. */
-  async function textAt(p) {
+  /**
+   * The Text tool's click: on the active text layer's words it edits them, elsewhere it starts a new text layer. A box
+   * opens by the words (Canva's and Photoshop's typing on the picture): what is typed shows on the picture at once;
+   * Enter is a new line, Ctrl+Enter or a click elsewhere keeps it, Esc puts it back as it was. One Undo step.
+   */
+  function textAt(p) {
     const l = active();
     const t = l?.text;
-    const onIt = t && (() => { const lx = p.x - l.x, ly = p.y - l.y, lines = t.value.split("\n"), w = Math.max(...lines.map((x) => x.length)) * t.size * 0.6; const left = /[\u0590-\u05FF]/.test(t.value) ? t.x - w : t.x; return lx >= left && lx <= left + w && ly >= t.y && ly <= t.y + lines.length * t.size * 1.2; })();
-    const words = window.prompt(T("textAsk", "The words (\\n for a new line):"), onIt ? t.value.replace(/\n/g, "\\n") : "");
-    if (words == null) return;
-    const value = words.replace(/\\n/g, "\n");
-    if (onIt) {
-      remember(T("hText", "Text"));
-      if (!value.trim()) { doc.layers.splice(doc.active, 1); doc.active = Math.max(0, doc.active - 1); renderLayers(); draw(); return; }
-      t.value = value;
-      l.name = `T ${value.split("\n")[0].slice(0, 24)}`;
-      drawText(l);
+    const onIt = t && (() => { const lx = p.x - l.x, ly = p.y - l.y, lines = t.value.split("\n"), w = Math.max(...lines.map((x) => x.length)) * t.size * 0.6; const left = /[֐-׿]/.test(t.value) ? t.x - w : t.x; return lx >= left && lx <= left + w && ly >= t.y && ly <= t.y + lines.length * t.size * 1.2; })();
+    remember(T("hText", "Text"));
+    let layer = l;
+    const before = onIt ? t.value : "";
+    const beforeName = layer?.name;
+    if (!onIt) {
+      layer = makeLayer("T");
+      layer.text = { value: "", x: Math.round(p.x), y: Math.round(p.y), ...textLook() };
+      addLayer(layer);
+    }
+    const box = document.createElement("textarea");
+    box.className = "text-edit";
+    box.dir = "auto";
+    box.rows = 2;
+    box.value = before;
+    box.placeholder = T("textType", "Type here · Ctrl+Enter keeps · Esc cancels");
+    // Under the words (so they show while typing), kept inside the view.
+    const lines = Math.max(1, before.split("\n").length);
+    const sx = cam.x + (layer.x + layer.text.x) * cam.scale, sy = cam.y + (layer.y + layer.text.y + layer.text.size * 1.2 * lines) * cam.scale + 8;
+    box.style.left = `${Math.max(8, Math.min(sx - 130, stage.clientWidth - 268))}px`;
+    box.style.top = `${Math.max(8, Math.min(sy, stage.clientHeight - 90))}px`;
+    stage.append(box);
+    const show = () => {
+      layer.text.value = box.value;
+      layer.name = `T ${box.value.split("\n")[0].slice(0, 24)}`;
+      drawText(layer);
+      draw();
+    };
+    let done = false;
+    const finish = (keep) => {
+      if (done) return;
+      done = true;
+      box.remove();
+      if (!keep) {
+        // Back as it was, and the Undo step taken for it dropped.
+        undoStack.pop();
+        if (onIt) { layer.text.value = before; layer.name = beforeName; drawText(layer); }
+        else doc.layers.splice(doc.layers.indexOf(layer), 1);
+      } else if (!layer.text.value.trim()) doc.layers.splice(doc.layers.indexOf(layer), 1);
+      const at = doc.layers.indexOf(layer);
+      doc.active = Math.max(0, Math.min(at >= 0 ? at : doc.active - 1, doc.layers.length - 1));
       renderLayers();
       draw();
-      return;
-    }
-    if (!value.trim()) return;
-    remember(T("hText", "Text"));
-    const nl = makeLayer(`T ${value.split("\n")[0].slice(0, 24)}`);
-    nl.text = { value, x: Math.round(p.x), y: Math.round(p.y), ...textLook() };
-    drawText(nl);
-    addLayer(nl);
+    };
+    box.addEventListener("input", show);
+    box.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+    });
+    box.addEventListener("blur", () => finish(true));
+    box.focus();
   }
   // Changing the bar while a text layer is active changes that text (one Undo step per change).
   for (const id of ["textSize", "textFont", "textBold", "textOutline"]) {
