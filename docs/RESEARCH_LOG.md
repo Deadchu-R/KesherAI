@@ -2778,3 +2778,13 @@ Each AI tool shows which local model it uses and offers to download it the first
 - The video export: CapCut asks resolution (480p–4K), frame rate and quality (bit rate) before export; Premiere's
   presets the same. KesherAI: size (4K–480p, only ever down) and quality (CRF 17 / 20 / 27) in "Send to the chat".
 - Stopped at: built (image-editor text and shapes, video-cut ExportLook); to go out in 0.6.399.
+
+## A picture and a turntable of a 3D model; frames, sizes and silence (2026-11-19)
+- 3D: Blender's F12 Render (with "Film → Transparent" for a see-through background), Spline's Export → Image, and
+  Sketchfab / ArtStation turntables (the camera once around the model, used for portfolios and stores). KesherAI: 📷
+  a PNG at twice the screen's sharpness, see-through, without helpers; 🎞 6 s WebM around the model; both into the chat.
+- Video: Premiere's Export Frame (camera icon under the program monitor), DaVinci's Grab Still. KesherAI: ＋ Add → 📷.
+- Pictures: Photoshop's Image Size (Alt+Ctrl+I, Constrain Proportions, resample "Bicubic"). KesherAI: Picture size with
+  the proportions kept and smoothing "high", 50 % / 200 % at a tap.
+- Sound: Audacity's Generate → Silence. KesherAI: + 1 s at the playhead.
+- Stopped at: built; in 0.6.399. Next ideas: a turntable at a chosen length and a full-HD size; crossfades in video.
