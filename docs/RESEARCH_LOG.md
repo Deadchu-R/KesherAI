@@ -2766,4 +2766,4 @@ Each AI tool shows which local model it uses and offers to download it the first
 - 3D: Blender's Local View ("/"), Maya's Isolate Select, 3ds Max's Isolate Selection (Alt+Q): only the chosen object,
   framed, until it is pressed again. KesherAI: "/" and a button in the inspector; not part of Undo.
 - Stopped at: built (image-editor turnImage/flipLayer, sound-editor changeSpeed/reverse, model-editor isolate); in
-  0.6.398. Still open: keeping the pitch while changing a sound's speed (a phase vocoder or WSOLA in the page).
+  0.6.398; Speed keeps the pitch too (tempo.js, WSOLA; "Keep pitch" on by default, as CapCut).
