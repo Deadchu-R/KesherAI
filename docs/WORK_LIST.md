@@ -12,8 +12,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
     (through the chat; it goes in by itself at the clip's place and length). On main, not in a build yet.
   - ✅ Sound: ✦ With AI on the selection: music for it (through the chat; goes in by itself, cut and faded to the
     selection, under it or instead of it), or other words in a voice. On main, not in a build yet.
-- ⬜ The design doc: boards for ✦ With AI (video and sound).
-- ⬜ Video: transitions between clips (crossfade, slide; CapCut's transitions) — research first.
+- ✅ The design doc: boards for ✦ With AI (video and sound) and the 3D picture / turntable buttons.
+- 🔨 Video: transitions between clips (crossfade, slide; CapCut's transitions) — research first.
 - ⬜ 3D turntable: choose its length (6–20 s) and size (the view, 1080p).
 - ⬜ Pictures: edit a text layer's words in place on the picture (instead of a question box).
 - ⬜ Security scan 164 (after 5 changes since scan 163; 2 so far).

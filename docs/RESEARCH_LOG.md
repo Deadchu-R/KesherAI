@@ -2788,3 +2788,17 @@ Each AI tool shows which local model it uses and offers to download it the first
   the proportions kept and smoothing "high", 50 % / 200 % at a tap.
 - Sound: Audacity's Generate → Silence. KesherAI: + 1 s at the playhead.
 - Stopped at: built; in 0.6.399. Next ideas: a turntable at a chosen length and a full-HD size; crossfades in video.
+
+## Mark it and let the model work: video and sound (2026-11-19)
+- Premiere Pro's Generative Media tool (2026): drag across a video or audio track (or double-click a gap), describe
+  it (video: Veo 3.1 by default, optional first/last/previous/next reference frames; sound: optionally hum the timing),
+  and the result is made at the range's length and put into the sequence there. Generative Extend lengthens a clip.
+- Descript: highlight script text → Regenerate (audio, or audio and video): smooth it, or change the words in an
+  authorized AI voice; English only.
+- ElevenLabs Studio: regenerate single words or paragraphs of narration.
+- KesherAI: ✦ With AI on a video clip (a picture from words, this shot redrawn in another look, or a video clip from
+  words through the chat, placed by itself at the clip's length) and on a sound selection (music for it through the
+  chat, cut and faded to the selection, or other words in a voice). Pictures (repaint the selection) and 3D (the part's
+  task box) already had it.
+- Stopped at: built on main (not in a build: Roee asked for no builds for now). Open: a sound effect model (Premiere's
+  sound effects; KesherAI has only the song model), and reference frames for the video model (Wan 2.1 image-to-video).
