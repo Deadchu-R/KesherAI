@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -690,15 +690,31 @@
       if (last && media[mOf(last)]?.kind === "image") { remember(); last.to = 3; after(); void saveEdit(); }
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
-  /** A freeze frame (CapCut's "Freeze"): the frame under the playhead held for 2 s, as a still clip at the playhead. */
-  async function addFreeze() {
-    if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
+  /** The frame under the playhead as a PNG, or undefined (with a message) when it is not on a video clip. */
+  async function frameNow() {
+    if (!source) return void msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
     const c0 = clips[locate(now).i];
-    if (!c0 || media[mOf(c0)]?.kind === "image" || !video.videoWidth) return msg(T("freezeNone", "Put the playhead on a video clip first"), true);
+    if (!c0 || media[mOf(c0)]?.kind === "image" || !video.videoWidth) return void msg(T("freezeNone", "Put the playhead on a video clip first"), true);
     const c = document.createElement("canvas");
     c.width = video.videoWidth; c.height = video.videoHeight;
     c.getContext("2d").drawImage(video, 0, 0);
-    const blob = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
+    return new Promise((resolve) => c.toBlob(resolve, "image/png"));
+  }
+  /** This frame as a picture in the chat's files and the bank (Premiere's Export Frame, DaVinci's Grab Still). */
+  async function saveFrame() {
+    const blob = await frameNow();
+    if (!blob) return;
+    const am = await import("./add-media.js");
+    try {
+      const { path } = await am.uploadMedia(new File([blob], `frame-${fmt(now).replace(/[:.]/g, "-")}-${Date.now().toString(36)}.png`, { type: "image/png" }));
+      if (!path) throw new Error(T("needChat", "To add clips, open the video editor from a chat"));
+      msg(T("frameSaved", "The frame is in the chat's files (and the bank)"));
+    } catch (e) { msg(e.message || String(e), true); }
+  }
+  /** A freeze frame (CapCut's "Freeze"): the frame under the playhead held for 2 s, as a still clip at the playhead. */
+  async function addFreeze() {
+    const blob = await frameNow();
+    if (!blob) return;
     const am = await import("./add-media.js");
     busy(T("loading", "Loading the video…"));
     try {
@@ -801,6 +817,8 @@
       { icon: "💬", label: T("textOver", "Text over the video"), hint: T("textHint", "from the playhead, 3 s"), run: addText },
       { icon: "🔤", label: T("titleCard", "A title card"), hint: T("titleHint", "words on a plain background, 3 s"), run: () => void addTitle() },
       { icon: "⏸", label: T("freeze", "Freeze frame"), hint: T("freezeHint", "the frame here, 2 s"), run: () => void addFreeze() },
+      "-",
+      { icon: "📷", label: T("saveFrame", "Save this frame as a picture"), hint: T("saveFrameHint", "to the chat and the bank"), run: () => void saveFrame() },
     ]);
   }
   $("addBtn").onclick = () => addMenu($("addBtn"));
