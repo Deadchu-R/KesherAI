@@ -2824,3 +2824,10 @@ Each AI tool shows which local model it uses and offers to download it the first
 - KesherAI: the ready flow "Sound effects from words" (Small-SFX, 2.3 GB + the 1.2 GB encoder), the chat's make_sound
   (1–120 s; asks before downloading), and "A sound effect for it" in the sound editor's ✦ With AI.
 - Stopped at: built and tested (flow and editor); not run in ComfyUI on the PC (no builds, no downloads now).
+
+## Continue a shot (2026-11-19)
+- Premiere's Generative Media tool takes reference frames (first, last, previous, next) sampled with an eyedropper;
+  Generative Extend lengthens a clip from its own frames; Runway and Kling have "extend" from the last frame.
+- KesherAI: the chat's animate_picture runs the ready flow Wan 2.2 TI2V 5B (a start picture and words, 1280×704 or
+  704×1280 by the picture's shape, 4n+1 frames at 24 fps); the video editor sends the clip's last frame and puts the new
+  clip after it. Stopped at: built and tested in the page; not run in ComfyUI on the PC.
