@@ -20,9 +20,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Pictures: type text on the picture (a box by the words, the typing shows at once; Esc puts it back).
 - ✅ Security scan 164: nothing to fix.
 - ✅ The design doc: boards for transitions and typing text on the picture.
-- 🔨 Sound: sound effects from words (Premiere makes them for a chosen range; KesherAI has only the song model) —
-  research which local model fits (small, runs on the PC), then the code; nothing downloaded on the PC without asking.
-- ⬜ Video: "continue this shot": the video model starts from the clip's last frame (Premiere's reference frames;
+- ✅ Sound effects from words: Stable Audio 3 Small-SFX (ready flow, the chat's make_sound, and "A sound effect for
+  it" in the sound editor). Not tried in ComfyUI on the PC yet (needs ComfyUI 0.22+ and a 3.5 GB download, with a yes).
+- ✅ Fixed: ✦ With AI now finds the new song or video in the bank too (the chat keeps them there, not in its folder).
+- 🔨 Video: "continue this shot": the video model starts from the clip's last frame (Premiere's reference frames;
   Wan 2.1 image-to-video).
 - ⬜ Video: a different transition at each cut (now one for all, as Apply all).
 
@@ -31,6 +32,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 🔨 0.6.399 was sent to GitHub before "no builds" (10:13); it will finish by itself. No new builds until Roee says.
 
 ## Waiting on Roee 👤
+- 👤 When convenient: try sound effects (needs ComfyUI 0.22+; it asks before downloading 3.5 GB).
 - 👤 Install 0.6.398 / 0.6.399 from the app and check (what to check is in the chat's "available" messages).
 - 👤 The guest test from the phone (shared projects).
 - 👤 A stronger model for writing chat reports.

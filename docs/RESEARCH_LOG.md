@@ -2811,3 +2811,16 @@ Each AI tool shows which local model it uses and offers to download it the first
 - KesherAI: one transition for every cut (as Apply all), 0.3–1.2 s, chosen in Send to the chat; made without overlap:
   each clip's last frame is held (tpad) and blended into the next clip's start (xfade), so the length and every time
   stay. Stopped at: built and checked with FFmpeg; open: showing it in the editor's player, and one per cut.
+
+## Sound effects from words (2026-11-19)
+- Premiere (2026) generates sound effects for a chosen range (optionally hummed for timing). Locally, the open options:
+  Stable Audio Open 1.0 (2024, music and effects, 47 s), AudioLDM 2, and **Stable Audio 3.0** (Stability AI, May 2026):
+  Small-SFX (459M, effects and ambiance, up to 2:00, runs on a processor), Small (music), Medium (1.4B, up to 6:20, needs
+  a graphics card); open weights under the Stability AI Community License (free under $1M a year in revenue; the
+  sounds are the user's), trained on licensed data. ComfyUI supports it from 0.22 (Day-0).
+- ComfyUI's own template (Comfy-Org/workflow_templates, blueprints/audio_generation_stable_audio_3_medium.json):
+  CheckpointLoaderSimple + CLIPLoader (t5gemma_b_b_ul2, type "stable_audio") + CLIPTextEncode ×2 + EmptyLatentAudio +
+  KSampler (distilled: 8 steps, cfg 1, lcm, simple; the "base" models: 50 steps, cfg 7) + VAEDecodeAudio.
+- KesherAI: the ready flow "Sound effects from words" (Small-SFX, 2.3 GB + the 1.2 GB encoder), the chat's make_sound
+  (1–120 s; asks before downloading), and "A sound effect for it" in the sound editor's ✦ With AI.
+- Stopped at: built and tested (flow and editor); not run in ComfyUI on the PC (no builds, no downloads now).
