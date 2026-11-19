@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", speedL: "מהירות", speedHint: "גבוה ומהיר יותר, או נמוך ואיטי יותר", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -99,6 +99,8 @@
     silence() { if (!need()) return; remember(); chans.forEach((c) => c.fill(0, sel[0], sel[1])); after(); },
     fadeIn() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => { for (let i = a; i < b; i++) c[i] *= (i - a) / (b - a); }); after(); },
     fadeOut() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => { for (let i = a; i < b; i++) c[i] *= (b - i) / (b - a); }); after(); },
+    // Audacity's Reverse: the selection played backwards.
+    reverse() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => c.subarray(a, b).reverse()); after(); },
     louder() { gain(Math.pow(10, 3 / 20)); },
     quieter() { gain(Math.pow(10, -3 / 20)); },
     normalize() {
@@ -724,6 +726,33 @@
   }
 
   // ---------- buttons and keys ----------
+  /**
+   * Audacity's Change Speed: the selection played k times as fast (higher and shorter, like a faster tape), by
+   * reading its samples at k steps (linear between two). The words after it move with the sound.
+   *
+   * @param k - 0.5 to 2.
+   */
+  function changeSpeed(k) {
+    if (!need()) return;
+    remember();
+    const [a, b] = sel;
+    const n = Math.max(1, Math.round((b - a) / k));
+    chans = chans.map((c) => {
+      const out = new Float32Array(c.length - (b - a) + n);
+      out.set(c.subarray(0, a));
+      for (let i = 0; i < n; i++) {
+        const x = a + i * k, j = Math.floor(x), f = x - j;
+        out[a + i] = c[Math.min(j, b - 1)] * (1 - f) + c[Math.min(j + 1, b - 1)] * f;
+      }
+      out.set(c.subarray(b), a + n);
+      return out;
+    });
+    const sa = secs(a), sb = secs(b), d = secs(b - a) - secs(n);
+    parts = parts.flatMap((p) => (p.end <= sa ? [p] : p.start >= sb ? [{ ...p, start: p.start - d, end: p.end - d }] : [{ ...p, start: sa + (Math.max(p.start, sa) - sa) / k, end: sa + (Math.min(p.end, sb) - sa) / k }]));
+    sel = [a, a + n];
+    after();
+  }
+  $("speed").onchange = () => { const k = Number($("speed").value); $("speed").value = "1"; if (k !== 1) changeSpeed(k); };
   Object.keys(ops).forEach((k) => ($(k).onclick = ops[k]));
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
@@ -747,7 +776,7 @@
   new ResizeObserver(() => draw()).observe(wrap);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
-    if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); }
+    if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); $("speedBox").title = T("speedHint", "Higher and faster, or lower and slower"); }
     draw();
   }).catch(() => undefined);
   open();
