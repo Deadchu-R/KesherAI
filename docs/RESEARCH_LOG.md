@@ -2755,3 +2755,15 @@ Each AI tool shows which local model it uses and offers to download it the first
   clip ("2× 🔊150%"); freeze frame from ＋ Add, 2 s (shortened or lengthened with trim). On the phone the clip's settings
   open from the bottom bar's ⚙ Clip.
 - Stopped at: built (video-cut.ts speed/volume, editor.js); board VideoClipSpeed; to check on the PC in 0.6.398.
+
+## Basic transforms the editors were missing (2026-11-19)
+- Pictures: Photoshop's Image → Image Rotation (90° CW / CCW, Flip Canvas H/V) turns all layers together; Edit →
+  Transform → Flip turns one layer. Affinity Photo the same (Document → Rotate / Flip). KesherAI: Edit menu for the
+  whole picture (layers and masks keep their places), Layer menu for one layer; Undo refits the view.
+- Sound: Audacity's Effect → Reverse, and Change Speed (pitch and tempo together, like a tape; Change Tempo keeps the
+  pitch, which needs a time-stretch). KesherAI: Reverse, and Speed 0.5×–2× (the tape kind) for the selection; the
+  transcript's words move with it.
+- 3D: Blender's Local View ("/"), Maya's Isolate Select, 3ds Max's Isolate Selection (Alt+Q): only the chosen object,
+  framed, until it is pressed again. KesherAI: "/" and a button in the inspector; not part of Undo.
+- Stopped at: built (image-editor turnImage/flipLayer, sound-editor changeSpeed/reverse, model-editor isolate); in
+  0.6.398. Still open: keeping the pitch while changing a sound's speed (a phase vocoder or WSOLA in the page).
