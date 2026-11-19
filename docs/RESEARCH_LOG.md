@@ -3502,3 +3502,49 @@ usage-limits (15/100/300 per day, concurrency, gmail-only paid); developers.clou
 knowledge, not fetched today; KesherAI: device-keys.ts, devices.ts, guests.ts, google.ts, tunnel.ts, tailscale.ts, link-watch.ts,
 phone-push.ts, access-log.ts, apps/android (README, capacitor.config.json, www/index.html), docs/WORK_LIST.md; the 2026-11-19
 helper-agents and task-inbox entries of this file.
+
+### Addendum (2026-11-19, Roee): the hub is a thin relay; the phone is the store, the PCs hold project files
+This replaces the "what the hub may hold", retention and task-table parts above. Same hosting, sign-in and routes.
+- **Rule**: the hub keeps presence, routing and short-lived **sealed** messages, and deletes each as soon as it is delivered
+  and acknowledged. Tasks, results and history live on the phone (IndexedDB inside the app, encrypted at rest with a
+  non-extractable WebCrypto key, behind the existing app lock); project files, diffs and branches stay on the PCs and in git.
+- **Every client is a paired device with its own key pair** (WebCrypto ECDH P-256, private key never leaves the device).
+  Pairing (section 4) now also exchanges public keys, and both screens show a 6-digit fingerprint to compare, so the hub cannot
+  swap a key unnoticed. Google sign-in only authorises pairing and control actions (pause, revoke); it does not unlock content.
+- **Envelope** (what the hub relays): `{v, id, from, to, kind, ttl, iv, ct}`; `ct` = AES-GCM of the message under a key from
+  ECDH(sender, recipient) + HKDF, with `id|from|to|kind` as authenticated data, so the hub cannot read, alter or redirect it.
+  The hub sees only routing metadata (ids, sizes, times), caps `ct` at 16 KB, queues per recipient for the lifetime `ttl`
+  (default 24 h, maximum 7 d, a "wait" task up to the maximum), **deletes on `ack`**, and the cron deletes expired ones. Online
+  recipients get it over the open socket and it is never written to storage unless the recipient is off.
+- **What the hub's storage now holds**: device rows (id, display name, public key, token hash, last seen), the sealed queue,
+  settings, and an audit trail of metadata only (event type, device id, time; no task text, no results), 30 days. No task or
+  result table; the "task list" screen reads the phone's local store.
+- **Cloud routes are the one place plaintext passes through the hub**: Claude-cloud and Jules need the spec in clear to call
+  Anthropic's `/fire` and Google's Jules API, so the phone seals that one message **to the hub's own key** (private half kept as
+  a Worker secret), the hub decrypts it in memory for the single outbound call, stores nothing, and returns the session URL or Jules
+  id sealed to the phone. Anthropic and Google receive that spec anyway; no other party does. Say so on the send form ("this
+  route shows the task to Claude's cloud"). Cloud results later (webhook, v2) are encrypted at once to the phone's key and held as
+  a sealed message until fetched.
+- **Routing moves to the sender**: `route.ts` lives in `packages/shared`; the phone gets presence from the hub (names, on/off,
+  busy, which agents each device reports; agent capability lists are small metadata and stay readable to the hub) and decides
+  the route, shows the "route it will take" line, then sends sealed to the PC or to the hub's cloud adapter. The hub only checks
+  that the target exists and the limits hold. This also makes offline-first natural: the outbox is already the phone's own store.
+- **Several clients** (phone, desktop app, a browser): each has its own local store; the hub fans a message out sealed once per
+  recipient. Events are append-only with the task id (a task = a list of events: created, routed, delivered, progress, result,
+  cancelled), so two clients merge by id and event time without conflicts. A new client starts empty and may ask a paired peer
+  that is on to send history (sealed, peer-to-peer through the relay, in pages). PCs keep their own record of tasks they ran
+  (the board and the inbox, already local), so the phone can be rebuilt from them.
+- **Cost of the choice**: lose the phone and the history is gone unless backed up. Options for Roee: (a) accept, the PCs and git
+  hold what matters; (b) an optional encrypted backup file of the phone store to his own Drive (`drive-sync.ts` exists; the
+  file is encrypted with a key from his pairing passphrase, Drive sees ciphertext); (c) a PC as a second store. Default: (a)
+  plus (c) automatically for tasks that went to a PC; (b) as a setting in v2.
+- **Changes to the plan**: v1 step 2 shrinks (no task table; add envelope relay, key pairing, fingerprint screen); add
+  `packages/shared/src/hub-crypto.ts` (seal/open, tests with fixed vectors and tamper, wrong-recipient and replay cases) and
+  `apps/web` / hub-page `local-store.ts` (IndexedDB event log, encrypted); step 4 PC client stores received tasks locally before
+  `ack`; the phone "Cloud" card keeps the PC's offline use working. Screens added to the list: pair-device **fingerprint
+  check**, Settings "what the hub holds" (live counts of queued sealed messages, with "delete all now"), Settings "backup of
+  this phone" (v2), and the send form's route line gains the "shown to Claude's cloud" notice.
+- **Check before relying on it**: WebCrypto ECDH/AES-GCM/HKDF run in the Workers runtime and in Android WebView (current
+  Chromium) and in Node 20+ for the PC; not yet tried on the user's phone, and the IndexedDB key being non-extractable means a
+  phone reset loses it (hence backup option b). Extra decision for Roee: the backup choice above.
+- Stopped at: addendum written; nothing built.
