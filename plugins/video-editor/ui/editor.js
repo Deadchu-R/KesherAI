@@ -2,14 +2,14 @@
 // stretches of one source video, split / trim / delete / move with the keys editors know, played back as the edit,
 // and exported by FFmpeg on the computer (video.cut). A plugin page with no build step: it talks to KesherAI only
 // through window.kesher (kesher.js).
-/* global fetch, File, window, performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver */
+/* global fetch, File, window, performance, document, kesher, Blob, URL, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, setInterval, clearInterval */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -601,7 +601,11 @@
   // ---------- ＋ Add (RESEARCH_LOG "Adding files and objects to the editors"): a video or a picture from the device,
   // this chat or the bank, put into the edit at the playhead (CapCut's "+"), the clip there split around it ----------
   const addedMsg = (n) => (he ? HE.addedClip(n) : `Added: ${n}`);
-  async function addClip(fileName, path, bytes) {
+  /**
+   * Puts a video or picture into the edit: at the playhead (the clip there split around it), or with `replace` in place
+   * of that clip at its length (a picture lasts as long; a shorter video is slowed to fill it, down to 0.25×).
+   */
+  async function addClip(fileName, path, bytes, replace) {
     if (!path) throw new Error(T("needChat", "To add clips, open the video editor from a chat"));
     const kind = /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName) ? "image" : "video";
     const url = URL.createObjectURL(new Blob([bytes]));
@@ -629,6 +633,18 @@
     media.push({ path, kind, url, duration, name: fileName });
     const m = media.length - 1;
     remember();
+    const old = replace == null ? null : clips[replace];
+    if (old) {
+      const want = len(old);
+      const next = { id: nextId++, from: 0, to: kind === "image" ? want : Math.min(duration, want), m };
+      if (kind === "video" && duration < want) next.speed = Math.max(0.25, Math.round((duration / want) * 100) / 100);
+      clips.splice(replace, 1, next);
+      chosen = replace;
+      now = startOf(replace);
+      after();
+      void saveEdit();
+      return msg(addedMsg(fileName));
+    }
     const { i, src } = locate(now);
     const c = clips[i];
     let at = clips.length;
@@ -690,6 +706,81 @@
       if (last && media[mOf(last)]?.kind === "image") { remember(); last.to = 3; after(); void saveEdit(); }
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
+  // ---------- ✦ With AI (FUTURE_FEATURES "Mark it and let the model work"; RESEARCH_LOG): the chosen clip made again
+  // from words, at its place and length, as Premiere's Generative Media tool fills a chosen range ----------
+  const blobUrl = (b) => new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(b); });
+  $("aiClip").onclick = () => {
+    const c = clips[chosen];
+    if (!c) return msg(T("nothing", "No clip under the playhead"), true);
+    $("aiInfo").textContent = `${T("clip", "Clip")} ${chosen + 1} · ${fmt(len(c))}`;
+    // A picture clip has no frame of its own to redraw.
+    document.querySelector('[name="aiKind"][value="restyle"]').disabled = media[mOf(c)]?.kind === "image";
+    $("aiDialog").showModal();
+    $("aiText").focus();
+  };
+  $("aiDialog").addEventListener("close", () => {
+    if ($("aiDialog").returnValue !== "ok") return;
+    const words = $("aiText").value.trim();
+    if (!words) return msg(T("aiNoWords", "Write what it should be"), true);
+    const kind = document.querySelector('[name="aiKind"]:checked').value;
+    void (kind === "video" ? videoFromWords(words) : pictureFor(words, kind === "restyle"));
+  });
+  /** A picture from words (or this shot's frame redrawn by the words) in place of the chosen clip, at its length. */
+  async function pictureFor(words, restyle) {
+    const id = clips[chosen]?.id;
+    const { w, h } = frameSize();
+    const wide = w >= h;
+    let image;
+    if (restyle) {
+      seek(startOf(chosen) + 0.05);
+      await new Promise((r) => setTimeout(r, 250));
+      const f = await frameNow();
+      if (!f) return;
+      image = await blobUrl(f);
+    }
+    busy(T("picMaking", "Drawing… (a minute or two)"));
+    try {
+      const [url] = await kesher.call(restyle ? "image.edit" : "image.generate", { prompt: words, width: wide ? 1024 : 576, height: wide ? 576 : 1024, ...(image ? { image, strength: 0.6 } : {}) });
+      if (!url) throw new Error("No picture came back.");
+      const blob = await (await fetch(url)).blob();
+      const am = await import("./add-media.js");
+      const file = new File([blob], `${words.slice(0, 30).replace(/[^\p{L}\p{N}]+/gu, "-")}-${Date.now().toString(36)}.png`, { type: "image/png" });
+      const { path, bytes } = await am.uploadMedia(file);
+      const at = clips.findIndex((c) => c.id === id);
+      await addClip(file.name, path, bytes, at >= 0 ? at : undefined);
+    } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
+  }
+  /**
+   * A video clip from words: the chat's video model makes it (asked through the chat, which asks the person first);
+   * the editor watches the chat's files and, when a new video arrives, puts it in place of the clip (slowed to fill it
+   * if it is shorter). It waits up to 20 minutes; the editor can be used meanwhile.
+   */
+  let waitingVideo = null;
+  async function videoFromWords(words) {
+    const id = clips[chosen]?.id;
+    const seconds = Math.max(1, Math.min(5, Math.round(len(clips[chosen]))));
+    const before = new Set((await kesher.call("media.list", { from: "chat", kind: "video" }).catch(() => [])).map((x) => x.id));
+    try {
+      await kesher.call("chat.ask", { text: `Make a video clip for my edit: ${words}. Use generate_video with seconds ${seconds}.` });
+    } catch (e) { return msg(e.message || String(e), true); }
+    clearInterval(waitingVideo);
+    const until = Date.now() + 20 * 60_000;
+    msg(T("aiWaiting", "Asked the chat; the clip goes in by itself when it is ready (a few minutes)"));
+    waitingVideo = setInterval(async () => {
+      if (Date.now() > until) { clearInterval(waitingVideo); return msg(T("aiLate", "The clip did not come in 20 minutes; add it from the chat's files when it does"), true); }
+      const now = await kesher.call("media.list", { from: "chat", kind: "video" }).catch(() => []);
+      const fresh = now.find((x) => !before.has(x.id) && !/-edited|clip-edited/.test(x.name));
+      if (!fresh) return;
+      clearInterval(waitingVideo);
+      try {
+        const am = await import("./add-media.js");
+        const { path, bytes } = await am.takeMedia(fresh);
+        const at = clips.findIndex((c) => c.id === id);
+        await addClip(fresh.name, path, bytes, at >= 0 ? at : undefined);
+      } catch (e) { msg(e.message || String(e), true); }
+    }, 10_000);
+  }
+
   /** The frame under the playhead as a PNG, or undefined (with a message) when it is not on a video clip. */
   async function frameNow() {
     if (!source) return void msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);

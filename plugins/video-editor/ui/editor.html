@@ -28,6 +28,7 @@
         <b data-t="clipH">The chosen clip</b>
         <div id="clipInfo" class="muted"></div>
         <div class="row"><button id="splitBtn" data-t="split">✂ Split</button><button id="delBtn" data-t="delete">⌫ Delete</button><button id="dupBtn" data-t="dup">⧉ Duplicate</button></div>
+        <button id="aiClip" class="primary" data-t="aiClip">✦ With AI…</button>
         <label class="row"><span data-t="speedL">Speed</span> <select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select></label>
         <label class="row"><span data-t="clipVol">Volume</span> <input type="range" id="clipVol" min="0" max="200" step="5" value="100" /> <span id="clipVolV" class="muted">100%</span></label>
         <div id="textTools" class="stack" hidden>
@@ -100,6 +101,18 @@
       <label class="row" id="burnRow" hidden><input type="checkbox" id="burnCaptions" /> <span data-t="burnCaptions">Also burn them into the picture (for phones and social apps)</span></label>
       <label class="field"><span data-t="toChatMsg">A message with it (optional)</span><textarea id="chatText" rows="3" maxlength="4000" dir="auto"></textarea></label>
       <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="send">Send</button></div>
+    </form>
+  </dialog>
+  <!-- ✦ With AI (Premiere's Generative Media tool, 2026): the chosen clip made again from words, at its length -->
+  <dialog id="aiDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="aiH">This clip, with AI</strong>
+      <span class="muted" id="aiInfo"></span>
+      <label class="row"><input type="radio" name="aiKind" value="picture" checked /> <span data-t="aiPicture">A picture from words instead (the picture model, a minute or two)</span></label>
+      <label class="row"><input type="radio" name="aiKind" value="restyle" /> <span data-t="aiRestyle">This shot in another look (its frame, redrawn)</span></label>
+      <label class="row"><input type="radio" name="aiKind" value="video" /> <span data-t="aiVideo">A video clip from words instead (through the chat, a few minutes; it goes in by itself)</span></label>
+      <label class="field"><span data-t="aiWhat">What should it be?</span><textarea id="aiText" rows="3" maxlength="600" dir="auto"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="aiGo">Make it</button></div>
     </form>
   </dialog>
   <dialog id="keysDialog">
