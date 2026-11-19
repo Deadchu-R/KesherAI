@@ -40,13 +40,14 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 - ✅ Helper agents (Roee, 12:39): docs/AGENT_BRIEF.md and .claude/agents (research, build); Claude leads,
   helpers research or build one task each and report back in 15 lines.
-- 🔨 A scene together for guests through share links: ✅ research → 🔨 build (helper agent, Opus).
+- ✅ A scene together for guests through share links (4d57785d). On main, not in a build yet.
+- ✅ Sub-agents in the chat (2842e845): lead + research/build/lookup agents, a model each, strip, cards, Settings > Agents. On main, not in a build yet; the real model swap and Antigravity as an agent need a test on the PC.
 - ✅ Research: helper agents inside KesherAI (lead + research/build/lookup helpers, a model per helper, GPU-aware).
 - ✅ Research: a task inbox (Claude → git → KesherAI on the PC → Antigravity / local model → agy/* branch → Claude
   reviews). Roee (12:5x): Antigravity runs only when he presses Run, one at a time, for now; KesherAI may push
   only agy/* and the inbox branch. Defaults until he says otherwise: 10 Antigravity tasks a day, Gemini's default model.
 - ✅ Naming (Roee, 13:20): in Hebrew they are "סוכנים" (lead: "סוכן ראשי"; "סוכן מחקר/בנייה/חיפוש"), not "עוזרים". Design doc boards renamed.
-- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76, pushed); ⬜ screens + Phone/Computer/Cloud toggle.: a small KesherAI web app that is always on, open only to Roee's Google
+- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76); ✅ screens: the hub page, Settings > Kesher Cloud, Phone/Computer/Cloud (6254d9bc). 👤 Roee: Google OAuth client + Cloudflare (apps/hub/README.md).: a small KesherAI web app that is always on, open only to Roee's Google
   account. It knows which devices (PCs with KesherAI, the phone) and agents (Claude, Gemini/Antigravity, …) are
   on, connects them, and routes a task to a cloud tool when no device is on, so the PC need not stay on.
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
@@ -59,7 +60,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   Claude stays the lead, the hub is its hands (devices, send a task to Antigravity / local model, results,
   approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1.
 - ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
-- ⬜ Design doc: guests in a scene, helpers in chat, the task inbox; then build helpers + inbox (Opus helper).
+- ✅ Design doc: boards from the real screens (agents, hub).
+- 🔨 Build the task inbox (Opus agent); 🔨 research Google's terms for Antigravity (Sonnet agent).
+- ✅ Usage tracker: docs/usage (track.py + charts); re-run after each build.
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
