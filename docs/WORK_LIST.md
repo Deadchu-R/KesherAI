@@ -33,6 +33,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
 
 ## Waiting on Roee 👤
+- 👤 When convenient: try the 3D editor's "A model from words" (ComfyUI; asks before downloading Hunyuan3D 2, ~4.9 GB).
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).
 - 👤 When convenient: try sound effects (needs ComfyUI 0.22+; it asks before downloading 3.5 GB).
 - 👤 Install 0.6.398 / 0.6.399 from the app and check (what to check is in the chat's "available" messages).
@@ -41,4 +42,5 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
 
 ## Later (agreed)
-- 🔨 A 3D model from words without going through the chat (the 3D editor's ✦: a picture from words, then Hunyuan3D).
+- ✅ A 3D model from words without the chat (＋ Add → A model from words: a picture, then Hunyuan3D 2 on the computer;
+  the first time it asks before downloading the 3D model). Not run in ComfyUI on the PC yet.

@@ -2831,3 +2831,12 @@ Each AI tool shows which local model it uses and offers to download it the first
 - KesherAI: the chat's animate_picture runs the ready flow Wan 2.2 TI2V 5B (a start picture and words, 1280×704 or
   704×1280 by the picture's shape, 4n+1 frames at 24 fps); the video editor sends the clip's last frame and puts the new
   clip after it. Stopped at: built and tested in the page; not run in ComfyUI on the PC.
+
+## A 3D model from words, without the chat (2026-11-19)
+- Meshy, Tripo and Rodin: text-to-3D usually runs as text → picture(s) → 3D (Meshy's "Text to 3D" shows the picture
+  first; Tripo's v2 and Rodin's Gen-2 the same in one step). Locally: a picture model, then Hunyuan3D 2 (shape) — the
+  same two steps the chat already took through make_3d.
+- KesherAI: the 3D editor's ＋ Add → "A model from words" draws the object alone (white background, three-quarter
+  view), keeps the picture in the chat's files, and the new /files/model3d turns it into a GLB (pictureTo3d, shared with
+  make_3d) that lands in the view; the download is asked first with its size.
+- Stopped at: built and tested in the page; not run in ComfyUI on the PC. Open: colours (Hunyuan3D 2's paint model).
