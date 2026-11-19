@@ -248,7 +248,9 @@
       d.textContent = mOf(c) ? `${md?.kind === "image" ? "🖼" : "🎬"} ${md?.name ?? ""}` : `🎬 ${T("clip", "Clip")} ${i + 1}`;
       if (mOf(c)) d.classList.add("added");
       const s = document.createElement("small");
-      s.textContent = `${fmt(c.from)}–${fmt(c.to)}`;
+      // Its speed and volume, when changed, so a faster or quieter clip shows on the timeline.
+      const marks = [(c.speed ?? 1) !== 1 ? `${c.speed}×` : "", (c.vol ?? 1) !== 1 ? `🔊${Math.round(c.vol * 100)}%` : ""].filter(Boolean).join(" ");
+      s.textContent = `${fmt(c.from)}–${fmt(c.to)}${marks ? ` · ${marks}` : ""}`;
       d.append(s);
       d.onpointerdown = (e) => {
         e.stopPropagation();
