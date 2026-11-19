@@ -222,7 +222,13 @@ export class ChatHelpers {
   }
 
   /**
-   * Starts the outside agent (Antigravity) as a helper, in its own copy of the project. Only the user starts it
+   * Asks "Run this in Antigravity?" before each message to it (wired to the task inbox, server.ts): the same ask on
+   * the PC, the phone and the hub, one ask per message, counted against the same daily limit. Unset: nothing is sent.
+   */
+  askAntigravity?: (info: { title: string; text: string; where: string }) => { ask: { requestId: string; until: number; left: number }; answer: Promise<"allow" | "deny" | "timeout">; cancel: () => void };
+
+  /**
+   * Starts the outside agent (Antigravity) as a helper, in its own copy of the project, after the user's Run on its ask. Only the user starts it
    * (the composer's `@antigravity`); the chat's model never does, so nothing runs on the user's Google account by itself.
    *
    * @param id - The chat (a code chat on a git project).
@@ -246,6 +252,21 @@ export class ChatHelpers {
       local: false,
       model: "Antigravity CLI",
       run: async (ctl) => {
+        // Google's terms for a personal plan: every message to Antigravity is the user's own tap, so each one asks.
+        if (!this.askAntigravity) throw new Error("Antigravity asks before each message, and the ask is not available here. (בעברית: Antigravity שואל לפני כל הודעה, והשאלה לא זמינה כאן.)");
+        const where = (this.host.workspace(id) ?? "").split(/[\\/]/).filter(Boolean).pop() ?? "project";
+        const asked = this.askAntigravity({ title: `@antigravity: ${text.split("\n")[0]!.slice(0, 100)}`, text, where });
+        ctl.update({ runAsk: { ...asked.ask, text: text.slice(0, 600) } });
+        let said: "allow" | "deny" | "timeout";
+        try {
+          said = await ctl.hold(asked.answer, "Waits for Run in Antigravity");
+        } catch (e) {
+          asked.cancel();
+          throw e;
+        } finally {
+          ctl.update({ runAsk: undefined });
+        }
+        if (said !== "allow") throw new Error(said === "timeout" ? "Not run: the ask expired after 30 minutes. (לא רץ: השאלה פגה אחרי 30 דקות.)" : "Not run: you chose Not now. (לא רץ: בחרת לא עכשיו.)");
         const copy = await wt.make(`helper-antigravity-${Date.now().toString(36)}`);
         let finished = false;
         const agent = outsideAgent("agent/antigravity", copy.path, start, () => "auto-edit");

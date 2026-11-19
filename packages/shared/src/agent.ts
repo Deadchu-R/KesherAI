@@ -128,6 +128,11 @@ export interface HelperRunInfo {
   error?: string;
   /** The chat goes on while it runs; its report reaches the chat's model at its next turn. */
   background: boolean;
+  /**
+   * An outside agent's message waits for "Run this in Antigravity?" (one ask per message, 30 minutes, answered on the
+   * card, the phone or through the hub; `POST /api/task-inbox/run-answer`).
+   */
+  runAsk?: { requestId: string; until: number; left: number; text: string };
 }
 
 /**

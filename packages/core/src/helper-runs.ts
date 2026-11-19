@@ -18,7 +18,15 @@ export interface HelperControl {
   /** One step done (a tool it used): counted, and the last ones are shown. */
   step(text: string): void;
   /** Changes what the card shows (the model after a swap, the swap's phase…). */
-  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "swap" | "cloudFiles" | "cloud">>): void;
+  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "swap" | "cloudFiles" | "cloud" | "runAsk">>): void;
+  /**
+   * Waits for something the user answers elsewhere (the Antigravity ask): the card says why, and the time cap waits.
+   *
+   * @param p - The answer.
+   * @param why - What the card shows meanwhile.
+   * @returns The answer; rejects when the run is stopped first.
+   */
+  hold<T>(p: Promise<T>, why: string): Promise<T>;
   /**
    * Asks the user a yes/no question on the card (a cloud helper and the project's files); the time cap waits meanwhile.
    *
@@ -248,7 +256,26 @@ export class HelperRuns extends EventEmitter {
       },
       update: (p) => {
         Object.assign(r.info, p);
+        for (const k of Object.keys(p) as Array<keyof typeof p>) if (p[k] === undefined) delete r.info[k];
         this.changed(r);
+      },
+      hold: async (p, why) => {
+        clearTimeout(r.timer);
+        r.info.state = "asking";
+        r.info.waitReason = why;
+        this.changed(r);
+        const stopped = new Promise<never>((_, reject) => {
+          if (r.abort.signal.aborted) reject(new Error("aborted"));
+          r.abort.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+        try {
+          return await Promise.race([p, stopped]);
+        } finally {
+          delete r.info.waitReason;
+          if (r.info.state === "asking") r.info.state = "running";
+          if (!r.abort.signal.aborted) this.armTimer(r);
+          this.changed(r);
+        }
       },
       ask: (question) => {
         if (r.abort.signal.aborted) return Promise.resolve(false);

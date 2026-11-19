@@ -3,6 +3,7 @@ import type { HelperRunInfo } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
+import { toast } from "./library";
 
 /**
  * Sub-agents in the chat (docs/RESEARCH_LOG.md, "Helper agents in the chat"; design boards HelpersStrip,
@@ -132,6 +133,27 @@ function SwapRow({ r, now }: { r: HelperRunInfo; now: number }) {
   );
 }
 
+/**
+ * "Run this in Antigravity?" before a message to it: the same ask as the task inbox (also on the phone and through
+ * the hub), one tap for one message, counted against the day's Antigravity limit.
+ */
+function RunAskRow({ r }: { r: HelperRunInfo }) {
+  const ask = r.runAsk!;
+  const answer = (decision: "allow" | "deny") => void api("/api/task-inbox/run-answer", { method: "POST", body: { requestId: ask.requestId, decision } }).catch((e) => toast((e as Error).message));
+  const min = Math.max(0, Math.ceil((ask.until - Date.now()) / 60_000));
+  return (
+    <div className="hask hask-agy">
+      <b>✦ {L("להריץ את זה ב-Antigravity?", "Run this in Antigravity?")}</b>
+      <span className="hask-text">{ask.text}</span>
+      <span className="small muted">{L(`נשארו היום: ${ask.left} · פג תוקף בעוד ${min} דק׳ · לחיצה אחת = הודעה אחת`, `Left today: ${ask.left} · expires in ${min} min · one tap = one message`)}</span>
+      <div className="row">
+        <button type="button" className="primary" onClick={() => answer("allow")}>▶ {L("הפעל", "Run")}</button>
+        <button type="button" onClick={() => answer("deny")}>{L("לא עכשיו", "Not now")}</button>
+      </div>
+    </div>
+  );
+}
+
 /** The card's question: may a cloud agent read this project's files (asked once per project). */
 function AskRow({ r, convId }: { r: HelperRunInfo; convId: string }) {
   const answer = (yes: boolean) => void api(`/api/conversations/${convId}/helpers/${r.id}/answer`, { method: "POST", body: { yes } }).catch(() => undefined);
@@ -212,7 +234,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
       </div>
       {note && (going(r) || open) && <div className="hnote muted small">{note}</div>}
       {r.state === "waiting" && <div className="hsteps warn">{L(`ממתין לתור: עד ${r.waitLimit ?? 1} בבת אחת על כרטיס המסך הזה. יתחיל כשאחד יסתיים.`, `Waiting in the queue: up to ${r.waitLimit ?? 1} at once on this graphics card. Starts when one ends.`)}</div>}
-      {r.state === "asking" && <AskRow r={r} convId={convId} />}
+      {r.state === "asking" && (r.runAsk ? <RunAskRow r={r} /> : <AskRow r={r} convId={convId} />)}
       {(r.state === "running" || open) && <Steps r={r} all={open} />}
       <SwapRow r={r} now={now} />
       <Report r={r} convId={convId} />
@@ -293,7 +315,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
           <span>{L(`צעד ${r.step} מתוך ${r.maxSteps}`, `Step ${r.step} of ${r.maxSteps}`)}</span>
           <div className="hbar"><b style={{ width: `${Math.min(100, (r.step / Math.max(1, r.maxSteps)) * 100)}%` }} /></div>
         </div>
-        {r.state === "asking" && <AskRow r={r} convId={convId} />}
+        {r.state === "asking" && (r.runAsk ? <RunAskRow r={r} /> : <AskRow r={r} convId={convId} />)}
         <SwapRow r={r} now={now} />
         <b className="small">{L("צעדים", "Steps")}</b>
         <Steps r={r} all />

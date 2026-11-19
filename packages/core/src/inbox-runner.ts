@@ -57,6 +57,14 @@ interface Saved {
   lastError?: string;
 }
 
+/** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
+export interface MessageAskInfo {
+  title: string;
+  text: string;
+  /** The project or copy it runs in (a name, never a full path). */
+  where: string;
+}
+
 /** An error with an HTTP status for the route. */
 const fail = (msg: string, code: number) => Object.assign(new Error(msg), { code });
 
@@ -98,6 +106,8 @@ export class TaskInbox {
   private loaded = false;
   private active?: Active;
   private timer?: ReturnType<typeof setInterval>;
+  /** Asks for one message to Antigravity from a chat's agent (kept in memory: a restart drops them, nothing runs). */
+  private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
   private saving: Promise<void> = Promise.resolve();
   private syncing?: Promise<void>;
 
@@ -459,10 +469,66 @@ export class TaskInbox {
   }
 
   /** The open asks, for the hub (sent to the phone as approval requests). */
-  openAsks(): Array<{ task: InboxTaskView; ask: InboxRunAsk }> {
-    if (!this.loaded) return [];
+  openAsks(): Array<{ title: string; text: string; where: string; ask: InboxRunAsk }> {
+    const messages = [...this.messageAsks.values()].map((m) => ({ title: m.info.title, text: m.info.text, where: m.info.where, ask: m.ask }));
+    if (!this.loaded) return messages;
     this.expireAsks();
-    return this.saved.tasks.filter((t) => t.runAsk).map((t) => ({ task: t, ask: t.runAsk! }));
+    return [...this.saved.tasks.filter((t) => t.runAsk).map((t) => ({ title: t.title, text: t.goal, where: t.branch, ask: t.runAsk! })), ...messages];
+  }
+
+  /**
+   * Asks "Run this in Antigravity?" before one message a chat's agent sends to Antigravity (the `@antigravity`
+   * sub-agent): the same ask as an inbox task (the PC, the phone in remote, the hub), one ask for one message, 30
+   * minutes, never remembered, and a yes counts against the same daily limit.
+   *
+   * @param info - What the message is, for the card and the phone.
+   * @returns The ask, and its answer when it comes ("timeout" after 30 minutes; "deny" when cancelled).
+   * @throws When today's limit is reached or the quota ran out (nothing is asked).
+   */
+  askMessage(info: MessageAskInfo): { ask: InboxRunAsk; answer: Promise<"allow" | "deny" | "timeout">; cancel: () => void } {
+    const now = this.now();
+    if (this.saved.quota && this.saved.quota.until > now) throw fail(`Antigravity's quota ran out; it can run again at ${new Date(this.saved.quota.until).toISOString()}.`, 429);
+    const cap = this.s.dailyCap;
+    if (this.today().used >= cap) throw fail(`Today's limit of ${cap} Antigravity runs is reached (Settings > Task inbox).`, 429);
+    const ms = this.d.approvalMs ?? 30 * 60_000;
+    const ask: InboxRunAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + ms, left: Math.max(0, cap - this.today().used) };
+    let finish!: (a: "allow" | "deny" | "timeout") => void;
+    const answer = new Promise<"allow" | "deny" | "timeout">((resolve) => (finish = resolve));
+    const timer = setTimeout(() => done("timeout"), ms);
+    const done = (a: "allow" | "deny" | "timeout") => {
+      if (!this.messageAsks.delete(ask.requestId)) return;
+      clearTimeout(timer);
+      finish(a);
+    };
+    this.messageAsks.set(ask.requestId, { ask, info: { title: info.title.slice(0, 200), text: info.text.slice(0, 2000), where: info.where.slice(0, 200) }, done });
+    this.d.notify("✦ Run this in Antigravity?", `${info.title.slice(0, 120)} · ${ask.left} left today`);
+    return { ask, answer, cancel: () => done("deny") };
+  }
+
+  /**
+   * The answer to a message ask (same verification as {@link answerRun}: the caller passes the verified sender).
+   *
+   * @returns Whether such an ask was open (it is used up either way).
+   */
+  async answerMessage(requestId: string, decision: "allow" | "deny", by: string): Promise<boolean> {
+    const m = this.messageAsks.get(requestId);
+    if (!m || !by) return false;
+    if (m.ask.until <= this.now()) {
+      m.done("timeout");
+      return false;
+    }
+    if (decision === "allow") {
+      await this.load();
+      // The limit may have been reached since it was asked.
+      if (this.today().used >= this.s.dailyCap) {
+        m.done("deny");
+        return true;
+      }
+      this.today().used++;
+      await this.save();
+    }
+    m.done(decision);
+    return true;
   }
 
   /**

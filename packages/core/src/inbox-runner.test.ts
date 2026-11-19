@@ -243,3 +243,36 @@ test("inbox: a declined task file, the daily cap, and the quota", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("inbox: a chat agent's message ask — one answer, one message, counted against the same daily limit", async () => {
+  const root = mkdtempSync(join(tmpdir(), "kesher-inbox-"));
+  let clock = Date.now();
+  const notes: string[] = [];
+  const settings = { dailyCap: 2 };
+  const inbox = new TaskInbox({ settings: () => settings, file: join(root, "inbox.json"), git, run: git, startAgent: () => Promise.reject(new Error("no")), notify: (t) => void notes.push(t), busy: async () => ({ free: true, reasons: [] }), now: () => clock, approvalMs: 1000 });
+  try {
+    const a = inbox.askMessage({ title: "@antigravity: fix", text: "fix the gap", where: "KesherAI" });
+    assert.equal(a.ask.left, 2);
+    assert.ok(notes.some((n) => /Run this in Antigravity\?/.test(n)), "the phone is told");
+    assert.equal(inbox.openAsks().length, 1, "and the hub sends it");
+    assert.equal(await inbox.answerMessage(a.ask.requestId, "allow", ""), false, "no verified sender");
+    assert.equal(await inbox.answerMessage(a.ask.requestId, "allow", "phone-1"), true);
+    assert.equal(await a.answer, "allow");
+    assert.equal(await inbox.answerMessage(a.ask.requestId, "allow", "phone-1"), false, "used up");
+    assert.equal((await inbox.state(true)).today.used, 1);
+    const b = inbox.askMessage({ title: "t", text: "x", where: "p" });
+    assert.equal(await inbox.answerMessage(b.ask.requestId, "deny", "pc"), true);
+    assert.equal(await b.answer, "deny");
+    assert.equal((await inbox.state(true)).today.used, 1, "Not now costs nothing");
+    const c = inbox.askMessage({ title: "t", text: "x", where: "p" });
+    clock += 2000;
+    assert.equal(await inbox.answerMessage(c.ask.requestId, "allow", "pc"), false, "expired");
+    assert.equal(await c.answer, "timeout");
+    const d = inbox.askMessage({ title: "t", text: "x", where: "p" });
+    await inbox.answerMessage(d.ask.requestId, "allow", "pc");
+    assert.throws(() => inbox.askMessage({ title: "t", text: "x", where: "p" }), /limit of 2/);
+    assert.equal(inbox.openAsks().length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

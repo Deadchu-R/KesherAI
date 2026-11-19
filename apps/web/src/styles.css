@@ -4071,3 +4071,5 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
   .tinbox-cols { grid-template-columns: minmax(0, 1fr); }
   .tinbox-legend { display: grid; gap: 6px; }
 }
+.hask-agy { background: var(--accent-soft); border: 1px solid rgb(152 163 255 / 0.4); }
+.hask-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: auto; }
