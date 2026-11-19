@@ -1531,3 +1531,13 @@ S5 an outside scanner's rules for Electron.
 - The phone: the video editor's clip settings are reachable (⚙ Clip), and the sound editor's Speed and Reverse fit at
   390 px with no sideways scroll (checked in a headless browser).
 - Nothing to fix.
+
+## Scan 162 (2026-11-19): text and shapes in pictures, the video export's size and quality, echo, duplicate a clip
+- **Export size and quality** (the one server change): `/files/cut` takes `size` only from EXPORT_HEIGHTS (480, 720,
+  1080, 2160) and `quality` only from high / normal / small; anything else is dropped. Into FFmpeg go only those
+  numbers (`scale=-2:'min(ih,720)'`, `-crf 17|20|27`); the bridge passes them only when they are a number / a string.
+  A 4K export of a long video takes longer, but one cut runs at a time (scan 146) and a smaller size is never upscaled.
+- **Text**: the words go to `fillText` on a canvas, never into the page as HTML; a project file's text is taken only
+  when `value` is a string. **Shapes, echo, duplicate**: in the editors' pages, no new bridge methods.
+- Performance: a text layer redraws only when changed; a shape's preview reuses one canvas per drag; echo is one pass.
+- Tests: video-cut.test.ts gained the export's size and quality (16 pass). Nothing to fix.
