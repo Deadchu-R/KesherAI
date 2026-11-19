@@ -8,7 +8,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo, extractSound, findScenes, SHAPES, srtOf, type MusicTrack } from "../video-cut.js";
+import { checkSegments, cutVideo, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -70,7 +70,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown; fade?: number } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown; fade?: number; texts?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
@@ -78,6 +78,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     let sound: string | undefined;
     let music: MusicTrack | undefined;
     const extras: Array<{ file: string; kind: "video" | "image" }> = [];
+    const texts: TextOverlay[] = [];
     try {
       full = await resolveInWorkspace(root, req.body?.path ?? "");
       // Clips added to the edit (the editor's "Add"): other videos or pictures of the same chat, at most 20.
@@ -90,6 +91,16 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
         extras.push({ file, kind });
       }
       segments = checkSegments(req.body?.segments, extras.length);
+      // Text over the picture: PNGs of this chat drawn by the editor, at most 30, each with its time in the edit.
+      const givenTexts = Array.isArray(req.body?.texts) ? (req.body.texts as Array<{ path?: unknown; start?: unknown; end?: unknown }>) : [];
+      if (givenTexts.length > 30) return reply.code(400).send({ error: "At most 30 texts." });
+      for (const t of givenTexts) {
+        const file = await resolveInWorkspace(root, String(t?.path ?? ""));
+        const start = Number(t?.start), end = Number(t?.end);
+        if (!/\.png$/i.test(file) || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end - start < 0.1 || end > 21_600) return reply.code(400).send({ error: "A text needs a PNG of this chat and a start before its end." });
+        if (!(await stat(file).catch(() => undefined))?.isFile()) return reply.code(404).send({ error: "A text's picture was not found." });
+        texts.push({ file, start, end });
+      }
       // A new sound for the video (from the sound editor): a sound file of the same chat.
       if (req.body?.sound) {
         sound = await resolveInWorkspace(root, req.body.sound);
@@ -121,7 +132,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     try {
       if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
       if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras, Math.min(1, Math.max(0, Number(req.body?.fade) || 0)));
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras, Math.min(1, Math.max(0, Number(req.body?.fade) || 0)), texts);
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {

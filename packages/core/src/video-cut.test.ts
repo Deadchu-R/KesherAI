@@ -105,3 +105,10 @@ test("a dip to black between clips: fades in after the first and out before the 
   assert.match(x, /afade=t=out:st=2\.500:d=0\.500\[a0\]/);
   assert.doesNotMatch(g(cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 3 }], true, undefined, undefined, undefined, undefined, undefined, 0.5)), /fade=/);
 });
+
+test("text over the picture: each PNG is a still input laid over the frame while it shows, before the new shape", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 4 }], true, undefined, undefined, "9:16", undefined, undefined, 0, [{ file: "t1.png", start: 0.5, end: 2 }, { file: "t2.png", start: 2, end: 4 }]);
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.ok(a.join(" ").includes("-loop 1 -t 4.000 -i t1.png -loop 1 -t 4.000 -i t2.png"));
+  assert.match(g, /concat=n=1:v=1:a=1\[vj\]\[a\];\[vj\]\[1:v\]overlay=0:0:enable='between\(t,0\.500,2\.000\)'\[t0\];\[t0\]\[2:v\]overlay=0:0:enable='between\(t,2\.000,4\.000\)'\[v\];\[v\]crop=/);
+});

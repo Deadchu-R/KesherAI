@@ -17,6 +17,15 @@ export interface ExtraClip {
   audio: boolean;
 }
 
+/** Text over the picture (the editor's "Text"): a picture of the words with a clear background, shown from start to end. */
+export interface TextOverlay {
+  /** A PNG the size of the frame, drawn in the page (so Hebrew and every font come out right). */
+  file: string;
+  /** Seconds of the edited video. */
+  start: number;
+  end: number;
+}
+
 /** The picture every stretch is fitted into when the edit has added clips: the opened video's size and frame rate. */
 export interface Frame {
   w: number;
@@ -118,7 +127,7 @@ export function musicGraph(m: MusicTrack, input: number, total: number, voice?: 
  * @param music - A music track under it.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }, fade = 0): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }, fade = 0, texts: readonly TextOverlay[] = []): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
@@ -156,7 +165,11 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   const crop = shape ? `;[v]crop='min(iw,ih*${sw}/${sh})':'min(ih,iw*${sh}/${sw})',scale=trunc(iw/2)*2:trunc(ih/2)*2[vc]` : "";
   const pic = shape ? "[vc]" : "[v]";
   const subs = burn ? `;${pic}subtitles=filename=${burn}:force_style='FontName=Arial,FontSize=20,Outline=2,Shadow=0,MarginV=28'[vs]` : "";
-  let graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[v]${audio ? "[a]" : ""}${crop}${subs}`;
+  // Text over the picture: each its own still input, laid over the whole frame while it shows (before the new shape,
+  // so it is cut with the picture).
+  const firstText = 1 + (sound ? 1 : 0) + (music ? 1 : 0) + (extra?.clips.length ?? 0);
+  const textChain = texts.map((t, k) => `[${k ? `t${k - 1}` : "vj"}][${firstText + k}:v]overlay=0:0:enable='between(t,${t.start.toFixed(3)},${t.end.toFixed(3)})'[${k === texts.length - 1 ? "v" : `t${k}`}]`).join(";");
+  let graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[${texts.length ? "vj" : "v"}]${audio ? "[a]" : ""}${texts.length ? `;${textChain}` : ""}${crop}${subs}`;
   // The music track, mixed with the video's sound (or alone, for a silent video).
   const total = segments.reduce((t, s) => t + (s.to - s.from), 0);
   let outA = audio ? "[a]" : "";
@@ -171,7 +184,8 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     const until = Math.max(0.1, ...segments.filter((s) => s.src === k + 1).map((s) => s.to));
     return ["-loop", "1", "-framerate", String(extra!.frame.fps), "-t", until.toFixed(3), "-i", c.file];
   });
-  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), ...(music ? ["-i", music.file] : []), ...extraInputs, "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(outA ? ["-map", outA, "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
+  const textInputs = texts.flatMap((t) => ["-loop", "1", "-t", Math.max(0.1, total).toFixed(3), "-i", t.file]);
+  return ["-y", "-hide_banner", "-loglevel", "error", "-i", input, ...(sound ? ["-i", sound] : []), ...(music ? ["-i", music.file] : []), ...extraInputs, ...textInputs, "-filter_complex", graph, "-map", burn ? "[vs]" : pic, ...(outA ? ["-map", outA, "-c:a", "aac", "-b:a", "160k"] : []), "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", output];
 }
 
 /**
@@ -186,7 +200,7 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param shape - One of SHAPES, or none.
  * @param music - A music track under it.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0, texts: readonly TextOverlay[] = []): Promise<void> {
   // With added clips: the opened video's frame, and which added videos have sound (FFmpeg reads their headers).
   let more: { clips: ExtraClip[]; frame: Frame } | undefined;
   if (extras.length) {
@@ -196,7 +210,7 @@ export async function cutVideo(ffmpeg: string, input: string, output: string, se
   }
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more, fade), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more, fade, texts), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);

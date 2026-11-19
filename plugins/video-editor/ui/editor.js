@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -283,6 +283,29 @@
       };
       ml.replaceChildren(d);
     } else ml.replaceChildren();
+    // The text lane: a bar per text, dragged to move it in time; a double-click edits its words.
+    const tl = $("textLane");
+    tl.style.width = box.style.width;
+    tl.replaceChildren(...texts.map((t) => {
+      const d = document.createElement("div");
+      d.className = `clip txt${t.id === chosenText ? " on" : ""}`;
+      d.style.left = `${t.start * zoom}px`;
+      d.style.width = `${Math.max(4, (t.end - t.start) * zoom - 2)}px`;
+      d.textContent = `🔤 ${t.text.replace(/\s+/g, " ")}`;
+      d.dir = "auto";
+      d.title = T("textDrag", "Drag: when it shows · double-click: edit");
+      d.onpointerdown = (e) => {
+        e.stopPropagation();
+        chosenText = t.id;
+        showTextTools();
+        d.setPointerCapture(e.pointerId);
+        const x0 = e.clientX, s0 = t.start, l0 = t.end - t.start;
+        d.onpointermove = (ev) => { t.start = Math.max(0, Math.min(total() - 0.1, s0 + (ev.clientX - x0) / zoom)); t.end = Math.min(total(), t.start + l0); d.style.left = `${t.start * zoom}px`; };
+        d.onpointerup = () => { d.onpointermove = null; void saveEdit(); render(); };
+      };
+      d.ondblclick = (e) => { e.stopPropagation(); const v = window.prompt(T("textAsk", "What should it say?"), t.text); if (v?.trim()) { t.text = v.trim(); textPics.delete(t.id); void saveEdit(); render(); } };
+      return d;
+    }));
     const c = clips[chosen];
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
@@ -295,6 +318,7 @@
     $("playhead").style.left = `${x}px`;
     $("time").textContent = `${fmt(now)} / ${fmt(total())}`;
     syncMusic(now, playing);
+    syncText(now);
     // Keep the playhead in view while playing (the phone's timeline follows it).
     if (x < tracks.scrollLeft + LAB || x > tracks.scrollLeft + tracks.clientWidth - 30) tracks.scrollLeft = x - tracks.clientWidth / 2;
     const all = total() || 1;
@@ -408,6 +432,63 @@
   // { path, name, start (s of the edit), duration } and the settings in the inspector; heard with the preview, lowered
   // while a transcript line is spoken (the export does it properly, with FFmpeg's side-chain compressor).
   let music = null;
+  // Text over the picture (CapCut's text track): [{ id, text, start, end, style: "box" | "plain" | "big", pos: "bottom" |
+  // "center" | "top" }] in seconds of the edit. Each is drawn on a canvas (Hebrew and the font come out right), shown
+  // over the player while it is on, and sent as a PNG of the frame's size to be laid over the exported video.
+  let texts = [];
+  let nextText = 1;
+  let chosenText = null;
+  const textPics = new Map();
+  /** The frame's size: the opened video's own. */
+  const frameSize = () => ({ w: media[0] && loadedM === 0 && video.videoWidth ? video.videoWidth : source?.w ?? 1920, h: media[0] && loadedM === 0 && video.videoHeight ? video.videoHeight : source?.h ?? 1080 });
+  /** A text drawn on a clear frame, as a PNG data URL. */
+  function textPic(t) {
+    const { w, h } = frameSize();
+    const key = `${t.text}|${t.style}|${t.pos}|${w}x${h}`;
+    if (textPics.get(t.id)?.key === key) return textPics.get(t.id).url;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    const size = Math.round(h / (t.style === "big" ? 8 : 17));
+    g.font = `700 ${size}px Heebo, Arial, sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.direction = /[\u0590-\u05FF\u0600-\u06FF]/.test(t.text) ? "rtl" : "ltr";
+    const lines = [];
+    for (const para of t.text.split("\n")) {
+      let line = "";
+      for (const word of para.split(/\s+/)) { const x = line ? `${line} ${word}` : word; if (g.measureText(x).width > w * 0.84 && line) { lines.push(line); line = word; } else line = x; }
+      lines.push(line);
+    }
+    const lh = size * 1.3, block = lines.length * lh;
+    const cy = t.pos === "top" ? h * 0.12 + block / 2 : t.pos === "center" ? h / 2 : h * 0.86 - block / 2;
+    if (t.style === "box") {
+      const bw = Math.min(w * 0.92, Math.max(...lines.map((l) => g.measureText(l).width)) + size * 1.2);
+      g.fillStyle = "rgba(0,0,0,0.62)";
+      g.beginPath();
+      g.roundRect?.(w / 2 - bw / 2, cy - block / 2 - size * 0.35, bw, block + size * 0.7, size * 0.35);
+      g.fill();
+    }
+    lines.forEach((l, i) => {
+      const y = cy - block / 2 + lh * (i + 0.5);
+      if (t.style !== "box") { g.lineWidth = size / 7; g.strokeStyle = "rgba(0,0,0,0.85)"; g.strokeText(l, w / 2, y); }
+      g.fillStyle = "#fff";
+      g.fillText(l, w / 2, y);
+    });
+    const url = c.toDataURL("image/png");
+    textPics.set(t.id, { key, url });
+    return url;
+  }
+  const textOver = document.createElement("img");
+  textOver.className = "still text-over";
+  textOver.alt = "";
+  textOver.hidden = true;
+  video.parentElement.append(textOver);
+  /** Shows the text that is on at the playhead over the player. */
+  function syncText(t) {
+    const on = texts.filter((x) => t >= x.start && t < x.end).at(-1);
+    textOver.hidden = !on;
+    if (on) textOver.src = textPic(on);
+  }
   const musicAudio = document.createElement("audio");
   const musicSettings = () => ({ volume: Number($("musicVol").value) / 100, fadeIn: Number($("fadeIn").value) || 0, fadeOut: Number($("fadeOut").value) || 0, duck: $("duck").checked });
   function musicLevel(t) {
@@ -466,7 +547,7 @@
   for (const id of ["musicVol", "fadeIn", "fadeOut", "duck"]) $(id).oninput = () => { $("musicVolN").textContent = `${$("musicVol").value}%`; render(); };
   const editKey = () => `edit:${source?.path ?? ""}`;
   /** The edit is kept while she is in the sound editor, so coming back finds it as it was. */
-  const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, media: media.slice(1).map(({ path, kind, duration, name }) => ({ path, kind, duration, name })), at: Date.now() } }).catch(() => undefined);
+  const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, media: media.slice(1).map(({ path, kind, duration, name }) => ({ path, kind, duration, name })), texts, at: Date.now() } }).catch(() => undefined);
   async function openSound() {
     if (!source) return;
     play(false);
@@ -569,6 +650,43 @@
       if (last && media[mOf(last)]?.kind === "image") { remember(); last.to = 3; after(); void saveEdit(); }
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
+  /** Text over the video from the playhead (3 s, a dark box low in the frame; change it in the inspector). */
+  function addText() {
+    if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
+    const words = window.prompt(T("textAsk", "What should it say?"));
+    if (!words?.trim()) return;
+    const start = Math.min(now, Math.max(0, total() - 0.5));
+    const t = { id: nextText++, text: words.trim(), start, end: Math.min(total(), start + 3), style: "box", pos: "bottom" };
+    texts.push(t);
+    chosenText = t.id;
+    showTextTools();
+    void saveEdit();
+    render();
+  }
+  /** The inspector's text tools for the chosen text: its look, its place, and delete. */
+  function showTextTools() {
+    const t = texts.find((x) => x.id === chosenText);
+    $("textTools").hidden = !t;
+    if (!t) return;
+    $("textStyle").value = t.style;
+    $("textPos").value = t.pos;
+  }
+  $("textStyle").onchange = () => { const t = texts.find((x) => x.id === chosenText); if (t) { t.style = $("textStyle").value; void saveEdit(); render(); } };
+  $("textPos").onchange = () => { const t = texts.find((x) => x.id === chosenText); if (t) { t.pos = $("textPos").value; void saveEdit(); render(); } };
+  $("textDel").onclick = () => { texts = texts.filter((x) => x.id !== chosenText); chosenText = null; showTextTools(); void saveEdit(); render(); };
+  /** The texts for the export: each drawn at the frame's size and put in the chat's folder. */
+  async function textPlan() {
+    if (!texts.length) return {};
+    const am = await import("./add-media.js");
+    const out = [];
+    for (const t of texts.filter((x) => x.end > x.start + 0.05)) {
+      const blob = await (await fetch(textPic(t))).blob();
+      const { path } = await am.uploadMedia(new File([blob], `text-${t.id}-${Date.now().toString(36)}.png`, { type: "image/png" }));
+      if (!path) throw new Error(T("needChat", "To add clips, open the video editor from a chat"));
+      out.push({ path, start: Math.round(t.start * 1000) / 1000, end: Math.round(t.end * 1000) / 1000 });
+    }
+    return { texts: out };
+  }
   async function addMenu(anchor) {
     const am = await import("./add-media.js");
     am.setHebrew(he);
@@ -578,6 +696,7 @@
       { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
       "-",
       { icon: "🖼", label: T("picClip", "A picture as a clip"), hint: T("picHint", "5 s, shorten it with trim"), run: () => addFrom("picture") },
+      { icon: "💬", label: T("textOver", "Text over the video"), hint: T("textHint", "from the playhead, 3 s"), run: addText },
       { icon: "🔤", label: T("titleCard", "A title card"), hint: T("titleHint", "words on a plain background, 3 s"), run: () => void addTitle() },
     ]);
   }
@@ -632,6 +751,8 @@
         }));
         media = [media[0], ...back.map((b) => b ?? { kind: "gone" })];
         clips = kept.clips.filter((c) => media[mOf(c)] && media[mOf(c)].kind !== "gone");
+        texts = Array.isArray(kept.texts) ? kept.texts.filter((t) => typeof t?.text === "string") : [];
+        nextText = Math.max(0, ...texts.map((t) => t.id)) + 1;
         if (!clips.length) clips = [{ id: 1, from: 0, to: video.duration }];
         nextId = Math.max(...clips.map((c) => c.id)) + 1;
       }
@@ -681,7 +802,7 @@
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
-      const r = await kesher.call("video.cut", { ...cutPlan(), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("dip").checked ? { fade: 0.4 } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
+      const r = await kesher.call("video.cut", { ...cutPlan(), ...(await textPlan()), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("dip").checked ? { fade: 0.4 } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);
