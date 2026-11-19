@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder, File */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
@@ -18,7 +18,7 @@ const kesher = window.kesher;
 const HE = {
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
-  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
+  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
@@ -1454,6 +1454,35 @@ function isolate() {
 $("isolate").onclick = isolate;
 $("hidePart").onclick = () => { if (!chosen) return; remember(); chosen.visible = !chosen.visible; choose(chosen); };
 $("frame").onclick = () => frame(chosen ?? model ?? scene);
+/**
+ * A picture of this view (Blender's F12 Render, Spline's Export Image): twice the screen's sharpness, see-through where
+ * there is no model (for a game's icons or a page), without the grid, the gizmo, the chosen part's box or reference
+ * pictures. It goes into the chat (and so the bank), or is downloaded when the editor has no chat.
+ */
+async function viewPicture() {
+  if (!model) return;
+  const hidden = [grid, gizmo.getHelper(), glow].filter((o) => o?.visible);
+  model.traverse((o) => { if (o.userData.reference && o.visible) hidden.push(o); });
+  hidden.forEach((o) => (o.visible = false));
+  const ratio = renderer.getPixelRatio();
+  renderer.setPixelRatio(Math.min(4, ratio * 2));
+  renderer.render(scene, camera);
+  const blob = await new Promise((resolve) => renderer.domElement.toBlob(resolve, "image/png"));
+  renderer.setPixelRatio(ratio);
+  hidden.forEach((o) => (o.visible = true));
+  renderer.render(scene, camera);
+  const file = `${(name || "model").replace(/\.[^.]+$/, "")}-view-${Date.now().toString(36)}.png`;
+  try {
+    const { uploadMedia } = await import("./add-media.js");
+    const { path } = await uploadMedia(new File([blob], file, { type: "image/png" }));
+    if (path) return msg(T("shotSaved", "The picture is in the chat's files (and the bank)"));
+  } catch { /* no chat: download it below */ }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = file;
+  a.click();
+}
+$("shot").onclick = () => void viewPicture();
 function keepVersion() {
   if (!model) return;
   if (glow) glow.visible = false;
@@ -1552,7 +1581,7 @@ const KEYS = () => [
   [$("keymap").value === "blender" ? "G / R / S" : "W / E / R", "kMove", "Move / rotate / scale"], ["X / Y / Z", "kAxis", "Lock to an axis (after the tool's key)"],
   ["F", "kF", "Frame the chosen part"], ["Home / A", "kHome", "The whole model"], ["H", "kH", "Hide the part"], ["Alt+H", "kAltH", "Show all"],
   [$("keymap").value === "blender" ? "Shift+D" : "Ctrl+D", "kDup", "Duplicate"], [$("keymap").value === "blender" ? "X / Delete" : "Delete", "kDel", "Delete"],
-  ["1 / 3 / 7", "kViews", "Front / right / top"], ["4 / 5 / 6", "kShade", "Wireframe / solid / material"], ["Shift+S", "kSnap", "Snapping"], ["/", "kIso", "Isolate the chosen part (again: show all)"], ["Esc", "kEsc", "Let go"], ["Ctrl+Z", "kUndo", "Undo"],
+  ["1 / 3 / 7", "kViews", "Front / right / top"], ["4 / 5 / 6", "kShade", "Wireframe / solid / material"], ["Shift+S", "kSnap", "Snapping"], ["/", "kIso", "Isolate the chosen part (again: show all)"], ["F12", "kShot", "A picture of this view"], ["Esc", "kEsc", "Let go"], ["Ctrl+Z", "kUndo", "Undo"],
 ];
 function showKeys() {
   $("keysTable").replaceChildren(...KEYS().map(([k, key, en]) => { const tr = document.createElement("tr"); const a = document.createElement("td"); const kbd = document.createElement("kbd"); kbd.textContent = k; a.append(kbd); const b = document.createElement("td"); b.textContent = T(key, en); tr.append(a, b); return tr; }));
@@ -1579,7 +1608,7 @@ addEventListener("keydown", (e) => {
   const map = {
     f: () => $("frame").click(), "/": isolate, home: () => model && frame(model), a: () => model && frame(model), h: () => $("hidePart").click(),
     delete: remove, ...(blender ? { x: remove } : {}), escape: () => choose(null),
-    1: () => view("front"), 3: () => view("right"), 7: () => view("top"), 4: () => shade("wire"), 5: () => shade("solid"), 6: () => shade("material"), "?": showKeys,
+    f12: () => void viewPicture(), 1: () => view("front"), 3: () => view("right"), 7: () => view("top"), 4: () => shade("wire"), 5: () => shade("solid"), 6: () => shade("material"), "?": showKeys,
   };
   if (map[k]) { e.preventDefault(); map[k](); }
 });
