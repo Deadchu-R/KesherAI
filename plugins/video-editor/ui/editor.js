@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -225,6 +225,8 @@
         now = start + Math.max(0, video.currentTime - c.from) / spd(c);
         // The player runs at the clip's speed (times the J/K/L rate).
         if (video.playbackRate !== rate * spd(c)) video.playbackRate = rate * spd(c);
+        const vol = Math.min(1, c.vol ?? 1);
+        if (Math.abs(video.volume - vol) > 0.01) video.volume = vol;
       }
     }
     lastT = t;
@@ -323,6 +325,9 @@
     }));
     const c = clips[chosen];
     $("speed").value = String(spd(c));
+    $("clipVol").value = String(Math.round((c?.vol ?? 1) * 100));
+    $("clipVolV").textContent = `${$("clipVol").value}%`;
+    $("clipVol").disabled = !c || media[mOf(c)]?.kind === "image";
     $("speed").disabled = !c || media[mOf(c)]?.kind === "image";
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
@@ -692,6 +697,17 @@
       await addClip(file.name, path, bytes);
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
+  // The chosen clip's volume (0–200 %), heard in the player and applied in the export.
+  $("clipVol").oninput = () => { $("clipVolV").textContent = `${$("clipVol").value}%`; };
+  $("clipVol").onchange = () => {
+    const c = clips[chosen];
+    if (!c) return;
+    remember();
+    const v = Number($("clipVol").value) / 100;
+    if (v === 1) delete c.vol; else c.vol = v;
+    after();
+    void saveEdit();
+  };
   // The chosen clip's speed (its sound keeps its pitch: FFmpeg's atempo).
   $("speed").onchange = () => {
     const c = clips[chosen];
@@ -842,7 +858,7 @@
   function cutPlan() {
     const used = [];
     const segments = clips.map((c) => {
-      const sp = spd(c) !== 1 ? { speed: spd(c) } : {};
+      const sp = { ...(spd(c) !== 1 ? { speed: spd(c) } : {}), ...((c.vol ?? 1) !== 1 ? { volume: c.vol } : {}) };
       if (!mOf(c)) return { from: c.from, to: c.to, ...sp };
       let k = used.indexOf(mOf(c));
       if (k < 0) k = used.push(mOf(c)) - 1;

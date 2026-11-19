@@ -123,3 +123,11 @@ test("a clip's speed: the picture's timestamps divided, the sound through atempo
   assert.deepEqual(checkSegments([{ from: 0, to: 1, speed: 2 }]), [{ from: 0, to: 1, speed: 2 }]);
   assert.throws(() => checkSegments([{ from: 0, to: 1, speed: 8 }]));
 });
+
+test("a clip's volume goes into its sound", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2, volume: 0.5 }, { from: 2, to: 3 }], true);
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.match(g, /asetpts=PTS-STARTPTS,volume=0\.50\[a0\]/);
+  assert.doesNotMatch(g, /\[a1\].*volume/);
+  assert.throws(() => checkSegments([{ from: 0, to: 1, volume: 3 }]));
+});

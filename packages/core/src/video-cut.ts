@@ -9,6 +9,8 @@ export interface Segment {
   src?: number;
   /** Played faster or slower (0.25 to 4; its sound keeps its pitch). */
   speed?: number;
+  /** Its sound louder or quieter (0 to 2). */
+  volume?: number;
 }
 
 /** A file added to the edit (the editors' "Add"): a video, or a picture shown for its stretch. */
@@ -55,7 +57,9 @@ export function checkSegments(given: unknown, extras = 0): Segment[] {
     if (!Number.isInteger(src) || src < 0 || src > extras) throw new Error("A stretch names a clip that was not sent.");
     const speed = Number((g as Segment)?.speed ?? 1);
     if (!Number.isFinite(speed) || speed < 0.25 || speed > 4) throw new Error("A stretch's speed is 0.25 to 4.");
-    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000, ...(src ? { src } : {}), ...(speed !== 1 ? { speed: Math.round(speed * 100) / 100 } : {}) };
+    const volume = Number((g as Segment)?.volume ?? 1);
+    if (!Number.isFinite(volume) || volume < 0 || volume > 2) throw new Error("A stretch's volume is 0 to 2.");
+    return { from: Math.round(from * 1000) / 1000, to: Math.round(to * 1000) / 1000, ...(src ? { src } : {}), ...(speed !== 1 ? { speed: Math.round(speed * 100) / 100 } : {}), ...(volume !== 1 ? { volume: Math.round(volume * 100) / 100 } : {}) };
   });
 }
 
@@ -152,7 +156,7 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     return { v: f("fade"), a: f("afade") };
   };
   // A speed: the picture's timestamps divided by it, the sound through atempo (each step 0.5–2, so 0.25 and 4 take two).
-  const tempo = (k: number) => (k === 1 ? "" : k < 0.5 ? `,atempo=0.5,atempo=${(k / 0.5).toFixed(4)}` : k > 2 ? `,atempo=2,atempo=${(k / 2).toFixed(4)}` : `,atempo=${k.toFixed(4)}`);
+  const tempo = (k: number, vol = 1) => (vol !== 1 ? `,volume=${vol.toFixed(2)}` : "") + (k === 1 ? "" : k < 0.5 ? `,atempo=0.5,atempo=${(k / 0.5).toFixed(4)}` : k > 2 ? `,atempo=2,atempo=${(k / 2).toFixed(4)}` : `,atempo=${k.toFixed(4)}`);
   const parts = segments.map((s, i) => {
     const c = s.src && extra ? extra.clips[s.src - 1] : undefined;
     const k = s.speed ?? 1;
@@ -160,10 +164,10 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     const dp = dip((s.to - s.from) / k, i);
     const vin = c ? `${first + s.src! - 1}:v` : "0:v";
     const v = `[${vin}]trim=start=${s.from}:end=${s.to},setpts=PTS-STARTPTS${vs}${fit}${dp.v}[v${i}]`;
-    if (!extra) return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${tempo(k)}${dp.a}[a${i}]` : v;
+    if (!extra) return audio || sound ? `${v};[${a}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${tempo(k, s.volume)}${dp.a}[a${i}]` : v;
     const hasSound = c ? c.audio : audio || !!sound;
     const ain = c ? `${first + s.src! - 1}:a` : a;
-    return hasSound ? `${v};[${ain}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${tempo(k)}${af}${dp.a}[a${i}]` : `${v};anullsrc=r=48000:cl=stereo,atrim=duration=${((s.to - s.from) / k).toFixed(3)}[a${i}]`;
+    return hasSound ? `${v};[${ain}]atrim=start=${s.from}:end=${s.to},asetpts=PTS-STARTPTS${tempo(k, s.volume)}${af}${dp.a}[a${i}]` : `${v};anullsrc=r=48000:cl=stereo,atrim=duration=${((s.to - s.from) / k).toFixed(3)}[a${i}]`;
   });
   audio = audio || !!sound || !!extra;
   const ins = segments.map((_, i) => (audio ? `[v${i}][a${i}]` : `[v${i}]`)).join("");
