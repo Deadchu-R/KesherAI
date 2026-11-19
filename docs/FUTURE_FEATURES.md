@@ -16,8 +16,8 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - ✅ Known engine bugs checked before each build (known-issues.ts)
 - 🔨 **A scene from Unreal, Unity or Godot, opened in KesherAI without the engine (Roee, 2026-11-18).** ✅ Godot (read and
   write the .tscn, conflicts, backup; Godot page → "A scene without Godot"); ✅ Unity (read the YAML, moves queued for the
-  package 0.2.8, applied with Undo; not yet run in Unity); ⬜ Unreal (a snapshot through the bridge); ⬜ real shapes
-  instead of boxes (Roee, 18:40: Godot's own shapes, the models' GLB / FBX, simplified when heavy). The plan: A stand-in of the
+  package 0.2.8, applied with Undo; not yet run in Unity); ✅ Unreal (through the Bridge plugin, open or closed); ✅ real
+  shapes instead of boxes (Roee, 18:40: Godot's own shapes, the models' GLB / FBX, simplified when heavy). The plan: A stand-in of the
   level (each actor or node as a box, or its real mesh where it can be exported to GLB) in the 3D editor; move, rotate
   and scale things there, from the PC or the phone; the changes wait as a list, and when the engine is opened, our
   plugin (KesherAIBridge / the Unity package / the Godot addon) applies them as one undo step (and reports conflicts:
@@ -90,7 +90,9 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 - 🔨 **My voice, reading a script** (built 2026-11-19: a whole script in "A voice of your own", part by part with pauses, kept in the bank; to try on the PC) (Roee, 2026-11-18 19:16; later, once enough features work well, to show off): he records a sample of his voice, writes a script, and KesherAI makes the whole recording in his voice (a local voice-cloning model, e.g. as in the sound editor's "In another voice"); first use: a marketing video for KesherAI as an Instagram story, in his voice. Research first (local voice cloning in Hebrew and English, quality, consent: only the owner's own voice).
 - ✅ **A dedicated editor for each kind a model makes** (2026-11-19: the picture, video, sound and 3D editors, each with ＋ Add from the device, the chat and the bank): pictures, video, sound, 3D (and later others), each with the tools that kind needs (layers, a mask and a brush for pictures; a timeline and cuts for video; a waveform, cuts and volume for sound; turning, lights and a material for 3D).
 - ✅ **From the chat to its editor** (Edit in… under each result, and from the bank's preview): every result in the chat (a picture, a clip, a sound, a model) has "Edit", which opens it in its editor as a new tab of its own; edit, save, and "Send to the chat" puts the new version back in the chat.
-- ⬜ **Mark it and let the model work**: in each editor, mark a part (a region of a picture, a stretch of a clip or a sound, a part of a model) and write what to do; the chat's model (or the right image, video or sound model) works on just that part.
+- ✅ **Mark it and let the model work** (2026-11-19: pictures repaint the selection; 3D the part's task box and 🖌 paint
+  the model; video ✦ With AI on a clip, and continue a shot; sound ✦ With AI on a selection: music, a sound effect, other
+  words): in each editor, mark a part (a region of a picture, a stretch of a clip or a sound, a part of a model) and write what to do; the chat's model (or the right image, video or sound model) works on just that part.
 - ✅ **Tabs in general** (0.6.369; Settings → Appearance turns them off): a tab system for KesherAI (several chats, editors, documents and pages open side by side, like a browser or an IDE), on the computer and in a form that works on the phone (390 px).
 
 ## Research to do

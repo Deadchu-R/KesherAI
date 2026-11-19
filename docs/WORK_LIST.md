@@ -50,6 +50,14 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 A stronger model for writing chat reports.
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
 
+## Next, from FUTURE_FEATURES (code only)
+- 🔨 Say on screen what loaded a model (FUTURE_FEATURES, "a game scene without its engine": still to do since the
+  background routine filled the card on 2026-11-18).
+- ⬜ Unity Studio-style group work on the scene stand-in over share links: each person's colour, selection and view
+  (research first).
+- 👤 Open items that need Roee: Magic Tab (testing at the keyboard), the npm SDK (an npm account), Google sign-in for
+  email invites, the Unreal levels bug (Roee: later).
+
 ## Later (agreed)
 - ✅ A 3D model from words without the chat (＋ Add → A model from words: a picture, then Hunyuan3D 2 on the computer;
   the first time it asks before downloading the 3D model). Not run in ComfyUI on the PC yet.
