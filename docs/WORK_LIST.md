@@ -45,7 +45,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Research: a task inbox (Claude → git → KesherAI on the PC → Antigravity / local model → agy/* branch → Claude
   reviews). Roee (12:5x): Antigravity runs only when he presses Run, one at a time, for now; KesherAI may push
   only agy/* and the inbox branch. Defaults until he says otherwise: 10 Antigravity tasks a day, Gemini's default model.
-- ⬜ **Kesher Cloud hub** (Roee, 12:56): a small KesherAI web app that is always on, open only to Roee's Google
+- ✅ Naming (Roee, 13:20): in Hebrew they are "סוכנים" (lead: "סוכן ראשי"; "סוכן מחקר/בנייה/חיפוש"), not "עוזרים". Design doc boards renamed.
+- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76, pushed); ⬜ screens + Phone/Computer/Cloud toggle.: a small KesherAI web app that is always on, open only to Roee's Google
   account. It knows which devices (PCs with KesherAI, the phone) and agents (Claude, Gemini/Antigravity, …) are
   on, connects them, and routes a task to a cloud tool when no device is on, so the PC need not stay on.
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
