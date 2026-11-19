@@ -457,6 +457,16 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (res.ok || res.status === 202 || (res.status === 409 && (body.needGb || body.downloading))) return body;
           throw new Error(body.error ?? String(res.status));
         }
+        // Who else has this scene open (routes/rooms.ts): the room is named here from the engine, project and scene this
+        // page was opened with, never by the page; the page sends its camera and selection and hears the others.
+        case "room.beat":
+        case "room.leave": {
+          need("model");
+          const room = godot ? `godot|${godot.project}|${godot.scene}` : unity ? `unity|${unity.project}|${unity.scene}` : unreal ? `unreal|${unreal.project ?? ""}|${unreal.level}` : "";
+          if (!room) return { others: [] };
+          if (msg.method === "room.leave") return api("/api/rooms/leave", { method: "POST", body: { room, tab: String(p.tab ?? "") } });
+          return api("/api/rooms/beat", { method: "POST", body: { room, tab: String(p.tab ?? ""), camera: p.camera, selection: p.selection } });
+        }
         case "media.list": {
           if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           const kind = ["image", "video", "audio", "model"].includes(String(p.kind)) ? String(p.kind) : "";

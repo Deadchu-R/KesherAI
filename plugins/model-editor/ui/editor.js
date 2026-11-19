@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder, File, MediaRecorder, performance, fetch */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder, File, MediaRecorder, performance, fetch, setInterval, clearInterval */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
@@ -18,7 +18,7 @@ const kesher = window.kesher;
 const HE = {
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
-  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
+  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", follow: "לעקוב אחרי", unfollow: "להפסיק לעקוב", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
@@ -199,6 +199,97 @@ async function load(bytes) {
   grid.position.y = box.min.y;
   $("empty").hidden = true;
 }
+// ---------- together (Unity Studio's real-time collaboration): who else has this scene open ----------
+// Everyone with the same engine scene open on this KesherAI (this computer, the phone, other paired devices) sees each
+// other's colour, camera (a cone with the name) and selection (outlined in their colour); a chip at the top follows
+// that person's view. Moves still go back to the engine as before; this shows who is where.
+const tab = Math.random().toString(36).slice(2, 12);
+let together = null; // the beat's timer while a stand-in is open
+let following = null; // the id of the person whose view this one follows
+const others = new Map(); // id → { member, marker, boxes }
+/** An object's id in its engine (Godot's node path, Unity's and Unreal's ids). */
+const idOf = (o) => o?.userData.godot?.path ?? o?.userData.unity?.id ?? o?.userData.unreal?.id;
+/** The object with this id in the scene. */
+function byId(id) {
+  let found = null;
+  model?.traverse((o) => { if (!found && idOf(o) === id) found = o; });
+  return found;
+}
+/** A person's camera: a cone in their colour pointing where they look, with their name above it. */
+function cameraMarker(member) {
+  const g = new THREE.Group();
+  g.userData.generated = true;
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1, 4), new THREE.MeshBasicMaterial({ color: member.colour, wireframe: true }));
+  cone.rotation.x = Math.PI / 2;
+  g.add(cone);
+  const c = document.createElement("canvas");
+  c.width = 256; c.height = 64;
+  const x = c.getContext("2d");
+  x.fillStyle = member.colour; x.font = "bold 34px Heebo, Arial, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText(member.name, 128, 32);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false }));
+  label.scale.set(2, 0.5, 1);
+  label.position.y = 0.9;
+  g.add(label);
+  scene.add(g);
+  return g;
+}
+/** The chips at the top: one per person, in their colour; a click follows their view (again: stops). */
+function drawPeople() {
+  const box = $("people");
+  box.hidden = !others.size;
+  box.replaceChildren(...[...others.values()].map(({ member }) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `person${following === member.id ? " on" : ""}`;
+    b.style.background = member.colour;
+    b.textContent = [...member.name][0] ?? "?";
+    b.title = following === member.id ? T("unfollow", "Stop following") : `${T("follow", "Follow")}: ${member.name}`;
+    b.onclick = () => { following = following === member.id ? null : member.id; drawPeople(); };
+    return b;
+  }));
+}
+async function beat() {
+  if (document.hidden || !model) return;
+  const chosenId = idOf(chosen) ?? (() => { for (let o = chosen; o; o = o.parent) if (idOf(o)) return idOf(o); return undefined; })();
+  let r;
+  try {
+    r = await kesher.call("room.beat", { tab, camera: { p: camera.position.toArray(), t: controls.target.toArray(), fov: camera.fov }, selection: chosenId ? [chosenId] : [] });
+  } catch { return; }
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).length() || 1;
+  const here = new Set();
+  for (const m of r?.others ?? []) {
+    here.add(m.id);
+    let o = others.get(m.id);
+    if (!o) { o = { member: m, marker: cameraMarker(m), boxes: [] }; others.set(m.id, o); }
+    o.member = m;
+    o.marker.visible = !!m.camera && following !== m.id;
+    if (m.camera) {
+      o.marker.position.fromArray(m.camera.p);
+      o.marker.lookAt(new THREE.Vector3().fromArray(m.camera.t));
+      o.marker.scale.setScalar(size * 0.04);
+    }
+    o.boxes.forEach((b) => b.removeFromParent());
+    o.boxes = m.selection.map(byId).filter(Boolean).map((obj) => { const h = new THREE.BoxHelper(obj, m.colour); h.userData.generated = true; scene.add(h); return h; });
+    if (following === m.id && m.camera) {
+      camera.position.fromArray(m.camera.p);
+      controls.target.fromArray(m.camera.t);
+      if (Math.abs(camera.fov - m.camera.fov) > 0.5) { camera.fov = m.camera.fov; camera.updateProjectionMatrix(); }
+    }
+  }
+  for (const [id, o] of others) if (!here.has(id)) { o.marker.removeFromParent(); o.boxes.forEach((b) => b.removeFromParent()); others.delete(id); if (following === id) following = null; }
+  drawPeople();
+}
+/** Starts showing who else is here (called when a scene stand-in opens). */
+function startTogether() {
+  clearInterval(together);
+  together = setInterval(() => void beat(), 1000);
+  void beat();
+}
+// Turning the view by hand stops following.
+controls.addEventListener("start", () => { if (following) { following = null; drawPeople(); } });
+addEventListener("pagehide", () => { if (together) void kesher.call("room.leave", { tab }).catch(() => undefined); });
+
 // ---------- a Godot scene without Godot (SceneStandIn board): a stand-in of its nodes, moved here, saved back ----------
 /** Godot writes a Transform3D's basis row by row, then the origin. */
 const fromGodot = (b, o) => new THREE.Matrix4().set(b[0], b[1], b[2], o[0], b[3], b[4], b[5], o[1], b[6], b[7], b[8], o[2], 0, 0, 0, 1);
@@ -560,9 +651,9 @@ async function open() {
   busy(T("loading", "Loading the model…"));
   try {
     const input = await kesher.call("editor.input");
-    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
-    if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
-    if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); set2D(is2dScene); $("dims").hidden = false; stats(); return; }
+    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
+    if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
+    if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
     if (!input?.bytes) return;
     name = input.name;
     $("name").textContent = name;

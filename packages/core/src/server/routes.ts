@@ -3,6 +3,7 @@
  * system first, the pages last. The key check for remote access is set up before this (server.ts), so it covers them.
  */
 import { bankRoutes } from "../routes/bank.js";
+import { roomRoutes } from "../routes/rooms.js";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { features } from "@kesher/shared";
@@ -180,6 +181,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await bankRoutes(app, services);
+  await roomRoutes(app);
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
