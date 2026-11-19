@@ -2952,3 +2952,135 @@ developer.playcanvas.com/user-manual/editor/realtime-collaboration and /projects
 dev.epicgames.com multi-user editing overview and perforce.com/blog/vcs/how-to-use-unreal-multi-user-editing;
 godotengine.org/asset-library/asset/5451 (Godot Team Create), access.endlessstudios.com (Backstitch);
 help.vectary.com/documentation/sharing-exporting-embedding/sharing.
+
+## Helper agents in the chat and the coding agent, a model for each (2026-11-19, Roee asked)
+Question: "exactly like Claude uses them" (a lead that keeps context and rules, fresh helpers for one task each, the
+right model for the job, background runs, a short report back), and the model per helper as a visible choice.
+
+### What others do
+- **Claude Code** (sub-agents docs, mintlify mirror of the frontmatter reference): Markdown + YAML in `.claude/agents/`;
+  `name`, `description` (the lead reads it to decide), `tools` allowlist (absent = all), `model` (`haiku`/`sonnet`/`opus`
+  or `inherit`, the default), `maxTurns`, `background: true`, `isolation: worktree`, `permissionMode`. Each helper has
+  its own clean context and sees only the prompt the lead writes; only the final summary returns. Built-ins: Explore
+  (read-only, cheap model), Plan, general-purpose. A helper cannot start helpers (no deep nesting). Background runs
+  return at once and report when done; approval prompts go to the main session.
+- **Cursor 2.4 subagents** (cursor.com/docs/subagents): same shape (`name`, `description`, `model: inherit|id`,
+  `readonly`, `is_background`); Explore uses a faster model by default so many searches run at once; parallel = several
+  Task calls in one message; shared checkout means helpers can overwrite each other, so isolation = worktree or cloud;
+  every run returns an id that resumes it; the task card shows which model ran; nesting one level only; "five helpers
+  cost about five times the tokens"; "start with two or three"; for a simple task a helper is slower than the lead.
+- **OpenCode** (opencode.ai/docs/agents): `mode: primary | subagent | all`; `model` as `provider/model`, a subagent uses
+  its own or inherits the parent's; `steps` caps model steps, and on the last one the tools are removed so the model must
+  summarise; which helpers the lead may start is a permission (`subagent` action, per agent id, last rule wins); the
+  child works in its own session and reports when idle. No parallel limit stated; @mention not described in the docs.
+- **Roo Code / Cline Orchestrator ("boomerang")**: the Orchestrator mode cannot edit files; it splits the job and starts
+  a `new_task` per subtask in a chosen mode; each subtask has a fresh context; the subtask ends with a summary that goes
+  back to the Orchestrator, which decides the next step. Modes each remember their own model (a strong one for
+  planning, a cheap one for code), so the model follows the job. The user sees each subtask as its own task, can open and
+  stop it. Subtasks run one after another (no parallel).
+- **OpenAI Agents SDK**: two patterns. Agents-as-tools: the manager keeps control, the specialist sees only the input
+  string it was given and returns text. Handoff: the conversation moves to the specialist. Each agent has its own model.
+  Codex CLI: custom agents in TOML, max 6 at once, depth 1 (from the 2026-11-14 entry).
+- **LangGraph / LangChain multi-agent** (docs.langchain.com): "subagents as tools" is the supervisor pattern; helpers are
+  stateless per call; best for parallel work and large-context domains; about 67% fewer tokens than loading skills into
+  one agent for multi-domain jobs. Handoffs and skills suit short back-and-forth better. LobeHub groups are the same
+  idea with a persona supervisor (KesherAI's `ask_member`).
+- **Model routing**: RouteLLM (strong vs weak model by a learned difficulty score, a threshold sets the cost/quality
+  point) and OpenRouter auto routing choose per request. For agent work a per-step router fails: a "looks good, commit
+  it" turn went to a 0.5B model that just chatted, because it lacked the task state; switching also loses the cache
+  (Anthropic lists `model_changed` as a cache miss) (yage.ai agentic routing note, vLLM issue 1439). The workable middle
+  is per task, not per step: choose the model once when the helper starts, lock it while it runs.
+
+### What it means for small local models (KesherAI: llama.cpp, one GGUF loaded)
+- Same model for lead and helpers is free: llama-server's `-np` slots (KesherAI's "chats at once", 1-8) run several
+  requests on one loaded model, but each slot gets a share of the context, so helpers need short prompts and a result cap.
+- A different local model = unload + load (up to a minute, the card's VRAM is the limit), and the lead's cache is lost.
+  So: never swap for a quick lookup; swap only for a longer job, one swap in and one back, and say so on screen.
+- Small models are fine for: find where X is, read these files and quote, summarise a page, list matches. They are weak
+  at: multi-file edits, remembering task state, long tool chains. Hence: lookups to the small model, build to the
+  stronger one (local if it fits, cloud if the user has a key), the lead stays the one that decides and writes.
+- Helpers need a step cap (OpenCode's `steps`, Claude's `maxTurns`) and a forced final summary on the last step; small
+  models loop otherwise.
+
+### What KesherAI already has (read in the code)
+- `packages/core/src/delegate.ts`: tool `delegate`, up to 4 parts at once, each an `AgentSession` with read-only tools
+  (`helperTools`, a NEVER list for anything that changes or starts helpers), `maxSteps: 20`, any model id per part,
+  falls back to the chat's model; the lead waits (`Promise.all`) and gets "## Part n" reports. Progress lines go to the
+  tool card (`ctx.progress`). Worker agents (`write: true`) run in a git worktree and return a diff. Needs: a code chat
+  whose folder is a git project.
+- `agents.ts`: `AgentDef` (name, description, instructions, model, tools, write); sources: personas with `agentWhen`
+  and `.kesher/agents/` and `.claude/agents/` files (Claude Code's format). `conversations.ts#delegateFor` wires it;
+  `agents` are listed in the tool's description.
+- `llamacpp.ts`: `LlamaEngine.load` holds one model; `LoadReason`/`LoadKind` (`chosen|chat|request|...`) show why a
+  model loaded; `parallel` slots; `fit-preview.ts` and `enginePlatform` know the GPUs (`vramTotal`).
+- Missing: (1) background runs (the lead blocks until all finish), (2) built-in helper types (research / build /
+  lookup) and a user-visible model per type, (3) GPU-aware default choice and a swap-cost rule, (4) a list of running
+  helpers with stop, (5) a limit setting, (6) no "helper" LoadKind, so a swap caused by a helper has no name on screen.
+
+### What to take
+- Claude/Cursor file format and fields (already read). `model: inherit` as the default, `background`, `maxTurns`.
+- Cursor: an id per run that resumes it, the card showing which model ran, one nesting level, "start with two or three".
+- OpenCode: a permission for which helpers the lead may start, `steps` with a forced summary at the end.
+- Roo: the lead that does not edit; the model belongs to the job type, set once; the user can open a helper's run.
+- Per-task routing with the model locked (not per step); show the choice and why.
+- Leave out: handoffs (the lead keeps control and Roee's rules), nested helpers, RouteLLM-style learned routers (no
+  training data, and the rule table below is enough), helpers asking the user questions (they decide and say what).
+
+### The plan (steps)
+1. **Built-in helper types** in `agents.ts` (source `builtin`): `lookup` (read-only, small/cheap model, 8 steps),
+   `research` (read-only plus web, 20 steps), `build` (worker in a worktree, strong model, 30 steps, diff comes back).
+   User-made ones stay as they are (persona with "when to use", `.kesher/agents/*.md`). One frontmatter addition:
+   `background: true`, `maxTurns`, and `model: small|strong|inherit|<id>` (the tier names so a file works on any PC).
+2. **Model per type** (a setting `helpers.models: {lookup, research, build}` each `auto | inherit | <model id>`),
+   resolved by one function `pickHelperModel(type, hardware, installed, cloudKeys, leadModel)`:
+   - `auto` lookup: the smallest installed chat model that supports tools (<= 4B, or <= 25% of VRAM); if the lead
+     already is small, `inherit`.
+   - `auto` research: `inherit` (same loaded model, so no swap).
+   - `auto` build: a stronger installed code model only if it fits (`fit-preview`), else a cloud model with a key, else
+     `inherit`.
+   - Swap rule: when the choice is a different local GGUF than the loaded one, and the card cannot hold both, do not
+     swap for `lookup`; run it on the loaded model and note "ran on X, no swap". For `build` a swap is allowed once, with
+     a visible "Switching to X for this job" row; the lead's model loads back after (`LoadKind` "helper").
+   - Cloud choice only when the user set it; never silently send project files to a cloud helper (privacy: the helper's
+     card says "cloud").
+3. **Tool for the lead**: keep `delegate`, extend its parts with `agent` (already) and `background: true`; add
+   `helper_result(id)`, `helper_wait(ids)` and `helper_stop(id)`. A background part returns `{id, status:"running"}` at
+   once; its report is written to the chat's run log and handed to the lead at its next turn as a short tool-result
+   message (cap ~1,500 tokens; the full text stays in the run, shown by "Show all"). The lead's prompt rule: "give the
+   helper everything it needs; ask for a report under 15 lines with paths and numbers".
+4. **Keep the lead small**: a helper's reply is cut to its last message (strip `<think>`), capped; a helper's tool
+   transcript never enters the lead's context; the user's rules (memory, AGENTS.md) are passed to helpers only as one
+   short "rules" block, not the chat. Lead stays the only one that talks to Roee.
+5. **Limits** (`helpers.maxAtOnce`, default 2; 1 when VRAM < 8 GB or one slot; max = the engine's `parallel`, up to 4;
+   cloud helpers do not count against slots but are capped at 4): extra parts queue ("waiting"). Steps per type as in
+   step 1. Depth 1 (a helper never starts helpers; already in NEVER). One `build` writer per worktree; two builders
+   never share a worktree. A time cap per helper (10 min); stop on the chat's Stop button stops all its helpers.
+6. **Core plumbing**: a `HelperRuns` store per chat (id, type, model, state, steps, start, tail of progress, report),
+   events over the existing chat stream so the phone in remote gets them like any other event; routes `GET
+   /api/chats/:id/helpers` and `POST .../helpers/:hid/stop`. Add `LoadKind` `"helper"` with the helper's name.
+7. **UI** (desktop and 390 px phone, remote the same since it is the chat stream): a "Helpers" strip above the composer
+   (chips: icon, type, model, step count, spinner; tap = open its run; Stop on each, "Stop all"); in the thread a
+   helper card replaces the plain tool card (title, model, state, the short report, "Show steps"); on the phone the strip
+   is one horizontal scroll row and the run opens as a bottom sheet. Settings > Chat > Helpers: a row per type with a
+   model picker (Auto shows what it would choose on this PC and why: "Qwen3-4B, fits in 6 GB"), steps, "at once" slider
+   with the GPU note, and a list of the user's own helpers with an "@name" hint. `@name` in the composer starts that
+   helper (the lead is told the user named it).
+8. **Tests** (node:test): `pickHelperModel` table (no GPU, 6 GB, 12 GB, 24 GB, cloud key only, lead small), queueing
+   and the cap, background result hand-off, stop, frontmatter `model: small`, swap refused for lookup.
+9. **Later**: resume a helper by id (Cursor), per-helper permission list (OpenCode), helper cost totals in the usage page.
+
+### Screens for the design doc
+(1) Chat with a running helpers strip, desktop; (2) the same at 390 px with the bottom sheet of one run; (3) the helper
+card in the thread (running, done, failed, stopped, "waiting", "cloud" mark, "switching model" row); (4) Settings >
+Helpers (model per type with the Auto explanation, at-once slider, steps) desktop and phone; (5) the model-swap notice
+and the Models page "loaded for: helper" line; (6) new/edit helper (name, when to use, tools, model, background);
+(7) remote: the phone controlling a PC shows the same strip, with a "PC is busy loading" state.
+- Stopped at: research and plan done; nothing built. Open questions: should `build` helpers be allowed outside git
+  projects (no worktree); default `maxAtOnce` 2 vs 1 on 8 GB cards; may a cloud helper see project files without asking.
+
+Sources: code.claude.com/docs/en/sub-agents and mintlify.com/shanraisshan/claude-code-best-practice/concepts/subagents;
+cursor.com/docs/subagents; opencode.ai/docs/agents; docs.roocode.com/community/custom-modes/orchestrator and
+docs.roocode.com/features/boomerang-tasks (page not reachable, Roo model-per-mode and summary return from earlier
+knowledge, marked as such); educative.io (OpenAI Agents SDK handoffs vs agents-as-tools); docs.langchain.com/oss/python/
+langchain/multi-agent; yage.ai/share/agentic-multi-model-routing-en-20260729.html (and vLLM issue 1439); RouteLLM
+(lm-sys); KesherAI: packages/core/src/delegate.ts, agents.ts, conversations.ts, llamacpp.ts, routes/engine.ts.
