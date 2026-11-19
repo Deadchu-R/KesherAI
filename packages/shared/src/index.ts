@@ -39,3 +39,4 @@ export * from "./study-plan.js";
 export * from "./link-beacon.js";
 export * from "./sheet.js";
 export * from "./office-out.js";
+export * from "./hub.js";

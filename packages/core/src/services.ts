@@ -8,6 +8,7 @@ import type { MemoryStore } from "./memory-store.js";
 import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
 import type { TaskBoard } from "./task-board.js";
+import type { HubClient } from "./hub-client.js";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { DownloadManager } from "@kesher/downloads";
 import type { KesherConfig, DataPaths } from "./config.js";
@@ -166,6 +167,8 @@ export interface KesherServices {
   modelUse?: ModelUse;
   /** The task board self-work shares with Claude. */
   board?: TaskBoard;
+  /** The link to the Kesher Cloud hub (off until the user turns it on). */
+  hub?: HubClient;
   /** Set in worker mode: its version, and "move to the newer version after the current item". */
   worker?: { version: string; upgrade: () => void };
   /** Set in the main desktop app: starts the worker and says where it is. */

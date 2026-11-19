@@ -1,0 +1,11 @@
+{
+  "name": "@kesher/hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kesher Cloud hub: a thin always-on relay (Cloudflare Worker + one Durable Object) for one owner's paired devices.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

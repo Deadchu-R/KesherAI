@@ -39,3 +39,13 @@ test("a secret this run cannot read is kept as it was, not lost", () => {
   const replaced = withSecrets(read, "seal", undefined);
   assert.equal((replaced.providers as Array<{ apiKey?: string }>)[0]?.apiKey, "k2");
 });
+
+test("the cloud hub's device token and private key are secrets too", () => {
+  const sealed = withSecrets({ hub: { enabled: true, url: "https://hub.example.test", token: "kh_tok", key: '{"d":"x"}' } }, "seal", box);
+  const raw = JSON.stringify(sealed);
+  assert.ok(!raw.includes("kh_tok") && !raw.includes('\\"d\\"'), "neither is written in plain text");
+  assert.ok(raw.includes("https://hub.example.test"), "the address is not a secret");
+  const back = withSecrets(sealed, "unseal", box).hub as { token?: string; key?: string };
+  assert.equal(back.token, "kh_tok");
+  assert.equal(back.key, '{"d":"x"}');
+});

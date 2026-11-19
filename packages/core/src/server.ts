@@ -57,6 +57,8 @@ import { managedPolicy, policyCheck } from "./business.js";
 import { ProjectFacts } from "./project-facts.js";
 import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
+import { HubClient } from "./hub-client.js";
+import { CORE_VERSION } from "./routes/system.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { sdProvider } from "./sdcpp.js";
 import { BrowserBridge } from "./browser-bridge.js";
@@ -525,6 +527,20 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.worker = worker && workerUpgrade ? { version: worker.version, upgrade: workerUpgrade } : undefined;
   services.workerHost = options.workerHost;
   services.board = taskBoard;
+  // Kesher Cloud hub: off until the user turns it on; tasks from it land on this board (hub-client.ts).
+  const hub = new HubClient({
+    settings: () => config.hub,
+    persist,
+    board: taskBoard,
+    version: CORE_VERSION,
+    notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
+    busy: () => services.selfWork?.current?.status === "running",
+    approvals: {
+      pending: () => services.conversations.pendingApprovals().map(({ conversationId, requestId, title, tool, preview, reason }) => ({ conversationId, requestId, title, tool, preview, reason })),
+      answer: async (conversationId, requestId, decision) => !!(await services.conversations.open(conversationId))?.session.approve(requestId, decision),
+    },
+  });
+  services.hub = hub;
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
@@ -708,6 +724,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       notifier.close();
       phonePush.close();
       telegram.stop();
+      hub.stop();
       void comfy.stop();
       routines.close();
       void semantic?.stop();

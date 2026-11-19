@@ -3625,3 +3625,9 @@ only for code in git. None routes between a PC, a local model and several cloud 
   Extra Sources: helpnetsecurity.com (Remote Control), analyticsindiamag.com (Codex mobile), docs.cursor.com/background-agent/
   web-and-mobile, lmstudio.ai/docs/lmlink and /blog/agent-remote-control, tailscale.com/blog/lm-link-remote-llm-access,
   support.nabucasa.com Remote UI deep dive, home-assistant.io/cloud.
+- Built: (2026-11-19) v1 backend, no screens yet: `apps/hub` (Worker + one SQLite Durable Object: Google sign-in pinned by
+  `sub`, code pairing with key fingerprint, hashed device tokens rotated after 30 days, 60-second one-use socket tickets,
+  revoke, sealed relay kept until ack, per-PC opt-in, approvals 30 min, Claude path through the scheduled task's `/fire`,
+  rate limits, metadata-only audit, kill switches; the hub makes its own key; dashboard-only setup in apps/hub/README.md);
+  `packages/shared/src/hub-protocol.ts`, `hub-crypto.ts`, `hub-route.ts` (route with reason and cost); PC side
+  `packages/core/src/hub-client.ts` + `routes/hub.ts` (off by default; tasks go to the task board). Not deployed.

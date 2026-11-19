@@ -58,6 +58,7 @@ import { browserRoutes } from "../routes/browser.js";
 import { comfyUiRoutes } from "../routes/comfy-ui.js";
 import { partsRoutes } from "../routes/parts.js";
 import { telegramRoutes } from "../routes/telegram.js";
+import { hubRoutes } from "../routes/hub.js";
 import { pagesRoutes } from "../routes/pages.js";
 import { pairRoutes } from "../routes/pair.js";
 import { speechRoutes } from "../routes/speech.js";
@@ -229,6 +230,10 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await partsRoutes(app, services);
   await telegramRoutes(app, telegram);
   telegram.start();
+  if (services.hub) {
+    await hubRoutes(app, services.hub);
+    services.hub.start();
+  }
   await pagesRoutes(app, services, new Pages(join(paths.root, "pages")));
   await pairRoutes(app, services);
 }

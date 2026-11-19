@@ -163,6 +163,31 @@ export const KesherConfigSchema = z.object({
   /** How the app looks (checked by cleanAppearance in @kesher/shared), and the last looks for Undo. */
   appearance: z.record(z.string(), z.unknown()).prefault({}),
   appearanceHistory: z.array(z.record(z.string(), z.unknown())).default([]),
+  /**
+   * Kesher Cloud hub (hub-client.ts): off until the user turns it on. `token` (the device token) and `key` (this PC's
+   * private key, JWK) are secrets: written encrypted, never sent to a page or logged.
+   */
+  hub: z
+    .object({
+      enabled: z.boolean().default(false),
+      url: z.string().max(300).optional(),
+      deviceId: z.string().max(64).optional(),
+      token: z.string().max(200).optional(),
+      key: z.string().max(1000).optional(),
+      /** What this PC accepts from the hub (per-device opt-in; no tasks until turned on). */
+      optIn: z
+        .object({
+          appear: z.boolean().default(true),
+          acceptTasks: z.boolean().default(false),
+          acceptLocal: z.boolean().default(false),
+          acceptAntigravity: z.boolean().default(false),
+          reportLinks: z.boolean().default(false),
+        })
+        .prefault({}),
+      /** Hub task ids whose result was already sent back. */
+      reported: z.array(z.string().max(64)).default([]),
+    })
+    .prefault({}),
   /** CivitAI: the user's own key, for LoRAs that need one to download (Images → Find LoRAs); never sent to a page. */
   civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */
@@ -488,14 +513,16 @@ export function useSecretBox(box: SecretBox | undefined): void {
 /** Encrypted secrets this run could not read, kept as they were so a save does not lose them (by slot). */
 const unreadable = new Map<string, string>();
 
-/** The secrets in a config: provider keys and the Telegram, Figma and GitHub tokens. */
+/** The secrets in a config: provider keys, the Telegram, Figma, GitHub, CivitAI and cloud hub tokens, and the hub key. */
 function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
   const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
   for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
-  for (const k of ["telegram", "figma", "github", "civitai"]) {
+  for (const k of ["telegram", "figma", "github", "civitai", "hub"]) {
     const o = c[k];
     if (o && typeof o === "object") slots.push({ obj: o as Record<string, unknown>, key: "token", slot: k });
   }
+  // The cloud hub's device private key.
+  if (c.hub && typeof c.hub === "object") slots.push({ obj: c.hub as Record<string, unknown>, key: "key", slot: "hub:key" });
   return slots;
 }
 

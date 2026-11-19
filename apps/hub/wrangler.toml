@@ -1,0 +1,21 @@
+# Kesher Cloud hub (Cloudflare Worker + one Durable Object). Generic and self-hostable: no account id, domain, email or
+# secret lives here. Everything owner-specific is set in the Cloudflare dashboard (see README.md).
+name = "kesher-hub"
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+# The free *.workers.dev address stays on until a custom domain works; turn it off in the dashboard after that.
+workers_dev = true
+# Variables and secrets typed in the dashboard are kept on every deploy (this file defines none).
+keep_vars = true
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "HubObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HubObject"]
+
+# Cleanup every 5 minutes: expired messages, pairings, tickets, sessions, audit lines older than 30 days.
+[triggers]
+crons = ["*/5 * * * *"]
