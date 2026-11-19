@@ -11,6 +11,9 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
   general-purpose agents that read those files), at most two at a time (a research and a build; three only when the files do not overlap), in the background.
   A fresh agent per task; a small follow-up on a task just finished goes to the same agent (SendMessage), since it
   already knows the files. Short tasks: Claude itself.
+- Models (Roee, 2026-11-19: the right model per helper, not always the expensive one): research = Sonnet
+  (reading and summing up sources), build = Opus (code quality), lookup = Haiku (find files, no edits). Pass the
+  same `model` when launching a general-purpose agent for one of them.
 - Each task prompt names the exact files, functions and RESEARCH_LOG entry, plus the files the last helper in that
   area touched (from its report), so a fresh helper starts clean but does not search the repo again.
 - Every helper's research is written into docs/RESEARCH_LOG.md (a dated entry with "Stopped at:" and sources)
