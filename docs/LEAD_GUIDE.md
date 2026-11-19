@@ -8,7 +8,9 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
 - Same chat throughout; Roee types `/compact` when Claude reminds him (Claude cannot compact itself). Remind him
   after each build, or when the work has run long (about every 2 hours of work).
 - Claude leads; long work goes to helper agents (`.claude/agents/kesher-research.md`, `kesher-build.md`, launched as
-  general-purpose agents that read those files), one or two at a time, in the background. Short tasks: Claude itself.
+  general-purpose agents that read those files), at most two at a time (a research and a build; three only when the files do not overlap), in the background.
+  A fresh agent per task; a small follow-up on a task just finished goes to the same agent (SendMessage), since it
+  already knows the files. Short tasks: Claude itself.
 - Every helper's research is written into docs/RESEARCH_LOG.md (a dated entry with "Stopped at:" and sources)
   and committed; Claude checks the entry is there before using the plan (Roee, 2026-11-19).
 - Keep Claude's own steps few: batch tool calls, short outputs (`tail`), no screenshots read unless the look matters.
