@@ -2877,3 +2877,78 @@ Each AI tool shows which local model it uses and offers to download it the first
 - KesherAI v1: colour chips (follow on click), cameras as named cones, selections outlined, 12 a scene, every second.
   Stopped at: built and tested in the page (computer and phone). Open: guests through share links (the stand-in is not
   open to guests yet), cursors and click rays, seeing moves live before they are saved to the engine.
+
+## A scene together, for guests through share links (2026-11-19)
+- **Unity Studio** (docs, updated 2026-07-22): everyone who opens the draft joins; icons at the Hierarchy's top right
+  (full list with search), a unique colour each for camera, cursor (with a white click ray), selection outline and a dot
+  on edited Inspector values; click an icon to follow, a cross to stop; at most 12; one person in a Logic script at a time.
+  No separate guest or viewer role in the session; who may open the draft is the project's membership.
+- **Figma**: link to Anyone / the organisation / only invited, each "can view" or "can edit"; viewers still see
+  multiplayer, follow others and comment. Up to 500 in a file, 200 editing; past 200 newcomers drop to view-only with
+  a notice, only 200 cursors shown (editors and the person being followed first); past 500 a static copy. Follow:
+  click an avatar, a border in their colour, "Stop following"; the followed person is not told; "Spotlight me" asks
+  everyone to follow (they get a few seconds for "Not now"). Link expiry 1 hour to 1 year (Enterprise): when it ends
+  the file falls back to its private setting and link users lose access; passwords on paid plans.
+- **Spline**: share modal with three link modes: anyone with the link as Viewer, as Editor, or only invited people;
+  viewers see the active-users panel and others' pointers with labels; edits live, autosave.
+- **PlayCanvas editor**: a Presence Bar (avatars come and go with the editor), a user colour everywhere, coloured
+  squares beside entities others selected, an outline in the viewport, each user a coloured wireframe frustum with the
+  name on hover. Project roles Read / Write / Admin (the team page).
+- **Unreal Multi-User Editing**: a trusted LAN (or VPN) session, join from the session browser; display name and
+  optional avatar colour; per-user "Position" (jump to their camera) and "Hide"; asset locks; edits recorded per user;
+  no viewer role or password in the guides: Epic treats everyone in the session as trusted.
+- **Godot**: nothing built in. Add-ons: Godot Team Create (MIT; host from the editor or a headless server, open port;
+  cameras and coloured selection boxes live), Backstitch (Endless + Ink & Switch, sync on save with automatic merging),
+  GodotWithU, YHDE. None describes guests or permissions.
+- **Sketchfab / Vectary**: share-to-view links (private link, password on paid plans; Vectary "restrict access" to the
+  workspace), comments and annotations, no live presence for outside viewers.
+- Common pattern: the link decides view or edit; viewers still get the full presence (colours, cameras, follow);
+  editing by outsiders is either fully trusted (Unity Studio, Unreal) or capped (Figma). Nobody gives an outsider more
+  than the one file.
+
+### KesherAI today (read for this)
+- Rooms (scene-rooms.ts, routes/rooms.ts): the room is named by the page (plugins.tsx "room.beat") from the engine,
+  the absolute engine project folder and the scene, hashed by the server; member id = `<device id>:<tab>`, the name is
+  the device's, set by the server. Guests are refused today: auth.ts lets a `project:<id>:read|edit` key reach only
+  /api/guest/* (deny by default), and the stand-in scene lists (/api/godot|unity/scenes) are owner routes.
+- Guests (guests.ts, routes/guests.ts): one-time invite 1 h–7 d, read or edit, Google sign-in; Remove / Ban stop the
+  key at once; GuestWatch alerts on outside tries, a new address, and more than 120 requests a minute; guest chats read
+  the project's `workspace` (GUEST_SECRET files hidden).
+- Note: a guest beating once a second is 60 requests a minute on its own, so with chat polling it could trip "busy".
+
+### What to take
+- Figma/Spline's rule: the guest's role decides; read guests get full presence (see, be seen, follow), edit guests may
+  also select. Unity Studio's look as already built, with a "guest" mark (dashed ring on the chip, "(guest)" in the name).
+- Figma's priority: the owner's own devices always get a seat; guests fill what is left (at most 6 of the 12).
+- Leave out for now: guests moving things (the stand-in saves into engine files on Roee's computer; Unity Studio and
+  Unreal trust everyone in the session, KesherAI's guests are outsiders), passwords (the invite is already personal
+  and signed in), cursors.
+
+### The plan
+1. **Guest routes** in routes/guests.ts: `GET /api/guest/scenes` (the engine scenes under the project's workspace),
+   `GET /api/guest/scene` (the stand-in, read only), `POST /api/guest/rooms/beat|leave`. The guest sends
+   `{engine, project: a path relative to the workspace, scene, tab}`; the server resolves the folder, checks it is
+   inside the workspace (realpath, no `..`, not GUEST_SECRET) and builds the same room string the owner's page builds,
+   so both meet in one room without the guest ever seeing an absolute path.
+2. **SceneRooms**: one shared instance for both route files; members carry `guest?: "read" | "edit"`; guests may not
+   create a room (join only while the owner or a paired device is in it); at most 6 guests a room; a read guest's
+   selection is dropped; `kick(deviceId)` called from Remove / Ban so the guest vanishes at once, not after 6 s.
+3. **What a guest hears**: others with opaque ids (a hash of member + room, not device ids), name, colour, camera,
+   selection, guest mark. Hidden: device ids, absolute paths, the room key, other rooms.
+4. **Limits**: beats from a guest at most 2 a second (429 above), counted apart from GuestWatch's "busy"; one alert to
+   the owner when a guest enters a scene (once in 10 minutes); body limit stays 32 KB.
+5. **Client**: GuestApp gets a "Scenes" tab (only when the project has engine scenes); it opens the model editor in
+   guest mode; plugins.tsx sends room.beat to the guest routes; save and move tools hidden for guests.
+6. **Phone (390 px)**: chips in one scrolling row, tap to follow, a bar "Following X · Stop"; touch orbit; beats stop
+   while the tab is hidden (saves battery and data) and leave on pagehide.
+7. **Later**: edit guests propose moves that the owner sees live and accepts (one undo step), Figma-like "Spotlight me".
+- Stopped at: research and the plan done; nothing built. Open: whether edit guests should move things at all; whether
+  a guest may start a room alone (here: no).
+
+Sources: docs.unity.com/en-us/unity-studio/collab/real-time-collaboration; help.figma.com/hc/en-us/articles/360040531773
+(share), /16142157359255 (link expiry), /360040322673 (follow and spotlight); Figma "How many people can be in a file at
+once"; docs.spline.design/sharing-collaboration-and-workspaces/real-time-collaboration-in-3-d;
+developer.playcanvas.com/user-manual/editor/realtime-collaboration and /projects/team-management;
+dev.epicgames.com multi-user editing overview and perforce.com/blog/vcs/how-to-use-unreal-multi-user-editing;
+godotengine.org/asset-library/asset/5451 (Godot Team Create), access.endlessstudios.com (Backstitch);
+help.vectary.com/documentation/sharing-exporting-embedding/sharing.
