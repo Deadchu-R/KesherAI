@@ -35,6 +35,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   it, with ComfyUI's own nodes; its geometry half ran in a real ComfyUI in the workspace.
 - ✅ Security scan 166: nothing to fix.
 
+- ✅ A study guide for a student friend (Roee, 11:50): a doc from installing to every study tool, only the study
+  parts, with 17 real screenshots (desktop and phone) from 0.6.400 on a demo course.
+
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
