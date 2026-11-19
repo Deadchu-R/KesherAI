@@ -61,7 +61,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1.
 - ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
 - ✅ Design doc: boards from the real screens (agents, hub).
-- 🔨 Build the task inbox (Opus agent); 🔨 research Google's terms for Antigravity (Sonnet agent).
+- ✅ Task inbox (77169e22): Antigravity only on Roee's own Run, from the PC or the phone (one ask = one task, 30 min); push only agy/* and kesher-inbox. Needs a live test on the PC.
+- ✅ Research: Google's terms for Antigravity (Run per task OK; unattended not on AI Pro; Jules/AI Studio key for that).
+- 🔨 The same Run ask for `@antigravity` in the chat agents.
+- 👤 Roee wants an update when the inbox is ready AND the hub site is live (needs his Google OAuth client + Cloudflare).
 - ✅ Usage tracker: docs/usage (track.py + charts); re-run after each build.
 
 ## Builds
