@@ -3084,3 +3084,157 @@ docs.roocode.com/features/boomerang-tasks (page not reachable, Roo model-per-mod
 knowledge, marked as such); educative.io (OpenAI Agents SDK handoffs vs agents-as-tools); docs.langchain.com/oss/python/
 langchain/multi-agent; yage.ai/share/agentic-multi-model-routing-en-20260729.html (and vLLM issue 1439); RouteLLM
 (lm-sys); KesherAI: packages/core/src/delegate.ts, agents.ts, conversations.ts, llamacpp.ts, routes/engine.ts.
+
+## A task inbox: Claude hands coding tasks to Antigravity, the local model or the PC, work returns as a branch (2026-11-19, Roee asked)
+Question: Claude works in the cloud and only through git; KesherAI on Roee's PC picks tasks up, runs them with Antigravity (his
+Gemini Pro plan) as a helper, and returns a branch for Claude to review and merge; the same inbox serves self-work and Roee's
+phone. Goal: least Claude usage, same quality. This extends the helper-agents entry above (lead + helpers, model per job).
+
+### 1. Antigravity without a person at the keyboard
+- **ACP** (what `packages/core/src/acp.ts` already uses; spec agentclientprotocol.com): `initialize` -> `session/new` (cwd) ->
+  `session/prompt` (returns `stopReason`: end_turn, max_tokens, max_turn_requests, refusal, cancelled) with `session/update`
+  notifications back (text, thought, tool_call with diffs, plan); `session/request_permission` (the client answers per step:
+  allow once/always, reject); `session/cancel`; `session/set_mode`, `session/set_config_option` (model, thinking); `session/resume`
+  / list. KesherAI advertises no fs/terminal, so `agy` edits and runs commands with its own tools in the folder it was given
+  (so it can run git and the project's scripts; each such step arrives as a permission request with the command in `rawInput`,
+  which is where a policy can decide). From the 2026-11-10 entries: modes default / accept-edits / plan (+ Auto), models per
+  account (Gemini 3.8 Flash default, Claude Sonnet/Opus 4.6, GPT-OSS 120B), thinking Low-High, `--add-dir`, `--sandbox`.
+- **Headless mode exists and is documented by Google** (antigravity.google/docs/cli/headless, read today): `agy -p "prompt"`;
+  `--output-format text|json|stream-json` (events init / step_update / result; json has `conversation_id`, `status`, `response`,
+  `error`, `usage`); `--json-schema` for a structured final answer; `--input-format stream-json` keeps one process for several
+  turns; `--continue` / `--conversation <id>`; `--print-timeout 15m`; no prompts: a step that needs approval is **denied**, the
+  run goes on, a notice goes to stderr; allow rules are `action(target)` entries under `permissions.allow` in settings.json;
+  `--dangerously-skip-permissions` approves everything (never use it); status SUCCESS/ERROR/CANCELED/INTERRUPTED/INVALID/
+  WAITING/RUNNING; exit 0 or non-zero; an unknown `--model` fails (no silent fallback); needs a prior interactive sign-in.
+  The page says nothing about terms or quotas and presents itself "for scripts and CI".
+- **Terms: the evidence still conflicts, and it is the main risk.** Today's forum reads (discuss.ai.google.dev; all replies by
+  one community account, no staff badge on the page): Sept 7 "single-user workflows ... local spawning with documented flags
+  ... compliant", Sept 28 "headless via a script under your own account is compliant; the restriction is for tools that
+  intercept tokens", Oct 8 "headless in your own app is what the mode is for; on a cloud server we recommend one `agy` task at
+  a time; many parallel runs can burn quota or trigger abuse protection; do not switch accounts or work around limits". Against
+  that, the 2026-11-10 entry recorded clause 6 of the Additional Terms (and zentor.ai) as banning "wrapping `agy -p` in
+  third-party agent loops", with bans that came without warning. No source here is Google staff or the terms text itself, so
+  neither side is settled. Roee's own rule since 11-13 (self-work never uses Antigravity; every message is a user press) stays
+  the safe line. Ask Google (support / the forum, with a staff reply requested) before any unattended mode.
+- **Quota** (from 11-10, agentpedia): a 5-hour meter under a weekly ceiling per model group (Claude and GPT have their own
+  group); an empty weekly meter locks that group for days. Not found: how a quota error shows in ACP (probably a failed prompt
+  with an error message); to be read on the PC the first time it happens, and treated as "deferred", never retried in a loop.
+- **Model inside Antigravity**: chosen per session with `set_config_option` (ACP) or `--model` (headless). To keep Roee's
+  Claude-group weekly meter free for his chats, the inbox default is the Gemini group; a task may name another.
+- **ACP or headless for the inbox**: ACP, because it is already built, is the path Google documents for third-party clients,
+  gives live progress and plan for the phone, cancel, resume, and lets KesherAI's policy answer each permission (headless can
+  only pre-allow or deny). Headless stays as a fallback and for a final structured report (`--json-schema`).
+
+### 2. How others run queued agent tasks and return a branch
+- **GitHub Copilot cloud agent** (docs.github.com, risks and mitigations, read today): issue assigned to Copilot or a prompt;
+  it works on a new branch with a **`copilot/` prefix** and can push to **only that one branch**; it cannot run git push itself
+  (a wrapper pushes); opens a **draft PR**; workflows do not run on its changes until a person with write access approves; it
+  cannot mark ready, approve or merge, and the requester cannot approve it either; firewalled internet; secret scanning and
+  CodeQL on its code. Take: one allowed ref, a wrapper pushes, draft/unmerged, a person (here: Claude) merges, checks need a
+  second approval.
+- **Google Jules** (developers.google.com/jules/api, sessions, read today): a session has `prompt`, `sourceContext` with
+  `startingBranch`, `title`, `requirePlanApproval` (plan waits for approval), `automationMode: AUTO_CREATE_PR`; states QUEUED,
+  PLANNING, AWAITING_PLAN_APPROVAL, AWAITING_USER_FEEDBACK, IN_PROGRESS, PAUSED, COMPLETED, FAILED; `outputs` hold the PR
+  (url, title, description); `approvePlan`, `sendMessage`. Take: the state list, a base branch in every task, plan-approval
+  as an optional gate, a message channel back to a waiting task.
+- **OpenAI Codex cloud, Devin, Sweep, Aider** (not fetched today; from earlier knowledge, marked as such): Codex: task in an
+  isolated container from a repo + AGENTS.md + setup script, internet off by default, result is a diff / PR you review.
+  Devin: ticket to PR with a plan the user can correct and its own test run. Sweep: GitHub issue (label) to PR. Aider: scripted
+  `--message`, `--yes`, `--test-cmd` / `--lint-cmd` with auto-fix, commits per change (`--no-auto-commits` to hold them), diff
+  review by the person. Take: AGENTS.md as the spec's standing context, the check command inside the task, small PRs.
+- **A good task spec** (common to all): goal in one sentence; files/areas to read; acceptance criteria; the exact check command;
+  what is out of scope; the base commit; a size limit. Vague tasks are where these tools fail, so the template requires them.
+- **Failure and partial work**: Jules/Copilot show failed/stalled sessions with the log; none of them lose partial work if a
+  branch was already pushed. Take: always push what exists as `...-partial` with a status, never silence.
+
+### 3. KesherAI fit (read in the code)
+- `task-board.ts`: one local JSON board (Claude, self-work, Roee), claim/done/block, `size`, `forKesher`; deliberately **not in
+  git**. `self-work.ts`: own branch, plan file, the project's checks after each item, commit only on pass, REVIEW checklist,
+  never pushes, refuses `agent/*` models (line ~250). `session-worktrees.ts`: `createSessionWorktree`, `worktreeWork`,
+  `removeSessionWorktree`. `install-when-free.ts#isFree` (no chat, no self-work, no download), `gpu-guard.ts` (nvidia-smi,
+  low priority, pause), `heavy-folder.ts#enginesRunning` (Godot/Unity/Unreal/Blender), `pc-games.ts` (installed games),
+  `routines.ts` (schedules). Missing: a way for Claude in the cloud to reach the PC, a game-running check, a per-task policy.
+- **Transport = git, content = the board.** Claude cannot reach the PC, so tasks travel on a dedicated branch `kesher-inbox`
+  (not `main`, so releases and history stay clean): `tasks/<id>.md` written by Claude (or Roee from the phone), `results/<id>.md`
+  written by KesherAI. One writer per file, so no merge conflicts. KesherAI does `git fetch` of that branch every few minutes
+  (cheap, no model) and **imports each new task into the existing local board** (same list, Roee's rule), with an `executor`
+  and `risk`; the board stays local, the inbox is only the courier. No secrets, email, Windows username or personal paths in
+  either file (a check refuses to write a result containing them).
+- **Task file** (`tasks/c-20261119-01.md`): frontmatter `id, title, executor: auto|antigravity|local|opus, risk: low|medium|high,
+  base: <branch or sha>, allowed_paths: [globs], forbidden_paths: [globs], check: "<command>", max_minutes, max_files, model?`;
+  body sections Goal, Read first, Acceptance, Out of scope, Report. Defaults forbid: `.github/**`, package.json version fields,
+  lockfiles, `.env*`, anything under `docs/SECURITY_REVIEW.md`, release scripts.
+- **Result file** (`results/<id>.md`): `status: done | partial | failed | declined | needs-approval | deferred-quota`,
+  `branch`, `base_sha`, `head_sha`, files changed, the check output tail, minutes, model, usage if known, a 5-line summary,
+  open questions. Branch names: `agy/<id>-<slug>` (Antigravity), `local/<id>-<slug>` (self-work), `*-partial` on failure.
+- **Picking a task** (`inbox.ts`, new): one at a time; only when KesherAI is free (`isFree`), no game or editor running (the
+  `pc-games` names + `enginesRunning` + GPU utilisation from gpu-guard above ~40% for 2 min), optional "PC idle for 5 min"
+  and a time window; checks run at low priority. Antigravity is cloud-side, so the game rule protects CPU/network/disk and
+  the user, not the GPU. Daily cap (default 5 Antigravity tasks) and a 15-minute cap per task (`--print-timeout` / a timer
+  that calls `cancel`).
+- **Running it**: `createSessionWorktree` from `base` on a new branch; start `agy acp` with `cwd` = the worktree and **no
+  `--add-dir`**; mode `accept-edits`; model = task's or the Gemini default; send one prompt built from the spec + AGENTS.md
+  + "do not push, do not touch other branches, report in this format". Follow-up fixes after a failed check are a second
+  prompt (see terms below). After the turn: KesherAI itself (not the agent) checks the diff against allowed/forbidden paths,
+  runs a secret/privacy scan on the diff (keys, emails, Windows username, personal paths), runs the task's `check` (typecheck,
+  lint, the changed tests), commits (AGENTS.md format with the `Desktop-he/Phone-he` lines), and **KesherAI pushes only that
+  one ref** plus `kesher-inbox`'s result file. The agent never gets push rights (Copilot's wrapper pattern). Existing rule
+  "self-work never pushes" stays; this is a new, narrow, switched-off-by-default exception that needs Roee's yes.
+- **Approvals policy** (decided by KesherAI from each permission request, not by the agent): auto-allow reads, edits inside
+  the worktree and allowed_paths, and commands from an allow list (`pnpm -s typecheck|lint`, `node --test ...`, `git status|
+  diff|add|commit|log` inside the worktree, `rg`, `ls`). Auto-reject: `git push|checkout|reset --hard|rebase|remote`, network
+  tools, installs, deleting outside the worktree, anything outside allowed_paths, reading `~`, `.env*`, keys. Everything else
+  goes to the 🔔 inbox / phone with the preview (already built) and the task waits (timer; auto-reject after 30 min).
+- **Terms handling (needs Roee's decision)**: two modes. *Attended* (default): the task runs only after Roee (or Claude's
+  task flagged `approve: roee`) presses **Run** on the PC or phone, one task per press, no automatic follow-up prompts, no
+  parallel runs, no account switching; this matches the safe line of the 11-13 entry. *Unattended* (auto-pick Antigravity
+  tasks): off, and offered only after Google confirms in writing or Roee accepts the ban risk in a dialog that quotes it.
+  The local model may run unattended (that is self-work, no terms issue).
+- **Routing rule** (the task's `executor: auto` resolves by this table; the lead can override):
+  - **Local model (self-work)**: 1-2 files, mechanical (strings, i18n, docs, a test for an existing function, a rename),
+    clear check, low risk.
+  - **Antigravity**: medium, well specified (3-15 files; a screen following an existing pattern, an endpoint plus its test, a
+    refactor with a stated end state), has acceptance and a check command, does not touch security, share links, auth, git/
+    updater, the ACP/chat protocol, migrations or releases.
+  - **Opus build helper** (Claude's own helper from the previous entry): hard or risky work, vague specs, cross-package
+    changes, anything Antigravity failed twice, and every security-labelled task.
+  - **Claude lead**: writes the specs, reviews every returned branch (diff + result file + check output, REVIEW checklist from
+    `self-work.ts`), merges or sends it back with a short correction, releases. Saving comes from reviewing being much shorter
+    than writing; it is not measured yet: the result file records minutes/usage and the board records Claude's review so the
+    split can be tuned (do not claim a number before that).
+- **Phone**: the inbox is a server route, so remote works like any page. The phone sees the queue and states, live progress
+  (ACP plan and current step, the same stream as a code chat), and can: Run / Skip / Stop (sends `cancel`, keeps the partial
+  branch, removes the worktree), Pause inbox, Inbox off (kill switch, also stops fetching), approve or reject a pending step,
+  open the diff, add a task (writes `tasks/` locally and pushes it with the others). Notifications: started, needs approval,
+  finished (done/partial/failed) with one line; quota hit says when to retry.
+
+### The plan (steps)
+1. `inbox.ts`: parse/validate task and result files (frontmatter, glob lists, size caps), the status model, tests.
+2. `inbox-git.ts`: fetch `kesher-inbox`, import into the board, write/push results; one-ref push guard; tests with a local bare repo.
+3. `inbox-policy.ts`: path allow/deny, command allow/deny from a permission request, secrets/privacy diff scan; table tests.
+4. `inbox-run.ts`: worktree, ACP run (one prompt), cancel/timeout, post-checks, commit, push, result; fake ACP agent in tests
+   (acp.ts already accepts an in-process agent).
+5. `isBusy()` gate: isFree + games/engines + GPU load + idle time + window; tests.
+6. Routes `GET/POST /api/inbox`, `/:id/run|skip|stop`, `/api/inbox/settings`; events on the existing stream.
+7. UI (desktop and 390 px): Inbox page + Settings; strings `L(he, en)`; notifications.
+8. Routing function `routeTask(spec)` and the lead-side prompt/template so Claude writes specs the same way (a `docs/INBOX.md`
+   with the template).
+9. First live test on the PC through KesherAI only (Roee's rule), one low-risk task, read the quota error format.
+
+### Screens for the design doc
+(1) Inbox page: queue with status chips (waiting, running, needs approval, done, partial, failed, deferred), desktop and phone.
+(2) Task detail: spec, live plan/steps, diff, check result, Run / Stop / Skip. (3) Approval card for an agent step with the
+policy verdict ("allowed by rule" / "asked"). (4) Result view with branch name and "copy for Claude". (5) Settings > Inbox:
+on/off, attended vs unattended (with the terms warning), busy rules (games, GPU, idle, window), daily cap, per-task minutes,
+allowed commands list, model per executor. (6) New task form (phone, with executor and risk). (7) Quota-hit state with retry time.
+(8) Board view showing the executor and branch on each task (existing board gets two chips).
+- Stopped at: research and plan done; nothing built; no live test of quota errors or of Antigravity's git behaviour in a worktree.
+  Open questions for Roee: (a) attended-only for Antigravity, or ask Google first for unattended; (b) may KesherAI push `agy/*`
+  branches and `kesher-inbox` (a narrow exception to "never pushes"); (c) daily cap and the Gemini default model; (d) may the
+  inbox branch live on the same GitHub repo.
+
+Sources: antigravity.google/docs/cli/headless; discuss.ai.google.dev threads 185494, 181088, 187536 (community replies, staff
+status not shown); agentclientprotocol.com (spec, from earlier reading and the SDK in acp.ts); docs.github.com Copilot cloud
+agent risks and mitigations; developers.google.com/jules/api/reference/rest/v1alpha/sessions; Codex/Devin/Sweep/Aider from earlier
+knowledge, not fetched; the 2026-11-10 and 2026-11-13 entries of this file; KesherAI: acp.ts, acp-chat.ts, self-work.ts,
+task-board.ts, session-worktrees.ts, install-when-free.ts, gpu-guard.ts, heavy-folder.ts, pc-games.ts, routines.ts.
