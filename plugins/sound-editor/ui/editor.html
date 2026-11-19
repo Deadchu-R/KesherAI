@@ -50,6 +50,7 @@
           <button id="clean" data-t="clean" title="Select a stretch of only noise first, or nothing (the quiet moments are used)">🧹 Clean noise</button>
           <button id="toInst" class="primary" data-t="toInst">🎻 To an instrument…</button>
           <button id="toVoice" data-t="toVoice">🗣 In another voice…</button>
+          <button id="aiSel" class="primary" data-t="aiSel">✦ With AI…</button>
         </div>
         <p class="hint muted small" data-t="hint">Drag to select · Space play · Delete cut · Ctrl+A all · Esc let go</p>
       </section>
@@ -105,6 +106,18 @@
     </form>
   </dialog>
   <!-- The words in another voice: a cloned voice (yours, any language) or a natural one on this computer -->
+  <!-- ✦ With AI (Premiere's Generative Media tool for sound, 2026): the selection made again from words, at its length -->
+  <dialog id="aiDialog">
+    <form method="dialog" class="stack">
+      <strong data-t="aiH">This stretch, with AI</strong>
+      <span class="muted" id="aiInfo"></span>
+      <label class="row"><input type="radio" name="aiKind" value="music" checked /> <span data-t="aiMusic">Music for it (the chat's song model, a few minutes; it goes in by itself)</span></label>
+      <label class="row"><input type="radio" name="aiKind" value="voice" /> <span data-t="aiVoice">Other words in a voice (yours or a natural one)</span></label>
+      <label class="row"><input type="checkbox" id="aiMix" checked /> <span data-t="aiMix">Under what is there (unticked: instead of it)</span></label>
+      <label class="field"><span data-t="aiWhat">What should it be?</span><textarea id="aiText" rows="3" maxlength="600" dir="auto"></textarea></label>
+      <div class="row"><button value="cancel" data-t="cancel">Cancel</button><span class="grow"></span><button value="ok" class="primary" data-t="aiGo">Make it</button></div>
+    </form>
+  </dialog>
   <dialog id="voiceDialog">
     <form method="dialog" class="stack">
       <strong data-t="voiceH">In another voice</strong>

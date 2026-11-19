@@ -2,7 +2,7 @@
 // a waveform with a selection, edits on the samples (cut, keep, silence, fades, gain, normalize) with undo, the
 // transcript from whisper, and a WAV sent back to the chat. A plugin page with no build step: it talks to KesherAI
 // only through window.kesher (kesher.js).
-/* global confirm, navigator, window, OfflineAudioContext, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio */
+/* global confirm, navigator, window, OfflineAudioContext, document, kesher, Blob, URL, AudioContext, requestAnimationFrame, addEventListener, setTimeout, clearTimeout, ResizeObserver, FileReader, devicePixelRatio, setInterval, clearInterval */
 (() => {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; המוזיקה תיכנס לבד כשתהיה מוכנה (כמה דקות)", aiLate: "המוזיקה לא הגיעה תוך 20 דקות; הוסף אותה מקבצי הצ׳אט כשתגיע", aiIn: "המוזיקה נכנסה", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -645,6 +645,63 @@
       busy(T("loading", "Loading the sound…"));
       try { const { bytes } = await am.takeMedia(it); await addBytes(it.name, bytes, anchor); } finally { busy(""); }
     } catch (e) { msg(e.message || String(e), true); }
+  }
+  // ---------- ✦ With AI (FUTURE_FEATURES "Mark it and let the model work"): the selection made again from words, at its
+  // place and length, as Premiere's Generative Media tool fills a chosen range with a sound ----------
+  $("aiSel").onclick = () => {
+    if (!need()) return;
+    $("aiInfo").textContent = `${fmt(sel[0])}–${fmt(sel[1])} (${secs(sel[1] - sel[0]).toFixed(1)}s)`;
+    $("aiDialog").showModal();
+    $("aiText").focus();
+  };
+  $("aiDialog").addEventListener("close", () => {
+    if ($("aiDialog").returnValue !== "ok" || !sel) return;
+    const words = $("aiText").value.trim();
+    const kind = document.querySelector('[name="aiKind"]:checked').value;
+    // Other words: the voice dialog does it (a voice, Listen, then instead of the selection or under it).
+    if (kind === "voice") { $("voiceText").value = words; return void $("toVoice").click(); }
+    if (!words) return msg(T("aiNoWords", "Write what it should be"), true);
+    void musicFor(words, [...sel], $("aiMix").checked);
+  });
+  /**
+   * Music for the selection: asked through the chat (which asks first), at least 10 s (the song model's shortest);
+   * the editor watches the chat's files, and the new song goes into the selection: cut to its length, faded in and out
+   * over half a second, under what is there or instead of it. It waits up to 20 minutes.
+   */
+  let waitingSong = null;
+  async function musicFor(words, [a, b], mix) {
+    const seconds = Math.max(10, Math.ceil(secs(b - a)));
+    const before = new Set((await kesher.call("media.list", { from: "chat", kind: "audio" }).catch(() => [])).map((x) => x.id));
+    try {
+      await kesher.call("chat.ask", { text: `Make music for a ${seconds}-second part of my sound: ${words}. Use make_music with seconds ${seconds}, no lyrics unless I asked for singing, and cover false.` });
+    } catch (e) { return msg(e.message || String(e), true); }
+    clearInterval(waitingSong);
+    const until = Date.now() + 20 * 60_000;
+    msg(T("aiWaiting", "Asked the chat; the music goes in by itself when it is ready (a few minutes)"));
+    waitingSong = setInterval(async () => {
+      if (Date.now() > until) { clearInterval(waitingSong); return msg(T("aiLate", "The music did not come in 20 minutes; add it from the chat's files when it does"), true); }
+      const list = await kesher.call("media.list", { from: "chat", kind: "audio" }).catch(() => []);
+      const fresh = list.find((x) => !before.has(x.id));
+      if (!fresh) return;
+      clearInterval(waitingSong);
+      try {
+        const am = await import("./add-media.js");
+        const { bytes } = await am.takeMedia(fresh);
+        const { samples } = await decoded(bytes);
+        const n = Math.min(b - a, samples[0].length), fade = Math.min(Math.round(rate / 2), Math.floor(n / 4));
+        const part = samples.map((c) => { const x = c.slice(0, n); for (let i = 0; i < fade; i++) { x[i] *= i / fade; x[n - 1 - i] *= i / fade; } return x; });
+        remember();
+        chans = chans.map((c, ch) => {
+          const x = part[Math.min(ch, part.length - 1)];
+          if (!mix) c.fill(0, a, b);
+          for (let i = 0; i < n && a + i < c.length; i++) c[a + i] = Math.max(-1, Math.min(1, c[a + i] + x[i]));
+          return c;
+        });
+        sel = [a, a + n];
+        after();
+        msg(T("aiIn", "The music is in"));
+      } catch (e) { msg(e.message || String(e), true); }
+    }, 10_000);
   }
   /** Music from words: the chat makes it with its song model (ACE-Step), and it comes back through "From this chat". */
   async function musicFromWords() {
