@@ -743,6 +743,8 @@ $("quad").onclick = () => setQuad(!quad);
 $("dim2").onclick = () => set2D(true);
 $("dim3").onclick = () => set2D(false);
 $("partSearch").oninput = () => renderParts();
+// Escape clears the search (as the engines' Hierarchy search does).
+$("partSearch").addEventListener("keydown", (e) => { if (e.key === "Escape" && $("partSearch").value) { e.stopPropagation(); $("partSearch").value = ""; renderParts(); } });
 // A double-click on one of the four views: that view alone (Max's Alt+W).
 renderer.domElement.addEventListener("dblclick", (e) => {
   if (!quad) return;

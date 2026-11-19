@@ -23,6 +23,8 @@ interface Peek { title: string; messages: number; from: string; to: string; peop
 
 const KINDS: Array<[Kind, string, string]> = [["couple", "זוג", "Couple"], ["ex", "אקסים", "Exes"], ["friends", "חברים", "Friends"], ["family", "משפחה", "Family"], ["group", "קבוצה", "Group"], ["work", "עבודה", "Work"]];
 const VOICES: Array<[Voice, string, string]> = [["coach", "מאמן", "Coach"], ["friend", "חבר כן", "Honest friend"], ["roast", "צולה", "Roaster"]];
+/** Minutes to read chapters (200 words a minute), for the full report's tab. */
+const readMin = (sections?: Array<{ body: string }>) => Math.max(1, Math.round((sections ?? []).reduce((n, x) => n + x.body.split(/\s+/).length, 0) / 200));
 const kindName = (k: Kind) => { const x = KINDS.find((y) => y[0] === k)!; return L(x[1], x[2]); };
 const when = (at: string) => (at ? new Date(at).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "numeric", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
 
@@ -418,7 +420,7 @@ function ReportView({ id, onGone }: { id: string; onGone: () => void }) {
       </div>
     ) },
     // KesherAI's own long read, and an imported report's original text (both, when the chat was added to an import).
-    { id: "full", name: ["📖 הדוח המלא", "📖 The full report"], has: !!rep?.story?.length, body: <FullReport sections={rep?.story ?? []} bubbles={bubbles} original={false} /> },
+    { id: "full", name: [`📖 הדוח המלא · ${readMin(rep?.story)} דק׳`, `📖 The full report · ${readMin(rep?.story)} min`], has: !!rep?.story?.length, body: <FullReport sections={rep?.story ?? []} bubbles={bubbles} original={false} /> },
     { id: "original", name: ["📜 הדוח של Brandon", "📜 Brandon's report"], has: !!r.imported, body: <FullReport sections={originalSections(r.imported ?? "")} bubbles={bubbles} original /> },
     { id: "numbers", name: ["המספרים", "The numbers"], has: n.messages > 0 || n.people.length > 1, body: <>
       {n.people.length > 1 && (

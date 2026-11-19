@@ -68,6 +68,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
           ))}
         </div>
       )}
+      {found && found.length > 0 && <p className="muted small">{L(`נמצאו ${found.length} פרויקטים במחשב`, `${found.length} projects found on the computer`)}</p>}
       {found && !found.length && <p className="muted small">{isRemote() ? L(`לא מצאתי פרויקטים של ${e.name} במחשב. פתח אחד במחשב פעם אחת, והוא יופיע כאן.`, `No ${e.name} projects found on the computer. Open one there once and it shows here.`) : L(`לא מצאתי פרויקטים של ${e.name} במחשב. אפשר לכתוב תיקייה:`, `No ${e.name} projects found on the computer. Type a folder:`)}</p>}
       {/* From the phone only the projects found on the computer (the server checks too); a folder by path is for the computer. */}
       {isRemote() ? null : found && found.length > 0 && !typing ? <button type="button" className="link small" onClick={() => setTyping(true)}>{L("תיקייה אחרת…", "Another folder…")}</button> : (
@@ -127,6 +128,7 @@ export function StandInLevels() {
           })}
         </div>
       )}
+      {projects && projects.length > 0 && <p className="muted small">{L(`נמצאו ${projects.length} פרויקטים במחשב`, `${projects.length} projects found on the computer`)}</p>}
       {projects && !projects.length && <p className="muted small">{L("לא מצאתי פרויקטים של Unreal במחשב.", "No Unreal projects found on the computer.")}</p>}
       {busy && busy === chosen && <p className="muted small">{L("קורא את הרמות… (כש-Unreal סגור זה מריץ אותו ברקע, עד דקה וחצי בפעם הראשונה)", "Reading the levels… (with Unreal closed it runs in the background, up to a minute and a half the first time)")}</p>}
       {levels && (levels.length ? (
