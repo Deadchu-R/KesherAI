@@ -38,7 +38,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
-- 🔨 0.6.400 (Roee, 11:16: "add the 2 things, then a build and stop"): everything since 0.6.399. After it, stop.
+- ✅ 0.6.400 is available (Roee, 11:16: "add the 2 things, then a build and stop"). Stopped after it.
 
 ## Waiting on Roee 👤
 - 👤 When convenient: 🖌 paint a model (ComfyUI 0.46+; asks before downloading SD 1.5 + ControlNet depth, ~2.8 GB).
@@ -46,7 +46,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 When convenient: try the 3D editor's "A model from words" (ComfyUI; asks before downloading Hunyuan3D 2, ~4.9 GB).
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).
 - 👤 When convenient: try sound effects (needs ComfyUI 0.22+; it asks before downloading 3.5 GB).
-- 👤 Install 0.6.398 / 0.6.399 from the app and check (what to check is in the chat's "available" messages).
+- 👤 Install 0.6.400 from the app and check (what to check is in the chat's "available" messages).
 - 👤 The guest test from the phone (shared projects).
 - 👤 A stronger model for writing chat reports.
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
