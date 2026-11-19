@@ -38,6 +38,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ A study guide for a student friend (Roee, 11:50): a doc from installing to every study tool, only the study
   parts, with 17 real screenshots (desktop and phone) from 0.6.400 on a demo course.
 
+- ✅ Helper agents (Roee, 12:39): docs/AGENT_BRIEF.md and .claude/agents (research, build); Claude leads,
+  helpers research or build one task each and report back in 15 lines.
+- 🔨 A scene together for guests through share links: research (helper agent) → build (helper agent).
+
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
