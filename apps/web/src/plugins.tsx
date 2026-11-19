@@ -437,7 +437,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // or from the bank of everything made, one item's bytes, taking a bank item into this chat, and a file from the
         // device put into the chat. Ids: `chat:<path>` for this chat's files, the bank's own ids otherwise.
         case "media.list": {
-          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           const kind = ["image", "video", "audio", "model"].includes(String(p.kind)) ? String(p.kind) : "";
           if (p.from === "bank") {
             const r = await api<{ items: Array<{ id: string; kind: string; name: string; size: number; createdAt: string; chat?: { id: string; title: string }; prompt?: string }> }>(`/api/bank${kind ? `?kind=${kind}` : ""}`);
@@ -452,7 +452,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             .slice(0, 500);
         }
         case "media.bytes": {
-          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           const id = String(p.id ?? "");
           if (id.startsWith("chat:") && !input) throw new Error("This page was not opened from a chat.");
           const url = id.startsWith("chat:") && input ? `/api/conversations/${encodeURIComponent(input.conversationId)}/files/download?path=${encodeURIComponent(id.slice(5))}` : `/api/bank/file?id=${encodeURIComponent(id)}`;
@@ -462,7 +462,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           return res.arrayBuffer();
         }
         case "media.take": {
-          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
           const id = String(p.id ?? "");
           if (id.startsWith("chat:")) return { path: id.slice(5) };
@@ -471,7 +471,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           return { path: r.paths[0] };
         }
         case "media.upload": {
-          if (!["video", "sound", "model"].some((u) => uses.includes(u))) need("video");
+          if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
           const bytes = p.bytes as ArrayBuffer;
           if (!(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 300 * 1024 ** 2) throw new Error("A file up to 300 MB.");

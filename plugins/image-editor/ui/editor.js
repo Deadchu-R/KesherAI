@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    new: "חדש…", open: "פתח תמונה…", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
+    new: "חדש…", open: "פתח תמונה…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
     aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", aiExpand: "⤢ הרחבה ב-AI", expandAll: "‎+25% מכל הצדדים", expandSame: "התמונה כבר בצורה הזאת", hExpand: "הרחבה", expandLayer: "הקצוות שהורחבו", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
@@ -762,6 +762,36 @@
     draw();
     $("file").value = "";
   };
+  /**
+   * A picture from this chat or from the bank as a new layer (Photoshop's "Place"), centred and fitted inside the
+   * picture; into an empty document it becomes the document, as Open does.
+   */
+  async function placeFrom(from) {
+    try {
+      const am = await import("./add-media.js");
+      am.setHebrew(he);
+      const it = await am.pickMedia(from, ["image"]);
+      if (!it) return;
+      const bytes = await kesher.call("media.bytes", { id: it.id });
+      const img = await loadImage(URL.createObjectURL(new Blob([bytes])));
+      if (!doc.layers.some((l) => !isEmpty(l))) {
+        docName = it.name.replace(/\.[^.]+$/, "");
+        $("docTab").textContent = it.name;
+        newDoc(img.naturalWidth, img.naturalHeight, false);
+        doc.layers[0].name = it.name;
+        doc.layers[0].ctx.drawImage(img, 0, 0);
+      } else {
+        remember(T("hPlace", "Place picture"));
+        const l = makeLayer(it.name);
+        const k = Math.min(1, doc.w / img.naturalWidth, doc.h / img.naturalHeight);
+        const w = img.naturalWidth * k, h = img.naturalHeight * k;
+        l.ctx.drawImage(img, (doc.w - w) / 2, (doc.h - h) / 2, w, h);
+        addLayer(l);
+      }
+      renderLayers();
+      draw();
+    } catch (e) { msg(e.message || String(e), true); }
+  }
   function isEmpty(l) {
     const d = l.ctx.getImageData(0, 0, l.canvas.width, l.canvas.height).data;
     for (let i = 3; i < d.length; i += 64) if (d[i] && !(d[i - 3] === 255 && d[i - 2] === 255 && d[i - 1] === 255)) return false;
@@ -1083,6 +1113,8 @@
     ["mFile", "File", [
       ["new", "New…", "Ctrl+N", () => $("newDialog").showModal()],
       ["open", "Open picture…", "Ctrl+O", () => $("file").click()],
+      ["placeChat", "Place from this chat…", "", () => void placeFrom("chat")],
+      ["placeBank", "Place from everything made…", "", () => void placeFrom("bank")],
       ["openProject", "Open project…", "", () => $("projectFile").click()],
       "-",
       ["saveProject", "Save project", "Ctrl+S", () => saveProject()],
