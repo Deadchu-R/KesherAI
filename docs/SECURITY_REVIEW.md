@@ -1541,3 +1541,11 @@ S5 an outside scanner's rules for Electron.
   when `value` is a string. **Shapes, echo, duplicate**: in the editors' pages, no new bridge methods.
 - Performance: a text layer redraws only when changed; a shape's preview reuses one canvas per drag; echo is one pass.
 - Tests: video-cut.test.ts gained the export's size and quality (16 pass). Nothing to fix.
+
+## Scan 163 (2026-11-19): a picture and a turntable of a 3D view, save a video frame, picture size, a second of silence
+- All in the editors' pages; the files they make go into the chat through the existing `media.upload` (the chat's
+  folder, the server's own name checks), or download when there is no chat. No new bridge methods or routes.
+- **Turntable**: MediaRecorder on the editor's own canvas (no camera or screen capture, no permission asked); 6 s at
+  6 Mb/s is about 1–5 MB; it can run once at a time (`turning`), and the camera and helpers come back after.
+- **Picture size**: clamped to 16–8192 px a side, as New; one canvas per layer and mask, as crop and rotate.
+- **Silence**: one second per press, a copy of the channels (as cut). Nothing to fix.
