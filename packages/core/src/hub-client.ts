@@ -13,6 +13,7 @@ import WebSocket from "ws";
 import {
   cleanOptIn,
   exportPrivateJwk,
+  HUB_LIMITS,
   generateHubKeys,
   importPrivateJwk,
   keyFingerprint,
@@ -27,6 +28,7 @@ import {
   type SealedBody,
   type SealedEnvelope,
 } from "@kesher/shared";
+import type { ActivityBatch, AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
 import type { TaskBoard } from "./task-board.js";
 
@@ -81,6 +83,8 @@ export interface HubClientDeps {
   openSocket?: (url: string, on: HubSocketEvents) => HubSocket;
   /** The name shown on the hub until the user renames it. */
   deviceName?: string;
+  /** Live agent activity (agent-activity.ts): Stop from the hub page reaches its runs, and it slows down when told to. */
+  activity?: Pick<AgentActivity, "has" | "cancel" | "slowDown">;
 }
 
 /** What the settings card shows (never the token or the key). */
@@ -440,9 +444,45 @@ export class HubClient {
         return this.lost("This PC was removed from the hub.");
       case "deliver":
         return this.onEnvelope(f.env);
+      case "refused":
+        // Over the hub's rate (or the free plan's quota): live activity goes every 10 seconds for a while.
+        if (f.code === "rate-limited") this.deps.activity?.slowDown();
+        return;
       default:
         return;
     }
+  }
+
+  /**
+   * Seals live agent activity to every paired phone (the hub page and the phone's Cloud tab are phones) and sends it
+   * in as few `agents` frames as fit. Only when this PC's opt-in reports activity; nothing is queued when offline
+   * (the next batch carries the whole state again).
+   *
+   * @param batches - One batch per run, from {@link AgentActivity}.
+   */
+  async sendActivity(batches: ActivityBatch[]): Promise<void> {
+    if (!this.connected || !this.s.deviceId || !cleanOptIn(this.s.optIn).reportActivity) return;
+    const viewers = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
+    if (!viewers.length || !batches.length) return;
+    const key = (await this.ownKey()).privateKey;
+    let envs: SealedEnvelope[] = [];
+    let size = 0;
+    const flush = () => {
+      if (envs.length) this.send({ t: "agents", envs });
+      envs = [];
+      size = 0;
+    };
+    for (const b of batches) {
+      for (const v of viewers) {
+        const env = { ...(await sealMessage({ from: this.s.deviceId, to: v.id, kind: "agent_event", ttl: 3600 }, { type: "agent_event", runId: b.runId, state: b.state, events: b.events }, key, v.publicKey)), run: b.runId, n: b.events.length };
+        const chars = JSON.stringify(env).length;
+        if (chars > HUB_LIMITS.ctChars) continue;
+        if (envs.length >= HUB_LIMITS.agentFrameEnvs || size + chars > HUB_LIMITS.frameChars - 500) flush();
+        envs.push(env);
+        size += chars;
+      }
+    }
+    flush();
   }
 
   /** The sender's public key (a paired device, or the hub itself). */
@@ -480,7 +520,9 @@ export class HubClient {
         await this.takeTask(env.from, body);
         return ack();
       case "cancel":
-        await this.cancelTask(env.from, body.taskId);
+        // Stop on an agent card (a run of this PC), or a hub task's cancel (its board item).
+        if (this.deps.activity?.has(body.taskId)) await this.deps.activity.cancel(body.taskId);
+        else await this.cancelTask(env.from, body.taskId);
         return ack();
       case "approval_answer":
         // The envelope opened with the sender's own key, so `from` is that paired device.

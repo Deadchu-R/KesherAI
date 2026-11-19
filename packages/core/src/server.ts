@@ -61,6 +61,7 @@ import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxSnapshot } from "./agent-activity.js";
 
 /** The hub approval list's name for the task inbox's run asks. */
 const INBOX_ASKS = "task-inbox";
@@ -561,8 +562,28 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.taskInbox = taskInbox;
   // The chat's @antigravity agent asks the same "Run this in Antigravity?" before each message it sends.
   services.conversations.helpers.askAntigravity = (info) => taskInbox.askMessage(info);
+  // Live agent activity for the hub page and the phone's Cloud tab (agent-activity.ts): off until the PC's opt-in.
+  const hubRef: { client?: HubClient } = {};
+  const activity = new AgentActivity({
+    send: (batches) => void hubRef.client?.sendActivity(batches).catch(() => undefined),
+    enabled: () => config.hub.enabled && config.hub.optIn.reportActivity,
+    fileNames: () => config.hub.optIn.reportFileNames,
+  });
+  const helperRuns = services.conversations.helpers.runs;
+  helperRuns.on("change", (chatId: string) => {
+    for (const r of helperRuns.list(chatId)) activity.observe(helperSnapshot(r, INBOX_ASKS), async () => helperRuns.stop(r.id));
+  });
+  taskInbox.onChange(() => {
+    void taskInbox.list().then((tasks) => {
+      for (const t of tasks) {
+        const snap = inboxSnapshot(t, t.runAsk, INBOX_ASKS);
+        if (snap) activity.observe(snap, () => taskInbox.stop(t.id));
+      }
+    }, () => undefined);
+  });
   // Kesher Cloud hub: off until the user turns it on; tasks from it land on this board (hub-client.ts).
   const hub = new HubClient({
+    activity,
     settings: () => config.hub,
     persist,
     board: taskBoard,
@@ -577,6 +598,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: `Run in Antigravity? ${title}`.slice(0, 200), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes." })),
       ],
       answer: async (conversationId, requestId, decision, from) => {
+        // An agent card's yes/no (a helper's ask) or an Antigravity step's approval: only from a paired phone.
+        if (conversationId === HELPER_ASKS) return from?.kind === "phone" && helperRuns.answer(requestId, decision === "allow");
+        if (conversationId === INBOX_APPROVALS) {
+          if (from?.kind !== "phone") return false;
+          const t = (await taskInbox.list()).find((x) => x.pending?.requestId === requestId);
+          return !!t && (await taskInbox.answer(t.id, requestId, decision));
+        }
         // A run answer counts only from a paired phone (its sealed, signed message); one answer is one task.
         if (conversationId === INBOX_ASKS) {
           if (from?.kind !== "phone") return false;
@@ -588,6 +616,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   });
   services.hub = hub;
+  hubRef.client = hub;
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });

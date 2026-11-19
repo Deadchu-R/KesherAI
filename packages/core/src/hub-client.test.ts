@@ -30,7 +30,9 @@ async function rig() {
     return reply({ error: "no" }, 404);
   }) as unknown as typeof fetch;
   const notes: string[] = [];
+  const activity = { cancelled: [] as string[], slowed: 0, has: (id: string) => id.startsWith("h-"), cancel: async (id: string) => (activity.cancelled.push(id), true), slowDown: () => void activity.slowed++ };
   const client = new HubClient({
+    activity,
     settings: () => s,
     persist: async () => undefined,
     board,
@@ -45,7 +47,7 @@ async function rig() {
       return { send: (t) => sent.push(JSON.parse(t) as Record<string, unknown>), close: () => undefined };
     },
   });
-  return { dir, s, board, sent, calls, client, notes, events: () => events!, socketUrl: () => socketUrl, done: () => rm(dir, { recursive: true, force: true }) };
+  return { dir, s, board, sent, calls, client, notes, activity, events: () => events!, socketUrl: () => socketUrl, done: () => rm(dir, { recursive: true, force: true }) };
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -118,6 +120,24 @@ test("pairs, connects with a one-use ticket, takes a sealed task onto the board 
   const body = await openEnvelope(results[0]!.env as SealedEnvelope, phone.privateKey, await pcPub);
   assert.deepEqual(body, { type: "result", taskId: "task-1", status: "done", text: "Fixed in commit abc" });
   assert.deepEqual(r.s.reported, ["task-1"]);
+
+  // Live agent activity: nothing until the opt-in; then one sealed batch per (phone, run) in an agents frame.
+  const batch = { runId: "h-1", state: { runId: "h-1", title: "Look into it", source: "chat-helper" as const, state: "running" as const, step: 1, startedAt: 1, lastEventAt: 2, files: 0, fileNames: [] }, events: [{ seq: 1, t: 2, type: "step" as const, n: 1, label: "read_file" }] };
+  const n0 = r.sent.length;
+  await r.client.sendActivity([batch]);
+  assert.equal(r.sent.length, n0, "reportActivity is off by default");
+  await r.client.setOptIn({ reportActivity: true });
+  await r.client.sendActivity([batch]);
+  const frame = r.sent.filter((f) => f.t === "agents").at(-1) as { envs: SealedEnvelope[] };
+  assert.equal(frame.envs.length, 1);
+  assert.equal(frame.envs[0]!.run, "h-1");
+  assert.equal(frame.envs[0]!.n, 1);
+  assert.deepEqual(await openEnvelope(frame.envs[0]!, phone.privateKey, await pcPub), { type: "agent_event", ...batch });
+  // Stop on an agent card reaches the run; a cancel of a hub task still goes to its board item.
+  await deliver(await sealMessage({ from: "dphone", to: "dpc", kind: "cancel" }, { type: "cancel", taskId: "h-1" }, phone.privateKey, await pcPub));
+  assert.deepEqual(r.activity.cancelled, ["h-1"]);
+  await r.client.onMessage(JSON.stringify({ t: "refused", code: "rate-limited" }));
+  assert.equal(r.activity.slowed, 1);
 
   // Revoked by the hub: the token is forgotten.
   await r.client.onMessage(JSON.stringify({ t: "revoked" }));

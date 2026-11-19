@@ -143,8 +143,28 @@ export class TaskInbox {
     }
   }
 
+  private readonly listeners = new Set<() => void>();
+
+  /**
+   * Calls back after every change of the queue (the hub's live agent activity watches it).
+   *
+   * @param cb - The callback (must not throw).
+   * @returns A function that stops it.
+   */
+  onChange(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
+
+  /** The tasks as they are now, oldest first, without their diffs. */
+  async list(): Promise<InboxTaskView[]> {
+    await this.load();
+    return this.saved.tasks.map(({ diff: _d, ...t }) => ({ ...t }));
+  }
+
   /** Writes the queue file (one write at a time, write then rename). */
   private save(): Promise<void> {
+    for (const cb of this.listeners) cb();
     const body = JSON.stringify(this.saved, null, 1);
     this.saving = this.saving.then(async () => {
       await mkdir(dirname(this.d.file), { recursive: true });
