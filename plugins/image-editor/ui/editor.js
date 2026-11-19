@@ -19,7 +19,7 @@
     pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
-    hCrop: "חיתוך", crop: "חיתוך", ratio: "יחס", cropHint: "גרור מסגרת. Enter מחיל, Esc מבטל.", apply2: "החל", free: "חופשי",
+    hCrop: "חיתוך", h_cw: "סיבוב 90° עם השעון", h_ccw: "סיבוב 90° נגד השעון", h_h: "היפוך התמונה לרוחב", h_v: "היפוך התמונה לגובה", h_lh: "היפוך השכבה לרוחב", h_lv: "היפוך השכבה לגובה", crop: "חיתוך", ratio: "יחס", cropHint: "גרור מסגרת. Enter מחיל, Esc מבטל.", apply2: "החל", free: "חופשי",
     uvGuide: "קווי UV (מדריך, לא נשמר)", paintLayer: "ציור", "back_model-editor": "חזרה למודל", fromModel: "הטקסטורה של המודל. כשתסיים: \"חזרה למודל\".",
     taskPh: "מה לעשות כאן? (ריק = מילוי שמתאים לסביבה)", pSelect: "בחירה", keysH: "קיצורים (כמו בפוטושופ)", close: "סגור",
     toChat: "שלח לצ'אט", toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתה (לא חובה)", toChatPh: "למשל: תעשה את השמיים חמים יותר", send: "שלח", sending: "שולח…", fromChat: "נפתח מהצ'אט",
@@ -85,6 +85,8 @@
     };
   }
   function restore(s) {
+    // A crop or a turn changed the picture's size: fit it in view again.
+    const resized = doc.w !== s.w || doc.h !== s.h;
     doc.w = s.w;
     doc.h = s.h;
     doc.active = s.active;
@@ -97,7 +99,7 @@
       return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}), ...(l.mask ? { mask: copyCanvas(l.mask) } : {}) };
     });
     renderLayers();
-    draw();
+    if (resized) fit(); else draw();
   }
   // History (Photoshop's History panel): each step keeps the state before it and its name.
   function remember(label = "Edit") {
@@ -460,6 +462,62 @@
     selection = null;
     renderLayers();
     fit();
+  }
+  // ---------- rotate and flip (Photoshop's Image → Image Rotation, and Edit → Transform → Flip for one layer) ----------
+  /**
+   * Turns or mirrors the whole picture: every layer (and its mask) is drawn at its place on the picture, then through
+   * the turn, so layers stay where they were relative to each other.
+   *
+   * @param how - "cw" or "ccw" (a quarter turn), "h" or "v" (a mirror).
+   */
+  function turnImage(how) {
+    remember(T(`h_${how}`, "Rotate"));
+    const quarter = how === "cw" || how === "ccw";
+    const w = quarter ? doc.h : doc.w, h = quarter ? doc.w : doc.h;
+    const through = (src, x, y) => {
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      if (how === "cw") g.setTransform(0, 1, -1, 0, w, 0);
+      else if (how === "ccw") g.setTransform(0, -1, 1, 0, 0, h);
+      else if (how === "h") g.setTransform(-1, 0, 0, 1, w, 0);
+      else g.setTransform(1, 0, 0, -1, 0, h);
+      g.drawImage(src, x, y);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      return { c, g };
+    };
+    for (const l of doc.layers) {
+      const { c, g } = through(l.canvas, l.x, l.y);
+      if (l.mask) l.mask = through(l.mask, l.x, l.y).c;
+      Object.assign(l, { canvas: c, ctx: g, x: 0, y: 0 });
+    }
+    doc.w = w;
+    doc.h = h;
+    selection = null;
+    renderLayers();
+    fit();
+  }
+  /** Mirrors only the active layer, in its own box (it stays where it is). */
+  function flipLayer(dir) {
+    const l = active();
+    if (!l) return;
+    remember(T(`h_l${dir}`, "Flip layer"));
+    const mirror = (src) => {
+      const c = document.createElement("canvas");
+      c.width = src.width;
+      c.height = src.height;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      if (dir === "h") g.setTransform(-1, 0, 0, 1, c.width, 0); else g.setTransform(1, 0, 0, -1, 0, c.height);
+      g.drawImage(src, 0, 0);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      return { c, g };
+    };
+    const { c, g } = mirror(l.canvas);
+    if (l.mask) l.mask = mirror(l.mask).c;
+    Object.assign(l, { canvas: c, ctx: g });
+    renderLayers();
+    draw();
   }
   const cancelCrop = () => { cropBox = null; draw(); };
   $("cropApply").onclick = applyCrop;
@@ -1128,6 +1186,11 @@
       ["redo", "Redo", "Ctrl+Y", redo],
       "-",
       ["clear", "Clear", "Del", clearSelection],
+      "-",
+      ["h_cw", "Rotate 90° clockwise", "", () => turnImage("cw")],
+      ["h_ccw", "Rotate 90° counter-clockwise", "", () => turnImage("ccw")],
+      ["h_h", "Flip picture horizontally", "", () => turnImage("h")],
+      ["h_v", "Flip picture vertically", "", () => turnImage("v")],
     ]],
     ["mSelect", "Select", [
       ["selAll", "Select all", "Ctrl+A", () => $("selAll").click()],
@@ -1139,6 +1202,8 @@
       ["duplicate", "Duplicate layer", "Ctrl+J", () => $("dupLayer").click()],
       ["mergeDown", "Merge down", "Ctrl+E", () => $("mergeDown").click()],
       ["flattenAll", "Flatten image", "", flattenAll],
+      ["h_lh", "Flip layer horizontally", "", () => flipLayer("h")],
+      ["h_lv", "Flip layer vertically", "", () => flipLayer("v")],
       "-",
       ["deleteLayer", "Delete layer", "", () => $("delLayer").click()],
     ]],
