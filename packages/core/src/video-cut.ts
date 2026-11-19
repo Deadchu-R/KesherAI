@@ -88,6 +88,13 @@ export interface ExportLook {
   /** "high" (bigger file), "normal" or "small" (smaller file). */
   quality?: "high" | "normal" | "small";
 }
+/** The transitions between clips one may choose (FFmpeg's xfade; CapCut's most used ones). */
+export const TRANSITIONS = ["fade", "fadeblack", "fadewhite", "wipeleft", "wiperight", "slideleft", "slideright", "slideup", "circleopen", "circleclose", "dissolve", "pixelize", "zoomin"];
+/** A transition between every two clips (CapCut's "Apply all"): which, and how long (0.1–1.5 s). */
+export interface Transition {
+  kind: string;
+  seconds: number;
+}
 /** The export heights one may choose. */
 export const EXPORT_HEIGHTS = [480, 720, 1080, 2160];
 const CRF = { high: 17, normal: 20, small: 27 } as const;
@@ -146,7 +153,7 @@ export function musicGraph(m: MusicTrack, input: number, total: number, voice?: 
  * @param music - A music track under it.
  * @returns The arguments.
  */
-export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }, fade = 0, texts: readonly TextOverlay[] = [], look: ExportLook = {}): string[] {
+export function cutArgs(input: string, output: string, segments: readonly Segment[], audio: boolean, sound?: string, burn?: string, shape?: string, music?: MusicTrack, more?: { clips: readonly ExtraClip[]; frame: Frame }, fade = 0, texts: readonly TextOverlay[] = [], look: ExportLook = {}, transition?: Transition): string[] {
   if (shape && !SHAPES.includes(shape)) throw new Error("Unknown shape.");
   if (burn && !/^[\w.-]+\.srt$/.test(burn)) throw new Error("The captions file name must be plain.");
   // With `sound` (a new sound for the video, from the sound editor), the sound comes from that second file instead.
@@ -154,13 +161,18 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   // Added clips (other videos, pictures): each stretch is fitted into the opened video's frame (letterboxed), at its
   // frame rate, with stereo sound at 48 kHz (silence where a clip has none), so concat can join them.
   const extra = more?.clips.length ? more : undefined;
+  // A transition between clips, without overlapping them (so every time in the edit stays where it was): each clip's
+  // last frame is held for the transition's length and blends into the start of the next one (FFmpeg's tpad + xfade).
+  // Every stretch is then made the same frame size, rate and time base, which xfade needs.
+  const tr = transition && segments.length > 1 && TRANSITIONS.includes(transition.kind) && more ? { kind: transition.kind, d: Math.min(1.5, Math.max(0.1, Number(transition.seconds) || 0.5)), frame: more.frame } : undefined;
   const first = 1 + (sound ? 1 : 0) + (music ? 1 : 0);
-  const fit = extra ? `,scale=${extra.frame.w}:${extra.frame.h}:force_original_aspect_ratio=decrease,pad=${extra.frame.w}:${extra.frame.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${extra.frame.fps},format=yuv420p` : "";
+  const frame = extra?.frame ?? tr?.frame;
+  const fit = frame ? `,scale=${frame.w}:${frame.h}:force_original_aspect_ratio=decrease,pad=${frame.w}:${frame.h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${frame.fps},format=yuv420p${tr ? ",settb=AVTB" : ""}` : "";
   const af = ",aformat=sample_rates=48000:channel_layouts=stereo";
   // A dip to black between clips (CapCut's simplest transition): each stretch fades in and out, its sound too; never
   // longer than a third of the stretch.
   const dip = (len: number, i: number) => {
-    const d = Math.min(Math.max(0, Number.isFinite(fade) ? fade : 0), 1, len / 3);
+    const d = tr ? 0 : Math.min(Math.max(0, Number.isFinite(fade) ? fade : 0), 1, len / 3);
     if (!d || segments.length < 2) return { v: "", a: "" };
     const first = i === 0, last = i === segments.length - 1;
     const f = (k: "fade" | "afade") => `${first ? "" : `,${k}=t=in:st=0:d=${d.toFixed(3)}`}${last ? "" : `,${k}=t=out:st=${(len - d).toFixed(3)}:d=${d.toFixed(3)}`}`;
@@ -200,7 +212,24 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
     const pic = `[${firstText + k}:v]format=rgba,fade=t=in:st=${t.start.toFixed(3)}:d=${d}:alpha=1,fade=t=out:st=${(t.end - Number(d)).toFixed(3)}:d=${d}:alpha=1[x${k}]`;
     return `${pic};[${k ? `t${k - 1}` : "vj"}][x${k}]overlay=0:0:enable='between(t,${t.start.toFixed(3)},${t.end.toFixed(3)})'[${k === texts.length - 1 ? "v" : `t${k}`}]`;
   }).join(";");
-  let graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[${texts.length ? "vj" : "v"}]${audio ? "[a]" : ""}${texts.length ? `;${textChain}` : ""}${crop}${sized}${subs}`;
+  const joined = texts.length ? "vj" : "v";
+  let join = `${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[${joined}]${audio ? "[a]" : ""}`;
+  if (tr) {
+    // The picture: [v0] held and blended into [v1] at v0's end, that held and blended into [v2] at their end, and on;
+    // each blend no longer than half the clip it blends into. The sound is joined as it is (it keeps every time).
+    const lens = segments.map((g) => (g.to - g.from) / (g.speed ?? 1));
+    let cur = "v0", at = lens[0]!;
+    const steps: string[] = [];
+    for (let i = 1; i < segments.length; i++) {
+      const d = Math.max(0.04, Math.min(tr.d, lens[i]! / 2)).toFixed(3);
+      const out = i === segments.length - 1 ? joined : `x${i}`;
+      steps.push(`[${cur}]tpad=stop_mode=clone:stop_duration=${d}[p${i}];[p${i}][v${i}]xfade=transition=${tr.kind}:duration=${d}:offset=${at.toFixed(3)}[${out}]`);
+      cur = out;
+      at += lens[i]!;
+    }
+    join = steps.join(";") + (audio ? `;${segments.map((_, i) => `[a${i}]`).join("")}concat=n=${segments.length}:v=0:a=1[a]` : "");
+  }
+  let graph = `${parts.join(";")};${join}${texts.length ? `;${textChain}` : ""}${crop}${sized}${subs}`;
   // The music track, mixed with the video's sound (or alone, for a silent video).
   const total = segments.reduce((t, s) => t + (s.to - s.from) / (s.speed ?? 1), 0);
   let outA = audio ? "[a]" : "";
@@ -231,17 +260,17 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
  * @param shape - One of SHAPES, or none.
  * @param music - A music track under it.
  */
-export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0, texts: readonly TextOverlay[] = [], look: ExportLook = {}): Promise<void> {
+export async function cutVideo(ffmpeg: string, input: string, output: string, segments: readonly Segment[], sound?: string, burn?: string, shape?: string, music?: MusicTrack, extras: ReadonlyArray<{ file: string; kind: "video" | "image" }> = [], fade = 0, texts: readonly TextOverlay[] = [], look: ExportLook = {}, transition?: Transition): Promise<void> {
   // With added clips: the opened video's frame, and which added videos have sound (FFmpeg reads their headers).
   let more: { clips: ExtraClip[]; frame: Frame } | undefined;
-  if (extras.length) {
+  if (extras.length || transition) {
     const main = await probeMedia(ffmpeg, input);
     const clips = await Promise.all(extras.map(async (c) => ({ ...c, audio: c.kind === "video" && (await probeMedia(ffmpeg, c.file)).audio })));
     more = { clips, frame: { w: main.w || 1920, h: main.h || 1080, fps: main.fps || 30 } };
   }
   const run = (audio: boolean) =>
     new Promise<void>((resolve, reject) => {
-      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more, fade, texts, look), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
+      execFile(ffmpeg, cutArgs(input, output, segments, audio, sound, burn, shape, music, more, fade, texts, look, transition), { cwd: dirname(output), timeout: 60 * 60_000, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(String(stderr || err.message).slice(0, 400))) : resolve()));
     });
   try {
     await run(true);

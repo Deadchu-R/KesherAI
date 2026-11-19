@@ -142,3 +142,17 @@ test("the export's size (only down, even widths) and quality", () => {
   assert.doesNotMatch(b[b.indexOf("-filter_complex") + 1]!, /scale=-2/);
   assert.equal(b[b.indexOf("-crf") + 1], "20");
 });
+
+test("a transition between clips holds each clip's end and blends it into the next, keeping every time", () => {
+  const frame = { w: 640, h: 360, fps: 30 };
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }, { from: 3, to: 7, speed: 2 }, { from: 6, to: 6.4 }], true, undefined, undefined, undefined, undefined, { clips: [], frame }, 0.4, [], {}, { kind: "dissolve", seconds: 0.6 });
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.match(g, /\[v0\]tpad=stop_mode=clone:stop_duration=0\.600\[p1\];\[p1\]\[v1\]xfade=transition=dissolve:duration=0\.600:offset=2\.000\[x1\]/);
+  // Half of the 0.4 s clip at most, at the end of the first two (2 + 2 s).
+  assert.match(g, /\[x1\]tpad=stop_mode=clone:stop_duration=0\.200\[p2\];\[p2\]\[v2\]xfade=transition=dissolve:duration=0\.200:offset=4\.000\[v\]/);
+  assert.match(g, /\[a0\]\[a1\]\[a2\]concat=n=3:v=0:a=1\[a\]/);
+  assert.match(g, /settb=AVTB/);
+  assert.doesNotMatch(g, /fade=t=in/); // the dip is not added on top
+  const b = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }, { from: 3, to: 4 }], true, undefined, undefined, undefined, undefined, { clips: [], frame }, 0, [], {}, { kind: "nope", seconds: 1 });
+  assert.doesNotMatch(b[b.indexOf("-filter_complex") + 1]!, /xfade/);
+});
