@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", speedL: "מהירות", speedHint: "גבוה ומהיר יותר, או נמוך ואיטי יותר", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -727,17 +727,20 @@
 
   // ---------- buttons and keys ----------
   /**
-   * Audacity's Change Speed: the selection played k times as fast (higher and shorter, like a faster tape), by
-   * reading its samples at k steps (linear between two). The words after it move with the sound.
+   * The selection played k times as fast: with "keep the pitch", Audacity's Change Tempo (tempo.js); without, its Change
+   * Speed (higher and shorter, like a faster tape: its samples read at k steps). The words after it move with the sound.
    *
    * @param k - 0.5 to 2.
    */
-  function changeSpeed(k) {
+  async function changeSpeed(k) {
     if (!need()) return;
     remember();
     const [a, b] = sel;
-    const n = Math.max(1, Math.round((b - a) / k));
-    chans = chans.map((c) => {
+    // "Keep the pitch" (on unless unticked): the voice stays itself, only faster or slower (tempo.js, WSOLA).
+    const kept = $("keepPitch").checked ? (await import("./tempo.js")).stretch(chans.map((c) => c.subarray(a, b)), k, rate) : null;
+    const n = kept ? kept[0].length : Math.max(1, Math.round((b - a) / k));
+    chans = chans.map((c, ch) => {
+      if (kept) { const out = new Float32Array(c.length - (b - a) + n); out.set(c.subarray(0, a)); out.set(kept[ch], a); out.set(c.subarray(b), a + n); return out; }
       const out = new Float32Array(c.length - (b - a) + n);
       out.set(c.subarray(0, a));
       for (let i = 0; i < n; i++) {
@@ -752,7 +755,7 @@
     sel = [a, a + n];
     after();
   }
-  $("speed").onchange = () => { const k = Number($("speed").value); $("speed").value = "1"; if (k !== 1) changeSpeed(k); };
+  $("speed").onchange = () => { const k = Number($("speed").value); $("speed").value = "1"; if (k !== 1) void changeSpeed(k); };
   Object.keys(ops).forEach((k) => ($(k).onclick = ops[k]));
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
@@ -776,7 +779,7 @@
   new ResizeObserver(() => draw()).observe(wrap);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
-    if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); $("speedBox").title = T("speedHint", "Higher and faster, or lower and slower"); }
+    if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); $("speedBox").title = T("speedHint", "Faster or slower; without \"keep pitch\" also higher or lower"); }
     draw();
   }).catch(() => undefined);
   open();
