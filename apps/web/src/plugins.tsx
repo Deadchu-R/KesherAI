@@ -436,6 +436,17 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // The editors' "Add" (RESEARCH_LOG "Adding files and objects to the editors"): what can be added from this chat
         // or from the bank of everything made, one item's bytes, taking a bank item into this chat, and a file from the
         // device put into the chat. Ids: `chat:<path>` for this chat's files, the bank's own ids otherwise.
+        // A picture of one object (in this chat) turned into a 3D model (Hunyuan3D 2 in ComfyUI), saved under 3d/. The
+        // first time the model needs a download: the answer says how big, and the page asks the person before
+        // calling again with download: true.
+        case "model.fromPicture": {
+          need("model");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/model3d`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: String(p.image ?? ""), download: p.download === true }) });
+          const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string; needGb?: number; downloading?: boolean };
+          if (res.ok || res.status === 202 || (res.status === 409 && (body.needGb || body.downloading))) return body;
+          throw new Error(body.error ?? String(res.status));
+        }
         case "media.list": {
           if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           const kind = ["image", "video", "audio", "model"].includes(String(p.kind)) ? String(p.kind) : "";

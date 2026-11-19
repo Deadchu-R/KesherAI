@@ -142,6 +142,11 @@ export class ConversationManager {
     void findEngines().then((e) => (this.unrealEngines = e.length > 0), () => undefined);
   }
 
+  /** The ready ComfyUI flows' runner (music, sound, 3D), for the editors' routes; undefined when it is not set up. */
+  get flows(): ConversationDeps["flows"] {
+    return this.deps.flows;
+  }
+
   /** @param deps - Services the manager needs. */
   constructor(
     private readonly deps: ConversationDeps,

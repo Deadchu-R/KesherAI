@@ -465,27 +465,44 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     run: async (input, ctx) => {
       const blocked = gate("3d-hunyuan3d", input.download);
       if (blocked) return { output: blocked };
-      const rel = String(input.image ?? "").replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
       if (!ctx.workspace) return { output: "There is no folder for this chat to read the picture from." };
-      const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
-      const { readFile, writeFile, mkdir } = await import("node:fs/promises");
-      const file = resolvePath(ctx.workspace, rel);
-      if (relative(ctx.workspace, file).startsWith("..")) return { output: "The picture must be one attached to this chat." };
-      const data = await readFile(file).catch(() => undefined);
-      if (!data) return { output: `No picture at ${rel}. Ask the user to attach it.` };
-      const files = await flows.run("3d-hunyuan3d", async (flow, upload) => {
-        flow["2"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
-        flow["7"]!.inputs.seed = randomInt(2 ** 31);
-      }, ctx.signal);
-      const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
-      if (!glb) return { output: "ComfyUI finished but saved no 3D model." };
-      const out = joinPath("3d", `${basename(file).replace(/\.[^.]+$/, "")}-${Date.now().toString(36)}.glb`);
-      await mkdir(dirname(joinPath(ctx.workspace, out)), { recursive: true });
-      await writeFile(joinPath(ctx.workspace, out), glb.data);
+      const made = await pictureTo3d(flows, ctx.workspace, String(input.image ?? ""), ctx.signal);
+      if ("error" in made) return { output: made.error };
+      const out = made.path;
       return { output: `Made the 3D model ${out} (GLB, shape only); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
     },
   };
   return [music, sound, animate, model3d];
+}
+
+/**
+ * A picture of one object turned into a 3D model (GLB, shape only) with the ready flow Hunyuan3D 2 in ComfyUI, saved
+ * in the chat's folder under 3d/. Used by the chat's make_3d and by the 3D editor's "A model from words" (its route).
+ *
+ * @param flows - The ready flows' runner (ready and allowed is checked by the caller).
+ * @param workspace - The chat's folder.
+ * @param image - The picture's path in it (an "[Attached: …]" is taken off).
+ * @param signal - To stop it.
+ * @returns The model's path in the folder, or what went wrong.
+ */
+export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, image: string, signal: AbortSignal): Promise<{ path: string } | { error: string }> {
+  const rel = image.replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
+  const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
+  const { readFile, writeFile, mkdir } = await import("node:fs/promises");
+  const file = resolvePath(workspace, rel);
+  if (relative(workspace, file).startsWith("..")) return { error: "The picture must be one attached to this chat." };
+  const data = await readFile(file).catch(() => undefined);
+  if (!data) return { error: `No picture at ${rel}. Ask the user to attach it.` };
+  const files = await flows.run("3d-hunyuan3d", async (flow, upload) => {
+    flow["2"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
+    flow["7"]!.inputs.seed = randomInt(2 ** 31);
+  }, signal);
+  const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
+  if (!glb) return { error: "ComfyUI finished but saved no 3D model." };
+  const out = joinPath("3d", `${basename(file).replace(/\.[^.]+$/, "")}-${Date.now().toString(36)}.glb`);
+  await mkdir(dirname(joinPath(workspace, out)), { recursive: true });
+  await writeFile(joinPath(workspace, out), glb.data);
+  return { path: out.split("\\").join("/") };
 }
 
 /**

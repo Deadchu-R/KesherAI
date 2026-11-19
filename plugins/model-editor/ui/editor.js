@@ -1,7 +1,7 @@
 // KesherAI's 3D editor, stage 1 (docs/RESEARCH_LOG.md → "The 3D editor's screen"): the chat's model in three.js, its
 // parts as a list, each part's material, measurements, light setups, versions, and a GLB back to the chat. A plugin page
 // with no build step (three.js is vendored in ui/vendor/three/); it talks to KesherAI only through window.kesher.
-/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder, File, MediaRecorder, performance */
+/* global window, document, Image, addEventListener, requestAnimationFrame, setTimeout, clearTimeout, ResizeObserver, FileReader, Blob, URL, setInterval, atob, confirm, TextDecoder, File, MediaRecorder, performance, fetch */
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
@@ -16,7 +16,7 @@ import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } fr
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
-  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
+  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "תמונה ואז Hunyuan3D, במחשב שלך", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד (Hunyuan3D 2) עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
@@ -1799,14 +1799,35 @@ async function addFrom(from) {
     try { const { bytes } = await takeMedia(it); await addFile(it.name, bytes); } finally { busy(""); }
   } catch (e) { msg(e.message, true); }
 }
-/** A model from words: the chat makes it (a picture, then Hunyuan3D), and it comes back through "From this chat". */
+/**
+ * A model from words, without the chat (Meshy's and Tripo's text-to-3D, as two steps): the picture model draws the
+ * object alone on a plain background, then Hunyuan3D 2 in ComfyUI turns that picture into a model (shape only) that
+ * lands in the view. The first time, the 3D model downloads after a yes (its size is shown).
+ */
 async function addFromWords() {
   const words = window.prompt(T("wordsAsk", "What to make? (an old wooden chair…)"));
   if (!words?.trim()) return;
+  // busy() counts its callers: one at a time here.
+  let shown = false;
+  const say = (t) => { if (shown) busy(""); shown = !!t; if (t) busy(t); };
   try {
-    await kesher.call("chat.ask", { text: `Make a 3D model of: ${words.trim()}. First a picture of the object alone on a plain background, then turn it into a 3D model with make_3d.` });
-    msg(T("wordsSent", "Asked the chat. When the model is ready (a few minutes), add it from \"From this chat\"."));
-  } catch (e) { msg(e.message, true); }
+    say(T("wordsDrawing", "Drawing the object… (a minute or two)"));
+    const [url] = await kesher.call("image.generate", { prompt: `${words.trim()}, a single object, whole and centered, three-quarter view, plain white background, soft even studio light, no shadow, no text`, width: 1024, height: 1024 });
+    if (!url) throw new Error("No picture came back.");
+    const blob = await (await fetch(url)).blob();
+    const { path } = await uploadMedia(new File([blob], `${words.trim().slice(0, 30).replace(/[^\p{L}\p{N}]+/gu, "-")}-${Date.now().toString(36)}.png`, { type: "image/png" }));
+    if (!path) throw new Error(T("needChat", "Open the 3D editor from a chat to make a model here"));
+    say(T("wordsModelling", "Turning the picture into a model… (a few minutes, on your computer)"));
+    let r = await kesher.call("model.fromPicture", { image: path });
+    if (r.needGb) {
+      say("");
+      if (!window.confirm(T("wordsDownload", "The 3D model (Hunyuan3D 2) is not on this computer yet. Download it now?") + ` (${r.needGb} GB)`)) return msg(T("wordsPicKept", "The picture is in the chat's files; make the model later from it"));
+      r = await kesher.call("model.fromPicture", { image: path, download: true });
+    }
+    if (r.downloading) return msg(T("wordsDownloading", "The 3D model is downloading (see the downloads circle); try again when it is done. The picture is in the chat's files."));
+    const bytes = await kesher.call("media.bytes", { id: `chat:${r.path}` });
+    await addFile(r.path.split("/").pop(), bytes);
+  } catch (e) { msg(e.message || String(e), true); } finally { say(""); }
 }
 function addMenu(anchor) {
   openMenu(anchor, T("addAt", "Lands in the middle of the view, chosen"), [
@@ -1819,7 +1840,7 @@ function addMenu(anchor) {
     { icon: "🎥", label: T("aCamera", "Camera"), run: addCamera },
     { icon: "🖼", label: T("aRef", "Reference picture"), hint: T("aRefHint", "behind the model, not exported"), run: () => addFrom("reference") },
     "-",
-    { icon: "✨", label: T("aWords", "A model from words"), hint: T("aWordsHint", "through the chat"), run: addFromWords },
+    { icon: "✨", label: T("aWords", "A model from words"), hint: T("aWordsHint", "a picture, then Hunyuan3D, on your computer"), run: addFromWords },
   ]);
 }
 $("addBtn").onclick = () => addMenu($("addBtn"));
