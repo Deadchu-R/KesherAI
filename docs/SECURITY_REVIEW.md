@@ -1512,3 +1512,12 @@ S5 an outside scanner's rules for Electron.
 - Performance: the text picture is cached per text and frame size; the voice model loads once per script.
 - Checked: lint, typecheck, tests (video-cut 13, voice-clone 2), a real FFmpeg export with a clip, a fade, a text
   and a 9:16 shape; the editor's text in a browser (desktop and 390 px).
+
+## Scan 160 (2026-11-19): clip speed and volume, words to picture / music in the editors, the image editor's place
+- **Speed and volume**: checkSegments turns both into finite numbers in range (0.25–4, 0–2) and rounds them before
+  they reach the filter graph; only `toFixed` digits go into it, so no text from the page enters ffmpeg's arguments.
+- **Picture and music from words**: go through `chat.ask`, which asks the person first (confirm) and runs as a normal
+  chat turn; the editor gets back only the path the chat made, read through `media.bytes` (inside the chat's folder).
+- **Image editor**: `media.*` now also open to the `image` use. The same checks hold: ids are `chat:` paths resolved
+  inside the chat's folder or bank ids (asset-bank.ts pathOf refuses `..`, absolute and drive paths, code sessions).
+- No new routes, no new dependencies. Tests 951 pass; lint and typecheck clean. Nothing to fix.
