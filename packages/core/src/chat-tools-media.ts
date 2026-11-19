@@ -303,7 +303,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
     return st.ready || st.downloading ? undefined : `Downloads a model of about ${st.missingGb} GB.`;
   };
   notes.push(
-    "make_sound makes a sound effect or ambiance from a description (Stable Audio 3 Small-SFX), seconds long; make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI; check the lyrics' spelling and rhythm before calling it (a song sung from clumsy lyrics sounds clumsy). make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
+    "animate_picture sets a picture in motion (Wan 2.2 5B; a video that starts from it, e.g. a shot's last frame to continue it). make_sound makes a sound effect or ambiance from a description (Stable Audio 3 Small-SFX), seconds long; make_music writes a song (style tags and lyrics, in the song's own language and letters, Hebrew too) with ACE-Step 1.5 in ComfyUI; check the lyrics' spelling and rhythm before calling it (a song sung from clumsy lyrics sounds clumsy). make_3d turns a picture of one object into a 3D model (GLB) with Hunyuan3D 2. Both take minutes. If they say a download is needed, ask the user first.",
   );
   // ACE-Step 1.5 XL when it is here (better, above all in languages it saw less), else 1.5; the first ACE-Step only
   // when it is already here and 1.5 is not (no second download needed).
@@ -400,6 +400,53 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       return { output: `Made the sound (${seconds} s); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
     },
   };
+  // A picture set in motion (Wan 2.2 TI2V 5B in ComfyUI): the video editor's "continue this shot" (its last frame),
+  // Premiere's reference frames for its video model.
+  const animate: AgentTool = {
+    risk: "safe",
+    askFirst: askDownload("video-wan22-ti2v"),
+    spec: {
+      name: "animate_picture",
+      description: "Set a picture in motion: a 1–5 second video that starts from the picture (Wan 2.2 5B in ComfyUI, 24 fps), with the motion described in words. Use it to continue a video's shot from its last frame, or to bring a still to life. Slow (minutes on a gaming graphics card).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          image: { type: "string", description: "The picture: the path the user attached it as (\"[Attached: …]\"), a file in this chat's folder." },
+          prompt: { type: "string", description: "The motion and what happens, in English: camera move, subject's action, mood." },
+          seconds: { type: "number", description: "Length, 1–5 (default 5)." },
+          download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
+        },
+        required: ["image", "prompt"],
+      },
+    },
+    run: async (input, ctx) => {
+      const blocked = gate("video-wan22-ti2v", input.download);
+      if (blocked) return { output: blocked };
+      const rel = String(input.image ?? "").replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
+      if (!ctx.workspace) return { output: "There is no folder for this chat to read the picture from." };
+      const { resolve: resolvePath, relative, basename } = await import("node:path");
+      const { readFile } = await import("node:fs/promises");
+      const file = resolvePath(ctx.workspace, rel);
+      if (relative(ctx.workspace, file).startsWith("..")) return { output: "The picture must be one attached to this chat." };
+      const data = await readFile(file).catch(() => undefined);
+      if (!data) return { output: `No picture at ${rel}. Ask the user to attach it.` };
+      // Wan 2.2 5B's sizes: wide 1280×704 or tall 704×1280, by the picture's own shape; frames 4n+1 at 24 a second.
+      const size = pictureSize(new Uint8Array(data));
+      const tall = size ? size.h > size.w : false;
+      const seconds = Math.min(5, Math.max(1, Number(input.seconds ?? 5) || 5));
+      const frames = 4 * Math.round((seconds * 24) / 4) + 1;
+      const files = await flows.run("video-wan22-ti2v", async (flow, upload) => {
+        flow["4"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
+        flow["5"]!.inputs.text = String(input.prompt ?? "").slice(0, 1000);
+        Object.assign(flow["7"]!.inputs, { width: tall ? 704 : 1280, height: tall ? 1280 : 704, length: frames });
+        flow["9"]!.inputs.seed = randomInt(2 ** 31);
+      }, ctx.signal);
+      const vid = files.find((f) => f.mimeType.startsWith("video/"));
+      if (!vid) return { output: "ComfyUI finished but saved no video." };
+      const asset = await deps.assets.save(vid.data, vid.mimeType, { sourceModelId: "comfyui/wan-2.2-ti2v-5b", meta: { prompt: String(input.prompt ?? "").slice(0, 1000) } });
+      return { output: `Made a ${seconds}-second video from the picture; the user can watch it.`, videoIds: [asset.id] };
+    },
+  };
   const model3d: AgentTool = {
     risk: "safe",
     askFirst: askDownload("3d-hunyuan3d"),
@@ -438,7 +485,28 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       return { output: `Made the 3D model ${out} (GLB, shape only); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
     },
   };
-  return [music, sound, model3d];
+  return [music, sound, animate, model3d];
+}
+
+/**
+ * A PNG's or JPEG's size from its first bytes (no decoding), for picking a video's shape.
+ *
+ * @param b - The file's bytes.
+ * @returns Width and height, or undefined for another kind of file.
+ */
+export function pictureSize(b: Uint8Array): { w: number; h: number } | undefined {
+  const be = (i: number, n: number) => { let v = 0; for (let k = 0; k < n; k++) v = v * 256 + (b[i + k] ?? 0); return v; };
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return { w: be(16, 4), h: be(20, 4) };
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    // JPEG: walk the segments to the frame header (SOF0–SOF15, not DHT, JPG or DAC).
+    for (let i = 2; i + 9 < b.length; ) {
+      if (b[i] !== 0xff) return undefined;
+      const m = b[i + 1]!;
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { w: be(i + 7, 2), h: be(i + 5, 2) };
+      i += 2 + be(i + 2, 2);
+    }
+  }
+  return undefined;
 }
 
 /**

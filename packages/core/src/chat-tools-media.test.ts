@@ -36,3 +36,14 @@ test("a song's cover: made with the active image model, no words asked for; none
   assert.equal(await songCover(deps(undefined), "pop", undefined), undefined);
   assert.equal(await songCover(deps("comfyui/wan_2.1_vae.safetensors"), "pop", undefined), undefined, "a support file is not an image model");
 });
+
+test("pictureSize reads a PNG's and a JPEG's size from their first bytes", async () => {
+  const { pictureSize } = await import("./chat-tools-media.js");
+  // A PNG header: 8 signature bytes, the IHDR length and name, then width and height.
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 1, 0xe0, 0, 0, 3, 0x56]);
+  assert.deepEqual(pictureSize(png), { w: 480, h: 854 });
+  // A JPEG: SOI, an APP0 segment, then SOF0 with height and width.
+  const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 17, 8, 1, 0xe0, 2, 0x80, 3]);
+  assert.deepEqual(pictureSize(jpg), { w: 640, h: 480 });
+  assert.equal(pictureSize(new Uint8Array([1, 2, 3])), undefined);
+});

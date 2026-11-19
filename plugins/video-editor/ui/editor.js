@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiContinue: "המשך את השוט הזה (הפריים האחרון שלו בתנועה, דרך הצ׳אט; נכנס אחריו)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -745,6 +745,7 @@
     $("aiInfo").textContent = `${T("clip", "Clip")} ${chosen + 1} · ${fmt(len(c))}`;
     // A picture clip has no frame of its own to redraw.
     document.querySelector('[name="aiKind"][value="restyle"]').disabled = media[mOf(c)]?.kind === "image";
+    document.querySelector('[name="aiKind"][value="continue"]').disabled = media[mOf(c)]?.kind === "image";
     $("aiDialog").showModal();
     $("aiText").focus();
   };
@@ -753,7 +754,7 @@
     const words = $("aiText").value.trim();
     if (!words) return msg(T("aiNoWords", "Write what it should be"), true);
     const kind = document.querySelector('[name="aiKind"]:checked').value;
-    void (kind === "video" ? videoFromWords(words) : pictureFor(words, kind === "restyle"));
+    void (kind === "video" ? videoFromWords(words) : kind === "continue" ? continueShot(words) : pictureFor(words, kind === "restyle"));
   });
   /** A picture from words (or this shot's frame redrawn by the words) in place of the chosen clip, at its length. */
   async function pictureFor(words, restyle) {
@@ -786,32 +787,60 @@
    * if it is shorter). It waits up to 20 minutes; the editor can be used meanwhile.
    */
   let waitingVideo = null;
+  /**
+   * Continue this shot (Premiere's reference frames; the chat's animate_picture, Wan 2.2 5B): the clip's last frame
+   * goes into the chat, the chat sets it in motion by the words, and the new clip goes in right after this one.
+   */
+  async function continueShot(words) {
+    const i = chosen, c = clips[i];
+    if (!c) return;
+    seek(startOf(i) + len(c) - 0.05);
+    await new Promise((r) => setTimeout(r, 300));
+    const f = await frameNow();
+    if (!f) return;
+    const am = await import("./add-media.js");
+    let path;
+    try { ({ path } = await am.uploadMedia(new File([f], `last-frame-${Date.now().toString(36)}.png`, { type: "image/png" }))); } catch (e) { return msg(e.message || String(e), true); }
+    if (!path) return msg(T("needChat", "To add clips, open the video editor from a chat"), true);
+    await waitForVideo(`Continue the shot from its last frame (attached: ${path}): ${words}. Use animate_picture with image ${path} and seconds 5.`, c.id, true);
+  }
   // What the chat makes is kept in the bank (the asset store) and what is saved into the chat is in its folder: both.
   const allMedia = async (kind) => (await Promise.all(["chat", "bank"].map((from) => kesher.call("media.list", { from, kind }).catch(() => [])))).flat();
   async function videoFromWords(words) {
-    const id = clips[chosen]?.id;
-    const seconds = Math.max(1, Math.min(5, Math.round(len(clips[chosen]))));
+    const c = clips[chosen];
+    const seconds = Math.max(1, Math.min(5, Math.round(len(c))));
+    await waitForVideo(`Make a video clip for my edit: ${words}. Use generate_video with seconds ${seconds}.`, c?.id, false);
+  }
+  /**
+   * Asks the chat (which asks the person first), then watches the chat's files and the bank; the first new video goes
+   * in place of the clip `id` (slowed to fill it when shorter) or, with `after`, right after it. Up to 20 minutes.
+   */
+  async function waitForVideo(ask, id, after) {
     const before = new Set((await allMedia("video")).map((x) => x.id));
     try {
-      await kesher.call("chat.ask", { text: `Make a video clip for my edit: ${words}. Use generate_video with seconds ${seconds}.` });
+      await kesher.call("chat.ask", { text: ask });
     } catch (e) { return msg(e.message || String(e), true); }
     clearInterval(waitingVideo);
     const until = Date.now() + 20 * 60_000;
     msg(T("aiWaiting", "Asked the chat; the clip goes in by itself when it is ready (a few minutes)"));
     waitingVideo = setInterval(async () => {
       if (Date.now() > until) { clearInterval(waitingVideo); return msg(T("aiLate", "The clip did not come in 20 minutes; add it from the chat's files when it does"), true); }
-      const now = await allMedia("video");
-      const fresh = now.find((x) => !before.has(x.id) && !/-edited|clip-edited/.test(x.name));
+      const fresh = (await allMedia("video")).find((x) => !before.has(x.id) && !/-edited|clip-edited/.test(x.name));
       if (!fresh) return;
       clearInterval(waitingVideo);
       try {
         const am = await import("./add-media.js");
         const { path, bytes } = await am.takeMedia(fresh);
         const at = clips.findIndex((c) => c.id === id);
-        await addClip(fresh.name, path, bytes, at >= 0 ? at : undefined);
+        if (after) {
+          // At the end of that clip (or of the edit), so it goes in after it.
+          now = at >= 0 ? startOf(at) + len(clips[at]) : total();
+          await addClip(fresh.name, path, bytes);
+        } else await addClip(fresh.name, path, bytes, at >= 0 ? at : undefined);
       } catch (e) { msg(e.message || String(e), true); }
     }, 10_000);
   }
+
 
   /** The frame under the playhead as a PNG, or undefined (with a message) when it is not on a video clip. */
   async function frameNow() {
