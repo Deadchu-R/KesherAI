@@ -168,7 +168,12 @@ export function cutArgs(input: string, output: string, segments: readonly Segmen
   // Text over the picture: each its own still input, laid over the whole frame while it shows (before the new shape,
   // so it is cut with the picture).
   const firstText = 1 + (sound ? 1 : 0) + (music ? 1 : 0) + (extra?.clips.length ?? 0);
-  const textChain = texts.map((t, k) => `[${k ? `t${k - 1}` : "vj"}][${firstText + k}:v]overlay=0:0:enable='between(t,${t.start.toFixed(3)},${t.end.toFixed(3)})'[${k === texts.length - 1 ? "v" : `t${k}`}]`).join(";");
+  // Each fades in and out over a quarter second (a third of it when shorter), as CapCut's default text animation.
+  const textChain = texts.map((t, k) => {
+    const d = Math.min(0.25, (t.end - t.start) / 3).toFixed(3);
+    const pic = `[${firstText + k}:v]format=rgba,fade=t=in:st=${t.start.toFixed(3)}:d=${d}:alpha=1,fade=t=out:st=${(t.end - Number(d)).toFixed(3)}:d=${d}:alpha=1[x${k}]`;
+    return `${pic};[${k ? `t${k - 1}` : "vj"}][x${k}]overlay=0:0:enable='between(t,${t.start.toFixed(3)},${t.end.toFixed(3)})'[${k === texts.length - 1 ? "v" : `t${k}`}]`;
+  }).join(";");
   let graph = `${parts.join(";")};${ins}concat=n=${segments.length}:v=1:a=${audio ? 1 : 0}[${texts.length ? "vj" : "v"}]${audio ? "[a]" : ""}${texts.length ? `;${textChain}` : ""}${crop}${subs}`;
   // The music track, mixed with the video's sound (or alone, for a silent video).
   const total = segments.reduce((t, s) => t + (s.to - s.from), 0);

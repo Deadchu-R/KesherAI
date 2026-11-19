@@ -496,7 +496,11 @@
   function syncText(t) {
     const on = texts.filter((x) => t >= x.start && t < x.end).at(-1);
     textOver.hidden = !on;
-    if (on) textOver.src = textPic(on);
+    if (!on) return;
+    textOver.src = textPic(on);
+    // The same quarter-second fade in and out as the export.
+    const d = Math.min(0.25, (on.end - on.start) / 3);
+    textOver.style.opacity = String(Math.max(0, Math.min(1, (t - on.start) / d, (on.end - t) / d)));
   }
   const musicAudio = document.createElement("audio");
   const musicSettings = () => ({ volume: Number($("musicVol").value) / 100, fadeIn: Number($("fadeIn").value) || 0, fadeOut: Number($("fadeOut").value) || 0, duck: $("duck").checked });

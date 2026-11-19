@@ -110,5 +110,6 @@ test("text over the picture: each PNG is a still input laid over the frame while
   const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 4 }], true, undefined, undefined, "9:16", undefined, undefined, 0, [{ file: "t1.png", start: 0.5, end: 2 }, { file: "t2.png", start: 2, end: 4 }]);
   const g = a[a.indexOf("-filter_complex") + 1]!;
   assert.ok(a.join(" ").includes("-loop 1 -t 4.000 -i t1.png -loop 1 -t 4.000 -i t2.png"));
-  assert.match(g, /concat=n=1:v=1:a=1\[vj\]\[a\];\[vj\]\[1:v\]overlay=0:0:enable='between\(t,0\.500,2\.000\)'\[t0\];\[t0\]\[2:v\]overlay=0:0:enable='between\(t,2\.000,4\.000\)'\[v\];\[v\]crop=/);
+  assert.match(g, /\[1:v\]format=rgba,fade=t=in:st=0\.500:d=0\.250:alpha=1,fade=t=out:st=1\.750:d=0\.250:alpha=1\[x0\];\[vj\]\[x0\]overlay=0:0:enable='between\(t,0\.500,2\.000\)'\[t0\]/);
+  assert.match(g, /\[t0\]\[x1\]overlay=0:0:enable='between\(t,2\.000,4\.000\)'\[v\];\[v\]crop=/);
 });
