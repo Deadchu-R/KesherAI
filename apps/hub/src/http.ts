@@ -8,7 +8,7 @@ export const SESSION_COOKIE = "__Host-kh_s";
 
 /** Headers every answer carries (strict CSP, no framing, no sniffing, no referrer). */
 export const SECURITY_HEADERS: Record<string, string> = {
-  "content-security-policy": "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; style-src 'self' https://accounts.google.com/gsi/style; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  "content-security-policy": "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",

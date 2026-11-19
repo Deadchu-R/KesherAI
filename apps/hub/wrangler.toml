@@ -5,6 +5,8 @@ main = "src/worker.ts"
 compatibility_date = "2026-10-01"
 # The free *.workers.dev address stays on until a custom domain works; turn it off in the dashboard after that.
 workers_dev = true
+# No public preview addresses for other versions.
+preview_urls = false
 # Variables and secrets typed in the dashboard are kept on every deploy (this file defines none).
 keep_vars = true
 
