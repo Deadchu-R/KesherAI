@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { loadReasonText, type LoadReason } from "./load-reason";
 import { api, isRemote } from "./api";
 import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
@@ -22,6 +23,8 @@ interface Info {
   address?: string;
   version?: string;
   model?: string | null;
+  /** Why the model was loaded (load-reason.ts). */
+  loadedWhy?: string;
   gpuPlan?: string | null;
   activeChat?: string;
   remote?: boolean;
@@ -146,7 +149,7 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
         api<Hardware>("/api/hardware").catch(() => undefined),
         api<{ name?: string; links?: Array<{ url: string }> }>("/api/remote/links").catch(() => undefined),
         api<{ version: string; commit?: string }>("/api/version").catch(() => undefined),
-        api<{ modelPath?: string; running: boolean; gpus?: string }>("/api/engines/llamacpp").catch(() => undefined),
+        api<{ modelPath?: string; running: boolean; gpus?: string; loadedFor?: LoadReason }>("/api/engines/llamacpp").catch(() => undefined),
         api<{ activeModels?: Record<string, string>; remote?: { enabled?: boolean } }>("/api/settings").catch(() => undefined),
       ]);
       if (!alive) return;
@@ -156,6 +159,7 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
         address: links?.links?.[0]?.url?.replace(/^https?:\/\//, "") ?? location.host,
         ...(version ? { version: `v${version.version}${version.commit ? ` · ${version.commit}` : ""}` } : {}),
         model: engine?.running && engine.modelPath ? engine.modelPath.split(/[\\/]/).pop() ?? null : null,
+        ...(engine?.running && engine.loadedFor ? { loadedWhy: loadReasonText(engine.loadedFor) } : {}),
         gpuPlan: engine?.gpus ?? null,
         ...(settings?.activeModels?.chat ? { activeChat: settings.activeModels.chat } : {}),
         remote: !!settings?.remote?.enabled,
@@ -229,6 +233,7 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
           <div className="hub-facts small">
             <p><span className="muted">{t("hubChat")}</span> <span dir="ltr">{info.activeChat?.split("/").slice(1).join("/") || "—"}</span></p>
             <p><span className="muted">{t("hubLoaded")}</span> <span dir="ltr">{info.model ?? t("hubNone")}</span></p>
+            {info.loadedWhy && <p className="muted">{info.loadedWhy}</p>}
             {info.gpuPlan && <p className="muted" dir="ltr">{info.gpuPlan}</p>}
             <p><span className="muted">{t("hubRemote")}</span> {info.remote ? t("hubOn") : t("hubOff")}</p>
           </div>

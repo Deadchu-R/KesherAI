@@ -266,9 +266,22 @@ export function waitForDownload(dm: DownloadManager, id: string): Promise<Downlo
   });
 }
 
+/** Why the chat model was loaded (shown on screen, so a load nobody expected has a name; Roee, 2026-11-18). */
+export type LoadKind = "chosen" | "chat" | "request" | "startup" | "settings" | "update" | "calibration" | "setup" | "benchmark";
+/** Why it was loaded, and when. */
+export interface LoadReason {
+  kind: LoadKind;
+  /** The chats that needed it ("chat"). */
+  chats?: string[];
+  /** When it was loaded (ms since 1970). */
+  at?: number;
+}
+
 /** What the UI shows about the built-in engine. */
 export interface EngineStatus {
   installed: boolean;
+  /** Why the model that is loaded now was loaded, and when. */
+  loadedFor?: LoadReason;
   /** llama.cpp build installed, e.g. `b12110`. */
   version?: string;
   binaryPath?: string;
@@ -331,6 +344,7 @@ export class LlamaEngine {
       ...(installed ? { binaryPath: this.opts.binaryPath } : {}),
       running: !!this.proc && this.proc.exitCode === null,
       ...(this.modelPath ? { modelPath: this.modelPath } : {}),
+      ...(this.modelPath && this.loadedFor ? { loadedFor: this.loadedFor } : {}),
       ...(this.job ? { job: this.job } : {}),
       log: this.log.slice(-60),
       ...(this.gpuSummary ? { gpus: this.gpuSummary } : {}),
@@ -415,6 +429,9 @@ export class LlamaEngine {
   fail(err: unknown): void {
     this.job = { phase: "error", message: err instanceof Error ? err.message : String(err) };
   }
+
+  /** Why the model now loading is loaded (cleared when the engine stops). */
+  loadedFor?: LoadReason;
 
   /**
    * Adds a line of KesherAI's own to the engine log (shown with llama-server's), e.g. who asked for a load.
@@ -872,6 +889,7 @@ export class LlamaEngine {
     const proc = this.proc;
     this.proc = undefined;
     this.modelPath = undefined;
+    this.loadedFor = undefined;
     if (!proc || proc.exitCode !== null) return;
     proc.kill();
     await new Promise((r) => {

@@ -1,4 +1,5 @@
 import { GpuCheck } from "../GpuCheck";
+import { loadReasonText, type LoadReason } from "../load-reason";
 import { ComfyOnlyKind, ModelKindCard } from "../ModelKinds";
 import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
@@ -25,6 +26,8 @@ interface Recommended {
 }
 interface EngineStatus {
   installed: boolean; version?: string; running: boolean; modelPath?: string; log: string[];
+  /** Why the loaded model was loaded (load-reason.ts). */
+  loadedFor?: LoadReason;
   job?: { phase: string; message: string };
   parallel?: number;
   runningParallel?: number;
@@ -498,8 +501,8 @@ function LoadedNow({ local }: { local: LocalFile[] }) {
       removeEventListener(BESIDE_EVENT, tick);
     };
   }, []);
-  const rows: Array<{ path: string; label: string; stop: () => void }> = [];
-  if (engine?.running && engine.modelPath) rows.push({ path: engine.modelPath, label: L("ראשי", "Main"), stop: () => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine, (e: Error) => toast(e.message)) });
+  const rows: Array<{ path: string; label: string; stop: () => void; why?: string }> = [];
+  if (engine?.running && engine.modelPath) rows.push({ path: engine.modelPath, label: L("ראשי", "Main"), why: loadReasonText(engine.loadedFor), stop: () => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine, (e: Error) => toast(e.message)) });
   if (beside?.running && beside.modelPath) rows.push({ path: beside.modelPath, label: L("לצד הראשי", "Beside the main one"), stop: () => void api<{ running: boolean }>("/api/engines/beside/stop", { method: "POST" }).then(setBeside, (e: Error) => toast(e.message)) });
   if (!rows.length) return null;
   return (
@@ -512,6 +515,7 @@ function LoadedNow({ local }: { local: LocalFile[] }) {
             <div className="grow">
               <strong dir="ltr">{r.path.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "")}</strong>
               <span className="muted small">{r.label}{measured ? ` · ${Math.round(measured.tps)} ${L("טוקנים/שנ׳", "tokens/s")}` : ""}</span>
+              {r.why && <span className="muted small loaded-why">{r.why}</span>}
             </div>
             <button type="button" className="small" onClick={r.stop}>{L("פרוק", "Unload")}</button>
           </div>

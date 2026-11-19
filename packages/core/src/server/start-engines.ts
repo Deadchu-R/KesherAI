@@ -47,7 +47,7 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
       // of his running; it was a start-up routine's chat).
       const busy = Object.keys(services.conversations.activity());
       const titles = busy.map((id) => services.library.listConversations().find((c) => c.id === id)?.title).filter(Boolean).slice(0, 2);
-      await loadModel(services, path, undefined, titles.length ? `needed by the chat "${titles.join('", "')}"` : "a request needed the model (not a chat: a title, a report, a pipeline or the phone)");
+      await loadModel(services, path, undefined, titles.length ? { kind: "chat", chats: titles as string[] } : { kind: "request" });
     },
     pids: () => (engine.pid ? [engine.pid] : []),
   });
@@ -85,7 +85,7 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
   // and on the PC half a minute after an update).
   if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
   if (config.engines.autoLoadLast && !afterTerminate && !config.engines.lastUnloaded && last && existsSync(last) && engine.status().installed) {
-    startLoad = loadModel(services, last, undefined, "the last model, at start-up")
+    startLoad = loadModel(services, last, undefined, { kind: "startup" })
       .catch((err) => engine.fail(err))
       .finally(() => (startLoad = undefined));
   }
