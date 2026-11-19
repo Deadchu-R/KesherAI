@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -100,6 +100,14 @@
     fadeIn() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => { for (let i = a; i < b; i++) c[i] *= (i - a) / (b - a); }); after(); },
     fadeOut() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => { for (let i = a; i < b; i++) c[i] *= (b - i) / (b - a); }); after(); },
     // Audacity's Reverse: the selection played backwards.
+    // Audacity's Echo: the selection heard again a quarter second later, each time at 40 % (until it is too quiet to hear).
+    echo() {
+      if (!need()) return;
+      remember();
+      const [a, b] = sel, d = Math.round(0.25 * rate);
+      chans.forEach((c) => { for (let i = a + d; i < b; i++) c[i] = Math.max(-1, Math.min(1, c[i] + 0.4 * c[i - d])); });
+      after();
+    },
     reverse() { if (!need()) return; remember(); const [a, b] = sel; chans.forEach((c) => c.subarray(a, b).reverse()); after(); },
     louder() { gain(Math.pow(10, 3 / 20)); },
     quieter() { gain(Math.pow(10, -3 / 20)); },

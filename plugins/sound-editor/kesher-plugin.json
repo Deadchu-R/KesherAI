@@ -1,7 +1,7 @@
 {
   "id": "sound-editor",
   "name": "Sound editor",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A sound editor after Audition, Descript and Ferrite: the waveform with an overview strip, select a stretch and cut, keep, silence, fade or change its volume, normalize, the transcript (cut a line, remove long silences), and the result sent back to the chat as a WAV.",
   "author": "KesherAI contributors",
   "kesher": {
