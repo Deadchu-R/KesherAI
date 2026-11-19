@@ -3242,3 +3242,263 @@ status not shown); agentclientprotocol.com (spec, from earlier reading and the S
 agent risks and mitigations; developers.google.com/jules/api/reference/rest/v1alpha/sessions; Codex/Devin/Sweep/Aider from earlier
 knowledge, not fetched; the 2026-11-10 and 2026-11-13 entries of this file; KesherAI: acp.ts, acp-chat.ts, self-work.ts,
 task-board.ts, session-worktrees.ts, install-when-free.ts, gpu-guard.ts, heavy-folder.ts, pc-games.ts, routines.ts.
+
+## Kesher Cloud hub: an always-on page for Roee only that routes tasks to a PC or to cloud tools (2026-11-19, Roee asked)
+Question: a small always-on KesherAI web app (also inside the Android app and the desktop app) that knows which devices
+and agents are on, connects them and routes a task: to a PC that is on, or, when none is, to cloud tools; Claude only
+through his Max plan, no API key. Builds on the task-inbox entry (git branch `kesher-inbox`) and the helper-agents entry.
+
+### 1. The Claude path under the Max plan (read today, code.claude.com/docs/en/routines and /github-actions)
+- **Scheduled tasks (formerly routines) with an API trigger are the sanctioned door.** Cloud Claude Code sessions on
+  Anthropic's infrastructure; "available on Pro, Max, Team, Enterprise"; "Scheduled tasks draw down subscription usage
+  the same way interactive sessions do". A task with only an API trigger "runs when you call its endpoint":
+  `POST https://api.anthropic.com/v1/claude_code/routines/<trig_id>/fire`, headers `Authorization: Bearer <that task's
+  token>`, `anthropic-beta: experimental-cc-routine-2026-04-01`, `anthropic-version: 2023-06-01`, body `{"text": "..."}`;
+  the reply holds `claude_code_session_id` and `claude_code_session_url` (open it in the Claude app to watch or continue).
+  This is not the Claude API: the page says "The `/fire` endpoint is available to claude.ai users only and is not part of
+  the Claude Platform API surface". The token is per task, shown once, only fires that task, can be regenerated or deleted
+  at once (that is the kill switch for this path).
+- Limits: API fires 30 per hour per task and 100 per hour per account; "no overage"; at the subscription limit, runs are
+  rejected until the window resets (unless usage credits are on, which Roee must not turn on if he wants zero metered
+  spend). Cloud sessions start in auto mode, work on `claude/`-prefixed branches, clone the chosen repo each run, network
+  "Trusted" allowlist by default. A paused subscription puts tasks on hold. **Research preview**: shapes, limits and the
+  beta header "may change"; the two previous header versions keep working.
+- **Injection rule that shapes the design**: the `text` arrives wrapped in `<routine-fire-payload>` as untrusted data, and
+  the saved prompt must opt in ("investigate the alert in the routine-fire-payload block"); the fired prompt "can't act as
+  approval or consent". So the saved prompt says what to do with a task; the text carries only the task spec.
+- **GitHub trigger on the same task** (issues opened/labeled, PR events; Claude GitHub App installed; hourly caps, extra
+  events dropped). Alternative door: the hub (or Roee) opens a GitHub issue with a label. Needs a GitHub token in the hub,
+  so it is the second choice.
+- **Claude Code GitHub Action (`claude-code-action`)**: docs say a secret `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`)
+  authenticates "with your Claude subscription ... Pro, Max, Team, Enterprise" and "If you authenticate with an OAuth token,
+  runs use your Claude subscription instead of API billing". Triggers: `@claude` comments (author needs write access; bots
+  rejected unless listed), or a `prompt` on any event. Costs GitHub-hosted runner minutes. Caveats: the token is tied to
+  the person's subscription, and a community question about the policy for scheduled CI use (claude-code-action issue
+  27125) is not answered in what I could read, so the terms for long-lived OAuth tokens in unattended CI are **unconfirmed**.
+  Keep it as a fallback, not the first path.
+- **What is not allowed**: calling `api.anthropic.com/v1/messages` from the hub, or putting a subscription OAuth token into
+  the hub to call models itself (not a Claude product; exactly what Roee forbids). The hub never holds a model credential.
+  Only the per-task fire token (and nothing that can read his account).
+- Claude on the PC (Claude Code / Claude desktop) is Roee's own session and stays outside the hub; the hub can only show
+  "open Claude" links. Result of a cloud run: v1 = the session URL (phone opens it in the Claude app); later the run
+  writes `results/<id>.md` to `kesher-inbox` and a GitHub push webhook (HMAC-checked) tells the hub.
+
+### 2. The Gemini path
+- **Jules API** (developers.google.com/jules/api, read today; alpha, "specifications and keys may change"): API key made in
+  the Jules web app (header `X-Goog-Api-Key`, at most 3 keys, public keys get disabled); the Jules GitHub app must be
+  installed on the repo; `POST /v1alpha/sessions` with `prompt`, `sourceContext` (source + `startingBranch`), `title`,
+  `automationMode: AUTO_CREATE_PR`, `requirePlanApproval`; poll `GetSession` (states QUEUED... COMPLETED/FAILED, outputs
+  hold the PR), `sendMessage`, `approvePlan`. Limits (jules.google/docs/usage-limits, read today): free 15 tasks per day /
+  3 at once; **Jules in Pro 100 / 15; Ultra 300 / 60** per rolling 24 h; paid tiers "currently available only for individual
+  @gmail.com accounts"; 18+. **Not found on those pages: any statement on API rate limits, whether API calls count in the same
+  daily tasks, or terms for automation.** So: the hub can create a Jules session with a Jules API key kept as a Worker
+  secret; it is Google's own documented API, but the plan and terms question is open (ask Google or test with one task).
+- **Gemini CLI GitHub Action** (not fetched today; from earlier knowledge, marked so): runs Gemini CLI in a workflow on
+  issues/PR comments, authenticates with a Gemini API key or Vertex/Workload Identity; the free API-key tier is rate limited
+  and metered billing starts if a billed key is used, so it is **not** "inside Roee's Gemini Pro plan" (Google AI Pro does
+  not include API credit). Leave it out of v1; Jules is the Gemini cloud door.
+- **Antigravity (`agy`)** runs only on a PC (ACP/headless) and only when Roee presses Run (decision of 11-19). The hub may
+  *deliver* an Antigravity task to a PC as "waiting for Run"; it never starts it by itself.
+
+### 3. Hosting (free or cheap, always on, one user)
+- **Cloudflare Workers + one Durable Object (SQLite) + static assets: pick this.** Free plan needs no card. Durable
+  Objects on Free are SQLite-backed with, per day (read today, developers.cloudflare.com/durable-objects/platform/pricing):
+  100,000 requests, 13,000 GB-s duration, 5 M rows read, 100,000 rows written, 5 GB stored (reset 00:00 UTC; over the
+  limit the operation fails, not billed). WebSockets: one request to open; "incoming WebSocket messages are counted at a
+  20:1 ratio"; outgoing messages and protocol pings are free; an idle object that can hibernate is not billed for duration
+  **if** the Hibernation API is used (`ctx.acceptWebSocket`, `setWebSocketAutoResponse` for ping/pong, not `accept()`).
+  Worker Free: 100,000 requests per day, 10 ms CPU per request (enough: no model work here).
+  **One-user maths**: 3 devices each sending a heartbeat message per 60 s = 4,320 messages per day = about 216 billed
+  requests; plus Roee's page loads and tasks, a few hundred. Under 1% of the free quota. Presence also comes free from
+  connect/close events, and a missed heartbeat (>90 s) marks "off". Cost: 0. The Workers paid plan ($5/month) is the
+  headroom if limits ever bite; not needed.
+- **Why not the others** (from earlier knowledge, not fetched today, so check prices before relying on them):
+  Firebase: Auth and Firestore free (Spark), but Cloud Functions need the Blaze plan (a card; free quota, no hard cap by
+  default) and it has no native WebSocket for presence (Firestore listeners work but each device is a billed reader, and
+  Realtime Database `onDisconnect` is the Firebase way). Supabase: free tier has Realtime Presence and Auth with Google, but
+  free projects are paused after a week of inactivity and it is a heavier Postgres stack for a task list. Fly.io: no free
+  tier for new accounts, a small always-on machine is a few dollars a month and needs a card; good if the hub grows past
+  Workers (Node, same code as packages/core, WebSocket with `ws`, which core already uses). A home server or the PC itself
+  defeats the goal (must work when the PC is off).
+- **Domain**: the free `*.workers.dev` address works for v1. A custom name (e.g. a sub-domain of his site) needs that DNS on
+  Cloudflare; do not move his existing site for this.
+- **Always-on = the Durable Object is the single brain** (one object named after his account): device table, queue, audit
+  log, settings, and the sockets. A cron trigger (free) every 5 min cleans leases and expiries.
+
+### 4. Sign-in for one Google account, pairing, revocation (reuse what exists)
+- **Read in the code**: `device-keys.ts` (a key per device `kd_<32 bytes base64url>`, only the SHA-256 hash is kept, `scope`,
+  `lastSeen`, removal alone, push keys removed with the device); `guests.ts` already verifies a Google `id_token`: `aud` equals
+  the client id, `email_verified === true`, `email` and `sub` present (line ~300); `google.ts` has the Google OAuth client and
+  scopes (`openid email profile`); `devices.ts` ("My devices": a Drive file lists his PCs, token and tunnel address);
+  `tunnel.ts`/`tailscale.ts` (inbound access to a PC, a quick tunnel changes address; `link-watch.ts` exists because the
+  address changes and the phone lost the PC); `phone-push.ts` (the phone holds a live event stream to the PC, UnifiedPush when
+  it cannot); `access-log.ts` (request log and refused-tries alert). `apps/android` is a Capacitor shell (`www/index.html`
+  connect screen, `local.html` phone-only mode) that opens **the PC's** interface, so **with the PC off the app has no UI**.
+  That is the exact gap the hub fills.
+- **Sign-in**: Google Identity Services in the hub page gives an ID token (JWT). The Worker verifies RS256 against Google's
+  JWKS (`https://www.googleapis.com/oauth2/v3/certs`, cached by `Cache-Control`), `iss` accounts.google.com, `aud` = the
+  hub's client id, `exp`, `email_verified`. **Allow-list by `sub`, not email** (email can change or be recycled): the
+  Worker has `ALLOWED_EMAIL` as a setup value; the **first** valid sign-in with that verified email pins its `sub` into the
+  Durable Object; after that only that `sub` passes, everyone else gets 403 and one audit line (no details back). Then the
+  hub issues its own **session**: an opaque random id in an `HttpOnly; Secure; SameSite=Strict` cookie, hash stored in the
+  object, 12 h idle / 30 d absolute; every state-changing call also checks `Origin` equals the hub origin (CSRF).
+- **Device pairing** (RFC 8628 device-code style, so a PC or the phone app never handles Google itself): the device calls
+  `POST /api/pair/start` (rate limited) and gets a short code (`ABCD-EFGH`, 5 min, single use) plus a poll secret; Roee, signed
+  in on the hub page, types or scans the code and names the device ("Home PC", "Phone"); the device's poll then receives its
+  **device token** once: `kh_<32 random bytes base64url>`, only its hash is stored, scope `device` (heartbeat, receive and
+  report tasks, nothing else). Revoke: delete in the hub's Devices list, the socket is closed immediately, token gone. A
+  separate `admin` capability exists only as the browser session. A KesherAI PC does this from Settings > Cloud hub (button
+  "Connect to my hub", shows the code). The phone app: a new "Cloud" mode in `www/` (a third card on the connect screen next to
+  Computer and Phone) which opens the hub page in the WebView, so the same sign-in and the same UI as the desktop. A web page
+  per origin keeps its own cookie, so the app signs in once; the Capacitor `server.allowNavigation: ["*"]` already allows the
+  navigation. If the Google button is awkward inside the WebView, the same pairing code flow signs the app in from a browser
+  that has the session ("approve this phone").
+- **How the PC connects (no open ports)**: `packages/core/src/hub-client.ts` opens an **outbound** WebSocket
+  `wss://<hub>/ws/device` with `Authorization: Bearer <device token>` (the `ws` package is already a core dependency),
+  sends `hello` (device id, name, version, platform, capabilities, busy state) and then a `beat` every 45 s; reconnect with
+  exponential backoff and jitter (1 s to 5 min). Nothing listens on the PC for the hub; the quick tunnel / Tailscale stay
+  for the phone-to-PC *direct* chat, but the hub does not depend on them. The token is kept in the PC's config like the
+  existing device keys (the secrets-in-config mechanism that `config-secrets.test.ts` covers), never printed.
+- **The phone as a device**: when the hub page is open (foreground) it is "on" through the same socket; when closed, presence
+  falls back to "last seen". Notifications when the app is closed reuse the existing UnifiedPush path: the hub sends an
+  encrypted Web Push message (RFC 8291, same as `phone-push.ts`) with only "task finished". Needs the phone's push endpoint to
+  be registered with the hub (as `push` on its device row).
+
+### 5. Routing, queue and presence
+- **Entities** (all in the Durable Object's SQLite): `device(id, name, kind pc|phone, hash, lastSeen, state, caps json)`,
+  `agent(id, kind, deviceId?, state)` where agents are *reported by devices* (a PC says: local model X loaded, Antigravity
+  signed in, task inbox on, busy yes/no) plus the cloud agents the hub knows by its own config (`claude-cloud` available if the
+  fire token is set; `jules` if the key is set), `task(id, createdAt, title, spec ≤ 8 KB, route, target, state, attempts,
+  resultText ≤ 4 KB, link, expiresAt)`, `audit(ts, who, action, ip hash, detail)`, `settings`.
+- **A task** has `goal`, optional `repo/base`, `executor: auto | claude-cloud | jules | pc-local | pc-antigravity | pc-any`, `risk`,
+  `ifOffline: wait | cloud | ask`, `ttl` (default 24 h). The spec uses the same template as the task inbox
+  (goal, read first, acceptance, check command, out of scope) so a task can move between routes unchanged.
+- **Route preview before send** (the "route it will take" line on the form): `auto` resolves with the inbox table (mechanical,
+  1-2 files -> local model; medium and specified -> Antigravity; hard or risky -> Claude) then checks who is on:
+  1. Target class needs a PC and one is **on and not busy** -> queue for that device (`pc-antigravity` arrives as "waiting for
+     Run", per Roee's rule; `pc-local` may start itself under the PC's own busy rules).
+  2. Target needs a PC and none is on -> by `ifOffline`: `wait` (stays queued, delivered when a PC returns, expires at ttl),
+     `cloud` (only if the task is a kind a cloud tool can do: needs a repo and no local-only resources), or `ask` (phone
+     notification with the two choices; default for risky tasks).
+  3. Cloud target: `claude-cloud` = fire the scheduled task with the spec as `text` (hub keeps the returned session URL and
+     the task shows "Open in Claude"); `jules` = create a Jules session (`requirePlanApproval: true` by default, PR not
+     auto-merged) and poll its state every minute while any Jules task is open (cron + on page open).
+  4. Never silently: the chosen route and why are stored on the task and shown ("PC Home is off, so: Claude cloud").
+- **Delivery to a PC** (at-least-once with a lease): hub sends `task` over the socket; the PC replies `ack` (stored in its
+  local task board/inbox first, so a crash does not lose it); hub marks `delivered`; the PC reports `progress` (short line),
+  then `result` (status, short text ≤ 4 KB, branch name, optional link). No `ack` in 30 s -> task goes back to the queue and the
+  device is marked "not responding". Tasks are idempotent by `id`; the PC ignores one it has seen. **When a PC comes back**
+  it sends `hello`; the hub sends its undelivered tasks in order (not older than ttl), and the hub clears "wait" tasks that
+  have since been routed to the cloud.
+- **Results to the phone**: the phone page holds one SSE/WebSocket to the hub (`/ws/ui`); every change is pushed as a small
+  event; after a closed app a UnifiedPush note brings it back. **Offline-first on the phone**: the hub page is a PWA (service
+  worker caches the shell and the last task list in IndexedDB); sending while offline writes to an outbox in IndexedDB with a
+  client-made task id and sends it on reconnect (the id makes the replay safe); the list shows "waiting to send".
+- **Git remains the durable return path for code**: results that are branches stay on `agy/*`, `local/*`, `claude/*` as in the
+  task-inbox entry; the hub holds only the pointer and 4 KB of text. The PC keeps polling git `kesher-inbox` as a fallback
+  when the hub is down (the hub is an accelerator, not a single point of failure), so the two do not fight: a task has one
+  id, the PC dedupes.
+
+### 6. Security (the hub is the only internet-facing piece)
+- **Threat model**: (a) a stranger finds the URL: all pages and APIs need the session or a device token; the only open
+  routes are `/api/pair/start` (code issuing, 5 per minute per IP, codes expire and do nothing without Roee approving) and the
+  sign-in callback; (b) stolen device token: scope is only "be a device", revoke in one tap, tokens hashed at rest, rotated on
+  every pairing; (c) stolen session cookie: SameSite Strict, short idle time, "sign out everywhere" (delete all sessions);
+  (d) a malicious task or result text (prompt injection reaching Claude through `text`): it is shown as plain text only, never
+  rendered as HTML, never executed by the hub; the saved routine prompt says what to do and treats the payload as the task;
+  the fire token cannot do more than start that one task, and cloud runs push only `claude/` branches under branch protection
+  on `main`; (e) a compromised hub: it holds no model credentials and no files; the worst it can do is spam tasks (hourly
+  caps bound it) or point a PC at a task, which is why PC-side policy decides (allowed paths, commands, attended Run for
+  Antigravity); a PC **never** executes shell text from the hub, only task specs through the existing inbox policy; (f) abuse
+  and cost: Cloudflare's own limits are the ceiling and nothing bills.
+- **Secrets**: Worker secrets only (`wrangler secret put`, encrypted, not in git): the Google client **id** is public, the fire
+  token, the Jules key, the VAPID key. Never in D1/DO rows, logs or the repo. The pairing/device tokens exist as hashes only.
+  Setup values are typed by Roee in the Cloudflare dashboard, never by Claude.
+- **Data allow-list** (the hub may hold): device names and states, task titles and specs (≤ 8 KB), short results (≤ 4 KB), links,
+  audit lines. **Never**: project files, diffs, screenshots, chat history, API keys, tokens of any kind, his email beyond the
+  pinned `sub` and a display name. A scan in the task form refuses a spec that looks like a key/token or contains a personal
+  path or Windows username (same check as the inbox). Retention: done tasks kept 30 days, audit 90 days, then deleted by the
+  cron.
+- **Audit log** (append-only in the object): sign-in ok/refused (hashed IP, no email text), pair start/approve/revoke, task
+  created/routed/delivered/result, settings change, kill switch. Visible in Settings > Hub > Activity; refused-tries alert like
+  `access-log.ts` (5 refusals in 10 minutes shows a banner and a phone note).
+- **Rate limits**: per IP and per device in the object (token bucket): sign-in 10/min, pair 5/min, task create 30/hour (matches
+  the 30/hour routine cap), device messages 120/min, all return 429. Plus Cloudflare's free rate-limit rule on `/api/*`.
+- **Kill switch**: (1) a big "Pause hub" on the page: stops routing, closes device sockets, keeps data; (2) "Sign out everywhere
+  and revoke all devices"; (3) outside the hub: delete the routine's API token at claude.ai (fires stop), delete the Jules key,
+  disable the Worker in the Cloudflare dashboard. All four are listed in Settings so he knows where they are.
+- **Hardening**: strict CSP, no inline script, `frame-ancestors 'none'`, HSTS (Cloudflare), JSON-only API with a size cap (16 KB),
+  the WebSocket checks `Origin` for the UI socket, constant-time token compares, no reflected input, dependency list near zero
+  (the Worker needs no framework; the verification uses WebCrypto).
+
+### 7. What to take, what to leave
+- Take: Anthropic's API-trigger scheduled task as the Claude door (subscription, per-task token, session URL back); the
+  Copilot-style rules already chosen (one allowed branch prefix, a human/Claude merges); RFC 8628 device pairing; Home
+  Assistant/Tailscale-style "device is on" by held connection; Cloudflare hibernating WebSocket for cheap presence; offline outbox.
+- Leave out: any call to the Claude API or use of his OAuth token in the hub; Gemini CLI Action for now; running the PC's
+  tools from hub text; storing files; multi-user (one `sub` only; guests keep using KesherAI share links); a hub-hosted model.
+
+### Plan for KesherAI (steps, smallest useful first)
+**Where the code lives**: `apps/hub` (new workspace package: `src/worker.ts` entry and routes, `src/hub-do.ts` the Durable
+Object, `src/auth.ts` Google JWT + sessions + pairing, `src/route.ts` pure routing function, `src/claude-cloud.ts` and
+`src/jules.ts` adapters, `public/` the page; `wrangler.toml`); wire types in `packages/shared/src/hub-protocol.ts`
+(message unions with a version number, used by both sides); PC side `packages/core/src/hub-client.ts` + `routes/hub.ts`
+(status, connect, disconnect) and `hub-tasks.ts` (a received task becomes a board/inbox item); the page reuses the web
+components where it can (`apps/web` shares styles; the hub page is a small separate Vite build so it stays tiny and the PC
+interface is not needed to load it); `apps/android/www` gets the "Cloud" card.
+**Protocol** (JSON, `v:1`): device -> hub `hello{id,name,kind,version,caps,busy}`, `beat{busy,agents[]}`, `ack{taskId}`,
+`progress{taskId,line}`, `result{taskId,status,text,branch?,link?}`; hub -> device `task{id,spec,executor,ttl}`,
+`cancel{id}`, `revoked`, `pause`; UI socket hub -> page `snapshot` then `event{type,...}`; page -> hub REST: `POST /api/tasks`,
+`POST /api/tasks/:id/cancel|reroute`, `GET /api/state`, `POST /api/devices/:id/revoke`, `POST /api/pair/approve`, `POST /api/kill`.
+
+**Version 1 (this week, one sitting for Roee's accounts + about a day of code)**
+1. `route.ts` + tests (pure function: devices, agents, task -> route + reason; table tests for each case in section 5).
+2. `apps/hub` Worker: Google sign-in with `sub` pin, sessions, `/api/state`, `/ws/ui`, devices table, audit log, pair flow,
+   kill switch; DO with hibernation + heartbeat; tests with a fake DO storage (`node:test`).
+3. `claude-cloud.ts`: fire call, store the session URL. Needs Roee: the routine (below).
+4. `hub-client.ts` in core: connect, hello/beat, receive a task and put it on the existing board with `executor`, send
+   `ack/result`; Settings > Cloud hub (connect, code, status, disconnect).
+5. The page (phone first, 390 px, Hebrew/English `L(he,en)`): dashboard (devices, agents on/off), send-task form with the
+   live "route it will take" line, task list with status and "Open in Claude", sign-in, settings, activity.
+6. Android: "Cloud" card + service worker + outbox.
+Done when: phone with the PC off creates "check the failing test", the hub routes it to Claude cloud, the phone shows the
+session link; phone with the PC on routes a small task to the local model on the PC and shows its short result.
+**Version 2**: `jules.ts` (plan approval gate, polling), GitHub push webhook for `results/<id>.md`, UnifiedPush notes from the
+hub, `ifOffline: ask` with notification choices, task reroute, history search. **Version 3**: Claude GitHub Action fallback
+(only after the OAuth-token terms are confirmed), Gemini CLI action if Google offers it inside the plan, PC wake via the
+existing Wake-on-LAN plugin sent by an always-on device, usage totals per route, multiple PCs choice by load.
+
+**Screens for the design doc** (phone and desktop, each both): (1) Sign-in (Google button, "this hub is private"); (2) Hub
+dashboard (devices and agents with on/off dots and "last seen", queue count, quick "send task"); (3) Devices and agents list
+(rename, revoke, what each can do, busy state); (4) Send-task form (goal, executor, risk, if-offline, and a live line "Route:
+Claude cloud because Home PC is off" with an edit); (5) Task list and detail (status chips queued/delivered/running/done/
+failed/expired, short result, "Open in Claude", cancel, reroute); (6) Pair a device (shows the code and the device name field,
+approve); (7) Settings (routine token set/clear, Jules key set/clear, busy rules, retention, sign-out everywhere, the three
+kill switches, Pause hub); (8) Activity/audit; (9) Offline state of the phone (outbox "waiting to send"); (10) the PC's
+Settings > Cloud hub card.
+
+### Decisions and actions only Roee can do
+1. Create a free **Cloudflare account** (no card) and approve using Workers; later run the one-time deploy (`wrangler login`
+   opens his browser). Claude must not type his credentials.
+2. Create a **Google OAuth Web client id** (Google Cloud console, "Google Identity" with the hub's URL as authorised origin),
+   the only Google setup; tell the hub his Gmail as `ALLOWED_EMAIL` in the dashboard (stays out of git).
+3. In **claude.ai/code/routines**: create one scheduled task "Kesher hub task" (repo `kesher`, API trigger only, model of his
+   choice, prompt written by us), generate the token once, put it into the hub's secret field himself. Confirm he accepts
+   "research preview, may change" and that usage credits stay off (so nothing is metered).
+4. Is the repo private, and may the hub-started cloud runs push `claude/*` branches to it (main stays protected)?
+5. Jules: does he want it in v2, and will he test one task to see whether API tasks count in his plan's daily limit (not
+   documented). Jules paid tiers are "individual @gmail.com" accounts.
+6. Terms question still open for Antigravity unattended (separate item on the list) and for subscription OAuth tokens in
+   GitHub Actions; v1 needs neither.
+7. A hub address: the free workers.dev one, or a name on his own domain later.
+- Stopped at: research and plan done; nothing built, nothing deployed; not verified live: the exact routine setup screens, a real
+  `/fire` call, Jules API usage against plan limits, Cloudflare behaviour on a WebView sign-in (no account yet).
+
+Sources: code.claude.com/docs/en/routines (scheduled tasks, API trigger, limits, injection wrapping), code.claude.com/docs/en/
+github-actions (auth secrets, subscription note, who can trigger), github.com/anthropics/claude-code-action issue 1281 (no policy
+text found), claudeissues.com issue 27125 (title only); developers.google.com/jules/api (auth, sessions); jules.google/docs/
+usage-limits (15/100/300 per day, concurrency, gmail-only paid); developers.cloudflare.com/durable-objects/platform/pricing
+(Free limits, WebSocket 20:1, hibernation); Firebase, Supabase, Fly.io, Gemini CLI Action, RFC 8628, RFC 8291 from earlier
+knowledge, not fetched today; KesherAI: device-keys.ts, devices.ts, guests.ts, google.ts, tunnel.ts, tailscale.ts, link-watch.ts,
+phone-push.ts, access-log.ts, apps/android (README, capacitor.config.json, www/index.html), docs/WORK_LIST.md; the 2026-11-19
+helper-agents and task-inbox entries of this file.
