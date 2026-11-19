@@ -1497,3 +1497,18 @@ S5 an outside scanner's rules for Electron.
   hand and noted on the board.
 - Checked: lint, typecheck, tests (chat-report 19, part-seg 4), the sound editor's tracks in a browser (desktop and
   390 px), P3-SAM and the bank on the PC.
+
+## Scan 159 (2026-11-19): computer view on a phone, a script in your voice, text over the video, the bank's age
+- **Computer view**: only the viewport meta and one attribute change; the choice is a word in localStorage; no data.
+- **A script in your voice**: up to 10,000 characters; the arguments go to the Python through a JSON file in the
+  engine's own folder (removed after), not the command line; the voice name is checked as before (letters, numbers,
+  space, `_`, `-`); parts are our own cut of her text and reach the model as data. The recording kept in the bank is
+  an `audio/wav` asset with her text (300 characters) as its description. Consent is unchanged.
+- **Text over the video**: the words are drawn in the page (canvas) into a PNG uploaded to the chat's `shared/`; the
+  route takes at most 30, each a `.png` resolved inside the chat's folder, with numeric start and end (start ≥ 0, end
+  after it, at most 6 h); FFmpeg's graph gets only those numbers (fixed decimals) and input indexes — no text from the
+  page reaches the filter.
+- **Bank age filter**: in the page only.
+- Performance: the text picture is cached per text and frame size; the voice model loads once per script.
+- Checked: lint, typecheck, tests (video-cut 13, voice-clone 2), a real FFmpeg export with a clip, a fade, a text
+  and a 9:16 shape; the editor's text in a browser (desktop and 390 px).
