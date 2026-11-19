@@ -163,6 +163,19 @@ export function BankPage() {
     const r = await api<{ paths: string[] }>("/api/bank/copy", { method: "POST", body: { ids: [it.id], conversationId: chatId } }).catch((e: Error) => (toast(e.message), undefined));
     if (r?.paths[0]) location.hash = editorHref(it.kind, chatId, r.paths[0]);
   };
+  // Keys (as Google Photos and a file manager): Ctrl+A chooses all shown, Delete deletes the chosen (asking first),
+  // Escape closes the preview or clears the choice. Not while typing in the search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest?.("input, textarea, select, [contenteditable]") || document.querySelector(".dialog-backdrop")) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && shown.length) { e.preventDefault(); setSel(new Set(shown.map((i) => i.id))); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && sel.size) { e.preventDefault(); void remove([...sel]); }
+      else if (e.key === "Escape") { if (view) setView(null); else setSel(new Set()); }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  });
   const card = (it: BankItem, note?: string) => (
     <div key={it.id} className={`bank-card${sel.has(it.id) ? " sel" : ""}`}>
       <button type="button" className="bank-thumb" onClick={() => setView(it)} aria-label={L(`תצוגה של ${it.name}`, `Preview ${it.name}`)}><Thumb it={it} /></button>
