@@ -3548,3 +3548,80 @@ This replaces the "what the hub may hold", retention and task-table parts above.
   Chromium) and in Node 20+ for the PC; not yet tried on the user's phone, and the IndexedDB key being non-extractable means a
   phone reset loses it (hence backup option b). Extra decision for Roee: the backup choice above.
 - Stopped at: addendum written; nothing built.
+
+### How others do it (2026-11-19, Roee asked: do competitors connect devices and agents through a cloud relay, and keep working with the PC off?)
+Read today: Help Net Security on Claude Code Remote Control; analyticsindiamag on Codex in the ChatGPT app; docs.cursor.com
+web and mobile; lmstudio.ai LM Link page, the Bionic remote-control post, and Tailscale's LM Link post; Nabu Casa "Remote UI
+deep dive"; jules.google usage limits (earlier). Searched but not read in full (search results only, from earlier knowledge
+where marked): Copilot coding agent on GitHub Mobile, Codex cloud help page, Ollama / Open WebUI / Jan / Msty / Pinokio,
+ngrok. Claude's own docs page for Remote Control was not reachable here (blocked), so it rests on the Help Net Security report.
+
+**Result in one line: nobody ships what Roee asked for. Products are either (A) a relay to *your own* machine, which stops
+when the machine is off, or (B) a vendor's cloud agent on a GitHub repo, which works with the PC off but only for that vendor and
+only for code in git. None routes between a PC, a local model and several cloud agents with the phone as the store.**
+
+| Product | Relayed / stored | Sign-in | Presence | When the PC is off | Phone UX | Price |
+|---|---|---|---|---|---|---|
+| **Claude Code Remote Control** (A) | Messages between the phone/web and the local session go through the Anthropic API over a TLS stream; the session works on the local filesystem; local side makes only outbound HTTPS, no inbound ports; "multiple short-lived credentials, each scoped to a single purpose" | Claude account; QR code or session URL, claude.ai/code | The local process registers and polls the API | **Dies**: the terminal must stay open; a network drop of about 10 minutes times the session out and it must be restarted; one remote session per instance | Claude mobile app / browser, continue the same session | Research preview, Max (at the time of the report) |
+| **Claude on the web + scheduled tasks** (B) | Runs in Anthropic's cloud on a cloned repo, `claude/` branches; API trigger returns a session URL | claude.ai + GitHub app | n/a (cloud) | **Works** | Claude app shows the session | In the subscription, hourly caps (section 1 above) |
+| **OpenAI Codex in the ChatGPT app** (A + B) | "A secure relay layer keeps trusted machines reachable without exposing them directly to the public internet" and syncs session state across devices signed in to ChatGPT; "files and credentials stay on the connected machine"; mirrors threads, approvals, terminal output, diffs, screenshots; phone can approve commands, change model, start tasks | ChatGPT account | Live mirror of the machine | The article does not say; Codex *cloud* tasks (containers on a repo, not read in full) cover the off case | ChatGPT app, all plans incl. Free (preview) | In the ChatGPT plan; programmatic tokens for business/enterprise only |
+| **Cursor web + mobile agents** (B) | Agents "keep working in the background" from any device; GitHub linked; shared run links; compute is where Cursor runs it (page does not say what is stored) | Cursor account + GitHub | none shown | **Works**; later "Open in Cursor" picks the work up on the desktop | **PWA**: push when a task finishes, full screen, **past runs viewable offline** | Needs Pro trial or paid plan with usage-based pricing; compute no charge for now, model usage billed |
+| **GitHub Copilot coding agent** (B; from earlier knowledge + search titles) | Runs in GitHub's cloud on a branch with a draft PR; start and track from GitHub Mobile; one allowed branch prefix, human merges | GitHub | none | **Works** | GitHub Mobile | Premium requests inside Copilot plans (check current numbers before quoting) |
+| **Jules** (B) | Cloud VM on a repo, plan approval gate, PR out | Google account + GitHub app | n/a | **Works** | Web, API | Free 15/day, Pro 100, Ultra 300 (usage-limits page) |
+| **LM Studio LM Link and Bionic** (A) | Built on Tailscale's tsnet; "all communication ... end-to-end encrypted"; prompts, responses, model lists and hardware info "never seen, either by Tailscale or LM Studio's backend service"; LM Studio's side only does device discovery, keep-alives and config; Bionic remote agent control rides the same link; each machine opts in to being controlled | LM Studio account (`lms login`, a "link" at link.lmstudio.ai) | Device list shows online/offline; keep-alives | Machine is simply offline; the agent keeps running on a remote machine that is on | iPhone/iPad via the Locally app; CLI and REST for desktop | LM Studio free for personal and work use |
+| **Home Assistant Cloud (Nabu Casa)** (A, relay model) | The instance dials out to a Nabu Casa proxy; the proxy forwards at TCP level, reads only the hostname from the TLS handshake (SNI) and **does not terminate TLS**: the instance decrypts with its own certificate | Account linked in the instance | Persistent outbound connection | Remote access ends, the phone app still shows what the phone can do locally | Companion app or browser | Paid subscription (price not shown on the page read) |
+| **Tailscale / ngrok** (A, network layer) | Tailscale: control server only coordinates, traffic is WireGuard end-to-end, falls back to its relays when no direct path; ngrok: reverse proxy that **terminates TLS at its edge** and sees the traffic (from earlier knowledge) | IdP login (Google etc.) | Device list with last seen | Device offline | Tailscale app / any browser | Tailscale free personal tier; ngrok free tier limited (check) |
+| **Ollama, Open WebUI, Jan, Msty, Pinokio** (A, from search results and earlier knowledge) | No vendor relay for the core apps: the docs and community answer is "put it on Tailscale / WireGuard / a Cloudflare tunnel" (Open WebUI has a docs page for Tailscale); Ollama also sells hosted models separately; Pinokio and Jan expose a local server/share link | local accounts or none | none | Offline | Browser, third-party apps | Free |
+| **Apple Private Relay-style E2E relays** (idea) | Two-hop relay so no single party sees both who and what | n/a | n/a | n/a | n/a | Used only as a design idea: the relay sees metadata, never content |
+
+### What this tells us
+1. **Our split is right and unusual**: A-type products need the PC on; B-type products need git and one vendor. The hub's
+   value is the router between them with an honest "why this route" line, plus a phone that keeps its own history.
+2. **Everyone keeps content off the relay or encrypts it**: LM Link ("never seen" by the vendors), Codex ("files and credentials
+   stay on the connected machine"), Nabu Casa (no TLS termination). Our sealed envelopes and "phone is the store" match the best
+   of them; ngrok-style TLS termination is the model to avoid. The one exception we have (cloud routes read in memory) is the
+   same as Cursor/Codex cloud/Jules, which must read the task by design.
+3. **Short-lived, single-purpose credentials** (Claude Remote Control) and **opt-in per machine** (Bionic "each machine decides").
+4. **Presence = device list with online/offline and keep-alives** (LM Link, Bionic, Tailscale): our heartbeat design is the same.
+5. **Offline phone**: only Cursor's PWA states it (past runs viewable offline, push on completion). We go further with an outbox
+   and the local store.
+6. **Handoff both ways**: Cursor "Open in Cursor", Claude web session -> terminal; a cloud result should be one tap from the PC.
+7. **Approvals from the phone** are now table stakes (Codex: approve commands from the phone).
+8. **Do not relay live model streams through a free relay**: LM Link and Nabu Casa carry live traffic because their relay is
+   built for it; a Workers Durable Object bills per message and per duration, so long chat streams do not belong on it.
+9. **Claude Remote Control already exists**: Roee's own Claude Code session on the PC can be driven from the Claude phone app under
+   his subscription, without us building anything, when the PC is on.
+
+### What we take or change in the plan
+- **Use vendor tools where they exist, do not rebuild them**: a PC can report an agent `claude-remote-control` (or `codex`)
+  with the session link; the hub's agent list shows it with "Open in Claude app" (link only, sealed to the phone). That fills
+  the "PC on, Claude interactive" case with zero code on our side and zero API use.
+- **Hub tasks stay short-task relay; live chat stays on the existing direct links** (quick tunnel, Tailscale, same-network).
+  Later, optional: the hub brokers a WebRTC data channel (hub only exchanges the offer/answer, sealed) so the phone can chat with
+  a PC directly without the tunnel address problem (`link-watch.ts` exists because that address changes). Not researched yet,
+  not in v1.
+- **Short-lived socket tickets**: a device keeps its token only in the PC config and calls `POST /api/ticket` to get a 60-second
+  one-use ticket for the WebSocket upgrade, so the long token never appears in a URL or log; tokens rotate every 30 days by the
+  device itself. (Change to section 4.)
+- **Per-device opt-in** (Bionic): each PC's Settings > Cloud hub has toggles: appear in the hub, accept tasks, accept
+  local-model tasks, accept Antigravity tasks (still Run-by-hand), report vendor session links. Defaults: appear on, accept tasks
+  off until he turns it on. Also in the hub's Devices list as read-only badges.
+- **Approvals through the relay**: add message kinds `approval_request` and `approval_answer` (sealed, ttl 30 min) so the
+  existing bell-notification approval cards for an Antigravity or local-model step can be answered from the phone while the hub
+  is the only link. Add to the protocol and to screens ("Approve step" sheet in the task detail).
+- **PWA behaviour copied from Cursor**: installable, push on completion (UnifiedPush path from section 4), past runs viewable
+  offline (already the local store), full screen.
+- **Handoff buttons**: task detail gets "Open session" (Claude cloud, Jules PR), "Pull this branch on a PC" (sealed task to a
+  PC to `git fetch` and open it), and "Continue in the Claude app".
+- **Cost note per route on the send form** (Cursor shows model cost, Jules shows the daily count): show "Claude cloud: counts
+  against your Max usage, 30 fires/hour" and "Jules: n of 100 today" (from the hub's own counters, no secrets).
+- **Leave out** (confirmed by looking at the others): relaying chat/model streams, TLS-terminating proxies, a vendor-account
+  lock-in for sign-in, a hub-hosted model, and anything that makes the hub able to read project files.
+- **Pricing position**: Remote Control needs Max and a running terminal; Codex mobile is in all ChatGPT plans; Cursor needs a
+  paid plan; LM Link is free. The hub on Cloudflare Free is $0 and adds no subscription, which fits Roee's rule.
+- Stopped at: how-others-do-it written and the plan changes listed above (tickets, per-device opt-in, approvals, vendor links,
+  handoff buttons, route cost line); nothing built. Not read in full: Claude's Remote Control docs page (blocked), Codex cloud
+  help page, Copilot mobile changelog, Ollama/Open WebUI/Jan/Msty/Pinokio/ngrok pages, Nabu Casa price (page did not list it).
+  Extra Sources: helpnetsecurity.com (Remote Control), analyticsindiamag.com (Codex mobile), docs.cursor.com/background-agent/
+  web-and-mobile, lmstudio.ai/docs/lmlink and /blog/agent-remote-control, tailscale.com/blog/lm-link-remote-llm-access,
+  support.nabucasa.com Remote UI deep dive, home-assistant.io/cloud.
