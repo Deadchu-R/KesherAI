@@ -1,7 +1,7 @@
 {
   "id": "video-editor",
   "name": "Video editor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A video editor after CapCut, Premiere and DaVinci Resolve: the viewer on top, a timeline with a magnetic main track, split, trim and delete with the keys editors know, and the cut exported on your computer by FFmpeg and sent back to the chat.",
   "author": "KesherAI contributors",
   "kesher": {

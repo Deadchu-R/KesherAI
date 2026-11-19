@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -72,14 +72,16 @@
   const redoStack = [];
   const LAB = 56; // the track label's width
 
-  const len = (c) => c.to - c.from;
+  // A clip's speed (CapCut's Speed: 0.25× to 4×): it lasts its stretch of the file divided by its speed.
+  const spd = (c) => c?.speed ?? 1;
+  const len = (c) => (c.to - c.from) / spd(c);
   const total = () => clips.reduce((s, c) => s + len(c), 0);
   /** Where the edit's time t is: which clip, and the time in the source. */
   function locate(t) {
     let at = 0;
     for (let i = 0; i < clips.length; i++) {
       const l = len(clips[i]);
-      if (t < at + l || i === clips.length - 1) return { i, src: clips[i].from + Math.min(l, Math.max(0, t - at)), start: at };
+      if (t < at + l || i === clips.length - 1) return { i, src: clips[i].from + Math.min(l, Math.max(0, t - at)) * spd(clips[i]), start: at };
       at += l;
     }
     return { i: -1, src: 0, start: 0 };
@@ -219,7 +221,11 @@
           if (mOf(n) === mOf(c) && !pic) video.currentTime = n.from;
           else void setMedia(mOf(n)).then(() => { if (media[mOf(n)]?.kind !== "image") { video.currentTime = n.from; if (playing) video.play().catch(() => undefined); } });
         } else { now = total(); play(false); }
-      } else if (!pic) now = start + Math.max(0, video.currentTime - c.from);
+      } else if (!pic) {
+        now = start + Math.max(0, video.currentTime - c.from) / spd(c);
+        // The player runs at the clip's speed (times the J/K/L rate).
+        if (video.playbackRate !== rate * spd(c)) video.playbackRate = rate * spd(c);
+      }
     }
     lastT = t;
     drawHead();
@@ -316,6 +322,8 @@
       return d;
     }));
     const c = clips[chosen];
+    $("speed").value = String(spd(c));
+    $("speed").disabled = !c || media[mOf(c)]?.kind === "image";
     $("clipInfo").textContent = c ? `${T("clip", "Clip")} ${chosen + 1} ${T("of", "of")} ${clips.length} · ${T("length", "length")} ${fmt(len(c))} · ${T("from", "from ")}${fmt(c.from)}` : "";
     if (parts.length) renderTranscript();
     $("undo").disabled = !undoStack.length;
@@ -360,8 +368,8 @@
     const next = [];
     for (const c of clips) {
       if (mOf(c) || b <= c.from || a >= c.to) { next.push(c); continue; }
-      if (a - c.from >= 0.1) next.push({ id: nextId++, from: c.from, to: a });
-      if (c.to - b >= 0.1) next.push({ id: nextId++, from: b, to: c.to });
+      if (a - c.from >= 0.1) next.push({ ...c, id: nextId++, from: c.from, to: a });
+      if (c.to - b >= 0.1) next.push({ ...c, id: nextId++, from: b, to: c.to });
     }
     if (next.length) clips = next;
   }
@@ -371,7 +379,7 @@
   function editTimeOf(src) {
     let at = 0;
     for (const c of clips) {
-      if (!mOf(c) && src >= c.from && src < c.to) return at + src - c.from;
+      if (!mOf(c) && src >= c.from && src < c.to) return at + (src - c.from) / spd(c);
       at += len(c);
     }
     return undefined;
@@ -684,6 +692,16 @@
       await addClip(file.name, path, bytes);
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
+  // The chosen clip's speed (its sound keeps its pitch: FFmpeg's atempo).
+  $("speed").onchange = () => {
+    const c = clips[chosen];
+    if (!c) return;
+    remember();
+    const v = Number($("speed").value);
+    if (v === 1) delete c.speed; else c.speed = v;
+    after();
+    void saveEdit();
+  };
   /** Text over the video from the playhead (3 s, a dark box low in the frame; change it in the inspector). */
   function addText() {
     if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
@@ -814,7 +832,7 @@
     for (const c of clips) {
       for (const p of mOf(c) ? [] : parts) {
         const a = Math.max(p.start, c.from), b = Math.min(p.end, c.to);
-        if (b - a > 0.2) out.push({ start: at + a - c.from, end: at + b - c.from, text: p.text });
+        if (b - a > 0.2) out.push({ start: at + (a - c.from) / spd(c), end: at + (b - c.from) / spd(c), text: p.text });
       }
       at += len(c);
     }
@@ -824,10 +842,11 @@
   function cutPlan() {
     const used = [];
     const segments = clips.map((c) => {
-      if (!mOf(c)) return { from: c.from, to: c.to };
+      const sp = spd(c) !== 1 ? { speed: spd(c) } : {};
+      if (!mOf(c)) return { from: c.from, to: c.to, ...sp };
       let k = used.indexOf(mOf(c));
       if (k < 0) k = used.push(mOf(c)) - 1;
-      return { from: c.from, to: c.to, src: k + 1 };
+      return { from: c.from, to: c.to, src: k + 1, ...sp };
     });
     return { segments, ...(used.length ? { clips: used.map((m) => ({ path: media[m].path })) } : {}) };
   }

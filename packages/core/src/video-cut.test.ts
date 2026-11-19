@@ -113,3 +113,13 @@ test("text over the picture: each PNG is a still input laid over the frame while
   assert.match(g, /\[1:v\]format=rgba,fade=t=in:st=0\.500:d=0\.250:alpha=1,fade=t=out:st=1\.750:d=0\.250:alpha=1\[x0\];\[vj\]\[x0\]overlay=0:0:enable='between\(t,0\.500,2\.000\)'\[t0\]/);
   assert.match(g, /\[t0\]\[x1\]overlay=0:0:enable='between\(t,2\.000,4\.000\)'\[v\];\[v\]crop=/);
 });
+
+test("a clip's speed: the picture's timestamps divided, the sound through atempo (two steps past 2× or under 0.5×)", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 4, speed: 2 }, { from: 4, to: 5, speed: 0.25 }], true);
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.match(g, /setpts=PTS-STARTPTS,setpts=PTS\/2\.0000\[v0\]/);
+  assert.match(g, /asetpts=PTS-STARTPTS,atempo=2\.0000\[a0\]/);
+  assert.match(g, /atempo=0\.5,atempo=0\.5000\[a1\]/);
+  assert.deepEqual(checkSegments([{ from: 0, to: 1, speed: 2 }]), [{ from: 0, to: 1, speed: 2 }]);
+  assert.throws(() => checkSegments([{ from: 0, to: 1, speed: 8 }]));
+});
