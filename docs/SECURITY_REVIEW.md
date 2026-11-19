@@ -1479,3 +1479,21 @@ S5 an outside scanner's rules for Electron.
   own links), as the rule asks; the rule was failing on every push.
 - Checked: lint, typecheck, tests (video-cut 12, gpu-guard 7, chat-report 17, asset-bank 4), a real FFmpeg cut with a
   fade and an added clip.
+
+## Scan 158 (2026-11-19): P3-SAM's runner, the full report again, sound tracks, 3D pictures, small tasks
+- **P3-SAM**: the runner (our own fixed text) is written to the engine's own folder before each split; the mesh and
+  its results stay in a per-run work folder that is removed after. `save_mid_res` writes more files there only.
+  Checked on the PC: a chair in 16 s with the card at 3 GB (it had filled 24 GB and hung).
+- **The full report again** (`/api/chat-reports/:id/full`): only for a finished report of this computer's own store;
+  from its kept notes (`notes.json`, removed with the report), or read again from its own chat; one at a time per
+  report (the running set). The chapters' quotes are checked against the chat as before. `storyChapters` parses only
+  complete JSON objects (a cut-off one is left out), no eval.
+- **Sound tracks**: in the page only (samples in memory); nothing new goes to the server.
+- **3D pictures in the bank**: the model is loaded from the bank's own address; a .gltf's other addresses do not load
+  (the same URL check as the viewer, scan 143); one hidden renderer; the model's memory is freed after its picture.
+- **Small tasks** (M for music, Escape in the outliner, reading time, project count): text and numbers shown with
+  React / `textContent`.
+- **Self-work**: its branch was not merged (two items closed without changes, one too large); the four were done by
+  hand and noted on the board.
+- Checked: lint, typecheck, tests (chat-report 19, part-seg 4), the sound editor's tracks in a browser (desktop and
+  390 px), P3-SAM and the bank on the PC.
