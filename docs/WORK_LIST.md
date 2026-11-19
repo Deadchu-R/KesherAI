@@ -37,7 +37,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
-- ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
+- ✅ 0.6.399 is available too.
+- 🔨 0.6.400 (Roee, 11:16: "add the 2 things, then a build and stop"): everything since 0.6.399. After it, stop.
 
 ## Waiting on Roee 👤
 - 👤 When convenient: 🖌 paint a model (ComfyUI 0.46+; asks before downloading SD 1.5 + ControlNet depth, ~2.8 GB).
