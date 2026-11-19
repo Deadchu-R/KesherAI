@@ -9,7 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -663,6 +663,27 @@
       if (last && media[mOf(last)]?.kind === "image") { remember(); last.to = 3; after(); void saveEdit(); }
     } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
   }
+  /**
+   * A picture made from words as a clip at the playhead (B-roll without a video model): the picture model draws it in
+   * the video's shape, it goes into the chat (and the bank), and in as a 5-second still.
+   */
+  async function addPictureFromWords() {
+    if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
+    const words = window.prompt(T("picWordsAsk", "What to draw? (a sunset over the sea, cinematic…)"));
+    if (!words?.trim()) return;
+    const { w, h } = frameSize();
+    const wide = w >= h;
+    busy(T("picMaking", "Drawing… (a minute or two)"));
+    try {
+      const [url] = await kesher.call("image.generate", { prompt: words.trim(), width: wide ? 1024 : 576, height: wide ? 576 : 1024 });
+      if (!url) throw new Error("No picture came back.");
+      const blob = await (await fetch(url)).blob();
+      const am = await import("./add-media.js");
+      const file = new File([blob], `${words.trim().slice(0, 30).replace(/[^\p{L}\p{N}]+/gu, "-")}-${Date.now().toString(36)}.png`, { type: "image/png" });
+      const { path, bytes } = await am.uploadMedia(file);
+      await addClip(file.name, path, bytes);
+    } catch (e) { msg(e.message || String(e), true); } finally { busy(""); }
+  }
   /** Text over the video from the playhead (3 s, a dark box low in the frame; change it in the inspector). */
   function addText() {
     if (!source) return msg(T("startVideo", "Start with a video: a picture goes in once there is one"), true);
@@ -709,6 +730,7 @@
       { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
       "-",
       { icon: "🖼", label: T("picClip", "A picture as a clip"), hint: T("picHint", "5 s, shorten it with trim"), run: () => addFrom("picture") },
+      { icon: "✨", label: T("picWords", "A picture from words"), hint: T("picWordsHint", "the picture model, 5 s"), run: () => void addPictureFromWords() },
       { icon: "💬", label: T("textOver", "Text over the video"), hint: T("textHint", "from the playhead, 3 s"), run: addText },
       { icon: "🔤", label: T("titleCard", "A title card"), hint: T("titleHint", "words on a plain background, 3 s"), run: () => void addTitle() },
     ]);
