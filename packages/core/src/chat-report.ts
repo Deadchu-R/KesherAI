@@ -739,9 +739,19 @@ export class ChatReports {
     const r = await this.get(id);
     if (r.status !== "done" || !r.report) throw Object.assign(new Error("Only a finished report has a full report to write."), { statusCode: 400 });
     const cached = JSON.parse(await readFile(join(this.folder(id), "notes.json"), "utf8").catch(() => "{}")) as { notes?: string[] };
-    if (!Array.isArray(cached.notes) || !cached.notes.length) throw Object.assign(new Error("This report's reading notes were not kept (reports finished before 0.6.394). Add a note or another export to read it again."), { statusCode: 409 });
     const chat = r.hasChat === false ? undefined : await this.chat(id).catch(() => undefined);
     const msgs = chat ? realMessages(chat) : [];
+    // A report finished before the notes were kept (0.6.394): it is read again from its chat, as when it was written.
+    if (!Array.isArray(cached.notes) || !cached.notes.length) {
+      if (!chat) throw Object.assign(new Error("This report has no chat to read again; add its export."), { statusCode: 409 });
+      r.status = "reading";
+      delete r.error;
+      await this.put(r);
+      const stop = new AbortController();
+      this.running.set(id, stop);
+      void this.write(r, msgs, ask, stop.signal).finally(() => this.running.delete(id));
+      return r;
+    }
     const notes = cached.notes;
     const userFor = (cap: number) => `Numbers (exact):\n${JSON.stringify(r.numbers)}\n\nNotes from reading the chat:\n${notes.join("\n\n").slice(0, cap)}`;
     const stop = new AbortController();
