@@ -43,6 +43,13 @@
         <button id="cropCancel" data-t="cancel">Cancel</button>
         <span class="muted" data-t="cropHint">Drag a frame. Enter applies, Esc cancels.</span>
       </div>
+      <div class="ctx" data-for="text">
+        <label><span data-t="textSize">Size</span> <input type="number" id="textSize" min="8" max="600" value="64" style="width:64px" /></label>
+        <label><span data-t="textFont">Font</span> <select id="textFont"><option value="sans" data-t="fSans">Sans</option><option value="serif" data-t="fSerif">Serif</option><option value="mono" data-t="fMono">Mono</option><option value="display" data-t="fDisplay">Display</option></select></label>
+        <label><input type="checkbox" id="textBold" checked /> <span data-t="textBold">Bold</span></label>
+        <label><input type="checkbox" id="textOutline" /> <span data-t="textOutline">Outline</span></label>
+        <span class="muted" data-t="textHint">Click the picture: new text · click a text: change it</span>
+      </div>
       <div class="ctx" data-for="fill">
         <label><span data-t="tolerance">Tolerance</span> <input type="range" id="tolerance" min="0" max="255" value="32" /></label>
       </div>
@@ -62,6 +69,7 @@
       <button data-tool="lasso" title="Lasso (L)">➰</button>
       <button data-tool="tapsel" title="Select an object by tapping it (AI, on your computer; Shift adds)">🎯</button>
       <hr />
+      <button data-tool="text" title="Text (T)"><b style="font-family:serif">T</b></button>
       <button data-tool="brush" title="Brush (B)">🖌</button>
       <button data-tool="eraser" title="Eraser (E)">⌫</button>
       <button data-tool="fill" title="Fill (G)">🪣</button>
@@ -157,6 +165,7 @@
       <button data-phone="select"><span>◯</span><b data-t="pSelect">Select</b></button>
       <button data-sheet="ai"><span>✦</span><b>AI</b></button>
       <button data-phone="brush"><span>✎</span><b data-t="hBrush">Brush</b></button>
+      <button data-phone="text"><span style="font-family:serif;font-weight:700">T</span><b data-t="hText">Text</b></button>
       <button data-phone="crop"><span>⛶</span><b data-t="crop">Crop</b></button>
       <button data-phone="fit"><span>⤢</span><b data-t="fit">Fit</b></button>
     </nav>

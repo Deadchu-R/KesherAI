@@ -1,7 +1,7 @@
 {
   "id": "image-editor",
   "name": "Image editor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A layered image editor after Photoshop and Affinity (menus, context bar, docked panels, personas, history) with your local picture model: generate a layer from words, repaint a selection, enlarge. Opens the picture in Affinity and brings it back. KesherAI's first official app plugin.",
   "author": "KesherAI contributors",
   "kesher": {

@@ -26,7 +26,7 @@
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
-    hBrush: "מברשת", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
+    hBrush: "מברשת", hText: "טקסט", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -81,7 +81,7 @@
   function snapshot() {
     return {
       w: doc.w, h: doc.h, active: doc.active,
-      layers: doc.layers.map((l) => ({ ...l, data: l.ctx.getImageData(0, 0, l.canvas.width, l.canvas.height), mask: l.mask ? copyCanvas(l.mask) : undefined })),
+      layers: doc.layers.map((l) => ({ ...l, data: l.ctx.getImageData(0, 0, l.canvas.width, l.canvas.height), mask: l.mask ? copyCanvas(l.mask) : undefined, text: l.text ? { ...l.text } : undefined })),
     };
   }
   function restore(s) {
@@ -96,7 +96,7 @@
       c.height = l.data.height;
       const ctx = c.getContext("2d", { willReadFrequently: true });
       ctx.putImageData(l.data, 0, 0);
-      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}), ...(l.mask ? { mask: copyCanvas(l.mask) } : {}) };
+      return { id: l.id, name: l.name, canvas: c, ctx, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.guide ? { guide: true } : {}), ...(l.mask ? { mask: copyCanvas(l.mask) } : {}), ...(l.text ? { text: { ...l.text } } : {}) };
     });
     renderLayers();
     if (resized) fit(); else draw();
@@ -273,13 +273,13 @@
     tool = t;
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
     // The phone bar shows it too, whether it was chosen there or by a key.
-    const phone = t === "rect" || t === "lasso" ? "select" : t === "brush" ? "brush" : t === "crop" ? "crop" : "";
+    const phone = t === "rect" || t === "lasso" ? "select" : t === "brush" || t === "crop" || t === "text" ? t : "";
     document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", !!phone && x.dataset.phone === phone));
     // The context bar shows this tool's options (Photoshop's options bar).
     document.querySelectorAll(".ctx").forEach((c) => c.classList.toggle("show", c.dataset.for.split(" ").includes(t)));
     $("ctxTool").textContent = document.querySelector(`[data-tool="${t}"]`)?.textContent ?? "";
     $("ctxHint").textContent = t === "move" ? T("hMove", "Drag to move the active layer.") : t === "hand" ? T("hHand", "Drag to move the view. Wheel: zoom.") : t === "picker" ? T("hPicker", "Click the picture to take its color.") : "";
-    stage.style.cursor = t === "hand" ? "grab" : t === "move" ? "move" : "crosshair";
+    stage.style.cursor = t === "hand" ? "grab" : t === "move" ? "move" : t === "text" ? "text" : "crosshair";
   }
   document.querySelectorAll("[data-tool]").forEach((b) => (b.onclick = () => setTool(b.dataset.tool)));
 
@@ -375,6 +375,7 @@
     drag = { t, start: p, last: p, sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, points: [p] };
     if (t === "brush" || t === "eraser") {
       if (!l) return msg(T("noLayer", "No active layer"));
+      delete l.text; // painted on: from now on it is pixels (Photoshop's Rasterize Type)
       const c = document.createElement("canvas");
       c.width = doc.w;
       c.height = doc.h;
@@ -384,7 +385,8 @@
       remember(T("hMove2", "Move"));
       drag.lx = l.x;
       drag.ly = l.y;
-    } else if (t === "fill" && l) floodFill(l, p.x, p.y, $("color").value);
+    } else if (t === "fill" && l) { delete l.text; floodFill(l, p.x, p.y, $("color").value); }
+    else if (t === "text") { drag = null; void textAt(p); }
     else if (t === "picker") pick(p);
     else if (t === "tapsel") tapSelect(p, e.shiftKey);
   });
@@ -455,6 +457,7 @@
       ctx.drawImage(l.canvas, l.x - x, l.y - y);
       if (l.mask) { const m = document.createElement("canvas"); m.width = w; m.height = h; m.getContext("2d", { willReadFrequently: true }).drawImage(l.mask, l.x - x, l.y - y); l.mask = m; }
       Object.assign(l, { canvas: c, ctx, x: 0, y: 0 });
+      delete l.text;
     }
     doc.w = w;
     doc.h = h;
@@ -463,6 +466,68 @@
     renderLayers();
     fit();
   }
+  // ---------- text (Photoshop's Type tool, T) ----------
+  // A text layer keeps its words and look (l.text), so it can be changed later: click it with the Text tool, or change
+  // the bar's size, font, bold or outline while it is the active layer. Painting, a filter, a turn or a crop make it
+  // pixels (as Photoshop's Rasterize Type).
+  const FONTS = { sans: "Heebo, Arial, sans-serif", serif: "'Frank Ruhl Libre', Georgia, serif", mono: "'JetBrains Mono', monospace", display: "Impact, 'Arial Black', sans-serif" };
+  /** Draws a text layer's words on its canvas (lines split at "\n"; right to left when it has Hebrew). */
+  function drawText(l) {
+    const t = l.text;
+    const g = l.ctx;
+    g.clearRect(0, 0, l.canvas.width, l.canvas.height);
+    g.font = `${t.bold ? 700 : 400} ${t.size}px ${FONTS[t.font] ?? FONTS.sans}`;
+    g.textBaseline = "top";
+    const rtl = /[\u0590-\u05FF\u0600-\u06FF]/.test(t.value);
+    g.direction = rtl ? "rtl" : "ltr";
+    g.textAlign = rtl ? "right" : "left";
+    t.value.split("\n").forEach((line, i) => {
+      const y = t.y + i * t.size * 1.2;
+      if (t.outline) { g.lineJoin = "round"; g.lineWidth = Math.max(2, t.size / 10); g.strokeStyle = t.color === "#000000" ? "#ffffff" : "#000000"; g.strokeText(line, t.x, y); }
+      g.fillStyle = t.color;
+      g.fillText(line, t.x, y);
+    });
+  }
+  /** The text bar's look, as a text layer keeps it. */
+  const textLook = () => ({ size: +$("textSize").value, font: $("textFont").value, bold: $("textBold").checked, outline: $("textOutline").checked, color: $("color").value });
+  /** The Text tool's click: on the active text layer's words it changes them, elsewhere it starts a new text layer. */
+  async function textAt(p) {
+    const l = active();
+    const t = l?.text;
+    const onIt = t && (() => { const lx = p.x - l.x, ly = p.y - l.y, lines = t.value.split("\n"), w = Math.max(...lines.map((x) => x.length)) * t.size * 0.6; const left = /[\u0590-\u05FF]/.test(t.value) ? t.x - w : t.x; return lx >= left && lx <= left + w && ly >= t.y && ly <= t.y + lines.length * t.size * 1.2; })();
+    const words = window.prompt(T("textAsk", "The words (\\n for a new line):"), onIt ? t.value.replace(/\n/g, "\\n") : "");
+    if (words == null) return;
+    const value = words.replace(/\\n/g, "\n");
+    if (onIt) {
+      remember(T("hText", "Text"));
+      if (!value.trim()) { doc.layers.splice(doc.active, 1); doc.active = Math.max(0, doc.active - 1); renderLayers(); draw(); return; }
+      t.value = value;
+      l.name = `T ${value.split("\n")[0].slice(0, 24)}`;
+      drawText(l);
+      renderLayers();
+      draw();
+      return;
+    }
+    if (!value.trim()) return;
+    remember(T("hText", "Text"));
+    const nl = makeLayer(`T ${value.split("\n")[0].slice(0, 24)}`);
+    nl.text = { value, x: Math.round(p.x), y: Math.round(p.y), ...textLook() };
+    drawText(nl);
+    addLayer(nl);
+  }
+  // Changing the bar while a text layer is active changes that text (one Undo step per change).
+  for (const id of ["textSize", "textFont", "textBold", "textOutline"]) {
+    $(id).addEventListener("change", () => {
+      const l = active();
+      if (!l?.text) return;
+      remember(T("hText", "Text"));
+      Object.assign(l.text, textLook());
+      drawText(l);
+      draw();
+    });
+  }
+  $("color").addEventListener("change", () => { const l = active(); if (tool === "text" && l?.text) { remember(T("hText", "Text")); l.text.color = $("color").value; drawText(l); draw(); } });
+
   // ---------- rotate and flip (Photoshop's Image → Image Rotation, and Edit → Transform → Flip for one layer) ----------
   /**
    * Turns or mirrors the whole picture: every layer (and its mask) is drawn at its place on the picture, then through
@@ -491,6 +556,7 @@
       const { c, g } = through(l.canvas, l.x, l.y);
       if (l.mask) l.mask = through(l.mask, l.x, l.y).c;
       Object.assign(l, { canvas: c, ctx: g, x: 0, y: 0 });
+      delete l.text;
     }
     doc.w = w;
     doc.h = h;
@@ -516,6 +582,7 @@
     const { c, g } = mirror(l.canvas);
     if (l.mask) l.mask = mirror(l.mask).c;
     Object.assign(l, { canvas: c, ctx: g });
+    delete l.text;
     renderLayers();
     draw();
   }
@@ -738,6 +805,7 @@
     const l = active();
     if (!l) return;
     remember(`${T("hFilter", "Filter")}: ${$("filter").selectedOptions[0].textContent}`);
+    delete l.text;
     const f = $("filter").value;
     const a = +$("amount").value;
     const tmp = document.createElement("canvas");
@@ -857,7 +925,7 @@
   }
   const exportPng = () => flatten().toBlob((b) => download(`${docName}.png`, b), "image/png");
   const saveProject = () => {
-    const project = { kesherImage: 1, w: doc.w, h: doc.h, active: doc.active, layers: doc.layers.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, png: l.canvas.toDataURL("image/png") })) };
+    const project = { kesherImage: 1, w: doc.w, h: doc.h, active: doc.active, layers: doc.layers.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, ...(l.text ? { text: l.text } : {}), png: l.canvas.toDataURL("image/png") })) };
     download(`${docName}.kesherimg`, new Blob([JSON.stringify(project)], { type: "application/json" }));
     msg(T("saved", "Saved"));
   };
@@ -875,6 +943,7 @@
         const l = makeLayer(s.name, img.naturalWidth, img.naturalHeight);
         l.ctx.drawImage(img, 0, 0);
         Object.assign(l, { visible: s.visible, opacity: s.opacity, blend: s.blend, x: s.x, y: s.y });
+        if (s.text && typeof s.text.value === "string") l.text = { ...s.text };
         doc.layers.push(l);
       }
       doc.active = Math.min(p.active, doc.layers.length - 1);
@@ -1109,7 +1178,7 @@
     if ((e.ctrlKey || e.metaKey) && k === "d") { e.preventDefault(); $("selNone").click(); return; }
     if (k === " ") { spaceDown = true; stage.style.cursor = "grab"; e.preventDefault(); return; }
     if (k === "delete" || k === "backspace") return clearSelection();
-    const map = { c: "crop", b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
+    const map = { t: "text", c: "crop", b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
     if (map[k]) setTool(map[k]);
     if (k === "[") $("size").value = String(Math.max(1, +$("size").value - 5));
     if (k === "]") $("size").value = String(+$("size").value + 5);
@@ -1442,11 +1511,11 @@
     const what = b.dataset.phone;
     if (what === "fit") return fit();
     // Select: rectangle, then lasso, then rectangle again.
-    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" ? "crop" : "brush");
+    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" || what === "text" ? what : "brush");
   }));
 
   // ---------- "?": the shortcuts ----------
-  const KEYS = [["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["C", "crop", "Crop"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
+  const KEYS = [["T", "hText", "Text"], ["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["C", "crop", "Crop"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
       const tr = document.createElement("tr");
