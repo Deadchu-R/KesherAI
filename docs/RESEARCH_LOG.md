@@ -2732,3 +2732,17 @@ Each AI tool shows which local model it uses and offers to download it the first
   meta, as Desktop site), with a short notice; in the menu "Computer view" / "Phone view" keeps a choice, and "By the
   mouse (automatic)" goes back. Kept on the device.
 - Stopped at: built (desktop-view.ts, the menu); to check on Roee's phone with a mouse.
+
+## My voice, reading a script (2026-11-19, 08:45; FUTURE_FEATURES "My voice, reading a script")
+- **ElevenLabs Studio (Projects)**: a long text in chapters and paragraphs, each spoken and re-spoken on its own, joined
+  with pauses; the instant clone needs about a minute of clean speech and a yes that it is the speaker's voice.
+- **Descript Overdub**: the voice is trained once (with a spoken consent line); the script is the edit, words typed
+  are spoken in the voice.
+- **Chatterbox Multilingual** (what KesherAI already has, 2026-11-16): zero-shot from a 10–30 s clip, Hebrew among 23
+  languages; it drifts on long text, so long scripts are spoken sentence by sentence (its own docs and issues).
+- **What we take**: the same "A voice of your own" box takes a whole script (up to 10,000 characters); it is cut into
+  parts of whole sentences up to ~220 characters (a long sentence at a comma), spoken by one model load, with 0.35 s
+  between parts and 0.8 s where a paragraph ends; the screen shows "part 3 of 12"; the recording downloads and is
+  kept in the bank of everything made (where the video editor takes it). Consent stays as it is (a voice is kept only
+  with a yes).
+- Stopped at: built (voice-clone.ts splitScript, the route keeps it, VoiceCloneSection); board VoiceScript.

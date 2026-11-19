@@ -58,9 +58,14 @@ export function VoiceCloneSection() {
   const say = async (voice: string) => {
     setBusy(voice);
     try {
-      const r = await fetch(withToken("/api/voice-clone/say"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice, text, lang }) });
+      // A script (more than a line) is read part by part and kept in the bank of everything made; the parts show
+      // on the screen as they are spoken.
+      const script = text.trim().length > 200;
+      const poll = setInterval(load, 2500);
+      const r = await fetch(withToken("/api/voice-clone/say"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice, text, lang, keep: script }) }).finally(() => clearInterval(poll));
       if (!r.ok) throw new Error(((await r.json()) as { error?: string }).error ?? String(r.status));
       setSrc(URL.createObjectURL(await r.blob()));
+      if (r.headers.get("x-asset-id")) toast(L("ההקלטה נשמרה גם בבנק היצירות", "The recording is also kept in Everything made"));
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -86,19 +91,23 @@ export function VoiceCloneSection() {
           </div>
           <label className="row small"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> {L("זה הקול שלי, או שיש לי אישור מבעל הקול", "This is my voice, or I have the speaker's permission")}</label>
           {st.voices.length > 0 && (
-            <div className="row wrap">
-              <input className="grow" value={text} dir="auto" aria-label={L("מה לומר", "What to say")} onChange={(e) => setText(e.target.value)} />
-              <select value={lang} aria-label={L("שפה", "Language")} onChange={(e) => setLang(e.target.value)}>{st.langs.map((l) => <option key={l} value={l}>{l}</option>)}</select>
+            <div className="stack">
+              <textarea className="grow" rows={text.length > 120 ? 8 : 2} maxLength={10000} value={text} dir="auto" aria-label={L("מה לומר: משפט או תסריט שלם", "What to say: a line or a whole script")} placeholder={L("משפט, או תסריט שלם (עד 10,000 תווים; שורה ריקה = הפסקה ארוכה)", "A line, or a whole script (up to 10,000 characters; an empty line = a longer pause)")} onChange={(e) => setText(e.target.value)} />
+              <div className="row wrap">
+                <span className="small muted grow">{text.trim().length > 200 ? L(`תסריט · כ-${Math.max(1, Math.round(text.trim().length / 900))} דק׳ דיבור · ${text.length}/10,000`, `A script · about ${Math.max(1, Math.round(text.trim().length / 900))} min of speech · ${text.length}/10,000`) : ""}</span>
+                <select value={lang} aria-label={L("שפה", "Language")} onChange={(e) => setLang(e.target.value)}>{st.langs.map((l) => <option key={l} value={l}>{l}</option>)}</select>
+              </div>
+              {busy && st.message && <span className="small muted">{st.message}</span>}
             </div>
           )}
           {st.voices.map((v) => (
             <div key={v} className="row">
               <b className="grow" dir="auto">{v}</b>
-              <button type="button" disabled={!!busy} onClick={() => void say(v)}>{busy === v ? L("מדבר… (בפעם הראשונה דקה-שתיים)", "Speaking… (a minute or two the first time)") : L("▶ להשמיע", "▶ Play")}</button>
+              <button type="button" disabled={!!busy} onClick={() => void say(v)}>{busy === v ? L("מדבר… (בפעם הראשונה דקה-שתיים)", "Speaking… (a minute or two the first time)") : text.trim().length > 200 ? L("🎙 להקריא את התסריט", "🎙 Read the script") : L("▶ להשמיע", "▶ Play")}</button>
               <button type="button" className="ghost" onClick={() => { if (confirm(L(`למחוק את הקול "${v}"?`, `Delete the voice "${v}"?`))) void api(`/api/voice-clone/voices/${encodeURIComponent(v)}`, { method: "DELETE" }).then(load); }}>{L("מחיקה", "Delete")}</button>
             </div>
           ))}
-          {src && <audio controls autoPlay src={src} />}
+          {src && <div className="row wrap"><audio controls autoPlay src={src} /><a className="button" href={src} download={`${(busy || "voice").replace(/\s+/g, "-")}.wav`}>{L("⬇ הורדה", "⬇ Download")}</a></div>}
           {st.phase === "error" && <p className="error small">{st.message}</p>}
         </>
       )}

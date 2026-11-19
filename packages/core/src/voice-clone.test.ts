@@ -23,3 +23,14 @@ test("a voice is kept only with consent, as a real WAV of a sensible length, and
   assert.deepEqual((await v.status()).voices, []);
   await assert.rejects(v.removeVoice("../x"), /No such voice/);
 });
+
+test("splitScript: sentences joined up to a part, paragraphs end with a longer pause, a long sentence cut at a comma", async () => {
+  const { splitScript } = await import("./voice-clone.js");
+  const r = splitScript("שלום לכולם! זה KesherAI.\n\n" + "משפט ארוך מאוד, ".repeat(20) + "סוף.");
+  assert.equal(r.parts[0], "שלום לכולם! זה KesherAI.");
+  assert.equal(r.pauses[0], 0.8);
+  assert.ok(r.parts.slice(1).every((p) => p.length <= 220));
+  assert.match(r.parts[1]!, /,$/);
+  assert.equal(r.pauses.at(-1), 0.8);
+  assert.equal(r.parts.join(" ").replace(/\s+/g, " ").length > 300, true);
+});

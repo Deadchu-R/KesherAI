@@ -621,7 +621,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     if (!dir) throw new Error("uv was not found after installing it.");
     return join(dir, process.platform === "win32" ? "uv.exe" : "uv");
   };
-  await voiceCloneRoutes(app, new VoiceCloner(join(paths.engines, "chatterbox"), uvPath));
+  await voiceCloneRoutes(app, new VoiceCloner(join(paths.engines, "chatterbox"), uvPath), services.assets);
   // Splitting a 3D model into parts by meaning: P3-SAM in its own Python (part-seg.ts), set up when she asks for it.
   await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), uvPath, freeGpu));
   // Removing a picture's background (the image editor): rembg + BiRefNet in its own Python (bg-remove.ts).

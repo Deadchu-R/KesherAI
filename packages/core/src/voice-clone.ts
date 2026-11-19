@@ -14,6 +14,48 @@ import { join } from "node:path";
 
 export const CLONE_LANGS = ["he", "en", "ar", "ru", "fr", "de", "es", "it", "pt", "nl", "pl", "sv", "da", "no", "fi", "el", "tr", "zh", "ja", "ko", "hi", "ms", "sw"] as const;
 
+/** The longest script read in one go (about 10 minutes of speech). */
+export const SCRIPT_MAX = 10_000;
+
+/**
+ * A script cut into parts the model speaks well (it drifts on long text): sentences joined up to about 220 characters,
+ * never across a paragraph; after each part a pause of 0.35 s, or 0.8 s where a paragraph ends.
+ *
+ * @param text - The script (Hebrew or any language).
+ * @returns The parts and the pause after each, in seconds.
+ */
+export function splitScript(text: string): { parts: string[]; pauses: number[] } {
+  const parts: string[] = [];
+  const pauses: number[] = [];
+  for (const para of text.slice(0, SCRIPT_MAX).split(/\n\s*\n|\r?\n/).map((p) => p.trim()).filter(Boolean)) {
+    const sentences = para.match(/[^.!?…؟。]+[.!?…؟。]*["'”׳״)]*\s*/g)?.map((x) => x.trim()).filter(Boolean) ?? [para];
+    let cur = "";
+    const push = () => { if (cur) { parts.push(cur); pauses.push(0.35); cur = ""; } };
+    for (const sen of sentences) {
+      // A sentence longer than a part is cut at a comma or a space.
+      for (let rest = sen; rest; ) {
+        if (rest.length <= 220) {
+          if (cur && cur.length + rest.length + 1 > 220) push();
+          cur = cur ? `${cur} ${rest}` : rest;
+          rest = "";
+        } else {
+          push();
+          // A comma if there is one past the middle (a natural breath), else the last space.
+          const comma = Math.max(rest.lastIndexOf(",", 220), rest.lastIndexOf("،", 220));
+          const cut = comma > 110 ? comma : rest.lastIndexOf(" ", 220);
+          const at = cut > 60 ? cut + 1 : 220;
+          parts.push(rest.slice(0, at).trim());
+          pauses.push(0.2);
+          rest = rest.slice(at).trim();
+        }
+      }
+    }
+    push();
+    if (pauses.length) pauses[pauses.length - 1] = 0.8;
+  }
+  return { parts, pauses };
+}
+
 /** What the voice engine is doing. */
 export interface CloneState {
   installed: boolean;
@@ -24,15 +66,25 @@ export interface CloneState {
 
 const SCRIPT = `import json, sys, torch, torchaudio
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-a = json.loads(sys.argv[1])
+a = json.loads(open(sys.argv[1][1:], encoding="utf-8").read() if sys.argv[1].startswith("@") else sys.argv[1])
 device = "cuda" if torch.cuda.is_available() else "cpu"
 try:
     model = ChatterboxMultilingualTTS.from_pretrained(device=device)
 except torch.cuda.OutOfMemoryError:
     device = "cpu"
     model = ChatterboxMultilingualTTS.from_pretrained(device="cpu")
-wav = model.generate(a["text"], language_id=a["lang"], audio_prompt_path=a["voice"])
-torchaudio.save(a["out"], wav, model.sr)
+# A script is spoken part by part (one model load), with a pause after each: a short one between sentences, a longer
+# one where a paragraph ends (ElevenLabs Studio's paragraphs).
+parts, pauses = a.get("parts") or [a["text"]], a.get("pauses") or [0]
+out = []
+for i, text in enumerate(parts):
+    print("PART", i + 1, len(parts), flush=True)
+    wav = model.generate(text, language_id=a["lang"], audio_prompt_path=a["voice"])
+    out.append(wav)
+    gap = int(model.sr * float(pauses[i] if i < len(pauses) else 0))
+    if gap > 0 and i < len(parts) - 1:
+        out.append(torch.zeros((wav.shape[0], gap), dtype=wav.dtype))
+torchaudio.save(a["out"], torch.cat(out, dim=1), model.sr)
 print("DONE", device)
 `;
 
@@ -66,6 +118,9 @@ export class VoiceCloner {
 
   private add(line: string) {
     this.state.log.push(line.slice(0, 300));
+    // A script's progress, for the screen ("PART 3 12" from the speaking script).
+    const part = /^PART (\d+) (\d+)/.exec(line);
+    if (part) this.state.message = `Speaking part ${part[1]} of ${part[2]}…`;
     if (this.state.log.length > 300) this.state.log.splice(0, 100);
   }
 
@@ -154,8 +209,9 @@ export class VoiceCloner {
     if (!(CLONE_LANGS as readonly string[]).includes(lang)) throw Object.assign(new Error("That language is not supported."), { statusCode: 400 });
     const ref = join(this.voicesDir(), `${voice}.wav`);
     if (!/^[\p{L}\p{N} _-]{1,40}$/u.test(voice) || !existsSync(ref)) throw Object.assign(new Error("No such voice."), { statusCode: 404 });
-    const t = text.trim().slice(0, 1500);
+    const t = text.trim().slice(0, SCRIPT_MAX);
     if (!t) throw Object.assign(new Error("Write something to say."), { statusCode: 400 });
+    const { parts, pauses } = splitScript(t);
     if (!existsSync(join(this.dir, "watermark-ok"))) {
       Object.assign(this.state, { phase: "installing", message: "Fixing the voice engine (one small download)…" });
       await this.fixWatermark(await this.uv(), { ...process.env, UV_PYTHON_INSTALL_DIR: join(this.dir, "python"), UV_CACHE_DIR: join(this.dir, "uv-cache") });
@@ -164,7 +220,10 @@ export class VoiceCloner {
     await writeFile(script, SCRIPT);
     const out = join(this.dir, `say-${Date.now()}.wav`);
     Object.assign(this.state, { phase: "speaking", message: "Speaking…" });
-    const job = this.run(this.python, [script, JSON.stringify({ text: t, lang, voice: ref, out })], { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONUTF8: "1" }, 10 * 60_000);
+    // The arguments go through a file (a 10,000-character script is too long for Windows' command line).
+    const args = join(this.dir, `say-${Date.now()}.json`);
+    await writeFile(args, JSON.stringify({ text: t, parts, pauses, lang, voice: ref, out }));
+    const job = this.run(this.python, [script, `@${args}`], { ...process.env, HF_HOME: join(this.dir, "hf"), PYTHONUTF8: "1" }, (10 + parts.length) * 60_000).finally(() => rm(args, { force: true }).catch(() => undefined));
     this.busy = job;
     try {
       await job;
