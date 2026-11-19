@@ -1573,3 +1573,17 @@ S5 an outside scanner's rules for Electron.
   to 0.1–1.5 s; nothing else from the page reaches FFmpeg. Tests: video-cut (18), comfy-flows, chat-tools-media pass.
 - **✦ With AI's wait** now also lists the bank (`/api/bank`, the same route the editors' Add uses); still one wait at a
   time, every 10 s, for 20 minutes at most. Nothing to fix.
+
+## Scan 166 (2026-11-19): a model from words, 3D with colours, painting a model, why a model loaded, a scene together
+- **/files/model3d and /files/paint3d**: the picture or model must be inside the chat's folder (`relative(...)` check,
+  and a .glb for painting); the words are cut (600); downloads only after `download: true` from a page that asked the
+  person; one model at a time (shared lock); ComfyUI behind the same business-mode check as the chat's tools. The
+  model goes to ComfyUI's input/3d through its own upload API (the subfolder is ours, "3d", never the page's).
+- **TRELLIS.2 / paint flows**: files only from the listed Hugging Face repos (Comfy-Org, comfyanonymous); KesherAI's
+  ComfyUI now reads clip_vision/ and background_removal/ inside the models folder (no other paths).
+- **Why a model loaded**: a fixed set of kinds plus chat titles the server already holds; shown as text (React escapes).
+- **Together** (/api/rooms/*): only keys that reach /api/ (this computer and paired devices; guests' keys open only
+  /api/guest/); the room key is hashed from what KesherAI's page opened (the page cannot pick another place); the
+  name is the device's; cameras are three finite numbers each, the field of view 1–179, at most 50 ids of 300
+  characters; 12 people a room, 50 rooms, gone after 6 s of silence; a 32 KB body limit. In memory only.
+- Performance: one small request a second per open scene; hidden tabs do not beat. Nothing to fix.

@@ -2869,3 +2869,11 @@ Each AI tool shows which local model it uses and offers to download it the first
 - Checked in the workspace's ComfyUI: validation, the upload into input/3d, and the geometry half on a real chair.
 - Open: the four sides are drawn separately, so they may not match perfectly where they meet (a multi-view model, like
   MV-Adapter, would match them; not native yet); a stronger image model with depth control.
+
+## A scene together (2026-11-19)
+- Unity Studio's real-time collaboration (docs.unity.com): each participant a colour; their camera and field of view
+  shown in the Scene view, their cursor and click ray, their selection outlined in their colour with a dot in the
+  Hierarchy, live edits; click a participant to follow their view; at most 12; one person edits a Logic script at a time.
+- KesherAI v1: colour chips (follow on click), cameras as named cones, selections outlined, 12 a scene, every second.
+  Stopped at: built and tested in the page (computer and phone). Open: guests through share links (the stand-in is not
+  open to guests yet), cursors and click rays, seeing moves live before they are saved to the engine.

@@ -33,7 +33,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   ComfyUI 0.46's validation in the workspace; not run with the real model (that needs the PC and a ~7.7 GB download).
 - ✅ Paint an existing model (🖌 in the 3D editor): four views drawn by words (SD 1.5 + ControlNet depth) and baked onto
   it, with ComfyUI's own nodes; its geometry half ran in a real ComfyUI in the workspace.
-- ⬜ Security scan 166 (after 5 changes since scan 165; 3 so far).
+- ✅ Security scan 166: nothing to fix.
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
@@ -51,10 +51,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
 
 ## Next, from FUTURE_FEATURES (code only)
-- 🔨 Say on screen what loaded a model (FUTURE_FEATURES, "a game scene without its engine": still to do since the
-  background routine filled the card on 2026-11-18).
-- ⬜ Unity Studio-style group work on the scene stand-in over share links: each person's colour, selection and view
-  (research first).
+- ✅ Say on screen what loaded a model ("Loaded because: …" on the Models page and in the computer's details).
+- ✅ A scene together (Unity Studio style): each person's colour chip, camera (a cone with the name) and selection,
+  and follow their view; for this computer, the phone and paired devices. ⬜ Later: guests through share links.
 - 👤 Open items that need Roee: Magic Tab (testing at the keyboard), the npm SDK (an npm account), Google sign-in for
   email invites, the Unreal levels bug (Roee: later).
 
