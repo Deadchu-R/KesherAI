@@ -17,7 +17,7 @@
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "קליפ",
-    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", outSize: "גודל", sizeKeep: "כמו שהוא", outQuality: "איכות", qHigh: "גבוהה", qNormal: "רגילה", qSmall: "קובץ קטן", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
+    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", dup: "⧉ שכפול", kDup: "שכפול הקליפ", outSize: "גודל", sizeKeep: "כמו שהוא", outQuality: "איכות", qHigh: "גבוהה", qNormal: "רגילה", qSmall: "קובץ קטן", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     soundTrack: "סאונד", newSound: "סאונד חדש", openingSound: "מוציא את הסאונד לעורך הסאונד…", dbl: "לחיצה כפולה: עריכה בעורך הסאונד (כלי נגינה, קולות…)", replaced: "הסאונד הוחלף מעורך הסאונד",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
@@ -155,6 +155,18 @@
     now = Math.min(startOf(i), Math.max(0, total() - 0.01));
     chosen = Math.min(i, clips.length - 1);
     after();
+  }
+  /** A copy of the chosen clip right after it (CapCut's Duplicate, Ctrl+D): the same stretch, speed and volume. */
+  function duplicateClip() {
+    const i = chosen >= 0 ? chosen : locate(now).i;
+    const c = clips[i];
+    if (!c) return msg(T("nothing", "No clip under the playhead"), true);
+    remember();
+    clips.splice(i + 1, 0, { ...c, id: nextId++ });
+    chosen = i + 1;
+    now = startOf(i + 1);
+    after();
+    void saveEdit();
   }
   function trim(edge) {
     const { i, src, start } = locate(now);
@@ -921,6 +933,7 @@
   $("splitBtn").onclick = split;
   $("scenes").onclick = splitScenes;
   $("delBtn").onclick = remove;
+  $("dupBtn").onclick = duplicateClip;
   $("trimStart").onclick = () => trim("start");
   $("trimEnd").onclick = () => trim("end");
   $("left").onclick = () => moveClip(-1);
@@ -929,7 +942,7 @@
   $("zoomOut").onclick = () => zoomBy(1 / 1.4);
   document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => ({ split, delete: remove, trimStart: () => trim("start"), trimEnd: () => trim("end"), play: () => play(), add: () => addMenu(b), words: () => $("app").classList.toggle("sheet") })[b.dataset.do]()));
 
-  const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Home / End", "kHomeEnd", "The start / the end"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["M", "kMusic", "The music starts at the playhead"], ["+ / −", "kZoom", "Zoom the timeline"]];
+  const KEYS = [["Space", "kPlay", "Play / pause"], ["J / K / L", "kJkl", "Back 5 s / stop / forward (twice = faster)"], ["← / →", "kFrame", "A frame"], ["Home / End", "kHomeEnd", "The start / the end"], ["Shift+← / →", "kSec", "A second"], ["S", "kSplit", "Split at the playhead"], ["Q / W", "kTrim", "Trim the start / end to the playhead"], ["Delete", "kDel", "Delete the clip (the gap closes)"], ["Ctrl+D", "kDup", "Duplicate the clip"], ["Alt+← / →", "kMove", "Move the clip left / right"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["M", "kMusic", "The music starts at the playhead"], ["+ / −", "kZoom", "Zoom the timeline"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
       const tr = document.createElement("tr");
@@ -951,6 +964,7 @@
     const frame = 1 / 30;
     if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
     if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); return redo(); }
+    if ((e.ctrlKey || e.metaKey) && k === "d") { e.preventDefault(); return duplicateClip(); }
     if (e.ctrlKey || e.metaKey) return;
     if (e.altKey && (k === "arrowleft" || k === "arrowright")) { e.preventDefault(); return moveClip(k === "arrowleft" ? -1 : 1); }
     const map = {
