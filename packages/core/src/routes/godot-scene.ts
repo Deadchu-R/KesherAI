@@ -77,6 +77,64 @@ export function clashes(nodes: readonly TscnNode[], changes: readonly StandInCha
   }).map((c) => c.path);
 }
 
+const err = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+
+/**
+ * A Godot project's scenes ("res://….tscn"), skipping hidden folders and addons; at most about 500.
+ *
+ * @param project - The project's folder (or its project.godot).
+ * @returns The scenes, sorted.
+ */
+export async function godotScenes(project: unknown): Promise<string[]> {
+  const { dir } = paths(project);
+  const out: string[] = [];
+  const walk = async (d: string, depth: number) => {
+    if (depth > 6 || out.length > 500) return;
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.name.startsWith(".") || e.name === "addons") continue;
+      if (e.isDirectory()) await walk(join(d, e.name), depth + 1);
+      else if (/\.tscn$/i.test(e.name)) out.push(`res://${relative(dir, join(d, e.name)).split(sep).join("/")}`);
+    }
+  };
+  await walk(dir, 0);
+  return out.sort();
+}
+
+/**
+ * One scene's nodes for the stand-in (placed scenes expanded), read only.
+ *
+ * @param project - The project's folder.
+ * @param scene - "res://….tscn" inside it.
+ * @returns The nodes and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big).
+ */
+export async function godotSceneOf(project: unknown, scene: unknown): Promise<{ nodes: TscnNode[]; mtime: number }> {
+  const { dir, file } = paths(project, scene);
+  await inside(dir, file!);
+  const st = await stat(file!).catch(() => undefined);
+  if (st && st.size > 50 * 1024 * 1024) throw err(413, "The scene is too big to read here.");
+  if (!st?.isFile()) throw err(404, "No such scene.");
+  return { nodes: await expand(dir, readTscn(await readFile(file!, "utf8")), 0), mtime: st.mtimeMs };
+}
+
+/**
+ * A model file the scene uses (res://….glb / .gltf), or a 2D sprite's picture, as bytes.
+ *
+ * @param project - The project's folder.
+ * @param path - "res://…" inside it.
+ * @returns Its media type and bytes; throws with a statusCode.
+ */
+export async function godotAssetOf(project: unknown, path: unknown): Promise<{ type: string; bytes: Buffer }> {
+  const { dir } = paths(project);
+  const rel = String(path ?? "").replace(/^res:\/\//, "");
+  const file = resolve(dir, rel);
+  if (!/\.(glb|gltf|png|jpe?g|webp|svg)$/i.test(file) || rel.split("/").includes("..")) throw err(400, "A model (.glb, .gltf) or a picture (.png, .jpg, .webp, .svg) inside the project.");
+  await inside(dir, file);
+  const st = await stat(file).catch(() => undefined);
+  if (!st?.isFile()) throw err(404, "No such file.");
+  if (st.size > 150 * 1024 * 1024) throw err(413, "The model is too big to show here.");
+  return { type: /\.glb$/i.test(file) ? "model/gltf-binary" : /\.gltf$/i.test(file) ? "model/gltf+json" : "application/octet-stream", bytes: await readFile(file) };
+}
+
 /**
  * The routes.
  *
@@ -86,18 +144,7 @@ export function clashes(nodes: readonly TscnNode[], changes: readonly StandInCha
 export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Promise<void> {
   app.get<{ Querystring: { project?: string } }>("/api/godot/scenes", async (req, reply) => {
     try {
-      const { dir } = paths(req.query.project);
-      const out: string[] = [];
-      const walk = async (d: string, depth: number) => {
-        if (depth > 6 || out.length > 500) return;
-        for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-          if (e.name.startsWith(".") || e.name === "addons") continue;
-          if (e.isDirectory()) await walk(join(d, e.name), depth + 1);
-          else if (/\.tscn$/i.test(e.name)) out.push(`res://${relative(dir, join(d, e.name)).split(sep).join("/")}`);
-        }
-      };
-      await walk(dir, 0);
-      return { scenes: out.sort() };
+      return { scenes: await godotScenes(req.query.project) };
     } catch (e) {
       return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
     }
@@ -105,12 +152,7 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
 
   app.get<{ Querystring: { project?: string; scene?: string } }>("/api/godot/scene", async (req, reply) => {
     try {
-      const { dir, file } = paths(req.query.project, req.query.scene);
-      await inside(dir, file!);
-      const st = await stat(file!).catch(() => undefined);
-      if (st && st.size > 50 * 1024 * 1024) return reply.code(413).send({ error: "The scene is too big to read here." });
-      if (!st?.isFile()) return reply.code(404).send({ error: "No such scene." });
-      return { nodes: await expand(dir, readTscn(await readFile(file!, "utf8")), 0), mtime: st.mtimeMs };
+      return await godotSceneOf(req.query.project, req.query.scene);
     } catch (e) {
       return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
     }
@@ -119,16 +161,9 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
   // A model file the scene uses (res://….glb / .gltf), or a 2D sprite's picture, for the stand-in to show its real shape.
   app.get<{ Querystring: { project?: string; path?: string } }>("/api/godot/asset", async (req, reply) => {
     try {
-      const { dir } = paths(req.query.project);
-      const rel = String(req.query.path ?? "").replace(/^res:\/\//, "");
-      const file = resolve(dir, rel);
-      if (!/\.(glb|gltf|png|jpe?g|webp|svg)$/i.test(file) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model (.glb, .gltf) or a picture (.png, .jpg, .webp, .svg) inside the project." });
-      await inside(dir, file);
-      const st = await stat(file).catch(() => undefined);
-      if (!st?.isFile()) return reply.code(404).send({ error: "No such file." });
-      if (st.size > 150 * 1024 * 1024) return reply.code(413).send({ error: "The model is too big to show here." });
+      const a = await godotAssetOf(req.query.project, req.query.path);
       // Sent as bytes (never as a page): an .svg is not run here, the stand-in draws it as a picture.
-      return reply.type(/\.glb$/i.test(file) ? "model/gltf-binary" : /\.gltf$/i.test(file) ? "model/gltf+json" : "application/octet-stream").header("content-disposition", "attachment").send(await readFile(file));
+      return reply.type(a.type).header("content-disposition", "attachment").send(a.bytes);
     } catch (e) {
       return reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
     }

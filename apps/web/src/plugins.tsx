@@ -108,8 +108,8 @@ export function usePluginUi(): PluginUi {
  * @param file - Path inside the plugin folder.
  * @returns The URL.
  */
-export function pluginFileUrl(pluginId: string, file: string): string {
-  const token = cache.filesKey || "local";
+export function pluginFileUrl(pluginId: string, file: string, filesKey?: string): string {
+  const token = filesKey || cache.filesKey || "local";
   return `/api/plugin-files/${encodeURIComponent(token)}/${pluginId}/${file.split("/").map(encodeURIComponent).join("/")}`;
 }
 
@@ -128,6 +128,71 @@ export function PluginStyles() {
 type Call = { kesher: 1; id: number; method: string; params?: Record<string, unknown> };
 
 /**
+ * A guest of a shared project in a scene (GuestApp's Scenes tab): the engine project by its path inside the shared
+ * folder, the scene, the guest's role, and the plugin files key (a guest cannot read /api/plugins/ui).
+ */
+export interface GuestSceneInput {
+  engine: "godot" | "unity";
+  project: string;
+  scene: string;
+  role: "read" | "edit";
+  filesKey: string;
+}
+
+/**
+ * What a plugin page may ask for when a guest opened it: the scene (read only), the models it shows, the room's beats,
+ * its own files and a toast; nothing else (everything else is the owner's and would only be refused by the server).
+ *
+ * @param g - The guest's scene.
+ * @param pluginId - The page's plugin.
+ * @param uses - Its declared models.
+ * @param method - What the page asked.
+ * @param p - The page's parameters.
+ * @returns The answer.
+ */
+async function guestCall(g: GuestSceneInput, pluginId: string, uses: string[], method: string, p: Record<string, unknown>): Promise<unknown> {
+  const where = { engine: g.engine, project: g.project, scene: g.scene };
+  const q = new URLSearchParams(where).toString();
+  switch (method) {
+    case "info":
+      return { pluginId, locale: getLocale(), conversationId: null, uses, apiVersion: 3, guest: g.role };
+    case "editor.input": {
+      const r = await api<{ nodes?: unknown[]; objects?: unknown[] }>(`/api/guest/scene?${q}`);
+      const name = g.scene.split("/").pop();
+      return { ...(g.engine === "godot" ? { godot: { scene: g.scene, nodes: r.nodes ?? [] } } : { unity: { scene: g.scene, objects: r.objects ?? [] } }), name, guest: { role: g.role } };
+    }
+    case "standin.asset": {
+      const res = await fetch(withToken(`/api/guest/scene/asset?${q}&path=${encodeURIComponent(String(p.path ?? ""))}`));
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
+      return res.arrayBuffer();
+    }
+    // The room: "waiting" while nobody of the owner's has the scene open, "full" past six guests; a beat over the
+    // limit (429) throws, so the page keeps what it shows.
+    case "room.beat": {
+      const res = await fetch(withToken("/api/guest/rooms/beat"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...where, tab: String(p.tab ?? ""), camera: p.camera, selection: p.selection }) });
+      const j = (await res.json().catch(() => ({}))) as { others?: unknown[]; code?: string; error?: string };
+      if (res.status === 409) return { others: [], waiting: j.code === "not-open", full: j.code === "full" };
+      if (!res.ok) throw new Error(j.error ?? String(res.status));
+      return j;
+    }
+    case "room.leave":
+      return api("/api/guest/rooms/leave", { method: "POST", body: { ...where, tab: String(p.tab ?? "") } });
+    case "own.file": {
+      const path = String(p.path ?? "");
+      if (!/^[\w-]+(\/[\w.-]+)*$/.test(path) || path.split("/").includes("..")) throw new Error("Give a path inside the plugin's folder.");
+      const res = await fetch(pluginFileUrl(pluginId, path, g.filesKey));
+      if (!res.ok) throw new Error(`${path}: ${res.status}`);
+      return res.arrayBuffer();
+    }
+    case "toast":
+      toast(String(p.text ?? ""));
+      return true;
+    default:
+      throw new Error(getLocale() === "he" ? "זה לא פתוח לאורחים." : "This is not open to guests.");
+  }
+}
+
+/**
  * A plugin page or panel in a sandboxed frame (scripts run, but it cannot
  * read the app, its token or its storage). It talks to the app through
  * `postMessage`; the plugin's page can use the tiny client in
@@ -140,8 +205,9 @@ type Call = { kesher: 1; id: number; method: string; params?: Record<string, unk
  * @param props.onInsertPrompt - For panels: puts text into the composer.
  * @param props.input - For pages: a file of a chat it was opened with ("Edit" on a chat's picture), which the page
  *   reads with `editor.input` and may send back to that chat only, with `chat.sendFile`.
+ * @param props.guest - For a guest of a shared project: the scene they opened; the page then reaches only guestCall.
  */
-export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot, unity, unreal }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput; unity?: UnitySceneInput; unreal?: UnrealLevelInput }) {
+export function PluginFrame({ pluginId, file, title, conversationId, onInsertPrompt, uses = [], input, godot, unity, unreal, guest }: { pluginId: string; file: string; title: string; conversationId?: string; onInsertPrompt?: (text: string) => void; uses?: string[]; input?: PageInput; godot?: GodotSceneInput; unity?: UnitySceneInput; unreal?: UnrealLevelInput; guest?: GuestSceneInput }) {
   const ref = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     const frame = ref.current;
@@ -160,6 +226,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     const handle = async (msg: Call): Promise<unknown> => {
       const p = msg.params ?? {};
+      if (guest) return guestCall(guest, pluginId, uses, msg.method, p);
       switch (msg.method) {
         case "info":
           return { pluginId, locale: getLocale(), conversationId: conversationId ?? input?.conversationId ?? null, uses, apiVersion: 3 };
@@ -677,6 +744,6 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);
-  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, unreal?.level, unreal?.project, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide]);
-  return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
+  }, [pluginId, conversationId, onInsertPrompt, uses.join(","), godot?.project, godot?.scene, unity?.project, unity?.scene, unreal?.level, unreal?.project, input?.conversationId, input?.path, input?.sound, input?.returnVideo, input?.returnTo?.path, input?.back?.path, input?.guide, guest?.engine, guest?.project, guest?.scene, guest?.role, guest?.filesKey]);
+  return <iframe ref={ref} className="plugin-frame" title={title} src={pluginFileUrl(pluginId, file, guest?.filesKey)} sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-modals" {...(uses.includes("sound") ? { allow: "microphone" } : {})} />;
 }

@@ -129,6 +129,65 @@ async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> 
 }
 
 const fail = (e: unknown) => ({ code: (e as { statusCode?: number }).statusCode ?? 500, error: (e as Error).message });
+const err = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+
+/**
+ * A Unity project's scenes ("Assets/….unity"), skipping hidden folders; at most about 500.
+ *
+ * @param project - The project's folder.
+ * @returns The scenes, sorted.
+ */
+export async function unityScenes(project: unknown): Promise<string[]> {
+  const { dir } = await paths(project);
+  const out: string[] = [];
+  const walk = async (d: string, depth: number) => {
+    if (depth > 8 || out.length > 500) return;
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.name.startsWith(".")) continue;
+      if (e.isDirectory()) await walk(join(d, e.name), depth + 1);
+      else if (/\.unity$/i.test(e.name)) out.push(relative(dir, join(d, e.name)).split(sep).join("/"));
+    }
+  };
+  await walk(join(dir, "Assets"), 0);
+  return out.sort();
+}
+
+/**
+ * One scene's objects for the stand-in (their looks resolved to models and built-in shapes), read only.
+ *
+ * @param project - The project's folder.
+ * @param scene - "Assets/….unity" inside it.
+ * @returns The objects and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big).
+ */
+export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number }> {
+  const { dir, file } = await paths(project, scene);
+  const st = await stat(file!).catch(() => undefined);
+  if (!st?.isFile()) throw err(404, "No such scene.");
+  if (st.size > 200 * 1024 * 1024) throw err(413, "The scene is too big to read here.");
+  const objects = readUnityScene(await readFile(file!, "utf8"));
+  await resolveLooks(dir, objects);
+  return { objects, mtime: st.mtimeMs };
+}
+
+/**
+ * A model file or picture the scene uses (under Assets/), as bytes.
+ *
+ * @param project - The project's folder.
+ * @param path - "Assets/…" inside it.
+ * @returns The bytes; throws with a statusCode.
+ */
+export async function unityAssetOf(project: unknown, path: unknown): Promise<Buffer> {
+  const { dir } = await paths(project);
+  const rel = String(path ?? "").replace(/\\/g, "/");
+  if (!/^Assets\//.test(rel) || !(MODEL.test(rel) || /\.(png|jpe?g|webp)$/i.test(rel)) || rel.split("/").includes("..")) throw err(400, "A model file or a picture under Assets/.");
+  const file = resolve(dir, rel);
+  const real = relative(await realpath(dir), await realpath(file).catch(() => file));
+  if (real.startsWith("..") || real.split(sep).includes("..")) throw err(400, "A model file under Assets/.");
+  const st = await stat(file).catch(() => undefined);
+  if (!st?.isFile()) throw err(404, "No such file.");
+  if (st.size > 150 * 1024 * 1024) throw err(413, "The model is too big to show here.");
+  return readFile(file);
+}
 
 /**
  * The routes.
@@ -138,18 +197,7 @@ const fail = (e: unknown) => ({ code: (e as { statusCode?: number }).statusCode 
 export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { project?: string } }>("/api/unity/scenes", async (req, reply) => {
     try {
-      const { dir } = await paths(req.query.project);
-      const out: string[] = [];
-      const walk = async (d: string, depth: number) => {
-        if (depth > 8 || out.length > 500) return;
-        for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-          if (e.name.startsWith(".")) continue;
-          if (e.isDirectory()) await walk(join(d, e.name), depth + 1);
-          else if (/\.unity$/i.test(e.name)) out.push(relative(dir, join(d, e.name)).split(sep).join("/"));
-        }
-      };
-      await walk(join(dir, "Assets"), 0);
-      return { scenes: out.sort() };
+      return { scenes: await unityScenes(req.query.project) };
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });
@@ -158,13 +206,7 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Querystring: { project?: string; scene?: string } }>("/api/unity/scene", async (req, reply) => {
     try {
-      const { file } = await paths(req.query.project, req.query.scene);
-      const st = await stat(file!).catch(() => undefined);
-      if (!st?.isFile()) return reply.code(404).send({ error: "No such scene." });
-      if (st.size > 200 * 1024 * 1024) return reply.code(413).send({ error: "The scene is too big to read here." });
-      const objects = readUnityScene(await readFile(file!, "utf8"));
-      await resolveLooks((await paths(req.query.project)).dir, objects);
-      return { objects, mtime: st.mtimeMs };
+      return await unitySceneOf(req.query.project, req.query.scene);
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });
@@ -174,16 +216,8 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
   // A model file the scene uses (Assets/….fbx / .obj / .glb / .gltf), for the stand-in to show its real shape.
   app.get<{ Querystring: { project?: string; path?: string } }>("/api/unity/asset", async (req, reply) => {
     try {
-      const { dir } = await paths(req.query.project);
-      const rel = String(req.query.path ?? "").replace(/\\/g, "/");
-      if (!/^Assets\//.test(rel) || !(MODEL.test(rel) || /\.(png|jpe?g|webp)$/i.test(rel)) || rel.split("/").includes("..")) return reply.code(400).send({ error: "A model file or a picture under Assets/." });
-      const file = resolve(dir, rel);
-      const real = relative(await realpath(dir), await realpath(file).catch(() => file));
-      if (real.startsWith("..") || real.split(sep).includes("..")) return reply.code(400).send({ error: "A model file under Assets/." });
-      const st = await stat(file).catch(() => undefined);
-      if (!st?.isFile()) return reply.code(404).send({ error: "No such file." });
-      if (st.size > 150 * 1024 * 1024) return reply.code(413).send({ error: "The model is too big to show here." });
-      return reply.type("application/octet-stream").send(await readFile(file));
+      const bytes = await unityAssetOf(req.query.project, req.query.path);
+      return reply.type("application/octet-stream").send(bytes);
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });

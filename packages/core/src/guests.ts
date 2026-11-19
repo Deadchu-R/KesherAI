@@ -216,9 +216,10 @@ export class GuestWatch {
    * @param status - The answer's status (403: outside the project).
    * @param now - The time (for tests).
    * @param night - Whether to say so when it is 23:00–07:00 here (the owner's "quiet hours" switch).
+   * @param counted - False for a scene's beats and models (rate-limited on their own), so they never make "busy".
    * @returns What to tell the owner, if anything.
    */
-  see(guest: string, address: string, status: number, now = Date.now(), night = false): GuestAlert[] {
+  see(guest: string, address: string, status: number, now = Date.now(), night = false, counted = true): GuestAlert[] {
     const out: GuestAlert[] = [];
     const once = (kind: GuestAlert) => {
       const key = `${guest}|${kind}`;
@@ -234,7 +235,7 @@ export class GuestWatch {
       once("new-address");
     }
     const times = (this.recent.get(guest) ?? []).filter((t) => now - t < 60_000);
-    times.push(now);
+    if (counted) times.push(now);
     this.recent.set(guest, times);
     if (times.length > 120) once("busy");
     const hour = new Date(now).getHours();

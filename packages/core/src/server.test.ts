@@ -248,6 +248,68 @@ test("a shared project: invite, join from outside, read, write in their own chat
   }
 });
 
+test("a scene together for guests: only where the owner is, read only, opaque, limited, and gone when removed", async () => {
+  const server = await makeServer();
+  try {
+    const ws = await mkdtemp(join(tmpdir(), "kesher-guest-ws-"));
+    const game = join(ws, "game");
+    await mkdir(join(game, "levels"), { recursive: true });
+    await writeFile(join(game, "project.godot"), "config_version=5\n");
+    await writeFile(join(game, "levels", "a.tscn"), `[gd_scene format=3]\n\n[node name="Level" type="Node3D"]\n\n[node name="Crate" type="Node3D" parent="."]\n`);
+    const alerts: string[] = [];
+    server.services.notifier.send = (async (n: { body: string }) => void alerts.push(n.body)) as typeof server.services.notifier.send;
+    const project = (await server.app.inject({ method: "POST", url: "/api/projects", payload: { name: "Game", workspace: ws } })).json() as { id: string };
+    const away = { remoteAddress: "203.0.113.9", headers: { host: "kesher.example" } };
+    const guest = async (role: "read" | "edit", name: string) => {
+      const inv = (await server.app.inject({ method: "POST", url: `/api/projects/${project.id}/invites`, payload: { role, hours: 1 } })).json() as { token: string };
+      const key = ((await server.app.inject({ method: "POST", url: `/api/join/${inv.token}`, payload: { name }, ...away })).json() as { key: string }).key;
+      return { remoteAddress: away.remoteAddress, headers: { host: "kesher.example", authorization: `Bearer ${key}` } };
+    };
+    const reader = await guest("read", "Dani");
+    const editor = await guest("edit", "Noa");
+    const scene = { engine: "godot", project: "game", scene: "res://levels/a.tscn" };
+    const list = (await server.app.inject({ url: "/api/guest/scenes", ...reader })).json() as { scenes: Array<{ engine: string; project: string; scene: string; open: boolean }> };
+    assert.deepEqual(list.scenes, [{ ...scene, open: false }]);
+    // Read only: the scene's nodes, never outside the shared folder.
+    const read = await server.app.inject({ url: `/api/guest/scene?engine=godot&project=game&scene=${encodeURIComponent(scene.scene)}`, ...reader });
+    assert.deepEqual((read.json() as { nodes: Array<{ path: string }> }).nodes.map((n) => n.path), [".", "Crate"]);
+    assert.equal((await server.app.inject({ url: `/api/guest/scene?engine=godot&project=..%2F..&scene=${encodeURIComponent(scene.scene)}`, ...reader })).statusCode, 403);
+    assert.equal((await server.app.inject({ url: `/api/guest/scene?engine=godot&project=${encodeURIComponent(game)}&scene=${encodeURIComponent(scene.scene)}`, ...reader })).statusCode, 403, "an absolute path");
+    assert.equal((await server.app.inject({ url: "/api/guest/scene?engine=godot&project=game&scene=res://.env.tscn", ...reader })).statusCode, 403);
+    assert.equal((await server.app.inject({ url: `/api/guest/scene/asset?engine=godot&project=game&scene=${encodeURIComponent(scene.scene)}&path=res://keys/a.pem`, ...reader })).statusCode, 403);
+    assert.equal((await server.app.inject({ url: `/api/guest/scene?engine=unreal&project=game&scene=x`, ...reader })).statusCode, 400);
+    // The owner's routes stay closed to a guest key; a guest cannot open a room alone.
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/rooms/beat", payload: { room: "x", tab: "t" }, ...reader })).statusCode, 403);
+    assert.equal((await server.app.inject({ url: `/api/godot/scene?project=${encodeURIComponent(game)}&scene=${encodeURIComponent(scene.scene)}`, ...reader })).statusCode, 403);
+    const alone = await server.app.inject({ method: "POST", url: "/api/guest/rooms/beat", payload: { ...scene, tab: "g1" }, ...reader });
+    assert.equal(alone.statusCode, 409);
+    assert.equal((alone.json() as { code: string }).code, "not-open");
+    // The owner opens it (the page writes the folder as it likes: here with project.godot).
+    const ownerBeat = () => server.app.inject({ method: "POST", url: "/api/rooms/beat", payload: { room: `godot|${join(game, "project.godot")}|${scene.scene}`, tab: "pc1", selection: ["Crate"] } });
+    assert.equal((await ownerBeat()).statusCode, 200);
+    assert.equal(((await server.app.inject({ url: "/api/guest/scenes", ...reader })).json() as { scenes: Array<{ open: boolean }> }).scenes[0]!.open, true);
+    const r = (await server.app.inject({ method: "POST", url: "/api/guest/rooms/beat", payload: { ...scene, tab: "g1", selection: ["Crate"] }, ...reader })).json() as { others: Array<{ id: string; name: string; selection: string[] }> };
+    assert.equal(r.others.length, 1);
+    assert.equal(r.others[0]!.name, "This computer");
+    assert.deepEqual(r.others[0]!.selection, ["Crate"]);
+    assert.match(r.others[0]!.id, /^[0-9a-f]{16}$/); // opaque: no device id, no folder
+    assert.doesNotMatch(JSON.stringify(r), new RegExp(ws.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")));
+    // Two beats a second at most (the refused one counted too), apart for each guest.
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/guest/rooms/beat", payload: { ...scene, tab: "g1" }, ...reader })).statusCode, 429);
+    assert.equal((await server.app.inject({ method: "POST", url: "/api/guest/rooms/beat", payload: { ...scene, tab: "g2", selection: ["Crate"] }, ...editor })).statusCode, 200);
+    // The owner sees both, marked as guests; the reader chose nothing for the others, the editor did.
+    const seen = (await ownerBeat()).json() as { others: Array<{ name: string; guest?: boolean; selection: string[] }> };
+    assert.deepEqual(seen.others.map((m) => [m.name, m.guest, m.selection]).sort(), [["Dani", true, []], ["Noa", true, ["Crate"]]]);
+    assert.equal(alerts.filter((a) => /opened the scene a\.tscn/.test(a)).length, 2, "one alert for each guest");
+    // Removed: gone from the scene at once.
+    const people = ((await server.app.inject({ url: `/api/projects/${project.id}/guests` })).json() as { people: Array<{ id: string; name: string }> }).people;
+    await server.app.inject({ method: "DELETE", url: `/api/projects/${project.id}/guests/${people.find((p) => p.name.startsWith("Dani"))!.id}` });
+    assert.deepEqual(((await ownerBeat()).json() as { others: Array<{ name: string }> }).others.map((m) => m.name), ["Noa"]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("an email invite: only that Google account joins; the wrong account and a banned one cannot", async () => {
   const server = await makeServer();
   const realFetch = globalThis.fetch;

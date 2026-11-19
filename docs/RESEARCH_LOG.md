@@ -2944,6 +2944,10 @@ Each AI tool shows which local model it uses and offers to download it the first
 7. **Later**: edit guests propose moves that the owner sees live and accepts (one undo step), Figma-like "Spotlight me".
 - Stopped at: research and the plan done; nothing built. Open: whether edit guests should move things at all; whether
   a guest may start a room alone (here: no).
+- Built (2026-11-19): steps 1–5 and the phone part of 6 (guest routes, shared SceneRooms with guest rules and opaque
+  ids, kick on Remove/Ban, 2 beats a second apart from "busy", one alert per guest in 10 minutes, GuestApp's Scenes tab,
+  the 3D editor's guest mode with "Following X · Stop"). Decided: guests never move things; no room alone; 6 guests.
+  Still open: the "Later" step (proposed moves, Spotlight).
 
 Sources: docs.unity.com/en-us/unity-studio/collab/real-time-collaboration; help.figma.com/hc/en-us/articles/360040531773
 (share), /16142157359255 (link expiry), /360040322673 (follow and spotlight); Figma "How many people can be in a file at

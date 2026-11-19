@@ -4,6 +4,7 @@
  */
 import { bankRoutes } from "../routes/bank.js";
 import { roomRoutes } from "../routes/rooms.js";
+import { SceneRooms } from "../scene-rooms.js";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { features } from "@kesher/shared";
@@ -181,7 +182,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await libraryRoutes(app, services);
   await fileRoutes(app, services);
   await bankRoutes(app, services);
-  await roomRoutes(app);
+  await roomRoutes(app, (services.sceneRooms ??= new SceneRooms()));
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);

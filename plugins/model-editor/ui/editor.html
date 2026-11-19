@@ -41,6 +41,10 @@
       <section class="view" id="view">
         <div class="empty" id="empty" data-t="empty">Open a model from a chat ("Edit in the 3D editor" on its preview), or press ＋ Add: a model, a picture, a shape, a light.</div>
         <div class="stats muted small" id="stats"></div>
+        <!-- Following someone's view (Figma's "Stop following"): whose, and a way out. -->
+        <div class="followbar" id="followBar" hidden role="status"><span class="dot" id="followDot"></span><span id="followName"></span><button type="button" id="followStop" data-t="stopFollow">Stop</button></div>
+        <!-- A guest: waiting for the owner to open this scene, or the scene is full. -->
+        <div class="guestnote" id="guestNote" hidden role="status"></div>
         <!-- The chosen part's task bar (the image editor's, and Meshy's / Tripo's "edit this part"): in words, the chat model
              turns it into the editor's own tools (colour, roughness, metal, a texture, a split, hide, duplicate). -->
         <form class="taskbar" id="taskbar" hidden>

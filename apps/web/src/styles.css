@@ -3851,6 +3851,15 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .guest-chat { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; text-align: start; width: 100%; }
 .guest-compose { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; gap: 8px; align-items: flex-end; }
 .guest-compose textarea { flex: 1; min-width: 0; resize: vertical; }
+/* A guest's Scenes tab and a scene opened in the 3D editor (guest mode), the whole screen. */
+.guest-tabs { margin-top: 10px; }
+.guest-scene { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 12px; text-align: start; width: 100%; height: auto; min-height: 64px; }
+.guest-scene-top { gap: 8px; align-items: center; min-width: 0; }
+.guest-scene-top b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-live { color: var(--good); border-color: var(--good); white-space: nowrap; }
+.guest-scene-page { display: flex; flex-direction: column; height: 100vh; height: 100dvh; background: var(--bg); color: var(--text); }
+.guest-scene-page .guest-bar { padding: 8px 12px; }
+.guest-scene-frame { flex: 1; min-height: 0; }
 /* Sharing a project (ProjectShare). */
 .project-row { gap: 0; }
 .project-share-btn { opacity: 0.55; }

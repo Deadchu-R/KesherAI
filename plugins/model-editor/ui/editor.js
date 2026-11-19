@@ -36,6 +36,7 @@ const HE = {
   partsInstalling: "מנוע החלקים עוד יורד; נסה שוב כשיסיים.", partsWorking: "מחלק לפי משמעות במחשב… (P3-SAM, יכול לקחת דקה)", partsReady: "מנוע החלקים מוכן: בחר חלק ו'לפי משמעות (AI)' שוב.", partsFailed: "ההתקנה של מנוע החלקים נעצרה", partsInstalling2: "מוריד את מנוע החלקים…",
   modsH: "מודיפיירים", addMod: "＋ הוספה…", mMirror: "מראה", mArray: "מערך", mSmooth: "הצללה חלקה", axis: "ציר", count: "כמות", gap: "רווח", on: "פעיל", up: "למעלה", remove: "הסר",
   kF: "מסגור החלק הנבחר", kHome: "כל המודל", kH: "הסתרת החלק", kAltH: "הצגת הכל", kW: "תיל (wireframe)", kUndo: "ביטול", tooBig: "המודל גדול מ-50MB",
+  stopFollow: "הפסק", following: "עוקב אחרי", guestMark: "(אורח)", guestWait: "מחכה שהבעלים יפתח את הסצנה הזאת… תצטרף לבד כשהוא בפנים.", guestFull: "יש כבר שישה אורחים בסצנה. נסה שוב עוד מעט.", guestOnly: "אורחים רק מסתכלים ועוקבים: שום דבר לא זז מכאן.",
 };
 let he = false;
 const T = (k, en) => (he && HE[k]) || en;
@@ -206,6 +207,9 @@ async function load(bytes) {
 const tab = Math.random().toString(36).slice(2, 12);
 let together = null; // the beat's timer while a stand-in is open
 let following = null; // the id of the person whose view this one follows
+// A guest of a shared project ("read" or "edit", from editor.input): look and follow, and with "edit" select; never move
+// or save. The host lets such a page reach only the scene, its models and the room (plugins.tsx guestCall).
+let guestRole = null;
 const others = new Map(); // id → { member, marker, boxes }
 /** An object's id in its engine (Godot's node path, Unity's and Unreal's ids). */
 const idOf = (o) => o?.userData.godot?.path ?? o?.userData.unity?.id ?? o?.userData.unreal?.id;
@@ -234,28 +238,44 @@ function cameraMarker(member) {
   scene.add(g);
   return g;
 }
-/** The chips at the top: one per person, in their colour; a click follows their view (again: stops). */
+/** A person's name as shown: guests marked "(guest)". */
+const nameOf = (member) => (member.guest ? `${member.name} ${T("guestMark", "(guest)")}` : member.name);
+/** The chips at the top: one per person, in their colour (a guest ringed dashed); a click follows their view (again: stops). */
 function drawPeople() {
   const box = $("people");
   box.hidden = !others.size;
   box.replaceChildren(...[...others.values()].map(({ member }) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = `person${following === member.id ? " on" : ""}`;
+    b.className = `person${following === member.id ? " on" : ""}${member.guest ? " guest" : ""}`;
     b.style.background = member.colour;
     b.textContent = [...member.name][0] ?? "?";
-    b.title = following === member.id ? T("unfollow", "Stop following") : `${T("follow", "Follow")}: ${member.name}`;
+    b.title = following === member.id ? T("unfollow", "Stop following") : `${T("follow", "Follow")}: ${nameOf(member)}`;
+    b.setAttribute("aria-label", b.title);
     b.onclick = () => { following = following === member.id ? null : member.id; drawPeople(); };
     return b;
   }));
+  // "Following X · Stop", in their colour.
+  const f = following && others.get(following)?.member;
+  $("followBar").hidden = !f;
+  if (f) {
+    $("followBar").style.setProperty("--follow", f.colour);
+    $("followName").textContent = `${T("following", "Following")} ${nameOf(f)}`;
+  }
 }
+$("followStop").onclick = () => { following = null; drawPeople(); };
 async function beat() {
   if (document.hidden || !model) return;
   const chosenId = idOf(chosen) ?? (() => { for (let o = chosen; o; o = o.parent) if (idOf(o)) return idOf(o); return undefined; })();
   let r;
   try {
-    r = await kesher.call("room.beat", { tab, camera: { p: camera.position.toArray(), t: controls.target.toArray(), fov: camera.fov }, selection: chosenId ? [chosenId] : [] });
+    r = await kesher.call("room.beat", { tab, camera: { p: camera.position.toArray(), t: controls.target.toArray(), fov: camera.fov }, selection: chosenId && guestRole !== "read" ? [chosenId] : [] });
   } catch { return; }
+  // A guest: waiting for the owner, or the scene is full (the room is empty for them meanwhile).
+  if (guestRole) {
+    $("guestNote").hidden = !(r?.waiting || r?.full);
+    $("guestNote").textContent = r?.full ? T("guestFull", "There are six guests in this scene already. Try again soon.") : T("guestWait", "Waiting for the owner to open this scene… you join by yourself when they are in.");
+  }
   const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()).length() || 1;
   const here = new Set();
   for (const m of r?.others ?? []) {
@@ -282,6 +302,7 @@ async function beat() {
 }
 /** Starts showing who else is here (called when a scene stand-in opens). */
 function startTogether() {
+  if (guestRole) msg(T("guestOnly", "Guests look and follow only: nothing moves from here."));
   clearInterval(together);
   together = setInterval(() => void beat(), 1000);
   void beat();
@@ -289,6 +310,19 @@ function startTogether() {
 // Turning the view by hand stops following.
 controls.addEventListener("start", () => { if (following) { following = null; drawPeople(); } });
 addEventListener("pagehide", () => { if (together) void kesher.call("room.leave", { tab }).catch(() => undefined); });
+// A guest whose tab is hidden leaves the room at once (no stale camera for the others; saves the phone's battery and
+// data) and comes back with the next beat when it shows again.
+document.addEventListener("visibilitychange", () => {
+  if (!guestRole || !together) return;
+  if (document.hidden) void kesher.call("room.leave", { tab }).catch(() => undefined);
+  else void beat();
+});
+/** Guest mode: the tools that change, save or send anything go away (editor.css "body.guest"); the view stays. The
+ *  guest page's own bar says "Guest" and the role. */
+function enterGuest(role) {
+  guestRole = role === "edit" ? "edit" : "read";
+  document.body.classList.add("guest");
+}
 
 // ---------- a Godot scene without Godot (SceneStandIn board): a stand-in of its nodes, moved here, saved back ----------
 /** Godot writes a Transform3D's basis row by row, then the origin. */
@@ -651,6 +685,7 @@ async function open() {
   busy(T("loading", "Loading the model…"));
   try {
     const input = await kesher.call("editor.input");
+    if (input?.guest) enterGuest(input.guest.role);
     if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
     if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
     if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
@@ -742,7 +777,7 @@ function choose(obj) {
   // The chosen object is outlined by a box (Blender's orange outline, simply) and gets the gizmo.
   glow = new THREE.BoxHelper(chosen, 0xffa040);
   scene.add(glow);
-  if (!chosen.userData.locked) gizmo.attach(chosen);
+  if (!chosen.userData.locked && !guestRole) gizmo.attach(chosen);
   const mesh = chosen.isMesh ? chosen : chosen.getObjectByProperty("isMesh", true);
   const m = mesh && matOf(mesh);
   if (m?.color) $("color").value = `#${m.color.getHexString()}`;
@@ -1783,6 +1818,8 @@ let lastTool = false;
 addEventListener("keydown", (e) => {
   if (e.target.closest?.("input, textarea, select, dialog")) return;
   const k = e.key.toLowerCase(), blender = $("keymap").value === "blender";
+  // A guest only looks: the view's keys, nothing that edits.
+  if (guestRole && (e.ctrlKey || e.metaKey || e.altKey || (e.shiftKey && k !== "?") || !["f", "/", "home", "a", "escape", "1", "3", "7", "4", "5", "6", "?"].includes(k))) return;
   if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); return undo(); }
   if ((e.ctrlKey || e.metaKey) && k === "d" && !blender) { e.preventDefault(); return duplicate(); }
   if (e.ctrlKey || e.metaKey) return;
@@ -1990,7 +2027,7 @@ $("addBtn").onclick = () => addMenu($("addBtn"));
 host.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
 host.addEventListener("drop", async (e) => {
   const files = [...(e.dataTransfer?.files ?? [])];
-  if (!files.length) return;
+  if (!files.length || guestRole) return;
   e.preventDefault();
   for (const f of files) {
     busy(T("loading", "Loading the model…"));

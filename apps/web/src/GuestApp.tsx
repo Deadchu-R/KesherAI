@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
+import { PluginFrame, type GuestSceneInput } from "./plugins";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const TOKEN_KEY = "kesher-token";
@@ -36,6 +37,44 @@ interface Chat {
   mine: boolean;
   busy: boolean;
   messages: Array<{ seq: number; role: "user" | "assistant"; text: string }>;
+}
+
+/** An engine scene in the shared project's folder; `open` while the owner (or their device) has it open. */
+interface SceneRow {
+  engine: "godot" | "unity";
+  project: string;
+  scene: string;
+  open: boolean;
+}
+/** The 3D editor a guest opens scenes in, and the key for its files. */
+interface SceneEditor {
+  pluginId: string;
+  file: string;
+  title: string;
+  uses: string[];
+  filesKey: string;
+}
+
+/**
+ * The Scenes tab (RESEARCH_LOG "A scene together, for guests through share links"): the engine scenes in the project's
+ * folder, the ones the owner has open now first. A guest joins only those: the others wait for the owner.
+ */
+function GuestScenes({ scenes, editor, onOpen }: { scenes: SceneRow[]; editor: SceneEditor | null; onOpen: (s: SceneRow) => void }) {
+  if (!editor) return <p className="muted small">{L("עורך התלת ממד לא פעיל במחשב של הבעלים.", "The 3D editor is not on in the owner's KesherAI.")}</p>;
+  return (
+    <section className="stack guest-scenes">
+      <p className="muted small">{L("פותחים סצנה שהבעלים פתוח בה עכשיו: רואים איפה כל אחד מסתכל ואפשר לעקוב אחריו. שום דבר לא זז ולא נשמר מכאן.", "Open a scene the owner has open now: see where everyone looks and follow them. Nothing is moved or saved from here.")}</p>
+      {scenes.map((sc) => (
+        <button key={`${sc.engine}|${sc.project}|${sc.scene}`} type="button" className="card guest-scene" onClick={() => onOpen(sc)}>
+          <span className="row guest-scene-top">
+            <b className="grow" dir="ltr">🧊 {sc.scene.split("/").pop()}</b>
+            {sc.open ? <span className="pill small guest-live">● {L("פתוח עכשיו", "Open now")}</span> : <span className="muted small">{L("סגור", "Closed")}</span>}
+          </span>
+          <span className="muted small" dir="ltr">{sc.engine === "godot" ? "Godot" : "Unity"} · {sc.project === "." ? "" : `${sc.project}/`}{sc.scene.replace(/^res:\/\//, "")}</span>
+        </button>
+      ))}
+    </section>
+  );
 }
 
 /** Joining from an invite link: what it is for, a name, and the guest's own key kept in this browser. */
@@ -136,15 +175,28 @@ export function GuestApp() {
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [tab, setTab] = useState<"chats" | "scenes">("chats");
+  const [scenes, setScenes] = useState<{ scenes: SceneRow[]; editor: SceneEditor | null }>({ scenes: [], editor: null });
+  const [scene, setScene] = useState<SceneRow | null>(null);
 
+  const loadScenes = useCallback(async () => {
+    setScenes(await api<{ scenes: SceneRow[]; editor: SceneEditor | null }>("/api/guest/scenes").catch(() => ({ scenes: [], editor: null })));
+  }, []);
   const load = useCallback(async () => {
     try {
       setMe(await api<Me>("/api/guest/me"));
       setChats((await api<{ chats: ChatRow[] }>("/api/guest/chats")).chats);
+      await loadScenes();
     } catch (e) {
       setError((e as Error).message);
     }
-  }, []);
+  }, [loadScenes]);
+  // While the Scenes list is shown, which are open now is asked again every 15 seconds (not while the tab is hidden).
+  useEffect(() => {
+    if (tab !== "scenes" || scene) return;
+    const t = setInterval(() => { if (!document.hidden) void loadScenes(); }, 15_000);
+    return () => clearInterval(t);
+  }, [tab, scene, loadScenes]);
   const read = useCallback(async (id: string) => {
     clearTimeout(timer.current);
     try {
@@ -162,6 +214,22 @@ export function GuestApp() {
   }, [join, load]);
 
   if (join) return <Join token={join} />;
+  // A scene: the 3D editor in guest mode, the whole screen, with a way back.
+  if (scene && scenes.editor && me) {
+    const guest: GuestSceneInput = { engine: scene.engine, project: scene.project, scene: scene.scene, role: me.role, filesKey: scenes.editor.filesKey };
+    return (
+      <main className="guest-scene-page">
+        <header className="guest-bar row">
+          <button type="button" className="ghost" onClick={() => { setScene(null); void loadScenes(); }} aria-label={L("חזרה", "Back")}>{getLocale() === "he" ? "→" : "←"}</button>
+          <strong className="grow" dir="ltr">{scene.scene.split("/").pop()}</strong>
+          <span className="pill small">{L("אורח", "Guest")} · {me.role === "edit" ? L("בחירה", "can select") : L("צפייה", "watching")}</span>
+        </header>
+        <div className="guest-scene-frame">
+          <PluginFrame pluginId={scenes.editor.pluginId} file={scenes.editor.file} title={scenes.editor.title} uses={scenes.editor.uses} guest={guest} />
+        </div>
+      </main>
+    );
+  }
   const leave = () => {
     if (!confirm(L("לצאת מהפרויקט בדפדפן הזה? כדי לחזור צריך הזמנה חדשה.", "Leave the project in this browser? To come back you need a new invite."))) return;
     localStorage.removeItem(TOKEN_KEY);
@@ -198,7 +266,15 @@ export function GuestApp() {
         <button type="button" className="ghost small" onClick={leave}>{L("יציאה", "Leave")}</button>
       </header>
       {error && <p className="error" role="alert" dir="auto">{error}</p>}
-      {!open ? (
+      {!open && scenes.scenes.length > 0 && (
+        <nav className="tabs guest-tabs" aria-label={L("חלקי הפרויקט", "Parts of the project")}>
+          <button type="button" className={tab === "chats" ? "on" : ""} onClick={() => setTab("chats")}>💬 {L("צ'אטים", "Chats")}</button>
+          <button type="button" className={tab === "scenes" ? "on" : ""} onClick={() => { setTab("scenes"); void loadScenes(); }}>🧊 {L("סצנות", "Scenes")}{scenes.scenes.some((x) => x.open) ? " ●" : ""}</button>
+        </nav>
+      )}
+      {!open && tab === "scenes" && scenes.scenes.length > 0 ? (
+        <GuestScenes scenes={scenes.scenes} editor={scenes.editor} onOpen={setScene} />
+      ) : !open ? (
         <section className="stack guest-list">
           {me && <p className="muted small" dir="auto">{L(`${me.name}, שיתפו איתך את הפרויקט הזה ב-KesherAI.`, `${me.name}, this project was shared with you in KesherAI.`)}</p>}
           {chats.length === 0 && <p className="muted">{L("אין עדיין צ'אטים בפרויקט.", "No chats in this project yet.")}</p>}

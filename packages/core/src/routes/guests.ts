@@ -2,8 +2,12 @@ import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
 import { GuestInvites, GuestQuota, GuestWatch, googlePoll, googleStart, guestName, guestOf, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
-import { clientAddress } from "../auth.js";
+import { clientAddress, PLUGIN_FILES_KEY } from "../auth.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
+import { BeatLimit, roomKey, SceneRooms } from "../scene-rooms.js";
+import { guestEngineProjects, guestPathPrivate, guestProjectFolder, type GuestEngine } from "../guest-scenes.js";
+import { godotAssetOf, godotSceneOf, godotScenes } from "./godot-scene.js";
+import { unityAssetOf, unitySceneOf, unityScenes } from "./unity-scene.js";
 
 /**
  * Working together on one project (docs/COLLABORATION.md, stage 1). Three kinds of routes:
@@ -12,6 +16,8 @@ import { pairedDeviceIdOf } from "../request-origin.js";
  * - the guest's: `/api/guest/*`, the only routes a guest key opens (auth.ts), each checked against the guest's own
  *   project. A guest reads the project's chats; with "edit" a guest starts chats of their own there and writes in
  *   those only (never in the owner's chats, which can use tools). Guest chats have no tools and no memory.
+ *   A guest also joins the engine scenes in the project's folder that the owner has open (a scene together: see
+ *   others' colours and cameras, follow them, and with "edit" select), read only: no route here writes a scene.
  */
 export async function guestRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const invites = new GuestInvites(join(s.paths.root, "guest-invites.json"));
@@ -34,7 +40,9 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
       busy: `${who} sent very many requests in a minute to "${project}".`,
       night: `${who} is using "${project}" during your quiet hours (23:00–07:00).`,
     };
-    for (const a of watch.see(d.id, clientAddress(req), reply.statusCode, Date.now(), s.config.remote.guestNightAlert)) {
+    // A scene's beats (about one a second) and the models it shows are limited on their own, apart from "busy".
+    const counted = !/^\/api\/guest\/(rooms\/|scene\/asset)/.test(req.url);
+    for (const a of watch.see(d.id, clientAddress(req), reply.statusCode, Date.now(), s.config.remote.guestNightAlert, counted)) {
       void s.notifier.send({ title: "KesherAI: a guest", body: say[a], tags: ["warning"], priority: a === "outside" ? 4 : 3 }).catch(() => undefined);
     }
   });
@@ -47,6 +55,8 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     return d && g && s.library.getProject(g.projectId) ? { id: d.id, name: d.name, ...g } : undefined;
   };
   const refuse = (reply: FastifyReply) => reply.code(403).send({ error: "Only a guest of a shared project can use this." });
+  /** The scenes' rooms, the same ones the owner's pages beat into (routes/rooms.ts). */
+  const rooms = (s.sceneRooms ??= new SceneRooms());
 
   // ---- The owner's (a guest key cannot reach these: auth.ts sends it only to /api/guest/*). ----
 
@@ -91,6 +101,7 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     const d = devices().find((x) => x.id === req.params.guest);
     if (!d || guestOf(d.scope)?.projectId !== req.params.id) return reply.code(404).send({ error: "No such guest." });
     await s.deviceKeys?.remove(d.id);
+    rooms.kick(d.id);
     return { ok: true };
   });
 
@@ -100,6 +111,7 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (!d || guestOf(d.scope)?.projectId !== req.params.id) return reply.code(404).send({ error: "No such guest." });
     if (d.email && !s.config.remote.guestBanned.includes(d.email)) s.config.remote.guestBanned.push(d.email);
     await s.deviceKeys?.remove(d.id);
+    rooms.kick(d.id);
     await s.saveConfig();
     return { ok: true, banned: d.email ?? null };
   });
@@ -245,5 +257,114 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });
     }
+  });
+
+  // ---- A scene together (RESEARCH_LOG "A scene together, for guests through share links"). The guest names an engine
+  // project by its path inside the project's folder; the server checks it and builds the same room the owner's page
+  // beats into. A guest only joins a scene the owner (or a paired device) has open, never moves anything, and hears the
+  // others by opaque ids. ----
+
+  const beats = new BeatLimit(2);
+  /** When the owner was last told that each guest entered a scene (once in 10 minutes). */
+  const entered = new Map<string, number>();
+  const engineOf = (v: unknown): GuestEngine | undefined => (v === "godot" || v === "unity" ? v : undefined);
+  const SCENE: Record<GuestEngine, RegExp> = { godot: /^res:\/\/[^\0|]{1,300}\.tscn$/i, unity: /^Assets\/[^\0|]{1,300}\.unity$/i };
+  const failed = (reply: FastifyReply, e: unknown) => reply.code((e as { statusCode?: number }).statusCode ?? 500).send({ error: (e as Error).message });
+  /**
+   * The guest's scene, checked: a known engine, a scene of its kind that is not private, and the engine project's real
+   * folder inside the shared folder. Throws with a statusCode (403 for anything outside).
+   */
+  const sceneOf = async (g: { projectId: string }, q: { engine?: unknown; project?: unknown; scene?: unknown }) => {
+    const engine = engineOf(q.engine);
+    const scene = String(q.scene ?? "");
+    if (!engine || !SCENE[engine].test(scene)) throw Object.assign(new Error("Say which engine and which scene."), { statusCode: 400 });
+    if (guestPathPrivate(scene)) throw Object.assign(new Error("That is not inside the shared project."), { statusCode: 403 });
+    const workspace = s.library.getProject(g.projectId)?.workspace;
+    if (!workspace) throw Object.assign(new Error("This project has no folder to share scenes from."), { statusCode: 404 });
+    const dir = await guestProjectFolder(workspace, q.project);
+    return { engine, scene, dir, room: await roomKey(`${engine}|${dir}|${scene}`) };
+  };
+
+  /** The engine scenes in the project's folder, which of them the owner has open now, and the 3D editor to open them. */
+  app.get("/api/guest/scenes", async (req, reply) => {
+    const g = guestBehind(req);
+    if (!g) return refuse(reply);
+    const workspace = s.library.getProject(g.projectId)?.workspace;
+    const page = s.plugins.ui().pages.find((p) => p.pluginId === "model-editor" && p.id === "editor");
+    const editor = page ? { pluginId: page.pluginId, file: page.file, title: page.title, uses: page.uses, filesKey: PLUGIN_FILES_KEY } : null;
+    if (!workspace) return { scenes: [], editor };
+    const scenes: Array<{ engine: GuestEngine; project: string; scene: string; open: boolean }> = [];
+    for (const p of await guestEngineProjects(workspace)) {
+      const dir = await guestProjectFolder(workspace, p.project).catch(() => undefined);
+      if (!dir) continue;
+      for (const scene of await (p.engine === "godot" ? godotScenes(dir) : unityScenes(dir)).catch(() => [] as string[])) {
+        if (scenes.length >= 300 || guestPathPrivate(scene) || scene.includes("|")) continue;
+        scenes.push({ engine: p.engine, project: p.project, scene, open: rooms.open(await roomKey(`${p.engine}|${dir}|${scene}`)) });
+      }
+    }
+    // The open ones first: where the owner is now.
+    return { scenes: scenes.sort((a, b) => Number(b.open) - Number(a.open)), editor };
+  });
+
+  /** One scene for the stand-in, read only (the same reading as the owner's /api/godot|unity/scene). */
+  app.get<{ Querystring: { engine?: string; project?: string; scene?: string } }>("/api/guest/scene", async (req, reply) => {
+    const g = guestBehind(req);
+    if (!g) return refuse(reply);
+    try {
+      const sc = await sceneOf(g, req.query);
+      return sc.engine === "godot" ? await godotSceneOf(sc.dir, sc.scene) : await unitySceneOf(sc.dir, sc.scene);
+    } catch (e) {
+      return failed(reply, e);
+    }
+  });
+
+  /** A model file or picture the scene shows (res://… or Assets/…), as bytes; never a private file. */
+  app.get<{ Querystring: { engine?: string; project?: string; scene?: string; path?: string } }>("/api/guest/scene/asset", async (req, reply) => {
+    const g = guestBehind(req);
+    if (!g) return refuse(reply);
+    try {
+      const sc = await sceneOf(g, req.query);
+      if (guestPathPrivate(req.query.path)) return reply.code(403).send({ error: "That is not inside the shared project." });
+      if (sc.engine === "godot") {
+        const a = await godotAssetOf(sc.dir, req.query.path);
+        return reply.type(a.type).header("content-disposition", "attachment").send(a.bytes);
+      }
+      const bytes = await unityAssetOf(sc.dir, req.query.path);
+      return reply.type("application/octet-stream").header("content-disposition", "attachment").send(bytes);
+    } catch (e) {
+      return failed(reply, e);
+    }
+  });
+
+  /** A guest's beat in a scene: at most two a second; the owner hears once (in 10 minutes) that they came in. */
+  app.post<{ Body: { engine?: string; project?: string; scene?: string; tab?: string; camera?: unknown; selection?: unknown } }>("/api/guest/rooms/beat", { bodyLimit: 32 * 1024 }, async (req, reply) => {
+    const g = guestBehind(req);
+    if (!g) return refuse(reply);
+    if (!beats.allow(g.id)) return reply.code(429).send({ error: "Too many beats: at most two a second.", code: "slow" });
+    const tab = String(req.body?.tab ?? "").replace(/[^\w-]/g, "").slice(0, 40);
+    if (!tab) return reply.code(400).send({ error: "Say which tab." });
+    try {
+      const sc = await sceneOf(g, req.body ?? {});
+      const who = g.name.replace(/ \(guest\)$/, "");
+      const r = rooms.beat(sc.room, `${g.id}:${tab}`, who, req.body ?? {}, Date.now(), g.role);
+      if ("error" in r) return reply.code(409).send(r);
+      if (r.joined && Date.now() - (entered.get(g.id) ?? -Infinity) > 600_000) {
+        entered.set(g.id, Date.now());
+        const project = s.library.getProject(g.projectId)?.name ?? "";
+        void s.notifier.send({ title: "KesherAI: a guest", body: `${who} opened the scene ${sc.scene.split("/").pop()} in "${project}" with you (${g.role === "edit" ? "can select" : "watching"}).`, tags: ["busts_in_silhouette"] }).catch(() => undefined);
+      }
+      return { others: r.others };
+    } catch (e) {
+      return failed(reply, e);
+    }
+  });
+
+  /** A guest closed the scene (or hid the tab): out of the room at once. */
+  app.post<{ Body: { engine?: string; project?: string; scene?: string; tab?: string } }>("/api/guest/rooms/leave", { bodyLimit: 4096 }, async (req, reply) => {
+    const g = guestBehind(req);
+    if (!g) return refuse(reply);
+    const sc = await sceneOf(g, req.body ?? {}).catch(() => undefined);
+    if (sc) rooms.leave(sc.room, `${g.id}:${String(req.body?.tab ?? "").replace(/[^\w-]/g, "").slice(0, 40)}`);
+    return { ok: true };
   });
 }
