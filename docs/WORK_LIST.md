@@ -14,9 +14,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
     selection, under it or instead of it), or other words in a voice. On main, not in a build yet.
 - ✅ The design doc: boards for ✦ With AI (video and sound) and the 3D picture / turntable buttons.
 - ✅ Video: transitions between clips (Send to the chat → Between clips: dissolve, slide, wipe, circle, zoom, pixels,
-  through white, fade to black; 0.3–1.2 s). Without overlap, so every time in the edit stays. Not shown in the editor's
-  player yet (only in the export).
-- ⬜ Video: show the transition in the editor's player too (a preview of the blend at each cut).
+  through white, fade to black; 0.3–1.2 s). Without overlap, so every time in the edit stays.
+- ✅ Video: the transition shows in the player at each cut; "Between clips" is in the inspector (phone: ⚙ Clip).
 - ✅ 3D turntable: its length (6, 12, 20 s) and size (the view's, or 1920×1080) from the 🎞 button's menu.
 - ✅ Pictures: type text on the picture (a box by the words, the typing shows at once; Esc puts it back).
 - ✅ Security scan 164: nothing to fix.
