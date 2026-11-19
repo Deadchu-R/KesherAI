@@ -24,6 +24,8 @@ interface OptIn {
   acceptLocal: boolean;
   acceptAntigravity: boolean;
   reportLinks: boolean;
+  reportActivity: boolean;
+  reportFileNames: boolean;
 }
 
 /** `GET /api/hub` (packages/core/src/hub-client.ts, HubStatus): no token, no key. */
@@ -130,6 +132,8 @@ export function CloudHubSection() {
           {opt("acceptAntigravity", "משימות ל-Antigravity (מחכות ל\"הפעל\")", "Antigravity tasks (they wait for Run)", !s.optIn.acceptTasks)}
           {opt("appear", "להופיע ברשימת המכשירים במרכז", "Show in the hub's device list")}
           {opt("reportLinks", "לשתף קישורים לשיחות של סוכנים (למשל Claude Remote Control)", "Share agent session links (e.g. Claude Remote Control)")}
+          {opt("reportActivity", "לשתף מה הסוכנים עושים עכשיו (לשונית סוכנים בענן: כותרת, צעדים ושמות כלים, נעול לטלפון)", "Share what the agents do now (the cloud's Agents tab: title, steps and tool names, sealed to the phone)")}
+          {opt("reportFileNames", "גם שמות הקבצים שהסוכנים נוגעים בהם (בלי התוכן)", "Also the names of the files the agents touch (never their content)", !s.optIn.reportActivity)}
           <small className="muted">{L("מחשב חדש לא מקבל משימות עד שמסמנים כאן.", "A new PC takes no tasks until you tick it here.")}</small>
           {s.devices.length > 0 && (
             <>

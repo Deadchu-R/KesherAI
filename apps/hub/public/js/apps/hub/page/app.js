@@ -1,5 +1,6 @@
 /**
- * Kesher Cloud hub page: sign in with Google (the one owner), then five tabs: dashboard, devices, tasks, pair, settings.
+ * Kesher Cloud hub page: sign in with Google (the one owner), then six tabs: dashboard, agents (agents.ts), devices,
+ * tasks, pair, settings.
  * The page is also a paired device of its own (device.ts), so it can send sealed tasks and keep them here.
  *
  * Two kinds of access, as the hub's API has them:
@@ -17,7 +18,9 @@ import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
 import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { getLocale, h, initLocale, L, setLocale, when } from "./dom.js";
 import { HubDevice, post } from "./device.js";
-const TABS = ["dash", "devices", "tasks", "pair", "settings"];
+import { agentsSummary, agentsTab } from "./agents.js";
+import { isGoing } from "../../../packages/shared/src/hub-agents.js";
+const TABS = ["dash", "agents", "devices", "tasks", "pair", "settings"];
 const device = new HubDevice();
 const app = {
     googleClientId: "",
@@ -36,6 +39,8 @@ const app = {
     filter: "all",
     search: "",
     openTask: undefined,
+    /** The agent card open in the agents tab (device/run, or cloud:<taskId>). */
+    openAgent: undefined,
     pairCode: "",
     pairName: "",
     peek: undefined,
@@ -43,6 +48,22 @@ const app = {
     busy: false,
 };
 const fingerprints = new Map();
+/** The agents view's link to the page (agents.ts). */
+const agentsView = {
+    device,
+    devices: () => devices(),
+    get open() {
+        return app.openAgent;
+    },
+    setOpen: (key) => {
+        app.openAgent = key;
+        if (location.hash !== "#agents")
+            location.hash = "#agents";
+        render();
+        scrollTo(0, 0);
+    },
+    render: () => render(),
+};
 // ---- helpers ----
 /** The current tab, from the address (#devices…). */
 function tab() {
@@ -136,6 +157,7 @@ const isOpen = (t) => !HubDevice.expired(t) && ["outbox", "waiting", "sent", "ru
 // ---- the frame: top bar, app switch, banner, tabs ----
 const TAB_LABEL = {
     dash: ["לוח", "Dashboard", "◉"],
+    agents: ["סוכנים", "Agents", "🤖"],
     devices: ["מכשירים", "Devices", "🖥"],
     tasks: ["משימות", "Tasks", "📋"],
     new: ["משימה חדשה", "New task", "＋"],
@@ -277,7 +299,7 @@ function dashboard() {
     const on = devices().filter((d) => d.online).length;
     const off = devices().length - on;
     const open = device.tasks.filter(isOpen);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
 }
 /** The devices tab (HubDevices). */
 function devicesTab() {
@@ -373,6 +395,7 @@ const AUDIT = {
     "cloud-on": ["Claude בענן הופעל", "Claude cloud on"],
     "kill-all": ["כל המכשירים נותקו", "All devices revoked"],
     "queue-dropped": ["התור נמחק", "Queue dropped"],
+    "agents-dropped": ["פעילות הסוכנים נמחקה", "Agent activity deleted"],
     connect: ["מכשיר התחבר", "Device connected"],
     "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
     "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
@@ -384,7 +407,9 @@ function settingsTab() {
     const owner = o
         ? [
             h("section", { class: "sec" }, h("h3", null, L("מתגי עצירה", "Kill switches")), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⏸"), h("span", { class: "grow" }, h("b", null, L("השהה את המרכז", "Pause the hub")), h("div", { class: "mut sm" }, L("לא מעביר כלום וסוגר את החיבורים; הנתונים נשמרים", "Relays nothing and closes the connections; data is kept"))), h("button", { type: "button", role: "switch", class: `tog${o.paused ? "" : " off"}`, "aria-checked": o.paused, "aria-label": L("השהה את המרכז", "Pause the hub"), disabled: app.busy, onclick: () => void act("/api/kill", { what: o.paused ? "resume" : "pause" }) })), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "✷"), h("span", { class: "grow" }, h("b", null, o.cloudOff ? L("Claude בענן כבוי", "Claude cloud is off") : L("כבה את Claude בענן", "Turn Claude cloud off")), h("div", { class: "mut sm" }, L("משימות לא יישלחו לענן. למחיקת הטוקן: בהגדרות המשימה המתוזמנת ב-claude.ai", "No task goes to the cloud. To delete the token: in the scheduled task's settings at claude.ai"))), h("button", { type: "button", class: `btn${o.cloudOff ? "" : " bad"}`, disabled: app.busy, onclick: () => void act("/api/kill", { what: o.cloudOff ? "cloud-on" : "cloud-off" }) }, o.cloudOff ? L("הפעל", "Turn on") : L("כבה", "Turn off"))), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⛔"), h("span", { class: "grow" }, h("b", null, L("נתק את כל המכשירים", "Disconnect every device")), h("div", { class: "mut sm" }, L("גם מתנתק מכל הדפדפנים. כל מכשיר יצטרך להתחבר מחדש עם קוד", "Also signs out every browser. Each device must pair again with a code"))), h("button", { type: "button", class: "btn bad", disabled: app.busy, onclick: () => confirm(L("לנתק את כל המכשירים ולהתנתק מכל הדפדפנים?", "Disconnect every device and sign out of every browser?")) && void act("/api/kill", { what: "everything" }).then(() => device.forget()) }, L("נתק הכול", "Disconnect all"))), h("div", { class: "kill soft" }, h("span", { class: "ki", "aria-hidden": "true" }, "🚪"), h("span", { class: "grow" }, h("b", null, L("התנתק בדפדפן הזה", "Sign out in this browser")), h("div", { class: "mut sm" }, L("התחברות מחדש עם Google", "Sign in again with Google"))), h("button", { type: "button", class: "btn", disabled: app.busy, onclick: () => void act("/api/signout", {}) }, L("התנתק", "Sign out")))),
-            h("section", { class: "sec" }, h("h3", null, L("מה המרכז מחזיק עכשיו", "What the hub holds now")), h("div", { class: "grid3" }, h("div", { class: "card stat" }, h("b", null, String(o.queued)), h("div", { class: "mut sm" }, L("הודעות נעולות בתור", "Sealed messages queued"))), h("div", { class: "card stat" }, h("b", null, String(o.devices.length)), h("div", { class: "mut sm" }, L("מכשירים", "Devices"))), h("div", { class: "card stat" }, h("b", null, String(o.audit.length)), h("div", { class: "mut sm" }, L("שורות פעילות אחרונות", "Recent activity lines")))), h("span", { class: "sm lines" }, L("ההודעות נעולות במפתח של המכשיר שמקבל אותן; המרכז לא יכול לקרוא אותן. כל הודעה נמחקת כשהתקבלה, או אחרי 24 שעות.", "Messages are sealed to the receiving device's key; the hub cannot read them. Each is deleted once received, or after 24 hours.")), h("div", null, h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.queued, onclick: () => confirm(L("למחוק את כל ההודעות שבתור?", "Delete every queued message?")) && void act("/api/kill", { what: "drop-queue" }) }, L("מחק את כל התור עכשיו", "Delete the whole queue now")))),
+            h("section", { class: "sec" }, h("h3", null, L("מה המרכז מחזיק עכשיו", "What the hub holds now")), h("div", { class: "grid3" }, h("div", { class: "card stat" }, h("b", null, String(o.queued)), h("div", { class: "mut sm" }, L("הודעות נעולות בתור", "Sealed messages queued"))), h("div", { class: "card stat" }, h("b", null, String(o.devices.length)), h("div", { class: "mut sm" }, L("מכשירים", "Devices"))), h("div", { class: "card stat" }, h("b", null, String(o.audit.length)), h("div", { class: "mut sm" }, L("שורות פעילות אחרונות", "Recent activity lines")))), h("span", { class: "sm lines" }, L("ההודעות נעולות במפתח של המכשיר שמקבל אותן; המרכז לא יכול לקרוא אותן. כל הודעה נמחקת כשהתקבלה, או אחרי 24 שעות.", "Messages are sealed to the receiving device's key; the hub cannot read them. Each is deleted once received, or after 24 hours.")), h("div", null, h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.queued, onclick: () => confirm(L("למחוק את כל ההודעות שבתור?", "Delete every queued message?")) && void act("/api/kill", { what: "drop-queue" }) }, L("מחק את כל התור עכשיו", "Delete the whole queue now"))), o.agents
+                ? h("div", { class: "kill soft" }, h("span", { class: "ki", "aria-hidden": "true" }, "🤖"), h("span", { class: "grow" }, h("b", null, L(`פעילות סוכנים: ${o.agents.kept} חבילות נעולות`, `Agent activity: ${o.agents.kept} sealed batches`)), h("div", { class: "mut sm" }, L(`נכתבו היום ${o.agents.writtenToday.toLocaleString()} שורות מתוך ${o.agents.freeWrites.toLocaleString()} בתוכנית החינמית. 50 אירועים לכל סוכן, 7 ימים.`, `Written today: ${o.agents.writtenToday.toLocaleString()} of ${o.agents.freeWrites.toLocaleString()} rows on the free plan. 50 events per agent, 7 days.`))), h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.agents.kept, onclick: () => confirm(L("למחוק את כל פעילות הסוכנים שהמרכז שומר?", "Delete all the agent activity the hub keeps?")) && void act("/api/kill", { what: "drop-agents" }) }, L("מחק", "Delete")))
+                : null),
             h("section", { class: "sec" }, h("h3", null, L("חשבון", "Account")), h("div", { class: "row" }, h("span", { class: "grow" }, L("מחובר עם Google · רק החשבון הזה נכנס", "Signed in with Google · only this account gets in")), h("span", { class: "tag t-ok" }, L("נעול לחשבון אחד", "Locked to one account")))),
         ]
         : [signInCard(L("מתגי העצירה ויומן הפעילות זמינים רק אחרי התחברות.", "The kill switches and the activity log are available only after signing in."))];
@@ -408,7 +433,7 @@ function render() {
     const scroller = document.scrollingElement;
     const y = scroller?.scrollTop ?? 0;
     const showSignIn = !app.signedIn && !device.paired;
-    const body = showSignIn ? signInScreen() : { dash: dashboard, devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
+    const body = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
     root.replaceChildren(...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body, showSignIn ? null : tabs("bottom-tabs")].filter((x) => !!x));
     root.classList.toggle("in-app", !!app.appOrigin);
     if (scroller)
@@ -519,6 +544,8 @@ async function main() {
     });
     addEventListener("hashchange", () => {
         app.note = undefined;
+        if (location.hash !== "#agents")
+            app.openAgent = undefined;
         render();
         scrollTo(0, 0);
     });
@@ -531,6 +558,13 @@ async function main() {
         if (app.signedIn && document.visibilityState === "visible")
             void loadOwner();
     }, 20_000);
+    // Elapsed times and "not answering" move on their own while an agent runs (not while typing).
+    setInterval(() => {
+        const a = document.activeElement;
+        const typing = a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT");
+        if (!typing && document.visibilityState === "visible" && (tab() === "agents" || tab() === "dash") && [...device.agents.values()].some(isGoing))
+            render();
+    }, 5000);
 }
 /** The page could not start (a network or script error): a short message with a retry, never a blank page. */
 function showFatal(err) {

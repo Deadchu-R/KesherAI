@@ -8,6 +8,7 @@
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage } from "../../../packages/shared/src/hub-crypto.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
+import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
 // ---- IndexedDB (one key-value store; structured clone keeps the CryptoKey usable but not exportable) ----
 const DB = "kesher-hub";
 let dbp;
@@ -84,6 +85,12 @@ export class HubDevice {
     tasks = [];
     pending;
     error;
+    /** Live agent runs of the PCs, by device and run (in memory; the hub keeps 7 days and the page catches up). */
+    agents = new Map();
+    /** Actions sent from an agent card and not yet answered by a new state ("stop", "allow", "deny"), by card key. */
+    agentActions = new Map();
+    agentSeq = 0;
+    catchingUp = false;
     /** Loads the saved identity and tasks, and connects when paired. */
     async load() {
         try {
@@ -178,6 +185,8 @@ export class HubDevice {
         this.ident = undefined;
         this.presence = [];
         this.tasks = [];
+        this.agents.clear();
+        this.agentSeq = 0;
         await put("device", undefined).catch(() => undefined);
         await put("tasks", undefined).catch(() => undefined);
         this.changed();
@@ -261,6 +270,7 @@ export class HubDevice {
                     await put("device", this.ident).catch(() => undefined);
                 }
                 this.changed();
+                void this.catchUpAgents();
                 return this.flushOutbox();
             case "presence":
                 this.presence = f.presence;
@@ -299,11 +309,98 @@ export class HubDevice {
         change(task);
         await this.saveTasks();
     }
+    /**
+     * Fetches the agent activity kept for this browser since the last one it has (after a reconnect, like SSE's
+     * `Last-Event-ID`), a page of 500 at a time.
+     */
+    async catchUpAgents() {
+        const id = this.ident;
+        if (!id || this.catchingUp)
+            return;
+        this.catchingUp = true;
+        try {
+            for (let page = 0; page < 10; page++) {
+                const r = await fetch(`/api/agents?since=${this.agentSeq}`, { credentials: "same-origin", headers: { authorization: `Bearer ${id.token}` } }).catch(() => undefined);
+                if (!r?.ok)
+                    return;
+                const data = (await r.json().catch(() => ({})));
+                for (const env of Array.isArray(data.envs) ? data.envs : [])
+                    await this.onAgentEvent(env, false);
+                this.changed();
+                if (!data.more)
+                    return;
+            }
+        }
+        finally {
+            this.catchingUp = false;
+        }
+    }
+    /** One sealed activity batch (live or caught up): opened with its PC's key and applied to its card. */
+    async onAgentEvent(env, live) {
+        const id = this.ident;
+        const senderKey = this.presence.find((d) => d.id === env.from)?.publicKey;
+        if (!id || !senderKey)
+            return;
+        let body;
+        try {
+            body = await openEnvelope(env, id.privateKey, senderKey);
+        }
+        catch {
+            return; // Tampered or not for us: ignored (activity is never acked; the hub keeps only a short ring).
+        }
+        if (body.type !== "agent_event" || body.runId !== env.run)
+            return;
+        const seq = typeof env.seq === "number" ? env.seq : 0;
+        this.agentSeq = Math.max(this.agentSeq, seq);
+        const card = applyAgentBatch(this.agents, env.from, body, typeof env.at === "number" ? env.at : Date.now(), seq);
+        // A new state answers a pending Stop or Approve: the card shows the PC's word again.
+        if (body.events.length)
+            this.agentActions.delete(`${card.deviceId}/${card.runId}`);
+        if (live)
+            this.changed();
+    }
+    /**
+     * Stops an agent run on its PC (a sealed `cancel`; the PC stops it like its own Stop button).
+     *
+     * @param c - The card.
+     * @returns Whether it was sent.
+     */
+    async stopAgent(c) {
+        return this.sendToAgent(c, "cancel", { type: "cancel", taskId: c.runId }, "stop");
+    }
+    /**
+     * Answers what a waiting run asks (a helper's question, a step's approval, Antigravity's Run): the existing sealed
+     * `approval_answer`, which the PC accepts only from a paired phone.
+     *
+     * @param c - The card (its state says what it waits for).
+     * @param decision - Allow (Run, Approve, Yes) or deny.
+     * @returns Whether it was sent.
+     */
+    async answerAgent(c, decision) {
+        const w = c.state.waiting;
+        if (!w)
+            return false;
+        return this.sendToAgent(c, "approval_answer", { type: "approval_answer", requestId: w.requestId, conversationId: w.conversationId, decision }, decision);
+    }
+    async sendToAgent(c, kind, body, action) {
+        const id = this.ident;
+        const pc = this.presence.find((d) => d.id === c.deviceId);
+        if (!id || !pc?.online || !this.connected)
+            return false;
+        const env = await sealMessage({ from: id.deviceId, to: pc.id, kind }, body, id.privateKey, pc.publicKey);
+        if (!this.sendFrame({ t: "send", env }))
+            return false;
+        this.agentActions.set(`${c.deviceId}/${c.runId}`, action);
+        this.changed();
+        return true;
+    }
     /** A sealed message for this browser: a PC's progress or result, or the hub's "Claude cloud started". */
     async onDeliver(env) {
         const id = this.ident;
         if (!id)
             return;
+        if (env.kind === "agent_event")
+            return this.onAgentEvent(env, true);
         const senderKey = env.from === "hub" ? id.hubKey : this.presence.find((d) => d.id === env.from)?.publicKey;
         if (!senderKey)
             return; // A sender not in presence (yet): it comes again on the next connect.
