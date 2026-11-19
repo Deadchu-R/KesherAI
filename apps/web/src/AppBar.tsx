@@ -1,3 +1,4 @@
+import { canChooseView, computerView, setViewChoice, viewChoice } from "./desktop-view";
 import { createPortal } from "react-dom";
 import { openPalette } from "./CommandPalette";
 import { useParts } from "./parts";
@@ -109,6 +110,9 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           <MenuItem icon="⚙" href="#/settings">{t("settings")}</MenuItem>
           <MenuSeparator />
           <MenuItem icon="🌐" onSelect={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{t("language")}</MenuItem>
+          {/* A phone: the computer's layout (on by itself while a mouse is connected), or back to the phone's. */}
+          {canChooseView() && <MenuItem icon={computerView() ? "📱" : "🖥"} onSelect={() => setViewChoice(computerView() ? "phone" : "computer")}>{computerView() ? (getLocale() === "he" ? "תצוגת טלפון" : "Phone view") : getLocale() === "he" ? "תצוגת מחשב" : "Computer view"}</MenuItem>}
+          {canChooseView() && viewChoice() !== "auto" && <MenuItem icon="🖱" onSelect={() => setViewChoice("auto")}>{getLocale() === "he" ? "לפי העכבר (אוטומטי)" : "By the mouse (automatic)"}</MenuItem>}
           <MenuItem icon="⟳" href="#/updates">{t("checkUpdates")}</MenuItem>
           <MenuItem icon="↻" onSelect={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</MenuItem>
           {appHome() && <MenuItem icon="⇄" href={`${appHome()!.replace(/\/$/, "")}/?switch=1`}>{t("switchComputer")}</MenuItem>}

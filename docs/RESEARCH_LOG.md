@@ -2719,3 +2719,16 @@ Each AI tool shows which local model it uses and offers to download it the first
   follow-on page — a title, 2–4 sections with headings, quotes checked against the chat — kept in the report as its
   own chapter ("🔎 …"), opened when it is ready, and ending with two questions to go on with.
 - Stopped at: built (chat-report.ts followUp page, the chapter, test); board ChatReportGuided.
+
+## A phone with a mouse (2026-11-19, 08:25; Roee: "a phone with a mouse connected can switch to the computer view")
+- **Chrome "Desktop site"**: the page is laid out as on a computer (a wide viewport, about 980–1280 px) and scaled to
+  the screen; Chrome turns it on by itself on big screens.
+- **Samsung DeX / Android desktop mode**: a mouse and keyboard (or a screen) turn the phone into a desktop layout;
+  apps get `pointer: fine` and hover.
+- **iPadOS with a pointer**: the same app, with hover states and a pointer; the layout follows the window's width.
+- **Web signals**: `(any-pointer: fine)` and `(any-hover: hover)` turn true when a mouse or touchpad is connected to a
+  touch phone, and `change` fires when it comes or goes.
+- **What we take**: on a touch phone, "auto" lays the page out 1280 px wide while a mouse is connected (the viewport
+  meta, as Desktop site), with a short notice; in the menu "Computer view" / "Phone view" keeps a choice, and "By the
+  mouse (automatic)" goes back. Kept on the device.
+- Stopped at: built (desktop-view.ts, the menu); to check on Roee's phone with a mouse.

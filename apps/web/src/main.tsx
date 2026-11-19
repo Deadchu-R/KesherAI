@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { GuestApp, isGuest } from "./GuestApp";
 import { getLocale, setLocale } from "./i18n";
+import { startDesktopView } from "./desktop-view";
 // The default font (redesign 2026-11): Heebo. Rubik and the others load only when picked in Appearance.
 import "@fontsource/heebo/400.css";
 import "@fontsource/heebo/500.css";
@@ -51,6 +52,8 @@ window.addEventListener("vite:preloadError", (e) => {
   location.reload();
 });
 
+// A phone with a mouse lays the page out as the computer does (desktop-view.ts).
+startDesktopView();
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {/* A guest of a shared project (an invite link, or one who joined) sees only the guest page. */}
