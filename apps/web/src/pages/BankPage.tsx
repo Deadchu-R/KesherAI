@@ -73,6 +73,9 @@ export function BankPage() {
   const [q, setQ] = useState("");
   // Newest first by day, or the biggest first (to free space: Premiere's and Windows' "sort by size").
   const [order, setOrder] = useState<"new" | "big">("new");
+  // Age: everything, or only what is older than a week / a month / three months (to clear out, as Midjourney's
+  // timeline and Google Photos' "free up space" do).
+  const [age, setAge] = useState(0);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [view, setView] = useState<BankItem | null>(null);
   const [dups, setDups] = useState<Group[] | null>(null);
@@ -85,9 +88,10 @@ export function BankPage() {
   const byId = useMemo(() => new Map((items ?? []).map((i) => [i.id, i])), [items]);
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase();
-    const list = (items ?? []).filter((i) => (!kind || i.kind === kind) && (!words || `${i.name} ${i.prompt ?? ""} ${i.chat?.title ?? ""}`.toLowerCase().includes(words)));
+    const before = age ? Date.now() - age * 86_400_000 : Infinity;
+    const list = (items ?? []).filter((i) => (!kind || i.kind === kind) && (!age || Date.parse(i.createdAt) < before) && (!words || `${i.name} ${i.prompt ?? ""} ${i.chat?.title ?? ""}`.toLowerCase().includes(words)));
     return order === "big" ? [...list].sort((a, b) => b.size - a.size) : list;
-  }, [items, kind, q, order]);
+  }, [items, kind, q, order, age]);
   const days = useMemo(() => {
     const out: Array<[string, BankItem[]]> = [];
     if (order === "big") return shown.length ? [[L("הכי גדולים קודם", "Biggest first"), shown] as [string, BankItem[]]] : [];
@@ -184,6 +188,13 @@ export function BankPage() {
           <button type="button" className={`chip-text${kind === "" ? " on" : ""}`} onClick={() => setKind("")}>{L("הכל", "All")}</button>
           {KINDS.map(([k, ic, he, en]) => <button key={k} type="button" className={`chip-text${kind === k ? " on" : ""}`} onClick={() => setKind(k)}>{ic} {L(he, en)} {(items ?? []).filter((i) => i.kind === k).length}</button>)}
           <span className="grow" />
+          <select value={age} onChange={(e) => setAge(Number(e.target.value))} aria-label={L("גיל", "Age")}>
+            <option value={0}>{L("מכל זמן", "Any time")}</option>
+            <option value={7}>{L("ישן משבוע", "Older than a week")}</option>
+            <option value={30}>{L("ישן מחודש", "Older than a month")}</option>
+            <option value={90}>{L("ישן משלושה חודשים", "Older than 3 months")}</option>
+          </select>
+          {shown.length > 0 && <button type="button" onClick={() => setSel(new Set(shown.map((i) => i.id)))}>{L(`בחר את כל ${shown.length} המוצגים`, `Select all ${shown.length} shown`)}</button>}
           <select value={order} onChange={(e) => setOrder(e.target.value as "new" | "big")} aria-label={L("סדר", "Order")}>
             <option value="new">{L("חדש קודם", "Newest first")}</option>
             <option value="big">{L("גדול קודם (לפנות מקום)", "Biggest first (free space)")}</option>
