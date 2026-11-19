@@ -54,6 +54,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building.
 - ⬜ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
   hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens.
+- ⬜ Roee (13:16): the hub as a Claude custom connector (remote MCP on the same Worker, OAuth for his account):
+  Claude stays the lead, the hub is its hands (devices, send a task to Antigravity / local model, results,
+  approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1.
 - ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
 - ⬜ Design doc: guests in a scene, helpers in chat, the task inbox; then build helpers + inbox (Opus helper).
 
