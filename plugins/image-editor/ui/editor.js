@@ -26,7 +26,7 @@
     mFile: "קובץ", mEdit: "עריכה", mSelect: "בחירה", mLayer: "שכבה", mFilter: "פילטר", mAi: "AI", mView: "תצוגה",
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
-    hBrush: "מברשת", hText: "טקסט", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
+    hBrush: "מברשת", hText: "טקסט", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
@@ -273,7 +273,7 @@
     tool = t;
     document.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === t));
     // The phone bar shows it too, whether it was chosen there or by a key.
-    const phone = t === "rect" || t === "lasso" ? "select" : t === "brush" || t === "crop" || t === "text" ? t : "";
+    const phone = t === "rect" || t === "lasso" ? "select" : t === "brush" || t === "crop" || t === "text" || t === "shape" ? t : "";
     document.querySelectorAll(".phonebar [data-phone]").forEach((x) => x.classList.toggle("on", !!phone && x.dataset.phone === phone));
     // The context bar shows this tool's options (Photoshop's options bar).
     document.querySelectorAll(".ctx").forEach((c) => c.classList.toggle("show", c.dataset.for.split(" ").includes(t)));
@@ -387,6 +387,12 @@
       drag.ly = l.y;
     } else if (t === "fill" && l) { delete l.text; floodFill(l, p.x, p.y, $("color").value); }
     else if (t === "text") { drag = null; void textAt(p); }
+    else if (t === "shape") {
+      const c = document.createElement("canvas");
+      c.width = doc.w;
+      c.height = doc.h;
+      strokePreview = { canvas: c, ctx: c.getContext("2d") };
+    }
     else if (t === "picker") pick(p);
     else if (t === "tapsel") tapSelect(p, e.shiftKey);
   });
@@ -418,12 +424,19 @@
     } else if (drag.t === "crop") {
       cropBox = cropRect(drag.start, p);
       draw();
+    } else if (drag.t === "shape") {
+      drag.end = e.shiftKey ? constrain(drag.start, p) : p;
+      const g = strokePreview.ctx;
+      g.clearRect(0, 0, doc.w, doc.h);
+      drawShape(g, drag.start, drag.end);
+      draw();
     } else if (drag.t === "picker") pick(p);
     drag.last = p;
   });
   view.addEventListener("pointerup", () => {
     if (!drag) return;
     if (drag.t === "brush" || drag.t === "eraser") commitStroke();
+    if (drag.t === "shape") commitShape();
     if ((drag.t === "rect" || drag.t === "ellipse" || drag.t === "lasso") && draftPath) {
       if (drag.t === "lasso") draftPath.closePath();
       selection = Math.hypot(drag.last.x - drag.start.x, drag.last.y - drag.start.y) > 2 || drag.t === "lasso" ? { path: draftPath, inverted: false } : null;
@@ -466,6 +479,58 @@
     renderLayers();
     fit();
   }
+  // ---------- shapes (Photoshop's Shape tool, U): a rectangle, an ellipse, a line or an arrow, each on a new layer ----------
+  /** With Shift: a square or circle, or a line at a multiple of 45°. */
+  function constrain(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if ($("shapeKind").value === "line" || $("shapeKind").value === "arrow") {
+      const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4), len = Math.hypot(dx, dy);
+      return { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
+    }
+    const d = Math.max(Math.abs(dx), Math.abs(dy));
+    return { x: a.x + Math.sign(dx || 1) * d, y: a.y + Math.sign(dy || 1) * d };
+  }
+  /** Draws the chosen shape from a to b in the chosen colour (filled, or as an outline of the chosen width). */
+  function drawShape(g, a, b) {
+    const kind = $("shapeKind").value, fill = $("shapeFill").checked, w = Math.max(1, +$("shapeWidth").value || 8);
+    g.save();
+    g.fillStyle = g.strokeStyle = $("color").value;
+    g.lineWidth = w;
+    g.lineCap = g.lineJoin = "round";
+    g.beginPath();
+    if (kind === "rect") g.rect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    else if (kind === "ellipse") g.ellipse((a.x + b.x) / 2, (a.y + b.y) / 2, Math.abs(b.x - a.x) / 2, Math.abs(b.y - a.y) / 2, 0, 0, Math.PI * 2);
+    else {
+      g.moveTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+      g.stroke();
+      if (kind === "arrow") {
+        // The head: two short strokes back from the tip, as long as four times the width (at least 14 px).
+        const ang = Math.atan2(b.y - a.y, b.x - a.x), head = Math.max(14, w * 4);
+        g.beginPath();
+        g.moveTo(b.x - head * Math.cos(ang - 0.45), b.y - head * Math.sin(ang - 0.45));
+        g.lineTo(b.x, b.y);
+        g.lineTo(b.x - head * Math.cos(ang + 0.45), b.y - head * Math.sin(ang + 0.45));
+        if (fill) { g.closePath(); g.fill(); } else g.stroke();
+      }
+      g.restore();
+      return;
+    }
+    if (fill) g.fill(); else g.stroke();
+    g.restore();
+  }
+  /** Lets go of a shape: it goes on a new layer above the active one (a click without a drag draws nothing). */
+  function commitShape() {
+    const end = drag.end;
+    strokePreview = null;
+    if (!end || Math.hypot(end.x - drag.start.x, end.y - drag.start.y) < 2) return draw();
+    remember(T("hShape", "Shape"));
+    const kind = $("shapeKind").value;
+    const l = makeLayer(T(`s_${kind}`, kind));
+    drawShape(l.ctx, drag.start, end);
+    addLayer(l);
+  }
+
   // ---------- text (Photoshop's Type tool, T) ----------
   // A text layer keeps its words and look (l.text), so it can be changed later: click it with the Text tool, or change
   // the bar's size, font, bold or outline while it is the active layer. Painting, a filter, a turn or a crop make it
@@ -1178,7 +1243,7 @@
     if ((e.ctrlKey || e.metaKey) && k === "d") { e.preventDefault(); $("selNone").click(); return; }
     if (k === " ") { spaceDown = true; stage.style.cursor = "grab"; e.preventDefault(); return; }
     if (k === "delete" || k === "backspace") return clearSelection();
-    const map = { t: "text", c: "crop", b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
+    const map = { u: "shape", t: "text", c: "crop", b: "brush", e: "eraser", m: "rect", l: "lasso", v: "move", g: "fill", i: "picker", h: "hand" };
     if (map[k]) setTool(map[k]);
     if (k === "[") $("size").value = String(Math.max(1, +$("size").value - 5));
     if (k === "]") $("size").value = String(+$("size").value + 5);
@@ -1511,11 +1576,11 @@
     const what = b.dataset.phone;
     if (what === "fit") return fit();
     // Select: rectangle, then lasso, then rectangle again.
-    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" || what === "text" ? what : "brush");
+    setTool(what === "select" ? (tool === "rect" ? "lasso" : "rect") : what === "crop" || what === "text" || what === "shape" ? what : "brush");
   }));
 
   // ---------- "?": the shortcuts ----------
-  const KEYS = [["T", "hText", "Text"], ["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["C", "crop", "Crop"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
+  const KEYS = [["U", "hShape", "Shape (Shift: square, circle, 45°)"], ["T", "hText", "Text"], ["B", "hBrush", "Brush"], ["E", "hEraser", "Eraser"], ["M", "rect", "Rectangle selection"], ["L", "lasso", "Lasso"], ["V", "hMove2", "Move"], ["C", "crop", "Crop"], ["G", "hFill", "Fill"], ["I", "picker", "Color picker"], ["H / Space", "hand", "Pan"], ["[  ]", "size", "Size"], ["X", "swap", "Swap colors"], ["Ctrl+Z / Ctrl+Y", "undo", "Undo / redo"], ["Ctrl+A / Ctrl+D", "selAll", "Select all / deselect"], ["Ctrl+J", "duplicate", "Duplicate layer"], ["Ctrl+E", "mergeDown", "Merge down"], ["Ctrl+S", "saveProject", "Save project"], ["Ctrl+Shift+E", "export", "Export PNG"], ["Ctrl+0", "fit", "Fit"], ["Ctrl+Enter", "toChat", "Send to the chat"], ["Del", "clear", "Clear"]];
   function showKeys() {
     $("keysTable").replaceChildren(...KEYS.map(([k, key, en]) => {
       const tr = document.createElement("tr");

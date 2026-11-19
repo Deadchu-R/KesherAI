@@ -43,6 +43,12 @@
         <button id="cropCancel" data-t="cancel">Cancel</button>
         <span class="muted" data-t="cropHint">Drag a frame. Enter applies, Esc cancels.</span>
       </div>
+      <div class="ctx" data-for="shape">
+        <select id="shapeKind"><option value="rect" data-t="s_rect">Rectangle</option><option value="ellipse" data-t="s_ellipse">Ellipse</option><option value="line" data-t="s_line">Line</option><option value="arrow" data-t="s_arrow">Arrow</option></select>
+        <label><input type="checkbox" id="shapeFill" /> <span data-t="shapeFill">Filled</span></label>
+        <label><span data-t="shapeWidth">Width</span> <input type="number" id="shapeWidth" min="1" max="200" value="8" style="width:56px" /></label>
+        <span class="muted" data-t="shapeHint">Drag to draw · Shift: square, circle, 45°</span>
+      </div>
       <div class="ctx" data-for="text">
         <label><span data-t="textSize">Size</span> <input type="number" id="textSize" min="8" max="600" value="64" style="width:64px" /></label>
         <label><span data-t="textFont">Font</span> <select id="textFont"><option value="sans" data-t="fSans">Sans</option><option value="serif" data-t="fSerif">Serif</option><option value="mono" data-t="fMono">Mono</option><option value="display" data-t="fDisplay">Display</option></select></label>
@@ -69,6 +75,7 @@
       <button data-tool="lasso" title="Lasso (L)">➰</button>
       <button data-tool="tapsel" title="Select an object by tapping it (AI, on your computer; Shift adds)">🎯</button>
       <hr />
+      <button data-tool="shape" title="Shape (U)">▭</button>
       <button data-tool="text" title="Text (T)"><b style="font-family:serif">T</b></button>
       <button data-tool="brush" title="Brush (B)">🖌</button>
       <button data-tool="eraser" title="Eraser (E)">⌫</button>
@@ -166,6 +173,7 @@
       <button data-sheet="ai"><span>✦</span><b>AI</b></button>
       <button data-phone="brush"><span>✎</span><b data-t="hBrush">Brush</b></button>
       <button data-phone="text"><span style="font-family:serif;font-weight:700">T</span><b data-t="hText">Text</b></button>
+      <button data-phone="shape"><span>▭</span><b data-t="hShape">Shape</b></button>
       <button data-phone="crop"><span>⛶</span><b data-t="crop">Crop</b></button>
       <button data-phone="fit"><span>⤢</span><b data-t="fit">Fit</b></button>
     </nav>
