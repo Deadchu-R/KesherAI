@@ -294,13 +294,22 @@
       d.textContent = `🔤 ${t.text.replace(/\s+/g, " ")}`;
       d.dir = "auto";
       d.title = T("textDrag", "Drag: when it shows · double-click: edit");
+      // Its end edge (the last 10 px, or the end handle) lengthens or shortens it; the rest moves it.
+      const grip = document.createElement("span");
+      grip.className = "txt-end";
+      grip.setAttribute("aria-hidden", "true");
+      d.append(grip);
       d.onpointerdown = (e) => {
         e.stopPropagation();
         chosenText = t.id;
         showTextTools();
         d.setPointerCapture(e.pointerId);
-        const x0 = e.clientX, s0 = t.start, l0 = t.end - t.start;
-        d.onpointermove = (ev) => { t.start = Math.max(0, Math.min(total() - 0.1, s0 + (ev.clientX - x0) / zoom)); t.end = Math.min(total(), t.start + l0); d.style.left = `${t.start * zoom}px`; };
+        const x0 = e.clientX, s0 = t.start, e0 = t.end, l0 = t.end - t.start;
+        const r = d.getBoundingClientRect();
+        const atEnd = e.target === grip || e.clientX > r.right - 10;
+        d.onpointermove = atEnd
+          ? (ev) => { t.end = Math.max(t.start + 0.3, Math.min(total(), e0 + (ev.clientX - x0) / zoom)); d.style.width = `${Math.max(4, (t.end - t.start) * zoom - 2)}px`; }
+          : (ev) => { t.start = Math.max(0, Math.min(total() - 0.1, s0 + (ev.clientX - x0) / zoom)); t.end = Math.min(total(), t.start + l0); d.style.left = `${t.start * zoom}px`; };
         d.onpointerup = () => { d.onpointermove = null; void saveEdit(); render(); };
       };
       d.ondblclick = (e) => { e.stopPropagation(); const v = window.prompt(T("textAsk", "What should it say?"), t.text); if (v?.trim()) { t.text = v.trim(); textPics.delete(t.id); void saveEdit(); render(); } };
