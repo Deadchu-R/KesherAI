@@ -18,7 +18,7 @@ const kesher = window.kesher;
 const HE = {
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
-  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
+  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
@@ -73,6 +73,7 @@ function setLight(kind) {
 setLight("studio");
 
 let model = null;
+let isolated = null; // Isolate's memory: every object's visibility before it, or null (see isolate())
 let meshes = []; // [{ mesh, name }]: every mesh, for picking and materials
 let nodes = []; // [{ obj, depth }]: the scene tree as shown (Blender's Outliner)
 const folded = new Set();
@@ -185,7 +186,7 @@ function set2D(on) {
 async function load(bytes) {
   const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
   if (model) { choose(null); model.removeFromParent(); }
-  model = gltf.scene;
+  model = gltf.scene; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   // Each mesh gets its own material, so changing one part does not change others that shared it.
   meshes = [];
@@ -249,7 +250,7 @@ function loadStandIn(nodes) {
     if (n.texture) void showSprite(o, n.texture, PX);
   }
   is2dScene = !nodes.some((n) => n.transform) && nodes.some((n) => n.position2d || /2D$/.test(n.type ?? ""));
-  model = root;
+  model = root; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   meshes = [];
   rebuild();
@@ -418,7 +419,7 @@ function loadUnityStandIn(objects) {
   for (const u of objects) (byId.get(u.parent) ?? root).add(byId.get(u.id));
   // A 2D scene: sprites, and no 3D meshes or models.
   is2dScene = objects.some((u) => u.components?.includes("SpriteRenderer")) && !objects.some((u) => u.model || u.components?.includes("MeshFilter"));
-  model = root;
+  model = root; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   meshes = [];
   rebuild();
@@ -511,7 +512,7 @@ function loadUnrealStandIn(u) {
   };
   for (const a of u.actors) (byId.get(a.parent) ?? folder(a.folder)).add(byId.get(a.id));
   is2dScene = u.actors.some((a) => /^Paper/.test(a.class)) && !u.actors.some((a) => a.mesh && !/^Paper/.test(a.class));
-  model = root;
+  model = root; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   rebuild();
   $("empty").hidden = true;
@@ -1432,6 +1433,25 @@ $("color").oninput = material((m) => m.color?.set($("color").value));
 $("rough").oninput = material((m) => { if ("roughness" in m) m.roughness = $("rough").value / 100; });
 $("metal").oninput = material((m) => { if ("metalness" in m) m.metalness = $("metal").value / 100; });
 ["color", "rough", "metal"].forEach((id) => ($(id).onchange = () => (editing = false)));
+// Isolate (Blender's Local View, "/"; Maya's Isolate Select): only the chosen part shows, framed; again brings the rest
+// back as it was. A way of looking, not an edit, so it is not in Undo.
+function isolate() {
+  if (isolated) {
+    for (const [o, v] of isolated) o.visible = v;
+    isolated = null;
+  } else {
+    if (!chosen || !model) return;
+    isolated = new Map();
+    const keep = new Set();
+    chosen.traverse((o) => keep.add(o));
+    for (let o = chosen; o; o = o.parent) keep.add(o);
+    model.traverse((o) => { isolated.set(o, o.visible); if (!keep.has(o) && o.isMesh) o.visible = false; });
+    frame(chosen);
+  }
+  $("isolate").classList.toggle("on", !!isolated);
+  renderParts();
+}
+$("isolate").onclick = isolate;
 $("hidePart").onclick = () => { if (!chosen) return; remember(); chosen.visible = !chosen.visible; choose(chosen); };
 $("frame").onclick = () => frame(chosen ?? model ?? scene);
 function keepVersion() {
@@ -1532,7 +1552,7 @@ const KEYS = () => [
   [$("keymap").value === "blender" ? "G / R / S" : "W / E / R", "kMove", "Move / rotate / scale"], ["X / Y / Z", "kAxis", "Lock to an axis (after the tool's key)"],
   ["F", "kF", "Frame the chosen part"], ["Home / A", "kHome", "The whole model"], ["H", "kH", "Hide the part"], ["Alt+H", "kAltH", "Show all"],
   [$("keymap").value === "blender" ? "Shift+D" : "Ctrl+D", "kDup", "Duplicate"], [$("keymap").value === "blender" ? "X / Delete" : "Delete", "kDel", "Delete"],
-  ["1 / 3 / 7", "kViews", "Front / right / top"], ["4 / 5 / 6", "kShade", "Wireframe / solid / material"], ["Shift+S", "kSnap", "Snapping"], ["Esc", "kEsc", "Let go"], ["Ctrl+Z", "kUndo", "Undo"],
+  ["1 / 3 / 7", "kViews", "Front / right / top"], ["4 / 5 / 6", "kShade", "Wireframe / solid / material"], ["Shift+S", "kSnap", "Snapping"], ["/", "kIso", "Isolate the chosen part (again: show all)"], ["Esc", "kEsc", "Let go"], ["Ctrl+Z", "kUndo", "Undo"],
 ];
 function showKeys() {
   $("keysTable").replaceChildren(...KEYS().map(([k, key, en]) => { const tr = document.createElement("tr"); const a = document.createElement("td"); const kbd = document.createElement("kbd"); kbd.textContent = k; a.append(kbd); const b = document.createElement("td"); b.textContent = T(key, en); tr.append(a, b); return tr; }));
@@ -1557,7 +1577,7 @@ addEventListener("keydown", (e) => {
   if (["x", "y", "z"].includes(k) && lastTool) { e.preventDefault(); lockAxis(k); return; }
   lastTool = false;
   const map = {
-    f: () => $("frame").click(), home: () => model && frame(model), a: () => model && frame(model), h: () => $("hidePart").click(),
+    f: () => $("frame").click(), "/": isolate, home: () => model && frame(model), a: () => model && frame(model), h: () => $("hidePart").click(),
     delete: remove, ...(blender ? { x: remove } : {}), escape: () => choose(null),
     1: () => view("front"), 3: () => view("right"), 7: () => view("top"), 4: () => shade("wire"), 5: () => shade("solid"), 6: () => shade("material"), "?": showKeys,
   };
