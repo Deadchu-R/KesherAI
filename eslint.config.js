@@ -12,7 +12,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
   // .kesher-self/ is the self-work agent's own scratch area (plan.md + throwaway scripts) — never linted.
-  { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "vendor/**", "plugins/*/ui/vendor/**", ".kesher-self/**"] },
+  { ignores: ["**/dist/**", "**/out/**", "**/node_modules/**", "docs/api/**", "apps/android/www/vendor/**", "apps/hub/public/js/**", "vendor/**", "plugins/*/ui/vendor/**", ".kesher-self/**"] },
   js.configs.recommended,
   { files: ["scripts/**", "apps/desktop/**"], languageOptions: { globals: globals.node } },
   // Boundaries (docs/ARCHITECTURE_REVIEW.md A6): the HTTP routes sit on top of everything else, so nothing below
@@ -24,6 +24,8 @@ export default tseslint.config(
     rules: { "no-restricted-imports": ["error", { patterns: [{ group: ["./routes/*", "../routes/*"], message: "Routes sit on top: move what you need out of routes/ instead." }] }] },
   },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
+  // The hub page (compiled into apps/hub/public/js, which is not linted: it is generated from these sources).
+  { files: ["apps/hub/page/**"], languageOptions: { globals: globals.browser } },
   // Hooks in the same order on every render (a hook after an early return crashes the page: React error #310).
   { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: {
       "react-hooks/rules-of-hooks": "error",

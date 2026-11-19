@@ -6,7 +6,7 @@
  * - Open (rate limited): `POST /api/signin`, `POST /api/pair/start`, `POST /api/pair/poll`.
  * - Device token (Bearer): `POST /api/ticket`, `POST /api/rotate`. Socket: `GET /ws/device?ticket=…`.
  * - Signed-in owner (session cookie + same Origin for changes): `GET /api/state`, `POST /api/signout`,
- *   `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
+ *   `POST /api/pair/check`, `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
  * - Internal (cron only): `POST /internal/cleanup`.
  */
 import type { HubFrame } from "../../../packages/shared/src/hub.js";
@@ -129,6 +129,7 @@ export class HubObject {
       await this.hub.signOut(session!);
       return json({ ok: true }, 200, { "set-cookie": sessionCookie(undefined) });
     }
+    if (path === "/api/pair/check") return answer(await this.hub.pairPeek(body.code));
     if (path === "/api/pair/approve") return answer(await this.hub.pairApprove(body.code, body.name));
     const revoke = /^\/api\/devices\/([\w-]{1,64})\/revoke$/.exec(path);
     if (revoke) return this.hub.revoke(revoke[1]!) ? json({ ok: true }) : json({ error: "No such device." }, 404);

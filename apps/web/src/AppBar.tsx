@@ -69,8 +69,11 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   const { simple } = useParts();
   const [host, setHost] = useState("");
 
+  // The phone app's ☁ Cloud tab opens this PC's hub (its address goes along, so the app remembers it for when the PC is off).
+  const [hubUrl, setHubUrl] = useState("");
   useEffect(() => {
     api<{ name?: string }>("/api/remote/links").then((r) => setHost(r.name ?? ""), () => undefined);
+    if (appHome()) api<{ url?: string }>("/api/hub").then((r) => setHubUrl(r.url ?? ""), () => undefined);
   }, []);
   useEffect(() => {
     setMenu(false);
@@ -125,11 +128,13 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         </button>
         <button type="button" data-pad="B" className="bar-btn hist" aria-label={t("back")} title={t("back")} onClick={() => history.back()}>{Icon.back}</button>
         <button type="button" className="bar-btn hist" aria-label={t("forward")} title={t("forward")} onClick={() => history.forward()}>{Icon.forward}</button>
-        {/* In the phone app (remote): switch to the phone's own screens and back, from the top bar. */}
+        {/* In the phone app (remote): Phone / Computer / ☁ Cloud, from the top bar. */}
         {appHome() && (
           <div className="bar-where" role="tablist" aria-label={getLocale() === "he" ? "איפה זה רץ" : "Where it runs"}>
             <a role="tab" href={`${appHome()!.replace(/\/$/, "")}/local.html`}>{getLocale() === "he" ? "טלפון" : "Phone"}</a>
             <span role="tab" aria-selected="true" className="on">{getLocale() === "he" ? "מחשב" : "Computer"}</span>
+            {/* Cloud: the Kesher Cloud hub's screens (devices, tasks, pairing), from the app's own cloud.html. */}
+            <a role="tab" href={`${appHome()!.replace(/\/$/, "")}/cloud.html${hubUrl ? `?hub=${encodeURIComponent(hubUrl)}` : ""}`}>{getLocale() === "he" ? "☁ ענן" : "☁ Cloud"}</a>
           </div>
         )}
         {/* Home, from every screen (computer, remote and phone). */}

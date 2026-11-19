@@ -1,12 +1,12 @@
 /**
- * Kesher Cloud hub: the Worker entry. It answers the bare page, refuses everything when the outside kill switch
- * (`HUB_DISABLED = "1"`) is on, and forwards API and socket requests to the one Durable Object, with the caller's IP in
- * a header it sets itself. The cron (every 5 minutes) runs the object's cleanup.
+ * Kesher Cloud hub: the Worker entry. The page itself is static (public/, served before the Worker). It refuses
+ * everything when the outside kill switch (`HUB_DISABLED = "1"`) is on, answers the page's `/api/config`, and forwards
+ * API and socket requests to the one Durable Object, with the caller's IP in a header it sets itself. The cron (every 5 minutes) runs the object's cleanup.
  *
  * Nothing here deploys itself: the owner deploys it from the Cloudflare dashboard (apps/hub/README.md).
  */
 import type { ExecutionContext, HubEnvBindings } from "./cf.js";
-import { json, SECURITY_HEADERS } from "./http.js";
+import { json } from "./http.js";
 
 export { HubObject } from "./hub-do.js";
 
@@ -27,15 +27,13 @@ export default {
     if (env.HUB_DISABLED === "1") return json({ error: "The hub is switched off." }, 503);
     const url = new URL(req.url);
     if (url.pathname.startsWith("/internal/")) return json({ error: "Not found." }, 404);
+    // The page's settings: only the Google client id (public by design; it names the app, it opens nothing).
+    if (url.pathname === "/api/config" && req.method === "GET") return json({ googleClientId: env.GOOGLE_CLIENT_ID ?? "" });
     if (url.pathname.startsWith("/api/") || url.pathname === "/ws/device") {
       const headers = new Headers(req.headers);
       // The DO trusts this header, so the Worker always overwrites it.
       headers.set("x-kh-ip", req.headers.get("cf-connecting-ip") ?? "unknown");
       return hubStub(env).fetch(new Request(req, { headers }));
-    }
-    if (url.pathname === "/" && req.method === "GET") {
-      // The page itself is built separately (apps/hub screens); until then a plain placeholder.
-      return new Response("Kesher Cloud hub. This hub is private.", { headers: { "content-type": "text/plain; charset=utf-8", ...SECURITY_HEADERS } });
     }
     return json({ error: "Not found." }, 404);
   },

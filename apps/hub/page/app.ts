@@ -1,0 +1,758 @@
+/**
+ * Kesher Cloud hub page: sign in with Google (the one owner), then five tabs: dashboard, devices, tasks, pair, settings.
+ * The page is also a paired device of its own (device.ts), so it can send sealed tasks and keep them here.
+ *
+ * Two kinds of access, as the hub's API has them:
+ * - Signed in (session cookie): the full device list with fingerprints, approving pairing codes, revoking, kill
+ *   switches and the activity log.
+ * - Paired (this browser's device token): live presence and tasks. A phone can pair by code without signing in.
+ *
+ * Opened from the KesherAI phone app (`?app=http://localhost`), the page shows the app's Phone / Computer / ☁ Cloud
+ * switch on top and the phone's bottom tabs. Layout: the design doc's Hub* and PhoneHub* boards.
+ */
+import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
+import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
+import { getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
+import { HubDevice, post, type PageTask } from "./device.js";
+
+/** What the signed-in owner sees (`GET /api/state`). */
+interface OwnerState {
+  devices: Array<HubPresence & { fingerprint: string }>;
+  paused: boolean;
+  cloudOff: boolean;
+  cloudReady: boolean;
+  queued: number;
+  audit: Array<{ ts: number; action: string; deviceId?: string }>;
+}
+
+type Tab = "dash" | "devices" | "tasks" | "new" | "pair" | "settings";
+const TABS: Tab[] = ["dash", "devices", "tasks", "pair", "settings"];
+
+/** Minimal Google Identity Services types (the script is loaded from accounts.google.com, allowed by the CSP). */
+interface Gis {
+  accounts: { id: { initialize(o: Record<string, unknown>): void; renderButton(el: HTMLElement, o: Record<string, unknown>): void } };
+}
+
+const device = new HubDevice();
+const app = {
+  googleClientId: "",
+  signedIn: false,
+  owner: undefined as OwnerState | undefined,
+  /** The phone app's own origin, when opened from it (validated: only the app's localhost origins). */
+  appOrigin: undefined as string | undefined,
+  /** A message under the top bar. */
+  note: undefined as { he: string; en: string; bad?: boolean } | undefined,
+  // Form state survives re-renders.
+  draft: "",
+  executor: "auto" as HubExecutor,
+  ifOffline: "cloud" as HubIfOffline,
+  filter: "all" as "all" | "open" | "done" | "failed" | "expired",
+  search: "",
+  openTask: undefined as string | undefined,
+  pairCode: "",
+  pairName: "",
+  peek: undefined as { kind: string; name: string; fingerprint: string } | undefined,
+  selfName: "",
+  busy: false,
+};
+const fingerprints = new Map<string, string>();
+
+// ---- helpers ----
+
+/** The current tab, from the address (#devices…). */
+function tab(): Tab {
+  const t = location.hash.slice(1) as Tab;
+  return t === "new" || TABS.includes(t) ? t : "dash";
+}
+
+/** Reads the owner's state; a 401 means not signed in. */
+async function loadOwner(): Promise<void> {
+  const r = await fetch("/api/state", { credentials: "same-origin" }).catch(() => undefined);
+  if (r?.status === 200) {
+    app.owner = (await r.json()) as OwnerState;
+    app.signedIn = true;
+  } else if (r?.status === 401) {
+    app.owner = undefined;
+    app.signedIn = false;
+  }
+  render();
+}
+
+/** Runs an owner action and reloads the state; shows the hub's error when it fails. */
+async function act(path: string, body: unknown, done?: { he: string; en: string }): Promise<Record<string, unknown> | undefined> {
+  app.busy = true;
+  render();
+  const r = await post(path, body).catch(() => undefined);
+  app.busy = false;
+  if (!r || r.status !== 200) {
+    app.note = { he: `לא הצליח: ${String(r?.data.error ?? "אין תשובה מהמרכז")}`, en: `Did not work: ${String(r?.data.error ?? "No answer from the hub")}`, bad: true };
+    render();
+    return undefined;
+  }
+  if (done) app.note = done;
+  await loadOwner();
+  return r.data;
+}
+
+/** The devices to show: the owner's full list when signed in, else the live presence. */
+function devices(): Array<HubPresence & { fingerprint?: string }> {
+  return app.owner?.devices ?? device.presence;
+}
+
+/** Whether the Claude cloud path can be used (known only when signed in; assumed otherwise, the hub refuses if not). */
+function cloudAvailable(): boolean {
+  return app.owner ? app.owner.cloudReady && !app.owner.cloudOff : true;
+}
+
+const pcs = () => devices().filter((d) => d.kind === "pc");
+const pcOff = () => pcs().length > 0 && !pcs().some((d) => d.online);
+const lastPcSeen = () => pcs().map((d) => d.lastSeen ?? "").sort().pop();
+
+/** A status dot. */
+const dot = (state: "on" | "off" | "busy") => h("span", { class: `dot ${state}`, "aria-hidden": "true" });
+
+/** The state of a device in words and as a dot. */
+function stateOf(d: HubPresence): { dot: "on" | "off" | "busy"; text: string; cls: string } {
+  if (!d.online) return { dot: "off", text: L("כבוי", "Off"), cls: "mut" };
+  if (d.busy) return { dot: "busy", text: L("עסוק", "Busy"), cls: "warn" };
+  return { dot: "on", text: L("מחובר", "Online"), cls: "ok" };
+}
+
+const AGENT: Record<string, [string, string]> = {
+  "local-model": ["מודל מקומי", "Local model"],
+  antigravity: ["✦ Antigravity", "✦ Antigravity"],
+  "claude-remote-control": ["✷ Claude Remote Control", "✷ Claude Remote Control"],
+  codex: ["Codex", "Codex"],
+};
+
+/** A status tag for a task. */
+function statusTag(t: PageTask): HTMLElement {
+  if (HubDevice.expired(t)) return h("span", { class: "tag t-off" }, L("פג תוקף", "Expired"));
+  switch (t.status) {
+    case "outbox":
+      return h("span", { class: "tag t-wait" }, L("⇡ ממתין לשליחה", "⇡ Waiting to send"));
+    case "waiting":
+      return h("span", { class: "tag t-wait" }, L("מחכה למחשב", "Waiting for the PC"));
+    case "sent":
+      return h("span", { class: "tag t-run" }, L("נמסר", "Delivered"));
+    case "running":
+      return h("span", { class: "tag t-run" }, h("span", { class: "spin", "aria-hidden": "true" }), L(" רץ", " Running"));
+    case "done":
+      return h("span", { class: "tag t-ok" }, L("✓ הסתיים", "✓ Done"));
+    case "blocked":
+      return h("span", { class: "tag t-ask" }, L("נתקע", "Blocked"));
+    case "cancelled":
+      return h("span", { class: "tag t-off" }, L("בוטל", "Cancelled"));
+    default:
+      return h("span", { class: "tag t-bad" }, L("✕ נכשל", "✕ Failed"));
+  }
+}
+
+/** The route chip of a task (who runs it). */
+function routeChip(t: PageTask): HTMLElement {
+  return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
+}
+
+const isOpen = (t: PageTask) => !HubDevice.expired(t) && ["outbox", "waiting", "sent", "running"].includes(t.status);
+
+// ---- the frame: top bar, app switch, banner, tabs ----
+
+const TAB_LABEL: Record<Tab, [string, string, string]> = {
+  dash: ["לוח", "Dashboard", "◉"],
+  devices: ["מכשירים", "Devices", "🖥"],
+  tasks: ["משימות", "Tasks", "📋"],
+  new: ["משימה חדשה", "New task", "＋"],
+  pair: ["חיבור", "Pair", "🔗"],
+  settings: ["הגדרות", "Settings", "⚙️"],
+};
+
+/** The tab links (top on a computer, bottom on a phone). */
+function tabs(cls: string): HTMLElement {
+  const cur = tab() === "new" ? "tasks" : tab();
+  return h(
+    "nav",
+    { class: cls, "aria-label": L("לשוניות המרכז", "Hub tabs") },
+    TABS.map((t) => h("a", { href: `#${t}`, class: `nt${cur === t ? " on" : ""}`, "aria-current": cur === t ? "page" : undefined }, h("span", { class: "ni", "aria-hidden": "true" }, TAB_LABEL[t][2]), h("span", null, L(TAB_LABEL[t][0], TAB_LABEL[t][1])))),
+  );
+}
+
+/** The phone app's Phone / Computer / ☁ Cloud switch (only when opened from the app). */
+function whereBar(): HTMLElement | null {
+  if (!app.appOrigin) return null;
+  const off = pcOff();
+  return h(
+    "div",
+    { class: "where-bar" },
+    h(
+      "div",
+      { class: "where", role: "tablist", "aria-label": L("איפה זה רץ", "Where it runs") },
+      h("a", { role: "tab", href: `${app.appOrigin}/local.html` }, L("טלפון", "Phone")),
+      off
+        ? h("span", { role: "tab", class: "gone", "aria-disabled": "true", title: L("המחשב כבוי", "The PC is off") }, dot("off"), L("מחשב", "Computer"))
+        : h("a", { role: "tab", href: `${app.appOrigin}/index.html` }, L("מחשב", "Computer")),
+      h("span", { role: "tab", class: "on", "aria-selected": "true" }, L("☁ ענן", "☁ Cloud")),
+    ),
+  );
+}
+
+/** The amber line when no PC is on. */
+function pcOffBanner(): HTMLElement | null {
+  if (!pcOff()) return null;
+  return h(
+    "div",
+    { class: "off-banner", role: "status" },
+    dot("off"),
+    h("span", null, L("המחשב כבוי · עבודה דרך הענן", "The PC is off · working through the cloud")),
+    h("span", { class: "grow" }),
+    lastPcSeen() ? h("span", { class: "mut xs" }, L("נראה לאחרונה ", "Last seen ") + when(lastPcSeen())) : null,
+    app.appOrigin ? h("a", { class: "acc xs", href: `${app.appOrigin}/index.html` }, L("נסה שוב", "Try again")) : null,
+  );
+}
+
+/** The top bar on a computer. */
+function topBar(): HTMLElement {
+  return h(
+    "header",
+    { class: "hubnav" },
+    h("b", { class: "brand" }, "☁ Kesher Cloud"),
+    tabs("top-tabs"),
+    h("span", { class: "grow" }),
+    h("span", { class: "chip hide-sm" }, app.signedIn ? L("🔒 פרטי · מחובר", "🔒 Private · signed in") : L("🔒 פרטי", "🔒 Private")),
+    app.signedIn && app.owner
+      ? h("button", { type: "button", class: "btn hide-sm", disabled: app.busy, onclick: () => void act("/api/kill", { what: app.owner!.paused ? "resume" : "pause" }) }, app.owner.paused ? L("▶ המשך", "▶ Resume") : L("⏸ השהה את המרכז", "⏸ Pause the hub"))
+      : null,
+    h("button", { type: "button", class: "btn", "aria-label": L("English", "עברית"), onclick: () => { setLocale(getLocale() === "he" ? "en" : "he"); render(); } }, getLocale() === "he" ? "EN" : "עב"),
+  );
+}
+
+/** A note line (errors and confirmations). */
+function noteLine(): HTMLElement | null {
+  if (!app.note) return null;
+  return h("div", { class: `note${app.note.bad ? " bad-note" : ""}`, role: app.note.bad ? "alert" : "status" }, h("span", { class: "grow" }, L(app.note.he, app.note.en)), h("button", { type: "button", class: "x", "aria-label": L("סגור", "Close"), onclick: () => { app.note = undefined; render(); } }, "✕"));
+}
+
+const relay = (short = false) =>
+  h("div", { class: "relay" }, "🔐 ", h("span", null, short ? L("ההיסטוריה שמורה במכשיר הזה. המרכז רק מעביר.", "The history is kept on this device. The hub only relays.") : L("המרכז רק מעביר הודעות נעולות ומוחק כל אחת ברגע שהתקבלה. המשימות וההיסטוריה שמורות במכשיר הזה, קבצי הפרויקט נשארים במחשב.", "The hub only relays sealed messages and deletes each one once it arrives. Tasks and history are kept on this device; project files stay on the PC.")));
+
+/** "Sign in to manage" for the owner-only parts, when this is a paired device that is not signed in. */
+function signInCard(what: string): HTMLElement {
+  return h("div", { class: "card pad stack" }, h("b", null, L("צריך להתחבר עם Google", "Sign in with Google first")), h("span", { class: "mut sm" }, what), h("div", { class: "gis" }));
+}
+
+// ---- screens ----
+
+/** The sign-in screen (PhoneHubSignIn), also the first screen on a computer. */
+function signInScreen(): HTMLElement {
+  const pairing = device.pending;
+  return h(
+    "main",
+    { class: "signin" },
+    h("div", { class: "logo", "aria-hidden": "true" }, "☁"),
+    h("h1", null, "Kesher Cloud"),
+    h("p", { class: "mut" }, L("המרכז הפרטי שלך: מחבר את הטלפון, המחשבים והסוכנים בענן, ושולח כל משימה למי שפנוי.", "Your private hub: it links your phone, your PCs and the cloud agents, and sends each task to whoever is free.")),
+    app.googleClientId ? h("div", { class: "gis" }) : h("p", { class: "warn sm" }, L("ההתחברות עם Google לא הוגדרה במרכז הזה (GOOGLE_CLIENT_ID).", "Google sign-in is not set up on this hub (GOOGLE_CLIENT_ID).")),
+    h("div", { class: "card pad stack start" }, h("b", { class: "sm" }, L("🔒 המרכז הזה פרטי", "🔒 This hub is private")), h("span", { class: "mut sm" }, L("רק חשבון אחד יכול להיכנס. כל השאר מקבלים \"אין גישה\". ההתחברות רק מאשרת חיבור מכשירים; את התוכן פותח רק המפתח שבמכשיר.", "Only one account can get in; everyone else gets \"no access\". Signing in only approves devices; the content is opened only by the key on each device."))),
+    pairing ? selfPairing() : h("button", { type: "button", class: "link", onclick: () => void startSelfPair() }, L("או: לחבר את המכשיר הזה עם קוד (מאשרים ממסך מחובר)", "Or: pair this device with a code (approve it on a signed-in screen)")),
+  );
+}
+
+/** Starts pairing this browser as a device; when signed in, approves it right away (same screen). */
+async function startSelfPair(): Promise<void> {
+  const name = app.selfName.trim() || (app.appOrigin ? L("הטלפון", "Phone") : L("דפדפן", "Browser"));
+  const r = await device.startPairing(name);
+  if ("error" in r) {
+    app.note = { he: r.error, en: r.error, bad: true };
+    return render();
+  }
+  if (app.signedIn) {
+    // The owner is signed in on this very page: no second screen to compare with.
+    await act("/api/pair/approve", { code: r.code, name }, { he: "הדפדפן הזה חובר כמכשיר", en: "This browser is now a paired device" });
+  }
+  render();
+}
+
+/** The code and fingerprint this device shows while it waits for approval. */
+function selfPairing(): HTMLElement {
+  const p = device.pending!;
+  return h(
+    "div",
+    { class: "card pad stack center" },
+    h("span", { class: "mut sm" }, L("אשרו את הקוד הזה במרכז, במסך שמחובר עם Google (לשונית חיבור):", "Approve this code at the hub on a screen signed in with Google (Pair tab):")),
+    h("div", { class: "code6", dir: "ltr" }, p.code),
+    h("span", { class: "mut sm" }, L("טביעת אצבע: ", "Fingerprint: "), h("b", { class: "mono" }, p.fingerprint)),
+    h("span", { class: "mut xs" }, L("ממתין לאישור… הקוד תקף 5 דקות", "Waiting for approval… the code is valid for 5 minutes")),
+    h("button", { type: "button", class: "btn", onclick: () => device.cancelPairing() }, L("בטל", "Cancel")),
+  );
+}
+
+/** The devices card (dashboard and phone): devices, then Claude cloud. */
+function deviceRows(full: boolean): HTMLElement[] {
+  const rows: HTMLElement[] = devices().map((d) => {
+    const s = stateOf(d);
+    const me = d.id === device.id;
+    const fp = d.fingerprint ?? fingerprints.get(d.id);
+    // What this PC takes (its own opt-in), as one chip beside its agents.
+    const takes = [d.optIn.acceptLocal && L("מקומי", "local"), d.optIn.acceptAntigravity && "Antigravity"].filter(Boolean).join(", ");
+    const optIn = d.kind === "pc" ? [d.optIn.acceptTasks ? L("📥 מקבל משימות", "📥 Takes tasks") + (takes ? `: ${takes}` : "") : L("📥 לא מקבל משימות", "📥 Takes no tasks")] : [];
+    const sub = [d.kind === "pc" ? (d.version ? `KesherAI ${d.version}` : "") : me ? L("הדף הזה פתוח בו עכשיו", "This page is open on it now") : "", !d.online && d.lastSeen ? L("נראה לאחרונה ", "last seen ") + when(d.lastSeen) : "", full && fp ? L("טביעת אצבע ", "fingerprint ") + fp : ""].filter(Boolean).join(" · ");
+    return h(
+      "div",
+      { class: "dev" },
+      h("span", { class: "dev-ic", "aria-hidden": "true" }, d.kind === "pc" ? "🖥" : "📱"),
+      h(
+        "div",
+        { class: "grow min0" },
+        h("div", { class: "row wrap" }, h("b", null, d.name, me ? L(" (זה)", " (this)") : ""), dot(s.dot), h("span", { class: `sm ${s.cls}` }, s.text)),
+        sub ? h("div", { class: "mut sm" }, sub) : null,
+        d.agents.length || optIn.length ? h("div", { class: "row wrap chips" }, d.agents.map((a) => h("span", { class: "chip" }, dot(a.state === "busy" ? "busy" : a.state === "on" && d.online ? "on" : "off"), a.label ? `${AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind} ${a.label}` : (AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind), a.link && isSafeLink(a.link) && d.optIn.reportLinks ? h("a", { href: a.link, target: "_blank", rel: "noopener noreferrer" }, " ↗") : null)), optIn.map((o) => h("span", { class: "chip" }, o as string))) : null,
+      ),
+      full && app.signedIn && !me
+        ? h("button", { type: "button", class: "btn sm-btn bad", disabled: app.busy, onclick: () => confirm(L(`לנתק את ${d.name}? הוא יצטרך להתחבר מחדש עם קוד.`, `Disconnect ${d.name}? It will need a new code to pair again.`)) && void act(`/api/devices/${encodeURIComponent(d.id)}/revoke`, {}, { he: "המכשיר נותק", en: "The device was disconnected" }) }, L("נתק", "Disconnect"))
+        : null,
+    );
+  });
+  if (!rows.length) rows.push(h("div", { class: "dev mut sm" }, L("אין עדיין מכשירים מחוברים. לשונית חיבור ›", "No devices paired yet. Pair tab ›")));
+  return rows;
+}
+
+/** Claude cloud as an agent row. */
+function cloudRow(): HTMLElement {
+  const known = !!app.owner;
+  const on = known ? app.owner!.cloudReady && !app.owner!.cloudOff : false;
+  return h(
+    "div",
+    { class: "dev" },
+    h("span", { class: "dev-ic", "aria-hidden": "true" }, "✷"),
+    h(
+      "div",
+      { class: "grow min0" },
+      h("div", { class: "row wrap" }, h("b", null, L("Claude בענן", "Claude cloud")), known ? dot(on ? "on" : "off") : null, known ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("זמין", "Available") : app.owner!.cloudOff ? L("כבוי", "Off") : L("לא מוגדר", "Not set up")) : null),
+      h("div", { class: "mut sm" }, L("משימה מתוזמנת בחשבון Claude שלך · בלי מפתח API · עד 30 הפעלות בשעה", "A scheduled task on your Claude account · no API key · up to 30 runs an hour")),
+    ),
+  );
+}
+
+/** The route line for the current form choice. */
+function routeBox(compact: boolean): HTMLElement {
+  if (!device.paired) return h("div", { class: "route" }, "🧭 ", h("span", { class: "grow" }, L("כדי לשלוח משימות מכאן, חברו את המכשיר הזה (לשונית חיבור).", "To send tasks from here, pair this device (Pair tab).")));
+  const r = device.route(app.executor, app.ifOffline, cloudAvailable());
+  const target = r.route === "claude-cloud" ? L("Claude בענן", "Claude cloud") : r.route === "none" ? L("אין לאן", "Nowhere") : (devices().find((d) => d.id === r.to)?.name ?? "PC");
+  return h(
+    "div",
+    { class: `route${compact ? "" : " col"}` },
+    h("div", { class: "row" }, h("span", { "aria-hidden": "true" }, "🧭"), h("span", { class: "grow" }, h("b", null, L("מסלול: ", "Route: "), target), " · ", L(r.reason.he, r.reason.en))),
+    compact ? null : h("div", { class: "row wrap sm route-path" }, h("span", { class: "chip" }, L("📱 המכשיר הזה", "📱 This device")), "→", h("span", { class: "chip" }, L("☁ המרכז (מעביר בלבד)", "☁ The hub (relays only)")), "→", h("span", { class: `chip${r.route === "claude-cloud" ? " opus" : ""}` }, r.route === "claude-cloud" ? "✷ Claude" : `🖥 ${target}`)),
+    h("span", { class: "sm cost" }, "💰 ", L(r.cost.he, r.cost.en)),
+  );
+}
+
+/** The cloud-path warning (the hub opens that one message to start the task). */
+function cloudWarning(): HTMLElement | null {
+  if (!device.paired || device.route(app.executor, app.ifOffline, cloudAvailable()).route !== "claude-cloud") return null;
+  return h("div", { class: "kill amber" }, h("span", { "aria-hidden": "true" }, "👁"), h("span", { class: "sm grow" }, L("המסלול הזה מראה את המשימה לענן של Claude. המרכז פותח אותה רק לרגע כדי לשלוח, ולא שומר אותה.", "This route shows the task to Claude's cloud. The hub opens it only for a moment to send it, and keeps nothing of it.")));
+}
+
+/** Sends the draft. */
+async function sendDraft(): Promise<void> {
+  const r = await device.send(app.draft, app.executor, app.ifOffline, cloudAvailable());
+  if ("error" in r) {
+    app.note = { ...r.error, bad: true };
+  } else {
+    app.draft = "";
+    app.note = { he: "המשימה נשלחה", en: "The task was sent" };
+    app.openTask = r.taskId;
+    location.hash = "#tasks";
+  }
+  render();
+}
+
+/** The task text box. */
+const draftBox = (rows: number) =>
+  h("textarea", { class: "inp area", rows, maxlength: 8000, "aria-label": L("מה לעשות", "What to do"), placeholder: L("מה לעשות? למשל: \"תבדוק למה הבנייה של אנדרואיד נכשלה\"", "What to do? For example: \"Find out why the Android build failed\""), value: app.draft, oninput: (e) => { app.draft = (e.target as HTMLTextAreaElement).value; } });
+
+/** The dashboard (HubDashboard / PhoneHubDashboard). */
+function dashboard(): HTMLElement {
+  const on = devices().filter((d) => d.online).length;
+  const off = devices().length - on;
+  const open = device.tasks.filter(isOpen);
+  return h(
+    "main",
+    { class: "page" },
+    h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))),
+    relay(),
+    h(
+      "div",
+      { class: "grid2" },
+      h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()),
+      h(
+        "div",
+        { class: "stack" },
+        h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))),
+        h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))),
+      ),
+    ),
+  );
+}
+
+/** The devices tab (HubDevices). */
+function devicesTab(): HTMLElement {
+  return h(
+    "main",
+    { class: "page" },
+    h("div", { class: "row" }, h("h1", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#pair" }, L("＋ חבר מכשיר", "＋ Pair a device"))),
+    h("section", { class: "card clip" }, h("div", { class: "row head wrap" }, h("b", null, L("המכשירים שלי", "My devices")), h("span", { class: "mut sm" }, L("כל מכשיר מחזיק מפתח משלו. \"נתק\" סוגר אותו מיד.", "Each device holds its own key. \"Disconnect\" closes it at once."))), deviceRows(true)),
+    h("section", { class: "card clip" }, h("div", { class: "row head wrap" }, h("b", null, L("סוכנים בענן", "Cloud agents")), h("span", { class: "mut sm" }, L("משמשים רק כשאין מחשב פנוי, או כשבחרת בהם", "Used only when no PC is free, or when you chose them"))), cloudRow()),
+    h("p", { class: "mut sm" }, L("כל מחשב מחליט בעצמו אם לקבל משימות: במחשב, הגדרות › ענן Kesher. מה המרכז יודע על מכשיר: שם, מפתח ציבורי, מתי נראה לאחרונה, ואילו סוכנים פועלים בו. לא קבצים, לא משימות, לא היסטוריה.", "Each PC decides for itself whether it takes tasks: on the PC, Settings › Kesher Cloud. What the hub knows about a device: its name, public key, when it was last seen and which agents run on it. No files, no tasks, no history.")),
+  );
+}
+
+/** The new-task form (HubSendTask / PhoneHubSendTask). */
+function newTask(): HTMLElement {
+  const opt = <T extends string>(group: string, value: T, cur: T, set: (v: T) => void, title: string, sub?: string) =>
+    h("label", { class: `opt${cur === value ? " sel2" : ""}` }, h("input", { type: "radio", name: group, value, checked: cur === value, onchange: () => { set(value); render(); } }), h("span", { class: "grow" }, title, sub ? h("div", { class: "mut xs" }, sub) : null));
+  return h(
+    "main",
+    { class: "page" },
+    h("h1", null, L("משימה חדשה", "New task")),
+    h(
+      "div",
+      { class: "grid2 wide-first" },
+      h(
+        "div",
+        { class: "stack" },
+        h("section", { class: "sec" }, h("span", { class: "mut sm" }, L("מה לעשות", "What to do")), draftBox(5)),
+        h("section", { class: "sec" }, h("h3", null, L("מי יבצע", "Who does it")), h("div", { class: "opts", role: "radiogroup" }, opt("ex", "auto", app.executor, (v) => (app.executor = v), L("אוטומטי", "Automatic"), L("לפי המשימה ומי מחובר", "By the task and who is on")), opt("ex", "pc-any", app.executor, (v) => (app.executor = v), L("🖥 מחשב", "🖥 A PC"), L("מודל מקומי או Antigravity", "Local model or Antigravity")), opt("ex", "claude-cloud", app.executor, (v) => (app.executor = v), L("✷ Claude בענן", "✷ Claude cloud"), L("מהמנוי שלך", "From your subscription")))),
+        h("section", { class: "sec" }, h("h3", null, L("אם המחשב כבוי", "If the PC is off")), h("div", { class: "opts", role: "radiogroup" }, opt("off", "wait", app.ifOffline, (v) => (app.ifOffline = v), L("לחכות לו", "Wait for it")), opt("off", "cloud", app.ifOffline, (v) => (app.ifOffline = v), L("לשלוח לענן", "Send to the cloud"))), h("span", { class: "mut sm" }, L("משימה שמחכה נמחקת מהמרכז אחרי 24 שעות אם לא נמסרה.", "A waiting task is deleted from the hub after 24 hours if it was not delivered."))),
+      ),
+      h(
+        "div",
+        { class: "stack" },
+        routeBox(false),
+        cloudWarning(),
+        h("section", { class: "sec" }, h("h3", { class: "sm" }, L("מה נשמר איפה", "What is kept where")), h("div", { class: "sm lines" }, L("📱 המשימה והתשובה: במכשיר הזה", "📱 The task and the answer: on this device"), h("br"), L("☁ המרכז: רק מזהה, יעד ושעה, עד שהמשימה נמסרה", "☁ The hub: only an id, a recipient and a time, until delivered"), h("br"), L("🔀 הקוד: בענף ב-GitHub, כמו תמיד", "🔀 The code: in a branch on GitHub, as always"))),
+        h("div", { class: "row end" }, h("span", { class: "grow" }), h("a", { class: "btn", href: "#tasks" }, L("ביטול", "Cancel")), h("button", { type: "button", class: "btn pri big", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח משימה", "Send the task"))),
+      ),
+    ),
+  );
+}
+
+/** The tasks tab (HubTasks / PhoneHubTasks). */
+function tasksTab(): HTMLElement {
+  const all = device.tasks;
+  const pick = (t: PageTask) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" : app.filter === "expired" ? HubDevice.expired(t) : true);
+  const q = app.search.trim().toLowerCase();
+  const list = all.filter(pick).filter((t) => !q || t.spec.toLowerCase().includes(q));
+  const count = (f: typeof app.filter) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" : HubDevice.expired(t))).length;
+  const chip = (f: typeof app.filter, he: string, en: string) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
+  const open = all.find((t) => t.taskId === app.openTask);
+  return h(
+    "main",
+    { class: "page" },
+    h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("נשמר במכשיר הזה (המרכז לא שומר משימות)", "Kept on this device (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
+    !device.paired ? pairThisCard() : null,
+    h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),
+    h(
+      "section",
+      { class: "card clip" },
+      h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })),
+      list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד לא נשלחו משימות מהמכשיר הזה.", "No tasks were sent from this device yet.")),
+    ),
+    open ? taskDetail(open) : null,
+  );
+}
+
+/** One row of the task list. */
+function taskRow(t: PageTask): HTMLElement {
+  const expired = HubDevice.expired(t);
+  const action =
+    t.status === "outbox" || expired
+      ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void (expired ? device.resend(t, cloudAvailable()).then(() => device.remove(t.taskId)) : device.remove(t.taskId)); } }, expired ? L("שלח שוב", "Send again") : L("בטל", "Cancel"))
+      : t.status === "waiting" && cloudAvailable()
+        ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, true, "claude-cloud"); } }, L("שלח לענן במקום", "Send to the cloud instead"))
+        : t.status === "failed"
+          ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, cloudAvailable()); } }, L("נתב מחדש", "Route again"))
+          : t.link && isSafeLink(t.link)
+            ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
+            : null;
+  return h(
+    "div",
+    { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") { app.openTask = t.taskId; render(); } } },
+    h("span", { class: "c-st" }, statusTag(t)),
+    h("div", { class: "grow min0" }, h("b", { class: "w5 ell1" }, t.title), t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
+    h("span", { class: "c-rt" }, routeChip(t)),
+    h("span", { class: "c-when mut sm" }, when(t.createdAt)),
+    h("span", { class: "c-act" }, action),
+  );
+}
+
+/** The open task, with its answer and timeline. */
+function taskDetail(t: PageTask): HTMLElement {
+  return h(
+    "section",
+    { class: `card pad stack${t.status === "done" ? " done-card" : ""}` },
+    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), routeChip(t), t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
+    h("div", { class: "sm answer" }, t.line ?? t.spec),
+    t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null,
+    h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")),
+  );
+}
+
+/** "Pair this device" (the page itself), for sending tasks. */
+function pairThisCard(): HTMLElement {
+  if (device.pending) return selfPairing();
+  return h(
+    "section",
+    { class: "card pad stack" },
+    h("b", null, L("לחבר את המכשיר הזה", "Pair this device")),
+    h("span", { class: "mut sm" }, L("כדי לשלוח משימות מכאן ולשמור אותן, הדף צריך מפתח משלו. המפתח נשאר בדפדפן הזה ולא יוצא ממנו.", "To send tasks from here and keep them, this page needs a key of its own. The key stays in this browser and never leaves it.")),
+    h("div", { class: "row wrap" }, h("input", { class: "inp grow", maxlength: 60, placeholder: L("שם המכשיר (למשל: הטלפון)", "Device name (e.g. Phone)"), "aria-label": L("שם המכשיר", "Device name"), value: app.selfName, oninput: (e) => { app.selfName = (e.target as HTMLInputElement).value; } }), h("button", { type: "button", class: "btn pri", onclick: () => void startSelfPair() }, L("חבר", "Pair"))),
+  );
+}
+
+/** The pair tab (HubPair): approve another device's code after comparing the fingerprint; or pair this one. */
+function pairTab(): HTMLElement {
+  const code = app.pairCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  const boxes = Array.from({ length: 8 }, (_, i) => h("span", { class: `cbox${i < code.length ? " full" : ""}` }, code[i] ?? ""));
+  boxes.splice(4, 0, h("span", { class: "mut dash" }, "-"));
+  const approve = app.signedIn
+    ? h(
+        "section",
+        { class: "sec" },
+        h("h3", null, L("1. הקוד מהמכשיר החדש", "1. The code from the new device")),
+        h("span", { class: "mut sm" }, L("במחשב: הגדרות › ענן Kesher › \"חבר למרכז שלי\". בטלפון: לשונית ענן › \"לחבר את המכשיר הזה\".", "On a PC: Settings › Kesher Cloud › \"Connect to my hub\". On a phone: the Cloud tab › \"Pair this device\".")),
+        h("label", { class: "codewrap" }, h("span", { class: "row center gap6", dir: "ltr", "aria-hidden": "true" }, boxes), h("input", { class: "code-input", autocomplete: "off", autocapitalize: "characters", spellcheck: "false", maxlength: 9, "aria-label": L("הקוד בן 8 התווים", "The 8-character code"), value: app.pairCode, oninput: (e) => { app.pairCode = (e.target as HTMLInputElement).value; app.peek = undefined; renderSoon(); } })),
+        h("span", { class: "mut sm center" }, L("הקוד תקף 5 דקות, לשימוש אחד", "The code is valid for 5 minutes, for one use")),
+        h("label", { class: "stack0" }, h("span", { class: "mut sm" }, L("שם המכשיר", "Device name")), h("input", { class: "inp", maxlength: 60, value: app.pairName, placeholder: L("למשל: הלפטופ", "e.g. Laptop"), oninput: (e) => { app.pairName = (e.target as HTMLInputElement).value; } })),
+        h("span", { class: "mut sm" }, L("מה הוא יוכל: לקבל משימות, לדווח מצב. לא לשנות הגדרות.", "What it can do: take tasks and report status. Not change settings.")),
+        !app.peek ? h("button", { type: "button", class: "btn pri", disabled: code.length !== 8 || app.busy, onclick: () => void peekCode(code) }, L("המשך להשוואה", "Continue to compare")) : null,
+      )
+    : signInCard(L("רק מי שמחובר עם Google יכול לאשר מכשיר חדש.", "Only a screen signed in with Google can approve a new device."));
+  const compare = app.peek
+    ? h(
+        "section",
+        { class: "sec accent" },
+        h("h3", null, L("2. השוו טביעת אצבע", "2. Compare the fingerprint")),
+        h("span", { class: "sm lines" }, L("אותם 6 מספרים צריכים להופיע עכשיו גם על המסך של המכשיר החדש. כך המרכז לא יכול להחליף מפתח בלי שתשים לב.", "The same 6 digits must show on the new device's screen now. That way the hub cannot swap a key without you noticing.")),
+        h("div", { class: "code6", dir: "ltr" }, app.peek.fingerprint),
+        h("div", { class: "row center mut sm" }, `${app.peek.kind === "pc" ? "🖥" : "📱"} ${app.peek.name}`),
+        h("div", { class: "row" }, h("button", { type: "button", class: "btn grow bad", onclick: () => { app.peek = undefined; app.pairCode = ""; render(); } }, L("לא תואם, בטל", "Does not match, cancel")), h("button", { type: "button", class: "btn pri grow", disabled: app.busy, onclick: () => void approveCode(code) }, L("תואם, חבר", "Matches, pair"))),
+      )
+    : null;
+  return h("main", { class: "page" }, h("h1", null, L("חיבור מכשיר", "Pair a device")), h("div", { class: "grid2" }, approve, compare ?? (device.paired ? h("section", { class: "sec" }, h("h3", null, L("המכשיר הזה", "This device")), h("span", { class: "sm" }, L(`מחובר בשם "${device.name ?? ""}".`, `Paired as "${device.name ?? ""}".`)), h("span", { class: "mut sm" }, L("כדי לחבר מחשב: במחשב, הגדרות › ענן Kesher, הקלידו את כתובת המרכז ולחצו \"חבר למרכז שלי\".", "To pair a PC: on the PC, Settings › Kesher Cloud, type the hub's address and press \"Connect to my hub\"."))) : pairThisCard())), relay());
+}
+
+/** Looks a code up (fingerprint first, approve after). */
+async function peekCode(code: string): Promise<void> {
+  const r = await post("/api/pair/check", { code }).catch(() => undefined);
+  if (r?.status === 200 && typeof r.data.fingerprint === "string") app.peek = { kind: String(r.data.kind), name: String(r.data.name), fingerprint: r.data.fingerprint };
+  else app.note = { he: `לא הצליח: ${String(r?.data.error ?? "אין תשובה")}`, en: `Did not work: ${String(r?.data.error ?? "No answer")}`, bad: true };
+  render();
+}
+
+/** Approves the code after the fingerprint matched. */
+async function approveCode(code: string): Promise<void> {
+  const r = await act("/api/pair/approve", { code, name: app.pairName.trim() || undefined }, { he: "המכשיר חובר. הוא יופיע ברשימה בעוד רגע.", en: "The device is paired. It shows in the list in a moment." });
+  if (r) {
+    app.peek = undefined;
+    app.pairCode = "";
+    app.pairName = "";
+    render();
+  }
+}
+
+const AUDIT: Record<string, [string, string]> = {
+  signin: ["התחברות", "Signed in"],
+  "signin-refused": ["ניסיון התחברות נדחה", "Sign-in refused"],
+  "owner-pinned": ["החשבון ננעל לבעלים", "Owner account pinned"],
+  "pair-start": ["מכשיר ביקש חיבור", "A device asked to pair"],
+  "pair-approve": ["קוד אושר", "Code approved"],
+  "pair-done": ["מכשיר חובר", "Device paired"],
+  "token-rotated": ["מפתח הגישה הוחלף", "Token rotated"],
+  revoke: ["מכשיר נותק", "Device disconnected"],
+  pause: ["המרכז הושהה", "Hub paused"],
+  resume: ["המרכז חזר לעבוד", "Hub resumed"],
+  "cloud-off": ["Claude בענן כובה", "Claude cloud off"],
+  "cloud-on": ["Claude בענן הופעל", "Claude cloud on"],
+  "kill-all": ["כל המכשירים נותקו", "All devices revoked"],
+  "queue-dropped": ["התור נמחק", "Queue dropped"],
+  connect: ["מכשיר התחבר", "Device connected"],
+  "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
+  "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
+};
+
+/** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */
+function settingsTab(): HTMLElement {
+  const o = app.owner;
+  const name = (id?: string) => (id ? (devices().find((d) => d.id === id)?.name ?? id.slice(0, 6)) : "");
+  const owner = o
+    ? [
+        h(
+          "section",
+          { class: "sec" },
+          h("h3", null, L("מתגי עצירה", "Kill switches")),
+          h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⏸"), h("span", { class: "grow" }, h("b", null, L("השהה את המרכז", "Pause the hub")), h("div", { class: "mut sm" }, L("לא מעביר כלום וסוגר את החיבורים; הנתונים נשמרים", "Relays nothing and closes the connections; data is kept"))), h("button", { type: "button", role: "switch", class: `tog${o.paused ? "" : " off"}`, "aria-checked": o.paused, "aria-label": L("השהה את המרכז", "Pause the hub"), disabled: app.busy, onclick: () => void act("/api/kill", { what: o.paused ? "resume" : "pause" }) })),
+          h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "✷"), h("span", { class: "grow" }, h("b", null, o.cloudOff ? L("Claude בענן כבוי", "Claude cloud is off") : L("כבה את Claude בענן", "Turn Claude cloud off")), h("div", { class: "mut sm" }, L("משימות לא יישלחו לענן. למחיקת הטוקן: בהגדרות המשימה המתוזמנת ב-claude.ai", "No task goes to the cloud. To delete the token: in the scheduled task's settings at claude.ai"))), h("button", { type: "button", class: `btn${o.cloudOff ? "" : " bad"}`, disabled: app.busy, onclick: () => void act("/api/kill", { what: o.cloudOff ? "cloud-on" : "cloud-off" }) }, o.cloudOff ? L("הפעל", "Turn on") : L("כבה", "Turn off"))),
+          h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⛔"), h("span", { class: "grow" }, h("b", null, L("נתק את כל המכשירים", "Disconnect every device")), h("div", { class: "mut sm" }, L("גם מתנתק מכל הדפדפנים. כל מכשיר יצטרך להתחבר מחדש עם קוד", "Also signs out every browser. Each device must pair again with a code"))), h("button", { type: "button", class: "btn bad", disabled: app.busy, onclick: () => confirm(L("לנתק את כל המכשירים ולהתנתק מכל הדפדפנים?", "Disconnect every device and sign out of every browser?")) && void act("/api/kill", { what: "everything" }).then(() => device.forget()) }, L("נתק הכול", "Disconnect all"))),
+          h("div", { class: "kill soft" }, h("span", { class: "ki", "aria-hidden": "true" }, "🚪"), h("span", { class: "grow" }, h("b", null, L("התנתק בדפדפן הזה", "Sign out in this browser")), h("div", { class: "mut sm" }, L("התחברות מחדש עם Google", "Sign in again with Google"))), h("button", { type: "button", class: "btn", disabled: app.busy, onclick: () => void act("/api/signout", {}) }, L("התנתק", "Sign out"))),
+        ),
+        h(
+          "section",
+          { class: "sec" },
+          h("h3", null, L("מה המרכז מחזיק עכשיו", "What the hub holds now")),
+          h("div", { class: "grid3" }, h("div", { class: "card stat" }, h("b", null, String(o.queued)), h("div", { class: "mut sm" }, L("הודעות נעולות בתור", "Sealed messages queued"))), h("div", { class: "card stat" }, h("b", null, String(o.devices.length)), h("div", { class: "mut sm" }, L("מכשירים", "Devices"))), h("div", { class: "card stat" }, h("b", null, String(o.audit.length)), h("div", { class: "mut sm" }, L("שורות פעילות אחרונות", "Recent activity lines")))),
+          h("span", { class: "sm lines" }, L("ההודעות נעולות במפתח של המכשיר שמקבל אותן; המרכז לא יכול לקרוא אותן. כל הודעה נמחקת כשהתקבלה, או אחרי 24 שעות.", "Messages are sealed to the receiving device's key; the hub cannot read them. Each is deleted once received, or after 24 hours.")),
+          h("div", null, h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.queued, onclick: () => confirm(L("למחוק את כל ההודעות שבתור?", "Delete every queued message?")) && void act("/api/kill", { what: "drop-queue" }) }, L("מחק את כל התור עכשיו", "Delete the whole queue now"))),
+        ),
+        h("section", { class: "sec" }, h("h3", null, L("חשבון", "Account")), h("div", { class: "row" }, h("span", { class: "grow" }, L("מחובר עם Google · רק החשבון הזה נכנס", "Signed in with Google · only this account gets in")), h("span", { class: "tag t-ok" }, L("נעול לחשבון אחד", "Locked to one account")))),
+      ]
+    : [signInCard(L("מתגי העצירה ויומן הפעילות זמינים רק אחרי התחברות.", "The kill switches and the activity log are available only after signing in."))];
+  return h(
+    "main",
+    { class: "page" },
+    h("h1", null, L("הגדרות המרכז", "Hub settings")),
+    h(
+      "div",
+      { class: "grid2" },
+      h("div", { class: "stack" }, owner.slice(0, 1), owner.slice(2)),
+      h(
+        "div",
+        { class: "stack" },
+        owner.slice(1, 2),
+        h(
+          "section",
+          { class: "sec" },
+          h("h3", null, L("המכשיר הזה", "This device")),
+          device.paired ? h("div", { class: "row" }, h("span", { class: "grow" }, L(`מחובר בשם "${device.name ?? ""}" · המשימות נשמרות כאן`, `Paired as "${device.name ?? ""}" · tasks are kept here`)), h("span", { class: `tag ${device.connected ? "t-ok" : "t-off"}` }, device.connected ? L("מחובר", "Connected") : L("לא מחובר", "Not connected"))) : h("span", { class: "mut sm" }, L("לא מחובר כמכשיר (אפשר לחבר בלשונית חיבור).", "Not paired as a device (pair it in the Pair tab).")),
+          device.paired ? h("div", null, h("button", { type: "button", class: "btn bad", onclick: () => confirm(L("לשכוח את המכשיר הזה? המפתח והמשימות שנשמרו כאן יימחקו.", "Forget this device? Its key and the tasks kept here are deleted.")) && void device.forget() }, L("שכח את המכשיר הזה", "Forget this device"))) : null,
+          h("div", { class: "row" }, h("span", { class: "grow" }, L("שפה", "Language")), h("button", { type: "button", class: "btn", onclick: () => { setLocale(getLocale() === "he" ? "en" : "he"); render(); } }, getLocale() === "he" ? "English" : "עברית")),
+        ),
+        o
+          ? h(
+              "section",
+              { class: "sec" },
+              h("h3", null, L("יומן פעילות", "Activity log")),
+              h("span", { class: "mut xs" }, L("רק סוג האירוע, המכשיר והשעה (30 יום). בלי תוכן.", "Only the event type, the device and the time (30 days). No content.")),
+              h("ul", { class: "audit" }, o.audit.length ? o.audit.slice(0, 60).map((a) => h("li", null, h("span", { class: "mut xs" }, when(a.ts)), " ", AUDIT[a.action] ? L(...AUDIT[a.action]!) : a.action.startsWith("relay-") ? L(`הועבר: ${a.action.slice(6)}`, `Relayed: ${a.action.slice(6)}`) : a.action, a.deviceId ? h("span", { class: "mut" }, ` · ${name(a.deviceId)}`) : null)) : h("li", { class: "mut" }, L("ריק", "Empty"))),
+            )
+          : null,
+      ),
+    ),
+  );
+}
+
+// ---- rendering ----
+
+let renderTimer: number | undefined;
+/** Re-renders soon (typing in a search box). */
+function renderSoon(): void {
+  clearTimeout(renderTimer);
+  renderTimer = window.setTimeout(render, 150);
+}
+
+/** Draws the page. Text being typed is kept (the form values live in `app`), and the focused field is restored. */
+function render(): void {
+  const root = document.getElementById("app")!;
+  const focus = document.activeElement as HTMLInputElement | null;
+  const focusKey = focus && root.contains(focus) && (focus.tagName === "INPUT" || focus.tagName === "TEXTAREA") ? (focus.getAttribute("aria-label") ?? "") : "";
+  const caret = focusKey ? focus!.selectionStart : null;
+  const scroller = document.scrollingElement;
+  const y = scroller?.scrollTop ?? 0;
+
+  const showSignIn = !app.signedIn && !device.paired;
+  const body: Child = showSignIn ? signInScreen() : { dash: dashboard, devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
+  root.replaceChildren(
+    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
+  );
+  root.classList.toggle("in-app", !!app.appOrigin);
+  if (scroller) scroller.scrollTop = y;
+  if (focusKey) {
+    const again = [...root.querySelectorAll<HTMLInputElement>("input, textarea")].find((el) => el.getAttribute("aria-label") === focusKey);
+    if (again) {
+      again.focus();
+      if (caret !== null) again.setSelectionRange(caret, caret);
+    }
+  }
+  mountGis();
+}
+
+let gisLoading: Promise<Gis | undefined> | undefined;
+/** Loads Google's sign-in script once and draws its button wherever the page has a `.gis` box. */
+function mountGis(): void {
+  const boxes = [...document.querySelectorAll<HTMLElement>(".gis")];
+  if (!boxes.length || !app.googleClientId) return;
+  gisLoading ??= new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.onload = () => {
+      const g = (window as unknown as { google?: Gis }).google;
+      g?.accounts.id.initialize({ client_id: app.googleClientId, ux_mode: "popup", callback: (r: { credential?: string }) => void signIn(r.credential ?? "") });
+      resolve(g);
+    };
+    s.onerror = () => resolve(undefined);
+    document.head.append(s);
+  });
+  void gisLoading.then((g) => {
+    for (const b of boxes) if (g && b.isConnected && !b.childElementCount) g.accounts.id.renderButton(b, { theme: "filled_black", size: "large", shape: "pill", text: "signin_with", width: Math.min(340, b.clientWidth || 320), locale: getLocale() });
+  });
+}
+
+/** Sends Google's ID token to the hub, which checks it is the owner and sets the session cookie. */
+async function signIn(credential: string): Promise<void> {
+  const r = await post("/api/signin", { credential }).catch(() => undefined);
+  if (r?.status === 200) {
+    app.note = undefined;
+    await loadOwner();
+  } else {
+    app.note = { he: r?.status === 403 ? "אין גישה: המרכז הזה פרטי" : "ההתחברות נכשלה", en: r?.status === 403 ? "No access: this hub is private" : "Sign-in failed", bad: true };
+    render();
+  }
+}
+
+/** The phone app's origin, when the page was opened from it. Only the app's own local origins are accepted. */
+function appOriginFrom(): string | undefined {
+  const asked = new URLSearchParams(location.search).get("app");
+  const ok = (x: string | null) => (x === "http://localhost" || x === "https://localhost" ? x : undefined);
+  try {
+    if (asked !== null) {
+      const v = ok(asked);
+      if (v) sessionStorage.setItem("kh-app", v);
+      history.replaceState(null, "", location.pathname + location.hash);
+      return v;
+    }
+    return ok(sessionStorage.getItem("kh-app"));
+  } catch {
+    return ok(asked);
+  }
+}
+
+/** Starts the page. */
+async function main(): Promise<void> {
+  initLocale();
+  app.appOrigin = appOriginFrom();
+  device.onChange(() => {
+    // This browser just paired while signed in: the owner's list should show it.
+    if (app.signedIn && device.id && app.owner && !app.owner.devices.some((d) => d.id === device.id)) void loadOwner();
+    // Fingerprints for the presence list (the signed-in state has them already).
+    for (const d of device.presence) if (!fingerprints.has(d.id)) void keyFingerprint(d.publicKey).then((f) => { fingerprints.set(d.id, f); renderSoon(); });
+    // Not while typing: a presence update must not take the cursor away (the next change or blur draws it).
+    const a = document.activeElement;
+    if (a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT")) return void a.addEventListener("blur", () => renderSoon(), { once: true });
+    render();
+  });
+  addEventListener("hashchange", () => {
+    app.note = undefined;
+    render();
+    scrollTo(0, 0);
+  });
+  const cfg = await fetch("/api/config").then((r) => r.json() as Promise<{ googleClientId?: string }>).catch(() => ({}) as { googleClientId?: string });
+  app.googleClientId = typeof cfg.googleClientId === "string" ? cfg.googleClientId : "";
+  await device.load();
+  await loadOwner();
+  // The signed-in state (who is on, the log) every 20 seconds while the page is visible.
+  setInterval(() => {
+    if (app.signedIn && document.visibilityState === "visible") void loadOwner();
+  }, 20_000);
+}
+
+void main();

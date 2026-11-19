@@ -38,6 +38,12 @@
     button { height: 48px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 16px; }
     button.primary { background: var(--accent); color: var(--bg); border: none; font-weight: 600; }
     .error { color: var(--bad); }
+    .cloud-card { border: 1px solid var(--accent); background: #1c1d2a; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .cloud-card[hidden] { display: none; }
+    .cc-head { display: flex; gap: 12px; align-items: center; line-height: 1.5; }
+    .cc-ic { font-size: 28px; }
+    .cc-tag { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #262a45; color: #c3cbff; }
+    .cc-sub { font-size: 13px; color: #c3cbff; }
     .update { border: 1px solid var(--accent); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
     .update[hidden] { display: none; }
     .notify { border: 1px solid var(--border, #2c2d33); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; text-align: start; }
@@ -86,6 +92,7 @@
   <div class="seg" role="tablist" aria-label="Where it runs">
     <a role="tab" href="local.html" data-he="טלפון" data-en="Phone">טלפון</a>
     <a role="tab" class="on" aria-selected="true" data-he="מחשב" data-en="Computer">מחשב</a>
+    <a role="tab" href="cloud.html" data-he="☁ ענן" data-en="☁ Cloud">☁ ענן</a>
   </div>
 </nav>
 <main>
@@ -126,6 +133,11 @@
     <button class="primary" type="submit" data-he="התחבר" data-en="Connect">התחבר</button>
   </form>
   <p id="status"></p>
+  <section id="cloudCard" class="cloud-card" hidden>
+    <div class="cc-head"><span class="cc-ic" aria-hidden="true">☁</span><span><b data-he="ענן" data-en="Cloud">ענן</b> <span class="cc-tag" data-he="מומלץ עכשיו" data-en="Recommended now">מומלץ עכשיו</span><br /><span class="cc-sub" data-he="המחשב כבוי? שלח משימות ל-Claude בענן, או שהן יחכו למחשב." data-en="Is the PC off? Send tasks to Claude cloud, or they wait for the PC.">המחשב כבוי? שלח משימות ל-Claude בענן, או שהן יחכו למחשב.</span></span></div>
+    <button id="openCloud" type="button" class="primary" data-he="פתח את לשונית ענן" data-en="Open the Cloud tab">פתח את לשונית ענן</button>
+    <p class="small" data-he="גם מהסרגל העליון: טלפון | מחשב | ☁ ענן" data-en="Also from the top bar: Phone | Computer | ☁ Cloud">גם מהסרגל העליון: טלפון | מחשב | ☁ ענן</p>
+  </section>
   <details id="crash" hidden><summary></summary><pre id="crashText" dir="ltr" style="white-space:pre-wrap;font-size:11px;max-height:40vh;overflow:auto"></pre></details>
   <button id="local" type="button" class="local" data-he="חזרה לטלפון" data-en="Back to the phone">חזרה לטלפון</button>
   <details class="more">
@@ -323,6 +335,7 @@
     }
   }
   renderComputers();
+  $("openCloud").onclick = () => (location.href = "cloud.html");
 
   // ---------- Sign in with Google: find my computers ----------
   // The computers that share themselves list their addresses and tokens in a small
@@ -534,6 +547,8 @@
       if (cancelled) return;
       $("status").textContent = tr.fail[lang];
       $("status").className = "error";
+      // A Kesher Cloud hub is known: the Cloud tab works without the computer (design: AndroidCloudCard).
+      if (localStorage.getItem("kesherai-hub")) $("cloudCard").hidden = false;
       // The computer may be asleep: offer to wake it when the link carries its network card's address.
       if (url.searchParams.get("wake") && window.Capacitor?.Plugins?.WakeOnLan) {
         const b = document.createElement("button");

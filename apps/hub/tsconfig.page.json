@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "rootDir": "../..",
+    "outDir": "public/js",
+    "removeComments": false,
+    "newLine": "lf"
+  },
+  "include": ["page/*.ts"]
+}

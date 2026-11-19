@@ -85,7 +85,9 @@ turn that on.
 - Device token (`Authorization: Bearer kh_…`): `POST /api/ticket` → a one-use 60-second `ticket` (and `rotateDue`
   after 30 days), `POST /api/rotate` → a new token (the old one stops at once). Tokens older than 180 days are refused.
 - Socket: `GET /ws/device?ticket=…`. Frames in `packages/shared/src/hub-protocol.ts`.
-- Signed in (cookie, same origin): `GET /api/state`, `POST /api/signout`, `POST /api/pair/approve` `{code, name}`,
+- Page: `GET /api/config` → `{googleClientId}` (public).
+- Signed in (cookie, same origin): `GET /api/state`, `POST /api/signout`, `POST /api/pair/check` `{code}` (the
+  fingerprint, before approving), `POST /api/pair/approve` `{code, name}`,
   `POST /api/devices/:id/revoke`, `POST /api/kill` `{what: pause|resume|cloud-off|cloud-on|drop-queue|everything}`.
 
 Live chat with a PC does not go through the hub; it stays on the direct links KesherAI already has.
@@ -95,6 +97,9 @@ Live chat with a PC does not go through the hub; it stays on the direct links Ke
   `src/sql-store.ts` / `src/store.ts` (storage), `src/google.ts`, `src/claude-cloud.ts`, `src/rate-limit.ts`. The
   protocol, sealing and routing are shared with the PC and the phone in `packages/shared/src/hub*.ts` (imported by
   path, so the Worker needs no install step).
+- The page: `page/*.ts` (no framework), compiled with the shared hub code into `public/js` by
+  `pnpm --filter @kesher/hub build:page`; the output is committed, so Workers Builds needs no build step (a test checks
+  it is current). `public/_headers` carries the same CSP as the API.
 - Checks from the repo root: `pnpm --filter @kesher/hub typecheck`, and
   `node --conditions=source --import tsx --test --test-force-exit apps/hub/src/*.test.ts`.
 - With the Wrangler CLI, `npx wrangler dev` runs it locally and `npx wrangler deploy` deploys; secrets with

@@ -260,6 +260,23 @@ export class Hub {
   }
 
   /**
+   * The owner (signed in) looks a code up before approving it: the device's kind, name and key fingerprint, so he can
+   * compare the fingerprint with the device's screen first (the hub page's "compare, then connect" step).
+   *
+   * @param code - The code as typed.
+   * @returns The waiting device's kind, name and fingerprint, or an error.
+   */
+  async pairPeek(code: unknown): Promise<{ kind: HubDeviceKind; name: string; fingerprint: string } | HubError> {
+    if (!this.limits.take("pairApprove", LIMITS.pairApprove)) return fail(429, "Too many tries.");
+    const c = typeof code === "string" ? normalCode(code) : "";
+    if (c.length !== 8) return fail(400, "Type the 8-character code.");
+    const p = this.store.pairingByCode(await sha256Hex(c));
+    if (!p || p.expiresAt <= this.now()) return fail(404, "That code is not waiting (expired or already used).");
+    if (p.approved) return fail(409, "That code was already approved.");
+    return { kind: p.kind, name: p.name, fingerprint: await keyFingerprint(p.publicKey) };
+  }
+
+  /**
    * The owner (signed in) approves a code he sees on the device; he compares the fingerprint on both screens.
    *
    * @param code - The code as typed.

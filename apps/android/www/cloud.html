@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#121213" />
+  <link rel="stylesheet" href="theme.css" />
+  <title>KesherAI · Kesher Cloud</title>
+  <style>
+    /* The ☁ Cloud tab of the top bar (Phone / Computer / ☁ Cloud). It opens the owner's Kesher Cloud hub page, which
+       shows the hub's own tabs (dashboard, devices, tasks, pair, settings) under the same switch; without a hub it
+       explains how to connect one. */
+    .wbar { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; padding: max(8px, env(safe-area-inset-top)) 12px 8px; background: var(--bg); border-bottom: 1px solid var(--border); }
+    .seg { display: flex; background: var(--panel); border: 1px solid #2a2a2e; border-radius: 10px; padding: 2px; gap: 2px; }
+    .seg a { display: grid; place-items: center; min-height: 32px; padding: 0 10px; border-radius: 8px; color: var(--muted); font-size: 12.5px; text-decoration: none; }
+    .seg a.on { background: #2e2e3a; color: var(--text); font-weight: 500; }
+    main { max-width: 560px; margin: 0 auto; padding: 28px 18px calc(24px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+    .logo { width: 76px; height: 76px; margin: 0 auto; border-radius: 22px; background: #262a3d; display: grid; place-items: center; font-size: 36px; }
+    h1 { margin: 0; text-align: center; font-size: 22px; }
+    p { margin: 0; color: var(--muted); line-height: 1.6; font-size: 14.5px; }
+    .card { border: 1px solid var(--border); background: var(--panel); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+    input { direction: ltr; width: 100%; }
+    .error { color: var(--bad); }
+    .small { font-size: 13px; text-align: center; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<nav class="wbar">
+  <div class="seg" role="tablist" aria-label="Where it runs">
+    <a role="tab" href="local.html" data-he="טלפון" data-en="Phone">טלפון</a>
+    <a role="tab" href="index.html" data-he="מחשב" data-en="Computer">מחשב</a>
+    <a role="tab" class="on" aria-selected="true" data-he="☁ ענן" data-en="☁ Cloud">☁ ענן</a>
+  </div>
+</nav>
+<main>
+  <div class="logo" aria-hidden="true">☁</div>
+  <h1>Kesher Cloud</h1>
+  <p id="opening" hidden data-he="פותח את המרכז שלך…" data-en="Opening your hub…">פותח את המרכז שלך…</p>
+  <section id="empty" class="card" hidden>
+    <strong data-he="לחבר מרכז" data-en="Connect a hub">לחבר מרכז</strong>
+    <p data-he="המרכז הפרטי שלך (Cloudflare, בחינם) מראה אילו מחשבים דלוקים ושולח משימות נעולות גם כשהמחשב כבוי. את הכתובת מוצאים במחשב: הגדרות › טלפון וגישה מרחוק › ענן Kesher." data-en="Your own private hub (Cloudflare, free) shows which PCs are on and sends sealed tasks even when the PC is off. Find its address on the PC: Settings › Phone and remote access › Kesher Cloud.">המרכז הפרטי שלך (Cloudflare, בחינם) מראה אילו מחשבים דלוקים ושולח משימות נעולות גם כשהמחשב כבוי. את הכתובת מוצאים במחשב: הגדרות › טלפון וגישה מרחוק › ענן Kesher.</p>
+    <form id="form">
+      <label><span data-he="כתובת המרכז" data-en="Hub address">כתובת המרכז</span><input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://hub.example.com" required /></label>
+    </form>
+    <button id="save" class="primary" type="button" data-he="פתח את המרכז" data-en="Open the hub">פתח את המרכז</button>
+    <p id="status" class="small"></p>
+  </section>
+  <button id="change" type="button" hidden data-he="שנה את כתובת המרכז" data-en="Change the hub address">שנה את כתובת המרכז</button>
+  <p class="small" data-he="ההיסטוריה של משימות הענן נשמרת בטלפון. המרכז רק מעביר." data-en="The history of cloud tasks is kept on the phone. The hub only relays.">ההיסטוריה של משימות הענן נשמרת בטלפון. המרכז רק מעביר.</p>
+</main>
+<script>
+  // The hub address is remembered here (the app's own storage), so the Cloud tab works when the PC is off.
+  const KEY = "kesherai-hub";
+  const $ = (id) => document.getElementById(id);
+  const lang = (localStorage.getItem("lang") || (navigator.language.startsWith("he") ? "he" : "en")) === "en" ? "en" : "he";
+  if (lang === "en") { document.documentElement.lang = "en"; document.documentElement.dir = "ltr"; }
+  for (const el of document.querySelectorAll("[data-he]")) el.textContent = el.dataset[lang];
+
+  /** A hub address that is safe to open: https (or http on this device for testing), no credentials, no query. */
+  function clean(u) {
+    try {
+      const x = new URL(String(u).trim());
+      const local = x.hostname === "localhost" || x.hostname === "127.0.0.1";
+      if (x.protocol !== "https:" && !(x.protocol === "http:" && local)) return "";
+      if (x.username || x.password) return "";
+      return x.origin + x.pathname.replace(/\/+$/, "");
+    } catch { return ""; }
+  }
+  /** Opens the hub page, which shows the Phone / Computer / ☁ Cloud switch when it knows it runs in the app. */
+  const open = (hub) => location.replace(`${hub}/?app=${encodeURIComponent(location.origin)}`);
+
+  const params = new URLSearchParams(location.search);
+  const given = clean(params.get("hub") || "");
+  if (given) localStorage.setItem(KEY, given);
+  const hub = clean(localStorage.getItem(KEY) || "");
+  if (hub && !params.has("change")) {
+    $("opening").hidden = false;
+    $("change").hidden = false;
+    open(hub);
+  } else {
+    $("empty").hidden = false;
+    $("url").value = hub;
+  }
+  $("change").onclick = () => location.replace("cloud.html?change=1");
+  const save = () => {
+    const h = clean($("url").value);
+    if (!h) { $("status").textContent = lang === "he" ? "הכתובת צריכה להתחיל ב-https://" : "The address must start with https://"; $("status").className = "small error"; return; }
+    localStorage.setItem(KEY, h);
+    open(h);
+  };
+  $("save").onclick = save;
+  $("form").onsubmit = (e) => { e.preventDefault(); save(); };
+</script>
+</body>
+</html>

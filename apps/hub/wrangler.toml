@@ -8,6 +8,12 @@ workers_dev = true
 # Variables and secrets typed in the dashboard are kept on every deploy (this file defines none).
 keep_vars = true
 
+# The hub's own page (public/: index.html, app.css, the compiled js/, and _headers with the CSP). Served as static
+# assets, free and without waking the Worker; /api/* and /ws/* are not files, so they reach the Worker.
+[assets]
+directory = "./public"
+not_found_handling = "none"
+
 [[durable_objects.bindings]]
 name = "HUB"
 class_name = "HubObject"

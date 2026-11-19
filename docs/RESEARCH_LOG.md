@@ -3638,3 +3638,10 @@ only for code in git. None routes between a PC, a local model and several cloud 
   rate limits, metadata-only audit, kill switches; the hub makes its own key; dashboard-only setup in apps/hub/README.md);
   `packages/shared/src/hub-protocol.ts`, `hub-crypto.ts`, `hub-route.ts` (route with reason and cost); PC side
   `packages/core/src/hub-client.ts` + `routes/hub.ts` (off by default; tasks go to the task board). Not deployed.
+- Built: (2026-11-19) the screens: the hub's own page (`apps/hub/page/*.ts`, compiled with the shared hub code into
+  `apps/hub/public/js`, served as Workers static assets with the CSP in `public/_headers`; tabs לוח, מכשירים, משימות,
+  חיבור, הגדרות; the page is itself a paired device, so tasks are sealed in the browser and kept there; code check before
+  approve via `POST /api/pair/check`), Settings → ענן Kesher on the PC (`CloudHubSection`), and ☁ ענן in the phone app's
+  top bar (`apps/android/www/cloud.html` opens the hub page with the app's switch; the connect screen offers Cloud when
+  the PC does not answer). Not done: per-PC opt-in from the hub page (it is shown; each PC sets it), renaming devices,
+  Jules, "ask me" when the PC is off, answering approvals on the hub page.

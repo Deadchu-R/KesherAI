@@ -62,6 +62,10 @@ async function pair(hub: Hub, kind: "pc" | "phone", name: string): Promise<{ id:
   const start = await hub.pairStart("1.2.3.4", { publicKey: keys.publicKey, kind, name });
   assert.ok(!isHubError(start));
   assert.deepEqual(await hub.pairPoll("1.2.3.4", start.pollSecret), { status: "pending" });
+  // Looking the code up first shows the same fingerprint the device shows, and approves nothing.
+  const peek = await hub.pairPeek(start.code);
+  assert.ok(!isHubError(peek) && peek.fingerprint === start.fingerprint && peek.kind === kind);
+  assert.deepEqual(await hub.pairPoll("1.2.3.4", start.pollSecret), { status: "pending" });
   const ok = await hub.pairApprove(start.code.toLowerCase().replace("-", " "), name);
   assert.ok(!isHubError(ok) && /^\d{3} \d{3}$/.test(ok.fingerprint));
   const done = await hub.pairPoll("1.2.3.4", start.pollSecret);
