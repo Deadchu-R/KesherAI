@@ -50,6 +50,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   on, connects them, and routes a task to a cloud tool when no device is on, so the PC need not stay on.
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
   Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security.
+- ⬜ Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
+  own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building.
 - ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
 - ⬜ Design doc: guests in a scene, helpers in chat, the task inbox; then build helpers + inbox (Opus helper).
 
