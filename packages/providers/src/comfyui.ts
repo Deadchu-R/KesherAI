@@ -210,12 +210,15 @@ export class ComfyUIProvider implements Provider {
    *
    * @param data - The picture.
    * @param name - Its file name.
+   * @param subfolder - A folder inside input (e.g. "3d" for a Load 3D node).
    * @returns The name to put in the Load Image node.
    */
-  async uploadImage(data: Uint8Array, name: string): Promise<string> {
+  async uploadImage(data: Uint8Array, name: string, subfolder?: string): Promise<string> {
     const form = new FormData();
     form.append("image", new Blob([new Uint8Array(data)]), name);
     form.append("overwrite", "true");
+    // A 3D model goes into input/3d, where ComfyUI's Load 3D nodes list their files.
+    if (subfolder) form.append("subfolder", subfolder);
     const res = await fetchOk(`${this.baseUrl}/upload/image`, { method: "POST", body: form });
     const j = (await res.json()) as { name: string; subfolder?: string };
     return j.subfolder ? `${j.subfolder}/${j.name}` : j.name;

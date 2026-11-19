@@ -343,6 +343,45 @@ export function readyFlows(): ReadyFlow[] {
       },
     },
     {
+      // Paint a model that is already made (StableProjectorz's projection painting, natively in ComfyUI 0.46+): the
+      // model is unwrapped, seen from four sides around it (their depth), each side drawn by Stable Diffusion 1.5 with
+      // ControlNet depth, and the four drawings baked back onto it as its colour texture (BakeTextureFromViews).
+      // Its loading, unwrapping, cameras, depth views and baking ran in a real ComfyUI in the workspace (RESEARCH_LOG).
+      id: "3d-paint-views",
+      icon: "🖌",
+      title: { en: "Paint a 3D model from words (four views, baked)", he: "צביעת מודל תלת-ממד ממילים (ארבעה צדדים, נאפה עליו)" },
+      description: {
+        en: "Load a model (GLB) and describe its look (old oak with brass, worn red velvet…); it is seen from four sides, each drawn to its shape with Stable Diffusion 1.5 and ControlNet depth, and the drawings are baked onto it as a texture. Needs ComfyUI 0.46 or newer.",
+        he: "טוענים מודל (GLB) ומתארים איך הוא צריך להיראות (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…); רואים אותו מארבעה צדדים, כל צד מצויר לפי הצורה שלו עם Stable Diffusion 1.5 ו-ControlNet עומק, והציורים נאפים עליו כטקסטורה. צריך ComfyUI 0.46 ומעלה.",
+      },
+      license: { name: "CreativeML Open RAIL-M (Stable Diffusion 1.5); ControlNet 1.1: OpenRAIL", url: "https://huggingface.co/spaces/CompVis/stable-diffusion-license" },
+      files: [
+        { label: "Stable Diffusion 1.5 (fp16)", repo: "Comfy-Org/stable-diffusion-v1-5-archive", path: "v1-5-pruned-emaonly-fp16.safetensors", rel: "image/v1-5-pruned-emaonly-fp16.safetensors", gb: 2.1 },
+        { label: "ControlNet 1.1 depth (fp16)", repo: "comfyanonymous/ControlNet-v1-1_fp16_safetensors", path: "control_v11f1p_sd15_depth_fp16.safetensors", rel: "controlnet/control_v11f1p_sd15_depth_fp16.safetensors", gb: 0.7 },
+      ],
+      checkpoints: { "7": "v1-5-pruned-emaonly-fp16.safetensors" },
+      flow: {
+        "1": { class_type: "Load3DAdvanced", inputs: {"model_file": "3d/example.glb", "viewport_state": "", "width": 768, "height": 768}, _meta: { title: "The model (a GLB)" } },
+        "2": { class_type: "Get3DComponents", inputs: {"model_3d": ["1", 0]} },
+        "3": { class_type: "UnwrapMesh", inputs: {"mesh": ["2", 0], "segmenter": "pec", "resolution": 2048, "padding": 2, "weld_distance": 0.0002} },
+        "4": { class_type: "CreateCameraInfo", inputs: {"mode": "orbit", "mode.yaw": 0, "mode.pitch": 15, "mode.distance": 2, "target_x": 0, "target_y": 0, "target_z": 0, "roll": 0, "fov": 35, "zoom": 1, "camera_type": "perspective", "mesh": ["3", 0]} },
+        "5": { class_type: "CreateCameraOrbit", inputs: {"camera_info": ["4", 0], "count": 4, "yaw": 360, "pitch": 0, "poles": "none"}, _meta: { title: "Four views around it" } },
+        "6": { class_type: "RenderMesh", inputs: {"mesh": ["3", 0], "mode": "depth", "width": 768, "height": 768, "background": "#000000", "camera_info": ["5", 0]} },
+        "7": { class_type: "CheckpointLoaderSimple", inputs: {"ckpt_name": "v1-5-pruned-emaonly-fp16.safetensors"} },
+        "8": { class_type: "ControlNetLoader", inputs: {"control_net_name": "control_v11f1p_sd15_depth_fp16.safetensors"} },
+        "9": { class_type: "CLIPTextEncode", inputs: {"clip": ["7", 1], "text": "an old wooden chair with worn red velvet, the whole object, evenly lit, flat studio light, no shadows, detailed texture"}, _meta: { title: "How it should look" } },
+        "10": { class_type: "CLIPTextEncode", inputs: {"clip": ["7", 1], "text": "shadows, dark lighting, background, text, watermark, blurry, low quality"}, _meta: { title: "What to avoid" } },
+        "11": { class_type: "ControlNetApplyAdvanced", inputs: {"positive": ["9", 0], "negative": ["10", 0], "control_net": ["8", 0], "image": ["6", 0], "strength": 1, "start_percent": 0, "end_percent": 1, "vae": ["7", 2]} },
+        "12": { class_type: "EmptyLatentImage", inputs: {"width": 768, "height": 768, "batch_size": 4} },
+        "13": { class_type: "KSampler", inputs: {"model": ["7", 0], "positive": ["11", 0], "negative": ["11", 1], "latent_image": ["12", 0], "seed": seed(), "steps": 25, "cfg": 7, "sampler_name": "dpmpp_2m", "scheduler": "karras", "denoise": 1} },
+        "14": { class_type: "VAEDecode", inputs: {"samples": ["13", 0], "vae": ["7", 2]} },
+        "15": { class_type: "BakeTextureFromViews", inputs: {"mesh": ["3", 0], "images": ["14", 0], "resolution": 2048, "blend_exponent": 4, "fill_unseen": true, "camera_info": ["5", 0], "mask": ["6", 1]}, _meta: { title: "Bake the views onto the model" } },
+        "16": { class_type: "ApplyTextureToMesh", inputs: {"mesh": ["3", 0], "base_color": ["15", 0]} },
+        "17": { class_type: "MeshToFile3D", inputs: {"mesh": ["16", 0]} },
+        "18": { class_type: "Save3DAdvanced", inputs: {"model_3d": ["17", 0], "filename_prefix": "3d/KesherAI-painted", "viewport_state": "", "width": 1024, "height": 1024} },
+      },
+    },
+    {
       // Wan 2.2 TI2V 5B (Alibaba, Apache-2.0), as in ComfyUI's own template (video_wan2_2_5B_ti2v): one model for
       // picture-to-video and text-to-video, 24 fps, fits a 24 GB card at 1280x704 (smaller is faster).
       id: "video-wan22-ti2v",

@@ -8,7 +8,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { pictureTo3d } from "../chat-tools-media.js";
+import { paintModel, pictureTo3d } from "../chat-tools-media.js";
 import { checkSegments, cutVideo, EXPORT_HEIGHTS, TRANSITIONS, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
@@ -174,6 +174,35 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     modelling = true;
     try {
       const made = await pictureTo3d(flows, root, String(req.body?.image ?? ""), AbortSignal.timeout(30 * 60_000), colours);
+      if ("error" in made) return reply.code(400).send(made);
+      return made;
+    } finally {
+      modelling = false;
+    }
+  });
+
+  // Paint a model of this chat by words (the 3D editor's "Paint this model"): the ready flow "3d-paint-views". As
+  // model3d: downloads only after a yes, one at a time (it shares the lock), ComfyUI started if needed.
+  app.post<{ Params: { id: string }; Body: { model?: string; look?: string; download?: boolean } }>("/api/conversations/:id/files/paint3d", async (req, reply) => {
+    const root = await folderOf(req.params.id);
+    if (!root) return reply.code(404).send({ error: "Conversation not found" });
+    const look = String(req.body?.look ?? "").trim();
+    if (!look) return reply.code(400).send({ error: "Say how it should look." });
+    const flows = s.conversations.flows;
+    if (!flows) return reply.code(409).send({ error: "ComfyUI's ready flows are not set up here (the Nodes page)." });
+    const st = flows.state("3d-paint-views");
+    if (!st.allowed) return reply.code(403).send({ error: "ComfyUI is turned off by business mode." });
+    if (!st.installed) return reply.code(409).send({ error: "ComfyUI is not installed yet (the Nodes page)." });
+    if (!st.ready) {
+      if (st.downloading) return reply.code(409).send({ error: "The painting models are still downloading.", downloading: true });
+      if (req.body?.download !== true) return reply.code(409).send({ error: "The painting models need a download first.", needGb: st.missingGb });
+      await flows.setup("3d-paint-views");
+      return reply.code(202).send({ downloading: true });
+    }
+    if (modelling) return reply.code(429).send({ error: "A 3D model is being made; try again when it is done." });
+    modelling = true;
+    try {
+      const made = await paintModel(flows, root, String(req.body?.model ?? ""), look, AbortSignal.timeout(30 * 60_000));
       if ("error" in made) return reply.code(400).send(made);
       return made;
     } finally {

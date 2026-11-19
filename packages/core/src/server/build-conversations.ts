@@ -209,7 +209,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         const flow = readyFlows().find((f) => f.id === id)!;
         await setupFlow(flow, paths.models, downloads);
       },
-      run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal) => {
+      run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal) => {
         if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
         const flow = readyFlows().find((f) => f.id === id)!;
         if (!comfy.status().running) {
@@ -219,7 +219,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         const list = (folder: string) => fetch(`${comfy.status().url}/models/${folder}`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
         const graph = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
         const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
-        await edit(graph, (data, name) => provider.uploadImage(data, name));
+        await edit(graph, (data, name, subfolder) => provider.uploadImage(data, name, subfolder));
         await guard.before("comfyui", signal);
         try {
           return await provider.runFlow(graph, signal);

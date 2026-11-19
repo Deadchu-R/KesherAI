@@ -447,6 +447,16 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           if (res.ok || res.status === 202 || (res.status === 409 && (body.needGb || body.downloading))) return body;
           throw new Error(body.error ?? String(res.status));
         }
+        // A model of this chat painted by words (four views drawn and baked onto it); as model.fromPicture, the first
+        // time it answers with the download's size and the page asks before calling again with download: true.
+        case "model.paint": {
+          need("model");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/paint3d`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model: String(p.model ?? ""), look: String(p.look ?? "").slice(0, 600), download: p.download === true }) });
+          const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string; needGb?: number; downloading?: boolean };
+          if (res.ok || res.status === 202 || (res.status === 409 && (body.needGb || body.downloading))) return body;
+          throw new Error(body.error ?? String(res.status));
+        }
         case "media.list": {
           if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
           const kind = ["image", "video", "audio", "model"].includes(String(p.kind)) ? String(p.kind) : "";

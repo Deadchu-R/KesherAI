@@ -18,7 +18,7 @@ const kesher = window.kesher;
 const HE = {
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
-  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
+  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
@@ -1483,6 +1483,35 @@ async function viewPicture() {
   a.click();
 }
 $("shot").onclick = () => void viewPicture();
+/**
+ * Paint this model by words (StableProjectorz's projection painting, in ComfyUI on this computer): the model as it is
+ * goes into the chat's files, is seen from four sides, each side drawn to its shape (Stable Diffusion 1.5 + ControlNet
+ * depth) and baked onto it as its colour texture; the painted copy lands beside it (the original stays, to compare).
+ */
+async function paintThisModel() {
+  if (!model) return;
+  const look = window.prompt(T("paintAsk", "How should it look? (old oak with brass, worn red velvet…)"));
+  if (!look?.trim()) return;
+  let shown = false;
+  const say = (t) => { if (shown) busy(""); shown = !!t; if (t) busy(t); };
+  try {
+    say(T("sending", "Sending…"));
+    const { path } = await uploadMedia(new File([await glb()], `${base()}.glb`, { type: "model/gltf-binary" }));
+    if (!path) throw new Error(T("needChat", "Open the 3D editor from a chat to make a model here"));
+    say(T("painting", "Painting it from four sides… (a few minutes, on your computer)"));
+    let r = await kesher.call("model.paint", { model: path, look: look.trim() });
+    if (r.needGb) {
+      say("");
+      if (!window.confirm(`${T("paintDownload", "Painting needs Stable Diffusion 1.5 and ControlNet depth, not on this computer yet. Download them now?")} (${r.needGb} GB)`)) return;
+      r = await kesher.call("model.paint", { model: path, look: look.trim(), download: true });
+    }
+    if (r.downloading) return msg(T("wordsDownloading", "The 3D model is downloading (see the downloads circle); try again when it is done. The picture is in the chat's files."));
+    const bytes = await kesher.call("media.bytes", { id: `chat:${r.path}` });
+    await addFile(r.path.split("/").pop(), bytes);
+    msg(T("painted", "The painted copy is beside the original (hide either with 👁)"));
+  } catch (e) { msg(e.message || String(e), true); } finally { say(""); }
+}
+$("paint").onclick = () => void paintThisModel();
 /**
  * A turntable video (as Sketchfab and ArtStation show a model): the camera goes once around the model at its height and
  * distance, recorded from the view (WebM, 30 fps, without the grid and helpers), into the chat.

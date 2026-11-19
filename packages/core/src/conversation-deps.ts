@@ -47,7 +47,7 @@ export interface ConversationDeps {
     setup(id: string): Promise<void>;
     run(
       id: string,
-      edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string) => Promise<string>) => Promise<void> | void,
+      edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void,
       signal: AbortSignal,
     ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
   };

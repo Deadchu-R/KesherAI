@@ -94,3 +94,15 @@ test("3D with colours (TRELLIS.2): ComfyUI's template graph, files in folders Co
   assert.equal(out["40"]!.inputs.unet_name, "video\\trellis_2_int8_convrot.safetensors");
   assert.equal(out["15"]!.inputs.clip_name, "dino_v3_L_naf_fp32.safetensors");
 });
+
+test("painting a model (four views baked): ComfyUI's native nodes, the model from input/3d, SD 1.5 named", () => {
+  const f = readyFlows().find((x) => x.id === "3d-paint-views")!;
+  assert.ok(f);
+  const kinds = Object.values(f.flow).map((n) => n.class_type);
+  for (const k of ["Load3DAdvanced", "UnwrapMesh", "CreateCameraOrbit", "RenderMesh", "ControlNetApplyAdvanced", "BakeTextureFromViews", "ApplyTextureToMesh", "Save3DAdvanced"]) assert.ok(kinds.includes(k), k);
+  assert.equal(f.flow["6"]!.inputs.mode, "depth");
+  assert.equal(f.flow["12"]!.inputs.batch_size, f.flow["5"]!.inputs.count); // one drawing per view
+  for (const n of Object.values(f.flow)) for (const v of Object.values(n.inputs)) if (Array.isArray(v) && typeof v[0] === "string") assert.ok(f.flow[v[0]], `missing node ${v[0]}`);
+  const out = withCheckpoints(f, ["image\\v1-5-pruned-emaonly-fp16.safetensors"]);
+  assert.equal(out["7"]!.inputs.ckpt_name, "image\\v1-5-pruned-emaonly-fp16.safetensors");
+});

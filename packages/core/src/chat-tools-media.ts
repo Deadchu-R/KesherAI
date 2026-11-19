@@ -548,3 +548,36 @@ export function pickMusicFlow(ready: (id: string) => boolean): string {
   if (!ready("music-ace-step-15") && ready("music-ace-step")) return "music-ace-step";
   return "music-ace-step-15";
 }
+
+/**
+ * Paints a model that is already made: the ready flow "3d-paint-views" sees it from four sides, draws each side by the
+ * words (Stable Diffusion 1.5 + ControlNet depth) and bakes them onto it as its colour texture. The result is saved
+ * beside it in the chat's folder (…-painted-….glb). Used by the 3D editor's "Paint this model" (its route).
+ *
+ * @param flows - The ready flows' runner (ready and allowed is checked by the caller).
+ * @param workspace - The chat's folder.
+ * @param model - The model's path in it (a GLB).
+ * @param look - How it should look, in English words (cut to 600 characters).
+ * @param signal - To stop it.
+ * @returns The painted model's path in the folder, or what went wrong.
+ */
+export async function paintModel(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, model: string, look: string, signal: AbortSignal): Promise<{ path: string } | { error: string }> {
+  const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
+  const { readFile, writeFile, mkdir } = await import("node:fs/promises");
+  const file = resolvePath(workspace, model);
+  if (relative(workspace, file).startsWith("..") || !/\.glb$/i.test(file)) return { error: "The model must be a GLB in this chat's files." };
+  const data = await readFile(file).catch(() => undefined);
+  if (!data) return { error: `No model at ${model}.` };
+  const files = await flows.run("3d-paint-views", async (flow, upload) => {
+    // Into input/3d, where ComfyUI's Load 3D lists files.
+    flow["1"]!.inputs.model_file = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`, "3d");
+    flow["9"]!.inputs.text = `${look.slice(0, 600)}, the whole object, evenly lit, flat studio light, no shadows, detailed texture`;
+    flow["13"]!.inputs.seed = randomInt(2 ** 31);
+  }, signal);
+  const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
+  if (!glb) return { error: "ComfyUI finished but saved no model." };
+  const out = joinPath(dirname(relative(workspace, file)), `${basename(file).replace(/\.[^.]+$/, "")}-painted-${Date.now().toString(36)}.glb`);
+  await mkdir(dirname(joinPath(workspace, out)), { recursive: true });
+  await writeFile(joinPath(workspace, out), glb.data);
+  return { path: out.split("\\").join("/") };
+}
