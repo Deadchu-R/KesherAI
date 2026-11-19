@@ -131,3 +131,14 @@ test("a clip's volume goes into its sound", () => {
   assert.doesNotMatch(g, /\[a1\].*volume/);
   assert.throws(() => checkSegments([{ from: 0, to: 1, volume: 3 }]));
 });
+
+test("the export's size (only down, even widths) and quality", () => {
+  const a = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }], true, undefined, undefined, "9:16", undefined, undefined, 0, [], { height: 720, quality: "small" });
+  const g = a[a.indexOf("-filter_complex") + 1]!;
+  assert.match(g, /\[vc\]scale=-2:'min\(ih,720\)'\[vh\]/);
+  assert.equal(a[a.indexOf("-map") + 1], "[vh]");
+  assert.equal(a[a.indexOf("-crf") + 1], "27");
+  const b = cutArgs("in.mp4", "out.mp4", [{ from: 0, to: 2 }], true, undefined, undefined, undefined, undefined, undefined, 0, [], { height: 333 });
+  assert.doesNotMatch(b[b.indexOf("-filter_complex") + 1]!, /scale=-2/);
+  assert.equal(b[b.indexOf("-crf") + 1], "20");
+});

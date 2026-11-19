@@ -17,7 +17,7 @@
     splitS: "פיצול", trimS: "התחלה", trimE: "סוף", deleteS: "מחיקה", playS: "נגן",
     toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Premiere וב-CapCut)", close: "סגור",
     withCaptions: "כתוביות מהתמלול (קובץ srt. לצידו)", transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה מעבירה אליה; ✂ חותך מהווידאו את מה שנאמר בה. Whisper רץ במחשב שלך.", wordsS: "קליפ",
-    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
+    transcribing: "מתמלל במחשב… (whisper)", burnCaptions: "וגם לצרוב אותן בתמונה (לטלפונים ולרשתות)", shape: "צורה", shapeKeep: "כמו שהיא", shape916: "9:16 (טלפון, רילס, טיקטוק)", shape11: "1:1 (ריבוע)", shape45: "4:5 (פוסט באינסטגרם)", shape169: "16:9 (רחב)", outSize: "גודל", sizeKeep: "כמו שהוא", outQuality: "איכות", qHigh: "גבוהה", qNormal: "רגילה", qSmall: "קובץ קטן", scenes: "🎬 פיצול במעברי שוט", findingScenes: "מחפש מעברי שוט… (FFmpeg במחשב)", noScenes: "לא נמצאו מעברי שוט", scenesDone: (n) => `פוצל ב-${n} מעברי שוט`, silences: (n) => `הסר ${n} שתיקות ארוכות`, noSilences: "אין שתיקות ארוכות",
     soundTrack: "סאונד", newSound: "סאונד חדש", openingSound: "מוציא את הסאונד לעורך הסאונד…", dbl: "לחיצה כפולה: עריכה בעורך הסאונד (כלי נגינה, קולות…)", replaced: "הסאונד הוחלף מעורך הסאונד",
     clip: "קליפ", of: "מתוך", length: "אורך", from: "מ-", cutting: "חותך במחשב… (FFmpeg)", saved: "נשמר בתיקיית הצ'אט:", tooShort: "קצר מדי לפיצול כאן",
     nothing: "אין קליפ מתחת לראש הניגון", summary: (n, len) => `${n} קליפים · ${len}`, loading: "טוען את הווידאו…",
@@ -894,7 +894,7 @@
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
-      const r = await kesher.call("video.cut", { ...cutPlan(), ...(await textPlan()), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("dip").checked ? { fade: 0.4 } : {}), ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
+      const r = await kesher.call("video.cut", { ...cutPlan(), ...(await textPlan()), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("dip").checked ? { fade: 0.4 } : {}), ...($("outSize").value ? { size: Number($("outSize").value) } : {}), quality: $("outQuality").value, ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
       if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);

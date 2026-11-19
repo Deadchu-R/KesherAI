@@ -8,7 +8,7 @@ import { zipSync } from "fflate";
 import { buildExecutableTool, csvRows, docxHtml, documentText, pptxSlides, resolveInWorkspace, xlsxSheets } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { checkSegments, cutVideo, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
+import { checkSegments, cutVideo, EXPORT_HEIGHTS, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -70,7 +70,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
    * The video editor's export: keeps the stretches of a video of the chat's folder, in their order, as a new .mp4 in
    * `shared/` (body `{ path, segments: [{ from, to }] }`, seconds). Returns the new file's path.
    */
-  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown; fade?: number; texts?: unknown } }>("/api/conversations/:id/files/cut", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { path?: string; segments?: unknown; name?: string; captions?: unknown; sound?: string; burn?: boolean; shape?: string; music?: { path?: string; start?: number; volume?: number; fadeIn?: number; fadeOut?: number; duck?: boolean }; clips?: unknown; fade?: number; texts?: unknown; size?: number; quality?: string } }>("/api/conversations/:id/files/cut", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     let full: string;
@@ -132,7 +132,11 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     try {
       if (srt) await writeFile(out.replace(/\.mp4$/, ".srt"), srt, "utf8");
       if (burn && srt) await writeFile(join(dir, burn), srt, "utf8");
-      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras, Math.min(1, Math.max(0, Number(req.body?.fade) || 0)), texts);
+      await cutVideo(await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }), full, out, segments, sound, burn, SHAPES.includes(String(req.body?.shape)) ? String(req.body?.shape) : undefined, music, extras, Math.min(1, Math.max(0, Number(req.body?.fade) || 0)), texts, {
+        // The export's size and quality: only the listed values (anything else keeps the size and the normal quality).
+        height: EXPORT_HEIGHTS.includes(Number(req.body?.size)) ? Number(req.body?.size) : undefined,
+        quality: (["high", "normal", "small"] as const).find((q) => q === req.body?.quality),
+      });
     } catch (err) {
       return reply.code(500).send({ error: `The video could not be cut: ${(err as Error).message}` });
     } finally {
