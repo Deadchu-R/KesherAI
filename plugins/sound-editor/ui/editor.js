@@ -8,7 +8,7 @@
   const $ = (id) => document.getElementById(id);
 
   const HE = {
-    trackHere: "לערוץ משלו", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
+    trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
@@ -58,7 +58,7 @@
     return chans.map((c, i) => {
       const out = new Float32Array(n);
       out.set(c);
-      for (const l of live) { const x = l.samples[Math.min(i, l.samples.length - 1)]; for (let j = 0; j < x.length; j++) out[l.at + j] += x[j]; }
+      for (const l of live) { const x = l.samples[Math.min(i, l.samples.length - 1)], g = l.gain ?? 1; for (let j = 0; j < x.length; j++) out[l.at + j] += x[j] * g; }
       for (let j = 0; j < n; j++) out[j] = Math.max(-1, Math.min(1, out[j]));
       return out;
     });
@@ -662,9 +662,18 @@
       const tools = document.createElement("span");
       tools.className = "layer-tools";
       const b = (txt, title, fn) => { const x = document.createElement("button"); x.textContent = txt; x.title = title; x.setAttribute("aria-label", title); x.onclick = fn; return x; };
+      // Its volume (0–150 %), as Audacity's track gain.
+      const vol = document.createElement("input");
+      vol.type = "range"; vol.min = "0"; vol.max = "150"; vol.value = String(Math.round((l.gain ?? 1) * 100));
+      vol.className = "layer-vol";
+      vol.title = `${TT("trackVol", "Volume")} ${vol.value}%`;
+      vol.setAttribute("aria-label", TT("trackVol", "Volume"));
+      vol.oninput = () => { l.gain = Number(vol.value) / 100; vol.title = `${TT("trackVol", "Volume")} ${vol.value}%`; };
+      vol.onpointerdown = (e) => e.stopPropagation();
       tools.append(
+        vol,
         b(l.muted ? "🔇" : "🔊", l.muted ? TT("unmute", "Unmute") : TT("mute", "Mute"), () => { l.muted = !l.muted; renderLayers(); }),
-        b("⤓", TT("mergeT", "Merge into the sound"), () => { putAt(l.samples, Math.min(l.at, length()), true); layers = layers.filter((x) => x !== l); after(); }),
+        b("⤓", TT("mergeT", "Merge into the sound"), () => { putAt(l.samples.map((c) => c.map((v) => v * (l.gain ?? 1))), Math.min(l.at, length()), true); layers = layers.filter((x) => x !== l); after(); }),
         b("✕", TT("removeT", "Remove the track"), () => { layers = layers.filter((x) => x !== l); after(); }),
       );
       row.append(bar, tools);
