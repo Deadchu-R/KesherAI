@@ -442,7 +442,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "model.fromPicture": {
           need("model");
           if (!input) throw new Error("This page was not opened from a chat.");
-          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/model3d`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: String(p.image ?? ""), download: p.download === true }) });
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/model3d`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: String(p.image ?? ""), download: p.download === true, colours: p.colours === true }) });
           const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string; needGb?: number; downloading?: boolean };
           if (res.ok || res.status === 202 || (res.status === 409 && (body.needGb || body.downloading))) return body;
           throw new Error(body.error ?? String(res.status));

@@ -76,3 +76,21 @@ test("sound effects (Stable Audio 3 Small-SFX): the distilled settings, and the 
   assert.deepEqual([out["6"]!.inputs.steps, out["6"]!.inputs.cfg, out["6"]!.inputs.sampler_name], [8, 1, "lcm"]);
   assert.equal(out["5"]!.class_type, "EmptyLatentAudio");
 });
+
+test("3D with colours (TRELLIS.2): ComfyUI's template graph, files in folders ComfyUI reads, names filled in", () => {
+  const f = readyFlows().find((x) => x.id === "3d-trellis2")!;
+  assert.ok(f);
+  assert.equal(f.flow["322"]!.class_type, "Save3DAdvanced");
+  assert.equal(f.flow["122"]!.class_type, "LoadImage");
+  assert.equal(f.flow["3"]!.class_type, "KSampler");
+  // No Pixal3D or MoGe: only TRELLIS.2's own branch is kept.
+  assert.ok(!Object.values(f.flow).some((n) => /Pixal3D|MoGe/.test(n.class_type)));
+  // Every link points at a node that is in the graph.
+  for (const n of Object.values(f.flow)) for (const v of Object.values(n.inputs)) if (Array.isArray(v) && typeof v[0] === "string") assert.ok(f.flow[v[0]], `missing node ${v[0]}`);
+  // comfy-manager's extra_model_paths: diffusion_models → video/, the others by their own name.
+  const base: Record<string, string> = { diffusion_models: "video/", vae: "vae/", clip_vision: "clip_vision/", background_removal: "background_removal/" };
+  for (const n of f.names!) assert.ok(f.files.some((x) => x.rel === `${base[n.folder]}${n.file}`), n.file);
+  const out = withCheckpoints(f, [], { diffusion_models: ["video\\trellis_2_int8_convrot.safetensors"], clip_vision: ["dino_v3_L_naf_fp32.safetensors"] });
+  assert.equal(out["40"]!.inputs.unet_name, "video\\trellis_2_int8_convrot.safetensors");
+  assert.equal(out["15"]!.inputs.clip_name, "dino_v3_L_naf_fp32.safetensors");
+});

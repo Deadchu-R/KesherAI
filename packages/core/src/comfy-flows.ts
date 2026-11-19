@@ -45,7 +45,7 @@ export interface ReadyFlow {
   /** Node ids whose `ckpt_name` is set to the file with this name. */
   checkpoints: Record<string, string>;
   /** Other loaders' inputs (a diffusion model, text encoders, a VAE): set to the name ComfyUI lists in that folder. */
-  names?: Array<{ node: string; input: string; folder: "diffusion_models" | "text_encoders" | "vae"; file: string }>;
+  names?: Array<{ node: string; input: string; folder: "diffusion_models" | "text_encoders" | "vae" | "clip_vision" | "background_removal"; file: string }>;
   flow: Record<string, ApiNode>;
 }
 
@@ -263,6 +263,83 @@ export function readyFlows(): ReadyFlow[] {
         "8": { class_type: "VAEDecodeHunyuan3D", inputs: { samples: ["7", 0], vae: ["1", 2], num_chunks: 8000, octree_resolution: 256 } },
         "9": { class_type: "VoxelToMeshBasic", inputs: { voxel: ["8", 0], threshold: 0.6 } },
         "10": { class_type: "SaveGLB", inputs: { mesh: ["9", 0], filename_prefix: "mesh/KesherAI" } },
+      },
+    },
+    {
+      // TRELLIS.2 (Microsoft, MIT), native in ComfyUI since 2026-08-22 (0.34+): a picture of one object becomes a model
+      // with its colours: a GLB with PBR textures (base colour, roughness, metallic, baked normal and occlusion maps).
+      // The graph is ComfyUI's own template 3d_pixal3d_trellis2_image_to_model with its switch set to TRELLIS.2 and
+      // only what the saved model needs; it passed a real ComfyUI 0.46's prompt validation (RESEARCH_LOG).
+      id: "3d-trellis2",
+      icon: "🎨",
+      title: { en: "3D model with colours from a picture (TRELLIS.2)", he: "מודל תלת-ממד עם צבעים מתמונה (TRELLIS.2)" },
+      description: {
+        en: "Load a picture of one object; TRELLIS.2 builds the shape and paints it: a GLB with its colours and materials (PBR), ready for Unity, Unreal or Blender. Needs ComfyUI 0.34 or newer and a graphics card; minutes.",
+        he: "טוענים תמונה של חפץ אחד, ו-TRELLIS.2 בונה את הצורה וצובע אותה: GLB עם הצבעים והחומרים (PBR), מוכן ל-Unity, Unreal או Blender. צריך ComfyUI 0.34 ומעלה וכרטיס גרפי; כמה דקות.",
+      },
+      license: { name: "MIT (TRELLIS.2)", url: "https://github.com/microsoft/TRELLIS.2/blob/main/LICENSE" },
+      // Sizes are approximate (shown before downloading; the real size is read from the Hub when it starts).
+      files: [
+        { label: "TRELLIS.2 (int8)", repo: "Comfy-Org/TRELLIS.2", path: "diffusion_models/trellis_2_int8_convrot.safetensors", rel: "video/trellis_2_int8_convrot.safetensors", gb: 4.5 },
+        { label: "TRELLIS.2 shape VAE", repo: "Comfy-Org/Pixal3D", path: "vae/trellis_2_shape_vae_bf16.safetensors", rel: "vae/trellis_2_shape_vae_bf16.safetensors", gb: 0.5 },
+        { label: "TRELLIS.2 texture VAE", repo: "Comfy-Org/Pixal3D", path: "vae/trellis_2_texture_vae_bf16.safetensors", rel: "vae/trellis_2_texture_vae_bf16.safetensors", gb: 0.5 },
+        { label: "DINOv3 (picture encoder)", repo: "Comfy-Org/Pixal3D", path: "clip_vision/dino_v3_L_naf_fp32.safetensors", rel: "clip_vision/dino_v3_L_naf_fp32.safetensors", gb: 1.3 },
+        { label: "BiRefNet (background removal)", repo: "Comfy-Org/BiRefNet", path: "background_removal/birefnet.safetensors", rel: "background_removal/birefnet.safetensors", gb: 0.9 },
+      ],
+      checkpoints: {},
+      names: [
+        { node: "40", input: "unet_name", folder: "diffusion_models", file: "trellis_2_int8_convrot.safetensors" },
+        { node: "117", input: "vae_name", folder: "vae", file: "trellis_2_shape_vae_bf16.safetensors" },
+        { node: "118", input: "vae_name", folder: "vae", file: "trellis_2_texture_vae_bf16.safetensors" },
+        { node: "15", input: "clip_name", folder: "clip_vision", file: "dino_v3_L_naf_fp32.safetensors" },
+        { node: "193", input: "bg_removal_name", folder: "background_removal", file: "birefnet.safetensors" },
+      ],
+      flow: {
+        "3": { class_type: "KSampler", inputs: {"model": ["108", 0], "seed": 56, "steps": 12, "cfg": 7.5, "sampler_name": "euler", "scheduler": "normal", "positive": ["299", 0], "negative": ["299", 1], "latent_image": ["87", 0], "denoise": 1} },
+        "12": { class_type: "KSampler", inputs: {"model": ["40", 0], "seed": 43, "steps": 12, "cfg": 1, "sampler_name": "euler", "scheduler": "normal", "positive": ["98", 0], "negative": ["98", 1], "latent_image": ["98", 2], "denoise": 1} },
+        "15": { class_type: "CLIPVisionLoader", inputs: {"clip_name": "dino_v3_L_naf_fp32.safetensors"} },
+        "18": { class_type: "KSampler", inputs: {"model": ["126", 0], "seed": 42, "steps": 20, "cfg": 7.5, "sampler_name": "euler", "scheduler": "normal", "positive": ["91", 0], "negative": ["91", 1], "latent_image": ["91", 2], "denoise": 1} },
+        "23": { class_type: "KSampler", inputs: {"model": ["126", 0], "seed": 42, "steps": 12, "cfg": 7.5, "sampler_name": "euler", "scheduler": "simple", "positive": ["94", 0], "negative": ["94", 1], "latent_image": ["94", 2], "denoise": 1} },
+        "40": { class_type: "UNETLoader", inputs: {"unet_name": "trellis_2_int8_convrot.safetensors", "weight_dtype": "default"} },
+        "87": { class_type: "EmptyTrellis2LatentStructure", inputs: {"batch_size": 1} },
+        "91": { class_type: "Trellis2ShapeStage", inputs: {"positive": ["299", 0], "negative": ["299", 1], "voxel": ["119", 0]} },
+        "92": { class_type: "VaeDecodeShapeTrellis", inputs: {"samples": ["23", 0], "vae": ["117", 0]} },
+        "93": { class_type: "VaeDecodeTextureTrellis", inputs: {"samples": ["12", 0], "vae": ["118", 0], "shape_subdivides": ["92", 1]} },
+        "94": { class_type: "Trellis2UpsampleStage", inputs: {"positive": ["91", 0], "negative": ["91", 1], "shape_latent": ["18", 0], "vae": ["117", 0], "target_resolution": 1536} },
+        "98": { class_type: "Trellis2TextureStage", inputs: {"positive": ["94", 0], "negative": ["94", 1], "shape_latent": ["23", 0]} },
+        "108": { class_type: "ModelSamplingSD3", inputs: {"model": ["125", 0], "shift": 5} },
+        "117": { class_type: "VAELoader", inputs: {"vae_name": "trellis_2_shape_vae_bf16.safetensors"} },
+        "118": { class_type: "VAELoader", inputs: {"vae_name": "trellis_2_texture_vae_bf16.safetensors"} },
+        "119": { class_type: "VaeDecodeStructureTrellis2", inputs: {"samples": ["3", 0], "vae": ["117", 0], "resolution": "32"} },
+        "122": { class_type: "LoadImage", inputs: {"image": "example.png"} },
+        "125": { class_type: "RescaleCFG", inputs: {"model": ["199", 0], "multiplier": 0.7} },
+        "126": { class_type: "RescaleCFG", inputs: {"model": ["279", 0], "multiplier": 0.5} },
+        "147": { class_type: "BakeTextureFromVoxel", inputs: {"mesh": ["196", 0], "voxel_colors": ["93", 0], "texture_size": ["288", 0], "reference_mesh": ["92", 0]} },
+        "164": { class_type: "PreviewImage", inputs: {"images": ["147", 0]} },
+        "186": { class_type: "DecimateMesh", inputs: {"mesh": ["241", 0], "target_face_count": 700000, "placement_mode": "midpoint"} },
+        "192": { class_type: "RemoveBackground", inputs: {"bg_removal_model": ["193", 0], "image": ["122", 0]} },
+        "193": { class_type: "LoadBackgroundRemovalModel", inputs: {"bg_removal_name": "birefnet.safetensors"} },
+        "196": { class_type: "UnwrapMesh", inputs: {"mesh": ["238", 0], "segmenter": "pec", "resolution": ["288", 0], "padding": 1, "weld_distance": 0.0002} },
+        "199": { class_type: "CFGOverride", inputs: {"model": ["40", 0], "cfg": 1, "start_percent": 0.667, "end_percent": 1} },
+        "202": { class_type: "GetMeshInfo", inputs: {"mesh": ["92", 0]} },
+        "207": { class_type: "PreviewImage", inputs: {"images": ["147", 1]} },
+        "208": { class_type: "PreviewImage", inputs: {"images": ["147", 2]} },
+        "210": { class_type: "ApplyTextureToMesh", inputs: {"mesh": ["196", 0], "base_color": ["164", 0], "metallic": ["207", 0], "roughness": ["208", 0], "occlusion": ["235", 0], "normal_map": ["226", 0]} },
+        "224": { class_type: "BakeNormalMapFromMesh", inputs: {"low_poly": ["196", 0], "high_poly": ["241", 0], "resolution": 2048, "cage_distance": 0.05, "ignore_backfaces": true} },
+        "226": { class_type: "PreviewImage", inputs: {"images": ["224", 0]} },
+        "233": { class_type: "BakeAmbientOcclusion", inputs: {"low_poly": ["196", 0], "high_poly": ["241", 0], "resolution": 1024, "samples": 64, "max_distance": 0.71, "strength": 1, "bias": 0.01} },
+        "235": { class_type: "PreviewImage", inputs: {"images": ["233", 0]} },
+        "238": { class_type: "MeshSmoothNormals", inputs: {"mesh": ["186", 0], "crease_angle": 180} },
+        "241": { class_type: "RemeshMesh", inputs: {"mesh": ["202", 0], "resolution": 768, "sign_mode": "solid", "sign_mode.fill": 20, "sign_mode.qef": false, "band": 1, "project_back": 0, "fix_poles": false, "smooth_iters": 20, "drop_small_components": 0.01, "precluster_max_verts": 20000000} },
+        "260": { class_type: "MeshSmoothNormals", inputs: {"mesh": ["210", 0], "crease_angle": 180} },
+        "279": { class_type: "CFGOverride", inputs: {"model": ["40", 0], "cfg": 1, "start_percent": 0.769, "end_percent": 1} },
+        "285": { class_type: "MeshToFile3D", inputs: {"mesh": ["260", 0]} },
+        "288": { class_type: "PrimitiveInt", inputs: {"value": 4096} },
+        "299": { class_type: "Trellis2Conditioning", inputs: {"clip_vision_model": ["15", 0], "image": ["302", 0]} },
+        "302": { class_type: "PreviewImage", inputs: {"images": ["312", 0]} },
+        "303": { class_type: "MaskPreview", inputs: {"mask": ["192", 0]} },
+        "312": { class_type: "ImageCropToMask", inputs: {"images": ["122", 0], "masks": ["303", 0], "width": 1024, "height": 1024, "pad_factor": 1.1, "grow_mask": 0, "background": "#000000"} },
+        "322": { class_type: "Save3DAdvanced", inputs: {"model_3d": ["285", 0], "filename_prefix": "3d/KesherAI", "viewport_state": "", "width": 1024, "height": 1024} },
       },
     },
     {

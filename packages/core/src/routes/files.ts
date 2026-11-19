@@ -153,24 +153,27 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
   // A picture of one object turned into a 3D model (the 3D editor's "A model from words"), saved under 3d/. As the
   // chat's make_3d: the model downloads only after a yes (`download`), one at a time, and ComfyUI is started if needed.
   let modelling = false;
-  app.post<{ Params: { id: string }; Body: { image?: string; download?: boolean } }>("/api/conversations/:id/files/model3d", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { image?: string; download?: boolean; colours?: boolean } }>("/api/conversations/:id/files/model3d", async (req, reply) => {
     const root = await folderOf(req.params.id);
     if (!root) return reply.code(404).send({ error: "Conversation not found" });
     const flows = s.conversations.flows;
     if (!flows) return reply.code(409).send({ error: "ComfyUI's ready flows are not set up here (the Nodes page)." });
-    const st = flows.state("3d-hunyuan3d");
+    // With colours (TRELLIS.2) or the shape only (Hunyuan3D 2).
+    const colours = req.body?.colours === true;
+    const flowId = colours ? "3d-trellis2" : "3d-hunyuan3d";
+    const st = flows.state(flowId);
     if (!st.allowed) return reply.code(403).send({ error: "ComfyUI is turned off by business mode." });
     if (!st.installed) return reply.code(409).send({ error: "ComfyUI is not installed yet (the Nodes page)." });
     if (!st.ready) {
       if (st.downloading) return reply.code(409).send({ error: "The 3D model is still downloading.", downloading: true });
       if (req.body?.download !== true) return reply.code(409).send({ error: "The 3D model needs a download first.", needGb: st.missingGb });
-      await flows.setup("3d-hunyuan3d");
+      await flows.setup(flowId);
       return reply.code(202).send({ downloading: true });
     }
     if (modelling) return reply.code(429).send({ error: "A 3D model is being made; try again when it is done." });
     modelling = true;
     try {
-      const made = await pictureTo3d(flows, root, String(req.body?.image ?? ""), AbortSignal.timeout(30 * 60_000));
+      const made = await pictureTo3d(flows, root, String(req.body?.image ?? ""), AbortSignal.timeout(30 * 60_000), colours);
       if ("error" in made) return reply.code(400).send(made);
       return made;
     } finally {

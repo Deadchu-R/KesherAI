@@ -449,27 +449,29 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
   };
   const model3d: AgentTool = {
     risk: "safe",
-    askFirst: askDownload("3d-hunyuan3d"),
+    askFirst: (input) => askDownload(input.colours === false ? "3d-hunyuan3d" : "3d-trellis2")(input),
     spec: {
       name: "make_3d",
-      description: "Turn a picture of one object (plain background) into a 3D model (GLB, shape only, no colors) with Hunyuan3D 2 in ComfyUI. The user gets the file. Slow (minutes).",
+      description: "Turn a picture of one object into a 3D model (GLB): with colours: true, painted with its colours and materials (TRELLIS.2, PBR textures; better, slower, needs ComfyUI 0.34+); otherwise the shape only (Hunyuan3D 2, faster). The user gets the file. Slow (minutes).",
       inputSchema: {
         type: "object",
         properties: {
           image: { type: "string", description: "The picture: the path the user attached it as (\"[Attached: …]\"), a file in this chat's folder." },
+          colours: { type: "boolean", description: "With its colours and materials (TRELLIS.2). Default true; false for the shape only." },
           download: { type: "boolean", description: "Only after the user agreed: download the model if it is missing." },
         },
         required: ["image"],
       },
     },
     run: async (input, ctx) => {
-      const blocked = gate("3d-hunyuan3d", input.download);
+      const colours = input.colours !== false;
+      const blocked = gate(colours ? "3d-trellis2" : "3d-hunyuan3d", input.download);
       if (blocked) return { output: blocked };
       if (!ctx.workspace) return { output: "There is no folder for this chat to read the picture from." };
-      const made = await pictureTo3d(flows, ctx.workspace, String(input.image ?? ""), ctx.signal);
+      const made = await pictureTo3d(flows, ctx.workspace, String(input.image ?? ""), ctx.signal, colours);
       if ("error" in made) return { output: made.error };
       const out = made.path;
-      return { output: `Made the 3D model ${out} (GLB, shape only); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
+      return { output: `Made the 3D model ${out} (GLB, ${colours ? "with its colours and materials" : "shape only"}); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
     },
   };
   return [music, sound, animate, model3d];
@@ -483,9 +485,10 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
  * @param workspace - The chat's folder.
  * @param image - The picture's path in it (an "[Attached: …]" is taken off).
  * @param signal - To stop it.
+ * @param colours - With its colours and materials (TRELLIS.2, PBR textures) instead of the shape only (Hunyuan3D 2).
  * @returns The model's path in the folder, or what went wrong.
  */
-export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, image: string, signal: AbortSignal): Promise<{ path: string } | { error: string }> {
+export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, image: string, signal: AbortSignal, colours = false): Promise<{ path: string } | { error: string }> {
   const rel = image.replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
   const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
   const { readFile, writeFile, mkdir } = await import("node:fs/promises");
@@ -493,9 +496,16 @@ export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>,
   if (relative(workspace, file).startsWith("..")) return { error: "The picture must be one attached to this chat." };
   const data = await readFile(file).catch(() => undefined);
   if (!data) return { error: `No picture at ${rel}. Ask the user to attach it.` };
-  const files = await flows.run("3d-hunyuan3d", async (flow, upload) => {
-    flow["2"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
-    flow["7"]!.inputs.seed = randomInt(2 ** 31);
+  const files = await flows.run(colours ? "3d-trellis2" : "3d-hunyuan3d", async (flow, upload) => {
+    const name = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
+    if (colours) {
+      // TRELLIS.2's graph (comfy-flows.ts "3d-trellis2"): the picture, and a new seed for its structure.
+      flow["122"]!.inputs.image = name;
+      flow["3"]!.inputs.seed = randomInt(2 ** 31);
+    } else {
+      flow["2"]!.inputs.image = name;
+      flow["7"]!.inputs.seed = randomInt(2 ** 31);
+    }
   }, signal);
   const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
   if (!glb) return { error: "ComfyUI finished but saved no 3D model." };
