@@ -2840,3 +2840,16 @@ Each AI tool shows which local model it uses and offers to download it the first
   view), keeps the picture in the chat's files, and the new /files/model3d turns it into a GLB (pictureTo3d, shared with
   make_3d) that lands in the view; the download is asked first with its size.
 - Stopped at: built and tested in the page; not run in ComfyUI on the PC. Open: colours (Hunyuan3D 2's paint model).
+
+## 3D models with colours (2026-11-19)
+- The options locally: Hunyuan3D 2 / 2.1 paint (textures; needs custom nodes with a compiled rasterizer on Windows,
+  hard to install), and **TRELLIS.2** (Microsoft; MIT code and weights) with **Pixal3D**, native in ComfyUI since
+  2026-08-22 (PR #14718, ComfyUI 0.34+): picture → shape → texture stage → a GLB with full PBR (base colour, roughness,
+  metallic, plus baked normal and ambient occlusion maps), no custom nodes, nvdiffrast removed.
+- ComfyUI's template 3d_pixal3d_trellis2_image_to_model: LoadImage → RemoveBackground (BiRefNet) → ImageCropToMask →
+  Trellis2Conditioning (DINOv3) → EmptyTrellis2LatentStructure → KSampler → VaeDecodeStructureTrellis2 →
+  Trellis2ShapeStage → KSampler → VaeDecodeShapeTrellis → Trellis2UpsampleStage → … → Trellis2TextureStage → KSampler →
+  VaeDecodeTextureTrellis → BakeTextureFromVoxel / ApplyTextureToMesh → Save3DAdvanced. Files from Comfy-Org/TRELLIS.2,
+  Comfy-Org/Pixal3D, Comfy-Org/BiRefNet, Comfy-Org/MoGe (sizes to check).
+- Decision: TRELLIS.2 (colours, MIT, native) for "a model with colours"; Hunyuan3D 2 stays for shape only.
+- Stopped at: research done; next, the flow in API form, checked against a real ComfyUI's validation in the workspace.
