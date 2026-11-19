@@ -31,6 +31,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 3D models with colours: TRELLIS.2 (MIT, native in ComfyUI 0.34+): the 3D editor's "A model from words, with
   colours" and "A model from a picture, with colours", and the chat's make_3d paints by default. The flow passed a real
   ComfyUI 0.46's validation in the workspace; not run with the real model (that needs the PC and a ~7.7 GB download).
+- 🔨 Paint an existing model in the 3D editor (Roee: yes, 10:59): research what can texture a given mesh locally, then the code.
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
