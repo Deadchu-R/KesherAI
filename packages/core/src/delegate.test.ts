@@ -72,9 +72,9 @@ test("delegate runs the parts at the same time, each with its model, and reports
     },
     { signal: new AbortController().signal, recordChange: () => undefined },
   );
-  assert.match(r.output, /Part 1 — small\nsmall found it/);
-  assert.match(r.output, /Part 2 — big\nbig found it/);
-  assert.match(r.output, /Part 3 — big \(asked for nope, not available\)/);
+  assert.match(r.output, /Part 1 — research — small \(id h-\w+\)\nsmall found it/);
+  assert.match(r.output, /Part 2 — research — big \(id h-\w+\)\nbig found it/);
+  assert.match(r.output, /Part 3 — research — big \(asked for nope, not available\)/);
   assert.ok(most >= 2, "parts ran at the same time");
   assert.ok(
     seen.every((s) => !s.includes("write_file")),
@@ -116,5 +116,116 @@ test("a worker agent edits in its own copy and its changes come back as a diff",
   const r = await d.run({ parts: [{ task: "fix a.ts", agent: "Fixer" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
   assert.deepEqual(wrote, ["/copy"], "it wrote in its copy, without asking");
   assert.ok(finished);
-  assert.match(r.output, /worker[\s\S]*```diff\n\+x/);
+  assert.match(r.output, /agent Fixer[\s\S]*Its changes[\s\S]*```diff\n\+x/);
+});
+
+test("background part: delegate answers at once, helper_wait brings the report; the session gets reports it was not given", async () => {
+  const { HelperRuns } = await import("./helper-runs.js");
+  const { helperToolsFor } = await import("./delegate.js");
+  const runs = new HelperRuns({ limit: () => 2 });
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const turn: ModelTurn = async () => {
+    await gate;
+    return { text: "it is in src/x.ts", toolCalls: [] };
+  };
+  const [d, result, wait] = helperToolsFor({ tools: () => [tool("read_file", "read")], currentModel: () => "m", turnFor: () => turn, models: () => [], runs, chatId: "c" });
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined, callId: "call-1" };
+  const r = await d!.run({ parts: [{ task: "find x", type: "lookup", background: true }] }, ctx);
+  const id = /id (h-\w+)/.exec(r.output)?.[1];
+  assert.ok(id);
+  assert.match(r.output, /Started in the background/);
+  assert.equal(runs.get(id!)!.callId, "call-1", "the card belongs to the delegate call");
+  assert.match((await result!.run({ id }, ctx)).output, /Still running/);
+  release();
+  assert.match((await wait!.run({ ids: [id] }, ctx)).output, /lookup — m \(id h-\w+\)\nit is in src\/x\.ts/);
+  assert.equal(runs.pending(id!), false);
+});
+
+test("stop: the chat's Stop stops the parts delegate waits for, and helper_stop stops one", async () => {
+  const { HelperRuns } = await import("./helper-runs.js");
+  const { helperToolsFor } = await import("./delegate.js");
+  const runs = new HelperRuns({ limit: () => 2 });
+  const turn: ModelTurn = (_req, signal) => new Promise((_, no) => signal.addEventListener("abort", () => no(new Error("aborted"))));
+  const [d, , , stop] = helperToolsFor({ tools: () => [], currentModel: () => "m", turnFor: () => turn, models: () => [], runs, chatId: "c" });
+  const ac = new AbortController();
+  const p = d!.run({ parts: [{ task: "a" }, { task: "b", background: true }] }, { signal: ac.signal, recordChange: () => undefined });
+  await new Promise((r) => setTimeout(r, 10));
+  const bg = runs.list("c").find((x) => x.background)!;
+  assert.match((await stop!.run({ id: bg.id }, { signal: ac.signal, recordChange: () => undefined })).output, /Stopped/);
+  ac.abort();
+  const out = await p;
+  assert.match(out.output, /Stopped by the user/);
+  assert.deepEqual(runs.list("c").map((x) => x.state), ["stopped", "stopped"]);
+});
+
+test("the model per part: modelFor's swap is prepared before the first step and released after", async () => {
+  const order: string[] = [];
+  const turn: ModelTurn = async () => {
+    order.push("turn");
+    return { text: "built", toolCalls: [] };
+  };
+  const d = delegateTool({
+    tools: () => [],
+    currentModel: () => "lead",
+    turnFor: (m) => {
+      order.push(`model ${m}`);
+      return turn;
+    },
+    models: () => [],
+    worktree: () => ({ make: async () => ({ path: "/copy", finish: async () => "+y" }) }),
+    modelFor: ({ kind }) => ({
+      modelId: "pending",
+      label: "Coder",
+      local: true,
+      prepare: async (ctl) => {
+        assert.equal(kind, "build");
+        ctl.update({ swap: { from: "lead", to: "Coder", phase: "running" } });
+        order.push("swap in");
+        return "llamacpp/Coder";
+      },
+      release: async () => void order.push("swap back"),
+    }),
+  });
+  const r = await d.run({ parts: [{ task: "fix it", type: "build" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.deepEqual(order, ["swap in", "model llamacpp/Coder", "turn", "swap back"]);
+  assert.match(r.output, /build — Coder[\s\S]*```diff\n\+y/);
+});
+
+test("a build part outside a git project is not run", async () => {
+  const d = delegateTool({ tools: () => [], currentModel: () => "m", turnFor: () => async () => ({ text: "", toolCalls: [] }), models: () => [] });
+  const r = await d.run({ parts: [{ task: "change it", type: "build" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.match(r.output, /git project/);
+});
+
+test("a cloud helper asks once before reading the project; no means the web only", async () => {
+  const { HelperRuns } = await import("./helper-runs.js");
+  const runs = new HelperRuns({ limit: () => 2 });
+  let answer: boolean | undefined;
+  const seen: string[][] = [];
+  const turn: ModelTurn = async (req) => {
+    seen.push(req.tools.map((t) => t.name));
+    return { text: "ok", toolCalls: [] };
+  };
+  const d = delegateTool({
+    tools: () => [tool("read_file", "read"), tool("web_search", "read")],
+    currentModel: () => "m",
+    turnFor: () => turn,
+    models: () => [],
+    workspace: () => "/proj",
+    runs,
+    chatId: "c",
+    modelFor: () => ({ modelId: "cloud/x", label: "X", local: false, cloud: true }),
+    cloudFiles: { get: () => answer, set: (y) => void (answer = y) },
+  });
+  const p = d.run({ parts: [{ task: "what is new" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  await new Promise((r) => setTimeout(r, 10));
+  const asking = runs.list("c")[0]!;
+  assert.equal(asking.state, "asking");
+  runs.answer(asking.id, false);
+  await p;
+  assert.equal(answer, false, "kept for the project");
+  assert.deepEqual(seen[0]!.filter((t) => t !== "ask_user" && t !== "request_access"), ["web_search"]);
+  await d.run({ parts: [{ task: "again" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.equal(runs.list("c")[1]!.state, "done", "not asked twice");
 });

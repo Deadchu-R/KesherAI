@@ -4,10 +4,20 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Why the chat model was loaded (the server's LoadReason in llamacpp.ts). */
 export interface LoadReason {
-  kind: "chosen" | "chat" | "request" | "startup" | "settings" | "update" | "calibration" | "setup" | "benchmark";
+  kind: "chosen" | "chat" | "request" | "startup" | "settings" | "update" | "calibration" | "setup" | "benchmark" | "helper";
   chats?: string[];
+  /** "helper": its task in a few words. */
+  helper?: string;
+  /** "helper": its job type. */
+  helperKind?: "lookup" | "research" | "build" | "external";
+  /** "helper": the chat's model back after the helper. */
+  back?: boolean;
   at?: number;
 }
+
+/** The sub-agent types' names (Hebrew comes after the word "סוכן"; Roee, 2026-11-19: agents, not helpers). */
+const HELPER_KIND_HE: Record<string, string> = { lookup: "חיפוש", research: "מחקר", build: "בנייה", external: "חיצוני" };
+const HELPER_KIND_EN: Record<string, string> = { lookup: "lookup", research: "research", build: "build", external: "outside" };
 
 /**
  * Says why the loaded model was loaded and how long ago, in the interface's language: shown beside it (the Models page,
@@ -29,6 +39,9 @@ export function loadReasonText(r: LoadReason | undefined, now = Date.now()): str
     calibration: L("חזר אחרי כיול", "back after calibration"),
     setup: L("ההגדרה הראשונה", "first-run setup"),
     benchmark: L("בדיקת מהירות", "a speed test"),
+    helper: r.back
+      ? L(`חזרה אחרי סוכן משנה${r.helper ? ` ("${r.helper}")` : ""}`, `back after a sub-agent${r.helper ? ` ("${r.helper}")` : ""}`)
+      : L([r.helperKind ? "סוכן" : "סוכן משנה", r.helperKind && HELPER_KIND_HE[r.helperKind], r.helper && `"${r.helper}"`, "צריך אותו"].filter(Boolean).join(" "), ["a", r.helperKind ? `${HELPER_KIND_EN[r.helperKind]} agent` : "sub-agent", r.helper && `"${r.helper}"`, "needed it"].filter(Boolean).join(" ")),
   };
   const mins = r.at ? Math.max(0, Math.round((now - r.at) / 60_000)) : undefined;
   const ago = mins === undefined ? "" : mins < 1 ? L(" · עכשיו", " · just now") : mins < 60 ? L(` · לפני ${mins} דק׳`, ` · ${mins} min ago`) : L(` · לפני ${Math.round(mins / 60)} שע׳`, ` · ${Math.round(mins / 60)} h ago`);

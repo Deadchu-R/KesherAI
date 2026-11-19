@@ -41,6 +41,7 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
+import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
 import { ShareDialog } from "../chat/ShareDialog";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
@@ -59,6 +60,10 @@ export function ConversationPage({ id }: { id: string }) {
   const [editingSeq, setEditingSeq] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  // Sub-agents: their runs come with the chat's events (`helpers`), so the phone in remote sees the same.
+  const helpers = useHelperRuns(id);
+  const setHelperRuns = helpers.set;
+  const [helperSheet, setHelperSheet] = useState<string | null>(null);
   // A long chat opens with its latest part drawn; earlier parts on request (a long chat stays quick).
   const [shownBlocks, setShownBlocks] = useState(150);
   useEffect(() => {
@@ -189,6 +194,10 @@ export function ConversationPage({ id }: { id: string }) {
             const { type: _t, ...rest } = e;
             setInfo(rest);
             if (rest.status === "idle") void refreshLibrary().catch(() => undefined);
+            return;
+          }
+          if (e.type === "helpers") {
+            setHelperRuns(e.runs);
             return;
           }
           if (e.type === "tool_output") {
@@ -534,6 +543,14 @@ export function ConversationPage({ id }: { id: string }) {
     { command: "side", title: L("שאלה בצד, שלא נכנסת לצ'אט", "A question on the side that stays out of the chat"), arg: true },
   ];
   const send = async () => {
+    // "@antigravity …": the outside agent as a sub-agent, started by the user only (never by the lead agent).
+    const outside = /^\s*@(antigravity|agy)\s+([\s\S]+)$/i.exec(input);
+    if (outside && conv.kind === "code") {
+      setInput("");
+      setError("");
+      await api(`/api/conversations/${id}/helpers`, { method: "POST", body: { kind: "external", task: outside[2]!.trim() } }).catch((e: Error) => setError(e.message));
+      return;
+    }
     // "/compact", "/fork", "/new" and "/model …": run here; nothing is sent to the model.
     const cmd = /^\/(compact|fork|new|model)(?:\s+([\s\S]*))?$/i.exec(input.trim());
     if (cmd) {
@@ -817,6 +834,8 @@ export function ConversationPage({ id }: { id: string }) {
                   convId={id}
                   renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
                   liveOutput={liveOut}
+                  // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
+                  after={b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />)}
                 />
               );
             }
@@ -1006,6 +1025,9 @@ export function ConversationPage({ id }: { id: string }) {
               <button type="button" onClick={() => resume(true)}>{L("לא צריך", "Dismiss")}</button>
             </div>
           )}
+          {/* Sub-agents the user started (the outside agent): no delegate call to sit under, so they come last. */}
+          {helpers.runs.some((r) => !r.callId) && <div className="hcards">{helpers.runs.filter((r) => !r.callId).map((r) => <HelperCard key={r.id} run={r} convId={id} />)}</div>}
+          <HelperSwapNotice runs={helpers.runs} convId={id} />
           {error && <p className="error">{error}</p>}
           <div ref={bottom} style={{ scrollMarginBottom: "240px" }} />
           {farUp && (
@@ -1028,15 +1050,26 @@ export function ConversationPage({ id }: { id: string }) {
             void attachments.attach(paths);
           }}
         >
+          <HelpersStrip
+            runs={helpers.runs}
+            convId={id}
+            onOpen={(r) => {
+              // A computer shows the card in the thread; the phone (or a run with no card) opens it as a sheet.
+              const card = document.getElementById(`helper-${r.id}`);
+              if (card && !matchMedia("(max-width: 760px)").matches) card.scrollIntoView({ block: "center", behavior: "smooth" });
+              else setHelperSheet(r.id);
+            }}
+          />
+          {helperSheet && helpers.runs.find((r) => r.id === helperSheet) && <HelperSheet run={helpers.runs.find((r) => r.id === helperSheet)!} convId={id} onClose={() => setHelperSheet(null)} />}
           <div className="box">
             <PromptTextarea
               rows={2}
               value={input}
-              placeholder={conv.kind === "code" ? t("codePlaceholder") : t("messagePlaceholder")}
+              placeholder={`${conv.kind === "code" ? t("codePlaceholder") : t("messagePlaceholder")}${helpers.agents.length ? L(" (@ לסוכן מסוים)", " (@ for a specific agent)") : ""}`}
               aria-label={t("messagePlaceholder")}
               onValue={setInput}
               commands={slashCommands}
-              at={{ models: modelOptions.filter((m) => !m.id.startsWith("agent/")).map((m) => ({ id: m.id, name: shortModelName(m.name || m.id) })), onModel: (mid) => void patch({ modelId: mid }) }}
+              at={{ models: modelOptions.filter((m) => !m.id.startsWith("agent/")).map((m) => ({ id: m.id, name: shortModelName(m.name || m.id) })), onModel: (mid) => void patch({ modelId: mid }), agents: helpers.agents.map((a) => ({ name: a.name, ...(a.description ? { hint: a.description } : a.external ? { hint: L("Antigravity CLI בעותק נפרד, רק כשאתה מפעיל", "Antigravity CLI in its own copy, only when you start it") } : {}) })) }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();

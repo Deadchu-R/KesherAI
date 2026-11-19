@@ -45,6 +45,8 @@ export interface ToolContext {
   recordChange(absolutePath: string, before: string | null): void;
   /** Shows live output of a long tool while it runs (builds, commands). Optional. */
   progress?(text: string): void;
+  /** The model's id for this call (a helper's card in the thread belongs to its `delegate` call). */
+  callId?: string;
   /** Environment variables for commands (the project's environment). */
   env?: Record<string, string>;
   /** The chat's web search settings (sites, depth). */

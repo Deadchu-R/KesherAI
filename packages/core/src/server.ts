@@ -31,7 +31,9 @@ import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
 import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
-import { ensureEngine } from "./routes/engine.js";
+import { ensureEngine, loadModel } from "./routes/engine.js";
+import { SideEngine, sideEngineOf } from "./side-engine.js";
+import type { HelperEngine } from "./chat-helpers.js";
 import { StudyModelSwitch } from "./study-model.js";
 import { GodotBridge } from "./godot-bridge.js";
 import { VoiceCloner } from "./voice-clone.js";
@@ -448,6 +450,29 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const sharedDir = join(worker ? worker.mainRoot : paths.root, "self-work");
   const taskBoard = new TaskBoard(join(sharedDir, "board.json"));
   const projectFacts = new ProjectFacts(join(paths.root, "project-facts.json"));
+  // Helpers in the chat (chat-helpers.ts) on this computer's engine: a small model beside the main one, or a build's
+  // one swap and back. A self-work worker shares the main app's engine, so it never loads or swaps there.
+  const besideEngine = () => sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry }));
+  const helperEngine: HelperEngine | undefined = worker
+    ? undefined
+    : {
+        loaded: () => {
+          const st = engine.status();
+          return { running: st.running, ...(st.modelPath ? { path: st.modelPath } : {}) };
+        },
+        vramGiB: async () => {
+          const { detectHardwareCached } = await import("@kesher/downloads");
+          const hw = await detectHardwareCached();
+          return Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
+        },
+        localModels: async () => (await localGgufs()).map((m) => ({ path: m.path, name: m.name, sizeGiB: m.size / 1024 ** 3 })),
+        loadMain: (path, why) => loadModel(services, path, undefined, why),
+        loadBeside: (path) => besideEngine().load(path),
+        beside: () => {
+          const st = besideEngine().status();
+          return { ...(st.running && st.modelPath ? { path: st.modelPath } : {}), ...(st.running && st.modelId ? { modelId: st.modelId } : {}) };
+        },
+      };
   const services: KesherServices = {
     localModels: localGgufs,
     browser,
@@ -460,7 +485,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot }),
+    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, ...(helperEngine ? { helperEngine } : {}) }),
     coach,
     memory,
     computer,

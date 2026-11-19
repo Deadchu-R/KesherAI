@@ -100,7 +100,7 @@ export function groupSummary(steps: Step[]): string {
  * @param props.live - Whether the agent is still working on this group.
  * @param props.renderStep - Draws one step when the group is open.
  */
-export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string> }) {
+export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[] }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   const images = steps.flatMap((s) => (SCREEN.test(s.call.name) ? [] : s.result?.assetIds ?? []));
@@ -168,6 +168,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput }: {
       )}
       {current && !current.result && liveOutput?.[current.call.callId] && <LiveOutput text={liveOutput[current.call.callId]!} />}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
+      {after && after.length > 0 && <div className="hcards">{after}</div>}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {sounds.length > 0 && (
         <div className="activity-audio">

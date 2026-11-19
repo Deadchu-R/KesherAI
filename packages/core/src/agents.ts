@@ -1,12 +1,21 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { HelperKind } from "@kesher/shared";
 
 /**
  * Agents: named helpers the chat's model hands work to by their description (like Claude Code's subagents and
  * Codex's custom agents). They come from personas that say when to use them, and from a project's agent files:
  * `.kesher/agents/*.md`, and `.claude/agents/*.md` in Claude Code's format, so agents a project already has work.
  * An agent runs as a `delegate` helper: own context, read-only tools, its own instructions and model.
+ *
+ * Three helpers are built in (docs/RESEARCH_LOG.md, "Helper agents in the chat"): `lookup` (reads, a small model, 8
+ * steps), `research` (reads and the web, the chat's model, 20 steps) and `build` (edits in its own copy of the
+ * project, a strong model, 30 steps). Agent files may add `background`, `maxTurns` and `model: small|strong|inherit|auto`
+ * (tiers, so one file works on any computer).
  */
+
+/** A model by tier instead of an id: chosen on each computer by `pickHelperModel` (helper-model.ts). */
+export type ModelTier = "auto" | "inherit" | "small" | "strong";
 
 /** One agent the chat's model may use. */
 export interface AgentDef {
@@ -20,10 +29,41 @@ export interface AgentDef {
   /** The tools it may use (KesherAI names); absent = all read-only tools. */
   tools?: string[];
   /** Where it was defined. */
-  source: "persona" | "project";
+  source: "persona" | "project" | "builtin";
   /** A worker: it may change files, in its own copy of the project (a git worktree); its changes come back as a diff. */
   write?: boolean;
+  /** Its job type (built-in helpers; others are `lookup`, or `build` when they write). */
+  kind?: HelperKind;
+  /** A model by tier, when the file names one instead of an id. */
+  tier?: ModelTier;
+  /** Runs in the background: the chat goes on, the report comes when it ends. */
+  background?: boolean;
+  /** Its step cap (the last step only writes the report). */
+  maxTurns?: number;
+  /** Its time cap, in minutes. */
+  maxMinutes?: number;
+  /** The file it came from (project agents), relative to the project. */
+  file?: string;
 }
+
+/** Steps per built-in type (the research plan, step 1). */
+export const HELPER_STEPS: Record<Exclude<HelperKind, "external">, number> = { lookup: 8, research: 20, build: 30 };
+
+/**
+ * The built-in helpers. Their models come from Settings > Helpers (`pickHelperModel`), not from here.
+ *
+ * @param steps - Steps per type as set in Settings (default `HELPER_STEPS`).
+ */
+export function builtinHelpers(steps: Partial<Record<Exclude<HelperKind, "external">, number>> = {}): AgentDef[] {
+  return [
+    { name: "lookup", kind: "lookup", source: "builtin", tier: "auto", maxTurns: steps.lookup ?? HELPER_STEPS.lookup, description: "Find where something is in the project, read files and quote them, list matches. Read only. Fast and small.", instructions: "You look things up. Search and read only what the task needs, then report exact paths, line numbers, names and short quotes." },
+    { name: "research", kind: "research", source: "builtin", tier: "auto", maxTurns: steps.research ?? HELPER_STEPS.research, description: "Read code and the web on one question and summarise it with sources. Read only.", instructions: "You research one question. Read the code and the web as needed. Report what you found with its sources (paths or links), what it means for the task, and what stays unclear." },
+    { name: "build", kind: "build", source: "builtin", tier: "auto", write: true, maxTurns: steps.build ?? HELPER_STEPS.build, description: "Make one change in its own copy of the project (a git worktree); the change comes back as a diff to review. Only in a code chat on a git project.", instructions: "You build one change. Read what you need, make the change with write_file and edit_file, keep it small and in the style of the code around it, then report what you changed and why." },
+  ];
+}
+
+/** Claude Code's model names as tiers (`sonnet` and `inherit` mean the chat's model). */
+const CLAUDE_TIERS: Record<string, ModelTier> = { haiku: "small", opus: "strong", small: "small", strong: "strong", auto: "auto", inherit: "inherit", sonnet: "inherit" };
 
 /** Claude Code's tool names, as KesherAI's. */
 const CLAUDE_TOOLS: Record<string, string[]> = {
@@ -64,11 +104,54 @@ export function parseAgentFile(text: string, fallbackName: string): AgentDef | u
   const instructions = m[2]!.trim().slice(0, 20_000);
   if (!name || !description || !instructions) return undefined;
   const model = fields.model && fields.model.includes("/") ? fields.model : undefined;
+  const tier = !model && fields.model ? CLAUDE_TIERS[fields.model.toLowerCase()] : undefined;
+  const turns = Number(fields.maxturns ?? fields.steps);
+  const minutes = Number(fields.maxminutes);
   const raw = fields.tools ? list(fields.tools) : [];
   const tools = fields.tools ? [...new Set(raw.flatMap((t) => CLAUDE_TOOLS[t.toLowerCase()] ?? [t]))] : undefined;
   // Claude Code's Edit / Write (or KesherAI's edit_file / write_file) make a worker.
   const write = raw.some((t) => /^(edit|write|multiedit|edit_file|write_file)$/i.test(t));
-  return { name, description, instructions, ...(model ? { model } : {}), ...(tools?.length ? { tools } : {}), ...(write ? { write: true } : {}), source: "project" };
+  return {
+    name,
+    description,
+    instructions,
+    ...(model ? { model } : {}),
+    ...(tier && tier !== "inherit" ? { tier } : {}),
+    ...(tools?.length ? { tools } : {}),
+    ...(write ? { write: true } : {}),
+    ...(/^true$/i.test(fields.background ?? "") ? { background: true } : {}),
+    ...(Number.isFinite(turns) && turns > 0 ? { maxTurns: Math.min(60, Math.round(turns)) } : {}),
+    ...(Number.isFinite(minutes) && minutes > 0 ? { maxMinutes: Math.min(60, Math.round(minutes)) } : {}),
+    source: "project",
+  };
+}
+
+/** KesherAI's tool names back as Claude Code's, so a file saved here works in Claude Code too. */
+const TO_CLAUDE: Record<string, string> = { read_file: "Read", search: "Grep", list_files: "Glob", web_search: "WebSearch", web_fetch: "WebFetch", edit_file: "Edit", write_file: "Write" };
+
+/**
+ * Writes an agent as a file (Settings > Helpers > New helper): the same frontmatter Claude Code reads, plus
+ * KesherAI's own fields, so one file works in both.
+ *
+ * @param a - The agent (name, description, instructions; optional tools, model or tier, background, steps, minutes).
+ * @returns The file's text.
+ */
+export function agentFileText(a: Pick<AgentDef, "name" | "description" | "instructions" | "tools" | "model" | "tier" | "background" | "maxTurns" | "maxMinutes">): string {
+  const one = (v: string) => v.replace(/[\r\n]+/g, " ").trim();
+  const tools = a.tools?.length ? [...new Set(a.tools.map((t) => TO_CLAUDE[t] ?? t))] : undefined;
+  return [
+    "---",
+    `name: ${one(a.name)}`,
+    `description: ${one(a.description)}`,
+    ...(tools ? [`tools: ${tools.join(", ")}`] : []),
+    `model: ${a.model ?? a.tier ?? "auto"}`,
+    ...(a.background ? ["background: true"] : []),
+    ...(a.maxTurns ? [`maxTurns: ${a.maxTurns}`] : []),
+    ...(a.maxMinutes ? [`maxMinutes: ${a.maxMinutes}`] : []),
+    "---",
+    a.instructions.trim(),
+    "",
+  ].join("\n");
 }
 
 const cache = new Map<string, { at: number; agents: AgentDef[] }>();
@@ -78,11 +161,12 @@ const cache = new Map<string, { at: number; agents: AgentDef[] }>();
  * 30 seconds. At most 20 files of 64 KB each.
  *
  * @param workspace - The project's folder.
+ * @param fresh - Read the files again now (after Settings saved one).
  */
-export function projectAgents(workspace: string | undefined): AgentDef[] {
+export function projectAgents(workspace: string | undefined, fresh = false): AgentDef[] {
   if (!workspace) return [];
   const hit = cache.get(workspace);
-  if (hit && Date.now() - hit.at < 30_000) return hit.agents;
+  if (hit && !fresh && Date.now() - hit.at < 30_000) return hit.agents;
   const out: AgentDef[] = [];
   for (const dir of [join(workspace, ".kesher", "agents"), join(workspace, ".claude", "agents")]) {
     let names: string[] = [];
@@ -97,7 +181,7 @@ export function projectAgents(workspace: string | undefined): AgentDef[] {
         const f = join(dir, n);
         if (statSync(f).size > 64 * 1024) continue;
         const a = parseAgentFile(readFileSync(f, "utf8"), n.replace(/\.md$/, ""));
-        if (a && !out.some((x) => x.name.toLowerCase() === a.name.toLowerCase())) out.push(a);
+        if (a && !out.some((x) => x.name.toLowerCase() === a.name.toLowerCase())) out.push({ ...a, file: `${dir === join(workspace, ".kesher", "agents") ? ".kesher" : ".claude"}/agents/${n}` });
       } catch {
         /* unreadable: skipped */
       }

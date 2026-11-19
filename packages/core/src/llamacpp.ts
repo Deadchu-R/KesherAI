@@ -267,12 +267,18 @@ export function waitForDownload(dm: DownloadManager, id: string): Promise<Downlo
 }
 
 /** Why the chat model was loaded (shown on screen, so a load nobody expected has a name; Roee, 2026-11-18). */
-export type LoadKind = "chosen" | "chat" | "request" | "startup" | "settings" | "update" | "calibration" | "setup" | "benchmark";
+export type LoadKind = "chosen" | "chat" | "request" | "startup" | "settings" | "update" | "calibration" | "setup" | "benchmark" | "helper";
 /** Why it was loaded, and when. */
 export interface LoadReason {
   kind: LoadKind;
   /** The chats that needed it ("chat"). */
   chats?: string[];
+  /** "helper": the helper's task in a few words, e.g. "fix remote-auth.test.ts". */
+  helper?: string;
+  /** "helper": its job type. */
+  helperKind?: "lookup" | "research" | "build" | "external";
+  /** "helper": the chat's model coming back after the helper ended. */
+  back?: boolean;
   /** When it was loaded (ms since 1970). */
   at?: number;
 }

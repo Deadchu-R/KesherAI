@@ -32,6 +32,7 @@ import { existsSync } from "node:fs";
 import { readFile as readFileFs } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssetStore } from "../assets.js";
+import type { HelperEngine } from "../chat-helpers.js";
 import type { BrowserBridge } from "../browser-bridge.js";
 import type { CanvasStore } from "../canvas.js";
 import type { ChatTimers } from "../chat-timers.js";
@@ -102,6 +103,8 @@ export interface ConversationParts {
   worker: { mainUrl: string; mainRoot: string; version: string } | undefined;
   /** The main app's context share, as the worker last read it. */
   mainSlot: () => number | undefined;
+  /** The engine as helpers need it (absent in a self-work worker). */
+  helperEngine?: HelperEngine;
   /** Saves the settings. */
   persist: () => Promise<void>;
 }
@@ -111,7 +114,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist } = p;
+  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine } = p;
   return new ConversationManager({
     board: taskBoard,
     registry,
@@ -128,6 +131,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
     engineSlotTokens: () => (worker ? mainSlot() : engine.slotContext()),
     saveConfig: () => persist(),
+    ...(helperEngine ? { helperEngine } : {}),
     browserPane: () => browser.status().pane,
     // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
     ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),

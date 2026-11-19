@@ -124,6 +124,20 @@ export const KesherConfigSchema = z.object({
       }),
     )
     .default([]),
+  /**
+   * Helpers in the chat (Settings > Helpers; docs/RESEARCH_LOG.md, "Helper agents in the chat"): the model per type
+   * (`auto`, `inherit`, `small`, `strong` or a model id), steps per type, how many at once (absent = by the card),
+   * the time cap, and per project folder whether a cloud helper may read its files (asked once).
+   */
+  helpers: z
+    .object({
+      models: z.object({ lookup: z.string().default("auto"), research: z.string().default("auto"), build: z.string().default("auto") }).prefault({}),
+      steps: z.object({ lookup: z.number().int().min(2).max(60).default(8), research: z.number().int().min(2).max(60).default(20), build: z.number().int().min(2).max(60).default(30) }).prefault({}),
+      atOnce: z.number().int().min(1).max(4).optional(),
+      minutes: z.number().int().min(1).max(60).default(10),
+      cloudProjects: z.record(z.string(), z.boolean()).prefault({}),
+    })
+    .prefault({}),
   /** Active model per category id, e.g. `{ "chat": "llamacpp/Qwen3-8B-Q4_K_M", "image": "comfyui/flux1-dev.safetensors" }`. */
   activeModels: z.record(z.string(), z.string()).prefault({}),
   /** Google Drive sign-in. The client id defaults to the one in branding.config.ts. */

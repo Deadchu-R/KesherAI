@@ -50,6 +50,8 @@ export interface AtOptions {
   models?: Array<{ id: string; name: string }>;
   /** Switches the chat to a model. */
   onModel?: (id: string) => void;
+  /** Sub-agents the lead agent hands the message to (`@name`); picking one writes `@name ` in the box. */
+  agents?: Array<{ name: string; hint?: string }>;
 }
 
 /** A command the chat itself runs (`/compact`, `/fork`…), offered in the `/` menu before the saved prompts. */
@@ -103,6 +105,7 @@ export const PromptTextarea = forwardRef<HTMLTextAreaElement, Props>(function Pr
   }, [atTyped, lists]);
   const without = () => value.replace(/@[^\s@]*$/, "");
   const atItems: AtItem[] = atTyped === undefined || closed ? [] : [
+    ...(at?.agents ?? []).map((a) => ({ group: L("סוכנים: הסוכן הראשי מעביר להם", "Agents: the lead agent hands it over"), key: `a:${a.name}`, label: `@${a.name}`, ...(a.hint ? { hint: a.hint } : {}), pick: () => onValue(`${without()}@${a.name} `) })),
     ...(at?.models ?? []).map((m) => ({ group: L("מודלים: הצ׳אט עובר אליו", "Models: the chat switches to it"), key: `m:${m.id}`, label: m.name, pick: () => { onValue(without()); at?.onModel?.(m.id); } })),
     ...(lists?.knowledge ?? []).map((k) => ({ group: L("ידע", "Knowledge"), key: `k:${k.id}`, label: k.name, pick: () => onValue(`${without()}${L("חפש בבסיס הידע", "Search the knowledge base")} "${k.name}": `) })),
     ...(lists?.pages ?? []).map((pg) => ({ group: L("דפים", "Pages"), key: `p:${pg.id}`, label: pg.title ?? pg.name ?? pg.id, pick: async () => {

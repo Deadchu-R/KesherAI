@@ -15,7 +15,8 @@ import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTo
 import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
-import { delegateTool } from "./delegate.js";
+import { helperToolsFor } from "./delegate.js";
+import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
 import { findEngines, readProject } from "./unreal-install.js";
@@ -151,6 +152,13 @@ export class ConversationManager {
   constructor(
     private readonly deps: ConversationDeps,
   ) {
+    this.helpers = new ChatHelpers({
+      deps,
+      session: (id) => this.sessions.get(id),
+      workspace: (id) => this.sessions.get(id)?.workspace,
+      worktree: (id) => this.helperWorktree(id),
+      leadModel: (id) => this.sessions.get(id)?.modelId ?? deps.config.activeModels.chat,
+    });
     // Know at start whether Unreal is installed, so the first chat already has the Unreal tools.
     this.checkUnreal();
   }
@@ -208,7 +216,7 @@ export class ConversationManager {
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
     const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])];
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
-    if (id) all.push(this.delegateFor(id, all));
+    if (id) all.push(...this.delegateFor(id, all));
     // Its own problems: the model can look into KesherAI's state and fault log.
     if (this.deps.faults && this.deps.doctorState) all.push(doctorTool({ faults: this.deps.faults, state: this.deps.doctorState, ...(id ? { chatId: id } : {}) }));
     // A guest's chat in a shared project (docs/COLLABORATION.md, stage 1): no tools at all (no files, computer,
@@ -232,7 +240,49 @@ export class ConversationManager {
   private chatModelIds: string[] = [];
   private chatModelsAt = 0;
 
-  private delegateFor(id: string, tools: AgentTool[]): AgentTool {
+  /** The chats' helpers: the queue, their models, the strip's events (chat-helpers.ts). */
+  readonly helpers: ChatHelpers;
+
+  /**
+   * A worker's own copy of the project: a worktree from the folder's last commit, its changes as a diff. Only in a
+   * code chat (building helpers need a git project).
+   *
+   * @param id - The chat.
+   */
+  private helperWorktree(id: string): WorktreeMaker | undefined {
+    const ws = this.sessions.get(id)?.workspace;
+    if (!ws || this.deps.library.summary(id)?.kind !== "code") return undefined;
+    return {
+      make: async (name: string) => {
+        const wt = await createSessionWorktree(ws, name, this.git);
+        return {
+          path: wt.path,
+          finish: async () => {
+            try {
+              await this.git(wt.path, ["add", "-A"]);
+              return await this.git(wt.path, ["diff", "--cached", wt.base]);
+            } finally {
+              await removeSessionWorktree(wt, this.git, true).catch(() => false);
+            }
+          },
+        };
+      },
+    };
+  }
+
+  /**
+   * The helpers a chat may name: the built-in types, personas with "when to use", and the project's agent files.
+   *
+   * @param id - The chat.
+   */
+  helperAgents(id: string): AgentDef[] {
+    return [
+      ...(this.deps.personas?.now() ?? []).filter((p) => p.agentWhen).map((p): AgentDef => ({ name: p.name, description: p.agentWhen!, instructions: p.instructions, ...(p.modelId ? { model: p.modelId } : {}), ...(p.agentWrite ? { write: true } : {}), source: "persona" })),
+      ...projectAgents(this.sessions.get(id)?.workspace),
+    ];
+  }
+
+  private delegateFor(id: string, tools: AgentTool[]): AgentTool[] {
     if (Date.now() - this.chatModelsAt > 5 * 60_000) {
       this.chatModelsAt = Date.now();
       void this.deps.registry
@@ -240,7 +290,7 @@ export class ConversationManager {
         .then((l) => (this.chatModelIds = l.models.filter((m) => (m.category === "chat" || m.category === "code") && !/embed|whisper|tts|rerank|phonon/i.test(m.providerModelId)).map((m) => m.id)))
         .catch(() => undefined);
     }
-    return delegateTool({
+    return helperToolsFor({
       tools: () => tools,
       currentModel: () => this.sessions.get(id)?.modelId ?? this.deps.config.activeModels.chat,
       turnFor: (modelId) => {
@@ -250,31 +300,13 @@ export class ConversationManager {
       models: () => this.chatModelIds,
       workspace: () => this.sessions.get(id)?.workspace,
       contextTokens: (m) => this.contextFor(m),
-      // A worker agent's own copy of the project: a worktree from the folder's last commit, its changes as a diff.
-      worktree: () => {
-        const ws = this.sessions.get(id)?.workspace;
-        if (!ws || this.deps.library.summary(id)?.kind !== "code") return undefined;
-        return {
-          make: async (name: string) => {
-            const wt = await createSessionWorktree(ws, name, this.git);
-            return {
-              path: wt.path,
-              finish: async () => {
-                try {
-                  await this.git(wt.path, ["add", "-A"]);
-                  return await this.git(wt.path, ["diff", "--cached", wt.base]);
-                } finally {
-                  await removeSessionWorktree(wt, this.git, true).catch(() => false);
-                }
-              },
-            };
-          },
-        };
-      },
-      agents: () => [
-        ...(this.deps.personas?.now() ?? []).filter((p) => p.agentWhen).map((p): AgentDef => ({ name: p.name, description: p.agentWhen!, instructions: p.instructions, ...(p.modelId ? { model: p.modelId } : {}), ...(p.agentWrite ? { write: true } : {}), source: "persona" })),
-        ...projectAgents(this.sessions.get(id)?.workspace),
-      ],
+      worktree: () => this.helperWorktree(id),
+      agents: () => this.helperAgents(id),
+      runs: this.helpers.runs,
+      chatId: id,
+      modelFor: ({ kind, agent }) => this.helpers.modelFor(id, kind, agent),
+      limits: () => this.helpers.limits(),
+      cloudFiles: this.helpers.cloudFiles(id),
     });
   }
 
@@ -946,6 +978,10 @@ export class ConversationManager {
     // models without tool calling answer from current information (models with tools can also search themselves).
     let context: string | undefined;
     let note: string | undefined;
+    // "@name" (the composer's helper mention): the user chose that helper for this, so the model is told to hand it over.
+    const named = /(?:^|\s)@([\p{L}\p{N}_.-]{2,60})/u.exec(text)?.[1];
+    const helper = named ? this.helperAgents(id).find((a) => a.name.toLowerCase() === named.toLowerCase()) ?? (["lookup", "research", "build"].includes(named.toLowerCase()) ? { name: named.toLowerCase() } : undefined) : undefined;
+    if (helper) context = `(The user named the helper "${helper.name}": hand this task to it with delegate${["lookup", "research", "build"].includes(helper.name) ? `, type "${helper.name}"` : `, agent "${helper.name}"`}, giving it everything it needs.)`;
     // "[Unity project: Name — C:\path]" (Unity page → Open in chat): that project, already on the user's list, is opened
     // to the chat's file tools too, so list_files/read_file see it like the unity_* tools do.
     const unityHeader = /^\s*\[Unity project: [^\]\n]*? — ([^\]\n]+)\]/.exec(text);
@@ -976,9 +1012,9 @@ export class ConversationManager {
             if (ok) pages.push(page.output.slice(0, 6000));
           }
         }
-        context = `Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}${pages.length ? `\n\nThe first pages, read just now:\n\n${pages.join("\n\n---\n\n")}` : ""}`;
+        context = `${context ? `${context}\n\n` : ""}Web search results for "${query}" (searched just now). Use them for current facts, say which ones you used, and give their links:\n${r.output}${pages.length ? `\n\nThe first pages, read just now:\n\n${pages.join("\n\n---\n\n")}` : ""}`;
       } catch (err) {
-        context = `(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
+        context = `${context ? `${context}\n\n` : ""}(A web search was asked for but failed: ${(err as Error).message}. Say so if it matters.)`;
         note = `The web search failed: ${(err as Error).message}`;
       }
     }
@@ -1202,6 +1238,8 @@ export class ConversationManager {
       s.queueChanged();
     }
     s.stop();
+    // The chat's Stop stops all its helpers too (background ones included).
+    this.helpers.runs.stopAll(id);
   }
 
   /**

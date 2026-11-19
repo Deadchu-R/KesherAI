@@ -32,3 +32,15 @@ test("an agent file with Edit or Write is a worker", () => {
   assert.ok(a?.tools?.includes("edit_file"));
   assert.equal(parseAgentFile("---\nname: r\ndescription: reads\ntools: Read\n---\nRead.", "x")?.write, undefined);
 });
+
+test("frontmatter: model tiers, background and steps; a saved file reads back the same", async () => {
+  const { agentFileText, builtinHelpers } = await import("./agents.js");
+  const a = parseAgentFile("---\nname: design-check\ndescription: checks screens\nmodel: small\nbackground: true\nmaxTurns: 12\nmaxMinutes: 5\n---\nCheck it.", "x");
+  assert.deepEqual([a?.tier, a?.model, a?.background, a?.maxTurns, a?.maxMinutes], ["small", undefined, true, 12, 5]);
+  assert.equal(parseAgentFile("---\nname: h\ndescription: d\nmodel: haiku\n---\nx", "x")?.tier, "small");
+  const text = agentFileText({ name: "design-check", description: "checks\nscreens", instructions: "Check it.", tools: ["read_file", "search"], tier: "auto", background: true, maxTurns: 12 });
+  assert.match(text, /^---\nname: design-check\ndescription: checks screens\ntools: Read, Grep\nmodel: auto\nbackground: true\nmaxTurns: 12\n---\nCheck it.\n$/);
+  const back = parseAgentFile(text, "x");
+  assert.deepEqual([back?.tier, back?.background, back?.tools], ["auto", true, ["read_file", "view_image", "read_document", "search", "find_symbol"]]);
+  assert.deepEqual(builtinHelpers({ build: 12 }).map((b) => [b.kind, b.maxTurns, !!b.write]), [["lookup", 8, false], ["research", 20, false], ["build", 12, true]]);
+});

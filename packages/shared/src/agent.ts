@@ -82,6 +82,54 @@ export interface AskItem {
   multiSelect?: boolean;
 }
 
+/** A helper's job type (docs/RESEARCH_LOG.md, "Helper agents in the chat"): looks, researches, builds, or an outside agent. */
+export type HelperKind = "lookup" | "research" | "build" | "external";
+
+/** Where a helper run is: queued, asking the user once (a cloud model and the project's files), working, or ended. */
+export type HelperState = "waiting" | "asking" | "running" | "done" | "failed" | "stopped";
+
+/** One helper run, as the chat's helpers strip and its card show it (sent live in a `helpers` event, never saved). */
+export interface HelperRunInfo {
+  id: string;
+  /** The `delegate` call that started it (its card in the thread); absent when the user started it. */
+  callId?: string;
+  kind: HelperKind;
+  /** A named helper (a persona or an agent file), when one was used. */
+  agent?: string;
+  /** The task in a few words. */
+  title: string;
+  /** The model's short name, e.g. `Qwen3-4B`. */
+  model: string;
+  /** Why this model: "same as the chat", "ran on X, no swap", "fits beside the chat's model" (and in Hebrew). */
+  modelNote?: string;
+  modelNoteHe?: string;
+  /** It runs on a cloud model. */
+  cloud?: boolean;
+  /** A cloud helper may read the project's files (the user said yes for this project). */
+  cloudFiles?: boolean;
+  state: HelperState;
+  /** Why it waits (the queue and its limit), and the limit (how many at once). */
+  waitReason?: string;
+  waitLimit?: number;
+  queuedAt: number;
+  startedAt?: number;
+  endedAt?: number;
+  step: number;
+  maxSteps: number;
+  /** The last steps, in order (at most 30). */
+  steps: string[];
+  /** A build helper's one model swap: to its model, and back to the chat's after. */
+  swap?: { from: string; to: string; phase: "loading" | "running" | "back" | "done"; sizeGiB?: number; backMs?: number };
+  /** Its short report (the start of it when long; `cut` says so). */
+  report?: string;
+  cut?: boolean;
+  /** The changes a build helper made in its own copy, as a diff (shortened). */
+  diff?: string;
+  error?: string;
+  /** The chat goes on while it runs; its report reaches the chat's model at its next turn. */
+  background: boolean;
+}
+
 /**
  * Everything that happens in a session, in order. Clients replay the list
  * to draw the conversation and follow new events live over SSE.
@@ -161,6 +209,8 @@ export type AgentEvent = EventBase &
         app?: McpAppRef;
       }
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
+    /** The chat's helper runs changed (not saved; `GET /api/conversations/:id/helpers` has them too). */
+    | { type: "helpers"; runs: HelperRunInfo[] }
     /** After a run that changed files: what changed (paths as shown), with "Undo all" for the run. */
     | { type: "receipt"; run: string; files: Array<{ path: string; kind: "new" | "changed" | "deleted"; added: number; removed: number }> }
     /** A run's changes were undone. */

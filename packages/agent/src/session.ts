@@ -7,6 +7,7 @@ import type {
   AgentMessage,
   AgentSessionInfo,
   AgentStatus,
+  HelperRunInfo,
   ApprovalDecision,
   PermissionMode,
   ToolCall,
@@ -94,6 +95,11 @@ export interface AgentSessionOptions {
   systemPrompt: string;
   /** Stop after this many model turns per user message (default 60). */
   maxSteps?: number;
+  /**
+   * The last of `maxSteps` gets no tools and a note to write the report (OpenCode's `steps`): helpers on small
+   * models loop otherwise, and end with nothing to hand back.
+   */
+  finalStepReport?: boolean;
   /** Saved conversation to resume. */
   messages?: AgentMessage[];
   events?: AgentEvent[];
@@ -220,6 +226,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly external?: ExternalAgent;
   private tools: Map<string, AgentTool>;
   private readonly maxSteps: number;
+  private readonly finalStepReport: boolean;
+  /** Notes for the model's next turn (a background helper's report), added before it is asked. */
+  private readonly inbox: string[] = [];
   private readonly onChange?: (s: AgentSession) => void;
   private statusValue: AgentStatus = "idle";
   private readonly reviewerOf?: () => Reviewer | undefined;
@@ -275,6 +284,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.systemPrompt = opts.systemPrompt;
     this.tools = new Map(opts.tools.map((t) => [t.spec.name, t]));
     this.maxSteps = opts.maxSteps ?? 60;
+    this.finalStepReport = opts.finalStepReport ?? false;
     this.onChange = opts.onChange;
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.reviewerOf = opts.reviewer;
@@ -477,6 +487,25 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.push({ type: "undo", path, restored: change.before === null ? "deleted" : "previous" });
     this.messages.push({ role: "user", content: `(The user undid your last change to ${path}.)` });
     return path;
+  }
+
+  /**
+   * Hands the model a note at its next turn (a background helper's report): in this run when it is working,
+   * otherwise with the next message. The user sees it in the helper's card, not as a message.
+   *
+   * @param text - What the model should read, already short.
+   */
+  deliver(text: string): void {
+    this.inbox.push(text);
+  }
+
+  /**
+   * Tells the clients the chat's helper runs changed (a `helpers` event, not saved).
+   *
+   * @param runs - All of the chat's runs now.
+   */
+  helpersChanged(runs: HelperRunInfo[]): void {
+    this.push({ type: "helpers", runs }, false);
   }
 
   /** Adds a short note to the conversation (shown in grey). */
@@ -915,6 +944,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       for (let step = 0; step < this.maxSteps; step++) {
         abort.signal.throwIfAborted();
         const turn = ++this.turn;
+        // Background helpers that ended since the last turn: their reports go in before the model is asked.
+        if (this.inbox.length) this.messages.push({ role: "user", content: `[KesherAI] ${this.inbox.splice(0).join("\n\n")}` });
+        // The last step of a helper: no tools, only the report.
+        const lastStep = this.finalStepReport && step === this.maxSteps - 1;
+        if (lastStep) this.messages.push({ role: "user", content: "[KesherAI] This is your last step: no more tools. Write your report now, from what you found." });
         const conversation = await this.fitContext(abort.signal);
         let result: Awaited<ReturnType<ModelTurn>>;
         // Reading (until the first word) and writing are timed apart: a long prompt on a big model can take half a
@@ -926,7 +960,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           this.push({ type: "assistant_delta", turn, text }, false);
         };
         try {
-          result = await this.model({ messages: conversation, tools: this.specs() }, abort.signal, onText);
+          result = await this.model({ messages: conversation, tools: lastStep ? [] : this.specs() }, abort.signal, onText);
         } catch (err) {
           // Too long for the model after all (the estimate is in characters; a local server may share its context between
           // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
@@ -1250,6 +1284,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
+      callId: call.id,
       ...(this.envOf ? { env: this.envOf() } : {}),
       ...(this.webOf?.() ? { web: this.webOf()! } : {}),
       ...(this.torOf?.() ? { viaTor: this.torOf()! } : {}),

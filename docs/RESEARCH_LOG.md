@@ -3081,6 +3081,13 @@ and the Models page "loaded for: helper" line; (6) new/edit helper (name, when t
 (7) remote: the phone controlling a PC shows the same strip, with a "PC is busy loading" state.
 - Stopped at: research and plan done; nothing built. Open questions: should `build` helpers be allowed outside git
   projects (no worktree); default `maxAtOnce` 2 vs 1 on 8 GB cards; may a cloud helper see project files without asking.
+- Built (2026-11-19, branch helpers-in-chat): steps 1–7. Decisions: build agents only in git projects; 1 at a time on
+  8 GB or less, else 2; a cloud agent asks once per project before reading files; lookup never swaps, research uses the
+  loaded model, build swaps once (LoadKind "helper") and back; auto never picks a cloud model; the outside agent
+  (Antigravity, `@antigravity` in a code chat) runs only when the user starts it. In Hebrew the UI says "סוכנים"
+  (lead agent "סוכן ראשי", sub-agents "סוכני משנה"). Code: core helper-model.ts, helper-runs.ts, chat-helpers.ts,
+  delegate.ts, routes/helpers.ts; web Helpers.tsx, settings/HelpersSection.tsx. Left: resume by id, per-agent
+  permissions, cost totals (step 9).
 
 Sources: code.claude.com/docs/en/sub-agents and mintlify.com/shanraisshan/claude-code-best-practice/concepts/subagents;
 cursor.com/docs/subagents; opencode.ai/docs/agents; docs.roocode.com/community/custom-modes/orchestrator and

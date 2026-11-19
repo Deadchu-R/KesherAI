@@ -17,6 +17,7 @@ import type { TaskBoard } from "./task-board.js";
 import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
+import type { HelperEngine } from "./chat-helpers.js";
 
 /** Services the conversation manager needs. */
 export interface ConversationDeps {
@@ -93,6 +94,8 @@ export interface ConversationDeps {
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
   /** Whether KesherAI's own browser pane (the desktop app) is there. */
   browserPane?(): boolean;
+  /** The built-in engine as helpers need it (chat-helpers.ts): what is loaded, the card, model files, loading. */
+  helperEngine?: HelperEngine;
   /** The translator's model id: a GGUF translator (TranslateGemma) is loaded beside the main model when needed. */
   translatorModel?(pick: string): Promise<string>;
   /** An attached recording or video, read for the model: its transcript and a few frames (speech-tools.ts readMedia). */

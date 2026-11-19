@@ -77,6 +77,7 @@ const REASON_TEXT: Record<LoadKind, string> = {
   calibration: "back after calibration",
   setup: "first-run setup",
   benchmark: "a speed test",
+  helper: "a sub-agent needed it",
 };
 
 /**
@@ -92,7 +93,7 @@ const REASON_TEXT: Record<LoadKind, string> = {
  * @returns The model id, e.g. `llamacpp/Qwen3-8B-Q4_K_M`.
  */
 export async function loadModel(s: KesherServices, modelPath: string, name?: string, why: LoadReason = { kind: "chosen" }): Promise<string> {
-  s.engine.note(`loading ${basename(modelPath)} (${REASON_TEXT[why.kind]}${why.chats?.length ? `: "${why.chats.join('", "')}"` : ""})`);
+  s.engine.note(`loading ${basename(modelPath)} (${why.kind === "helper" && why.back ? "back after a sub-agent" : REASON_TEXT[why.kind]}${why.chats?.length ? `: "${why.chats.join('", "')}"` : ""}${why.helper ? `: ${why.helperKind ? `${why.helperKind} agent` : "sub-agent"}, "${why.helper}"` : ""})`);
   s.engine.loadedFor = { ...why, at: Date.now() };
   // Before too: the guard checks every few seconds, and a load takes up to a minute; after a long idle time it
   // stopped the server while it was still loading (found on the PC: "stopped: unused for a while" twice in a row).
