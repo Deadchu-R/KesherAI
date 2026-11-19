@@ -30,10 +30,18 @@ export const HUB_LIMITS = {
     defaultTtl: 24 * 3600,
     maxTtl: 7 * 24 * 3600,
     approvalTtl: 30 * 60,
+    /** Live agent activity: events in one batch, runs in one `agents` frame, events the hub keeps per run and for how long. */
+    agentBatchEvents: 20,
+    agentFrameEnvs: 16,
+    agentEventsPerRun: 50,
+    agentKeepMs: 7 * 24 * 3600 * 1000,
+    /** A running agent's heartbeat, and how long without one before a viewer shows it as stale (the Cursor freeze lesson). */
+    agentBeatMs: 25_000,
+    agentStaleMs: 90_000,
 };
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event"];
 /** The opt-in a new PC starts with. */
-export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false };
+export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
 export const BODY_FOR_KIND = {
@@ -45,6 +53,7 @@ export const BODY_FOR_KIND = {
     approval_request: "approval_request",
     approval_answer: "approval_answer",
     cloud_started: "cloud_started",
+    agent_event: "agent_event",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -85,6 +94,8 @@ export function cleanOptIn(x) {
         acceptLocal: bool(o.acceptLocal, DEFAULT_OPT_IN.acceptLocal),
         acceptAntigravity: bool(o.acceptAntigravity, DEFAULT_OPT_IN.acceptAntigravity),
         reportLinks: bool(o.reportLinks, DEFAULT_OPT_IN.reportLinks),
+        reportActivity: bool(o.reportActivity, DEFAULT_OPT_IN.reportActivity),
+        reportFileNames: bool(o.reportFileNames, DEFAULT_OPT_IN.reportFileNames),
     };
 }
 /**
@@ -143,6 +154,13 @@ export function parseEnvelope(x) {
     if (typeof e.ct !== "string" || !e.ct || e.ct.length > HUB_LIMITS.ctChars || !B64URL.test(e.ct))
         return null;
     const kind = e.kind;
+    if (kind === "agent_event") {
+        // The run id and the event count are the only plain facts of an activity batch (the hub keeps a ring per run).
+        const n = e.n;
+        if (!isHubId(e.run) || typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > HUB_LIMITS.agentBatchEvents)
+            return null;
+        return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, run: e.run, n };
+    }
     return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct };
 }
 /**
@@ -175,6 +193,12 @@ export function parseDeviceFrame(raw) {
         case "send": {
             const env = parseEnvelope(x.env);
             return env ? { t: "send", env } : null;
+        }
+        case "agents": {
+            if (!Array.isArray(x.envs) || !x.envs.length || x.envs.length > HUB_LIMITS.agentFrameEnvs)
+                return null;
+            const envs = x.envs.map(parseEnvelope);
+            return envs.every((e) => !!e && e.kind === "agent_event") ? { t: "agents", envs } : null;
         }
         case "ack":
             return isHubId(x.id) ? { t: "ack", id: x.id } : null;
@@ -234,7 +258,133 @@ export function parseSealedBody(x, kind) {
             const error = str(b.error, 300);
             return { type: "cloud_started", taskId: b.taskId, ...(isSafeLink(b.sessionUrl) ? { sessionUrl: b.sessionUrl } : {}), ...(error ? { error } : {}) };
         }
+        case "agent_event": {
+            if (!isHubId(b.runId))
+                return null;
+            const state = parseAgentState(b.state, b.runId);
+            if (!state || !Array.isArray(b.events))
+                return null;
+            const events = b.events.slice(0, HUB_LIMITS.agentBatchEvents).map(parseActivityEvent).filter((e) => !!e);
+            return { type: "agent_event", runId: b.runId, state, events };
+        }
         default:
             return null;
     }
+}
+const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
+const FILE_OPS = ["read", "edit", "create", "delete"];
+const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+const optNum = (k, v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
+const optStr = (k, v, max) => (typeof v === "string" && v ? { [k]: v.slice(0, max) } : {});
+/**
+ * A file path as an event may carry it: relative, forward slashes, no `..`, no drive or home prefix, at most 160
+ * characters. A path that cannot be made safe is dropped.
+ *
+ * @param p - The path as the agent named it.
+ * @returns The clean path, or undefined.
+ */
+export function cleanAgentPath(p) {
+    if (typeof p !== "string")
+        return undefined;
+    let s = p.trim().replace(/\\/g, "/");
+    // An absolute path keeps only its last three parts (never a user name or a home folder).
+    if (/^([a-zA-Z]:)?\//.test(s) || s.startsWith("~"))
+        s = s.split("/").filter((x) => x && x !== "~").slice(-3).join("/");
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused here
+    if (!s || s.split("/").includes("..") || /[\u0000-\u001f]/.test(s))
+        return undefined;
+    return s.slice(-160);
+}
+function parseWaiting(x) {
+    if (!x || typeof x !== "object")
+        return undefined;
+    const w = x;
+    if (!isHubId(w.requestId) || !isHubId(w.conversationId))
+        return undefined;
+    const reason = w.reason === "ask" || w.reason === "run-press" ? w.reason : "approval";
+    return { reason, requestId: w.requestId, conversationId: w.conversationId, summary: str(w.summary, 200) };
+}
+/**
+ * Checks one activity event (after opening a batch): a known type, its fields present and capped.
+ *
+ * @param x - Untrusted input.
+ * @returns The event, or null.
+ */
+export function parseActivityEvent(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const e = x;
+    const head = { seq: num(e.seq), t: num(e.t) };
+    switch (e.type) {
+        case "started": {
+            const title = str(e.title, 120).trim();
+            if (!title || !SOURCES.includes(e.source))
+                return null;
+            return { ...head, type: "started", title, source: e.source, ...optStr("model", e.model, HUB_LIMITS.nameChars) };
+        }
+        case "step":
+            return { ...head, type: "step", n: num(e.n), ...optNum("of", e.of), label: str(e.label, 80) };
+        case "tool": {
+            const name = str(e.name, 60);
+            return name ? { ...head, type: "tool", name, ok: e.ok !== false, ...optNum("ms", e.ms) } : null;
+        }
+        case "file": {
+            const path = cleanAgentPath(e.path);
+            return path ? { ...head, type: "file", path, op: FILE_OPS.includes(e.op) ? e.op : "read" } : null;
+        }
+        case "usage":
+            return { ...head, type: "usage", tokensIn: num(e.tokensIn), tokensOut: num(e.tokensOut) };
+        case "waiting": {
+            const w = parseWaiting(e);
+            return w ? { ...head, type: "waiting", ...w } : null;
+        }
+        case "done": {
+            const branch = str(e.branch, 200);
+            return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}) };
+        }
+        case "failed":
+            return { ...head, type: "failed", reason: str(e.reason, 200) };
+        case "cancelled":
+            return { ...head, type: "cancelled" };
+        default:
+            return null;
+    }
+}
+/**
+ * Checks a run's state (after opening a batch).
+ *
+ * @param x - Untrusted input.
+ * @param runId - The batch's run id (the state must be for the same run).
+ * @returns The state, or null.
+ */
+export function parseAgentState(x, runId) {
+    if (!x || typeof x !== "object")
+        return null;
+    const s = x;
+    if (s.runId !== runId || !SOURCES.includes(s.source) || !RUN_STATES.includes(s.state))
+        return null;
+    const names = Array.isArray(s.fileNames) ? s.fileNames.map(cleanAgentPath).filter((p) => !!p).slice(-5) : [];
+    const waiting = s.state === "waiting" ? parseWaiting(s.waiting) : undefined;
+    const branch = str(s.branch, 200);
+    return {
+        runId,
+        title: str(s.title, 120).trim() || "Agent",
+        source: s.source,
+        state: s.state,
+        ...optStr("model", s.model, HUB_LIMITS.nameChars),
+        step: num(s.step),
+        ...optNum("of", s.of),
+        ...optStr("label", s.label, 80),
+        startedAt: num(s.startedAt),
+        lastEventAt: num(s.lastEventAt),
+        ...optNum("endedAt", s.endedAt),
+        ...optNum("tokensIn", s.tokensIn),
+        ...optNum("tokensOut", s.tokensOut),
+        files: num(s.files),
+        fileNames: names,
+        ...(waiting ? { waiting } : {}),
+        ...(branch ? { branch } : {}),
+        ...(isSafeLink(s.link) ? { link: s.link } : {}),
+    };
 }

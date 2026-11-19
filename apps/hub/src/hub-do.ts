@@ -4,7 +4,8 @@
  *
  * Routes (the Worker forwards everything except static files; `x-kh-ip` is set by the Worker, never by the caller):
  * - Open (rate limited): `POST /api/signin`, `POST /api/pair/start`, `POST /api/pair/poll`.
- * - Device token (Bearer): `POST /api/ticket`, `POST /api/rotate`. Socket: `GET /ws/device?ticket=…`.
+ * - Device token (Bearer): `POST /api/ticket`, `POST /api/rotate`, `GET /api/agents?since=…` (activity catch-up).
+ *   Socket: `GET /ws/device?ticket=…`.
  * - Signed-in owner (session cookie + same Origin for changes): `GET /api/state`, `POST /api/signout`,
  *   `POST /api/pair/check`, `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
  * - Internal (cron only): `POST /internal/cleanup`.
@@ -108,6 +109,7 @@ export class HubObject {
     if (req.method === "POST" && path === "/api/pair/poll") return answer(await this.hub.pairPoll(ip, (await readJson(req))?.pollSecret));
     if (req.method === "POST" && path === "/api/ticket") return answer(await this.hub.issueTicket(bearer(req)));
     if (req.method === "POST" && path === "/api/rotate") return answer(await this.hub.rotateToken(bearer(req)));
+    if (req.method === "GET" && path === "/api/agents") return answer(await this.hub.agentsSince(bearer(req), url.searchParams.get("since")));
 
     if (req.method === "POST" && path === "/api/signin") {
       if (!sameOrigin(req)) return json({ error: "Not allowed." }, 403);
@@ -145,6 +147,9 @@ export class HubObject {
           break;
         case "drop-queue":
           this.hub.dropQueued();
+          break;
+        case "drop-agents":
+          this.hub.dropAgentActivity();
           break;
         case "everything":
           this.hub.killAll();

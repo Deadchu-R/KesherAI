@@ -48,6 +48,9 @@ export const HUB_TIMES = {
   audit: 30 * DAY,
 } as const;
 
+/** Rows the Durable Objects free plan lets the hub write per day (Cloudflare pricing page, 2026-11). */
+export const FREE_ROWS_PER_DAY = 100_000;
+
 /** Sockets of connected devices, as the Durable Object has them. */
 export interface DeviceSockets {
   /** Sends a frame to every socket of a device; false when it has none. */
@@ -389,6 +392,7 @@ export class Hub {
     if (!this.store.device(deviceId)) return false;
     this.store.deleteDevice(deviceId);
     this.store.dropQueueFor(deviceId);
+    this.store.dropAgentEventsFor(deviceId);
     this.sockets.send(deviceId, { t: "revoked" });
     this.sockets.close(deviceId, 4001, "revoked");
     this.audit("revoke", { deviceId });
@@ -430,8 +434,32 @@ export class Hub {
       this.sockets.send(d.id, { t: "revoked" });
     }
     this.store.dropQueue();
+    this.store.dropAgentEvents();
     this.sockets.closeAll(4001, "revoked");
     this.audit("kill-all");
+  }
+
+  /** Deletes all kept agent activity now (the hub page's "delete agent activity"). */
+  dropAgentActivity(): void {
+    this.store.dropAgentEvents();
+    this.audit("agents-dropped");
+  }
+
+  /**
+   * A viewer catches up after a reconnect (like SSE's `Last-Event-ID`): the activity batches kept for it after `since`.
+   *
+   * @param bearer - The viewer's device token.
+   * @param since - The last order number it has (0 for all).
+   * @returns The envelopes (with `seq` and `at`) and the newest number, or an error.
+   */
+  async agentsSince(bearer: string | undefined, since: unknown): Promise<{ envs: SealedEnvelope[]; seq: number; more: boolean } | HubError> {
+    const d = await this.deviceForToken(bearer);
+    if (!d) return fail(401, "Unknown device.");
+    if (!this.limits.take(`agents:${d.id}`, LIMITS.ticket)) return fail(429, "Too many tries.");
+    const from = typeof since === "string" && /^\d{1,15}$/.test(since) ? Number(since) : 0;
+    const rows = this.store.agentEvents(d.id, from, 500);
+    const envs = rows.map((r) => ({ ...(JSON.parse(r.env) as SealedEnvelope), seq: r.seq, at: r.createdAt }));
+    return { envs, seq: rows.at(-1)?.seq ?? from, more: rows.length === 500 };
   }
 
   /** Deletes every queued (sealed) message now ("what the hub holds" > delete all). */
@@ -471,12 +499,15 @@ export class Hub {
    *
    * @returns The state.
    */
-  async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; audit: AuditRow[] }> {
+  async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; agents: { kept: number; writtenToday: number; freeWrites: number }; audit: AuditRow[] }> {
     const all = this.store.devices();
     const devices = await Promise.all(
       all.map(async (d) => ({ id: d.id, name: d.name, kind: d.kind, publicKey: d.publicKey, online: this.sockets.isOnline(d.id), ...(d.lastSeen ? { lastSeen: new Date(d.lastSeen).toISOString() } : {}), busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), fingerprint: await keyFingerprint(d.publicKey) })),
     );
-    return { devices, paused: this.paused, cloudOff: this.store.getSetting("cloudOff") === "1", cloudReady: !!(await this.cloudTrigger()), queued: this.store.queueCount(), audit: this.store.auditList(100) };
+    // The free plan counts rows written per day (UTC): the page shows how much of it live activity used today.
+    const today = new Date(this.now()).setUTCHours(0, 0, 0, 0);
+    const agents = { kept: this.store.agentEventCount(), writtenToday: this.store.agentEventCount(today), freeWrites: FREE_ROWS_PER_DAY };
+    return { devices, paused: this.paused, cloudOff: this.store.getSetting("cloudOff") === "1", cloudReady: !!(await this.cloudTrigger()), queued: this.store.queueCount(), agents, audit: this.store.auditList(100) };
   }
 
   // ---- sockets ----
@@ -544,6 +575,24 @@ export class Hub {
         return;
       case "send":
         return this.relay(d, f.env, refuse);
+      case "agents":
+        return this.agentActivity(d, f.envs, refuse);
+    }
+  }
+
+  /**
+   * Live agent activity from a PC: each batch (sealed to one phone) is kept in its run's short ring and delivered at
+   * once to that phone's open sockets; nothing is queued or acked (the next batch carries the whole state again).
+   */
+  private agentActivity(from: DeviceRow, envs: SealedEnvelope[], refuse: (code: HubRefusal, id?: string) => void): void {
+    if (from.kind !== "pc" || !from.optIn.reportActivity) return refuse("not-allowed");
+    const t = this.now();
+    for (const env of envs) {
+      if (env.from !== from.id || !env.run) return refuse("not-allowed", env.id);
+      const to = this.store.device(env.to);
+      if (!to || to.kind !== "phone") continue;
+      const row = this.store.addAgentEvent({ to: to.id, from: from.id, run: env.run, n: env.n ?? 0, env: JSON.stringify(env), createdAt: t }, HUB_LIMITS.agentEventsPerRun);
+      this.sockets.send(to.id, { t: "deliver", env: { ...env, seq: row.seq, at: t } });
     }
   }
 
@@ -602,6 +651,7 @@ export class Hub {
     this.store.prunePairings(t);
     this.store.pruneTickets(t);
     this.store.pruneAudit(t - HUB_TIMES.audit);
+    this.store.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
     return this.store.pruneQueue(t);
   }
 }

@@ -3,7 +3,7 @@
  * uses bound parameters.
  */
 import { cleanAgents, cleanOptIn, type HubDeviceKind, type SealedKind } from "../../../packages/shared/src/hub.js";
-import type { AuditRow, DeviceRow, HubStore, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
+import type { AgentEventRow, AuditRow, DeviceRow, HubStore, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
 import type { SqlStorage } from "./cf.js";
 
 const SCHEMA = `
@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS queue (id TEXT PRIMARY KEY, recipient TEXT NOT NULL, 
 CREATE INDEX IF NOT EXISTS queue_by_recipient ON queue (recipient, created_at);
 CREATE TABLE IF NOT EXISTS audit (ts INTEGER NOT NULL, action TEXT NOT NULL, device_id TEXT, ip_hash TEXT);
 CREATE INDEX IF NOT EXISTS audit_by_ts ON audit (ts);
+CREATE TABLE IF NOT EXISTS agent_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, recipient TEXT NOT NULL, sender TEXT NOT NULL,
+  run TEXT NOT NULL, n INTEGER NOT NULL, env TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS agent_events_by_recipient ON agent_events (recipient, seq);
+CREATE INDEX IF NOT EXISTS agent_events_by_run ON agent_events (recipient, sender, run, seq);
+CREATE INDEX IF NOT EXISTS agent_events_by_time ON agent_events (created_at);
 `;
 
 type Row = Record<string, string | number | null>;
@@ -52,6 +57,7 @@ function toDevice(r: Row): DeviceRow {
 }
 
 const toPairing = (r: Row): PairingRow => ({ codeHash: String(r.code_hash), pollHash: String(r.poll_hash), publicKey: String(r.public_key), kind: r.kind === "phone" ? "phone" : "pc", name: String(r.name), expiresAt: num(r.expires_at), approved: num(r.approved) === 1 });
+const toAgentEvent = (r: Row): AgentEventRow => ({ seq: num(r.seq), to: String(r.recipient), from: String(r.sender), run: String(r.run), n: num(r.n), env: String(r.env), createdAt: num(r.created_at) });
 const toQueued = (r: Row): QueuedRow => ({ id: String(r.id), to: String(r.recipient), from: String(r.sender), kind: String(r.kind) as SealedKind, expiresAt: num(r.expires_at), env: String(r.env), createdAt: num(r.created_at) });
 
 /** The hub's storage in the Durable Object's SQLite. */
@@ -212,5 +218,38 @@ export class SqlStore implements HubStore {
   /** @inheritdoc */
   pruneAudit(before: number): void {
     this.sql.exec("DELETE FROM audit WHERE ts < ?", before);
+  }
+  /** @inheritdoc */
+  addAgentEvent(row: Omit<AgentEventRow, "seq">, maxEvents: number): AgentEventRow {
+    if (row.n === 0) this.sql.exec("DELETE FROM agent_events WHERE recipient = ? AND sender = ? AND run = ? AND n = 0", row.to, row.from, row.run);
+    const seq = num(this.first("INSERT INTO agent_events (recipient, sender, run, n, env, created_at) VALUES (?, ?, ?, ?, ?, ?) RETURNING seq", row.to, row.from, row.run, row.n, row.env, row.createdAt)?.seq);
+    if (row.n > 0) {
+      // The oldest batches of the run go while it holds more than maxEvents events (the newest is always kept).
+      const rows = this.all("SELECT seq, n FROM agent_events WHERE recipient = ? AND sender = ? AND run = ? AND n > 0 ORDER BY seq DESC", row.to, row.from, row.run);
+      let total = 0;
+      const old = rows.filter((r) => (total += num(r.n)) > maxEvents && num(r.seq) !== seq).map((r) => num(r.seq));
+      if (old.length) this.sql.exec(`DELETE FROM agent_events WHERE seq IN (${old.map(() => "?").join(",")})`, ...old);
+    }
+    return { ...row, seq };
+  }
+  /** @inheritdoc */
+  agentEvents(to: string, since: number, limit: number): AgentEventRow[] {
+    return this.all("SELECT * FROM agent_events WHERE recipient = ? AND seq > ? ORDER BY seq LIMIT ?", to, since, limit).map(toAgentEvent);
+  }
+  /** @inheritdoc */
+  dropAgentEventsFor(deviceId: string): void {
+    this.sql.exec("DELETE FROM agent_events WHERE recipient = ? OR sender = ?", deviceId, deviceId);
+  }
+  /** @inheritdoc */
+  dropAgentEvents(): void {
+    this.sql.exec("DELETE FROM agent_events");
+  }
+  /** @inheritdoc */
+  pruneAgentEvents(before: number): number {
+    return this.sql.exec("DELETE FROM agent_events WHERE created_at < ?", before).rowsWritten;
+  }
+  /** @inheritdoc */
+  agentEventCount(since?: number): number {
+    return num((since === undefined ? this.first("SELECT COUNT(*) AS n FROM agent_events") : this.first("SELECT COUNT(*) AS n FROM agent_events WHERE created_at >= ?", since))?.n);
   }
 }

@@ -61,6 +61,23 @@ export interface QueuedRow {
   createdAt: number;
 }
 
+/**
+ * One sealed batch of live agent activity for one viewer (`to`) about one run of a PC (`from`). The hub keeps a short
+ * ring per (viewer, PC, run): the newest heartbeat (`n` = 0) and batches up to 50 events, 7 days at most.
+ */
+export interface AgentEventRow {
+  /** The hub's order number (catch-up with `GET /api/agents?since=`). */
+  seq: number;
+  to: string;
+  from: string;
+  run: string;
+  /** Events in it (0 = heartbeat). */
+  n: number;
+  /** The envelope as JSON (sealed). */
+  env: string;
+  createdAt: number;
+}
+
 /** One audit line: metadata only (no task text, no result, no email). */
 export interface AuditRow {
   ts: number;
@@ -113,6 +130,22 @@ export interface HubStore {
   audit(row: AuditRow): void;
   auditList(limit: number): AuditRow[];
   pruneAudit(before: number): void;
+
+  /**
+   * Keeps one activity batch and trims its run's ring: an older heartbeat of the run goes, and the oldest batches go
+   * while the run holds more than `maxEvents` events.
+   *
+   * @returns The row with its new order number.
+   */
+  addAgentEvent(row: Omit<AgentEventRow, "seq">, maxEvents: number): AgentEventRow;
+  /** A viewer's batches after `since`, oldest first, at most `limit`. */
+  agentEvents(to: string, since: number, limit: number): AgentEventRow[];
+  /** Deletes the batches to or from a device. */
+  dropAgentEventsFor(deviceId: string): void;
+  dropAgentEvents(): void;
+  pruneAgentEvents(before: number): number;
+  /** How many batches are kept, and how many were written since a time (the free plan's write counter). */
+  agentEventCount(since?: number): number;
 }
 
 /** The store in memory, for tests (same behaviour as the SQLite one). */
@@ -124,6 +157,8 @@ export class MemoryStore implements HubStore {
   private tickets = new Map<string, TicketRow>();
   private queue: QueuedRow[] = [];
   private log: AuditRow[] = [];
+  private agentRows: AgentEventRow[] = [];
+  private agentSeq = 0;
 
   /** @inheritdoc */
   getSetting(key: string): string | undefined {
@@ -261,5 +296,42 @@ export class MemoryStore implements HubStore {
   /** @inheritdoc */
   pruneAudit(before: number): void {
     this.log = this.log.filter((a) => a.ts >= before);
+  }
+  /** @inheritdoc */
+  addAgentEvent(row: Omit<AgentEventRow, "seq">, maxEvents: number): AgentEventRow {
+    const added = { ...row, seq: ++this.agentSeq };
+    const same = (r: AgentEventRow) => r.to === row.to && r.from === row.from && r.run === row.run;
+    if (row.n === 0) this.agentRows = this.agentRows.filter((r) => !(same(r) && r.n === 0));
+    this.agentRows.push(added);
+    let total = 0;
+    const keep = new Set<number>();
+    for (const r of this.agentRows.filter(same).reverse()) {
+      if (r.n === 0) keep.add(r.seq);
+      else if ((total += r.n) <= maxEvents || r.seq === added.seq) keep.add(r.seq);
+    }
+    this.agentRows = this.agentRows.filter((r) => !same(r) || keep.has(r.seq));
+    return { ...added };
+  }
+  /** @inheritdoc */
+  agentEvents(to: string, since: number, limit: number): AgentEventRow[] {
+    return this.agentRows.filter((r) => r.to === to && r.seq > since).slice(0, limit).map((r) => ({ ...r }));
+  }
+  /** @inheritdoc */
+  dropAgentEventsFor(deviceId: string): void {
+    this.agentRows = this.agentRows.filter((r) => r.to !== deviceId && r.from !== deviceId);
+  }
+  /** @inheritdoc */
+  dropAgentEvents(): void {
+    this.agentRows = [];
+  }
+  /** @inheritdoc */
+  pruneAgentEvents(before: number): number {
+    const n = this.agentRows.length;
+    this.agentRows = this.agentRows.filter((r) => r.createdAt >= before);
+    return n - this.agentRows.length;
+  }
+  /** @inheritdoc */
+  agentEventCount(since?: number): number {
+    return since === undefined ? this.agentRows.length : this.agentRows.filter((r) => r.createdAt >= since).length;
   }
 }

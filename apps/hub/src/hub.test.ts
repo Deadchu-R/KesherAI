@@ -301,3 +301,60 @@ test("kill switches: pause closes sockets and refuses, kill-all revokes everythi
   assert.equal(await hub.checkSession(s.session), false);
   assert.ok(isHubError(await hub.issueTicket(pc.token)));
 });
+
+test("live agent activity: only an opted-in PC, kept as a short ring per run, delivered live, caught up by seq", async () => {
+  const { hub, store, sockets, tick } = await setup();
+  const pc = await pair(hub, "pc", "PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  sockets.on.add(phone.id);
+  const state = { runId: "h-1", title: "Look into it", source: "chat-helper", state: "running", step: 1, startedAt: 1, lastEventAt: 2, files: 0, fileNames: [] } as const;
+  const batch = async (n: number, run = "h-1") => ({ ...(await sealMessage({ from: pc.id, to: phone.id, kind: "agent_event" }, { type: "agent_event", runId: run, state: { ...state, runId: run }, events: Array.from({ length: n }, (_, i) => ({ seq: i + 1, t: 1, type: "step" as const, n: i, label: "x" })) }, pc.keys.privateKey, phone.keys.publicKey)), run, n });
+  const send = async (envs: unknown[]) => hub.onFrame(pc.id, JSON.stringify({ t: "agents", envs }));
+
+  // Not opted in: refused, nothing kept.
+  await send([await batch(1)]);
+  assert.equal(store.agentEventCount(), 0);
+  assert.equal((sockets.frames(pc.id, "refused").at(-1) as { code: string }).code, "not-allowed");
+  await hub.onFrame(pc.id, JSON.stringify({ t: "beat", busy: true, agents: [], optIn: { appear: true, reportActivity: true } }));
+
+  // Opted in: delivered at once with the hub's seq and time, and opens on the phone.
+  await send([await batch(2)]);
+  const live = sockets.frames(phone.id, "deliver").at(-1) as { env: { seq: number; at: number; run: string } };
+  assert.ok(live.env.seq > 0 && live.env.at > 0 && live.env.run === "h-1");
+  const body = await openEnvelope(live.env as never, phone.keys.privateKey, pc.keys.publicKey);
+  assert.equal(body.type, "agent_event");
+
+  // Heartbeats replace each other; events past 50 per run push the oldest batches out.
+  await send([await batch(0)]);
+  await send([await batch(0)]);
+  assert.equal(store.agentEvents(phone.id, 0, 500).filter((r) => r.n === 0).length, 1);
+  for (let i = 0; i < 30; i++) await send([await batch(5)]);
+  const rows = store.agentEvents(phone.id, 0, 500).filter((r) => r.run === "h-1" && r.n > 0);
+  assert.ok(rows.reduce((a, r) => a + r.n, 0) <= 50, "at most 50 events per run");
+  await send([await batch(3, "h-2")]);
+
+  // Catch-up by seq with the phone's token; the PC's token sees only what was sealed to it.
+  const all = await hub.agentsSince(phone.token, "0");
+  assert.ok(!isHubError(all) && all.envs.length === store.agentEventCount());
+  const later = await hub.agentsSince(phone.token, String(all.envs.at(-2)!.seq));
+  assert.ok(!isHubError(later) && later.envs.length === 1 && later.envs[0]!.run === "h-2");
+  const pcView = await hub.agentsSince(pc.token, "0");
+  assert.ok(!isHubError(pcView) && pcView.envs.length === 0);
+  assert.ok(isHubError(await hub.agentsSince("kh_nope", "0")));
+
+  // A batch claiming another sender is refused; a task kind inside an agents frame is a bad frame.
+  const forged = { ...(await batch(1)), from: phone.id };
+  await send([forged]);
+  assert.equal((sockets.frames(pc.id, "refused").at(-1) as { code: string }).code, "not-allowed");
+
+  // The page's counter, the 7-day prune and the purge.
+  const st = await hub.state();
+  assert.ok(st.agents.kept > 0 && st.agents.writtenToday > 0 && st.agents.freeWrites === 100_000);
+  tick(8 * 24 * 3600 * 1000);
+  hub.cleanup();
+  assert.equal(store.agentEventCount(), 0);
+  await send([await batch(1)]);
+  hub.dropAgentActivity();
+  assert.equal(store.agentEventCount(), 0);
+});
