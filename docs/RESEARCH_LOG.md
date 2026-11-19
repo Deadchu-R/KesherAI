@@ -2852,4 +2852,8 @@ Each AI tool shows which local model it uses and offers to download it the first
   VaeDecodeTextureTrellis → BakeTextureFromVoxel / ApplyTextureToMesh → Save3DAdvanced. Files from Comfy-Org/TRELLIS.2,
   Comfy-Org/Pixal3D, Comfy-Org/BiRefNet, Comfy-Org/MoGe (sizes to check).
 - Decision: TRELLIS.2 (colours, MIT, native) for "a model with colours"; Hunyuan3D 2 stays for shape only.
-- Stopped at: research done; next, the flow in API form, checked against a real ComfyUI's validation in the workspace.
+- Built: the template converted to API form by its own /object_info (dynamic combos as "name.sub", widgets that became
+  links still take their value), the switch set to TRELLIS.2, cut to the 45 nodes the saved GLB needs; a real ComfyUI
+  0.46 (CPU, in the workspace) accepted it with placeholder model files (node_errors empty). Output: Save3DAdvanced's
+  "3d" result (a .glb), which KesherAI's provider already collects.
+- Stopped at: built and validated; open: running it with the real model on the PC; file sizes are approximate.

@@ -28,14 +28,16 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Video: a different transition at each cut (the clip's "Comes in with"; plain cut or any kind; seen in the player).
 - ✅ Security scan 165: nothing to fix.
 
-- 🔨 3D models with colours (Roee chose, 11:xx): a model from words/a picture with its colours and texture, not only its
-  shape — research the local options first (Hunyuan3D 2 paint, others), then the code.
+- ✅ 3D models with colours: TRELLIS.2 (MIT, native in ComfyUI 0.34+): the 3D editor's "A model from words, with
+  colours" and "A model from a picture, with colours", and the chat's make_3d paints by default. The flow passed a real
+  ComfyUI 0.46's validation in the workspace; not run with the real model (that needs the PC and a ~7.7 GB download).
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
 
 ## Waiting on Roee 👤
+- 👤 When convenient: a 3D model with colours (update ComfyUI to 0.34+; it asks before downloading TRELLIS.2, ~7.7 GB).
 - 👤 When convenient: try the 3D editor's "A model from words" (ComfyUI; asks before downloading Hunyuan3D 2, ~4.9 GB).
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).
 - 👤 When convenient: try sound effects (needs ComfyUI 0.22+; it asks before downloading 3.5 GB).
