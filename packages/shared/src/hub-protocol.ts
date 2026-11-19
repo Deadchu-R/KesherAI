@@ -32,15 +32,23 @@ export const HUB_LIMITS = {
   defaultTtl: 24 * 3600,
   maxTtl: 7 * 24 * 3600,
   approvalTtl: 30 * 60,
+  /** Live agent activity: events in one batch, runs in one `agents` frame, events the hub keeps per run and for how long. */
+  agentBatchEvents: 20,
+  agentFrameEnvs: 16,
+  agentEventsPerRun: 50,
+  agentKeepMs: 7 * 24 * 3600 * 1000,
+  /** A running agent's heartbeat, and how long without one before a viewer shows it as stale (the Cursor freeze lesson). */
+  agentBeatMs: 25_000,
+  agentStaleMs: 90_000,
 } as const;
 
 /** What a paired device is. */
 export type HubDeviceKind = "pc" | "phone";
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -58,6 +66,13 @@ export interface SealedEnvelope {
   iv: string;
   /** Ciphertext with its tag, base64url. */
   ct: string;
+  /** `agent_event` only: the run it belongs to (an opaque id; the hub keeps the last events of each run by it). */
+  run?: string;
+  /** `agent_event` only: how many events it carries (0 = a heartbeat that only refreshes the run's state). */
+  n?: number;
+  /** Set by the hub on an `agent_event` it delivers: its order number (for catch-up) and when it arrived (ms). */
+  seq?: number;
+  at?: number;
 }
 
 /**
@@ -75,10 +90,14 @@ export interface HubOptIn {
   acceptAntigravity: boolean;
   /** Reports vendor session links (e.g. a Claude Remote Control URL) as presence metadata. */
   reportLinks: boolean;
+  /** Sends live agent activity (sealed: titles, steps, tool names, counts) to the owner's phones and hub page. */
+  reportActivity: boolean;
+  /** With activity: also the names (relative paths) of files the agents touch, never their contents. */
+  reportFileNames: boolean;
 }
 
 /** The opt-in a new PC starts with. */
-export const DEFAULT_OPT_IN: HubOptIn = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false };
+export const DEFAULT_OPT_IN: HubOptIn = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 
 /** An agent a device reports (a loaded local model, Antigravity, a vendor session such as Claude Remote Control). */
 export interface HubAgent {
@@ -112,6 +131,8 @@ export type DeviceFrame =
   | { t: "hello"; version: string; platform?: string; busy: boolean; optIn: HubOptIn; agents: HubAgent[] }
   | { t: "beat"; busy: boolean; optIn?: HubOptIn; agents: HubAgent[] }
   | { t: "send"; env: SealedEnvelope }
+  /** Live agent activity: one sealed `agent_event` per (viewer, run), kept by the hub as a short ring, never queued. */
+  | { t: "agents"; envs: SealedEnvelope[] }
   | { t: "ack"; id: string };
 
 /** Why the hub refused a frame. */
@@ -143,7 +164,73 @@ export type SealedBody =
   | { type: "cancel"; taskId: string }
   | { type: "approval_request"; requestId: string; conversationId: string; title: string; tool: string; preview: string; reason: string }
   | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny" }
-  | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string };
+  | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
+  /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
+  | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] };
+
+// ---- live agent activity (docs/RESEARCH_LOG.md, "Live agent activity in the Kesher Cloud hub") ----
+
+/** Where an agent run comes from. */
+export type AgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud";
+
+/** A run's state. `stale` is never sent: a viewer shows it when a going run's heartbeat stops for 90 seconds. */
+export type AgentRunStateName = "queued" | "running" | "waiting" | "done" | "failed" | "cancelled" | "stale";
+
+/** What a waiting run waits for, and how to answer it (the existing `approval_answer` with these two ids). */
+export interface AgentWaiting {
+  /** approval: a tool approval; ask: a yes/no question of the run; run-press: Antigravity waits for Run. */
+  reason: "approval" | "ask" | "run-press";
+  requestId: string;
+  conversationId: string;
+  /** Short text made by KesherAI (never the prompt or a file's text). */
+  summary: string;
+}
+
+/** A file an agent touched: its path relative to the project, never its content. */
+export interface AgentFile {
+  path: string;
+  op: "read" | "edit" | "create" | "delete";
+}
+
+/**
+ * One event of a run. Metadata only (privacy rule of the research entry): titles, step numbers, tool names, relative
+ * paths when the PC allows names, token counts. Never a prompt, a file's text, a diff or the model's output.
+ */
+export type ActivityEvent = { seq: number; t: number } & (
+  | { type: "started"; title: string; source: AgentSource; model?: string }
+  | { type: "step"; n: number; of?: number; label: string }
+  | { type: "tool"; name: string; ok: boolean; ms?: number }
+  | ({ type: "file" } & AgentFile)
+  | { type: "usage"; tokensIn: number; tokensOut: number }
+  | ({ type: "waiting" } & AgentWaiting)
+  | { type: "done"; steps: number; branch?: string; link?: string }
+  | { type: "failed"; reason: string }
+  | { type: "cancelled" }
+);
+
+/** A run's whole current state, carried in every batch. */
+export interface AgentRunState {
+  runId: string;
+  title: string;
+  source: AgentSource;
+  state: Exclude<AgentRunStateName, "stale">;
+  model?: string;
+  /** Steps done, the most allowed, and the current step's label (a tool name). */
+  step: number;
+  of?: number;
+  label?: string;
+  startedAt: number;
+  lastEventAt: number;
+  endedAt?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  /** How many files it touched, and the last few names (only when the PC reports file names). */
+  files: number;
+  fileNames: string[];
+  waiting?: AgentWaiting;
+  branch?: string;
+  link?: string;
+}
 
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
 export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
@@ -155,6 +242,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   approval_request: "approval_request",
   approval_answer: "approval_answer",
   cloud_started: "cloud_started",
+  agent_event: "agent_event",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -198,6 +286,8 @@ export function cleanOptIn(x: unknown): HubOptIn {
     acceptLocal: bool(o.acceptLocal, DEFAULT_OPT_IN.acceptLocal),
     acceptAntigravity: bool(o.acceptAntigravity, DEFAULT_OPT_IN.acceptAntigravity),
     reportLinks: bool(o.reportLinks, DEFAULT_OPT_IN.reportLinks),
+    reportActivity: bool(o.reportActivity, DEFAULT_OPT_IN.reportActivity),
+    reportFileNames: bool(o.reportFileNames, DEFAULT_OPT_IN.reportFileNames),
   };
 }
 
@@ -251,6 +341,12 @@ export function parseEnvelope(x: unknown): SealedEnvelope | null {
   if (typeof e.iv !== "string" || e.iv.length !== 16 || !B64URL.test(e.iv)) return null;
   if (typeof e.ct !== "string" || !e.ct || e.ct.length > HUB_LIMITS.ctChars || !B64URL.test(e.ct)) return null;
   const kind = e.kind as SealedKind;
+  if (kind === "agent_event") {
+    // The run id and the event count are the only plain facts of an activity batch (the hub keeps a ring per run).
+    const n = e.n;
+    if (!isHubId(e.run) || typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > HUB_LIMITS.agentBatchEvents) return null;
+    return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, run: e.run, n };
+  }
   return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct };
 }
 
@@ -281,6 +377,11 @@ export function parseDeviceFrame(raw: unknown): DeviceFrame | null {
     case "send": {
       const env = parseEnvelope(x.env);
       return env ? { t: "send", env } : null;
+    }
+    case "agents": {
+      if (!Array.isArray(x.envs) || !x.envs.length || x.envs.length > HUB_LIMITS.agentFrameEnvs) return null;
+      const envs = x.envs.map(parseEnvelope);
+      return envs.every((e): e is SealedEnvelope => !!e && e.kind === "agent_event") ? { t: "agents", envs } : null;
     }
     case "ack":
       return isHubId(x.id) ? { t: "ack", id: x.id } : null;
@@ -332,7 +433,127 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const error = str(b.error, 300);
       return { type: "cloud_started", taskId: b.taskId, ...(isSafeLink(b.sessionUrl) ? { sessionUrl: b.sessionUrl } : {}), ...(error ? { error } : {}) };
     }
+    case "agent_event": {
+      if (!isHubId(b.runId)) return null;
+      const state = parseAgentState(b.state, b.runId);
+      if (!state || !Array.isArray(b.events)) return null;
+      const events = b.events.slice(0, HUB_LIMITS.agentBatchEvents).map(parseActivityEvent).filter((e): e is ActivityEvent => !!e);
+      return { type: "agent_event", runId: b.runId, state, events };
+    }
     default:
       return null;
   }
+}
+
+const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
+const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+const optNum = (k: string, v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
+const optStr = (k: string, v: unknown, max: number) => (typeof v === "string" && v ? { [k]: v.slice(0, max) } : {});
+
+/**
+ * A file path as an event may carry it: relative, forward slashes, no `..`, no drive or home prefix, at most 160
+ * characters. A path that cannot be made safe is dropped.
+ *
+ * @param p - The path as the agent named it.
+ * @returns The clean path, or undefined.
+ */
+export function cleanAgentPath(p: unknown): string | undefined {
+  if (typeof p !== "string") return undefined;
+  let s = p.trim().replace(/\\/g, "/");
+  // An absolute path keeps only its last three parts (never a user name or a home folder).
+  if (/^([a-zA-Z]:)?\//.test(s) || s.startsWith("~")) s = s.split("/").filter((x) => x && x !== "~").slice(-3).join("/");
+  // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused here
+  if (!s || s.split("/").includes("..") || /[\u0000-\u001f]/.test(s)) return undefined;
+  return s.slice(-160);
+}
+
+function parseWaiting(x: unknown): AgentWaiting | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const w = x as Record<string, unknown>;
+  if (!isHubId(w.requestId) || !isHubId(w.conversationId)) return undefined;
+  const reason = w.reason === "ask" || w.reason === "run-press" ? w.reason : "approval";
+  return { reason, requestId: w.requestId, conversationId: w.conversationId, summary: str(w.summary, 200) };
+}
+
+/**
+ * Checks one activity event (after opening a batch): a known type, its fields present and capped.
+ *
+ * @param x - Untrusted input.
+ * @returns The event, or null.
+ */
+export function parseActivityEvent(x: unknown): ActivityEvent | null {
+  if (!x || typeof x !== "object") return null;
+  const e = x as Record<string, unknown>;
+  const head = { seq: num(e.seq), t: num(e.t) };
+  switch (e.type) {
+    case "started": {
+      const title = str(e.title, 120).trim();
+      if (!title || !SOURCES.includes(e.source as AgentSource)) return null;
+      return { ...head, type: "started", title, source: e.source as AgentSource, ...optStr("model", e.model, HUB_LIMITS.nameChars) };
+    }
+    case "step":
+      return { ...head, type: "step", n: num(e.n), ...optNum("of", e.of), label: str(e.label, 80) };
+    case "tool": {
+      const name = str(e.name, 60);
+      return name ? { ...head, type: "tool", name, ok: e.ok !== false, ...optNum("ms", e.ms) } : null;
+    }
+    case "file": {
+      const path = cleanAgentPath(e.path);
+      return path ? { ...head, type: "file", path, op: FILE_OPS.includes(e.op as AgentFile["op"]) ? (e.op as AgentFile["op"]) : "read" } : null;
+    }
+    case "usage":
+      return { ...head, type: "usage", tokensIn: num(e.tokensIn), tokensOut: num(e.tokensOut) };
+    case "waiting": {
+      const w = parseWaiting(e);
+      return w ? { ...head, type: "waiting", ...w } : null;
+    }
+    case "done": {
+      const branch = str(e.branch, 200);
+      return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}) };
+    }
+    case "failed":
+      return { ...head, type: "failed", reason: str(e.reason, 200) };
+    case "cancelled":
+      return { ...head, type: "cancelled" };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Checks a run's state (after opening a batch).
+ *
+ * @param x - Untrusted input.
+ * @param runId - The batch's run id (the state must be for the same run).
+ * @returns The state, or null.
+ */
+export function parseAgentState(x: unknown, runId: string): AgentRunState | null {
+  if (!x || typeof x !== "object") return null;
+  const s = x as Record<string, unknown>;
+  if (s.runId !== runId || !SOURCES.includes(s.source as AgentSource) || !RUN_STATES.includes(s.state as AgentRunState["state"])) return null;
+  const names = Array.isArray(s.fileNames) ? s.fileNames.map(cleanAgentPath).filter((p): p is string => !!p).slice(-5) : [];
+  const waiting = s.state === "waiting" ? parseWaiting(s.waiting) : undefined;
+  const branch = str(s.branch, 200);
+  return {
+    runId,
+    title: str(s.title, 120).trim() || "Agent",
+    source: s.source as AgentSource,
+    state: s.state as AgentRunState["state"],
+    ...optStr("model", s.model, HUB_LIMITS.nameChars),
+    step: num(s.step),
+    ...optNum("of", s.of),
+    ...optStr("label", s.label, 80),
+    startedAt: num(s.startedAt),
+    lastEventAt: num(s.lastEventAt),
+    ...optNum("endedAt", s.endedAt),
+    ...optNum("tokensIn", s.tokensIn),
+    ...optNum("tokensOut", s.tokensOut),
+    files: num(s.files),
+    fileNames: names,
+    ...(waiting ? { waiting } : {}),
+    ...(branch ? { branch } : {}),
+    ...(isSafeLink(s.link) ? { link: s.link } : {}),
+  };
 }

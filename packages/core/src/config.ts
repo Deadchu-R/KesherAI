@@ -196,6 +196,9 @@ export const KesherConfigSchema = z.object({
           acceptLocal: z.boolean().default(false),
           acceptAntigravity: z.boolean().default(false),
           reportLinks: z.boolean().default(false),
+          /** Live agent activity to the owner's phones (sealed metadata), and with it the touched files' names. */
+          reportActivity: z.boolean().default(false),
+          reportFileNames: z.boolean().default(false),
         })
         .prefault({}),
       /** Hub task ids whose result was already sent back. */
