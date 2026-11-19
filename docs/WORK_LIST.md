@@ -63,7 +63,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Design doc: boards from the real screens (agents, hub).
 - ✅ Task inbox (77169e22): Antigravity only on Roee's own Run, from the PC or the phone (one ask = one task, 30 min); push only agy/* and kesher-inbox. Needs a live test on the PC.
 - ✅ Research: Google's terms for Antigravity (Run per task OK; unattended not on AI Pro; Jules/AI Studio key for that).
-- 🔨 The same Run ask for `@antigravity` in the chat agents.
+- ✅ The same Run ask for `@antigravity` in the chat agents (9327418a).
+- ⏸ Paused (Roee, 14:40: near the weekly usage limit; resume when he has set up the hub): research on the hub as a Claude connector. Stopped at: reading Claude's custom-connector auth and tool-permission docs; nothing written to RESEARCH_LOG yet.
 - 👤 Roee wants an update when the inbox is ready AND the hub site is live (needs his Google OAuth client + Cloudflare).
 - ✅ Usage tracker: docs/usage (track.py + charts); re-run after each build.
 
