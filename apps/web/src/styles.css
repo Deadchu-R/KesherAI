@@ -3996,3 +3996,78 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
   .hs-model, .hs-steps { grid-column: 2; }
   .he-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The task inbox (pages/TaskInboxPage.tsx): queue table on the computer, cards at 390 px. */
+.tinbox .tinbox-head { flex-wrap: wrap; gap: 8px; }
+.tinbox .tinbox-head h1 { margin: 0; }
+.tinbox-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: calc(999px * var(--r-scale, 1)); border: 1px solid var(--border-strong); background: var(--panel-2); font-size: 12.5px; white-space: nowrap; }
+.tinbox-chip.good { color: var(--good); border-color: rgb(111 211 165 / 0.35); }
+.tinbox-chip.warn { color: var(--warn); border-color: rgb(242 182 109 / 0.35); }
+.tinbox .chip-text.on { background: var(--raised); color: var(--text); }
+.tinbox-status { gap: 8px; }
+.tinbox-err { color: var(--warn); }
+.tinbox-terms { border-inline-start: 3px solid var(--accent); padding-inline-start: 10px; }
+.tinbox-later { opacity: 0.7; border: 1px dashed var(--border-strong); border-radius: 6px; padding: 0 6px; }
+.tinbox-quota { border-color: rgb(242 182 109 / 0.45); }
+.tinbox-ask { border-color: rgb(152 163 255 / 0.5); background: var(--accent-soft); }
+.tinbox-ask p { margin: 4px 0; }
+.tinbox-goal { white-space: pre-wrap; overflow-wrap: anywhere; margin: 2px 0; }
+.tinbox-table { padding: 0; overflow: hidden; }
+.tinbox-row { display: grid; grid-template-columns: 96px minmax(200px, 2fr) 124px 124px minmax(0, 1fr) minmax(0, 210px); gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.tinbox-row:last-child { border-bottom: none; }
+.tinbox-th { background: var(--panel-2); }
+.tinbox-empty { padding: 14px; margin: 0; }
+.tinbox-id { overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, monospace; font-size: 11px; }
+.tinbox-title { min-width: 0; }
+.tinbox-title .link { background: none; border: none; padding: 0; color: var(--text); font: inherit; font-weight: 500; text-align: start; cursor: pointer; }
+.tinbox-title .link:hover { text-decoration: underline; }
+.tinbox-from { color: #c3a6ff; }
+.tinbox-branch { font-family: ui-monospace, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tinbox-actions { gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.tinbox-actions button { height: 30px; padding: 0 10px; font-size: 13px; }
+.tinbox .danger { color: var(--bad); }
+.tinbox-ex { display: inline-block; padding: 2px 9px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12px; white-space: nowrap; border: 1px solid var(--border-strong); }
+.tinbox-ex.agy { color: #8fd0ff; border-color: rgb(143 208 255 / 0.35); }
+.tinbox-ex.local { color: var(--good); border-color: rgb(111 211 165 / 0.35); }
+.tinbox-ex.opus { color: #e8b4ff; border-color: rgb(232 180 255 / 0.35); }
+.tinbox-st { display: inline-block; padding: 2px 9px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12px; background: var(--panel-2); color: var(--text-2); }
+.tinbox-st.run { color: var(--accent); }
+.tinbox-st.ask { color: var(--warn); }
+.tinbox-st.good { color: var(--good); }
+.tinbox-st.warn { color: var(--warn); }
+.tinbox-st.bad { color: var(--bad); }
+.tinbox-legend { gap: 14px; color: var(--text-2); }
+.tinbox-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.tinbox-cols h2, .tinbox-task h2 { margin: 0; font-size: 16px; }
+.tinbox-task h1 { margin: 0; font-size: 22px; }
+.tinbox-plan { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.tinbox-plan .completed { color: var(--text-2); }
+.tinbox-plan .in_progress { color: var(--accent); }
+.tinbox-cmd { direction: ltr; text-align: left; margin: 0; padding: 10px 12px; background: #0e0e10; border-radius: var(--radius-sm); font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tinbox-approve { border-color: rgb(242 182 109 / 0.5); }
+.tinbox-diff { direction: ltr; text-align: left; margin: 0; padding: 8px 0; max-height: 420px; overflow: auto; background: #0e0e10; border-radius: var(--radius-sm); font: 12px/1.6 ui-monospace, monospace; color: #d6d6dc; }
+.tinbox-diff div { padding: 0 12px; white-space: pre; }
+.tinbox-diff .dp { background: #16301f; color: #a6e3b8; }
+.tinbox-diff .dm { background: #3a1d20; color: #f2a6a6; }
+.tinbox-diff .dh { color: #8b8bd6; }
+.tinbox-plus { color: var(--good); }
+.tinbox-minus { color: var(--bad); }
+.tinbox-check { gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.tinbox code { font-size: 12px; padding: 1px 6px; border-radius: 6px; background: var(--panel-2); overflow-wrap: anywhere; }
+.tinbox-settings .tinbox-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tinbox-settings textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 12.5px; }
+.tinbox-settings .locked { opacity: 0.6; }
+@media (max-width: 760px) {
+  .tinbox .hide-phone { display: none; }
+  .tinbox .tinbox-head h1, .tinbox-task h1 { flex-basis: 100%; font-size: 22px; }
+  .tinbox-th { display: none; }
+  .tinbox-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title title" "ex st" "branch branch" "act act"; gap: 6px 8px; padding: 12px; }
+  .tinbox-row .tinbox-id { display: none; }
+  .tinbox-row .tinbox-title { grid-area: title; }
+  .tinbox-row > span:nth-child(3) { grid-area: ex; }
+  .tinbox-row > span:nth-child(4) { grid-area: st; justify-self: end; }
+  .tinbox-row .tinbox-branch { grid-area: branch; }
+  .tinbox-row .tinbox-actions { grid-area: act; justify-content: flex-start; }
+  .tinbox-cols { grid-template-columns: minmax(0, 1fr); }
+  .tinbox-legend { display: grid; gap: 6px; }
+}

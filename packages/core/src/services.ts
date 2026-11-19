@@ -169,6 +169,8 @@ export interface KesherServices {
   board?: TaskBoard;
   /** The link to the Kesher Cloud hub (off until the user turns it on). */
   hub?: HubClient;
+  /** The task inbox (Claude's tasks on the kesher-inbox branch; Antigravity on the user's Run). */
+  taskInbox?: import("./inbox-runner.js").TaskInbox;
   /** Set in worker mode: its version, and "move to the newer version after the current item". */
   worker?: { version: string; upgrade: () => void };
   /** Set in the main desktop app: starts the worker and says where it is. */

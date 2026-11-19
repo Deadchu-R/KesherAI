@@ -46,13 +46,32 @@ export function includedFiles(patterns: string, ignoredFiles: string[]): string[
 }
 
 /**
+ * Keeps `.kesher/worktrees/` out of the user's `git status`, without changing a file they commit (the repo's local
+ * exclude file).
+ *
+ * @param repo - The repo root.
+ * @param git - Runs git.
+ */
+export async function excludeWorktrees(repo: string, git: Git): Promise<void> {
+  const exclude = join(resolve(repo, (await git(repo, ["rev-parse", "--git-common-dir"])).trim()), "info", "exclude");
+  const had = existsSync(exclude) ? await readFile(exclude, "utf8") : "";
+  if (!/^\/?\.kesher\/worktrees\/?$/m.test(had)) {
+    await mkdir(dirname(exclude), { recursive: true });
+    await appendFile(exclude, `${had && !had.endsWith("\n") ? "\n" : ""}/.kesher/worktrees/\n`);
+  }
+}
+
+/**
  * Makes a session's worktree.
  *
  * @param folder - A folder inside the user's git checkout.
  * @param name - From {@link worktreeName}.
  * @param git - Runs git.
+ * @param opts - `branch`: its own branch name instead of `kesher/<name>` (the task inbox's `agy/…`); `base`: the
+ *   commit to start from instead of HEAD; `copyIncluded: false`: do not copy `.worktreeinclude` files (such as `.env`)
+ *   into it (a worktree an outside agent works in gets no secrets).
  */
-export async function createSessionWorktree(folder: string, name: string, git: Git): Promise<SessionWorktree> {
+export async function createSessionWorktree(folder: string, name: string, git: Git, opts: { branch?: string; base?: string; copyIncluded?: boolean } = {}): Promise<SessionWorktree> {
   if (!/^[a-z0-9-]{1,60}$/.test(name)) throw new Error("Bad worktree name.");
   let repo: string;
   try {
@@ -60,21 +79,15 @@ export async function createSessionWorktree(folder: string, name: string, git: G
   } catch {
     throw new Error("This folder is not a git project, so it cannot have a worktree. Start the session without one, or run `git init` there first.");
   }
-  const base = (await git(repo, ["rev-parse", "HEAD"]).catch(() => "")).trim();
-  if (!base) throw new Error("The git project has no commit yet: commit once, then start a session in a worktree.");
+  const base = (await git(repo, ["rev-parse", "--verify", `${opts.base ?? "HEAD"}^{commit}`]).catch(() => "")).trim();
+  if (!base) throw new Error(opts.base ? `There is no commit ${opts.base} in this project.` : "The git project has no commit yet: commit once, then start a session in a worktree.");
   const path = join(repo, ".kesher", "worktrees", name);
-  const branch = `kesher/${name}`;
-  // Keep the worktrees out of the user's `git status`, without changing a file they commit.
-  const exclude = join(resolve(repo, (await git(repo, ["rev-parse", "--git-common-dir"])).trim()), "info", "exclude");
-  const had = existsSync(exclude) ? await readFile(exclude, "utf8") : "";
-  if (!/^\/?\.kesher\/worktrees\/?$/m.test(had)) {
-    await mkdir(dirname(exclude), { recursive: true });
-    await appendFile(exclude, `${had && !had.endsWith("\n") ? "\n" : ""}/.kesher/worktrees/\n`);
-  }
+  const branch = opts.branch ?? `kesher/${name}`;
+  await excludeWorktrees(repo, git);
   await mkdir(dirname(path), { recursive: true });
   await git(repo, ["worktree", "add", "-b", branch, path, base]);
   // .worktreeinclude: ignored files (.env and the like) the new checkout needs.
-  const want = existsSync(join(repo, ".worktreeinclude")) ? await readFile(join(repo, ".worktreeinclude"), "utf8") : "";
+  const want = opts.copyIncluded !== false && existsSync(join(repo, ".worktreeinclude")) ? await readFile(join(repo, ".worktreeinclude"), "utf8") : "";
   if (want.trim()) {
     // --directory: an ignored folder (node_modules) is one line, so the list stays short and .env is not cut off.
     const ignored = (await git(repo, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory"]).catch(() => "")).split(/\r?\n/);

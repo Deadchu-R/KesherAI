@@ -9,7 +9,7 @@ import { hostname } from "node:os";
 import { LinkWatch } from "./link-watch.js";
 import { LinkBeaconPoster } from "./link-beacon-post.js";
 import { LipSync } from "./lipsync.js";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import Fastify from "fastify";
 import { constants as zlibConstants } from "node:zlib";
 import cors from "@fastify/cors";
@@ -60,6 +60,10 @@ import { ProjectFacts } from "./project-facts.js";
 import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
+import { buildTaskInbox } from "./server/build-inbox.js";
+
+/** The hub approval list's name for the task inbox's run asks. */
+const INBOX_ASKS = "task-inbox";
 import { CORE_VERSION } from "./routes/system.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { sdProvider } from "./sdcpp.js";
@@ -552,17 +556,29 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.worker = worker && workerUpgrade ? { version: worker.version, upgrade: workerUpgrade } : undefined;
   services.workerHost = options.workerHost;
   services.board = taskBoard;
+  // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
+  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard });
+  services.taskInbox = taskInbox;
   // Kesher Cloud hub: off until the user turns it on; tasks from it land on this board (hub-client.ts).
   const hub = new HubClient({
     settings: () => config.hub,
     persist,
     board: taskBoard,
+    inbox: (t, boardId) => taskInbox.fromHub(t, boardId),
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",
     approvals: {
-      pending: () => services.conversations.pendingApprovals().map(({ conversationId, requestId, title, tool, preview, reason }) => ({ conversationId, requestId, title, tool, preview, reason })),
-      answer: async (conversationId, requestId, decision) => !!(await services.conversations.open(conversationId))?.session.approve(requestId, decision),
+      pending: () => [
+        ...services.conversations.pendingApprovals().map(({ conversationId, requestId, title, tool, preview, reason }) => ({ conversationId, requestId, title, tool, preview, reason })),
+        // The PC's "Run this task in Antigravity?" asks, so the phone can answer away from home.
+        ...taskInbox.openAsks().map(({ task, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: `Run in Antigravity? ${task.title}`.slice(0, 200), tool: "antigravity", preview: [task.goal.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · Branch: ${task.branch} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this one task. The ask expires in 30 minutes." })),
+      ],
+      answer: async (conversationId, requestId, decision, from) => {
+        // A run answer counts only from a paired phone (its sealed, signed message); one answer is one task.
+        if (conversationId === INBOX_ASKS) return from?.kind === "phone" && !!(await taskInbox.answerRun(requestId, decision, `hub:${from.id}`).catch(() => undefined));
+        return !!(await services.conversations.open(conversationId))?.session.approve(requestId, decision);
+      },
     },
   });
   services.hub = hub;

@@ -1,0 +1,242 @@
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import ignore from "ignore";
+import type { AcpPermission } from "./acp.js";
+
+/**
+ * The task inbox's rules for an agent's steps and for the work it returns (docs/RESEARCH_LOG.md, "A task inbox",
+ * approvals policy). KesherAI decides from each permission request, not the agent: reads and edits inside the
+ * worktree and the task's paths, and commands on the user's list, are allowed; git push and other history or
+ * branch changes, installs, the network, secret files and anything outside the worktree are denied; the rest is
+ * asked (the task waits for the user). After the turn the diff is checked again by KesherAI itself.
+ */
+
+/** What the policy decided, and the rule (English; the page translates the known ones). */
+export interface PolicyVerdict {
+  verdict: "allow" | "deny" | "ask";
+  rule: string;
+  /** The step in a few words (a command, `edit path`). */
+  what: string;
+}
+
+/** The task's limits the policy needs. */
+export interface PolicyContext {
+  worktree: string;
+  allowedPaths: string[];
+  forbiddenPaths: string[];
+  commands: string[];
+}
+
+/** Commands never allowed (the first word, or the first two). */
+const DENY_COMMANDS: RegExp[] = [
+  /^git\s+(push|checkout|switch|reset|rebase|remote|config|tag|branch|merge|pull|fetch|clone|cherry-pick|filter-branch|update-ref|worktree|commit|add|stash|clean|gc|reflog)\b/,
+  /^(sudo|su|doas|runas|chmod|chown|icacls|takeown|reg|setx|netsh|schtasks|crontab|systemctl|launchctl)\b/,
+  /^(curl|wget|ssh|scp|sftp|ftp|nc|ncat|telnet|rsync|iwr|irm|invoke-webrequest|invoke-restmethod|start-bitstransfer)\b/i,
+  /^(pnpm|npm|yarn|bun)\s+(add|install|i|ci|remove|rm|uninstall|update|up|upgrade|publish|link|dlx|exec|x)\b/,
+  /^(npx|pnpx|bunx)\b/,
+  /^(pip|pip3|uv|cargo|go|gem|brew|apt|apt-get|winget|choco|scoop)\s+(install|add|get)\b/,
+  /^(rm|del|rmdir|rd|remove-item)\b.*(\s|^)(-rf?|\/s|-recurse)\b/i,
+  /^(powershell|pwsh|cmd|bash|sh|zsh)\b/i,
+  /^(gh|agy|claude|codex)\b/,
+];
+
+/** Files no step may read or change: secrets and keys. */
+const SECRET_FILE = /(^|[\\/])(\.env(\.[\w.-]*)?|\.npmrc|\.netrc|\.git-credentials|id_(rsa|ed25519|ecdsa)(\.pub)?|[^\\/]+\.(pem|key|p12|pfx)|credentials(\.json)?|secrets?\.(json|ya?ml))$/i;
+
+/** Pulls the fields a step names out of the agent's raw input (its JSON). */
+function fieldsOf(raw: string | undefined): { command?: string; paths: string[] } {
+  if (!raw) return { paths: [] };
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return { paths: [] };
+  }
+  const paths: string[] = [];
+  let command: string | undefined;
+  const walk = (x: unknown, key = "", depth = 0) => {
+    if (depth > 4 || x == null) return;
+    if (typeof x === "string") {
+      if (/^(command|cmd|commandline|command_line|script)$/i.test(key)) command ??= x;
+      else if (/(^|_)(path|file|filepath|file_path|abs_path|absolute_path|target|source|destination|dir|directory|cwd)$/i.test(key)) paths.push(x);
+      return;
+    }
+    if (Array.isArray(x)) {
+      if (/^(command|cmd|args|argv)$/i.test(key) && x.every((y) => typeof y === "string")) command ??= (x as string[]).join(" ");
+      else x.slice(0, 30).forEach((y) => walk(y, key, depth + 1));
+      return;
+    }
+    if (typeof x === "object") for (const [k, y] of Object.entries(x as Record<string, unknown>).slice(0, 40)) walk(y, k, depth + 1);
+  };
+  walk(v);
+  return { ...(command ? { command: command.trim() } : {}), paths };
+}
+
+/**
+ * A path relative to the worktree, or undefined when it is outside it.
+ *
+ * @param worktree - The task's worktree.
+ * @param p - A path the step names (absolute or relative to the worktree).
+ */
+export function insideWorktree(worktree: string, p: string): string | undefined {
+  const root = resolve(worktree);
+  const full = isAbsolute(p) ? resolve(p) : resolve(root, p);
+  if (full !== root && !full.startsWith(root + sep)) return undefined;
+  return relative(root, full).split(sep).join("/");
+}
+
+/**
+ * Whether a project path matches a list of globs (.gitignore syntax: `apps/**`, `packages/*\/src/**`, `.env*`).
+ *
+ * @param path - Relative to the project, with `/`.
+ * @param globs - The list.
+ */
+export function matchesAny(path: string, globs: string[]): boolean {
+  if (!path || !globs.length) return false;
+  return ignore().add(globs).ignores(path);
+}
+
+/** Whether a changed path is inside the allowed paths and outside the forbidden ones. */
+export function pathAllowed(path: string, allowed: string[], forbidden: string[]): boolean {
+  return matchesAny(path, allowed) && !matchesAny(path, forbidden) && !SECRET_FILE.test(path);
+}
+
+/**
+ * Whether a command may run without asking: every part of `a && b` starts with an allowed command and has no
+ * other shell syntax.
+ */
+function commandAllowed(command: string, allowed: string[]): boolean {
+  const parts = command.split("&&").map((p) => p.trim()).filter(Boolean);
+  if (!parts.length || /[;|<>`$\n&]/.test(command.replace(/&&/g, " "))) return false;
+  return parts.every((p) => {
+    const argv = p.split(/\s+/);
+    // An allowed command still may not look outside the worktree (`ls ~`, `rg x ../..`, `C:\…`).
+    if (argv.some((w) => /^(~|\/|\.\.([\\/]|$)|[a-z]:[\\/])/i.test(w) || /[\\/]\.\.([\\/]|$)/.test(w))) return false;
+    return allowed.some((a) => {
+      const want = a.trim().split(/\s+/);
+      return want.length > 0 && want.every((w, i) => argv[i] === w);
+    });
+  });
+}
+
+/**
+ * Decides one permission request of an agent working on an inbox task.
+ *
+ * @param p - The request, as acp.ts flattened it.
+ * @param ctx - The task's worktree, paths and the allowed commands.
+ * @returns The verdict and the rule.
+ */
+export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict {
+  const f = fieldsOf(p.rawInput);
+  const kind = (p.toolKind ?? "").toLowerCase();
+  const diffPaths = (p.diffs ?? []).map((d) => d.path);
+  const paths = [...new Set([...f.paths, ...diffPaths])];
+  const label = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 200);
+
+  if (f.command || kind === "execute") {
+    const command = f.command ?? p.title;
+    const what = label(command || "a command");
+    const parts = command.split(/&&|\|\||;|\|/).map((x) => x.trim()).filter(Boolean);
+    for (const part of parts) if (DENY_COMMANDS.some((r) => r.test(part))) return { verdict: "deny", rule: /^git\s+(push|commit|add)\b/.test(part) ? "only KesherAI commits and pushes" : /^git\s/.test(part) ? "git history and branches are KesherAI's" : /install|add|ci\b|npx|pnpx|bunx/.test(part) ? "no installs" : /curl|wget|ssh|iwr|irm|web|scp|ftp|nc\b/i.test(part) ? "no network" : "not allowed in a task", what };
+    if (SECRET_FILE.test(command.split(/\s+/).find((w) => SECRET_FILE.test(w)) ?? "")) return { verdict: "deny", rule: "secret files", what };
+    // Where it runs (cwd) and any path it names must be inside the worktree.
+    if (f.paths.some((x) => !insideWorktree(ctx.worktree, x))) return { verdict: "deny", rule: "outside the worktree", what };
+    return commandAllowed(command, ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
+  }
+
+  if (kind === "fetch") return { verdict: "deny", rule: "no network", what: label(p.title || "fetch") };
+
+  const rel = paths.map((x) => insideWorktree(ctx.worktree, x));
+  const shown = label(`${kind || "step"} ${rel.map((r, i) => r ?? paths[i]).join(", ") || p.title}`);
+  if (rel.some((r) => r === undefined)) return { verdict: "deny", rule: "outside the worktree", what: shown };
+  if (rel.some((r) => SECRET_FILE.test(r!))) return { verdict: "deny", rule: "secret files", what: shown };
+
+  if (kind === "read" || kind === "search" || kind === "think") return { verdict: "allow", rule: "reading inside the project", what: shown };
+  if (kind === "edit" || kind === "delete" || kind === "move") {
+    if (!rel.length) return { verdict: "ask", rule: "the step does not say which file", what: shown };
+    if (rel.some((r) => matchesAny(r!, ctx.forbiddenPaths))) return { verdict: "deny", rule: "a forbidden path", what: shown };
+    if (rel.every((r) => matchesAny(r!, ctx.allowedPaths))) return { verdict: "allow", rule: "inside the allowed paths", what: shown };
+    return { verdict: "ask", rule: "outside the allowed paths", what: shown };
+  }
+  return { verdict: "ask", rule: "an unknown kind of step", what: shown };
+}
+
+/** A finding of the secrets and privacy scan. */
+export interface ScanFinding {
+  file: string;
+  kind: string;
+}
+
+/** Keys and tokens by their known shapes. */
+const SECRET_PATTERNS: Array<[string, RegExp]> = [
+  ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
+  ["AWS key", /\bAKIA[0-9A-Z]{16}\b/],
+  ["GitHub token", /\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b/],
+  ["API key", /\bsk-(ant-|proj-)?[A-Za-z0-9_-]{24,}\b/],
+  ["Google key", /\bAIza[0-9A-Za-z_-]{35}\b/],
+  ["Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/],
+  ["Hugging Face token", /\bhf_[A-Za-z0-9]{30,}\b/],
+];
+
+/** Addresses that are fine in code (examples, no-reply). */
+const OK_EMAIL = /@(example\.(com|org|net)|users\.noreply\.github\.com|anthropic\.com|noreply\.invalid|kesher\.invalid|localhost|test)$/i;
+/** User names that are not a person (placeholders and system accounts). */
+const OK_USER = /^(public|default|default user|all users|user|username|you|me|name|runner|runneradmin|root|claude|node|app|ubuntu|vscode|codespace|\$\{?\w+\}?|%\w+%|<[^>]+>|\.\.\.|x+)$/i;
+
+/**
+ * Scans the lines a change adds for keys, tokens, email addresses, the Windows user name and personal paths
+ * (Roee's rule: nothing in git may show them). Run by KesherAI on the diff before every commit.
+ *
+ * @param diff - A unified diff (`git diff`).
+ * @param me - This computer's user name and home folder, which must never appear.
+ * @returns What was found, by file (never the found text itself, so the finding can be shown and logged).
+ */
+export function scanDiff(diff: string, me: { username?: string; home?: string } = {}): ScanFinding[] {
+  const out: ScanFinding[] = [];
+  let file = "";
+  const home = me.home && me.home.length > 3 ? me.home.toLowerCase().replace(/\\/g, "/") : undefined;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ ")) {
+      file = line.slice(4).replace(/^b\//, "").trim();
+      continue;
+    }
+    if (!line.startsWith("+") || line.startsWith("+++")) continue;
+    const add = line.slice(1);
+    const hit = (kind: string) => {
+      if (!out.some((f) => f.file === file && f.kind === kind)) out.push({ file, kind });
+    };
+    for (const [kind, re] of SECRET_PATTERNS) if (re.test(add)) hit(kind);
+    for (const m of add.matchAll(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g)) if (!OK_EMAIL.test(m[0]) && !/^[\w.+-]+@\d/.test(m[0]) && /\.[a-z]{2,}$/i.test(m[0])) hit("email address");
+    for (const m of add.matchAll(/[a-z]:[\\/]+users[\\/]+([^\\/"'`\s]+)/gi)) if (!OK_USER.test(m[1]!)) hit("personal path");
+    for (const m of add.matchAll(/\/(?:home|Users)\/([^/"'`\s]+)/g)) if (!OK_USER.test(m[1]!)) hit("personal path");
+    const low = add.toLowerCase();
+    if (home && low.replace(/\\/g, "/").includes(home)) hit("personal path");
+    // The user name itself only as part of a path (a bare word can be anyone's name, and his name may be in git).
+    if (me.username && me.username.length >= 2 && new RegExp(`[\\\\/]${me.username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\\\/]|$)`, "i").test(add)) hit("user name");
+  }
+  return out;
+}
+
+/**
+ * Checks the files a change touched against the task's limits.
+ *
+ * @param files - Changed paths (relative, `/`).
+ * @param ctx - The allowed and forbidden paths, and the most files.
+ * @returns The paths outside the limits, and whether there are too many files.
+ */
+export function checkPaths(files: string[], ctx: { allowedPaths: string[]; forbiddenPaths: string[]; maxFiles: number }): { outside: string[]; tooMany: boolean } {
+  return { outside: files.filter((f) => !pathAllowed(f, ctx.allowedPaths, ctx.forbiddenPaths)), tooMany: files.length > ctx.maxFiles };
+}
+
+/**
+ * Whether a diff changes a `"version"` field in a package.json (releases are the lead's).
+ *
+ * @param diff - The unified diff.
+ */
+export function changesVersion(diff: string): boolean {
+  let pkg = false;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ ")) pkg = /(^|\/)package\.json$/.test(line.slice(4).trim());
+    else if (pkg && /^[+-]\s*"version"\s*:/.test(line)) return true;
+  }
+  return false;
+}

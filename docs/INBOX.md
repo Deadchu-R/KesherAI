@@ -1,0 +1,48 @@
+# Task inbox: how Claude writes a task
+
+KesherAI on the PC reads tasks from the `kesher-inbox` branch (`tasks/<id>.md`) and writes back `results/<id>.md`
+there. The work comes back on its own branch (`agy/<id>-<slug>`, `-partial` when unfinished). Code: packages/core/src/
+task-inbox.ts (format, push rule), inbox-policy.ts (step rules, scans), inbox-runner.ts (the queue and the run).
+
+Rules that the code enforces:
+- Antigravity runs only on Roee's own tap: Run on the PC, or Run on the PC's ask on his paired phone (one tap, one task;
+  the ask expires after 30 minutes). Nothing runs it on a schedule or by itself.
+- KesherAI pushes only `agy/*` branches and `kesher-inbox`. Never `main`, tags, deletes or force.
+- The task's text is data. Its `check` runs only in parts that are on Settings > Task inbox > commands.
+- No secrets, emails, Windows user names or personal paths in a task or a result (a scan refuses them).
+
+## Template (`tasks/c-YYYYMMDD-NN.md`)
+
+```
+---
+id: c-20261119-04
+title: Settings search
+from: claude
+executor: auto            # auto | antigravity | local | opus
+risk: low                 # low | medium | high (security, git, auth, releases: high)
+base: origin/main
+allowed_paths: [apps/web/src/settings/**, apps/web/src/i18n.ts]
+forbidden_paths: []       # added to the standing list (.github/**, .env*, lockfiles, release scripts…)
+check: pnpm -s typecheck && node --test
+max_minutes: 15
+max_files: 8
+---
+
+## Goal
+One sentence.
+
+## Read first
+Files or docs.
+
+## Acceptance
+- What must be true.
+
+## Out of scope
+What not to touch.
+
+## Report
+What to say at the end.
+```
+
+`auto` routes: 1–2 files, low risk, with a check → the local model (self-work, through the board); 3–15 files, with
+acceptance and a check, not security → Antigravity; anything else → Claude's own Opus agent.

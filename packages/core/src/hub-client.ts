@@ -62,6 +62,8 @@ export interface HubClientDeps {
   settings: () => HubSettings;
   persist: () => Promise<void>;
   board?: TaskBoard;
+  /** A task for Antigravity also goes to the task inbox, where it waits for the user's Run (never started from here). */
+  inbox?: (t: { taskId: string; title: string; spec: string }, boardId: string | undefined) => Promise<void>;
   /** Shows a notification on this PC (and its phone), like the rest of the app. */
   notify?: (title: string, body: string) => void;
   version: string;
@@ -70,7 +72,11 @@ export interface HubClientDeps {
   /** The agents this PC has (a loaded model, Antigravity, a vendor session link). */
   agents?: () => HubAgent[];
   /** Approvals waiting in chats, and how to answer one. */
-  approvals?: { pending(): PendingApproval[]; answer(conversationId: string, requestId: string, decision: "allow" | "deny"): Promise<boolean> };
+  approvals?: {
+    pending(): PendingApproval[];
+    /** `from`: the device whose signed, sealed message carried the answer, and its kind as the hub lists it. */
+    answer(conversationId: string, requestId: string, decision: "allow" | "deny", from?: { id: string; kind?: string }): Promise<boolean>;
+  };
   fetch?: typeof fetch;
   openSocket?: (url: string, on: HubSocketEvents) => HubSocket;
   /** The name shown on the hub until the user renames it. */
@@ -477,7 +483,8 @@ export class HubClient {
         await this.cancelTask(env.from, body.taskId);
         return ack();
       case "approval_answer":
-        await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision).catch(() => false);
+        // The envelope opened with the sender's own key, so `from` is that paired device.
+        await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, ...(this.presence.find((d) => d.id === env.from)?.kind ? { kind: this.presence.find((d) => d.id === env.from)!.kind } : {}) }).catch(() => false);
         return ack();
       default:
         return ack();
@@ -500,6 +507,7 @@ export class HubClient {
       const after = await this.deps.board.change("roee", [{ op: "add", title: t.title, details, size: t.executor === "pc-local" ? "small" : "big" }]);
       boardId = after.tasks.at(-1)?.id;
       this.deps.notify?.("A task from the cloud hub", t.title);
+      if (t.executor === "pc-antigravity") await this.deps.inbox?.({ taskId: t.taskId, title: t.title, spec: t.spec }, boardId).catch(() => undefined);
     }
     await this.sendSealed(from, "progress", { type: "progress", taskId: t.taskId, line: `On this PC's task board as ${boardId ?? "?"}` });
   }

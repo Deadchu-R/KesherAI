@@ -202,6 +202,29 @@ export const KesherConfigSchema = z.object({
       reported: z.array(z.string().max(64)).default([]),
     })
     .prefault({}),
+  /**
+   * The task inbox (inbox-runner.ts; Settings > Task inbox): off until turned on. Antigravity runs only on the user's
+   * own Run (on the PC, or the answer to the PC's ask on the paired phone). Defaults from Roee (2026-11-19): 10
+   * Antigravity tasks a day, Gemini's default model.
+   */
+  taskInbox: z
+    .object({
+      enabled: z.boolean().default(false),
+      paused: z.boolean().default(false),
+      repo: z.string().max(500).optional(),
+      branch: z.string().max(60).default("kesher-inbox"),
+      fetchMinutes: z.number().int().min(1).max(120).default(5),
+      dailyCap: z.number().int().min(0).max(100).default(10),
+      maxMinutes: z.number().int().min(1).max(60).default(15),
+      model: z.string().max(80).default(""),
+      allowedPaths: z.array(z.string().max(120)).max(40).optional(),
+      forbiddenPaths: z.array(z.string().max(120)).max(60).optional(),
+      commands: z.array(z.string().max(120)).max(40).optional(),
+      notWhileGame: z.boolean().default(true),
+      notWhileEditor: z.boolean().default(true),
+      gpuBusyPercent: z.number().int().min(0).max(100).default(40),
+    })
+    .prefault({}),
   /** CivitAI: the user's own key, for LoRAs that need one to download (Images → Find LoRAs); never sent to a page. */
   civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */

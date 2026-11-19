@@ -96,6 +96,7 @@ import { downloadRoutes } from "../routes/downloads.js";
 import { openAIRoutes } from "../routes/openai.js";
 import { libraryRoutes } from "../routes/library.js";
 import { helperRoutes } from "../routes/helpers.js";
+import { taskInboxRoutes } from "../routes/task-inbox.js";
 import { fileRoutes } from "../routes/files.js";
 import { terminalRoutes } from "../routes/terminal.js";
 import websocket from "@fastify/websocket";
@@ -183,6 +184,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
   await helperRoutes(app, services);
+  if (services.taskInbox) await taskInboxRoutes(app, services, services.taskInbox);
   await fileRoutes(app, services);
   await bankRoutes(app, services);
   await roomRoutes(app, (services.sceneRooms ??= new SceneRooms()));

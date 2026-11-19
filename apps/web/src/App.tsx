@@ -44,6 +44,7 @@ import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
 import { SelfWorkPage } from "./pages/SelfWorkPage";
+import { TaskInboxPage } from "./pages/TaskInboxPage";
 import { TasksPage } from "./pages/TasksPage";
 import { StudyPage } from "./pages/StudyPage";
 import { AvatarFeed } from "./pages/AvatarCamera";
@@ -312,6 +313,7 @@ export function App() {
   else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/code") page = <CodeHome />;
   else if (hash === "#/self-work") page = <SelfWorkPage />;
+  else if (hash === "#/task-inbox" || hash.startsWith("#/task-inbox/")) page = <TaskInboxPage key={hash} {...(hash.length > 13 ? { id: decodeURIComponent(hash.slice(13)) } : {})} />;
   else if (hash === "#/tasks") page = <TasksPage />;
   else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;

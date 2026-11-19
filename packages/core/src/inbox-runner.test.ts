@@ -1,0 +1,245 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { agent } from "@agentclientprotocol/sdk";
+import { AcpAgent } from "./acp.js";
+import { TaskInbox, isQuotaError, quotaUntil, type RunCmd } from "./inbox-runner.js";
+import { TaskBoard } from "./task-board.js";
+
+// The tester's own git identity, as a user's global config would have it: the inbox must never commit with it.
+const gitConfig = join(mkdtempSync(join(tmpdir(), "kesher-gitcfg-")), "gitconfig");
+writeFileSync(gitConfig, "[user]\n\tname = Someone Real\n\temail = someone.real@example.com\n[init]\n\tdefaultBranch = main\n");
+const git: RunCmd = async (cwd, args) => {
+  const r = spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: "1" } });
+  return { code: r.status ?? -1, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+};
+const sh = async (cwd: string, ...args: string[]) => {
+  const r = await git(cwd, args);
+  assert.equal(r.code, 0, `git ${args.join(" ")}: ${r.out}`);
+  return r.out.trim();
+};
+
+const TASK = (id: string, paths = "[apps/**]") => `---
+id: ${id}
+title: Clear all downloads
+executor: antigravity
+risk: low
+allowed_paths: ${paths}
+check: git status
+max_files: 5
+---
+
+## Goal
+Add a "Clear all" button.
+`;
+
+/** A project with an `origin` (a bare repo) and a task on its inbox branch, as Claude would push it. */
+async function setup(tasks: Record<string, string>) {
+  const root = mkdtempSync(join(tmpdir(), "kesher-inbox-"));
+  const origin = join(root, "origin.git");
+  const repo = join(root, "repo");
+  await sh(root, "init", "--quiet", "--bare", "-b", "main", origin);
+  await sh(root, "clone", "--quiet", origin, repo);
+  await sh(repo, "checkout", "-q", "-b", "main");
+  mkdirSync(join(repo, "apps"), { recursive: true });
+  writeFileSync(join(repo, "apps", "a.ts"), "export const a = 1;\n");
+  writeFileSync(join(repo, "AGENTS.md"), "rules\n");
+  await sh(repo, "add", "-A");
+  await sh(repo, "commit", "-q", "-m", "init");
+  await sh(repo, "push", "-q", "origin", "main");
+  // Claude's side: another clone writes tasks/ on the inbox branch.
+  const claude = join(root, "claude");
+  await sh(root, "clone", "--quiet", origin, claude);
+  await sh(claude, "checkout", "-q", "--orphan", "kesher-inbox");
+  await sh(claude, "rm", "-rfq", ".");
+  for (const [id, text] of Object.entries(tasks)) {
+    mkdirSync(join(claude, "tasks"), { recursive: true });
+    writeFileSync(join(claude, "tasks", `${id}.md`), text);
+  }
+  await sh(claude, "add", "-A");
+  await sh(claude, "commit", "-q", "-m", "tasks");
+  await sh(claude, "push", "-q", "origin", "kesher-inbox");
+  return { root, origin, repo };
+}
+
+/** A fake `agy acp`: asks for a push (denied by the policy), an install (asked), edits a file in its folder. */
+function fakeAgy(write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }) {
+  let cwd = "";
+  return agent()
+    .onRequest("initialize", () => ({ protocolVersion: 1, agentInfo: { name: "fake-agy" }, authMethods: [] }))
+    .onRequest("session/new", ({ params }) => {
+      cwd = params.cwd;
+      return { sessionId: "s1", modes: { currentModeId: "default", availableModes: [{ id: "default", name: "Default" }, { id: "accept-edits", name: "Accept edits" }] }, configOptions: [{ id: "model", name: "Model", category: "model", type: "select", currentValue: "gemini-flash", options: [{ value: "gemini-flash", name: "Gemini 3.8 Flash" }] }] };
+    })
+    .onRequest("session/set_mode", ({ params }) => {
+      seen.mode = params.modeId;
+      return {};
+    })
+    .onRequest("session/prompt", async ({ params, client }) => {
+      seen.prompts++;
+      const sessionId = params.sessionId;
+      const options = [
+        { optionId: "yes", name: "Allow", kind: "allow_once" as const },
+        { optionId: "no", name: "Deny", kind: "reject_once" as const },
+      ];
+      const push = await client.request("session/request_permission", { sessionId, toolCall: { toolCallId: "t1", title: "git push", kind: "execute", rawInput: { command: "git push origin HEAD" } }, options });
+      seen.push = push.outcome.outcome === "selected" ? push.outcome.optionId : "cancelled";
+      const install = await client.request("session/request_permission", { sessionId, toolCall: { toolCallId: "t2", title: "to filter the list", kind: "execute", rawInput: { command: "pnpm add fuse.js" } }, options });
+      seen.install = install.outcome.outcome === "selected" ? install.outcome.optionId : "cancelled";
+      const python = await client.request("session/request_permission", { sessionId, toolCall: { toolCallId: "t3", title: "a script", kind: "execute", rawInput: { command: "python gen.py" } }, options });
+      void python;
+      await client.notify("session/update", { sessionId, update: { sessionUpdate: "plan", entries: [{ content: "Edit the page", priority: "high", status: "completed" }] } });
+      for (const [p, text] of Object.entries(write)) {
+        mkdirSync(dirname(join(cwd, p)), { recursive: true });
+        writeFileSync(join(cwd, p), text);
+      }
+      await client.notify("session/update", { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Changed apps/a.ts. Checked with git status." } } });
+      return { stopReason: "end_turn" };
+    });
+}
+
+async function inboxFor(repo: string, root: string, write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }, now = () => Date.now()) {
+  const notes: string[] = [];
+  const board = new TaskBoard(join(root, "board.json"));
+  const settings = { enabled: true, repo, branch: "kesher-inbox", dailyCap: 2 };
+  const inbox = new TaskInbox({
+    settings: () => settings,
+    file: join(root, "inbox.json"),
+    git,
+    run: git.length ? async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }) : git,
+    startAgent: (_cwd, h) => AcpAgent.connect(fakeAgy(write, seen), h),
+    board,
+    notify: (t, b) => void notes.push(`${t} ${b}`),
+    busy: async () => ({ free: true, reasons: [] }),
+    me: { username: "someone", home: join(root, "home", "someone") },
+    now,
+    approvalMs: 300,
+  });
+  return { inbox, notes, board, settings };
+}
+
+const settle = async (inbox: TaskInbox, id: string) => {
+  await inbox.idle();
+  return inbox.task(id);
+};
+
+test("inbox run: Run on the PC, the policy, KesherAI's checks, one agy branch and the result pushed", async () => {
+  const { root, origin, repo } = await setup({ "c-20261119-02": TASK("c-20261119-02") });
+  const seen = { prompts: 0 } as { prompts: number; push?: string; install?: string; mode?: string };
+  const { inbox, notes, board } = await inboxFor(repo, root, { "apps/a.ts": "export const a = 2;\n" }, seen);
+  try {
+    await inbox.sync();
+    let t = await inbox.task("c-20261119-02");
+    assert.equal(t.status, "waiting");
+    assert.equal(t.runBy, "antigravity");
+    assert.ok(t.runAsk, "the PC asks right away");
+    assert.ok(notes.some((n) => /Run this task in Antigravity\?/.test(n)), "and the phone is told");
+    assert.ok((await board.read()).tasks.some((x) => x.id === t.boardId && /\[Inbox c-20261119-02\]/.test(x.title)), "on the shared board");
+
+    t = await inbox.run("c-20261119-02", { here: true });
+    assert.equal(t.status, "running");
+    await assert.rejects(inbox.run("c-20261119-02", { here: true }), /One at a time|cannot be run/);
+    // The install is asked; nobody answers within the (test) 300 ms, so it is denied.
+    t = await settle(inbox, "c-20261119-02");
+    assert.equal(seen.prompts, 1, "one prompt per Run");
+    assert.equal(seen.mode, "accept-edits");
+    assert.equal(seen.push, "no", "git push is denied by the policy");
+    assert.equal(seen.install, "no", "an unanswered ask is denied");
+    assert.equal(t.status, "done", t.note);
+    assert.equal(t.branch, "agy/c-20261119-02-clear-all-downloads");
+    assert.equal(t.pushed, true);
+    assert.equal(t.modelUsed, "Gemini 3.8 Flash");
+    assert.deepEqual(t.files, [{ path: "apps/a.ts", added: 1, removed: 1 }]);
+    assert.ok(t.checks?.every((c) => c.ok));
+    assert.ok(t.decisions?.some((d) => d.verdict === "deny" && /only KesherAI/.test(d.rule)));
+    assert.ok(t.decisions?.some((d) => d.verdict === "ask" && d.answer === "timeout"));
+    // On origin: the work branch (by KesherAI's own identity) and the result file; main untouched.
+    const remote = await sh(origin, "branch", "--list");
+    assert.match(remote, /agy\/c-20261119-02-clear-all-downloads/);
+    assert.equal(await sh(origin, "log", "-1", "--format=%an <%ae>", "agy/c-20261119-02-clear-all-downloads"), "KesherAI <kesherai@noreply.invalid>");
+    assert.equal(await sh(origin, "rev-list", "--count", "main"), "1", "main is never pushed");
+    const result = await sh(origin, "show", "kesher-inbox:results/c-20261119-02.md");
+    assert.match(result, /status: done/);
+    assert.match(result, /branch: agy\/c-20261119-02-clear-all-downloads/);
+    const item = (await board.read()).tasks.find((x) => x.id === t.boardId);
+    assert.equal(item?.status, "done");
+    assert.equal((await inbox.state(true)).today.used, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox run: from the phone, Run is the answer to the PC's ask — one answer, one task; expired asks start nothing", async () => {
+  const { root, repo } = await setup({ "c-20261119-03": TASK("c-20261119-03") });
+  const seen = { prompts: 0 };
+  let clock = Date.now();
+  const { inbox } = await inboxFor(repo, root, { "apps/a.ts": "export const a = 3;\n" }, seen, () => clock);
+  try {
+    await inbox.sync();
+    await assert.rejects(inbox.run("c-20261119-03", { here: false }), (e: { code?: number }) => e.code === 403);
+    const ask = (await inbox.task("c-20261119-03")).runAsk!;
+    assert.equal(await inbox.answerRun("not-the-id", "allow", "phone-1"), undefined);
+    assert.equal(await inbox.answerRun(ask.requestId, "allow", ""), undefined, "no verified sender, nothing starts");
+    // "Not now" uses the ask up.
+    assert.equal((await inbox.answerRun(ask.requestId, "deny", "phone-1"))?.status, "waiting");
+    assert.equal(await inbox.answerRun(ask.requestId, "allow", "phone-1"), undefined, "a used ask cannot start it");
+    // A new ask expires after its 30 (here 0.3 s of clock) minutes.
+    const again = (await inbox.askRun("c-20261119-03")).runAsk!;
+    clock += 1000;
+    assert.equal(await inbox.answerRun(again.requestId, "allow", "phone-1"), undefined);
+    // A fresh one answered in time runs the task once.
+    const fresh = (await inbox.askRun("c-20261119-03")).runAsk!;
+    assert.equal(inbox.openAsks().length, 1);
+    const t = await inbox.answerRun(fresh.requestId, "allow", "phone-1");
+    assert.equal(t?.status, "running");
+    assert.equal(await inbox.answerRun(fresh.requestId, "allow", "phone-1"), undefined, "a yes is never remembered");
+    await settle(inbox, "c-20261119-03");
+    assert.equal(seen.prompts, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox run: work outside the allowed paths or with a secret is never committed or pushed", async () => {
+  const { root, origin, repo } = await setup({ "c-20261119-04": TASK("c-20261119-04") });
+  const seen = { prompts: 0 };
+  const { inbox } = await inboxFor(repo, root, { "apps/a.ts": "export const a = 4;\n", ".github/workflows/x.yml": "on: push\n", "apps/k.ts": `export const k = "sk-ant-${"x".repeat(30)}";\n` }, seen);
+  try {
+    await inbox.sync();
+    await inbox.run("c-20261119-04", { here: true });
+    const t = await settle(inbox, "c-20261119-04");
+    assert.equal(t.status, "failed");
+    assert.equal(t.pushed, false);
+    assert.match(t.note ?? "", /Not committed or pushed/);
+    assert.ok(t.checks?.some((c) => c.name === "paths" && !c.ok));
+    assert.ok(t.checks?.some((c) => c.name === "secrets and privacy" && !c.ok && !c.note.includes("sk-ant")));
+    assert.doesNotMatch(await sh(origin, "branch", "--list"), /agy\//);
+    assert.equal((await inbox.state(true)).lastError, undefined);
+    assert.match(await sh(origin, "show", "kesher-inbox:results/c-20261119-04.md"), /status: failed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: a declined task file, the daily cap, and the quota", async () => {
+  const { root, repo } = await setup({ "c-20261119-05": "not a task", "c-20261119-06": TASK("c-20261119-06") });
+  const { inbox, settings } = await inboxFor(repo, root, {}, { prompts: 0 });
+  try {
+    await inbox.sync();
+    assert.equal((await inbox.task("c-20261119-05")).status, "declined");
+    // A task from the hub for Antigravity is prepared and waits for the user's Run, like any other.
+    await inbox.fromHub({ taskId: "T-77", title: "From the phone", spec: "Fix the gap" }, "t9");
+    const hub = await inbox.task("h-t-77");
+    assert.deepEqual([hub.status, hub.runBy, hub.from, hub.boardId, !!hub.runAsk], ["waiting", "antigravity", "hub", "t9", true]);
+    settings.dailyCap = 0;
+    await assert.rejects(inbox.run("c-20261119-06", { here: true }), /limit of 0/);
+    assert.ok(isQuotaError("RESOURCE_EXHAUSTED: quota exceeded, retry in 1h35m"));
+    assert.equal(quotaUntil("quota exceeded, retry in 1h35m", 0).until, 95 * 60_000);
+    assert.equal(quotaUntil("quota", 0).estimated, true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

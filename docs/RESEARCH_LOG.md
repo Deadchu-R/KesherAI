@@ -3240,6 +3240,13 @@ on/off, attended vs unattended (with the terms warning), busy rules (games, GPU,
 allowed commands list, model per executor. (6) New task form (phone, with executor and risk). (7) Quota-hit state with retry time.
 (8) Board view showing the executor and branch on each task (existing board gets two chips).
 - Stopped at: research and plan done; nothing built; no live test of quota errors or of Antigravity's git behaviour in a worktree.
+- Built: 2026-11-19, steps 1-8 (task-inbox.ts, inbox-policy.ts, inbox-busy.ts, inbox-runner.ts, routes/task-inbox.ts,
+  server/build-inbox.ts; page #/task-inbox and Settings > Task inbox; docs/INBOX.md). Roee's decisions in code: Antigravity
+  only on his tap (Run on the PC, or Run on the PC's ask on the paired phone, remote or sealed through the hub; one ask =
+  one task, 30 min, never remembered), one at a time; pushes only `agy/*` and `kesher-inbox` (pushAllowed, tested); 10 a
+  day, Gemini's default model. Hub tasks for Antigravity wait as "prepared". Local tasks go to self-work via the board and
+  are not pushed (`local/*` is not on the push list). Not built: idle-time and hours rules, "deny with a reason" text,
+  unattended mode (locked), Jules (shown as "later"). Step 9 (live test on the PC, the quota error format) still open.
   Open questions for Roee: (a) attended-only for Antigravity, or ask Google first for unattended; (b) may KesherAI push `agy/*`
   branches and `kesher-inbox` (a narrow exception to "never pushes"); (c) daily cap and the Gemini default model; (d) may the
   inbox branch live on the same GitHub repo.
