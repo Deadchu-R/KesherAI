@@ -31,13 +31,16 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 3D models with colours: TRELLIS.2 (MIT, native in ComfyUI 0.34+): the 3D editor's "A model from words, with
   colours" and "A model from a picture, with colours", and the chat's make_3d paints by default. The flow passed a real
   ComfyUI 0.46's validation in the workspace; not run with the real model (that needs the PC and a ~7.7 GB download).
-- 🔨 Paint an existing model in the 3D editor (Roee: yes, 10:59): research what can texture a given mesh locally, then the code.
+- ✅ Paint an existing model (🖌 in the 3D editor): four views drawn by words (SD 1.5 + ControlNet depth) and baked onto
+  it, with ComfyUI's own nodes; its geometry half ran in a real ComfyUI in the workspace.
+- ⬜ Security scan 166 (after 5 changes since scan 165; 3 so far).
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too (it was sent before "no builds"). No new builds until Roee says; everything since is on main.
 
 ## Waiting on Roee 👤
+- 👤 When convenient: 🖌 paint a model (ComfyUI 0.46+; asks before downloading SD 1.5 + ControlNet depth, ~2.8 GB).
 - 👤 When convenient: a 3D model with colours (update ComfyUI to 0.34+; it asks before downloading TRELLIS.2, ~7.7 GB).
 - 👤 When convenient: try the 3D editor's "A model from words" (ComfyUI; asks before downloading Hunyuan3D 2, ~4.9 GB).
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).

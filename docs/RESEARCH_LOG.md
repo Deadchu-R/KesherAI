@@ -2857,3 +2857,15 @@ Each AI tool shows which local model it uses and offers to download it the first
   0.46 (CPU, in the workspace) accepted it with placeholder model files (node_errors empty). Output: Save3DAdvanced's
   "3d" result (a .glb), which KesherAI's provider already collects.
 - Stopped at: built and validated; open: running it with the real model on the PC; file sizes are approximate.
+
+## Paint a model that is already made (2026-11-19)
+- TRELLIS.2 paints only what it builds (its texture stage needs its own shape latent; ComfyUI has no mesh encoder for it).
+  Hunyuan3D 2 / 2.1 Paint textures any mesh but needs custom nodes with a compiled rasterizer. StableProjectorz and
+  Dream Textures (Blender) project drawings from cameras onto the model.
+- ComfyUI 0.46 has that natively: Load3DAdvanced (input/3d) → Get3DComponents → UnwrapMesh → CreateCameraInfo (orbit,
+  framed by the mesh) → CreateCameraOrbit → RenderMesh (depth: near is white) → drawings → BakeTextureFromViews (with
+  the cameras and the render's mask) → ApplyTextureToMesh → MeshToFile3D → Save3DAdvanced (a .glb in its "3d" result).
+- KesherAI: "3d-paint-views" with SD 1.5 + ControlNet depth (one batch of four, one per view); the 3D editor's 🖌.
+- Checked in the workspace's ComfyUI: validation, the upload into input/3d, and the geometry half on a real chair.
+- Open: the four sides are drawn separately, so they may not match perfectly where they meet (a multi-view model, like
+  MV-Adapter, would match them; not native yet); a stronger image model with depth control.
