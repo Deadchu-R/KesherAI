@@ -18,7 +18,7 @@ const kesher = window.kesher;
 const HE = {
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים", aWordsHint: "דרך הצ׳אט", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
-  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל… (6 שנ׳)", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
+  color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
   loading: "טוען את המודל…", sending: "שולח…", tris: "משולשים", parts: "חלקים", size: "גודל", version: "גרסה", unnamed: "חלק",
@@ -1484,11 +1484,14 @@ async function viewPicture() {
 }
 $("shot").onclick = () => void viewPicture();
 /**
- * A turntable video (as Sketchfab and ArtStation show a model): the camera goes once around the model in 6 seconds at
- * its height and distance, recorded from the view (WebM, 30 fps, without the grid and helpers), into the chat.
+ * A turntable video (as Sketchfab and ArtStation show a model): the camera goes once around the model at its height and
+ * distance, recorded from the view (WebM, 30 fps, without the grid and helpers), into the chat.
+ *
+ * @param seconds - How long one turn takes (6, 12 or 20).
+ * @param hd - Recorded at 1920×1080 (16:9) instead of the view's own size.
  */
 let turning = false;
-async function turntable() {
+async function turntable(seconds = 6, hd = false) {
   if (!model || turning || quad) return;
   if (typeof MediaRecorder === "undefined") return msg(T("noRecord", "This browser cannot record the view"), true);
   turning = true;
@@ -1498,17 +1501,24 @@ async function turntable() {
   controls.enabled = false;
   const was = camera.position.clone(), t0 = controls.target.clone();
   const off = was.clone().sub(t0), r = Math.hypot(off.x, off.z), a0 = Math.atan2(off.z, off.x);
+  const ratio = renderer.getPixelRatio();
+  if (hd) {
+    renderer.setPixelRatio(1);
+    renderer.setSize(1920, 1080, false);
+    camera.aspect = 16 / 9;
+    camera.updateProjectionMatrix();
+  }
   const type = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((m) => MediaRecorder.isTypeSupported(m)) ?? "video/webm";
   const rec = new MediaRecorder(renderer.domElement.captureStream(30), { mimeType: type, videoBitsPerSecond: 6_000_000 });
   const parts = [];
   rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
   const done = new Promise((resolve) => (rec.onstop = resolve));
-  msg(T("turning", "Recording a turn around the model… (6 s)"));
+  msg(`${T("turning", "Recording a turn around the model…")} (${seconds}s)`);
   rec.start();
   const start = performance.now();
   await new Promise((resolve) => {
     const step = () => {
-      const k = Math.min(1, (performance.now() - start) / 6000), a = a0 + k * Math.PI * 2;
+      const k = Math.min(1, (performance.now() - start) / (seconds * 1000)), a = a0 + k * Math.PI * 2;
       camera.position.set(t0.x + r * Math.cos(a), was.y, t0.z + r * Math.sin(a));
       camera.lookAt(t0);
       if (k < 1) requestAnimationFrame(step); else resolve();
@@ -1519,6 +1529,7 @@ async function turntable() {
   await done;
   camera.position.copy(was);
   camera.lookAt(t0);
+  if (hd) { renderer.setPixelRatio(ratio); resize(); }
   controls.enabled = true;
   hidden.forEach((o) => (o.visible = true));
   turning = false;
@@ -1534,7 +1545,14 @@ async function turntable() {
   a.download = file;
   a.click();
 }
-$("turn").onclick = () => void turntable();
+// The 🎞 button's choices: how long the turn takes, and the view's size or Full HD.
+$("turn").onclick = () => {
+  setHebrew(he);
+  openMenu($("turn"), T("turnH", "A turntable video, into the chat"), [6, 12, 20].flatMap((sec) => [
+    { icon: "🎞", label: `${sec} ${T("sec", "s")} · ${T("turnView", "the view's size")}`, run: () => void turntable(sec, false) },
+    { icon: "🖥", label: `${sec} ${T("sec", "s")} · 1080p`, hint: "16:9", run: () => void turntable(sec, true) },
+  ]));
+};
 function keepVersion() {
   if (!model) return;
   if (glow) glow.visible = false;
