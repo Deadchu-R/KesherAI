@@ -2767,3 +2767,14 @@ Each AI tool shows which local model it uses and offers to download it the first
   framed, until it is pressed again. KesherAI: "/" and a button in the inspector; not part of Undo.
 - Stopped at: built (image-editor turnImage/flipLayer, sound-editor changeSpeed/reverse, model-editor isolate); in
   0.6.398; Speed keeps the pitch too (tempo.js, WSOLA; "Keep pitch" on by default, as CapCut).
+
+## Text and shapes in the picture editor; the video export's size (2026-11-19)
+- Text: Photoshop's Type tool (T) makes a type layer that stays editable (click it to change the words; the options
+  bar sets font, size, colour) until it is rasterized (painting asks first). Affinity Photo's Artistic Text the same;
+  Photopea and Canva as well. KesherAI: a text layer keeps its words and look; the bar's size, font (four kinds), bold
+  and outline change the active text layer; painting, filters, turns and crops make it pixels.
+- Shapes: Photoshop's Shape tool (U: rectangle, ellipse, line, with an arrowhead option), Shift for square, circle,
+  45°. KesherAI: the same four, filled or outlined, each on its own layer.
+- The video export: CapCut asks resolution (480p–4K), frame rate and quality (bit rate) before export; Premiere's
+  presets the same. KesherAI: size (4K–480p, only ever down) and quality (CRF 17 / 20 / 27) in "Send to the chat".
+- Stopped at: built (image-editor text and shapes, video-cut ExportLook); to go out in 0.6.399.
