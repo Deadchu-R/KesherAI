@@ -25,6 +25,34 @@ import com.getcapacitor.annotation.PermissionCallback;
 @CapacitorPlugin(name = "KesherNotify", permissions = { @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }) })
 public class NotifyPlugin extends Plugin {
 
+    /** The query marker with which a page asks for an address to open in the phone's browser. */
+    private static final String EXTERNAL = "kesher-external";
+
+    /** Whether an address carries the "open in the phone's browser" marker. */
+    static boolean wantsBrowser(android.net.Uri u) {
+        try {
+            return u != null && u.isHierarchical() && "1".equals(u.getQueryParameter(EXTERNAL));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Whether an address is Google's sign-in (accounts.google.com), which refuses to run inside a WebView. */
+    static boolean isGoogleSignIn(android.net.Uri u) {
+        return u != null && "https".equals(u.getScheme()) && "accounts.google.com".equals(u.getHost());
+    }
+
+    /** The address without the "open in the phone's browser" marker (the browser does not need it). */
+    static android.net.Uri withoutMarker(android.net.Uri u) {
+        if (!wantsBrowser(u)) return u;
+        android.net.Uri.Builder b = u.buildUpon().clearQuery();
+        for (String name : u.getQueryParameterNames()) {
+            if (EXTERNAL.equals(name)) continue;
+            for (String v : u.getQueryParameters(name)) b.appendQueryParameter(name, v);
+        }
+        return b.build();
+    }
+
     @Override
     public void load() {
         // Nothing here may stop the plugin from loading (then the app would have no notifications at all).
@@ -48,6 +76,17 @@ public class NotifyPlugin extends Plugin {
                             String here = view != null && view.getUrl() != null ? RemoteBridge.origin(view.getUrl()) : null;
                             String own = RemoteBridge.origin(getBridge().getLocalUrl());
                             boolean onComputer = here != null && RemoteBridge.saved(getContext()).contains(here);
+                            boolean onOtherSite = here != null && !here.equals(own);
+                            // A page asks to be opened in the phone's browser (the Kesher Cloud hub's "Open in the
+                            // phone's browser", ?kesher-external=1), or a page other than the app's own goes to
+                            // Google's sign-in, which Google blocks inside apps (it would leave a blank page here).
+                            if (target != null && !target.equals(own) && (wantsBrowser(request.getUrl()) || (onOtherSite && isGoogleSignIn(request.getUrl())))) {
+                                android.content.Intent open = new android.content.Intent(android.content.Intent.ACTION_VIEW, withoutMarker(request.getUrl()));
+                                open.addCategory(android.content.Intent.CATEGORY_BROWSABLE);
+                                open.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                                getContext().startActivity(open);
+                                return true;
+                            }
                             if (onComputer && target != null && !target.equals(here) && !target.equals(own)) {
                                 android.content.Intent open = new android.content.Intent(android.content.Intent.ACTION_VIEW, request.getUrl());
                                 open.addCategory(android.content.Intent.CATEGORY_BROWSABLE);

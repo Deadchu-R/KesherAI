@@ -25,7 +25,7 @@ export default tseslint.config(
   },
   { files: ["apps/web/**"], languageOptions: { globals: globals.browser } },
   // The hub page (compiled into apps/hub/public/js, which is not linted: it is generated from these sources).
-  { files: ["apps/hub/page/**"], languageOptions: { globals: globals.browser } },
+  { files: ["apps/hub/page/**", "apps/hub/public/*.js"], languageOptions: { globals: globals.browser } },
   // Hooks in the same order on every render (a hook after an early return crashes the page: React error #310).
   { files: ["apps/web/**/*.tsx", "apps/web/**/*.ts", "plugins/**/*.tsx"], plugins: { "react-hooks": reactHooks }, rules: {
       "react-hooks/rules-of-hooks": "error",

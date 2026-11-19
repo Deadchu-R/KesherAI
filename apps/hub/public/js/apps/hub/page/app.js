@@ -9,6 +9,9 @@
  *
  * Opened from the KesherAI phone app (`?app=http://localhost`), the page shows the app's Phone / Computer / ☁ Cloud
  * switch on top and the phone's bottom tabs. Layout: the design doc's Hub* and PhoneHub* boards.
+ *
+ * Inside an app's WebView (the KesherAI app, or any Android `; wv)` WebView) Google blocks its sign-in, so the page
+ * offers pairing by code there instead, plus a button that opens the hub in the phone's own browser.
  */
 import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
 import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
@@ -22,6 +25,8 @@ const app = {
     owner: undefined,
     /** The phone app's own origin, when opened from it (validated: only the app's localhost origins). */
     appOrigin: undefined,
+    /** Running inside an app's WebView, where Google's sign-in is blocked (see {@link inWebView}). */
+    inApp: false,
     /** A message under the top bar. */
     note: undefined,
     // Form state survives re-renders.
@@ -172,13 +177,27 @@ function noteLine() {
 const relay = (short = false) => h("div", { class: "relay" }, "🔐 ", h("span", null, short ? L("ההיסטוריה שמורה במכשיר הזה. המרכז רק מעביר.", "The history is kept on this device. The hub only relays.") : L("המרכז רק מעביר הודעות נעולות ומוחק כל אחת ברגע שהתקבלה. המשימות וההיסטוריה שמורות במכשיר הזה, קבצי הפרויקט נשארים במחשב.", "The hub only relays sealed messages and deletes each one once it arrives. Tasks and history are kept on this device; project files stay on the PC.")));
 /** "Sign in to manage" for the owner-only parts, when this is a paired device that is not signed in. */
 function signInCard(what) {
-    return h("div", { class: "card pad stack" }, h("b", null, L("צריך להתחבר עם Google", "Sign in with Google first")), h("span", { class: "mut sm" }, what), h("div", { class: "gis" }));
+    return h("div", { class: "card pad stack" }, h("b", null, L("צריך להתחבר עם Google", "Sign in with Google first")), h("span", { class: "mut sm" }, what), app.inApp ? inAppNote() : h("div", { class: "gis" }));
+}
+/**
+ * The hub's own address with a marker that the KesherAI app opens in the phone's browser (NotifyPlugin.java); in a
+ * plain browser the page drops the marker again ({@link dropExternalMarker}).
+ */
+function externalHref() {
+    return `${location.origin}/?${EXTERNAL}=1${location.hash}`;
+}
+/** Why there is no Google button inside the app, and a way out to the phone's browser (PhoneHubInApp). */
+function inAppNote() {
+    return h("div", { class: "card pad stack start in-app-note", role: "note" }, h("span", { class: "sm" }, L("ההתחברות עם Google לא עובדת בתוך האפליקציה. חברו עם קוד ואשרו אותו בדפדפן.", "Google sign-in doesn't work inside the app; pair with a code and approve it in your browser.")), h("a", { class: "btn", href: externalHref(), rel: "noopener" }, L("פתח בדפדפן של הטלפון ↗", "Open in the phone's browser ↗")), h("span", { class: "mut xs", dir: "ltr" }, location.origin));
 }
 // ---- screens ----
 /** The sign-in screen (PhoneHubSignIn), also the first screen on a computer. */
 function signInScreen() {
     const pairing = device.pending;
-    return h("main", { class: "signin" }, h("div", { class: "logo", "aria-hidden": "true" }, "☁"), h("h1", null, "Kesher Cloud"), h("p", { class: "mut" }, L("המרכז הפרטי שלך: מחבר את הטלפון, המחשבים והסוכנים בענן, ושולח כל משימה למי שפנוי.", "Your private hub: it links your phone, your PCs and the cloud agents, and sends each task to whoever is free.")), app.googleClientId ? h("div", { class: "gis" }) : h("p", { class: "warn sm" }, L("ההתחברות עם Google לא הוגדרה במרכז הזה (GOOGLE_CLIENT_ID).", "Google sign-in is not set up on this hub (GOOGLE_CLIENT_ID).")), h("div", { class: "card pad stack start" }, h("b", { class: "sm" }, L("🔒 המרכז הזה פרטי", "🔒 This hub is private")), h("span", { class: "mut sm" }, L("רק חשבון אחד יכול להיכנס. כל השאר מקבלים \"אין גישה\". ההתחברות רק מאשרת חיבור מכשירים; את התוכן פותח רק המפתח שבמכשיר.", "Only one account can get in; everyone else gets \"no access\". Signing in only approves devices; the content is opened only by the key on each device."))), pairing ? selfPairing() : h("button", { type: "button", class: "link", onclick: () => void startSelfPair() }, L("או: לחבר את המכשיר הזה עם קוד (מאשרים ממסך מחובר)", "Or: pair this device with a code (approve it on a signed-in screen)")));
+    return h("main", { class: "signin" }, h("div", { class: "logo", "aria-hidden": "true" }, "☁"), h("h1", null, "Kesher Cloud"), h("p", { class: "mut" }, L("המרכז הפרטי שלך: מחבר את הטלפון, המחשבים והסוכנים בענן, ושולח כל משימה למי שפנוי.", "Your private hub: it links your phone, your PCs and the cloud agents, and sends each task to whoever is free.")), ...(app.inApp
+        ? // In the app: pairing by code is the main action (Google refuses to sign in inside a WebView).
+            [pairing ? selfPairing() : h("button", { type: "button", class: "btn pri big", onclick: () => void startSelfPair() }, L("לחבר את המכשיר הזה עם קוד", "Pair this device with a code")), inAppNote()]
+        : [app.googleClientId ? h("div", { class: "gis" }) : h("p", { class: "warn sm" }, L("ההתחברות עם Google לא הוגדרה במרכז הזה (GOOGLE_CLIENT_ID).", "Google sign-in is not set up on this hub (GOOGLE_CLIENT_ID)."))]), h("div", { class: "card pad stack start" }, h("b", { class: "sm" }, L("🔒 המרכז הזה פרטי", "🔒 This hub is private")), h("span", { class: "mut sm" }, L("רק חשבון אחד יכול להיכנס. כל השאר מקבלים \"אין גישה\". ההתחברות רק מאשרת חיבור מכשירים; את התוכן פותח רק המפתח שבמכשיר.", "Only one account can get in; everyone else gets \"no access\". Signing in only approves devices; the content is opened only by the key on each device."))), app.inApp ? null : pairing ? selfPairing() : h("button", { type: "button", class: "link", onclick: () => void startSelfPair() }, L("או: לחבר את המכשיר הזה עם קוד (מאשרים ממסך מחובר)", "Or: pair this device with a code (approve it on a signed-in screen)")));
 }
 /** Starts pairing this browser as a device; when signed in, approves it right away (same screen). */
 async function startSelfPair() {
@@ -408,7 +427,7 @@ let gisLoading;
 /** Loads Google's sign-in script once and draws its button wherever the page has a `.gis` box. */
 function mountGis() {
     const boxes = [...document.querySelectorAll(".gis")];
-    if (!boxes.length || !app.googleClientId)
+    if (!boxes.length || !app.googleClientId || app.inApp)
         return;
     gisLoading ??= new Promise((resolve) => {
         const s = document.createElement("script");
@@ -458,10 +477,32 @@ function appOriginFrom() {
         return ok(asked);
     }
 }
+/** The query marker that asks the KesherAI app to open an address in the phone's browser. */
+const EXTERNAL = "kesher-external";
+/** Removes the "open in the browser" marker from the address once the page is open (it has done its job). */
+function dropExternalMarker() {
+    const q = new URLSearchParams(location.search);
+    if (!q.has(EXTERNAL))
+        return;
+    q.delete(EXTERNAL);
+    const rest = q.toString();
+    history.replaceState(null, "", location.pathname + (rest ? `?${rest}` : "") + location.hash);
+}
+/**
+ * Whether the page runs inside an app's WebView, where Google blocks its sign-in (`disallowed_useragent`) and its
+ * popup has nowhere to go: opened from the KesherAI app (`?app=`), or an Android WebView (`; wv)` in the user agent).
+ * @param appOrigin - The KesherAI app's origin, when the page was opened from it.
+ * @param ua - The browser's user agent.
+ */
+function inWebView(appOrigin, ua) {
+    return !!appOrigin || /; wv\)/.test(ua);
+}
 /** Starts the page. */
 async function main() {
     initLocale();
+    dropExternalMarker();
     app.appOrigin = appOriginFrom();
+    app.inApp = inWebView(app.appOrigin, navigator.userAgent);
     device.onChange(() => {
         // This browser just paired while signed in: the owner's list should show it.
         if (app.signedIn && device.id && app.owner && !app.owner.devices.some((d) => d.id === device.id))
@@ -491,4 +532,12 @@ async function main() {
             void loadOwner();
     }, 20_000);
 }
-void main();
+/** The page could not start (a network or script error): a short message with a retry, never a blank page. */
+function showFatal(err) {
+    console.error(err);
+    const root = document.getElementById("app");
+    if (!root)
+        return;
+    root.replaceChildren(h("main", { class: "signin", role: "alert" }, h("div", { class: "logo", "aria-hidden": "true" }, "☁"), h("h1", null, "Kesher Cloud"), h("p", { class: "warn sm" }, L("הדף לא נטען. בדקו את החיבור לאינטרנט ונסו שוב.", "The page did not load. Check the internet connection and try again.")), h("button", { type: "button", class: "btn pri", onclick: () => location.reload() }, L("נסה שוב", "Try again"))));
+}
+main().then(() => document.documentElement.setAttribute("data-ready", ""), showFatal);

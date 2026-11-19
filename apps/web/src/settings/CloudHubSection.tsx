@@ -1,9 +1,21 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, appHome } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/**
+ * A link to the hub page. In the KesherAI phone app the hub must open in the phone's own browser: Google blocks its
+ * sign-in inside the app's WebView, and a new-window link has no window to open there (a blank page). The
+ * `kesher-external` marker asks the app to open it in the browser (NotifyPlugin.java); elsewhere it is a plain link.
+ * @param url - The hub's address.
+ * @param hash - The hub tab to open (e.g. `#pair`), or "".
+ */
+export function hubPageHref(url: string, hash = ""): string {
+  const base = url.replace(/\/+$/, "");
+  return appHome() ? `${base}/?kesher-external=1${hash}` : `${base}/${hash}`;
+}
 
 /** What this PC takes from the hub (its own opt-in). */
 interface OptIn {
@@ -94,7 +106,7 @@ export function CloudHubSection() {
           <span className={`dot ${s.connected ? "on" : "off"}`} aria-hidden="true" />
           <span>{state}</span>
           {s.lastError && <span className="bad small">· {s.lastError}</span>}
-          <a className="small" href={s.url} target="_blank" rel="noopener noreferrer">{L("פתח את דף המרכז ↗", "Open the hub page ↗")}</a>
+          <a className="small" href={hubPageHref(s.url)} target="_blank" rel="noopener noreferrer">{L("פתח את דף המרכז ↗", "Open the hub page ↗")}</a>
         </div>
       )}
 
@@ -104,7 +116,7 @@ export function CloudHubSection() {
           <code dir="ltr" className="tg-code">{s.pairing.code}</code>
           <span>{L("טביעת אצבע: ", "Fingerprint: ")}<bdi><b dir="ltr">{s.pairing.fingerprint}</b></bdi></span>
           <small className="muted">{L("אשר רק אם אותם 6 מספרים מופיעים גם בדף המרכז. ממתין לאישור…", "Approve only if the same 6 digits show on the hub page. Waiting for approval…")}</small>
-          <div><a className="button" href={`${s.url}/#pair`} target="_blank" rel="noopener noreferrer">{L("פתח את לשונית החיבור ↗", "Open the Pair tab ↗")}</a></div>
+          <div><a className="button" href={hubPageHref(s.url, "#pair")} target="_blank" rel="noopener noreferrer">{L("פתח את לשונית החיבור ↗", "Open the Pair tab ↗")}</a></div>
         </div>
       ) : (
         <div><button type="button" className="primary" disabled={busy} onClick={() => void run(() => api("/api/hub/pair", { method: "POST" }))}>{L("חבר למרכז שלי", "Connect to my hub")}</button></div>

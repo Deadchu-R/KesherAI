@@ -8,10 +8,23 @@
   <meta name="referrer" content="no-referrer" />
   <title>Kesher Cloud</title>
   <link rel="stylesheet" href="/app.css" />
+  <script src="/boot.js"></script>
   <script type="module" src="/js/apps/hub/page/app.js"></script>
 </head>
 <body>
   <!-- The hub's own page (apps/hub/page/*.ts, compiled into js/ by `pnpm --filter @kesher/hub build:page`). -->
-  <div id="app" class="b"><noscript>Kesher Cloud needs JavaScript.</noscript></div>
+  <!-- Until the page draws: "loading", or (boot.js) a short error with a retry, so the page is never blank. -->
+  <div id="app" class="b">
+    <main class="signin">
+      <div class="logo" aria-hidden="true">☁</div>
+      <h1>Kesher Cloud</h1>
+      <p id="boot-wait" class="mut sm">טוען… · Loading…</p>
+      <div id="boot-fail" class="stack center" role="alert" hidden>
+        <p class="warn sm">הדף לא נטען. בדקו את החיבור ונסו שוב.<br /><span dir="ltr">The page did not load. Check the connection and try again.</span></p>
+        <button id="boot-retry" type="button" class="btn pri">נסה שוב · Try again</button>
+      </div>
+      <noscript><p class="warn sm">Kesher Cloud needs JavaScript.</p></noscript>
+    </main>
+  </div>
 </body>
 </html>

@@ -45,6 +45,10 @@ DNS record and the certificate. Your main site is not touched. When the custom d
 2. **Authorised JavaScript origins:** your hub address (for example `https://hub.<your domain>`).
 3. Copy the **client ID** (it ends in `.apps.googleusercontent.com`; this is not a secret, but it stays out of git).
 
+Google blocks its sign-in inside apps (WebViews). Inside the KesherAI app (`?app=`) or any Android WebView (`; wv)`)
+the page shows no Google button: it pairs the phone with a code (approved on a signed-in screen) and offers "Open in
+the phone's browser" (`?kesher-external=1`, which the app opens in the browser).
+
 ### 4. Variables and secrets
 **Your Worker → Settings → Variables and Secrets → Add**. Choose type **Secret** for each:
 
