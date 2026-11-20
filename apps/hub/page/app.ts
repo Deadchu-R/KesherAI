@@ -20,6 +20,7 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
+import { clearShown, notifySection, startPush, type PushView } from "./push.js";
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
@@ -48,6 +49,8 @@ interface Gis {
 const device = new HubDevice();
 const app = {
   googleClientId: "",
+  /** The hub's Web Push key ("" when the hub has no notifications set up). */
+  vapidKey: "",
   signedIn: false,
   owner: undefined as OwnerState | undefined,
   /** The phone app's own origin, when opened from it (validated: only the app's localhost origins). */
@@ -114,12 +117,15 @@ const agentsView: AgentsView = {
   snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
 
+/** Settings › Notifications (push.ts): this browser's Web Push for "N waiting for you". */
+const pushView: PushView = { device, vapidKey: () => app.vapidKey, inApp: () => app.inApp, externalHref: () => externalHref(), render: () => render() };
+
 /** "Waiting for you" (waiting.ts): answers go sealed to the PC; an agent card opens on the Agents tab. */
 const waitingView: WaitingView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key) };
 
 // ---- helpers ----
 
-/** The current tab, from the address (#devices…). */
+/** The current tab, from the address (#devices…). Anything else, such as #waiting from a notification, is the dashboard, which opens with "Waiting for you". */
 function tab(): Tab {
   const t = location.hash.slice(1) as Tab;
   return t === "new" || TABS.includes(t) ? t : "dash";
@@ -874,6 +880,10 @@ const AUDIT: Record<string, [string, string]> = {
   "owner-pinned": ["החשבון ננעל לבעלים", "Owner account pinned"],
   "pair-start": ["מכשיר ביקש חיבור", "A device asked to pair"],
   "pair-approve": ["קוד אושר", "Code approved"],
+  "push-on": ["התראות הופעלו במכשיר", "Notifications turned on for a device"],
+  "push-off": ["התראות כובו במכשיר", "Notifications turned off for a device"],
+  "push-gone": ["שירות ההתראות הודיע שהמכשיר הוסר", "The push service said the device's subscription is gone"],
+  "push-failed": ["התראה לא נשלחה", "A notification was not sent"],
   "pair-done": ["מכשיר חובר", "Device paired"],
   "token-rotated": ["מפתח הגישה הוחלף", "Token rotated"],
   revoke: ["מכשיר נותק", "Device disconnected"],
@@ -946,6 +956,7 @@ function settingsTab(): HTMLElement {
           device.paired ? h("div", null, h("button", { type: "button", class: "btn bad", onclick: () => confirm(L("לשכוח את המכשיר הזה? המפתח והמשימות שנשמרו כאן יימחקו.", "Forget this device? Its key and the tasks kept here are deleted.")) && void device.forget().then(() => drive.forget()) }, L("שכח את המכשיר הזה", "Forget this device"))) : null,
           h("div", { class: "row" }, h("span", { class: "grow" }, L("שפה", "Language")), h("button", { type: "button", class: "btn", onclick: () => { setLocale(getLocale() === "he" ? "en" : "he"); render(); } }, getLocale() === "he" ? "English" : "עברית")),
         ),
+        notifySection(pushView),
         o
           ? h(
               "section",
@@ -1099,9 +1110,15 @@ async function main(): Promise<void> {
     render();
     scrollTo(0, 0);
   });
-  const cfg = await fetch("/api/config").then((r) => r.json() as Promise<{ googleClientId?: string }>).catch(() => ({}) as { googleClientId?: string });
+  const cfg = await fetch("/api/config").then((r) => r.json() as Promise<{ googleClientId?: string; vapidPublicKey?: string }>).catch(() => ({}) as { googleClientId?: string; vapidPublicKey?: string });
   app.googleClientId = typeof cfg.googleClientId === "string" ? cfg.googleClientId : "";
+  app.vapidKey = typeof cfg.vapidPublicKey === "string" && /^[\w-]{80,100}$/.test(cfg.vapidPublicKey) ? cfg.vapidPublicKey : "";
   await device.load();
+  // The service worker (notifications, installing the hub as an app); a shown "waiting" notification closes when the page is seen.
+  void startPush(pushView);
+  addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") clearShown();
+  });
   // The app's token is taken only inside an Android WebView opened from the app (a link elsewhere cannot plant one).
   await drive.load(handed && app.appOrigin && /; wv\)/.test(navigator.userAgent) ? handed : undefined);
   await loadOwner();

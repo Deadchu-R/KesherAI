@@ -6,6 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage } from "../../../packages/shared/src/hub-crypto.js";
+import { dropLocalPush } from "./push.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
@@ -225,8 +226,19 @@ export class HubDevice {
         this.pending = undefined;
         this.changed();
     }
-    /** Forgets this browser's key, token and tasks (the hub page's "forget this browser"). */
+    /**
+     * POSTs to a device route with this browser's token (push subscription).
+     *
+     * @param path - The route.
+     * @param body - The JSON body.
+     * @returns The answer, or undefined when not paired or offline.
+     */
+    async postAsDevice(path, body) {
+        return this.ident ? post(path, body, this.ident.token).catch(() => undefined) : undefined;
+    }
+    /** Forgets this browser's key, token, tasks and notifications (the hub page's "forget this browser"). */
     async forget() {
+        await dropLocalPush();
         this.stop();
         this.ident = undefined;
         this.presence = [];

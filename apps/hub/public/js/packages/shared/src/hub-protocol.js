@@ -231,7 +231,10 @@ export function parseEnvelope(x) {
             return null;
         return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, run: e.run, n };
     }
-    return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct };
+    // The waiting count of an approvals snapshot (anything else, or a bad value, is dropped, never refused).
+    const w = e.waiting;
+    const waiting = kind === "approvals" && typeof w === "number" && Number.isInteger(w) && w >= 0 && w <= 999 ? w : undefined;
+    return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}) };
 }
 /**
  * Reads one device frame from a socket message.
