@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reviewHunks } from "./helper-review.js";
@@ -28,7 +28,7 @@ new file mode 100644
 `;
 
 test("reviewHunks applies one hunk, rejects another, keeps decided ones, and reports conflicts", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "kesher-review-"));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kesher-review-"))); // Windows: long path, as the code resolves it
   t.after(() => rmSync(root, { recursive: true, force: true }));
   writeFileSync(join(root, "a.txt"), before);
   const one = await reviewHunks({ root, shown: DIFF, full: DIFF, request: { path: "a.txt", hunks: [1], decision: "accepted" } });
@@ -50,7 +50,7 @@ test("reviewHunks applies one hunk, rejects another, keeps decided ones, and rep
 });
 
 test("reviewHunks never writes outside the project or into .git", async (t) => {
-  const root = mkdtempSync(join(tmpdir(), "kesher-review-"));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "kesher-review-"))); // Windows: long path, as the code resolves it
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const evil = "diff --git a/../out.txt b/../out.txt\nnew file mode 100644\n--- /dev/null\n+++ b/../out.txt\n@@ -0,0 +1 @@\n+x\n";
   await assert.rejects(reviewHunks({ root, shown: evil, full: evil, request: { decision: "accepted" } }));
