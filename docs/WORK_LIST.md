@@ -74,6 +74,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   in the hub ("from Claude"); this chat's agents in the hub (tools/hub-report, group "Claude chat"). In 0.6.402.
 - 👤 Roee: update the PC to 0.6.402, check it shows Online, turn on tasks + agent activity for it; approve the two inbox
   tasks (c-20261119-01 local, -02 Antigravity). Next chat: pair it with tools/hub-report (he approves the code).
+- 👤 Chat 2 (2026-11-20): hub-report cannot reach hub.roeetal.com from this cloud session (proxy 403, host not on the
+  session's network allowlist). Roee: add hub.roeetal.com to the Claude Code environment's allowed hosts, then pair.
+  Inbox check 14:15: both tasks still without results/ and no agy/* branch (waiting on the PC at 0.6.402 + Run).
+- 🔨 Usability gap list against the code (Sonnet agent, chat 2), then the design doc, then batch builds.
 - ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
