@@ -21,3 +21,17 @@ Click the KesherAI button (or Alt+K) → "Open the side panel": KesherAI's chat 
 computer. "Ask about this page" hands the page's text to a new chat (marked as the page's content, never
 instructions). KesherAI lets only itself and browser extensions show it in a frame, never a web site.
 
+
+## Debugging tools (0.3.0)
+
+In Chrome, Edge and Brave the app's exact browser tools also work here (the same ones as in KesherAI's own
+browser): the page's accessibility snapshot with refs, the console, the network, keys, waiting, pop-ups and pictures
+without bringing the tab to the front. They use `chrome.debugger`, an **optional** permission: nothing at install;
+the first time a task needs it a small window explains it and asks (or press "Allow debugging now" in the popup).
+
+- While it works Chrome shows a bar: "KesherAI started debugging this browser". Pressing **Cancel** there stops
+  KesherAI at once (the app treats it as its Stop button).
+- Its tabs go into a **KesherAI** tab group; it lets go of a tab after 5 idle minutes, and of all of them on Stop.
+- Only the CDP domains the tools use are sent (Page, Runtime, Log, Network, DOM, Accessibility, Input, Emulation,
+  Overlay); only web pages on sites you allowed; never the browser's own pages or the KesherAI app's.
+- Firefox has no debugger for extensions: there the extension keeps the page reader (read, click, type).

@@ -35,6 +35,11 @@ export async function packExtension(folder: string, target: "chrome" | "firefox"
   if (target === "firefox") {
     const manifest = JSON.parse(Buffer.from(files["manifest.json"]!).toString("utf8")) as Record<string, unknown>;
     manifest.background = { scripts: ["page.js", "background.js"] };
+    // Firefox has no chrome.debugger (it keeps the page reader); tab groups are Chrome's.
+    const drop = (list: unknown) => (Array.isArray(list) ? list.filter((p) => p !== "debugger" && p !== "tabGroups") : list);
+    manifest.permissions = drop(manifest.permissions);
+    manifest.optional_permissions = drop(manifest.optional_permissions);
+    if (Array.isArray(manifest.optional_permissions) && !manifest.optional_permissions.length) delete manifest.optional_permissions;
     manifest.browser_specific_settings = { gecko: { id: "kesherai@deadchu-r.github.io", strict_min_version: "128.0", data_collection_permissions: { required: ["none"] } } };
     files["manifest.json"] = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
   } else {
@@ -130,7 +135,7 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     return pane(reply, async () => ({ ok: true, result: (await s.browser.paneCall(`pane-${cmd}`, args)) ?? null }));
   });
 
-  app.get<{ Querystring: { key?: string; browser?: string; version?: string } }>("/api/browser/connect", { websocket: true }, (socket, req) => {
+  app.get<{ Querystring: { key?: string; browser?: string; version?: string; features?: string } }>("/api/browser/connect", { websocket: true }, (socket, req) => {
     const origin = String(req.headers.origin ?? "");
     const key = String(req.query.key ?? "");
     if (!isLocalRequest(req) || !/^(chrome|moz)-extension:\/\//.test(origin) || !s.config.browserKey || !same(key, s.config.browserKey)) {
@@ -138,7 +143,7 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
       socket.close();
       return;
     }
-    s.browser.attach(socket, { browser: String(req.query.browser ?? "").slice(0, 40), version: String(req.query.version ?? "").slice(0, 20) });
+    s.browser.attach(socket, { browser: String(req.query.browser ?? "").slice(0, 40), version: String(req.query.version ?? "").slice(0, 20), features: String(req.query.features ?? "").slice(0, 80) });
     socket.send(JSON.stringify({ type: "ready" }));
   });
 }

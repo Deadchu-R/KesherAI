@@ -1,5 +1,6 @@
 /**
- * The model's CDP browser tools for KesherAI's own browser pane (docs/research/browser-computer-control.md, Phase 1):
+ * The model's CDP browser tools for KesherAI's own browser pane and, through the extension's `chrome.debugger` (0.3.0+),
+ * the user's own Chrome: the same recipes over either transport (docs/research/browser-computer-control.md, Phases 1–2):
  * an accessibility snapshot with refs, acting by ref (hover, select, scroll, keys, upload), a click at a point of a
  * screenshot, waiting, back / forward / reload / bring to front, closing a tab, the console and the network, a pop-up's
  * answer and JavaScript. browser_click, browser_type and browser_screenshot (browser-bridge.ts) take these refs too.
@@ -18,6 +19,8 @@ import { hostOf, untrusted, uploadRefusal, redactUrl } from "./browser-safety.js
 export interface CdpToolHelpers {
   tabArg: Record<string, unknown>;
   onSite: (input: Record<string, unknown>, signal?: AbortSignal) => Promise<string>;
+  /** Keeps a picture or a recording as an asset (its id), so the chat shows it in the step. */
+  saveAsset?: (data: Buffer, mimeType: string) => Promise<string>;
 }
 
 /** Whether a ref is a snapshot ref ("e12") rather than an older browser_read number. */
@@ -44,14 +47,15 @@ export async function snapshotText(page: CdpPage, note = ""): Promise<string> {
  * @returns The tools, not yet wrapped by browserTools' log and site scope.
  */
 export function cdpBrowserTools(b: BrowserBridge, h: CdpToolHelpers): AgentTool[] {
-  const tab = { tabId: h.tabArg.tabId };
+  // The tab, and (when both are there) which browser: KesherAI's pane or the user's Chrome.
+  const tab = { tabId: h.tabArg.tabId, ...(h.tabArg.browser ? { browser: h.tabArg.browser } : {}) };
   const refArg = { ref: { type: "string", description: "The element's ref from browser_snapshot, e.g. e12." } };
   const run = <T>(input: Record<string, unknown>, ctx: ToolContext, fn: (p: CdpPage, tabId: number) => Promise<T>) => b.withCdp(input, fn, ctx.signal);
   /** `button "Send" (ref e3)` for cards and the log. */
   const label = async (input: Record<string, unknown>, ctx: ToolContext) => {
     const ref = String(input.ref ?? "");
-    const id = await b.paneTabId(input, ctx.signal).catch(() => undefined);
-    const l = id === undefined ? undefined : b.cdpLabel(id, ref);
+    const id = await b.cdpTabId(input, ctx.signal).catch(() => undefined);
+    const l = id === undefined ? undefined : b.cdpLabel(id, ref, b.cdpTarget(input));
     return l ? `${l} (ref ${ref})` : `element ${ref}`;
   };
   const source = async (p: CdpPage, what: string) => `${what} of ${hostOf((await p.where()).url) ?? "the page"}`;
@@ -62,7 +66,7 @@ export function cdpBrowserTools(b: BrowserBridge, h: CdpToolHelpers): AgentTool[
       spec: {
         name: "browser_snapshot",
         description:
-          "Read a tab of KesherAI's browser as an accessibility tree: headings, text, and every button, link, field and list with a ref (e1, e2…) for browser_click, browser_type, browser_select, browser_hover and browser_scroll. Cheaper and more exact than a screenshot; refs change after each snapshot or page change. Hidden text is not included.",
+          "Read a tab as an accessibility tree: headings, text, and every button, link, field and list with a ref (e1, e2…) for browser_click, browser_type, browser_select, browser_hover and browser_scroll. Cheaper and more exact than a screenshot; refs change after each snapshot or page change. Hidden text is not included.",
         inputSchema: { type: "object", properties: tab },
       },
       preview: async (input, ctx) => `Read the page${await h.onSite(input, ctx.signal)}`,
@@ -147,7 +151,7 @@ export function cdpBrowserTools(b: BrowserBridge, h: CdpToolHelpers): AgentTool[
       run: async (input, ctx) => {
         const what = String(input.action);
         if (!["back", "forward", "reload", "front"].includes(what)) throw new Error("action is back, forward, reload or front.");
-        if (what === "front") await b.paneCall("pane-select", { id: await b.paneTabId(input, ctx.signal) });
+        if (what === "front") await b.frontTab(input, ctx.signal);
         return { output: await run(input, ctx, async (p) => (what === "front" ? undefined : await p.history(what as "back"), snapshotText(p))) };
       },
     },
@@ -155,13 +159,12 @@ export function cdpBrowserTools(b: BrowserBridge, h: CdpToolHelpers): AgentTool[
       risk: "exec",
       spec: {
         name: "browser_close_tab",
-        description: "Close a tab of KesherAI's browser (tabId from browser_tabs; leave out for the one in front).",
+        description: "Close a tab (tabId from browser_tabs; leave out for the one in front).",
         inputSchema: { type: "object", properties: tab },
       },
       preview: async (input, ctx) => `Close the tab${await h.onSite(input, ctx.signal)}`,
       run: async (input, ctx) => {
-        const id = await b.paneTabId(input, ctx.signal);
-        await b.paneCall("pane-close", { id });
+        const id = await b.closeTab(input, ctx.signal);
         return { output: `Closed tab ${id}.` };
       },
     },

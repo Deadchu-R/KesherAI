@@ -18,3 +18,13 @@ test("the Chrome package has only Chrome's manifest keys; Firefox's keeps its ow
   assert.deepEqual(firefox.background, { scripts: ["page.js", "background.js"] });
   assert.ok(firefox.browser_specific_settings);
 });
+
+test("extension 0.3.0: Chrome asks for the debugger only as an optional permission; Firefox's package has none", async () => {
+  const chrome = manifestOf(await packExtension(folder, "chrome"));
+  assert.deepEqual(chrome.optional_permissions, ["debugger"]);
+  assert.ok(!(chrome.permissions as string[]).includes("debugger"));
+  assert.ok((chrome.permissions as string[]).includes("tabGroups"));
+  const firefox = manifestOf(await packExtension(folder, "firefox"));
+  assert.equal(firefox.optional_permissions, undefined);
+  assert.ok(!(firefox.permissions as string[]).includes("tabGroups"));
+});

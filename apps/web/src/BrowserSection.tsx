@@ -6,7 +6,7 @@ import { getLocale, he$ } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-interface Info { connected: boolean; extension?: boolean; browser?: string; key: string; folder: string | null }
+interface Info { connected: boolean; extension?: boolean; extensionCdp?: boolean; browser?: string; version?: string; key: string; folder: string | null }
 
 /** Settings → Browser: the extension that lets the agent work in the user's own browser. */
 export function BrowserSection() {
@@ -32,6 +32,18 @@ export function BrowserSection() {
           <span className="pill">{L("התוסף לא מחובר", "The extension is not connected")}</span>
         )}
       </p>
+      {/* Extension 0.3.0 (Chrome, Edge, Brave): the exact tools over Chrome's debugger, and the bar Chrome shows for it. */}
+      {ext && info.extensionCdp && (
+        <p className="muted small" dir="auto">
+          {L(
+            "כלי הניפוי (מבנה הדף, קונסול, רשת, מקשים) עובדים גם כאן. בפעם הראשונה התוסף יבקש הרשאת \"debugger\", ובזמן העבודה Chrome יציג פס \"KesherAI started debugging this browser\". זה צפוי; לחיצה על Cancel בפס עוצרת את KesherAI. הלשוניות שלו נמצאות בקבוצת לשוניות \"KesherAI\".",
+            "The debugging tools (page structure, console, network, keys) work here too. The first time, the extension asks for the \"debugger\" permission, and while it works Chrome shows a \"KesherAI started debugging this browser\" bar. That is expected; Cancel on that bar stops KesherAI. Its tabs are in a \"KesherAI\" tab group.",
+          )}
+        </p>
+      )}
+      {ext && !info.extensionCdp && !/firefox/i.test(info.browser ?? "") && (
+        <p className="muted small" dir="auto">{L("עדכן את התוסף ל-0.3.0 כדי לקבל את כלי הניפוי (קונסול, רשת, לחיצות מדויקות) גם בדפדפן שלך.", "Update the extension to 0.3.0 to get the debugging tools (console, network, exact clicks) in your own browser too.")}</p>
+      )}
       {!ext && (
         <>
         <ol className="small">

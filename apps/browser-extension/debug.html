@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>KesherAI</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 0; padding: 18px; background: #16171b; color: #e9e9ee; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  p, li { margin: 6px 0; color: #a9a9b3; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+  ul { margin: 6px 0; padding-inline-start: 18px; }
+  .bar { margin: 10px 0; padding: 8px 10px; border-radius: 8px; background: #3a3420; color: #f3e3a3; font-size: 12.5px; }
+  button { margin-top: 10px; width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #383a42; background: #1e1f24; color: #e9e9ee; font: inherit; cursor: pointer; }
+  button.pri { background: #5b7fe0; border-color: #5b7fe0; color: #fff; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1 id="title">Let KesherAI debug pages?</h1>
+  <p id="why">A task in KesherAI wants its exact browser tools here: read the page's structure, see the console and the network, press keys and take pictures without bringing the tab to the front.</p>
+  <p class="bar" id="bar">While it works, Chrome shows a bar: "KesherAI started debugging this browser". That is expected. Pressing Cancel on that bar stops KesherAI right away.</p>
+  <ul>
+    <li id="l1">Only for tasks you ask for, only on sites you allowed, and the app still asks before acting.</li>
+    <li id="l2">Its tabs are kept in a "KesherAI" tab group. It lets go after 5 idle minutes.</li>
+    <li id="l3">You can take this back in chrome://extensions → KesherAI → Details.</li>
+  </ul>
+  <button id="yes" class="pri" type="button">Allow debugging</button>
+  <button id="no" type="button">Not now</button>
+  <script src="debug.js"></script>
+</body>
+</html>

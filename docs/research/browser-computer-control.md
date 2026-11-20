@@ -163,6 +163,17 @@ Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can
   select, click, wait, console, network, eval, screenshots, scroll, confirm pop-up, upload). Not checked here: the
   Electron debugger inside the desktop app (needs the PC), and whether Electron also draws its own pop-up when CDP
   handles `Page.javascriptDialogOpening`.
+- **Phase 2 (extension 0.3.0):** the same recipes drive the user's Chrome. The extension forwards raw CDP for one tab
+  (`cdp-send`, `cdp-attach`, `cdp-detach-all`, `front`, `close`) and sends its events back (`cdp-event`,
+  `cdp-detached`); `browser-ext-cdp.ts` turns that into a `CdpTransport`, and the bridge picks pane or Chrome per call
+  (`cdpTarget`, `canCdp`, `cdpTabId`), so every CDP tool takes `browser: chrome`. `debugger` is an optional permission
+  asked from a small window (`debug.html`) that explains Chrome's "started debugging" bar; Cancel on that bar is the
+  app's Stop; Stop detaches every tab; idle tabs detach after 5 minutes; tabs go into a "KesherAI" tab group. The
+  extension sends only Page/Runtime/Log/Network/DOM/Accessibility/Input/Emulation/Overlay, only on http(s) pages of
+  allowed sites (re-checked when the tab changes site), never KesherAI's own port. Firefox (no `chrome.debugger`)
+  keeps the page reader; its package drops `debugger` and `tabGroups`. Checked with a fake extension socket
+  (`browser-bridge.test.ts`, `browser-ext-cdp.test.ts`) and the packed manifests; not checked here: a real Chrome with
+  the extension loaded (needs the PC or a store build).
 
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?

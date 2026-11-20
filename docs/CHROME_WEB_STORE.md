@@ -20,6 +20,9 @@ Fee: $5, once, when the developer account is registered (Roee pays it himself). 
   • "Ask about this page": the page's text goes to a new chat on your computer.
   • Browser tasks you ask KesherAI to do (open a page, read it, click, type, take a screenshot) in your own browser,
     where you are already signed in. KesherAI asks you before each action unless you choose otherwise.
+  • Debugging tools for web developers (from 0.3.0, optional): the page's structure, console and network messages,
+    keys and screenshots, through Chrome's debugger, only after you allow it. Chrome shows its "started debugging"
+    bar while it works; Cancel there stops KesherAI.
 
   Everything stays on your computer: the extension talks only to the KesherAI app at 127.0.0.1, with a key you paste
   from its settings. It never types into password or card fields.
@@ -41,6 +44,12 @@ Fee: $5, once, when the developer account is registered (Roee pays it himself). 
   - `storage`: keep the connection key and port.
   - `alarms`: keep the connection to the local app alive.
   - `sidePanel`: show KesherAI's chat beside the page.
+  - `tabGroups` (0.3.0): keep the tabs KesherAI works in together in one "KesherAI" tab group, so the user sees them.
+  - Optional permission `debugger` (0.3.0; nothing at install): asked the first time a task the user started needs
+    the exact tools (a small window explains Chrome's "started debugging this browser" bar first). Used only on the
+    tab of that task, only on sites the user allowed, only for reading the page's structure, its console and network
+    messages, keys and screenshots; it detaches after 5 idle minutes and on Stop. Only these CDP domains are sent:
+    Page, Runtime, Log, Network, DOM, Accessibility, Input, Emulation, Overlay.
   - Optional host permission `<all_urls>` (from 0.2.6; nothing at install): the extension asks for one site the first
     time a task needs it (a small window with "Allow on this site", "Allow on all sites", "Not now"), or for all sites
     when the user presses "Allow on all sites" in its popup. Nothing runs on a page until a task does.

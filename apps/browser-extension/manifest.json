@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KesherAI",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Your local AI beside every page: chat with it, ask about the page, and let it do browser tasks you approve.",
   "permissions": [
     "tabs",
@@ -9,7 +9,11 @@
     "storage",
     "alarms",
     "sidePanel",
-    "activeTab"
+    "activeTab",
+    "tabGroups"
+  ],
+  "optional_permissions": [
+    "debugger"
   ],
   "optional_host_permissions": [
     "<all_urls>"

@@ -37,3 +37,21 @@ function showAll() {
   });
 }
 showAll();
+
+// Debugging (0.3.0, Chrome-family browsers): the app's exact tools need the optional "debugger" permission. It is asked
+// the first time a task needs it; this allows it ahead, from this click. Firefox has no debugger for extensions.
+const heUi = (navigator.language || "").startsWith("he");
+const T = (he, en) => (heUi ? he : en);
+function showDebugger() {
+  if (/Firefox\//.test(navigator.userAgent)) return;
+  void chrome.permissions.contains({ permissions: ["debugger"] }).then((on) => {
+    $("dbg").textContent = on
+      ? T("ניפוי באגים מותר: כש-KesherAI עובד, Chrome מציג פס \"started debugging\" (Cancel בו עוצר אותו).", "Debugging allowed: while KesherAI works, Chrome shows a \"started debugging\" bar (Cancel there stops it).")
+      : T("ניפוי באגים (קונסול, רשת, לחיצות מדויקות): KesherAI ישאל בפעם הראשונה שמשימה תצטרך אותו.", "Debugging (console, network, exact clicks): KesherAI asks the first time a task needs it.");
+    $("dbg").dir = "auto";
+    $("dbgon").hidden = on;
+    $("dbgon").textContent = T("לאפשר ניפוי באגים עכשיו", "Allow debugging now");
+  });
+}
+$("dbgon").onclick = () => void chrome.permissions.request({ permissions: ["debugger"] }).catch(() => false).then(showDebugger);
+showDebugger();
