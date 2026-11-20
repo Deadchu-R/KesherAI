@@ -25,6 +25,8 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
 ## Saving Claude tokens first (Roee, 2026-11-20: the top priority, before KesherAI's own efficiency)
 - Small, clear tasks go to the task inbox (kesher-inbox) for KesherAI's local model or Antigravity (his Gemini plan),
   not to a Claude agent. Claude agents only for work that needs Claude (design decisions, big builds, security review).
+- Broad research (competitors, market) goes to Gemini (docs/GEMINI_RESEARCH.md: Roee's Deep Research, or an inbox task
+  for Antigravity); a Claude research agent only for the gap list against our code and decisions.
 - Builds: Opus. Research, docs, test fixing, screenshot boards: Sonnet. Lookups: Haiku. One agent per task, no
   follow-up rounds unless needed.
 - The lead does not read big files, logs or transcripts: grep -n with ranges, `tail -n 20`, agents report ≤12 lines.
