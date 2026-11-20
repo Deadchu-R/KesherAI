@@ -24,7 +24,9 @@ import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
-import { computerGroup, forTelegram } from "./chat-tool-groups.js";
+import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
+import { mcpToolName } from "./mcp.js";
+import { missingNote, ToolRouter } from "./tool-router.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
@@ -122,6 +124,8 @@ export class ConversationManager {
   /** Outside agents' session ids, saved with the chat. */
   private readonly agentSessions = new Map<string, string>();
   private readonly sessions = new Map<string, AgentSession>();
+  /** Routing by meaning (tool-router.ts): words, and a tiny call to the built-in engine when it runs. */
+  private readonly router = new ToolRouter({ ask: () => this.deps.routeAsk?.() });
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
@@ -198,7 +202,38 @@ export class ConversationManager {
     }));
   }
 
+  /**
+   * A chat's tools, without the groups and connectors the user turned off for it in the + menu.
+   *
+   * @param kind - The chat's kind.
+   * @param id - The chat (none: the tools any chat of that kind gets).
+   */
   private toolsFor(kind: ConversationKind, id?: string): { tools: AgentTool[]; notes: string[] } {
+    const all = this.allToolsFor(kind, id);
+    const off = id ? this.deps.library.summary(id)?.toolsOff : undefined;
+    return off?.length ? { ...all, tools: withoutOff(all.tools, off, (server) => mcpToolName(server, "")) } : all;
+  }
+
+  /**
+   * The + menu's Tools sheet: each tool group and each connected MCP server this chat has tools from, with whether
+   * it is on.
+   *
+   * @param id - The chat.
+   * @param servers - The MCP servers (id and name).
+   * @returns The switches, or undefined when the chat is not found.
+   */
+  async toolSwitches(id: string, servers: Array<{ id: string; name: string }>): Promise<{ groups: Array<{ id: string; he: string; en: string; tools: number; on: boolean }>; connectors: Array<{ id: string; name: string; tools: number; on: boolean }> } | undefined> {
+    const c = (await this.open(id))?.conversation;
+    if (!c) return undefined;
+    const names = this.allToolsFor(c.kind, id).tools.map((t) => t.spec.name);
+    const off = new Set(c.toolsOff ?? []);
+    return {
+      groups: CHAT_TOOL_GROUPS.map((g) => ({ id: g.id, he: g.he, en: g.en, tools: names.filter((n) => groupOfTool(n) === g.id).length, on: !off.has(g.id) })).filter((g) => g.tools > 0 || !g.on),
+      connectors: servers.map((sv) => ({ id: connectorKey(sv.id), name: sv.name, tools: names.filter((n) => n.startsWith(mcpToolName(sv.id, ""))).length, on: !off.has(connectorKey(sv.id)) })).filter((sv) => sv.tools > 0 || !sv.on),
+    };
+  }
+
+  private allToolsFor(kind: ConversationKind, id?: string): { tools: AgentTool[]; notes: string[] } {
     const media = this.mediaTools();
     const { tools: computer, notes: computerNotes } = computerGroup(id ? (this.deps.computerTools?.(id) ?? []) : []);
     media.notes.push(...computerNotes);
@@ -689,6 +724,23 @@ export class ConversationManager {
           }, this.deps.board ? [dirname(this.deps.board.file)] : [])
         : undefined;
     if (outside) this.outside.set(id, outside);
+    // Tool search for local models with many tools: the everyday tools in full, the rest loaded on demand.
+    const toolSearch = (): string[] | undefined => {
+      const c = this.deps.library.summary(id);
+      const model = c?.modelId ?? "";
+      let local = true;
+      try {
+        local = this.deps.registry.resolve(model).provider.location !== "cloud";
+      } catch {
+        local = true;
+      }
+      if (!(local && this.deps.config.toolSearch !== false)) return undefined;
+      // A Unity chat gets every Unity tool in full, so the model never works blind and guesses.
+      // Only in a chat that is about Unity: the project is chosen for the whole app, and every other chat paid
+      // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
+      const unityHere = this.unityInChat(id);
+      return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.available ? UNREAL_GRAPH_TOOLS : [])];
+    };
     const session = new AgentSession({
       id,
       modelId: conversation.modelId,
@@ -707,22 +759,12 @@ export class ConversationManager {
       contextTokens: this.contextFor(conversation.modelId),
       // Read on every request, so adding or removing a teammate applies to the next message.
       team: () => this.teamOf(id),
-      // Tool search for local models with many tools: the everyday tools in full, the rest loaded on demand.
-      toolSearch: () => {
-        const c = this.deps.library.summary(id);
-        const model = c?.modelId ?? "";
-        let local = true;
-        try {
-          local = this.deps.registry.resolve(model).provider.location !== "cloud";
-        } catch {
-          local = true;
-        }
-        if (!(local && this.deps.config.toolSearch !== false)) return undefined;
-        // A Unity chat gets every Unity tool in full, so the model never works blind and guesses.
-        // Only in a chat that is about Unity: the project is chosen for the whole app, and every other chat paid
-        // ~1,600 tokens of Unity tools plus its guide (found on the PC: 8,300 tokens before the first word).
-        const unityHere = this.unityInChat(id);
-        return [...CORE_TOOLS, ...(unityHere ? UNITY_TOOL_NAMES : this.deps.unity?.activeProject ? ["unity_status"] : []), ...(this.unrealState.project || unityHere ? ["android_run_on_phone"] : []), ...(this.unrealState.project ? UNREAL_TOOL_NAMES : this.unrealEngines ? ["unreal_status", "unreal_create_project", "unreal_use_project"] : []), ...(this.deps.unreal?.available ? UNREAL_GRAPH_TOOLS : [])];
+      toolSearch,
+      // Routing by meaning (tool-router.ts): the tools a message points at, and a note when what it needs is not installed.
+      route: async (text, signal) => {
+        const r = await this.router.route(text, this.sessions.get(id)?.toolNames() ?? [], this.deps.library.summary(id)?.toolsOff ?? [], !!toolSearch()?.length, signal);
+        const note = missingNote(r.missing);
+        return { tools: r.tools, ...(note ? { note } : {}) };
       },
       // The model team's translator: a final answer written in another language than the user's is put into theirs.
       polishAnswer: async (answer, userText, signal) => {
@@ -1105,7 +1147,7 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar">> & { personaId?: string | null }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar" | "toolsOff">> & { personaId?: string | null }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
@@ -1127,7 +1169,7 @@ export class ConversationManager {
     }
     if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main"));
     if (patch.mode) session.setMode(patch.mode);
-    return this.deps.library.saveConversation({
+    const saved = await this.deps.library.saveConversation({
       ...next,
       modelId: session.modelId,
       mode: session.mode,
@@ -1135,6 +1177,9 @@ export class ConversationManager {
       events: session.events,
       ...(this.agentSessions.has(id) ? { agentSession: this.agentSessions.get(id)! } : {}),
     });
+    // Tools switched on or off in the + menu: the next message has (or lacks) them.
+    if (patch.toolsOff) await this.refreshTools(id);
+    return saved;
   }
 
   /**

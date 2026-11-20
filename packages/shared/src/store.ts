@@ -89,6 +89,8 @@ export interface Conversation {
   envFolder?: string;
   /** Other models that plan or review alongside the main one. */
   team?: Teammate[];
+  /** Tool groups (chat-tool-groups.ts ids) and connectors (`mcp:<server id>`) the user turned off for this chat (+ menu). */
+  toolsOff?: string[];
   /** Agent group: personas the chat's model leads, asking each for its part of a task. */
   group?: string[];
   /** The persona this chat talks as (its instructions join the system prompt). */

@@ -374,7 +374,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown; toolsOff?: unknown } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -386,14 +386,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       // The chat's web settings (sites, depth) are checked; empty ones are taken off.
       // Only these fields (scan 54: any other key in the body went into the saved chat, e.g. its worktree path).
       const { web, bar } = b;
+      // The + menu's tool switches: group ids and `mcp:<server>` keys, short text only.
+      if (b.toolsOff !== undefined && (!Array.isArray(b.toolsOff) || b.toolsOff.length > 64 || b.toolsOff.some((x) => typeof x !== "string" || !/^(mcp:)?[\w.-]{1,64}$/.test(x)))) return reply.code(400).send({ error: "toolsOff is a list of tool group ids and mcp:<server> keys." });
+      const toolsOff = b.toolsOff as string[] | undefined;
       const rest = Object.fromEntries((["title", "modelId", "mode", "projectId", "team", "group", "personaId"] as const).filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as Partial<Pick<typeof b, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "personaId">>;
       if (rest.title !== undefined && typeof rest.title !== "string") return reply.code(400).send({ error: "title must be text" });
-      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}) });
+      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}), ...(toolsOff ? { toolsOff: [...new Set(toolsOff)] } : {}) });
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;
       return summary;
     },
   );
+
+  /** The + menu's Tools sheet: the chat's tool groups and connectors, each on or off (switched with PATCH toolsOff). */
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/tool-switches", async (req, reply) => {
+    const r = await s.conversations.toolSwitches(req.params.id, s.mcp.list().map((m) => ({ id: m.id, name: m.name })));
+    return r ?? reply.code(404).send({ error: "Conversation not found" });
+  });
 
   app.delete<{ Params: { id: string }; Querystring: { worktree?: string } }>("/api/conversations/:id", async (req) => {
     const w = req.query.worktree;

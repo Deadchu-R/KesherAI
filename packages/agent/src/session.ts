@@ -147,6 +147,12 @@ export interface AgentSessionOptions {
    */
   toolSearch?: () => readonly string[] | undefined;
   /**
+   * Routing by meaning: before the model answers a message, the tools it points at (by Hebrew and English words, or a
+   * tiny model call) are loaded, and `note` (e.g. "an image model is not installed") goes to the model with it.
+   * Read once per message; a failure or no answer leaves the message as it was.
+   */
+  route?: (text: string, signal: AbortSignal) => Promise<{ tools: readonly string[]; note?: string } | undefined>;
+  /**
    * Keeps each run's files from before it (for "Undo all" on its receipt, after a restart too). Without it they are
    * kept in memory only.
    */
@@ -263,6 +269,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
   private readonly toolSearch?: () => readonly string[] | undefined;
+  private readonly route?: AgentSessionOptions["route"];
+  /** The message waiting for the router (set by send, routed at the start of the run). */
+  private routeText?: string;
   /** How many times each changing action ran for the current message (the loop guard). */
   private readonly repeats = new Map<string, number>();
   /** Tools the model loaded with find_tools in this conversation. */
@@ -308,6 +317,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.team = opts.team;
     if (opts.undoStore) this.undoStore = opts.undoStore;
     this.toolSearch = opts.toolSearch;
+    this.route = opts.route;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
@@ -391,6 +401,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.tools = new Map(tools.map((t) => [t.spec.name, t]));
   }
 
+  /** @returns The names of the tools this session has now (sorted). */
+  toolNames(): string[] {
+    return [...this.tools.keys()].sort();
+  }
+
   /** @param mode - New permission mode; applies to the next tool call. */
   setMode(mode: PermissionMode): void {
     this.mode = mode;
@@ -414,6 +429,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text, ...(images?.length ? { images } : {}) });
     this.repeats.clear();
     this.loadToolsFor(text);
+    this.routeText = text;
     this.push({ type: "user", text });
     // Steps done for the message before the model starts (the search the globe button asked for), shown like its own.
     for (const st of steps) this.push(st);
@@ -918,6 +934,21 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
   }
 
+  /**
+   * Routing by meaning ({@link AgentSessionOptions.route}) for the message send() just added: its tools are loaded,
+   * and the router's note joins that message for the model.
+   */
+  private async routeMessage(signal: AbortSignal): Promise<void> {
+    const text = this.routeText;
+    this.routeText = undefined;
+    if (text === undefined || !this.route) return;
+    const r = await this.route(text, signal).catch(() => undefined);
+    if (!r) return;
+    for (const name of r.tools) if (this.tools.has(name)) this.loadedTools.add(name);
+    const last = this.messages.at(-1);
+    if (r.note && last?.role === "user") last.content += `\n\n${r.note}`;
+  }
+
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
     // By name, not by the order tools were registered (MCP servers and plugins connect in any order), so the tool
@@ -1009,6 +1040,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       const planner = team.find((m) => m.role === "planner");
       const reviewer = team.find((m) => m.role === "reviewer");
       const request = [...this.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+      await this.routeMessage(abort.signal);
       if (planner) {
         const plan = await this.askTeammate(planner, PLANNER_PROMPT, `The user's request:\n${request}`, abort.signal);
         if (plan) this.messages.push({ role: "user", content: `(A plan from your teammate ${planner.modelId}; follow it where it makes sense, the user's words come first.)\n${plan}` });

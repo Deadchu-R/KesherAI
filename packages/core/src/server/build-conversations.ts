@@ -5,6 +5,7 @@
  * services made before it; the body is the same as when it stood in server.ts.
  */
 import { aboutUserNote } from "../user-profile.js";
+import { engineAsk } from "../tool-router.js";
 import { ConversationManager } from "../conversations.js";
 import { browserTools } from "../browser-bridge.js";
 import { fabTools } from "../fab-tools.js";
@@ -131,6 +132,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     projectFacts,
     // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
     engineSlotTokens: () => (worker ? mainSlot() : engine.slotContext()),
+    // Routing by meaning: a tiny call to the model the engine has loaded (never in a self-work worker: not its engine).
+    routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath })),
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
     browserPane: () => browser.status().pane,

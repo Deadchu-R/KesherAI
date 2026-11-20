@@ -92,6 +92,8 @@ export interface ConversationDeps {
   personas?: Personas;
   /** SKILL.md skills, listed in the prompt and loaded with use_skill. */
   skills?: SkillStore;
+  /** The built-in engine's JSON call for the tool router (tool-router.ts), or undefined while no model is loaded. */
+  routeAsk?(): import("./tool-router.js").AskJson | undefined;
   /** The context each chat gets on KesherAI's own engine, as it reported it (2 chats at once share it). */
   engineSlotTokens?(): number | undefined;
   /** Facts learned per project from its chats' failing commands (project-facts.ts). */

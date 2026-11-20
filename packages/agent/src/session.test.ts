@@ -415,6 +415,26 @@ test("tool search: only core tools in full, find_tools loads the others for the 
   assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "hi");
 });
 
+test("routing by meaning: the router's tools are loaded before the first answer and its note reaches the model", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-rt-"));
+  const { model, seen } = scripted([{ text: "done" }]);
+  const asked: string[] = [];
+  const session = new AgentSession({
+    id: "t", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", toolSearch: () => ["read_file"],
+    route: async (text) => {
+      asked.push(text);
+      return { tools: ["write_file", "not_a_tool"], note: "[KesherAI] routed" };
+    },
+  });
+  session.send("תכתוב קובץ");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  assert.deepEqual(asked, ["תכתוב קובץ"]);
+  const names = seen[0]!.tools.map((t) => t.name);
+  assert.ok(names.includes("write_file") && !names.includes("not_a_tool"));
+  assert.match(seen[0]!.messages.at(-1)!.content, /routed/);
+  assert.ok(!session.events.some((e) => e.type === "user" && /routed/.test(e.text)), "the note is for the model only");
+});
+
 test("another answer: the model sees the conversation up to the last message; the old answer stays", async () => {
   const { session, seen } = await makeSession([{ text: "first" }, { text: "second" }, { text: "third" }]);
   session.send("hi");
