@@ -181,9 +181,10 @@ export function agentsTab(v: AgentsView): HTMLElement {
   const pcs = v.devices().filter((d) => d.kind === "pc");
   // The Claude chat's runs are one group, however many chats paired (each chat pairs once); newest report first.
   const chats = v.devices().filter((d) => d.kind === "claude-chat").sort((a, b) => Date.parse(b.lastSeen ?? "") - Date.parse(a.lastSeen ?? ""));
-  const isChat = (id: string) => chats.some((d) => d.id === id);
-  const chatRuns = rest.filter((c) => isChat(c.deviceId));
-  const ids = [...new Set([...pcs.map((d) => d.id), ...rest.map((c) => c.deviceId)])].filter((id) => !isChat(id));
+  // A run is the chat's by its device, or by its source while the device list has not caught up yet.
+  const isChat = (c: AgentCard) => c.state.source === "claude-chat" || chats.some((d) => d.id === c.deviceId);
+  const chatRuns = rest.filter(isChat);
+  const ids = [...new Set([...pcs.map((d) => d.id), ...rest.filter((c) => !isChat(c)).map((c) => c.deviceId)])];
   const cloud = cloudTasks(v, now);
   const empty = !cards.length && !cloud.length;
   return h(
@@ -202,7 +203,7 @@ export function agentsTab(v: AgentsView): HTMLElement {
         list.length ? h("div", { class: "alist" }, list.map((c) => card(v, c, now, pc))) : h("div", { class: "trow mut sm" }, pc && !pc.optIn.reportActivity ? L("המחשב הזה לא משתף פעילות סוכנים. במחשב: הגדרות › ענן Kesher › לשתף מה הסוכנים עושים.", "This PC does not share agent activity. On the PC: Settings › Kesher Cloud › Share what the agents do.") : L("אין סוכנים פעילים עכשיו.", "No agents running now.")),
       );
     }),
-    chats.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null,
+    chats.length || chatRuns.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null,
     cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null,
     empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null,
   );

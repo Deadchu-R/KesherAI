@@ -34,6 +34,16 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
 - Batch steps; no polling; one background wait per release.
 - After each build, re-run docs/usage/track.py and compare; remind Roee to /compact after each build.
 
+## Show agents in the hub (tools/hub-report, details in its README)
+Roee sees this chat's helper agents live in the Kesher Cloud hub's Agents tab, group "Claude chat" / "צ׳אט Claude".
+Run from /home/claude/kesher; each call is one short connection and exits at once (exit 2 = not paired).
+- Once per chat: `node --import tsx tools/hub-report/hub-report.ts pair <hubUrl>`, then tell Roee the code and the
+  6-digit fingerprint to approve on the hub's Devices screen (run it again to keep waiting).
+- Before launching an agent: `… start <runId> --kind research|build|lookup --model <model> --title "<short title>"`.
+- Optional while it runs: `… step <runId> "<short label>"`.
+- When its notification arrives: `… done <runId> "<summary ≤300 chars>"` or `… failed <runId> "<reason>"`.
+Labels only: no prompts, no file contents (paths, keys and tokens are scrubbed anyway).
+
 ## Design doc (artifact https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U)
 Roee watches it live: every new or changed screen goes in before the build, no approval needed.
 1. Screenshots of the real screen (desktop 1280 wide, phone 390 at deviceScaleFactor 2) from Playwright.

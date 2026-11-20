@@ -99,9 +99,13 @@ async function act(path, body, done) {
     await loadOwner();
     return r.data;
 }
-/** The devices to show: the owner's full list when signed in, else the live presence. */
+/**
+ * The devices to show: the owner's full list when signed in (plus any device the live presence knows that paired
+ * after the list was loaded, e.g. approved in another tab), else the live presence.
+ */
 function devices() {
-    return app.owner?.devices ?? device.presence;
+    const own = app.owner?.devices;
+    return own ? [...own, ...device.presence.filter((d) => !own.some((o) => o.id === d.id))] : device.presence;
 }
 /** Whether the Claude cloud path can be used (known only when signed in; assumed otherwise, the hub refuses if not). */
 function cloudAvailable() {

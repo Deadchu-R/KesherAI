@@ -23,7 +23,9 @@ so a new chat starts from a few small files.
 3. Design doc tools: `export DESIGN_DIR=<the new scratchpad>`, copy tools/design/design_marks.json there, and read the
    design doc (artifact 225udEzmNSSZPHUewaCh7U, read with out_dir $DESIGN_DIR/design2) before the first board.
    Scripts: tools/design/shotboard.py and design_marks.py.
-4. Usage: the tracker only sees this chat; compare with docs/usage/history/*.json for the savings over time.
+4. Hub: pair this chat once so its agents show in the hub's Agents tab (Claude chat):
+   `node --import tsx tools/hub-report/hub-report.ts pair <hubUrl>` (LEAD_GUIDE "Show agents in the hub").
+5. Usage: the tracker only sees this chat; compare with docs/usage/history/*.json for the savings over time.
 
 ## What does not carry over
 - Background agents of the old chat (finish them first).
