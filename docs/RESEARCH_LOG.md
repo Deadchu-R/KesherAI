@@ -3771,3 +3771,41 @@ on the free plan with a quota counter in the hub page.
   (title only), docs.cursor.com/en/background-agent/api/list-agents (search); openai.com/index/work-with-codex-from-anywhere;
   docs.devin.ai/sdk/guides/watching-sessions; docs.openhands.dev/sdk/api-reference/openhands.sdk.event (search); langfuse.com/guides/cookbook/otel_integration_python_sdk (search);
   dev.to OpenTelemetry GenAI without leaking PII (search); developers.cloudflare.com/durable-objects/platform/pricing (via hub entry).
+
+## Focused usability: one unified chat, token saving, Unity-first bridge, ComfyUI → engine (2026-11-20, Gemini research Roee shared)
+Source: a Gemini deep-research report Roee attached (8 pages, Hebrew), summarised here; its own sources: MCP Apps (SEP-1865,
+stable 2026-01-26), MCP core spec, llama.cpp server docs (slots, cache_prompt, slot-save-path), Cline/Roo Code context
+patterns, Unity-MCP (IvanMurzak/CoplayDev), Unreal-MCP / Remote Control API, ComfyUI server API (WebSocket), Ubisoft
+CHORD PBR, LM Studio / Open WebUI.
+- **Thesis:** stop being a collection of tools with their own screens; the chat is the operating system (like Claude and
+  Gemini). One request, everything shown inside the conversation.
+- **1. Unified chat:** every reply is typed content blocks, not one string: (1) step accordion / tool pill (one folding
+  line with live status), (2) live media/progress card (ComfyUI preview over its WebSocket), (3) inline action bar under
+  a result ([Import to Unity] [Apply to selected] [4 variations]) that calls tools directly with zero LLM tokens,
+  (4) human-in-the-loop approval card (diff / object list, Approve/Cancel, synced to the phone), (5) linked side canvas
+  for heavy results (PBR maps, C# diff), (6) token telemetry footer (router/main model, cache %, tokens saved). Adopt
+  MCP Apps (ui:// resources in a sandboxed iframe; callServerTool / updateModelContext / sendMessage). "Zero tab
+  switching": auto-detect a running Unity/ComfyUI and show a small "Unity: MyGame • connected" chip in the composer.
+- **2. Models and tokens:** hub-and-spoke: a fast router (1.5–4B or rules, GBNF JSON) picks tool groups and model size;
+  context-isolated stateless sub-agents return a 200–400 token findings pack; the main model synthesises. Five
+  techniques: stable prefix + KV slot pinning (static system prompt, cache_prompt, a fixed id_slot per agent kind;
+  nothing that changes at the top of the prompt), deferred tool loading (4–6 tools per turn, sorted alphabetically),
+  two-stage scene/AST reading (compact tree first, details on demand), tool-output pruning after 2 turns (summary line,
+  full output on disk; compact only at ~70%), targeted SEARCH/REPLACE diffs and zero-LLM UI actions. VRAM coordinator:
+  save the slot to disk, free VRAM, run ComfyUI, restore the slot.
+- **3. Unity-first stability:** bridge outside Unity on a deterministic port (hash of the project path) with
+  [InitializeOnLoad] reconnect and an editor_ready event after every domain reload (with the last compile errors); all
+  Unity API calls on the main thread through a queue; one Undo group per chat turn (one Ctrl+Z undoes the turn);
+  self-healing compile loop (write → AssetDatabase.Refresh → wait compilationFinished → return only file/line/message;
+  up to 2 automatic fixes). A small reliable core: unity_get_hierarchy, unity_inspect_object, unity_modify_scene,
+  unity_read_console, unity_import_sprite, unity_create_pbr_material; Unreal later: inspect_level, apply_material.
+- **4. ComfyUI → engine from the chat:** router picks a fixed workflow template (only prompt/seed/resolution change);
+  POST /prompt + WebSocket progress and live preview in the bubble; background removal for UI sprites or seamless albedo
+  + Normal/Roughness/AO for PBR; a result card with zero-token buttons; the Unity plugin imports to Assets/Generated/,
+  sets TextureImporter, builds a pipeline-matched material and applies it with Undo.
+- **Their sprint order:** 1 routing + KV cache + visible telemetry; 2 typed blocks in the chat; 3 Unity core toolset at
+  100%; 4 the end-to-end demo (one request → live preview → button → material on an object in Unity, a 45 s video).
+- **What KesherAI already has (to check against, not rebuild):** chat sub-agents with a model each (2842e845), Unity /
+  Unreal / Godot bridges and scene editors, ComfyUI flows with "✦ With AI" in the editors, approvals synced to the phone,
+  the token-usage tracker (docs/usage). Next step: a gap list per category, then the design doc, then builds.
+Stopped at: summary written; gap analysis against the current code not done yet.

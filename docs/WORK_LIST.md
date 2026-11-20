@@ -68,6 +68,14 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 Roee wants an update when the inbox is ready AND the hub site is live (needs his Google OAuth client + Cloudflare).
 - ✅ Usage tracker: docs/usage (track.py + charts); re-run after each build.
 
+## Next focus (Roee, 2026-11-20): finish the agents work, then focused usability (Gemini research in RESEARCH_LOG)
+- 🔨 Hub: why the PC shows Off; Claude's inbox tasks visible in the hub (Opus agent). Then build 0.6.402 (live agent
+  tracking + this) and check it with Roee.
+- ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
+  (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
+  100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
+  end-to-end demo. First a gap list against what exists, then the design doc, then builds.
+
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
