@@ -22,6 +22,7 @@ import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
+import { connectorSection, type ConnectionView } from "./connector.js";
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
@@ -36,6 +37,8 @@ interface OwnerState {
   queued: number;
   /** Live agent activity the hub keeps, and today's rows written against the free plan's daily limit. */
   agents?: { kept: number; writtenToday: number; freeWrites: number };
+  /** Claude connections approved for the hub's MCP endpoint ("Connected apps"); missing on an older hub. */
+  connections?: ConnectionView[];
   audit: Array<{ ts: number; action: string; deviceId?: string }>;
 }
 
@@ -903,12 +906,23 @@ const AUDIT: Record<string, [string, string]> = {
   "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
   "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
   "relay-command": ["הרצה או ביטול של משימה נשלחו למחשב", "Run or Cancel of a task sent to a PC"],
+  "mcp-client-registered": ["Claude נרשם כאפליקציה", "Claude registered as an app"],
+  "mcp-approved": ["אישרת חיבור של Claude", "You approved a Claude connection"],
+  "mcp-denied": ["סירבת לחיבור של Claude", "You refused a Claude connection"],
+  "mcp-connected": ["Claude התחבר", "Claude connected"],
+  "mcp-revoked": ["חיבור של Claude נותק", "A Claude connection was revoked"],
+  "mcp-refresh-reused": ["מפתח רענון ישן חזר: החיבור נותק", "An old refresh token came back: the connection was ended"],
+  "mcp-list_devices": ["Claude: רשימת מכשירים", "Claude: list devices"],
+  "mcp-get_agent_status": ["Claude: מצב הסוכנים", "Claude: agent status"],
+  "mcp-waiting_for_approval": ["Claude: כמה מחכה לאישור", "Claude: waiting for approval"],
+  "mcp-list_tasks": ["Claude: רשימת משימות", "Claude: list tasks"],
+  "mcp-send_task": ["Claude שלח משימה למחשב", "Claude sent a task to a PC"],
 };
 
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */
 function settingsTab(): HTMLElement {
   const o = app.owner;
-  const name = (id?: string) => (id ? (devices().find((d) => d.id === id)?.name ?? id.slice(0, 6)) : "");
+  const name = (id?: string) => (id ? (devices().find((d) => d.id === id)?.name ?? o?.connections?.find((c) => c.id === id)?.name ?? id.slice(0, 6)) : "");
   const owner = o
     ? [
         h(
@@ -937,6 +951,7 @@ function settingsTab(): HTMLElement {
               )
             : null,
         ),
+        o.connections ? connectorSection(o.connections, app.busy, (c) => void act(`/api/connections/${encodeURIComponent(c.id)}/revoke`, {}, { he: `"${c.name}" נותק`, en: `"${c.name}" was revoked` })) : null,
         h("section", { class: "sec" }, h("h3", null, L("חשבון", "Account")), h("div", { class: "row" }, h("span", { class: "grow" }, L("מחובר עם Google · רק החשבון הזה נכנס", "Signed in with Google · only this account gets in")), h("span", { class: "tag t-ok" }, L("נעול לחשבון אחד", "Locked to one account")))),
       ]
     : [signInCard(L("מתגי העצירה ויומן הפעילות זמינים רק אחרי התחברות.", "The kill switches and the activity log are available only after signing in."))];

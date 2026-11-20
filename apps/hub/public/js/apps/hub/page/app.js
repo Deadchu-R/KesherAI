@@ -22,6 +22,7 @@ import { agentsSummary, agentsTab } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
 import { clearShown, notifySection, startPush } from "./push.js";
+import { connectorSection } from "./connector.js";
 import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
@@ -634,17 +635,29 @@ const AUDIT = {
     "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
     "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
     "relay-command": ["הרצה או ביטול של משימה נשלחו למחשב", "Run or Cancel of a task sent to a PC"],
+    "mcp-client-registered": ["Claude נרשם כאפליקציה", "Claude registered as an app"],
+    "mcp-approved": ["אישרת חיבור של Claude", "You approved a Claude connection"],
+    "mcp-denied": ["סירבת לחיבור של Claude", "You refused a Claude connection"],
+    "mcp-connected": ["Claude התחבר", "Claude connected"],
+    "mcp-revoked": ["חיבור של Claude נותק", "A Claude connection was revoked"],
+    "mcp-refresh-reused": ["מפתח רענון ישן חזר: החיבור נותק", "An old refresh token came back: the connection was ended"],
+    "mcp-list_devices": ["Claude: רשימת מכשירים", "Claude: list devices"],
+    "mcp-get_agent_status": ["Claude: מצב הסוכנים", "Claude: agent status"],
+    "mcp-waiting_for_approval": ["Claude: כמה מחכה לאישור", "Claude: waiting for approval"],
+    "mcp-list_tasks": ["Claude: רשימת משימות", "Claude: list tasks"],
+    "mcp-send_task": ["Claude שלח משימה למחשב", "Claude sent a task to a PC"],
 };
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */
 function settingsTab() {
     const o = app.owner;
-    const name = (id) => (id ? (devices().find((d) => d.id === id)?.name ?? id.slice(0, 6)) : "");
+    const name = (id) => (id ? (devices().find((d) => d.id === id)?.name ?? o?.connections?.find((c) => c.id === id)?.name ?? id.slice(0, 6)) : "");
     const owner = o
         ? [
             h("section", { class: "sec" }, h("h3", null, L("מתגי עצירה", "Kill switches")), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⏸"), h("span", { class: "grow" }, h("b", null, L("השהה את המרכז", "Pause the hub")), h("div", { class: "mut sm" }, L("לא מעביר כלום וסוגר את החיבורים; הנתונים נשמרים", "Relays nothing and closes the connections; data is kept"))), h("button", { type: "button", role: "switch", class: `tog${o.paused ? "" : " off"}`, "aria-checked": o.paused, "aria-label": L("השהה את המרכז", "Pause the hub"), disabled: app.busy, onclick: () => void act("/api/kill", { what: o.paused ? "resume" : "pause" }) })), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "✷"), h("span", { class: "grow" }, h("b", null, o.cloudOff ? L("Claude בענן כבוי", "Claude cloud is off") : L("כבה את Claude בענן", "Turn Claude cloud off")), h("div", { class: "mut sm" }, L("משימות לא יישלחו לענן. למחיקת הטוקן: בהגדרות המשימה המתוזמנת ב-claude.ai", "No task goes to the cloud. To delete the token: in the scheduled task's settings at claude.ai"))), h("button", { type: "button", class: `btn${o.cloudOff ? "" : " bad"}`, disabled: app.busy, onclick: () => void act("/api/kill", { what: o.cloudOff ? "cloud-on" : "cloud-off" }) }, o.cloudOff ? L("הפעל", "Turn on") : L("כבה", "Turn off"))), h("div", { class: "kill" }, h("span", { class: "ki", "aria-hidden": "true" }, "⛔"), h("span", { class: "grow" }, h("b", null, L("נתק את כל המכשירים", "Disconnect every device")), h("div", { class: "mut sm" }, L("גם מתנתק מכל הדפדפנים. כל מכשיר יצטרך להתחבר מחדש עם קוד", "Also signs out every browser. Each device must pair again with a code"))), h("button", { type: "button", class: "btn bad", disabled: app.busy, onclick: () => confirm(L("לנתק את כל המכשירים ולהתנתק מכל הדפדפנים?", "Disconnect every device and sign out of every browser?")) && void act("/api/kill", { what: "everything" }).then(() => device.forget()) }, L("נתק הכול", "Disconnect all"))), h("div", { class: "kill soft" }, h("span", { class: "ki", "aria-hidden": "true" }, "🚪"), h("span", { class: "grow" }, h("b", null, L("התנתק בדפדפן הזה", "Sign out in this browser")), h("div", { class: "mut sm" }, L("התחברות מחדש עם Google", "Sign in again with Google"))), h("button", { type: "button", class: "btn", disabled: app.busy, onclick: () => void act("/api/signout", {}) }, L("התנתק", "Sign out")))),
             h("section", { class: "sec" }, h("h3", null, L("מה המרכז מחזיק עכשיו", "What the hub holds now")), h("div", { class: "grid3" }, h("div", { class: "card stat" }, h("b", null, String(o.queued)), h("div", { class: "mut sm" }, L("הודעות נעולות בתור", "Sealed messages queued"))), h("div", { class: "card stat" }, h("b", null, String(o.devices.length)), h("div", { class: "mut sm" }, L("מכשירים", "Devices"))), h("div", { class: "card stat" }, h("b", null, String(o.audit.length)), h("div", { class: "mut sm" }, L("שורות פעילות אחרונות", "Recent activity lines")))), h("span", { class: "sm lines" }, L("ההודעות נעולות במפתח של המכשיר שמקבל אותן; המרכז לא יכול לקרוא אותן. כל הודעה נמחקת כשהתקבלה, או אחרי 24 שעות.", "Messages are sealed to the receiving device's key; the hub cannot read them. Each is deleted once received, or after 24 hours.")), h("div", null, h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.queued, onclick: () => confirm(L("למחוק את כל ההודעות שבתור?", "Delete every queued message?")) && void act("/api/kill", { what: "drop-queue" }) }, L("מחק את כל התור עכשיו", "Delete the whole queue now"))), o.agents
                 ? h("div", { class: "kill soft" }, h("span", { class: "ki", "aria-hidden": "true" }, "🤖"), h("span", { class: "grow" }, h("b", null, L(`פעילות סוכנים: ${o.agents.kept} חבילות נעולות`, `Agent activity: ${o.agents.kept} sealed batches`)), h("div", { class: "mut sm" }, L(`נכתבו היום ${o.agents.writtenToday.toLocaleString()} שורות מתוך ${o.agents.freeWrites.toLocaleString()} בתוכנית החינמית. 50 אירועים לכל סוכן, 7 ימים.`, `Written today: ${o.agents.writtenToday.toLocaleString()} of ${o.agents.freeWrites.toLocaleString()} rows on the free plan. 50 events per agent, 7 days.`))), h("button", { type: "button", class: "btn bad", disabled: app.busy || !o.agents.kept, onclick: () => confirm(L("למחוק את כל פעילות הסוכנים שהמרכז שומר?", "Delete all the agent activity the hub keeps?")) && void act("/api/kill", { what: "drop-agents" }) }, L("מחק", "Delete")))
                 : null),
+            o.connections ? connectorSection(o.connections, app.busy, (c) => void act(`/api/connections/${encodeURIComponent(c.id)}/revoke`, {}, { he: `"${c.name}" נותק`, en: `"${c.name}" was revoked` })) : null,
             h("section", { class: "sec" }, h("h3", null, L("חשבון", "Account")), h("div", { class: "row" }, h("span", { class: "grow" }, L("מחובר עם Google · רק החשבון הזה נכנס", "Signed in with Google · only this account gets in")), h("span", { class: "tag t-ok" }, L("נעול לחשבון אחד", "Locked to one account")))),
         ]
         : [signInCard(L("מתגי העצירה ויומן הפעילות זמינים רק אחרי התחברות.", "The kill switches and the activity log are available only after signing in."))];

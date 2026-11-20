@@ -16,7 +16,8 @@ Design and reasons: `docs/RESEARCH_LOG.md`, entry "Kesher Cloud hub" (with its a
   (busy, which work it accepts, its agents). Sealed messages only until the recipient acknowledges them (at most 7 days;
   approvals 30 minutes). An activity log with event type, device id and time only (30 days). For a phone with
   notifications on: its browser's push address and keys, and the last "waiting" count it was told (a number a PC sends
-  in clear for this, nothing else).
+  in clear for this, nothing else); each PC's last such count. For the Claude connector: the registered Claude clients
+  (name, redirect addresses), hashes of its codes and tokens, and the ids, PC and time of tasks it sent (no text).
 - **Never:** task text, results, files, chat, passwords or tokens in plain form. Messages are sealed on the sending
   device to the receiving device's key. The one exception is a task you send to **Claude cloud**: the hub opens that
   one message in memory to start the scheduled task, and stores nothing of it.
@@ -98,11 +99,32 @@ learns what waits.
 A phone is notified only while its hub page is closed, at most once per 30 seconds, and only when the count grows; a tap
 opens "Waiting for you". "Notify this device" off, "Forget this device" or revoking the device stops it.
 
+### 8. Connect Claude (optional): the hub as a custom connector
+The hub is also a remote MCP server at `https://<your hub>/mcp`, so Claude (claude.ai, the desktop and phone apps,
+Claude Code) can list your devices and agents, see how much waits for approval, and send a task to a PC, inside your
+own Claude plan. Nothing to set up on Cloudflare: it uses the Google sign-in you already have.
+1. On the hub page (signed in): **Settings › Connect to Claude** shows the address; copy it.
+2. In Claude: **Settings › Connectors › Add custom connector**, name it "Kesher Cloud", paste the address, leave the
+   client id and secret empty, and press **Connect**.
+3. The hub's approval page opens (sign in to the hub first if it asks). Check that it returns to `claude.ai` and approve.
+4. In a chat, turn Kesher Cloud on in the tools menu.
+
+What Claude gets: metadata only. Task text, results, approvals and agent steps are sealed between your devices and the
+hub holds no key that opens them, so the tools answer with names, counts and ids plus a link to the hub page, where
+your browser opens them. `send_task` is sealed by the hub with its own key (the same key the Claude cloud path uses):
+the text came from Claude in plain form and is in the Worker's memory only for that call. The PC must have "accepts
+tasks" and the kind (Antigravity, which still waits for your Run, or the local model) turned on.
+
+Tokens: access 1 hour, refresh 30 days (rotated on each use; an old one coming back ends the connection), at most 90
+days before you approve again, at most 10 connections. **Settings › Connected apps › Revoke** ends one at once;
+"Disconnect all" ends all of them. Every tool call is in the activity log (tool name only).
+
 ## Kill switches
 1. **Pause hub** (hub page): stops routing and closes every device connection; data kept.
-2. **Sign out everywhere and revoke all devices** (hub page).
-3. **Claude path:** switch it off on the hub page, or delete the scheduled task's token at claude.ai (fires stop at once).
-4. **Whole hub:** set `HUB_DISABLED` to `1`, or disable the Worker in the Cloudflare dashboard.
+2. **Sign out everywhere and revoke all devices** (hub page); this also ends every Claude connection.
+3. **Claude connector:** Settings › Connected apps › Revoke (or remove the connector in Claude).
+4. **Claude path:** switch it off on the hub page, or delete the scheduled task's token at claude.ai (fires stop at once).
+5. **Whole hub:** set `HUB_DISABLED` to `1`, or disable the Worker in the Cloudflare dashboard.
 
 ## The hub's API (for the KesherAI clients)
 - Open, rate limited: `POST /api/signin` `{credential}` (Google ID token, from the hub page only), `POST /api/pair/start`
@@ -113,6 +135,11 @@ opens "Waiting for you". "Notify this device" off, "Forget this device" or revok
   A phone or hub page: `POST /api/push/subscribe` `{endpoint, keys: {p256dh, auth}, lang}` (known push services only)
   and `POST /api/push/unsubscribe`.
 - Socket: `GET /ws/device?ticket=…`. Frames in `packages/shared/src/hub-protocol.ts`.
+- Claude connector: `GET /.well-known/oauth-protected-resource[/mcp]`, `GET /.well-known/oauth-authorization-server`,
+  `POST /oauth/register` (only Claude's redirect addresses), `GET /oauth/authorize` (→ the approval page `/connect`),
+  `POST /oauth/token` (code + PKCE S256, or refresh), `POST /mcp` (Bearer access token; tools `list_devices`,
+  `get_agent_status`, `waiting_for_approval`, `list_tasks`, `send_task`). Signed in: `POST /api/oauth/check`,
+  `POST /api/oauth/decide`, `POST /api/connections/:id/revoke`.
 - Page: `GET /api/config` → `{googleClientId, vapidPublicKey}` (public; the key is empty until all three VAPID values are set).
 - Signed in (cookie, same origin): `GET /api/state`, `POST /api/signout`, `POST /api/pair/check` `{code}` (the
   fingerprint, before approving), `POST /api/pair/approve` `{code, name}`,
@@ -123,7 +150,7 @@ Live chat with a PC does not go through the hub; it stays on the direct links Ke
 ## For developers
 - Code: `src/hub.ts` (all logic, as a plain class), `src/hub-do.ts` (the Durable Object), `src/worker.ts` (entry),
   `src/sql-store.ts` / `src/store.ts` (storage), `src/google.ts`, `src/claude-cloud.ts`, `src/rate-limit.ts`,
-  `src/web-push.ts` (Web Push on WebCrypto; subscriptions are kept in settings as `push:<device id>`). The
+  `src/oauth.ts`, `src/mcp.ts`, `src/connector.ts` (the Claude connector), `src/web-push.ts` (Web Push on WebCrypto; subscriptions are kept in settings as `push:<device id>`). The
   protocol, sealing and routing are shared with the PC and the phone in `packages/shared/src/hub*.ts` (imported by
   path, so the Worker needs no install step).
 - The page: `page/*.ts` (no framework), compiled with the shared hub code into `public/js` by

@@ -29,6 +29,7 @@ import {
 } from "../../../packages/shared/src/hub.js";
 import { claudeTrigger, fireText, type ClaudeTrigger, type FireResult } from "./claude-cloud.js";
 import { ownerCheck, type GoogleClaims } from "./google.js";
+import { ConnectorAuth } from "./oauth.js";
 import { LIMITS, RateLimiter } from "./rate-limit.js";
 import type { AuditRow, DeviceRow, HubStore } from "./store.js";
 import { cleanPushSub, PUSH, sendPush, type StoredPushSub, type VapidKeys } from "./web-push.js";
@@ -124,6 +125,33 @@ function pushKey(deviceId: string): string {
   return `push:${deviceId}`;
 }
 
+/** Where a PC's last "waiting for you" count is kept (a number it already sends in clear; deleted with the device). */
+function waitingKey(deviceId: string): string {
+  return `waiting:${deviceId}`;
+}
+
+/** Tasks the Claude connector sent (ids, target and time only; never the text), newest last. */
+const CONNECTOR_TASKS = "connectorTasks";
+
+/** One task the Claude connector sent, as the hub remembers it. */
+export interface ConnectorTaskRow {
+  /** The sealed envelope's id (to see whether the PC took it yet). */
+  envId: string;
+  taskId: string;
+  to: string;
+  executor: "pc-local" | "pc-antigravity";
+  at: number;
+}
+
+/** What the connector's `send_task` asks for. */
+export interface ConnectorTaskRequest {
+  title: string;
+  spec: string;
+  /** A PC's id or name; empty: the one PC that takes tasks. */
+  device?: string;
+  executor: "pc-local" | "pc-antigravity";
+}
+
 /** The hub. One instance lives in the Durable Object. */
 export class Hub {
   readonly limits: RateLimiter;
@@ -131,6 +159,8 @@ export class Hub {
   private readonly sockets: DeviceSockets;
   private readonly now: () => number;
   private hubKey?: Promise<{ privateKey: HubCryptoKey; publicKey: string } | undefined>;
+  /** The Claude connector's OAuth (oauth.ts): registered clients, codes and "Connected apps". */
+  readonly connector: ConnectorAuth;
 
   /** @param deps - Storage, sockets, setup values and the outside calls. */
   constructor(private readonly deps: HubDeps) {
@@ -138,6 +168,7 @@ export class Hub {
     this.sockets = deps.sockets;
     this.now = deps.now ?? Date.now;
     this.limits = new RateLimiter(this.now);
+    this.connector = new ConnectorAuth(this.store, this.now, (action, grantId) => this.audit(action, grantId ? { deviceId: grantId } : {}));
   }
 
   // ---- audit and helpers ----
@@ -409,6 +440,7 @@ export class Hub {
     if (!this.store.device(deviceId)) return false;
     this.store.deleteDevice(deviceId);
     this.store.setSetting(pushKey(deviceId), undefined);
+    this.store.setSetting(waitingKey(deviceId), undefined);
     this.store.dropQueueFor(deviceId);
     this.store.dropAgentEventsFor(deviceId);
     this.sockets.send(deviceId, { t: "revoked" });
@@ -444,14 +476,17 @@ export class Hub {
     this.audit(off ? "cloud-off" : "cloud-on");
   }
 
-  /** Kill switch 2: sign out everywhere, revoke every device, drop every queued message. */
+  /** Kill switch 2: sign out everywhere, revoke every device and every Claude connection, drop every queued message. */
   killAll(): void {
     this.store.deleteAllSessions();
     for (const d of this.store.devices()) {
       this.store.deleteDevice(d.id);
       this.store.setSetting(pushKey(d.id), undefined);
+      this.store.setSetting(waitingKey(d.id), undefined);
       this.sockets.send(d.id, { t: "revoked" });
     }
+    this.connector.revokeAll();
+    this.store.setSetting(CONNECTOR_TASKS, undefined);
     this.store.dropQueue();
     this.store.dropAgentEvents();
     this.sockets.closeAll(4001, "revoked");
@@ -518,7 +553,7 @@ export class Hub {
    *
    * @returns The state.
    */
-  async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; agents: { kept: number; writtenToday: number; freeWrites: number }; audit: AuditRow[] }> {
+  async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; agents: { kept: number; writtenToday: number; freeWrites: number }; connections: ReturnType<ConnectorAuth["list"]>; audit: AuditRow[] }> {
     const all = this.store.devices();
     const devices = await Promise.all(
       all.map(async (d) => ({ id: d.id, name: d.name, kind: d.kind, publicKey: d.publicKey, online: this.sockets.isOnline(d.id), ...(d.lastSeen ? { lastSeen: new Date(d.lastSeen).toISOString() } : {}), busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), fingerprint: await keyFingerprint(d.publicKey) })),
@@ -526,7 +561,7 @@ export class Hub {
     // The free plan counts rows written per day (UTC): the page shows how much of it live activity used today.
     const today = new Date(this.now()).setUTCHours(0, 0, 0, 0);
     const agents = { kept: this.store.agentEventCount(), writtenToday: this.store.agentEventCount(today), freeWrites: FREE_ROWS_PER_DAY };
-    return { devices, paused: this.paused, cloudOff: this.store.getSetting("cloudOff") === "1", cloudReady: !!(await this.cloudTrigger()), queued: this.store.queueCount(), agents, audit: this.store.auditList(100) };
+    return { devices, paused: this.paused, cloudOff: this.store.getSetting("cloudOff") === "1", cloudReady: !!(await this.cloudTrigger()), queued: this.store.queueCount(), agents, connections: this.connector.list(), audit: this.store.auditList(100) };
   }
 
   // ---- sockets ----
@@ -644,6 +679,10 @@ export class Hub {
     if (env.kind === "task" || env.kind === "cloud") {
       if (!this.limits.take(`task:${from.id}`, LIMITS.task)) return refuse("rate-limited", env.id);
     }
+    // A PC answers a task the Claude connector sent (sealed from the hub) with progress and a result sealed to the hub.
+    // The hub does not open them (no plain result is ever kept here): taken and dropped; the owner reads the result on
+    // the PC's board or the hub page.
+    if (env.to === "hub" && (env.kind === "progress" || env.kind === "result")) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: false });
     if (env.to === "hub") return this.cloud(from, env, refuse);
     if (env.kind === "cloud" || env.kind === "cloud_started") return refuse("not-allowed", env.id);
     const to = this.store.device(env.to);
@@ -665,7 +704,10 @@ export class Hub {
     const online = this.sockets.send(to.id, { t: "deliver", env });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
     if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
-    if (env.kind === "approvals" && env.waiting !== undefined) await this.notifyWaiting(to.id, env.waiting, online);
+    if (env.kind === "approvals" && env.waiting !== undefined) {
+      this.noteWaiting(from.id, env.waiting);
+      await this.notifyWaiting(to.id, env.waiting, online);
+    }
   }
 
   // ---- Web Push ("N waiting for you" on a phone whose page is closed) ----
@@ -766,6 +808,112 @@ export class Hub {
     this.sockets.send(from.id, { t: "deliver", env: reply });
   }
 
+  // ---- the Claude connector's view (mcp.ts): metadata the hub already holds, and tasks sealed by the hub ----
+
+  /** Keeps a PC's latest waiting count (written only when it changes; the PC sends the same number to each phone). */
+  private noteWaiting(pcId: string, n: number): void {
+    const count = Math.max(0, Math.floor(n));
+    let old: number | undefined;
+    try {
+      old = (JSON.parse(this.store.getSetting(waitingKey(pcId)) ?? "null") as { n?: number } | null)?.n;
+    } catch {
+      // A damaged value is replaced below.
+    }
+    if (old !== count) this.store.setSetting(waitingKey(pcId), JSON.stringify({ n: count, at: this.now() }));
+  }
+
+  /**
+   * Each PC's last "waiting for you" count, as it told the owner's phones (in clear, for Web Push). What waits is
+   * sealed to the phones; the hub has the number only.
+   *
+   * @returns One entry per PC that has reported a count.
+   */
+  waitingCounts(): Array<{ deviceId: string; name: string; waiting: number; at: number }> {
+    return this.store.devices().flatMap((d) => {
+      const raw = d.kind === "pc" ? this.store.getSetting(waitingKey(d.id)) : undefined;
+      if (!raw) return [];
+      try {
+        const w = JSON.parse(raw) as { n: number; at: number };
+        return [{ deviceId: d.id, name: d.name, waiting: w.n, at: w.at }];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  /**
+   * What the hub can tell about tasks without opening anything: sealed task messages still waiting for each PC, and
+   * the tasks the connector sent (ids, target, time; whether the PC took them yet).
+   *
+   * @returns Queued counts per PC and the connector's own recent tasks.
+   */
+  connectorTasks(): { queued: Array<{ deviceId: string; name: string; tasks: number; other: number }>; sent: Array<ConnectorTaskRow & { name: string; taken: boolean }> } {
+    const t = this.now();
+    const devs = this.store.devices();
+    const queued = devs
+      .filter((d) => d.kind === "pc")
+      .map((d) => {
+        const q = this.store.queued(d.id).filter((x) => x.expiresAt > t);
+        return { deviceId: d.id, name: d.name, tasks: q.filter((x) => x.kind === "task").length, other: q.filter((x) => x.kind !== "task").length };
+      });
+    const sent = this.sentTasks().map((s) => ({ ...s, name: devs.find((d) => d.id === s.to)?.name ?? "?", taken: !this.store.queued(s.to).some((q) => q.id === s.envId) }));
+    return { queued, sent };
+  }
+
+  private sentTasks(): ConnectorTaskRow[] {
+    try {
+      const x = JSON.parse(this.store.getSetting(CONNECTOR_TASKS) ?? "[]") as unknown;
+      return Array.isArray(x) ? (x as ConnectorTaskRow[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * The connector's `send_task`: the hub seals the task with its own key (the key the Claude cloud path already uses)
+   * to one PC that takes this kind of task, queues it and delivers it when the PC is on. The text came from Claude in
+   * plain form; it exists here in memory for this call only and is never stored or logged. The PC adds it to its board
+   * as "from the cloud hub"; an Antigravity task still waits for Run by hand.
+   *
+   * @param req - Title, spec, which PC and which executor.
+   * @param grantId - The connection that asked (for the rate limit and the log).
+   * @returns The task id, the PC and whether it was delivered now, or an error in words.
+   */
+  async sendConnectorTask(req: ConnectorTaskRequest, grantId: string): Promise<{ taskId: string; deviceId: string; name: string; delivered: boolean } | { error: string }> {
+    if (this.paused) return { error: "The hub is paused." };
+    const title = req.title.trim().slice(0, HUB_LIMITS.titleChars);
+    if (!title) return { error: "A title is needed." };
+    if (req.spec.length > HUB_LIMITS.specChars) return { error: `The spec is longer than ${HUB_LIMITS.specChars} characters.` };
+    const takes = (d: DeviceRow) => d.kind === "pc" && d.optIn.appear && d.optIn.acceptTasks && (req.executor === "pc-local" ? d.optIn.acceptLocal : d.optIn.acceptAntigravity);
+    const pcs = this.store.devices().filter((d) => d.kind === "pc");
+    const want = (req.device ?? "").trim();
+    const named = want ? pcs.filter((d) => d.id === want || d.name.toLowerCase() === want.toLowerCase()) : pcs.filter(takes);
+    if (!named.length) return { error: want ? `No paired PC is called "${want.slice(0, 60)}".` : "No PC takes this kind of task (on the PC: Settings › Kesher Cloud)." };
+    if (named.length > 1) return { error: `More than one PC fits; name one: ${named.map((d) => d.name).join(", ")}.` };
+    const pc = named[0]!;
+    if (!takes(pc)) return { error: `"${pc.name}" does not take ${req.executor === "pc-local" ? "local-model" : "Antigravity"} tasks (on the PC: Settings › Kesher Cloud).` };
+    if (!this.limits.take(`task:${grantId}`, LIMITS.task)) return { error: "Too many tasks in an hour." };
+    const key = await this.ownKey();
+    if (!key) return { error: "The hub has no key yet." };
+    const taskId = randomB64url(16);
+    const env = await sealMessage({ from: "hub", to: pc.id, kind: "task" }, { type: "task", taskId, title, spec: req.spec, executor: req.executor, ifOffline: "wait", createdAt: new Date(this.now()).toISOString() }, key.privateKey, pc.publicKey);
+    const t = this.now();
+    this.store.enqueue({ id: env.id, to: pc.id, from: "hub", kind: "task", expiresAt: t + env.ttl * 1000, env: JSON.stringify(env), createdAt: t });
+    const delivered = this.sockets.send(pc.id, { t: "deliver", env });
+    this.store.setSetting(CONNECTOR_TASKS, JSON.stringify([...this.sentTasks(), { envId: env.id, taskId, to: pc.id, executor: req.executor, at: t }].slice(-20)));
+    return { taskId, deviceId: pc.id, name: pc.name, delivered };
+  }
+
+  /**
+   * Writes one connector tool call to the activity log (the tool's name and the connection; no arguments).
+   *
+   * @param tool - The tool's name.
+   * @param grantId - The connection.
+   */
+  noteToolCall(tool: string, grantId: string): void {
+    this.audit(`mcp-${tool}`, { deviceId: grantId });
+  }
+
   // ---- upkeep ----
 
   /**
@@ -780,6 +928,7 @@ export class Hub {
     this.store.pruneTickets(t);
     this.store.pruneAudit(t - HUB_TIMES.audit);
     this.store.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
+    this.connector.cleanup();
     return this.store.pruneQueue(t);
   }
 }

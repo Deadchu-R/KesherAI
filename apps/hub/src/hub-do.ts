@@ -9,10 +9,13 @@
  *   Socket: `GET /ws/device?ticket=…`.
  * - Signed-in owner (session cookie + same Origin for changes): `GET /api/state`, `POST /api/signout`,
  *   `POST /api/pair/check`, `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
+ * - The Claude connector (connector.ts): `/.well-known/oauth-*`, `/oauth/*`, `/mcp`; and, signed in,
+ *   `POST /api/oauth/check`, `POST /api/oauth/decide`, `POST /api/connections/:id/revoke`.
  * - Internal (cron only): `POST /internal/cleanup`.
  */
 import type { HubFrame } from "../../../packages/shared/src/hub.js";
 import { fireClaudeTask } from "./claude-cloud.js";
+import { connectorOwnerRoute, connectorRoute, isConnectorPath } from "./connector.js";
 import { cfGlobals, upgradeResponse, type CfWebSocket, type DurableObjectState, type HubEnvBindings } from "./cf.js";
 import { googleKeys, verifyGoogleIdToken } from "./google.js";
 import { bearer, cookie, json, readJson, sameOrigin, SESSION_COOKIE, sessionCookie } from "./http.js";
@@ -107,6 +110,8 @@ export class HubObject {
       return upgradeResponse(pair[0]);
     }
 
+    if (isConnectorPath(path)) return (await connectorRoute(req, this.hub, await this.hub.ipHash(ip))) ?? json({ error: "Not found." }, 404);
+
     if (req.method === "POST" && path === "/api/pair/start") return answer(await this.hub.pairStart(ip, (await readJson(req)) ?? {}));
     if (req.method === "POST" && path === "/api/pair/poll") return answer(await this.hub.pairPoll(ip, (await readJson(req))?.pollSecret));
     if (req.method === "POST" && path === "/api/ticket") return answer(await this.hub.issueTicket(bearer(req)));
@@ -137,6 +142,8 @@ export class HubObject {
     }
     if (path === "/api/pair/check") return answer(await this.hub.pairPeek(body.code));
     if (path === "/api/pair/approve") return answer(await this.hub.pairApprove(body.code, body.name));
+    const conn = await connectorOwnerRoute(path, body, this.hub, url.origin);
+    if (conn) return conn;
     const revoke = /^\/api\/devices\/([\w-]{1,64})\/revoke$/.exec(path);
     if (revoke) return this.hub.revoke(revoke[1]!) ? json({ ok: true }) : json({ error: "No such device." }, 404);
     if (path === "/api/kill") {

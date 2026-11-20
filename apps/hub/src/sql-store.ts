@@ -3,7 +3,7 @@
  * uses bound parameters.
  */
 import { cleanAgents, cleanDeviceKind, cleanOptIn, type SealedKind } from "../../../packages/shared/src/hub.js";
-import type { AgentEventRow, AuditRow, DeviceRow, HubStore, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
+import type { AgentEventRow, AuditRow, DeviceRow, HubStore, OauthClientRow, OauthCodeRow, OauthGrantRow, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
 import type { SqlStorage } from "./cf.js";
 
 const SCHEMA = `
@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS agent_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, 
 CREATE INDEX IF NOT EXISTS agent_events_by_recipient ON agent_events (recipient, seq);
 CREATE INDEX IF NOT EXISTS agent_events_by_run ON agent_events (recipient, sender, run, seq);
 CREATE INDEX IF NOT EXISTS agent_events_by_time ON agent_events (created_at);
+CREATE TABLE IF NOT EXISTS oauth_clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS oauth_codes (hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, challenge TEXT NOT NULL,
+  expires_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS oauth_grants (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, name TEXT NOT NULL, created_at INTEGER NOT NULL,
+  last_used INTEGER NOT NULL, access_hash TEXT NOT NULL UNIQUE, access_expires_at INTEGER NOT NULL, refresh_hash TEXT NOT NULL UNIQUE,
+  prev_refresh_hash TEXT, refresh_expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS oauth_grants_by_prev ON oauth_grants (prev_refresh_hash);
 `;
 
 type Row = Record<string, string | number | null>;
@@ -58,6 +65,16 @@ function toDevice(r: Row): DeviceRow {
 
 const toPairing = (r: Row): PairingRow => ({ codeHash: String(r.code_hash), pollHash: String(r.poll_hash), publicKey: String(r.public_key), kind: cleanDeviceKind(r.kind), name: String(r.name), expiresAt: num(r.expires_at), approved: num(r.approved) === 1 });
 const toAgentEvent = (r: Row): AgentEventRow => ({ seq: num(r.seq), to: String(r.recipient), from: String(r.sender), run: String(r.run), n: num(r.n), env: String(r.env), createdAt: num(r.created_at) });
+const toClient = (r: Row): OauthClientRow => {
+  let uris: unknown = [];
+  try {
+    uris = JSON.parse(String(r.redirect_uris ?? "[]"));
+  } catch {
+    // A damaged list reads as empty (the client cannot be used).
+  }
+  return { id: String(r.id), name: String(r.name), redirectUris: Array.isArray(uris) ? uris.filter((u): u is string => typeof u === "string") : [], createdAt: num(r.created_at) };
+};
+const toGrant = (r: Row): OauthGrantRow => ({ id: String(r.id), clientId: String(r.client_id), name: String(r.name), createdAt: num(r.created_at), lastUsed: num(r.last_used), accessHash: String(r.access_hash), accessExpiresAt: num(r.access_expires_at), refreshHash: String(r.refresh_hash), ...(r.prev_refresh_hash != null ? { prevRefreshHash: String(r.prev_refresh_hash) } : {}), refreshExpiresAt: num(r.refresh_expires_at) });
 const toQueued = (r: Row): QueuedRow => ({ id: String(r.id), to: String(r.recipient), from: String(r.sender), kind: String(r.kind) as SealedKind, expiresAt: num(r.expires_at), env: String(r.env), createdAt: num(r.created_at) });
 
 /** The hub's storage in the Durable Object's SQLite. */
@@ -255,5 +272,70 @@ export class SqlStore implements HubStore {
   /** @inheritdoc */
   agentEventCount(since?: number): number {
     return num((since === undefined ? this.first("SELECT COUNT(*) AS n FROM agent_events") : this.first("SELECT COUNT(*) AS n FROM agent_events WHERE created_at >= ?", since))?.n);
+  }
+  /** @inheritdoc */
+  putOauthClient(row: OauthClientRow): void {
+    this.sql.exec("INSERT OR REPLACE INTO oauth_clients (id, name, redirect_uris, created_at) VALUES (?, ?, ?, ?)", row.id, row.name, JSON.stringify(row.redirectUris), row.createdAt);
+  }
+  /** @inheritdoc */
+  oauthClient(id: string): OauthClientRow | undefined {
+    const r = this.first("SELECT * FROM oauth_clients WHERE id = ?", id);
+    return r && toClient(r);
+  }
+  /** @inheritdoc */
+  oauthClientCount(): number {
+    return num(this.first("SELECT COUNT(*) AS n FROM oauth_clients")?.n);
+  }
+  /** @inheritdoc */
+  pruneOauthClients(before: number): void {
+    this.sql.exec("DELETE FROM oauth_clients WHERE created_at < ? AND id NOT IN (SELECT client_id FROM oauth_grants)", before);
+  }
+  /** @inheritdoc */
+  putOauthCode(row: OauthCodeRow): void {
+    this.sql.exec("INSERT OR REPLACE INTO oauth_codes (hash, client_id, redirect_uri, challenge, expires_at) VALUES (?, ?, ?, ?, ?)", row.hash, row.clientId, row.redirectUri, row.challenge, row.expiresAt);
+  }
+  /** @inheritdoc */
+  takeOauthCode(hash: string): OauthCodeRow | undefined {
+    const r = this.first("SELECT * FROM oauth_codes WHERE hash = ?", hash);
+    if (!r) return undefined;
+    this.sql.exec("DELETE FROM oauth_codes WHERE hash = ?", hash);
+    return { hash: String(r.hash), clientId: String(r.client_id), redirectUri: String(r.redirect_uri), challenge: String(r.challenge), expiresAt: num(r.expires_at) };
+  }
+  /** @inheritdoc */
+  pruneOauthCodes(now: number): void {
+    this.sql.exec("DELETE FROM oauth_codes WHERE expires_at <= ?", now);
+  }
+  /** @inheritdoc */
+  putGrant(g: OauthGrantRow): void {
+    this.sql.exec(
+      "INSERT OR REPLACE INTO oauth_grants (id, client_id, name, created_at, last_used, access_hash, access_expires_at, refresh_hash, prev_refresh_hash, refresh_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      g.id, g.clientId, g.name, g.createdAt, g.lastUsed, g.accessHash, g.accessExpiresAt, g.refreshHash, g.prevRefreshHash ?? null, g.refreshExpiresAt,
+    );
+  }
+  /** @inheritdoc */
+  grants(): OauthGrantRow[] {
+    return this.all("SELECT * FROM oauth_grants ORDER BY created_at").map(toGrant);
+  }
+  /** @inheritdoc */
+  grantByAccess(hash: string): OauthGrantRow | undefined {
+    const r = this.first("SELECT * FROM oauth_grants WHERE access_hash = ?", hash);
+    return r && toGrant(r);
+  }
+  /** @inheritdoc */
+  grantByRefresh(hash: string): OauthGrantRow | undefined {
+    const r = this.first("SELECT * FROM oauth_grants WHERE refresh_hash = ? OR prev_refresh_hash = ?", hash, hash);
+    return r && toGrant(r);
+  }
+  /** @inheritdoc */
+  deleteGrant(id: string): boolean {
+    return this.sql.exec("DELETE FROM oauth_grants WHERE id = ?", id).rowsWritten > 0;
+  }
+  /** @inheritdoc */
+  deleteAllGrants(): void {
+    this.sql.exec("DELETE FROM oauth_grants");
+  }
+  /** @inheritdoc */
+  pruneGrants(now: number): void {
+    this.sql.exec("DELETE FROM oauth_grants WHERE refresh_expires_at <= ?", now);
   }
 }

@@ -87,6 +87,42 @@ export interface AuditRow {
   ipHash?: string;
 }
 
+/** An OAuth client that registered itself (RFC 7591) for the Claude connector: a public client, no secret. */
+export interface OauthClientRow {
+  id: string;
+  /** The name it gave (shown on the approval screen and in "Connected apps"). */
+  name: string;
+  redirectUris: string[];
+  createdAt: number;
+}
+
+/** A one-use authorization code (hash), 60 seconds, bound to its client, redirect URI and PKCE challenge. */
+export interface OauthCodeRow {
+  hash: string;
+  clientId: string;
+  redirectUri: string;
+  /** PKCE S256 challenge. */
+  challenge: string;
+  expiresAt: number;
+}
+
+/**
+ * One approved connection ("Connected apps"): its current access token and refresh token, as hashes. Revoking deletes
+ * the row, so both stop at once. The refresh token before the current one is kept (hash) to notice reuse.
+ */
+export interface OauthGrantRow {
+  id: string;
+  clientId: string;
+  name: string;
+  createdAt: number;
+  lastUsed: number;
+  accessHash: string;
+  accessExpiresAt: number;
+  refreshHash: string;
+  prevRefreshHash?: string;
+  refreshExpiresAt: number;
+}
+
 /** The hub's storage. Synchronous, like the Durable Object's SQLite API. */
 export interface HubStore {
   getSetting(key: string): string | undefined;
@@ -148,6 +184,25 @@ export interface HubStore {
   pruneAgentEvents(before: number): number;
   /** How many batches are kept, and how many were written since a time (the free plan's write counter). */
   agentEventCount(since?: number): number;
+
+  putOauthClient(row: OauthClientRow): void;
+  oauthClient(id: string): OauthClientRow | undefined;
+  oauthClientCount(): number;
+  /** Deletes clients made before a time that no connection uses (Claude registers anew on each fresh connection). */
+  pruneOauthClients(before: number): void;
+  putOauthCode(row: OauthCodeRow): void;
+  /** Returns the code and deletes it (one use). */
+  takeOauthCode(hash: string): OauthCodeRow | undefined;
+  pruneOauthCodes(now: number): void;
+  putGrant(row: OauthGrantRow): void;
+  grants(): OauthGrantRow[];
+  grantByAccess(hash: string): OauthGrantRow | undefined;
+  /** The grant whose current or previous refresh token has this hash. */
+  grantByRefresh(hash: string): OauthGrantRow | undefined;
+  deleteGrant(id: string): boolean;
+  deleteAllGrants(): void;
+  /** Deletes grants whose refresh token expired. */
+  pruneGrants(now: number): void;
 }
 
 /** The store in memory, for tests (same behaviour as the SQLite one). */
@@ -161,6 +216,9 @@ export class MemoryStore implements HubStore {
   private log: AuditRow[] = [];
   private agentRows: AgentEventRow[] = [];
   private agentSeq = 0;
+  private clients = new Map<string, OauthClientRow>();
+  private codes = new Map<string, OauthCodeRow>();
+  private grantRows = new Map<string, OauthGrantRow>();
 
   /** @inheritdoc */
   getSetting(key: string): string | undefined {
@@ -339,5 +397,65 @@ export class MemoryStore implements HubStore {
   /** @inheritdoc */
   agentEventCount(since?: number): number {
     return since === undefined ? this.agentRows.length : this.agentRows.filter((r) => r.createdAt >= since).length;
+  }
+  /** @inheritdoc */
+  putOauthClient(row: OauthClientRow): void {
+    this.clients.set(row.id, structuredClone(row));
+  }
+  /** @inheritdoc */
+  oauthClient(id: string): OauthClientRow | undefined {
+    const c = this.clients.get(id);
+    return c && structuredClone(c);
+  }
+  /** @inheritdoc */
+  oauthClientCount(): number {
+    return this.clients.size;
+  }
+  /** @inheritdoc */
+  pruneOauthClients(before: number): void {
+    const used = new Set([...this.grantRows.values()].map((g) => g.clientId));
+    for (const [k, c] of this.clients) if (c.createdAt < before && !used.has(k)) this.clients.delete(k);
+  }
+  /** @inheritdoc */
+  putOauthCode(row: OauthCodeRow): void {
+    this.codes.set(row.hash, { ...row });
+  }
+  /** @inheritdoc */
+  takeOauthCode(hash: string): OauthCodeRow | undefined {
+    const c = this.codes.get(hash);
+    this.codes.delete(hash);
+    return c;
+  }
+  /** @inheritdoc */
+  pruneOauthCodes(now: number): void {
+    for (const [k, c] of this.codes) if (c.expiresAt <= now) this.codes.delete(k);
+  }
+  /** @inheritdoc */
+  putGrant(row: OauthGrantRow): void {
+    this.grantRows.set(row.id, { ...row });
+  }
+  /** @inheritdoc */
+  grants(): OauthGrantRow[] {
+    return [...this.grantRows.values()].map((g) => ({ ...g })).sort((a, b) => a.createdAt - b.createdAt);
+  }
+  /** @inheritdoc */
+  grantByAccess(hash: string): OauthGrantRow | undefined {
+    return this.grants().find((g) => g.accessHash === hash);
+  }
+  /** @inheritdoc */
+  grantByRefresh(hash: string): OauthGrantRow | undefined {
+    return this.grants().find((g) => g.refreshHash === hash || g.prevRefreshHash === hash);
+  }
+  /** @inheritdoc */
+  deleteGrant(id: string): boolean {
+    return this.grantRows.delete(id);
+  }
+  /** @inheritdoc */
+  deleteAllGrants(): void {
+    this.grantRows.clear();
+  }
+  /** @inheritdoc */
+  pruneGrants(now: number): void {
+    for (const [k, g] of this.grantRows) if (g.refreshExpiresAt <= now) this.grantRows.delete(k);
   }
 }
