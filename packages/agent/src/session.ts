@@ -26,6 +26,17 @@ import { stat } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { displayPath } from "./workspace.js";
 
+/**
+ * Tool specs sorted by name (a copy), so the tool list sent to the model does not depend on the order tools were
+ * registered in and the prompt's start stays the same between turns (the engine's prompt cache).
+ *
+ * @param specs - The tool specs.
+ * @returns A new array, sorted by `name`.
+ */
+export function sortSpecs(specs: readonly ToolSpec[]): ToolSpec[] {
+  return [...specs].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
 /** One model turn: give it the conversation and tools, get text and tool calls back. */
 export type ModelTurn = (
   request: { messages: AgentMessage[]; tools: ToolSpec[] },
@@ -851,12 +862,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
 
   private specs(): ToolSpec[] {
     if (this.toolsUnsupported) return [];
-    const all = [...this.tools.values()].map((t) => t.spec);
+    // By name, not by the order tools were registered (MCP servers and plugins connect in any order), so the tool
+    // list, which sits at the top of the prompt, stays the same from turn to turn and the engine keeps its cache.
+    const all = sortSpecs([...this.tools.values()].map((t) => t.spec));
     const core = this.toolSearch?.();
     const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : [])];
     if (!core?.length) return [...base, ...all];
-    // Tool search: the core tools and the ones loaded so far in full; the rest by name only.
-    const full = all.filter((t) => core.includes(t.name) || this.loadedTools.has(t.name));
+    // Tool search: the core tools and the ones loaded so far in full; the rest by name only. Loaded tools come after
+    // the core ones, so loading one changes only the end of the list.
+    const full = [...all.filter((t) => core.includes(t.name)), ...all.filter((t) => !core.includes(t.name) && this.loadedTools.has(t.name))];
     const rest = all.filter((t) => !full.includes(t));
     if (!rest.length) return [...base, ...full];
     const short = (d: string) => (d.split(/(?<=\.)\s/)[0] ?? d).slice(0, 90);

@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent, ToolCall } from "@kesher/shared";
-import { AgentSession, type ModelTurn } from "./session.js";
+import { AgentSession, sortSpecs, type ModelTurn } from "./session.js";
 import { CODE_TOOLS } from "./tools.js";
 import { dangerReason, decide } from "./permissions.js";
 import { globToRegExp, resolveInWorkspace } from "./workspace.js";
@@ -764,4 +764,16 @@ test("the usage event carries the cached tokens only when the provider reported 
   await waitFor(s, (e) => e.type === "usage" && e.input === 900);
   const second = s.events.filter((e) => e.type === "usage").at(-1);
   assert.equal(second && "cached" in second, false);
+});
+
+test("tools go to the model sorted by name, whatever order they were registered in", async () => {
+  assert.deepEqual(sortSpecs([{ name: "b", description: "", inputSchema: {} }, { name: "a", description: "", inputSchema: {} }]).map((t) => t.name), ["a", "b"]);
+  const { model, seen } = scripted([{ text: "ok" }]);
+  const s = new AgentSession({ id: "t", modelId: "m", model, mode: "ask", tools: [...CODE_TOOLS].reverse(), systemPrompt: "sys" });
+  s.send("hi");
+  await waitFor(s, (e) => e.type === "assistant");
+  const own = new Set(CODE_TOOLS.map((t) => t.spec.name));
+  const sent = seen[0]!.tools.map((t) => t.name).filter((n) => own.has(n));
+  assert.ok(sent.length > 3);
+  assert.deepEqual(sent, [...sent].sort());
 });
