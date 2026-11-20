@@ -53,7 +53,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
   Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security.
 - ⬜ Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
-  own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building.
+  own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building. Roee (2026-11-20):
+  a hub builder tool, quick and easy (FUTURE_FEATURES, "Hub builder").
 - ⬜ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
   hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens.
 - ⬜ Roee (13:16): the hub as a Claude custom connector (remote MCP on the same Worker, OAuth for his account):

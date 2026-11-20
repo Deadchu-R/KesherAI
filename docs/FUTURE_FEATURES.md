@@ -35,6 +35,13 @@ Status: ⬜ to do · 🔧 partly there · ✅ already in KesherAI · 👤 waits 
 
 - 🔨 **A phone with a mouse becomes the computer's screen** (built 2026-11-19: desktop-view.ts lays the page out 1280 px wide while a mouse is connected, and the menu chooses; to try on his phone) (Roee, 2026-11-18 19:26): when a mouse (or a keyboard and mouse) is connected to the phone, remote KesherAI can switch to the desktop layout, as from a laptop, and everything works as on the computer (hover, right-click, drag, the editors' mouse tools); the switch is offered on its own when a fine pointer appears (`(pointer: fine)` / `any-hover`), and can be chosen by hand.
 
+- **Hub builder (Roee, 2026-11-20):** a tool that lets anyone build their own Kesher Cloud hub quickly and easily, on
+  their own Cloudflare account and domain: a guided setup in KesherAI (and/or a one-click "Deploy to Cloudflare" button
+  in apps/hub/README) that creates the Worker from the repo, connects the domain, sets the Google sign-in ID and the
+  owner's email as secrets, optionally creates the Claude cloud task, then pairs the PC and phone, with a check at each
+  step. Today it takes ~10 manual steps (apps/hub/README.md). Research first (Gemini): how Coolify, Vercel/Netlify
+  deploy buttons, Cloudflare's deploy button, Home Assistant / Tailscale onboarding do it.
+
 ## Looks and personalization
 - ✅ Change the design in words, pictures from the web, presets, full dark for HDR, the look synced between devices, reset to defaults
 - ✅ Import a look from Figma (variables or styles) — needs the owner's Figma token to try
