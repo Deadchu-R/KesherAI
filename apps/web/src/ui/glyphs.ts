@@ -96,7 +96,7 @@ const FROM_TEXT: Record<string, string> = {
 };
 
 /** Pages whose drawing differs from their emoji's (the menu has two 📦, "Libraries" and "Models"). */
-const FROM_PAGE: Record<string, string> = { "#/libraries": "library", "#/models": "box", "#/self-work": "bot", "#/memory": "layers", "#/task-inbox": "download" };
+const FROM_PAGE: Record<string, string> = { "#/libraries": "library", "#/models": "box", "#/self-work": "bot", "#/memory": "layers", "#/task-inbox": "download", "#/games": "gamepad" };
 
 /**
  * The drawing's name for an icon, if there is one.
