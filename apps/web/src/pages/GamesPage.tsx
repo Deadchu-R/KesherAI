@@ -20,6 +20,8 @@ interface Project {
   moves?: number;
   /** Inspector values waiting to be written. */
   values?: number;
+  /** Unreal: packages only in OneDrive (not downloaded), skipped by the index. */
+  cloudOnly?: number;
   clashes: number;
   running?: boolean;
   lastSync?: string;
@@ -172,6 +174,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
                   {p.values ? `${p.lastSync || p.moves ? " · " : ""}${L(`${p.values} ערכים ייכתבו בסנכרון`, `${p.values} value(s) written at the next sync`)}` : ""}
                 </p>
               )}
+              {p.cloudOnly ? <p className="small games-ue-warn" role="status">☁ {L(`${p.cloudOnly} קבצים נמצאים רק ב-OneDrive (לא הורדו למחשב) ולא נקראו`, `${p.cloudOnly} file${p.cloudOnly > 1 ? "s" : ""} only in OneDrive (not downloaded), not read`)}</p> : null}
               {p.problem && <p className="small games-problem" role="alert">{p.problem}</p>}
               <div className="row wrap games-actions">
                 {p.canSync && <button type="button" className="primary" disabled={p.running} onClick={() => syncNow(p)}>{L("סנכרן עכשיו", "Sync now")}</button>}

@@ -19,6 +19,10 @@ interface Ref { package: string; path?: string }
 interface UnrealAsset {
   name: string; package: string; className?: string; kind?: string; parent?: string; engine?: string; size: number;
   unversioned: boolean; cooked: boolean; thumbnails: number; problems: string[];
+  /** Soft notes (saved by a newer Unreal than the reader knows). */
+  warnings?: string[];
+  /** Only in OneDrive (not downloaded): not read. */
+  cloudOnly?: boolean;
   exports: Array<{ name: string; className: string; superName?: string; top: boolean; size: number }>; exportCount: number;
   uses: Ref[]; soft: Ref[]; engineUses: string[]; usedBy: Array<{ path: string; soft: boolean }>; usedByComplete: boolean;
   tags: Array<{ object: string; className: string; tags: Array<[string, string]> }>;
@@ -241,6 +245,8 @@ function UnrealAssetView({ a, onOpen }: { a: UnrealAsset; onOpen: (path: string)
         </div>
         <span className="muted small games-cp-path" dir="ltr">{a.package}</span>
         <p className="muted small games-sub">{L("נקרא מכותרת הקובץ, בלי Unreal. קריאה בלבד.", "Read from the file's header, without Unreal. Read only.")}</p>
+        {a.cloudOnly && <p className="small games-ue-warn" role="status">☁ {L("הקובץ נמצא רק ב-OneDrive (לא הורד למחשב). הורידו אותו ב-OneDrive כדי לקרוא אותו כאן.", "Only in OneDrive (not downloaded). Download it in OneDrive to read it here.")}</p>}
+        {(a.warnings?.length ?? 0) > 0 && <p className="muted small games-sub">{L("נשמר ב-Unreal חדש מהמוכר כאן: נקרא לפי הפריסה החדשה ביותר, ייתכנו פרטים חסרים. ", "Saved by a newer Unreal than known here: read with the newest known layout; some details may be missing. ")}<span dir="ltr">{a.warnings!.join(" · ")}</span></p>}
         {a.problems.length > 0 && <p className="small games-ue-warn" role="status">{L("חלקים שלא נקראו: ", "Parts not read: ")}{a.problems.join(" · ")}</p>}
       </div>
       <details className="games-ue-sec" open={a.usedBy.length > 0 || a.uses.length > 0}>

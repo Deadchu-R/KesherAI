@@ -1,4 +1,5 @@
 import { open, stat } from "node:fs/promises";
+import { CLOUD_ONLY_MESSAGE, isCloudReadError, looksCloudOnly } from "./cloud-only.js";
 
 /**
  * Unreal package header reader (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20, step 7):
@@ -12,7 +13,8 @@ import { open, stat } from "node:fs/promises";
  *
  * Layouts follow FPackageFileSummary / FObjectImport / FObjectExport for UE4.0 to UE5.x. Cooked packages saved
  * without versions ("unversioned") are read by trying the known file versions and keeping the first that makes
- * sense (names resolve, offsets in range).
+ * sense (names resolve, offsets in range). A package saved by an engine newer than this reader knows (a newer legacy
+ * format or file version) is read with the newest known layout and carries a soft warning instead of failing.
  */
 
 /** The tag every package starts with. */
@@ -27,7 +29,14 @@ const PKG_FILTER_EDITOR_ONLY = 0x80000000;
 /** UE4 file versions where the layout changes (EUnrealEngineObjectUE4Version). */
 const UE4 = { WORLD_LEVEL_INFO: 224, CHUNKID_ARRAY: 326, ENGINE_VERSION_OBJECT: 336, LOAD_FOR_EDITOR_GAME: 365, SOFT_PACKAGE_REFS: 384, SERIALIZE_TEXT: 459, COMPATIBLE_ENGINE_VERSION: 444, COOKED_ASSETS_IN_EDITOR: 485, NAME_HASHES: 504, PRELOAD_DEPENDENCIES: 507, TEMPLATE_INDEX: 508, SEARCHABLE_NAMES: 510, EXPORT_64BIT: 511, SOFT_OBJECT_PATH: 514, LOCALIZATION_ID: 516, PACKAGE_OWNER: 518, NON_OUTER_PACKAGE_IMPORT: 520, ASSETREGISTRY_DEPENDENCYFLAGS: 521, LATEST: 522 } as const;
 /** UE5 file versions where the layout changes (EUnrealEngineObjectUE5Version). */
-const UE5 = { INITIAL: 1000, NAMES_FROM_EXPORT_DATA: 1001, PAYLOAD_TOC: 1002, OPTIONAL_RESOURCES: 1003, REMOVE_EXPORT_PACKAGE_GUID: 1005, EXPORT_IS_INHERITED: 1006, SOFT_OBJECT_PATH_LIST: 1008, DATA_RESOURCES: 1009, SCRIPT_SERIALIZATION_OFFSET: 1010, METADATA_OFFSET: 1014, VERSE_CELLS: 1015, PACKAGE_SAVED_HASH: 1016, LATEST: 1017 } as const;
+const UE5 = { INITIAL: 1000, NAMES_FROM_EXPORT_DATA: 1001, PAYLOAD_TOC: 1002, OPTIONAL_RESOURCES: 1003, REMOVE_EXPORT_PACKAGE_GUID: 1005, EXPORT_IS_INHERITED: 1006, SOFT_OBJECT_PATH_LIST: 1008, DATA_RESOURCES: 1009, SCRIPT_SERIALIZATION_OFFSET: 1010, METADATA_OFFSET: 1014, VERSE_CELLS: 1015, PACKAGE_SAVED_HASH: 1016, IMPORT_TYPE_HIERARCHIES: 1018, LATEST: 1018 } as const;
+/**
+ * The newest legacy package format known here. -9 (seen in UE 5.8 packages): the SavedHash and TotalHeaderSize moved
+ * up, before the custom versions (so a reader can find the header's size without knowing the custom versions).
+ */
+const LEGACY_LATEST = -9;
+/** Legacy formats below this are not taken for packages at all (a random file whose second word is negative). */
+const LEGACY_FLOOR = -32;
 
 /** Caps, so a corrupt count cannot make a huge loop or array. */
 const MAX_NAMES = 500_000;
@@ -74,6 +83,8 @@ export interface UassetHeader {
   error?: string;
   /** Parts that could not be read (the rest is still there). */
   problems: string[];
+  /** Soft notes that do not stop the read (a package saved by an engine newer than this reader knows). */
+  warnings: string[];
   legacyVersion?: number;
   fileVersionUE4?: number;
   fileVersionUE5?: number;
@@ -99,6 +110,8 @@ export interface UassetHeader {
   tags: UassetTags[];
   /** How many thumbnails the package holds. */
   thumbnails: number;
+  /** The file is only in OneDrive (a Files On-Demand placeholder): it was not read, so nothing was downloaded. */
+  cloudOnly?: boolean;
 }
 
 /** A read past the bytes the reader has (caught inside; never reaches a caller). */
@@ -162,6 +175,11 @@ function latin1(b: Uint8Array): string {
 /** The summary's fields this reader uses. */
 interface Summary {
   legacy: number;
+  /** The legacy format whose layout was used (the newest known one for a newer package). */
+  layout: number;
+  /** The file versions written in the file (0 for an unversioned one), before any guess. */
+  savedUe4: number;
+  savedUe5: number;
   ue4: number;
   ue5: number;
   licensee: number;
@@ -195,28 +213,39 @@ function engineVersion(c: Cursor): string | undefined {
 }
 
 /**
- * Reads the summary with the given file versions (for unversioned packages: a guess).
+ * Reads the summary with the given file versions (for unversioned packages: a guess) and, for a legacy format newer
+ * than {@link LEGACY_LATEST}, the given known layout (default: the newest).
  *
  * @throws Short on a short read; Error on a layout this reader does not know.
  */
-function readSummary(bytes: Uint8Array, guess?: { ue4: number; ue5: number }): Summary {
+function readSummary(bytes: Uint8Array, guess?: { ue4: number; ue5: number; layout?: number }): Summary {
   const c = new Cursor(bytes);
   const tag = c.u32();
   if (tag === PACKAGE_TAG_SWAPPED) throw new Error("This package was saved byte-swapped (a console build): not read here.");
   if (tag !== PACKAGE_TAG) throw new Error("Not an Unreal package (.uasset/.umap).");
   const legacy = c.i32();
-  if (legacy >= 0 || legacy < -9) throw new Error(`Unknown package format (${legacy}).`);
-  if (legacy !== -4) c.i32(); // LegacyUE3Version
+  if (legacy >= 0 || legacy < LEGACY_FLOOR) throw new Error(`Unknown package format (${legacy}).`);
+  // A newer format than known: read as the newest known one (or the layout being tried).
+  const layout = legacy < LEGACY_LATEST ? (guess?.layout ?? LEGACY_LATEST) : legacy;
+  if (layout !== -4) c.i32(); // LegacyUE3Version
   let ue4 = c.i32();
-  let ue5 = legacy <= -8 ? c.i32() : 0;
+  let ue5 = layout <= -8 ? c.i32() : 0;
   const licensee = c.i32();
-  if (legacy <= -2) {
+  const savedUe4 = ue4;
+  const savedUe5 = ue5;
+  // Since -9 the SavedHash and TotalHeaderSize come before the custom versions.
+  let totalHeaderSize = 0;
+  if (layout <= -9) {
+    c.skip(20); // SavedHash (FIoHash)
+    totalHeaderSize = c.i32();
+  }
+  if (layout <= -2) {
     // Custom versions: Optimized (GUID + version) since -6, GUID + version + name for -3..-5, tag + version for -2.
     const n = c.i32();
     if (n < 0 || n > 10_000) throw new Error("Bad custom version count.");
     for (let i = 0; i < n; i++) {
-      if (legacy < -5) c.skip(20);
-      else if (legacy < -2) {
+      if (layout < -5) c.skip(20);
+      else if (layout < -2) {
         c.skip(20);
         c.fstring();
       } else c.skip(8);
@@ -225,14 +254,16 @@ function readSummary(bytes: Uint8Array, guess?: { ue4: number; ue5: number }): S
   const unversioned = ue4 === 0 && ue5 === 0 && licensee === 0;
   if (unversioned) {
     ue4 = guess?.ue4 ?? UE4.LATEST;
-    ue5 = legacy <= -8 ? (guess?.ue5 ?? UE5.LATEST) : 0;
+    ue5 = layout <= -8 ? (guess?.ue5 ?? UE5.LATEST) : 0;
   } else if (guess) {
     // A retry with other thresholds (a versioned file whose layout did not check out).
     ue4 = guess.ue4;
     ue5 = guess.ue5;
   }
-  if (ue5 >= UE5.PACKAGE_SAVED_HASH) c.skip(20); // SavedHash (FIoHash)
-  const totalHeaderSize = c.i32();
+  if (layout > -9) {
+    if (ue5 >= UE5.PACKAGE_SAVED_HASH) c.skip(20); // SavedHash (FIoHash)
+    totalHeaderSize = c.i32();
+  }
   const packageName = c.fstring();
   const flags = c.u32();
   const editorOnly = (flags & PKG_FILTER_EDITOR_ONLY) === 0;
@@ -256,6 +287,7 @@ function readSummary(bytes: Uint8Array, guess?: { ue4: number; ue5: number }): S
   }
   if (ue4 >= UE4.SEARCHABLE_NAMES) c.skip(4);
   const thumbnailOffset = c.i32();
+  if (ue5 >= UE5.IMPORT_TYPE_HIERARCHIES) c.skip(8); // ImportTypeHierarchies count and offset
   if (ue5 < UE5.PACKAGE_SAVED_HASH) c.skip(16); // Guid
   if (editorOnly && ue4 >= UE4.PACKAGE_OWNER) {
     c.skip(16); // PersistentGuid
@@ -278,9 +310,9 @@ function readSummary(bytes: Uint8Array, guess?: { ue4: number; ue5: number }): S
   const extra = c.i32();
   if (extra < 0 || extra > 10_000) throw new Error("Bad package list.");
   for (let i = 0; i < extra; i++) c.fstring();
-  if (legacy > -7) c.skip(4); // NumTextureAllocations
+  if (layout > -7) c.skip(4); // NumTextureAllocations
   const assetRegistryOffset = c.i32();
-  return { legacy, ue4, ue5, licensee, unversioned, totalHeaderSize, packageName, flags, nameCount, nameOffset, exportCount, exportOffset, importCount, importOffset, softRefCount, softRefOffset, thumbnailOffset, ...(engine ? { engine } : {}), assetRegistryOffset, end: c.pos };
+  return { legacy, layout, savedUe4, savedUe5, ue4, ue5, licensee, unversioned, totalHeaderSize, packageName, flags, nameCount, nameOffset, exportCount, exportOffset, importCount, importOffset, softRefCount, softRefOffset, thumbnailOffset, ...(engine ? { engine } : {}), assetRegistryOffset, end: c.pos };
 }
 
 /** The bytes one import takes, for a version. */
@@ -392,11 +424,25 @@ function readTables(bytes: Uint8Array, s: Summary): Tables {
   return { names, imports, exports: out };
 }
 
+/** One layout to try: file versions and, for a legacy format newer than known, the known format to read it as. */
+type Guess = { ue4: number; ue5: number; layout?: number };
+
 /** The candidate layouts for a package whose layout is unknown or did not check out, newest first. */
-function guesses(legacy: number): Array<{ ue4: number; ue5: number }> {
+function guesses(legacy: number): Guess[] {
   const ue4 = [522, 518, 516, 514, 511, 510, 508, 507, 504, 459];
-  const ue5 = [1017, 1016, 1015, 1014, 1012, 1010, 1009, 1008, 1006, 1005, 1004, 1003, 1002, 1001, 1000];
-  return legacy <= -8 ? ue5.map((v) => ({ ue4: UE4.LATEST, ue5: v })) : ue4.map((v) => ({ ue4: v, ue5: 0 }));
+  const ue5 = [1018, 1017, 1016, 1015, 1014, 1012, 1010, 1009, 1008, 1006, 1005, 1004, 1003, 1002, 1001, 1000];
+  const asUe5 = (layout?: number) => ue5.map((v) => ({ ue4: UE4.LATEST, ue5: v, ...(layout ? { layout } : {}) }));
+  // A newer legacy format: the newest known one first, then the one before it.
+  if (legacy < LEGACY_LATEST) return [...asUe5(LEGACY_LATEST), ...asUe5(-8)];
+  return legacy <= -8 ? asUe5() : ue4.map((v) => ({ ue4: v, ue5: 0 }));
+}
+
+/** Soft warnings for a package saved by an engine newer than this reader knows. */
+function newerWarnings(s: Summary): string[] {
+  const out: string[] = [];
+  if (s.legacy < LEGACY_LATEST) out.push(`Saved by a newer Unreal (package format ${s.legacy}): read as format ${s.layout}.`);
+  if (s.savedUe5 > UE5.LATEST || s.savedUe4 > UE4.LATEST) out.push(`Saved by a newer Unreal (file version ${s.savedUe5 > UE5.LATEST ? s.savedUe5 : s.savedUe4}): read with the newest known layout.`);
+  return out;
 }
 
 /** A FName or FString list (soft package references), each kept only when it looks like a package path. */
@@ -457,7 +503,7 @@ function readThumbnails(bytes: Uint8Array, s: Summary): number {
  * @returns The header.
  */
 export function parseUassetHeader(bytes: Uint8Array): UassetHeader {
-  const empty: UassetHeader = { ok: false, problems: [], unversioned: false, packageFlags: 0, isMap: false, cooked: false, names: [], imports: [], exports: [], hardPackages: [], softPackages: [], tags: [], thumbnails: 0 };
+  const empty: UassetHeader = { ok: false, problems: [], warnings: [], unversioned: false, packageFlags: 0, isMap: false, cooked: false, names: [], imports: [], exports: [], hardPackages: [], softPackages: [], tags: [], thumbnails: 0 };
   let s: Summary | undefined;
   let firstError: Error | undefined;
   try {
@@ -471,7 +517,7 @@ export function parseUassetHeader(bytes: Uint8Array): UassetHeader {
   const legacy = s?.legacy ?? (bytes.length >= 8 ? new DataView(bytes.buffer, bytes.byteOffset, 8).getInt32(4, true) : 0);
   let tables: Tables | undefined;
   let short = false;
-  const tries: Array<{ ue4: number; ue5: number } | undefined> = !s || s.unversioned ? guesses(legacy) : [undefined, ...guesses(legacy)];
+  const tries: Array<Guess | undefined> = !s || s.unversioned ? guesses(legacy) : [undefined, ...guesses(legacy)];
   for (const g of tries) {
     try {
       const sum = g ? readSummary(bytes, g) : s!;
@@ -502,6 +548,7 @@ export function parseUassetHeader(bytes: Uint8Array): UassetHeader {
     isMap: (s.flags & PKG_CONTAINS_MAP) !== 0,
     cooked: (s.flags & PKG_FILTER_EDITOR_ONLY) !== 0,
     totalHeaderSize: s.totalHeaderSize,
+    warnings: newerWarnings(s),
   };
   if (!tables) {
     head.problems.push(short ? "The header is longer than the bytes read." : "The name, import and export tables could not be read.");
@@ -545,7 +592,8 @@ const FIRST_READ = 16 * 1024;
 
 /**
  * Reads a .uasset/.umap file's header: its first bytes, then (when the header is longer) up to the header's end,
- * never more than `maxBytes`. Never throws.
+ * never more than `maxBytes`. Never throws. A file only in OneDrive (a placeholder, seen from its stat or its read
+ * error) gives `ok: false` with `cloudOnly` and is not read, so no download starts.
  *
  * @param abs - The file.
  * @param opts.maxBytes - The most bytes read (default 16 MB; a header bigger than this is read in part).
@@ -554,9 +602,13 @@ const FIRST_READ = 16 * 1024;
 export async function readUassetFile(abs: string, opts: { maxBytes?: number } = {}): Promise<UassetHeader & { size: number }> {
   const max = Math.max(FIRST_READ, opts.maxBytes ?? 16 * 1024 * 1024);
   let fh: Awaited<ReturnType<typeof open>> | undefined;
+  let size = 0;
+  const cloudOnly = () => ({ ...parseUassetHeader(new Uint8Array()), error: CLOUD_ONLY_MESSAGE, cloudOnly: true, size });
   try {
     const st = await stat(abs);
     if (!st.isFile()) throw new Error("Not a file.");
+    size = st.size;
+    if (looksCloudOnly(st)) return cloudOnly();
     fh = await open(abs, "r");
     const first = Buffer.alloc(Math.min(FIRST_READ, st.size));
     const { bytesRead } = await fh.read(first, 0, first.length, 0);
@@ -572,6 +624,7 @@ export async function readUassetFile(abs: string, opts: { maxBytes?: number } = 
     if (head.ok && head.totalHeaderSize && head.totalHeaderSize > max) head.problems.push(`Only the first ${Math.round(max / 1048576)} MB of the header were read.`);
     return { ...head, size: st.size };
   } catch (err) {
+    if (isCloudReadError(err, size)) return cloudOnly();
     return { ...parseUassetHeader(new Uint8Array()), error: (err as Error).message, size: 0 };
   } finally {
     await fh?.close().catch(() => undefined);

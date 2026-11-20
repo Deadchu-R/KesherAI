@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packageFileOf, packageNameOf, parseUassetHeader, readUassetFile, uassetSummary } from "./uasset.js";
+import { headerBytesNeeded, packageFileOf, packageNameOf, parseUassetHeader, readUassetFile, uassetSummary } from "./uasset.js";
 import { build, doorSpec, EDITOR_ONLY, W } from "./uasset-fake.test.js";
 
 test("reads a UE5.3 Blueprint header: class, parent, exports, references, tags, thumbnail", () => {
@@ -30,6 +30,39 @@ test("reads UE4.27, UE5.0 and UE5.4+ (saved hash, Verse cells) layouts", () => {
     assert.equal(h.hardPackages.length, 2);
   }
   assert.equal(parseUassetHeader(build(doorSpec(-7, 522, 0))).engine, "4.27.2");
+});
+
+test("reads UE5.8 packages (format -9: saved hash and header size before the custom versions; import type hierarchies)", async () => {
+  const bytes = build(doorSpec(-9, 522, 1018, { engine: [5, 8, 4] }));
+  const h = parseUassetHeader(bytes);
+  assert.equal(h.ok, true);
+  assert.deepEqual(h.problems, []);
+  assert.deepEqual(h.warnings, []);
+  assert.equal(h.engine, "5.8.4");
+  assert.equal(h.legacyVersion, -9);
+  assert.equal(h.fileVersionUE5, 1018);
+  assert.deepEqual(h.softPackages, ["/Game/Audio/S_Creak"]);
+  assert.equal(h.thumbnails, 1);
+  assert.deepEqual(uassetSummary(h, "BP_Door"), { name: "BP_Door", className: "Blueprint", kind: "Blueprint", parent: "Actor" });
+  assert.equal(headerBytesNeeded(bytes), bytes.length);
+  // Cooked and unversioned 5.8 packages read too.
+  const cooked = parseUassetHeader(build(doorSpec(-9, 522, 1018, { unversioned: true, flags: EDITOR_ONLY | 0x2000, tags: undefined })));
+  assert.deepEqual(cooked.exports.map((e) => e.objectName), ["BP_Door", "BP_Door_C", "Default__BP_Door_C"]);
+});
+
+test("a package from a newer Unreal than known reads with the newest layout and a soft warning", () => {
+  for (const [legacy, ue5, warnings] of [[-9, 1021, 1], [-10, 1018, 1], [-11, 1025, 2]] as const) {
+    const h = parseUassetHeader(build(doorSpec(legacy, 522, ue5, { engine: [5, 9, 0] })));
+    assert.equal(h.ok, true, `${legacy}/${ue5}`);
+    assert.deepEqual(h.problems, [], `${legacy}/${ue5}`);
+    assert.equal(h.warnings.length, warnings, `${legacy}/${ue5}`);
+    assert.match(h.warnings[0]!, /newer Unreal/);
+    assert.equal(uassetSummary(h, "BP_Door").parent, "Actor");
+  }
+  // A format far outside any Unreal one is still refused.
+  const junk = build(doorSpec(-9, 522, 1018));
+  new DataView(junk.buffer).setInt32(4, -1000, true);
+  assert.equal(parseUassetHeader(junk).ok, false);
 });
 
 test("an older UE4 file (4.20-ish, no package owner, FString soft refs before 514) still reads", () => {

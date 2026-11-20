@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { AssetEntry } from "@kesher/agent";
+import { looksCloudOnly } from "./cloud-only.js";
 import { packageNameOf, readUassetFile, uassetSummary } from "./uasset.js";
 
 /**
@@ -19,10 +20,16 @@ export interface UnrealAssetInfo {
   uses: string[];
   /** /Game packages it references softly. */
   soft: string[];
+  /** Only in OneDrive (not downloaded): not read, so its class and references are not known. */
+  cloudOnly?: boolean;
 }
 
 /** Read headers by full path, with the file's time and size when read. */
-const cache = new Map<string, { mtime: number; size: number; info: UnrealAssetInfo }>();
+const cache = new Map<string, { mtime: number; size: number; at: number; info: UnrealAssetInfo }>();
+/** A file found only in OneDrive is looked at again after this long (downloading it does not change its time). */
+const CLOUD_RECHECK_MS = 10 * 60_000;
+/** Per project folder: how many packages the last index pass found only in OneDrive. */
+const cloudCounts = new Map<string, number>();
 const MAX_CACHE = 200_000;
 /** The index reads at most this much of each header (most are a few KB). */
 const INDEX_BYTES = 2 * 1024 * 1024;
@@ -39,14 +46,31 @@ export async function unrealAssetInfo(abs: string): Promise<UnrealAssetInfo | un
   const st = await stat(abs).catch(() => undefined);
   if (!st?.isFile()) return undefined;
   const hit = cache.get(abs);
-  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit.info;
-  const h = await readUassetFile(abs, { maxBytes: INDEX_BYTES });
+  const placeholder = looksCloudOnly(st);
+  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size && (hit.info.cloudOnly ? placeholder || Date.now() - hit.at < CLOUD_RECHECK_MS : !placeholder)) return hit.info;
+  // Only in OneDrive: skipped quietly (reading it would start a download or fail).
+  const h = placeholder ? undefined : await readUassetFile(abs, { maxBytes: INDEX_BYTES });
+  if (!h || h.cloudOnly) {
+    const info: UnrealAssetInfo = { uses: [], soft: [], cloudOnly: true };
+    cache.set(abs, { mtime: st.mtimeMs, size: st.size, at: Date.now(), info });
+    return info;
+  }
   const sum = uassetSummary(h, basename(abs).replace(/\.[^.]+$/, ""));
   const game = (list: string[]) => list.filter((p) => p.startsWith("/Game/"));
   const info: UnrealAssetInfo = { ...(sum.className ? { className: sum.className } : {}), ...(sum.kind ? { kind: sum.kind } : {}), ...(sum.parent ? { parent: sum.parent } : {}), uses: game(h.hardPackages), soft: game(h.softPackages) };
   if (cache.size >= MAX_CACHE) cache.clear();
-  cache.set(abs, { mtime: st.mtimeMs, size: st.size, info });
+  cache.set(abs, { mtime: st.mtimeMs, size: st.size, at: Date.now(), info });
   return info;
+}
+
+/**
+ * How many of a project's packages the last index pass found only in OneDrive (not downloaded, so not read).
+ *
+ * @param root - The project folder.
+ * @returns The count (0 when none, or before the first pass).
+ */
+export function cloudOnlyCount(root: string): number {
+  return cloudCounts.get(root) ?? 0;
 }
 
 /** An index entry with what its header said. */
@@ -60,14 +84,17 @@ export type IndexedAsset = AssetEntry & { className?: string; parent?: string };
  * @param root - The project folder.
  * @param assets - The asset list (listAssets).
  * @param budgetMs - How long new headers may be read for (default 2.5 s).
- * @returns The assets, and whether every Unreal package was read.
+ * Packages only in OneDrive are skipped quietly (never read, so nothing is downloaded) and counted.
+ *
+ * @returns The assets, whether every Unreal package was read, and how many are only in OneDrive.
  */
-export async function withUnrealKinds(root: string, assets: AssetEntry[], budgetMs = 2500): Promise<{ assets: IndexedAsset[]; complete: boolean }> {
+export async function withUnrealKinds(root: string, assets: AssetEntry[], budgetMs = 2500): Promise<{ assets: IndexedAsset[]; complete: boolean; cloudOnly: number }> {
   const until = Date.now() + budgetMs;
   const out: IndexedAsset[] = assets.slice();
   const todo = out.map((a, i) => [a, i] as const).filter(([a]) => UNREAL.test(a.path));
   let next = 0;
   let complete = true;
+  let cloudOnly = 0;
   const worker = async () => {
     while (next < todo.length) {
       if (Date.now() > until) {
@@ -76,11 +103,15 @@ export async function withUnrealKinds(root: string, assets: AssetEntry[], budget
       }
       const [a, i] = todo[next++]!;
       const info = await unrealAssetInfo(join(root, a.path)).catch(() => undefined);
+      if (info?.cloudOnly) cloudOnly++;
       if (info?.className) out[i] = { ...a, kind: info.kind ?? a.kind, className: info.className, ...(info.parent ? { parent: info.parent } : {}) };
     }
   };
   await Promise.all(Array.from({ length: 8 }, worker));
-  return { assets: out, complete };
+  // A pass cut short by its time budget counted only part of them: keep the bigger count until a whole pass.
+  cloudCounts.set(root, complete ? cloudOnly : Math.max(cloudOnly, cloudCounts.get(root) ?? 0));
+  if (cloudCounts.size > 200) cloudCounts.delete(cloudCounts.keys().next().value!);
+  return { assets: out, complete, cloudOnly };
 }
 
 /**
@@ -97,7 +128,8 @@ export function usersOf(root: string, assets: AssetEntry[], pkg: string): { user
   for (const a of assets) {
     if (!UNREAL.test(a.path) || packageNameOf(a.path) === pkg) continue;
     const hit = cache.get(join(root, a.path));
-    if (!hit) {
+    if (!hit || hit.info.cloudOnly) {
+      // Not read (yet, or only in OneDrive): it might use the package.
       complete = false;
       continue;
     }

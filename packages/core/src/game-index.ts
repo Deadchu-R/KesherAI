@@ -208,6 +208,7 @@ export async function unrealAssetText(root: string, rel: string): Promise<string
   const pkg = packageNameOf(rel);
   if (!pkg) return "";
   const info = await unrealAssetInfo(join(root, rel));
+  if (info?.cloudOnly) return `${pkg}: only in OneDrive (not downloaded on this computer), so it was not read.`;
   if (!info?.className) return "";
   const { assets } = await projectIndex(root);
   await withUnrealKinds(root, assets, 4000);

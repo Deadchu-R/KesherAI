@@ -5,7 +5,8 @@ import { basename, dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 import { findGameProjects, type GameProject } from "../game-projects.js";
 import { gameSourceRoutes } from "./game-source.js";
-import { HIT_KINDS, searchGameProject, type GameHit, type HitKind } from "../game-index.js";
+import { HIT_KINDS, projectIndex, searchGameProject, type GameHit, type HitKind } from "../game-index.js";
+import { cloudOnlyCount } from "../unreal-assets.js";
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
 import { editorOpen, runningUnity, type UnityProcesses } from "../unity-running.js";
@@ -41,6 +42,8 @@ export interface GameProjectState {
   running?: boolean;
   lastSync?: string;
   problem?: string;
+  /** Unreal: packages only in OneDrive (not downloaded), skipped by the index. */
+  cloudOnly?: number;
   /** Whether "Sync now" can run for it here. */
   canSync: boolean;
   /** Its page in the app. */
@@ -126,6 +129,15 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
   gameInspectorRoutes(app, s, findOne, values);
   const valuesOf = (all: Awaited<ReturnType<ValueQueue["list"]>>, p: GameProject) => all.filter((v) => v.engine === p.kind && sameFolder(v.project, p.path));
 
+  // Unreal projects' index passes started by the list (at most one per project every few minutes), so the card can
+  // show how many packages are only in OneDrive without waiting for a search.
+  const indexedAt = new Map<string, number>();
+  const refreshIndex = (root: string) => {
+    if (Date.now() - (indexedAt.get(root) ?? 0) < 5 * 60_000) return;
+    indexedAt.set(root, Date.now());
+    void projectIndex(root).catch(() => undefined);
+  };
+
   app.get("/api/games", async () => {
     const [list, uq, unityQ, unrealProject, vals] = await Promise.all([found(), s.unreal.queue(), s.unity.queue(), s.unreal.project(), values.list()]);
     const godot = s.godot.status();
@@ -136,6 +148,8 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
         const mine = uq.filter((q) => q.project.toLowerCase() === p.name.toLowerCase());
         const current = !!unrealProject && unrealProject.toLowerCase() === p.name.toLowerCase();
         const st = current ? s.unreal.syncState : undefined;
+        refreshIndex(p.path);
+        const cloudOnly = cloudOnlyCount(p.path);
         return {
           ...base,
           open: !!unrealOpenDir && sameFolder(unrealOpenDir, p.path),
@@ -144,6 +158,7 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
           ...(st?.running ? { running: true } : {}),
           ...(st?.lastAt ? { lastSync: st.lastAt } : {}),
           ...(st?.lastError && mine.length ? { problem: st.lastError } : {}),
+          ...(cloudOnly ? { cloudOnly } : {}),
           // The headless sync runs on the project Unreal last opened with the KesherAI Bridge plugin.
           canSync: current && mine.length > 0,
           page: "#/unreal",

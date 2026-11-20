@@ -77,13 +77,21 @@ export function build(spec: Spec): Uint8Array {
   const editor = (flags & EDITOR_ONLY) === 0;
   const summary = (o: Record<string, number>) => {
     const w = new W().u32(0x9e2a83c1).i32(spec.legacy);
-    if (spec.legacy !== -4) w.i32(864);
+    // A format newer than -9 is written as -9 (what a newer engine might keep; the reader reads it as -9).
+    const layout = Math.max(spec.legacy, -9);
+    if (layout !== -4) w.i32(864);
     w.i32(spec.unversioned ? 0 : ue4);
-    if (spec.legacy <= -8) w.i32(spec.unversioned ? 0 : ue5);
-    w.i32(0).i32(spec.unversioned ? 0 : 1);
+    if (layout <= -8) w.i32(spec.unversioned ? 0 : ue5);
+    w.i32(0);
+    // -9 (UE 5.8): SavedHash and TotalHeaderSize before the custom versions.
+    if (layout <= -9) w.zeros(20).i32(o.total!);
+    w.i32(spec.unversioned ? 0 : 1);
     if (!spec.unversioned) w.zeros(16).i32(3); // one custom version
-    if (ue5 >= 1016) w.zeros(20);
-    w.i32(o.total!).str("None").u32(flags).i32(spec.names.length).i32(o.names!);
+    if (layout > -9) {
+      if (ue5 >= 1016) w.zeros(20);
+      w.i32(o.total!);
+    }
+    w.str("None").u32(flags).i32(spec.names.length).i32(o.names!);
     if (ue5 >= 1008) w.i32(0).i32(0);
     if (editor && ue4 >= 516) w.str("");
     if (ue4 >= 459) w.i32(0).i32(0);
@@ -94,6 +102,7 @@ export function build(spec: Spec): Uint8Array {
     if (ue4 >= 384) w.i32(spec.soft?.length ?? 0).i32(o.soft!);
     if (ue4 >= 510) w.i32(0);
     w.i32(o.thumbs!);
+    if (ue5 >= 1018) w.i32(0).i32(0); // import type hierarchies
     if (ue5 < 1016) w.zeros(16);
     if (editor && ue4 >= 518) w.zeros(16);
     w.i32(1).i32(spec.exports.length).i32(spec.names.length); // one generation
@@ -101,7 +110,7 @@ export function build(spec: Spec): Uint8Array {
     w.u16(ma).u16(mi).u16(pa).u32(123).str("++UE+Release");
     w.u16(ma).u16(mi).u16(pa).u32(123).str("++UE+Release");
     w.u32(0).i32(0).u32(0).i32(0);
-    if (spec.legacy > -7) w.i32(0);
+    if (layout > -7) w.i32(0);
     w.i32(o.registry!).i64(o.total!).i32(0).i32(0).i32(0).i32(0);
     if (ue5 >= 1001) w.i32(0);
     if (ue5 >= 1002) w.i64(0);
