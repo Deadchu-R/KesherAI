@@ -1,0 +1,582 @@
+{
+ "group": "משחקים",
+ "mocks": [
+  {
+   "url": "**/api/games",
+   "json": {
+    "projects": [
+     {
+      "engine": "godot",
+      "name": "Platformer",
+      "path": "D:/Games/PlatformerGodot",
+      "version": "4.4",
+      "open": false,
+      "pending": 0,
+      "clashes": 0,
+      "lastSync": {
+       "$ago": "40m"
+      },
+      "canSync": false,
+      "page": "#/godot"
+     },
+     {
+      "engine": "unity",
+      "name": "DungeonKeep",
+      "path": "D:/Games/DungeonKeep",
+      "version": "6000.0.32f1",
+      "open": false,
+      "pending": 2,
+      "values": 2,
+      "clashes": 0,
+      "lastSync": {
+       "$ago": "12m"
+      },
+      "canSync": true,
+      "page": "#/unity"
+     },
+     {
+      "engine": "unreal",
+      "name": "SkyHarbor",
+      "path": "D:/Games/SkyHarbor/SkyHarbor.uproject",
+      "version": "5.5",
+      "open": false,
+      "pending": 0,
+      "clashes": 0,
+      "lastSync": {
+       "$ago": "300m"
+      },
+      "canSync": true,
+      "page": "#/unreal"
+     }
+    ],
+    "clashes": 0
+   }
+  },
+  {
+   "url": "**/api/games/conflicts",
+   "json": {
+    "conflicts": [
+     {
+      "id": "c1",
+      "engine": "unity",
+      "project": "Platformer",
+      "key": "D:/Games/Platformer",
+      "path": "Assets/Graphs/Enemy.asset",
+      "name": "Enemy",
+      "request": "האויב מסתובב בין שתי נקודות ורודף אחרי השחקן",
+      "queuedAt": {
+       "$ago": "140m"
+      },
+      "baseAt": {
+       "$ago": "300m"
+      },
+      "engineAt": {
+       "$ago": "60m"
+      },
+      "mine": [
+       "+ Patrol",
+       "+ Patrol → Chase",
+       "speed = 3.5"
+      ],
+      "diff": {
+       "added": [
+        "Animator Trigger",
+        "Wait 0.5s"
+       ],
+       "removed": [
+        "Chase Timeout"
+       ]
+      }
+     },
+     {
+      "id": "c2",
+      "engine": "unity",
+      "project": "Platformer",
+      "key": "D:/Games/Platformer",
+      "path": "Assets/Scenes/Level1.unity",
+      "name": "Crate · Rigidbody · m_Mass",
+      "queuedAt": {
+       "$ago": "50m"
+      },
+      "baseAt": {
+       "$ago": "300m"
+      },
+      "engineAt": {
+       "$ago": "20m"
+      },
+      "mine": [
+       "m_Mass: 1 → 5"
+      ],
+      "value": {
+       "engine": [
+        "m_Mass: 3"
+       ]
+      }
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/unity/queue",
+   "json": [
+    {
+     "id": "q0",
+     "project": "D:/Games/Platformer",
+     "path": "Assets/Graphs/Player.asset#graph",
+     "at": {
+      "$ago": "150m"
+     }
+    },
+    {
+     "id": "q1",
+     "project": "D:/Games/Platformer",
+     "path": "Assets/Graphs/Door.asset#graph",
+     "at": {
+      "$ago": "130m"
+     }
+    },
+    {
+     "id": "q2",
+     "project": "D:/Games/Platformer",
+     "path": "Assets/Graphs/Coin.asset#graph",
+     "at": {
+      "$ago": "110m"
+     }
+    }
+   ]
+  },
+  {
+   "url": "**/api/unreal/queue",
+   "json": []
+  },
+  {
+   "url": "**/api/games/checkpoints",
+   "json": {
+    "checkpoints": [
+     {
+      "id": "c1",
+      "engine": "unity",
+      "name": "DungeonKeep",
+      "project": "D:/Games/DungeonKeep",
+      "source": "chat",
+      "label": "לפתוח את הדלת",
+      "at": {
+       "$ago": "25m"
+      },
+      "chatId": "x1",
+      "files": [
+       {
+        "rel": "Assets/Scripts/Door.cs",
+        "size": 612
+       },
+       {
+        "rel": "Assets/Scenes/Level1.unity",
+        "size": 48200
+       }
+      ]
+     },
+     {
+      "id": "c2",
+      "engine": "unity",
+      "name": "DungeonKeep",
+      "project": "D:/Games/DungeonKeep",
+      "source": "sync",
+      "label": "סנכרון: 2 ערכים",
+      "at": {
+       "$ago": "70m"
+      },
+      "files": [
+       {
+        "rel": "Assets/Scenes/Level1.unity",
+        "size": 48100
+       }
+      ]
+     },
+     {
+      "id": "c3",
+      "engine": "godot",
+      "name": "Platformer",
+      "project": "D:/Games/PlatformerGodot",
+      "source": "source",
+      "label": "player.gd",
+      "at": {
+       "$ago": "190m"
+      },
+      "files": [
+       {
+        "rel": "player/player.gd",
+        "size": 412
+       }
+      ]
+     },
+     {
+      "id": "c4",
+      "engine": "unreal",
+      "name": "SkyHarbor",
+      "project": "SkyHarbor",
+      "source": "chat",
+      "label": "מסך פתיחה",
+      "at": {
+       "$ago": "420m"
+      },
+      "chatId": "x2",
+      "files": [
+       {
+        "rel": "Content/UI/WBP_Menu.uasset",
+        "size": 182000
+       },
+       {
+        "rel": "Source/SkyHarbor/Menu.cpp",
+        "size": 2300
+       }
+      ]
+     }
+    ],
+    "bytes": 13002342,
+    "count": 7,
+    "limits": {
+     "days": 30,
+     "maxMB": 4096
+    }
+   }
+  },
+  {
+   "url": "**/api/games/checkpoints/c1/diff?*",
+   "json": {
+    "rel": "Assets/Scripts/Door.cs",
+    "binary": false,
+    "sizeBefore": 480,
+    "sizeNow": 612,
+    "diff": "--- a/Assets/Scripts/Door.cs\n+++ b/Assets/Scripts/Door.cs\n@@ -8,7 +8,12 @@ public class Door : MonoBehaviour\n {\n     public float openSpeed = 2f;\n     bool isOpen;\n-    void Update() { }\n+    void Update()\n+    {\n+        if (!isOpen) return;\n+        transform.position = Vector3.MoveTowards(transform.position, openPos, openSpeed * Time.deltaTime);\n+    }\n+    public void Open() { isOpen = true; }\n }\n"
+   }
+  },
+  {
+   "url": "**/api/games/inspect/files?*",
+   "json": {
+    "files": [
+     {
+      "path": "Assets/Scenes/Level1.unity",
+      "size": 9000
+     },
+     {
+      "path": "Assets/Scenes/Menu.unity",
+      "size": 9700
+     },
+     {
+      "path": "Assets/Prefabs/Door.prefab",
+      "size": 10400
+     },
+     {
+      "path": "Assets/Prefabs/Crate.prefab",
+      "size": 11100
+     },
+     {
+      "path": "Assets/Data/Settings.asset",
+      "size": 11800
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/games/inspect?*",
+   "json": {
+    "path": "Assets/Scenes/Level1.unity",
+    "objects": [
+     {
+      "id": "o1",
+      "name": "Player",
+      "components": [
+       {
+        "target": "t1",
+        "type": "Transform",
+        "fields": [
+         {
+          "name": "m_LocalPosition",
+          "value": "(0, 1, 0)",
+          "editable": true
+         }
+        ]
+       },
+       {
+        "target": "t2",
+        "type": "MonoBehaviour",
+        "script": "guid-p",
+        "fields": [
+         {
+          "name": "speed",
+          "value": "6",
+          "editable": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "o2",
+      "name": "Crate",
+      "components": [
+       {
+        "target": "t3",
+        "type": "Transform",
+        "fields": [
+         {
+          "name": "m_LocalPosition",
+          "value": "(4, 0.5, 2)",
+          "editable": true
+         },
+         {
+          "name": "m_LocalScale",
+          "value": "(1, 1, 1)",
+          "editable": true
+         }
+        ]
+       },
+       {
+        "target": "t4",
+        "type": "Rigidbody",
+        "fields": [
+         {
+          "name": "m_Mass",
+          "value": "1",
+          "editable": true
+         },
+         {
+          "name": "m_Drag",
+          "value": "0",
+          "editable": true
+         },
+         {
+          "name": "m_UseGravity",
+          "value": "true",
+          "editable": true
+         }
+        ]
+       },
+       {
+        "target": "t5",
+        "type": "BoxCollider",
+        "fields": [
+         {
+          "name": "m_IsTrigger",
+          "value": "false",
+          "editable": true
+         },
+         {
+          "name": "m_Size",
+          "value": "(1, 1, 1)",
+          "editable": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "o3",
+      "name": "Ground",
+      "components": [
+       {
+        "target": "t6",
+        "type": "Transform",
+        "fields": [
+         {
+          "name": "m_LocalScale",
+          "value": "(20, 1, 20)",
+          "editable": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "o4",
+      "name": "Door",
+      "components": [
+       {
+        "target": "t7",
+        "type": "Transform",
+        "fields": [
+         {
+          "name": "m_LocalPosition",
+          "value": "(-3, 1, 0)",
+          "editable": true
+         }
+        ]
+       }
+      ],
+      "prefab": {
+       "source": "guid-door",
+       "overrides": [
+        {
+         "target": "t7",
+         "name": "m_Name",
+         "value": "Door"
+        }
+       ]
+      }
+     }
+    ],
+    "names": {
+     "guid-door": "Assets/Prefabs/Door.prefab"
+    },
+    "readOnly": false,
+    "open": false,
+    "pending": [
+     {
+      "id": "pv1",
+      "target": "t4",
+      "name": "m_Mass",
+      "from": "1",
+      "to": "5"
+     },
+     {
+      "id": "pv2",
+      "target": "t4",
+      "name": "m_Drag",
+      "from": "0",
+      "to": "0.5"
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "GamesProjects",
+   "title": "משחקים: הפרויקטים, נקודות שמירה ומפקח",
+   "route": "#/games",
+   "height": {
+    "desktop": 700,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".games-card"
+    }
+   ]
+  },
+  {
+   "id": "GamesCheckpoints",
+   "title": "משחקים: נקודות שמירה והשוואה",
+   "route": "#/games",
+   "height": {
+    "desktop": 1250,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-top-links button"
+    },
+    {
+     "wait": ".games-cp"
+    },
+    {
+     "click": ".games-cp-head"
+    },
+    {
+     "wait": ".games-cp-files .games-hit"
+    },
+    {
+     "click": ".games-cp-files .games-hit"
+    },
+    {
+     "wait": ".games-cp-diff"
+    }
+   ]
+  },
+  {
+   "id": "GamesInspector",
+   "title": "משחקים: מפקח הסצנה",
+   "route": "#/games",
+   "height": {
+    "desktop": 900,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card >> nth=1 >> button:has-text(\"מפקח\")"
+    },
+    {
+     "wait": ".games-inspector"
+    },
+    {
+     "click": ".games-inspector .games-hit"
+    },
+    {
+     "wait": ".games-insp-objs"
+    },
+    {
+     "click": ".games-insp-objs .games-cp-head:has-text(\"Crate\")"
+    },
+    {
+     "wait": ".games-insp-field"
+    }
+   ]
+  },
+  {
+   "id": "GamesSyncSheet",
+   "title": "משחקים: ממתינים לסנכרון ושינוי שהתנגש",
+   "route": "#/games",
+   "height": {
+    "desktop": 1000,
+    "phone": 1380
+   },
+   "mocks": [
+    {
+     "url": "**/api/games",
+     "json": {
+      "projects": [
+       {
+        "engine": "unity",
+        "name": "Platformer",
+        "path": "D:/Games/Platformer",
+        "version": "6000.0.32f1",
+        "open": false,
+        "pending": 3,
+        "moves": 2,
+        "values": 1,
+        "clashes": 2,
+        "lastSync": {
+         "$ago": "95m"
+        },
+        "canSync": true,
+        "page": "#/unity"
+       },
+       {
+        "engine": "unreal",
+        "name": "DungeonKeep",
+        "path": "D:/Games/DungeonKeep/DungeonKeep.uproject",
+        "version": "5.5",
+        "open": true,
+        "pending": 0,
+        "clashes": 0,
+        "lastSync": {
+         "$ago": "12m"
+        },
+        "canSync": true,
+        "page": "#/unreal"
+       }
+      ],
+      "clashes": 2
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card >> nth=0 >> text=הצג ממתינים"
+    },
+    {
+     "wait": ".games-clash"
+    }
+   ]
+  }
+ ]
+}

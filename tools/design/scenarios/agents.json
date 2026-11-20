@@ -1,0 +1,154 @@
+{
+ "group": "סוכנים ומשימות",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c1",
+   "method": "GET",
+   "json": {
+    "id": "c1",
+    "projectId": null,
+    "title": "תיקון מסך ההתחברות",
+    "kind": "code",
+    "modelId": "qwen3-coder",
+    "mode": "ask",
+    "workspace": "D:/Games/Platformer",
+    "createdAt": {
+     "$ago": "1m"
+    },
+    "updatedAt": {
+     "$ago": "1m"
+    },
+    "messageCount": 2,
+    "session": {
+     "id": "c1",
+     "status": "idle",
+     "modelId": "qwen3-coder",
+     "mode": "ask",
+     "workspace": "D:/Games/Platformer",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "1m"
+      },
+      "type": "user",
+      "text": "תתקן את מסך ההתחברות ותשווה את מסך ההגדרות למתחרים"
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "1m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "התחלתי שני סוכנים: אחד מתקן את ההתחברות והשני משווה את מסך ההגדרות."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c1/helpers",
+   "json": {
+    "runs": [
+     {
+      "kind": "build",
+      "model": "Qwen3-Coder-30B",
+      "state": "running",
+      "queuedAt": {
+       "$agoMs": "5m"
+      },
+      "startedAt": {
+       "$agoMs": "280s"
+      },
+      "step": 6,
+      "maxSteps": 30,
+      "background": true,
+      "steps": [
+       "read_file: apps/web/src/Login.tsx",
+       "edit_file: apps/web/src/ui/App.tsx"
+      ],
+      "id": "h1",
+      "title": "לתקן את מסך ההתחברות",
+      "name": "תיקון התחברות",
+      "note": "לבדוק את הטוקן"
+     },
+     {
+      "kind": "research",
+      "model": "Qwen3-4B",
+      "state": "running",
+      "queuedAt": {
+       "$agoMs": "5m"
+      },
+      "startedAt": {
+       "$agoMs": "280s"
+      },
+      "step": 3,
+      "maxSteps": 30,
+      "background": true,
+      "steps": [
+       "web_search: settings screen"
+      ],
+      "id": "h2",
+      "title": "להשוות את מסך ההגדרות למתחרים"
+     }
+    ],
+    "agents": []
+   }
+  },
+  {
+   "url": "**/api/conversations/c1/events*",
+   "body": ": hi\n\n",
+   "contentType": "text/event-stream"
+  }
+ ],
+ "boards": [
+  {
+   "id": "AgentsLabel",
+   "title": "סוכנים בצ׳אט: שם והערה",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 1250
+   },
+   "steps": [
+    {
+     "wait": ".hcard"
+    },
+    {
+     "waitMs": 1500
+    },
+    {
+     "click": ".hcard >> nth=1 >> button:has-text(\"שם והערה\")"
+    },
+    {
+     "wait": ".alab-form"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".hchip"
+    },
+    {
+     "waitMs": 1500
+    },
+    {
+     "click": ".hchip"
+    },
+    {
+     "waitMs": 500
+    },
+    {
+     "click": ".hsheet-wrap button:has-text(\"שם והערה\"), .hsheet-wrap button:has-text(\"ערוך\")"
+    },
+    {
+     "wait": ".alab-form"
+    }
+   ]
+  }
+ ]
+}

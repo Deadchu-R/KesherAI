@@ -17,6 +17,7 @@
     "typecheck": "pnpm build:packages && pnpm --filter @kesher/web typecheck && pnpm --filter @kesher/desktop typecheck && pnpm --filter @kesher/hub typecheck && tsc -p tools/hub-report/tsconfig.json",
     "lint": "eslint .",
     "test": "node --conditions=source --import tsx --test --test-force-exit --test-timeout=120000 \"packages/*/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\" \"apps/hub/src/**/*.test.ts\"",
+    "design:render": "node --conditions=source --import tsx tools/design/render.ts",
     "docs:api": "typedoc",
     "create-plugin": "node scripts/create-plugin.mjs",
     "plugin:check": "node --conditions=source --import tsx scripts/plugin-check.ts",

@@ -1,0 +1,164 @@
+{
+ "group": "סוכנים ומשימות",
+ "mocks": [
+  {
+   "url": "**/api/task-inbox",
+   "json": {
+    "settings": {
+     "enabled": true,
+     "paused": false,
+     "repo": "D:/Projects/KesherAI",
+     "branch": "kesher-inbox",
+     "fetchMinutes": 10,
+     "dailyCap": 10,
+     "maxMinutes": 30,
+     "model": "",
+     "allowedPaths": [],
+     "forbiddenPaths": [],
+     "commands": [
+      "pnpm -s typecheck"
+     ],
+     "notWhileGame": true,
+     "notWhileEditor": false,
+     "gpuBusyPercent": 0
+    },
+    "today": {
+     "date": "2026-11-20",
+     "used": 2
+    },
+    "busy": {
+     "free": true,
+     "reasons": []
+    },
+    "runHere": true,
+    "project": "KesherAI",
+    "lastFetch": {
+     "$agoMs": "2m"
+    },
+    "tasks": [
+     {
+      "id": "t-0412",
+      "title": "להשוות את מסך ההגדרות למתחרים",
+      "executor": "auto",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "להשוות את מסך ההגדרות למתחרים",
+      "status": "waiting",
+      "runBy": "antigravity",
+      "branch": "agy/t-0412",
+      "label": {
+       "name": "השוואת הגדרות",
+       "note": "לא לגעת בעיצוב הישן"
+      }
+     },
+     {
+      "id": "t-0411",
+      "title": "לתקן אזהרות לינט בחבילת core",
+      "executor": "auto",
+      "risk": "low",
+      "from": "self-work",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לתקן אזהרות לינט בחבילת core",
+      "status": "queued",
+      "runBy": "local",
+      "branch": "agy/t-0411"
+     },
+     {
+      "id": "t-0409",
+      "title": "לעדכן את תיעוד ההתקנה",
+      "executor": "auto",
+      "risk": "low",
+      "from": "roee",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לעדכן את תיעוד ההתקנה",
+      "status": "done",
+      "runBy": "opus",
+      "branch": "agy/t-0409"
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/task-inbox/work-list",
+   "json": {
+    "items": [
+     {
+      "id": "w-1a2b",
+      "section": "בתור",
+      "status": "next",
+      "title": "לחבר חיפוש בכל המשחקים לדף הפרויקטים",
+      "text": "",
+      "order": 0
+     },
+     {
+      "id": "w-3c4d",
+      "section": "בתור",
+      "status": "next",
+      "title": "לבדוק את מסך ההגדרות בטלפון ב-390 פיקסלים",
+      "text": "",
+      "order": 1
+     },
+     {
+      "id": "w-5e6f",
+      "section": "ממתין לך",
+      "status": "waiting",
+      "title": "לאשר את הצבעים של עורך התמונות",
+      "text": "",
+      "order": 2
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "InboxAssign",
+   "title": "תיבת משימות: מי מבצע, ורשימת העבודה",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 900,
+    "phone": 1960
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has(.tinbox-title)"
+    },
+    {
+     "click": ".tinbox-row:has(.tinbox-title) >> nth=0 >> .assign > button"
+    },
+    {
+     "wait": ".assign-list"
+    },
+    {
+     "click": ".tinbox-wl > button"
+    },
+    {
+     "wait": ".tinbox-wl-item"
+    }
+   ]
+  }
+ ]
+}
