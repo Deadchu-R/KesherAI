@@ -11,6 +11,8 @@ import { sameFolder } from "../unity-cli.js";
 import type { BlueprintJson, QueuedEdit } from "../unreal-bridge.js";
 import { makeDiff } from "@kesher/agent";
 import type { GameCheckpoint } from "../game-checkpoints.js";
+import { ValueQueue } from "../game-inspector.js";
+import { gameInspectorRoutes, syncValues, valueClashLines } from "./game-inspector.js";
 
 /**
  * The Game projects home (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20, step 1): one page
@@ -31,6 +33,8 @@ export interface GameProjectState {
   /** Changes waiting to go in: graph edits and (Unity) scene stand-in moves. */
   pending: number;
   moves?: number;
+  /** Inspector values waiting to be written (step 6). */
+  values?: number;
   /** Queued changes that clash with an edit made in the engine (waiting for a choice). */
   clashes: number;
   running?: boolean;
@@ -45,7 +49,7 @@ export interface GameProjectState {
 /** One clash on the Sync and conflicts sheet. */
 export interface GameClash {
   id: string;
-  engine: "unreal" | "unity";
+  engine: "unreal" | "unity" | "godot";
   project: string;
   /** The queue's project: the folder (Unity) or the name (Unreal). */
   key: string;
@@ -61,6 +65,8 @@ export interface GameClash {
   mine: string[];
   /** The engine's side: nodes added and removed since the copy the change was made on (read only when the editor is open). */
   diff?: { added: string[]; removed: string[] };
+  /** An inspector value (step 6): the engine's side is the value in the file now. */
+  value?: { engine: string[] };
 }
 
 /** The graph's short name, from its path. */
@@ -73,8 +79,8 @@ const shortName = (path: string) => (path.split("#")[0]!.split("/").pop() ?? pat
  * @returns The note's title and body, or undefined when all went in.
  */
 export function syncNote(r: SyncReport): { title: string; body: string } | undefined {
-  const name = r.engine === "unity" ? basename(r.project) : r.project;
-  const app = r.engine === "unity" ? "Unity" : "Unreal";
+  const name = r.engine === "unreal" ? r.project : basename(r.project);
+  const app = r.engine === "unity" ? "Unity" : r.engine === "godot" ? "Godot" : "Unreal";
   if (r.clashes) return { title: `התנגשות בסנכרון · Sync clash: ${name}`, body: `${r.clashes} שינויים נערכו גם ב-${app}. בחר מה לשמור. · ${r.clashes} change(s) were also edited in ${app}. Choose what to keep.` };
   if (r.error) return { title: `הסנכרון נכשל · Sync failed: ${name}`, body: r.error };
   return undefined;
@@ -113,9 +119,13 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
   const findOne = async (engine: unknown, path: unknown) => (await found()).find((p) => p.kind === engine && typeof path === "string" && sameFolder(p.path, path));
   // The Source view of every engine (step 4), on the same list of found projects.
   gameSourceRoutes(app, s, findOne);
+  // The inspector with the engine closed (step 6): values queued here, written at the next sync.
+  const values = new ValueQueue(s.paths.root);
+  gameInspectorRoutes(app, s, findOne, values);
+  const valuesOf = (all: Awaited<ReturnType<ValueQueue["list"]>>, p: GameProject) => all.filter((v) => v.engine === p.kind && sameFolder(v.project, p.path));
 
   app.get("/api/games", async () => {
-    const [list, uq, unityQ, unrealProject] = await Promise.all([found(), s.unreal.queue(), s.unity.queue(), s.unreal.project()]);
+    const [list, uq, unityQ, unrealProject, vals] = await Promise.all([found(), s.unreal.queue(), s.unity.queue(), s.unreal.project(), values.list()]);
     const godot = s.godot.status();
     const unrealOpenDir = s.unreal.connected && s.unreal.projectFile ? dirname(s.unreal.projectFile) : undefined;
     const projects: GameProjectState[] = await Promise.all(list.map(async (p): Promise<GameProjectState> => {
@@ -140,24 +150,27 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (p.kind === "unity") {
         const mine = unityQ.filter((q) => sameFolder(q.project, p.path));
         const moves = await pendingMoves(p.path);
+        const vs = valuesOf(vals, p);
         const st = s.unity.syncState.get(p.path) ?? [...s.unity.syncState].find(([k]) => sameFolder(k, p.path))?.[1];
         const shown = !!s.unity.activeProject && sameFolder(s.unity.activeProject, p.path);
         return {
           ...base,
           open: (shown && s.unity.connected) || existsSync(join(p.path, "Temp", "UnityLockfile")),
-          pending: mine.length + moves,
+          pending: mine.length + moves + vs.length,
           ...(moves ? { moves } : {}),
-          clashes: mine.filter((q) => q.clash && !q.decision).length,
+          ...(vs.length ? { values: vs.length } : {}),
+          clashes: mine.filter((q) => q.clash && !q.decision).length + vs.filter((v) => v.clash && !v.decision).length,
           ...(st?.running ? { running: true } : {}),
           ...(st?.lastAt ? { lastSync: st.lastAt } : {}),
           ...(st?.lastError && mine.length ? { problem: st.lastError } : {}),
           // Scene moves go in when Unity opens (the package applies them); graph changes sync in a batch Unity run.
-          canSync: mine.length > 0 && s.unity.hasProject(p.path),
+          canSync: (mine.length > 0 && s.unity.hasProject(p.path)) || vs.length > 0,
           page: "#/unity",
         };
       }
-      // Godot: the scene stand-in writes the .tscn at once, so nothing waits.
-      return { ...base, open: !!godot.connected && !!godot.editor?.projectFile && sameFolder(dirname(godot.editor.projectFile), p.path), pending: 0, clashes: 0, canSync: false, page: "#/godot" };
+      // Godot: the scene stand-in writes the .tscn at once; only inspector values wait.
+      const vs = valuesOf(vals, p);
+      return { ...base, open: !!godot.connected && !!godot.editor?.projectFile && sameFolder(dirname(godot.editor.projectFile), p.path), pending: vs.length, ...(vs.length ? { values: vs.length } : {}), clashes: vs.filter((v) => v.clash && !v.decision).length, canSync: vs.length > 0, page: "#/godot" };
     }));
     const order = { unity: 0, unreal: 1, godot: 2 } as const;
     projects.sort((a, b) => b.clashes - a.clashes || b.pending - a.pending || Number(b.open) - Number(a.open) || order[a.engine] - order[b.engine] || a.name.localeCompare(b.name));
@@ -174,12 +187,26 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
       void s.unreal.syncNow().catch(() => undefined);
       return { started: true };
     }
-    if (p.kind === "unity") {
-      if (!s.unity.hasProject(p.path)) return reply.code(409).send({ error: "Add this project on the Unity page first." });
-      void s.unity.syncNow(p.path).catch(() => undefined);
-      return { started: true };
+    // Inspector values first (written into the files with the engine closed), then the queued graph changes.
+    const vs = valuesOf(await values.list(), p);
+    let wrote: Awaited<ReturnType<typeof syncValues>> | undefined;
+    if (vs.length) {
+      wrote = await syncValues(s, values, p);
+      if ("error" in wrote) {
+        onSync({ engine: p.kind, project: p.path, applied: 0, failed: vs.length, clashes: 0, error: wrote.error });
+        return reply.code(409).send({ error: wrote.error });
+      }
+      if (wrote.clashes || wrote.failed) onSync({ engine: p.kind, project: p.path, applied: wrote.applied, failed: wrote.failed, clashes: wrote.clashes, ...(wrote.failed ? { error: `${wrote.failed} value(s) could not be written; their files could not be read.` } : {}) });
     }
-    return reply.code(400).send({ error: "Godot projects have nothing waiting: the stand-in saves the scene at once." });
+    const valuesDone = wrote && !("error" in wrote) ? { values: wrote } : {};
+    if (p.kind === "unity") {
+      const graphs = (await s.unity.queue()).some((q) => sameFolder(q.project, p.path));
+      if (graphs && !s.unity.hasProject(p.path)) return reply.code(409).send({ error: "Add this project on the Unity page first.", ...valuesDone });
+      if (graphs) void s.unity.syncNow(p.path).catch(() => undefined);
+      return { started: graphs, ...valuesDone };
+    }
+    if (wrote) return { started: false, ...valuesDone };
+    return reply.code(400).send({ error: "Nothing is waiting in this Godot project." });
   });
 
   /**
@@ -284,6 +311,11 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
         ...(now && q.baseSig ? { diff: graphDiff(q.baseSig, now) } : {}),
       });
     }
+    for (const v of await values.list()) {
+      if (!v.clash || v.decision === "mine") continue;
+      const lines = valueClashLines(v);
+      conflicts.push({ id: v.id, engine: v.engine, project: basename(v.project), key: v.project, path: v.file, name: `${shortName(v.file)} · ${v.object}`, queuedAt: v.at, engineAt: v.clash.at, ...(v.decision ? { decision: v.decision } : {}), mine: lines.mine, value: { engine: lines.engine } });
+    }
     return { conflicts };
   });
 
@@ -292,7 +324,7 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
     const choice = req.body?.choice;
     if (choice !== "mine" && choice !== "engine" && choice !== "skip") return reply.code(400).send({ error: "Choose mine, engine or skip." });
     const id = req.params.id;
-    const done = (await s.unreal.decide(id, choice as ClashChoice)) || (await s.unity.decide(id, choice as ClashChoice));
+    const done = (await s.unreal.decide(id, choice as ClashChoice)) || (await s.unity.decide(id, choice as ClashChoice)) || (await values.decide(id, choice as ClashChoice));
     if (!done) return reply.code(404).send({ error: "That change is no longer waiting." });
     return { ok: true };
   });

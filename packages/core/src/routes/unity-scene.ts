@@ -35,7 +35,7 @@ const MODEL = /\.(fbx|obj|glb|gltf)$/i;
  * @param wanted - The GUIDs.
  * @returns GUID → "Assets/…" (the asset, without ".meta").
  */
-async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, string>> {
+export async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   let seen = 0;
   const walk = async (d: string, depth: number): Promise<void> => {

@@ -20,8 +20,8 @@ export type ClashChoice = "mine" | "engine" | "skip";
 
 /** How one sync ended (for the page and the notification). */
 export interface SyncReport {
-  engine: "unreal" | "unity";
-  /** The project (Unreal: its name; Unity: its folder). */
+  engine: "unreal" | "unity" | "godot";
+  /** The project (Unreal: its name; Unity and Godot: its folder). */
   project: string;
   applied: number;
   failed: number;

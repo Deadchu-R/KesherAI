@@ -5,6 +5,7 @@ import { toast } from "../library";
 import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch";
 import { GameSource } from "../engine/GameSource";
 import { GameCheckpoints } from "../engine/GameCheckpoints";
+import { GameInspector } from "../engine/GameInspector";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -17,6 +18,8 @@ interface Project {
   open: boolean;
   pending: number;
   moves?: number;
+  /** Inspector values waiting to be written. */
+  values?: number;
   clashes: number;
   running?: boolean;
   lastSync?: string;
@@ -28,7 +31,7 @@ interface Project {
 /** One clash on the Sync and conflicts sheet. */
 interface Clash {
   id: string;
-  engine: "unreal" | "unity";
+  engine: "unreal" | "unity" | "godot";
   project: string;
   /** The queue's project: the folder (Unity) or the name (Unreal). */
   key: string;
@@ -41,6 +44,8 @@ interface Clash {
   decision?: "mine" | "skip";
   mine: string[];
   diff?: { added: string[]; removed: string[] };
+  /** An inspector value: the value in the file now. */
+  value?: { engine: string[] };
 }
 
 /** A change waiting for the editor (/api/unreal/queue, /api/unity/queue). */
@@ -65,6 +70,8 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   const [cps, setCps] = useState<{ project?: Project } | null>(null);
   // The Source view of one project, over the list (a card's Code button, or a search result's file at its line).
   const [code, setCode] = useState<{ engine: Project["engine"]; path: string; name: string; open?: { path: string; line?: number } } | null>(null);
+  // The inspector of one project (its card's Inspector button): values read from the files with the engine closed.
+  const [inspect, setInspect] = useState<Project | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
   const busy = !!list?.projects.some((p) => p.running);
   useEffect(() => {
@@ -88,6 +95,18 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
     location.hash = r.engine === "unity" ? "#/unity" : r.engine === "unreal" ? "#/unreal" : "#/godot";
   };
 
+  if (inspect) {
+    return (
+      <div className="page games-page">
+        <div className="row games-code-head">
+          <button type="button" className="ghost" onClick={() => { setInspect(null); load(); }} aria-label={L("חזרה לפרויקטים", "Back to the projects")}>{getLocale() === "he" ? "→" : "←"}</button>
+          <h1 className="grow" dir="auto">{L(`מפקח · ${inspect.name}`, `Inspector · ${inspect.name}`)}</h1>
+          <span className="games-chip">{ENGINE[inspect.engine].label}</span>
+        </div>
+        <GameInspector key={inspect.path} engine={inspect.engine} project={inspect.path} />
+      </div>
+    );
+  }
   if (code) {
     return (
       <div className="page games-page">
@@ -138,11 +157,12 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
                 {p.clashes > 0 && <span className="games-chip bad">{L(`${p.clashes} התנגשויות`, `${p.clashes} clash${p.clashes > 1 ? "es" : ""}`)}</span>}
                 {p.running && <span className="games-chip">{L("מסנכרן…", "Syncing…")}</span>}
               </div>
-              {(p.lastSync || p.moves) && (
+              {(p.lastSync || p.moves || p.values) && (
                 <p className="muted small games-sub">
                   {p.lastSync ? L(`סנכרון אחרון: ${when(p.lastSync)}`, `Last sync: ${when(p.lastSync)}`) : ""}
                   {p.lastSync && p.moves ? " · " : ""}
                   {p.moves ? L(`${p.moves} הזזות בסצנה ייכנסו כש-Unity ייפתח`, `${p.moves} scene move(s) go in when Unity opens`) : ""}
+                  {p.values ? `${p.lastSync || p.moves ? " · " : ""}${L(`${p.values} ערכים ייכתבו בסנכרון`, `${p.values} value(s) written at the next sync`)}` : ""}
                 </p>
               )}
               {p.problem && <p className="small games-problem" role="alert">{p.problem}</p>}
@@ -150,6 +170,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
                 {p.canSync && <button type="button" className="primary" disabled={p.running} onClick={() => syncNow(p)}>{L("סנכרן עכשיו", "Sync now")}</button>}
                 {(p.pending > 0 || p.clashes > 0) && <button type="button" onClick={() => setSheet({ project: p })}>{L("הצג ממתינים", "View pending")}</button>}
                 <button type="button" onClick={() => setCode({ engine: p.engine, path: p.path, name: p.name })}>{"</>"} {L("קוד", "Code")}</button>
+                <button type="button" onClick={() => setInspect(p)}>🔧 {L("מפקח", "Inspector")}</button>
                 <button type="button" onClick={() => setSearch({ project: p, q: "" })} aria-label={L(`חיפוש ב-${p.name}`, `Search ${p.name}`)}>🔍 {L("חיפוש", "Search")}</button>
                 <button type="button" onClick={() => setCps({ project: p })} aria-label={L(`נקודות שחזור של ${p.name}`, `Checkpoints of ${p.name}`)}>↺ {L("שחזור", "Restore")}</button>
                 <a className="button" href={p.page}>{L("לעמוד הפרויקט", "Project page")}</a>
@@ -177,7 +198,7 @@ function SyncSheet({ project, onClose, onChange }: { project?: Project; onClose:
   const [clashes, setClashes] = useState<Clash[] | null>(null);
   const [waiting, setWaiting] = useState<Array<Waiting & { engine: "unreal" | "unity" }>>([]);
   const [busy, setBusy] = useState("");
-  const mineOf = (engine: "unreal" | "unity", proj: string) => !project || (project.engine === engine && (engine === "unity" ? same(proj, project.path) : proj.toLowerCase() === project.name.toLowerCase()));
+  const mineOf = (engine: "unreal" | "unity" | "godot", proj: string) => !project || (project.engine === engine && (engine === "unreal" ? proj.toLowerCase() === project.name.toLowerCase() : same(proj, project.path)));
   const load = () => {
     void api<{ conflicts: Clash[] }>("/api/games/conflicts").then((r) => setClashes(r.conflicts.filter((c) => mineOf(c.engine, c.key))), (e: Error) => { toast(e.message); setClashes([]); });
     void Promise.all((["unreal", "unity"] as const).map((engine) => api<Waiting[]>(`/api/${engine}/queue`).then((q) => q.map((x) => ({ ...x, engine })), () => [])))
@@ -192,7 +213,7 @@ function SyncSheet({ project, onClose, onChange }: { project?: Project; onClose:
       onChange();
     }, (e: Error) => toast(e.message)).finally(() => setBusy(""));
   };
-  const app = (e: "unreal" | "unity") => (e === "unity" ? "Unity" : "Unreal");
+  const app = (e: "unreal" | "unity" | "godot") => (e === "unity" ? "Unity" : e === "godot" ? "Godot" : "Unreal");
   return (
     <div className="hsheet-wrap" onClick={onClose}>
       <div className="hsheet games-sheet" role="dialog" aria-modal="true" aria-label={L("סנכרון והתנגשויות", "Sync and conflicts")} onClick={(e) => e.stopPropagation()}>
@@ -217,7 +238,9 @@ function SyncSheet({ project, onClose, onChange }: { project?: Project; onClose:
               </div>
               <div className="games-side">
                 <b className="small">{L(`של ${app(c.engine)} (נשמר ${when(c.engineAt)})`, `${app(c.engine)}'s (saved ${when(c.engineAt)})`)}</b>
-                {c.diff ? (
+                {c.value ? (
+                  <ul className="mono small" dir="ltr">{c.value.engine.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                ) : c.diff ? (
                   <ul className="mono small" dir="ltr">
                     {c.diff.added.map((n, i) => <li key={`a${i}`} className="good">+ {n}</li>)}
                     {c.diff.removed.map((n, i) => <li key={`r${i}`} className="bad">− {n}</li>)}

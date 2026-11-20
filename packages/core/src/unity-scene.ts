@@ -34,7 +34,7 @@ export interface UnityObject {
 }
 
 /** Unity's class ids for the components the outliner names (the Inspector's names). */
-const COMPONENTS: Record<string, string> = {
+export const COMPONENTS: Record<string, string> = {
   "20": "Camera", "23": "MeshRenderer", "33": "MeshFilter", "50": "Rigidbody2D", "54": "Rigidbody", "58": "CircleCollider2D", "60": "PolygonCollider2D", "61": "BoxCollider2D", "64": "MeshCollider", "65": "BoxCollider", "70": "CapsuleCollider2D", "81": "AudioListener", "82": "AudioSource", "95": "Animator", "108": "Light", "135": "SphereCollider", "136": "CapsuleCollider", "137": "SkinnedMeshRenderer", "143": "CharacterController", "195": "NavMeshAgent", "198": "ParticleSystem", "212": "SpriteRenderer", "222": "CanvasRenderer", "223": "Canvas", "156049354": "Grid", "483693784": "TilemapRenderer", "1839735485": "Tilemap",
 };
 

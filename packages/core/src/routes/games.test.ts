@@ -30,7 +30,7 @@ test("Game projects: a Unity project with a clash, both sides on the sheet, and 
   const unity = new UnityCli(config.unity, async () => undefined, run, join(home, "data", "unity"));
   const unreal = new UnrealBridge(join(home, "data", "unreal"));
   const sent: Note[] = [];
-  const s = { unity, unreal, config, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async (n: Note) => { sent.push(n); return []; } } } as unknown as KesherServices;
+  const s = { unity, unreal, config, paths: { root: join(home, "data") }, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async (n: Note) => { sent.push(n); return []; } } } as unknown as KesherServices;
   const oldHome = process.env.HOME;
   process.env.HOME = home;
   const app = Fastify();
@@ -73,7 +73,7 @@ test("Game projects: checkpoints listed, compared, restored, and the limits save
   const store = new GameCheckpoints(() => join(home, "heavy", "game-checkpoints"), () => config.gameCheckpoints);
   const unreal = new UnrealBridge(join(home, "data", "unreal"));
   const unity = new UnityCli(config.unity, async () => undefined, async () => ({ code: 1, stdout: "", stderr: "" }), join(home, "data", "unity"));
-  const s = { unity, unreal, config, gameCheckpoints: store, saveConfig: async () => undefined, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async () => [] } } as unknown as KesherServices;
+  const s = { unity, unreal, config, paths: { root: join(home, "data") }, gameCheckpoints: store, saveConfig: async () => undefined, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async () => [] } } as unknown as KesherServices;
   const oldHome = process.env.HOME;
   process.env.HOME = home;
   const app = Fastify();

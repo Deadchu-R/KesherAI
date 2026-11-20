@@ -4252,6 +4252,28 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-cp-limits label { gap: 6px; align-items: center; }
 .games-cp-limits input[type="number"] { width: 6.5em; min-height: 40px; }
 .games-cp-limits button { min-height: 40px; }
+/* The inspector with the engine closed (engine/GameInspector.tsx) */
+.games-inspector { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.games-inspector input[type="search"] { width: 100%; min-height: 44px; box-sizing: border-box; }
+.games-insp-head { gap: 8px; align-items: center; min-width: 0; }
+.games-insp-pending { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; border: 1px solid #5a4a1f; color: var(--warn); }
+.games-insp-pending button { min-height: 40px; }
+.games-insp-objs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.games-insp-objs > li { min-width: 0; }
+.games-insp-objs .games-cp-head { border: 1px solid var(--border); border-radius: 10px; }
+.games-insp-comp { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 8px; background: var(--bg); min-width: 0; }
+.games-insp-fields { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.games-insp-field { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; align-items: baseline; padding: 2px 0; }
+.games-insp-field dt, .games-insp-field dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+.games-insp-field.pending dd b { color: var(--warn); }
+.games-insp-field button.ghost { min-width: 32px; min-height: 32px; }
+.games-insp-edit { gap: 6px; }
+.games-insp-edit input { flex: 1 1 8em; min-width: 0; min-height: 40px; }
+.games-insp-edit button { min-height: 40px; }
+@media (max-width: 480px) {
+  /* A 390 px phone: the name above its value, so long vectors still fit. */
+  .games-insp-field { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 4px 0; border-bottom: 1px solid var(--border); }
+}
 .games-code-head { gap: 8px; align-items: center; }
 .games-code-head h1 { margin: 0; overflow-wrap: anywhere; }
 .game-source-lang { flex: none; min-width: 3.2em; font-size: 11px; opacity: .7; }

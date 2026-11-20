@@ -580,6 +580,18 @@ export class UnrealBridge {
   }
 
   /**
+   * A Blueprint's saved copy only (never asks the editor, never starts one), for the inspector with Unreal closed.
+   *
+   * @param path - The Blueprint's object path.
+   * @returns The copy and when it was saved, or undefined when there is none.
+   */
+  async savedGraph(path: string): Promise<{ graph: BlueprintJson; savedAt: string } | undefined> {
+    const project = await this.project();
+    if (!project) return undefined;
+    return this.readJson<{ graph: BlueprintJson; savedAt: string }>(join(this.projectDir(project), "graphs", fileFor(path)));
+  }
+
+  /**
    * Keeps a graph read from the headless editor as the saved copy the page shows.
    *
    * @param path - The Blueprint's object path.
