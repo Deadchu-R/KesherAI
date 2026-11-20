@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
+import { clampInt, hierarchyCs, unityEditTools } from "./unity-edit-tools.js";
 
 /**
  * Unity in the chat, through Unity's own CLI (`unity`), the way Unity
@@ -24,29 +25,30 @@ const cut = (s: string) => (s.length > MAX_OUT ? `${s.slice(0, MAX_OUT)}\n… (c
 const WORDS = /^[a-z0-9_.-]{1,60}( [a-z0-9_.-]{1,60}){0,3}$/i;
 const FLAG = /^[a-z_][a-z0-9_-]{0,60}$/i;
 
-/** The tools that tool search must never hide while a Unity project is in use. */
+/** The tools that tool search must never hide while a Unity project is in use (sorted by name). */
 export const UNITY_TOOL_NAMES = [
-  "unity_status",
-  "unity_list_scripts",
-  "unity_read_script",
-  "unity_write_script",
-  "unity_recompile",
-  "unity_console",
-  "unity_scene",
-  "unity_create_gameobject",
   "unity_add_component",
-  "unity_find_commands",
-  "unity_command",
-  "unity_script_eval",
-  "unity_screenshot",
-  "unity_performance",
   "unity_build",
+  "unity_command",
+  "unity_console",
+  "unity_create_gameobject",
+  "unity_find_commands",
+  "unity_inspect_object",
   "unity_install_platform",
+  "unity_list_scripts",
+  "unity_performance",
+  "unity_read_script",
+  "unity_recompile",
+  "unity_scene",
+  "unity_screenshot",
+  "unity_script_eval",
+  "unity_status",
+  "unity_write_script",
 ] as const;
 
 /** The workflow, for the model (Unity's own guidance for agents, in short). */
 export const UNITY_NOTE =
-  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene (hierarchy) to see what exists. 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look; unity_performance for FPS, draw calls and memory (in Play Mode, before and after an optimization). 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. For materials, particle effects or level dressing, first load the skill: use_skill materials-specialist / vfx-specialist / level-design-specialist. At the end, list exactly what changed (files and scene objects).";
+  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene hierarchy (a compact tree: names, #ids, child counts; narrow it with depth, filter or root) to see what exists, then unity_inspect_object on the one object you need (its components and fields). 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too), then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look; unity_performance for FPS, draw calls and memory (in Play Mode, before and after an optimization). 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. For materials, particle effects or level dressing, first load the skill: use_skill materials-specialist / vfx-specialist / level-design-specialist. At the end, list exactly what changed (files and scene objects).";
 
 const MAX_TEXT = 300_000;
 const CODE_EXT = /\.(cs|shader|hlsl|cginc|compute|uss|uxml|tss|asmdef|asmref)$/i;
@@ -271,8 +273,18 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
       risk: "write",
       spec: {
         name: "unity_scene",
-        description: "The open scene: action 'hierarchy' lists its GameObjects with their components; 'save' saves it (give path, e.g. Assets/Scenes/Main.unity, for a new unsaved scene).",
-        inputSchema: { type: "object", properties: { action: { type: "string", enum: ["hierarchy", "save"] }, path: { type: "string" } }, required: ["action"] },
+        description: "The open scene: action 'hierarchy' lists its GameObjects as a compact tree (name, #id, child count, inactive; no components: unity_inspect_object shows one object's); 'save' saves it (give path, e.g. Assets/Scenes/Main.unity, for a new unsaved scene).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["hierarchy", "save"] },
+            path: { type: "string" },
+            depth: { type: "number", description: "hierarchy: levels to list (default 4, at most 20); deeper children are counted." },
+            filter: { type: "string", description: "hierarchy: only objects whose name contains this, at any depth, with their full path." },
+            root: { type: "string", description: "hierarchy: list under this object (#id or path) only." },
+          },
+          required: ["action"],
+        },
       },
       run: async (input) => {
         need();
@@ -285,7 +297,9 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
           }
           return { output: await evalCs(SAVE_SCENE(target)) };
         }
-        return { output: cut(await evalCs(HIERARCHY)) };
+        const root = String(input.root ?? "").trim().slice(0, 300);
+        const filter = String(input.filter ?? "").trim().slice(0, 80);
+        return { output: cut(await evalCs(hierarchyCs({ depth: clampInt(input.depth, 0, 20, 4), filter, root, limit: 300 }))) };
       },
     },
     {
@@ -524,6 +538,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         return { output: cut(await evalCs(PERFORMANCE)) };
       },
     },
+    ...unityEditTools({ project, need, evalCs: async (code) => cut(await evalCs(code)) }),
     {
       risk: "read",
       spec: {
@@ -609,21 +624,6 @@ var heavy = new System.Collections.Generic.List<System.Tuple<int, string>>();
 foreach (var r in renderers) { var f = r.GetComponent<UnityEngine.MeshFilter>(); if (f != null && f.sharedMesh != null && f.sharedMesh.isReadable) heavy.Add(System.Tuple.Create(f.sharedMesh.triangles.Length / 3, r.name)); }
 heavy.Sort((a, b) => b.Item1.CompareTo(a.Item1));
 if (heavy.Count > 0) { sb.Append("Most triangles:"); for (var i = 0; i < System.Math.Min(5, heavy.Count); i++) sb.Append(" " + heavy[i].Item2 + " (" + heavy[i].Item1 + ")"); sb.AppendLine(); }
-return sb.ToString();`;
-
-const HIERARCHY = `var sb = new System.Text.StringBuilder(); var count = 0;
-var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-sb.AppendLine("Scene: " + (scene.path == "" ? "(new, never saved)" : scene.path) + (scene.isDirty ? " (unsaved changes)" : ""));
-System.Action<UnityEngine.Transform, int> walk = null;
-walk = (t, d) => {
-  if (count++ >= 400) return;
-  var parts = new System.Collections.Generic.List<string>();
-  foreach (var c in t.GetComponents<UnityEngine.Component>()) { if (c == null) parts.Add("Missing script"); else if (!(c is UnityEngine.Transform)) parts.Add(c.GetType().Name); }
-  sb.AppendLine(new string(' ', d * 2) + t.name + (t.gameObject.activeSelf ? "" : " (inactive)") + (parts.Count > 0 ? " [" + string.Join(", ", parts) + "]" : ""));
-  if (d < 10) foreach (UnityEngine.Transform ch in t) walk(ch, d + 1);
-};
-foreach (var r in scene.GetRootGameObjects()) walk(r.transform, 0);
-if (count >= 400) sb.AppendLine("… (first 400 objects)");
 return sb.ToString();`;
 
 const SAVE_SCENE = (path: string) => `var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
