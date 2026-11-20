@@ -27,7 +27,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.23");
+static const TCHAR* BridgeVersion = TEXT("0.1.24");
 
 void FKesherAIBridgeModule::StartupModule()
 {

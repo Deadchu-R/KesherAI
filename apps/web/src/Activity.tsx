@@ -21,8 +21,8 @@ export interface Step {
 
 // What each tool does, for the folded line ("Wrote 2 files, ran 3 commands, used your computer 4×").
 // Game-engine tools count like the code tools they resemble (they were all "used a tool" before).
-const WRITE = /^(write_file|edit_file|unreal_write_source|unity_write_script|unity_create_gameobject|unity_add_component|(unreal|unity)_change_graph)$/;
-const READ = /^(read_file|list_files|search|unreal_(read_source|list_source|status|plugins|read_graph|list_graphs)|unity_(read_script|list_scripts|status|scene|console|find_commands|read_graph|list_graphs))$/;
+const WRITE = /^(write_file|edit_file|unreal_write_source|unity_write_script|unity_create_gameobject|unity_add_component|unity_modify_scene|unreal_apply_material|godot_edit|(unreal|unity)_change_graph)$/;
+const READ = /^(read_file|list_files|search|unreal_(read_source|list_source|status|plugins|read_graph|list_graphs|inspect_level)|unity_(read_script|list_scripts|status|scene|console|find_commands|read_graph|list_graphs))$/;
 const RUN = /^(run_command|build_executable|install_tool|check_tools|unreal_(compile|python|package|open_editor|port_plugin|create_project)|unity_(build|command|script_eval|install_platform)|android_run_on_phone)$/;
 const WEB = /^(web_search|web_fetch|download_file)$/;
 const COMPUTER = /^(computer_|browser_)/;
@@ -68,10 +68,12 @@ export function stepLabel(step: Step): string {
     android_run_on_phone: "stepOnPhone",
     unreal_change_graph: "stepGraph",
     unity_change_graph: "stepGraph",
+    unreal_inspect_level: "stepLevel",
+    unreal_apply_material: "stepMaterial",
     computer_screenshot: "stepScreenshot",
     unity_screenshot: "stepScreenshot",
   };
-  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image", "target", "package") || (n === "list_files" ? t("theFolder") : "");
+  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image", "target", "package", "actor", "level") || (n === "list_files" ? t("theFolder") : "");
   const key = keyFor[n] ?? (COMPUTER.test(n) ? "stepComputer" : undefined);
   if (key === "stepComputer") return t(key, { what: n.replace(/^(computer|browser)_/, "").replace(/_/g, " ") });
   return key ? t(key, { what }) : `${n}${what ? `: ${what}` : ""}`;

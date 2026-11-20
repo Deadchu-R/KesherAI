@@ -3,6 +3,7 @@
 #include "KesherLevel.h"
 
 #include "AssetRegistry/AssetRegistryModule.h"
+#include "Components/MeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/Level.h"
@@ -11,6 +12,7 @@
 #include "FileHelpers.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/WorldSettings.h"
+#include "Materials/MaterialInterface.h"
 #include "HAL/FileManager.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -47,6 +49,32 @@ namespace
 	{
 		TArray<TSharedPtr<FJsonValue>> Out;
 		for (double D : List) Out.Add(MakeShared<FJsonValueNumber>(D));
+		return Out;
+	}
+
+	/** An actor's mesh components and the material in each slot (slot name, or its index when unnamed). */
+	TArray<TSharedPtr<FJsonValue>> MaterialSlots(const AActor* Actor)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		TInlineComponentArray<UMeshComponent*> Meshes(Actor);
+		for (const UMeshComponent* M : Meshes)
+		{
+			if (!M || Out.Num() >= 8) continue;
+			const TArray<FName> Names = M->GetMaterialSlotNames();
+			TArray<TSharedPtr<FJsonValue>> Slots;
+			for (int32 I = 0; I < M->GetNumMaterials() && I < 32; ++I)
+			{
+				TSharedRef<FJsonObject> Slot = MakeShared<FJsonObject>();
+				Slot->SetStringField(TEXT("slot"), Names.IsValidIndex(I) && !Names[I].IsNone() ? Names[I].ToString() : FString::FromInt(I));
+				const UMaterialInterface* Mat = M->GetMaterial(I);
+				Slot->SetStringField(TEXT("material"), Mat ? Mat->GetPathName() : FString());
+				Slots.Add(MakeShared<FJsonValueObject>(Slot));
+			}
+			TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
+			Item->SetStringField(TEXT("component"), M->GetName());
+			Item->SetArrayField(TEXT("materials"), Slots);
+			Out.Add(MakeShared<FJsonValueObject>(Item));
+		}
 		return Out;
 	}
 
@@ -134,6 +162,9 @@ namespace KesherLevel
 				if (C && Parts.Num() < 40) Parts.Add(MakeShared<FJsonValueString>(C->GetClass()->GetName()));
 			}
 			Item->SetArrayField(TEXT("components"), Parts);
+			// The materials of its meshes (unreal_inspect_level, and the old value on unreal_apply_material's card).
+			const TArray<TSharedPtr<FJsonValue>> Slots = MaterialSlots(Actor);
+			if (Slots.Num()) Item->SetArrayField(TEXT("slots"), Slots);
 			// The folder it sits in in the Outliner.
 			if (!Actor->GetFolderPath().IsNone()) Item->SetStringField(TEXT("folder"), Actor->GetFolderPath().ToString());
 			// The shape: the static mesh of its root (a Static Mesh Actor), or of its first mesh component.
@@ -253,6 +284,51 @@ namespace KesherLevel
 		Out->SetNumberField(TEXT("moved"), Done);
 		Out->SetArrayField(TEXT("clashes"), Clashes);
 		Out->SetArrayField(TEXT("missing"), Missing);
+		Out->SetBoolField(TEXT("saved"), bSaved);
+		return Out;
+	}
+
+	TSharedRef<FJsonObject> SetMaterial(const FString& Path, const FString& ActorKey, const FString& ComponentName, const FString& SlotKey, const FString& MaterialPath, bool bSave)
+	{
+		UWorld* World = LoadLevel(Path);
+		if (!World || !World->PersistentLevel) return LevelError(TEXT("No level at ") + Path);
+		AActor* Actor = nullptr;
+		for (AActor* A : World->PersistentLevel->Actors)
+		{
+			if (A && (A->GetFName().ToString() == ActorKey || A->GetActorLabel() == ActorKey)) { Actor = A; break; }
+		}
+		if (!Actor) return LevelError(TEXT("No actor ") + ActorKey + TEXT(" in ") + Path);
+		UMeshComponent* Mesh = nullptr;
+		TInlineComponentArray<UMeshComponent*> Meshes(Actor);
+		for (UMeshComponent* M : Meshes)
+		{
+			if (M && (ComponentName.IsEmpty() || M->GetName() == ComponentName)) { Mesh = M; break; }
+		}
+		if (!Mesh) return LevelError(ComponentName.IsEmpty() ? ActorKey + TEXT(" has no mesh component.") : TEXT("No mesh component ") + ComponentName + TEXT(" on ") + ActorKey);
+		int32 Index = INDEX_NONE;
+		if (SlotKey.IsNumeric()) Index = FCString::Atoi(*SlotKey);
+		else Index = Mesh->GetMaterialIndex(FName(*SlotKey));
+		if (Index < 0 || Index >= Mesh->GetNumMaterials()) return LevelError(TEXT("No material slot ") + SlotKey + TEXT(" on ") + Mesh->GetName());
+		if (!MaterialPath.StartsWith(TEXT("/Game/")) && !MaterialPath.StartsWith(TEXT("/Engine/"))) return LevelError(TEXT("A material under /Game or /Engine."));
+		UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+		if (!Material) return LevelError(TEXT("No material or material instance at ") + MaterialPath);
+		const UMaterialInterface* Old = Mesh->GetMaterial(Index);
+		{
+			const FScopedTransaction Transaction(NSLOCTEXT("KesherAI", "ApplyMaterial", "KesherAI: apply a material"));
+			Actor->Modify();
+			Mesh->Modify();
+			Mesh->SetMaterial(Index, Material);
+			Actor->PostEditChange();
+		}
+		bool bSaved = false;
+		// The editor closed (the commandlet): the level (or the actor's own file) is saved now; open, she saves it.
+		if (bSave) bSaved = UEditorLoadingAndSavingUtils::SavePackages({Actor->GetPackage()}, false);
+		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+		Out->SetStringField(TEXT("actor"), Actor->GetActorLabel());
+		Out->SetStringField(TEXT("component"), Mesh->GetName());
+		Out->SetNumberField(TEXT("slot"), Index);
+		Out->SetStringField(TEXT("from"), Old ? Old->GetPathName() : FString());
+		Out->SetStringField(TEXT("to"), Material->GetPathName());
 		Out->SetBoolField(TEXT("saved"), bSaved);
 		return Out;
 	}

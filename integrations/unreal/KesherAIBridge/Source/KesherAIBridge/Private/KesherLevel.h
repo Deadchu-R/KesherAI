@@ -15,6 +15,7 @@
  * - Mesh: one static mesh's triangles (its lowest LOD, at most 30 000 triangles), for the stand-in to show its shape.
  * - Move: actors moved in KesherAI, as one undo step; one that moved in Unreal meanwhile is left and named. With the
  *   editor closed, the level is saved; with it open, it is left changed for her to save.
+ * - SetMaterial: a material in one slot of an actor's mesh (unreal_apply_material), saved the same way.
  */
 namespace KesherLevel
 {
@@ -22,4 +23,6 @@ namespace KesherLevel
 	TSharedRef<FJsonObject> Read(const FString& Path);
 	TSharedRef<FJsonObject> Mesh(const FString& Path);
 	TSharedRef<FJsonObject> Move(const FString& Path, const TArray<TSharedPtr<FJsonValue>>& Moves, bool bSave);
+	/** One material slot of an actor's mesh component set to a material or material instance, as one undo step. */
+	TSharedRef<FJsonObject> SetMaterial(const FString& Path, const FString& Actor, const FString& Component, const FString& Slot, const FString& Material, bool bSave);
 }

@@ -22,7 +22,8 @@ import { gameFindTool } from "./game-index.js";
 import { findGameProjects } from "./game-projects.js";
 import { homedir } from "node:os";
 import type { GameCheckpoints, GameEngine } from "./game-checkpoints.js";
-import { unityAssetFile, unrealAssetFile } from "./game-sync.js";
+import { unityAssetFile, unrealAssetFile, unrealLevelFile } from "./game-sync.js";
+import { unrealLevelTools } from "./unreal-level-tools.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -97,6 +98,14 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     tools.push(...unrealTools(p.unreal, join(deps.outputsDir, "..", "logs"), p.jobs(), p.refresh, phones).filter((t) => /^unreal_(status|create_project|use_project)$/.test(t.spec.name)));
     notes.push("Unreal Engine is installed here: for Unreal work start with unreal_status, then unreal_create_project or unreal_use_project (the other Unreal tools and their guide come after that).");
   }
+  // Unreal levels: their actors, and a material on an actor's mesh (live through the Bridge, or with Unreal closed).
+  if (p.unreal.project || deps.unreal?.connected) {
+    tools.push(...unrealLevelTools({
+      ...(deps.unreal ? { bridge: deps.unreal } : {}),
+      projectDir: () => (deps.unreal?.projectFile ? dirname(deps.unreal.projectFile) : p.unreal.project ? (/\.uproject$/i.test(p.unreal.project) ? dirname(p.unreal.project) : p.unreal.project) : undefined),
+    }));
+    notes.push("unreal_inspect_level lists a level's actors (labels, classes, transforms, mesh slots and materials), also with Unreal closed; unreal_apply_material puts a material in an actor's mesh slot (the user sees the old → new material before it runs).");
+  }
   // A game project in use: running its Android build on the user's phone and reading why it closed.
   if (p.unreal.project || deps.unity?.activeProject) {
     tools.push(...androidPhoneTools());
@@ -149,6 +158,8 @@ export function engineWrites(name: string, input: Record<string, unknown>, dirs:
       return one("unity", dirs.unity, dirs.unity ? unityAssetFile(dirs.unity, path) : undefined);
     case "unreal_change_graph":
       return one("unreal", dirs.unreal, dirs.unreal ? unrealAssetFile(dirs.unreal, path) : undefined);
+    case "unreal_apply_material":
+      return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim()) : undefined);
     case "unreal_write_source":
       return one("unreal", dirs.unreal, path && dirs.unreal ? join(dirs.unreal, path) : undefined);
     case "godot_file":

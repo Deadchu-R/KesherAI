@@ -144,6 +144,15 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 		const TArray<TSharedPtr<FJsonValue>>* Moves = nullptr;
 		if (In->TryGetArrayField(TEXT("moves"), Moves)) Result = KesherLevel::Move(Path, *Moves, bOffline);
 	}
+	else if (Cmd == TEXT("level_material"))
+	{
+		FString Actor, Component, Slot, Material;
+		In->TryGetStringField(TEXT("actor"), Actor);
+		In->TryGetStringField(TEXT("component"), Component);
+		In->TryGetStringField(TEXT("slot"), Slot);
+		In->TryGetStringField(TEXT("material"), Material);
+		Result = KesherLevel::SetMaterial(Path, Actor, Component, Slot.IsEmpty() ? FString(TEXT("0")) : Slot, Material, bOffline);
+	}
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

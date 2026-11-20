@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import type WebSocket from "ws";
-import { batchFiles, nodeSig, sortForSync, unrealAssetFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
+import { batchFiles, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
 
 /**
  * The link to the Unreal Editor (the KesherAI Bridge plugin,
@@ -17,7 +17,7 @@ import { batchFiles, nodeSig, sortForSync, unrealAssetFile, type ClashChoice, ty
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.23";
+export const BRIDGE_VERSION = "0.1.24";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -40,8 +40,12 @@ export interface QueuedEdit {
   ops: unknown[];
   /** What the user asked for, in words. */
   request?: string;
-  /** "create": make this Blueprint first (it was made in KesherAI with Unreal closed). */
-  kind?: "create";
+  /**
+   * "create": make this Blueprint first (it was made in KesherAI with Unreal closed). "material": a material for a
+   * level actor's mesh slot (unreal_apply_material with Unreal closed): `path` is the level, `ops` has one
+   * { op: "material", actor, component, slot, material }.
+   */
+  kind?: "create" | "material";
   /** For "create": the parent class (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, UserWidget…). */
   parent?: string;
   at: string;
@@ -76,7 +80,7 @@ export interface HeadlessAnswer {
 }
 
 /** Commands the headless editor (the editor closed) can run. */
-const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move"]);
+const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move", "level_material"]);
 
 /** A stand-in answer kept on disk, unless it is an empty level list (a scan that was not ready, kept by 0.6.383). */
 const usable = <T>(cmd: string, v: T | undefined): T | undefined => (cmd === "levels" && v && !(v as { levels?: unknown[] }).levels?.length ? undefined : v);
@@ -86,6 +90,13 @@ const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "leve
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
 const fileFor = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
+/** The file a queued change writes: a level's .umap for a material, else the Blueprint's .uasset. */
+const queuedFile = (dir: string, q: QueuedEdit) => (q.kind === "material" ? unrealLevelFile(dir, q.path) : unrealAssetFile(dir, q.path));
+/** A queued material change's arguments for the `level_material` command. */
+function materialArgs(q: QueuedEdit): Record<string, string> {
+  const o = (q.ops[0] ?? {}) as Record<string, unknown>;
+  return { actor: String(o.actor ?? ""), component: String(o.component ?? ""), slot: String(o.slot ?? "0"), material: String(o.material ?? "") };
+}
 
 /** The bridge. One per server. */
 export class UnrealBridge {
@@ -325,6 +336,12 @@ export class UnrealBridge {
     for (const q of apply) {
       try {
         // A Blueprint made in KesherAI while Unreal was closed: made now, before the changes that follow it in the queue.
+        if (q.kind === "material") {
+          await this.request("level_material", { path: q.path, ...materialArgs(q) }, 120_000);
+          await this.unqueue(q.id);
+          applied++;
+          continue;
+        }
         if (q.kind === "create") {
           await this.request("create", { path: q.path, parent: q.parent ?? "Actor" }, 60_000);
           await this.unqueue(q.id);
@@ -355,7 +372,7 @@ export class UnrealBridge {
     const file = this.lastProjectFile ?? this.info?.projectFile;
     if (!edits.length || !file || !this.beforeSync) return;
     const dir = dirname(file);
-    const files = batchFiles(edits, (q) => unrealAssetFile(dir, q.path));
+    const files = batchFiles(edits, (q) => queuedFile(dir, q));
     if (files.length) await this.beforeSync({ engine: "unreal", project: dir, name: project, files, count: edits.length }).catch(() => undefined);
   }
 
@@ -369,7 +386,7 @@ export class UnrealBridge {
     const all = await this.queue();
     const file = this.lastProjectFile ?? this.info?.projectFile;
     const dir = file ? dirname(file) : undefined;
-    const r = await sortForSync(all.filter((q) => q.project === project), (q) => (dir ? unrealAssetFile(dir, q.path) : undefined));
+    const r = await sortForSync(all.filter((q) => q.project === project), (q) => (dir ? queuedFile(dir, q) : undefined));
     if (r.newClashes.length) await this.writeJson(join(this.dir, "queue.json"), all);
     return r;
   }
@@ -504,6 +521,33 @@ export class UnrealBridge {
     } else r = await this.request<Moved>("level_move", { path, moves }, 900_000);
     // The copy kept is now old: the next read takes the level again.
     const project = other ? basename(projectFile!, ".uproject") : await this.project();
+    if (project) await rm(join(this.projectDir(project), "standin", `level-${fileFor(path)}`), { force: true }).catch(() => undefined);
+    return r;
+  }
+
+  /**
+   * The stand-in's copy of a read kept here, without asking any editor (fast: for approval cards).
+   *
+   * @param cmd - levels or level.
+   * @param path - The level ("" for levels).
+   * @returns The copy, or undefined when none is kept.
+   */
+  async keptStandIn<T extends object>(cmd: "levels" | "level", path = ""): Promise<T | undefined> {
+    const project = await this.project();
+    return project ? usable(cmd, await this.readJson<T>(join(this.projectDir(project), "standin", `${cmd}-${fileFor(path)}`))) : undefined;
+  }
+
+  /**
+   * A material in one slot of a level actor's mesh (unreal_apply_material), in the open editor as one undo step (left
+   * for her to save). The kept copy of the level is dropped, so the next read shows the new material.
+   *
+   * @param path - The level (/Game/…).
+   * @param args - The actor (label or id), mesh component ("" = the first), slot (index or name) and material path.
+   * @returns What the editor did: the actor, component, slot index, the old and new material, and whether it saved.
+   */
+  async applyMaterial(path: string, args: { actor: string; component: string; slot: string; material: string }): Promise<{ actor: string; component: string; slot: number; from: string; to: string; saved: boolean }> {
+    const r = await this.request<{ actor: string; component: string; slot: number; from: string; to: string; saved: boolean }>("level_material", { path, ...args }, 120_000);
+    const project = await this.project();
     if (project) await rm(join(this.projectDir(project), "standin", `level-${fileFor(path)}`), { force: true }).catch(() => undefined);
     return r;
   }
@@ -645,9 +689,11 @@ export class UnrealBridge {
       const commands: Array<Record<string, unknown>> = [];
       for (const q of mine) {
         if (q.kind === "create") commands.push({ cmd: "create", path: q.path, parent: q.parent ?? "Actor" });
+        else if (q.kind === "material") commands.push({ cmd: "level_material", path: q.path, ...materialArgs(q) });
         else commands.push({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops });
       }
-      const paths = [...new Set(mine.map((q) => q.path))];
+      // Blueprints are compiled, saved and read again; a level is saved by its own command.
+      const paths = [...new Set(mine.filter((q) => q.kind !== "material").map((q) => q.path))];
       for (const path of paths) commands.push({ cmd: "compile", path }, { cmd: "save", path });
       for (const path of paths) commands.push({ cmd: "graph", path });
       const answers = await this.offline(commands);
@@ -658,6 +704,8 @@ export class UnrealBridge {
         if (a && a.ok !== false) {
           applied++;
           await this.unqueue(mine[i]!.id);
+          // A level changed: its kept copy is old now (the next read takes it again).
+          if (mine[i]!.kind === "material") await rm(join(this.projectDir(project), "standin", `level-${fileFor(mine[i]!.path)}`), { force: true }).catch(() => undefined);
         } else failed++;
       }
       // The graphs read at the end become the saved copies the page shows.

@@ -107,6 +107,7 @@ export function opsSummary(ops: unknown[], base: Record<string, string> = {}): s
       case "delete": return `− ${name(o.node)}`;
       case "move": return `↔ ${name(o.node)}`;
       case "comment": return `💬 ${name(o.node)}`;
+      case "material": return `◧ ${String(o.actor ?? "")} [${String(o.slot ?? "0")}]: ${String(o.material ?? "").split("/").pop() ?? ""}`;
       default: return String(o.op ?? "?");
     }
   });
@@ -123,6 +124,18 @@ export function unrealAssetFile(projectDir: string, objectPath: string): string 
   const m = /^\/Game\/([^.]+)(?:\.[^/]*)?$/.exec(objectPath);
   if (!m || m[1]!.split("/").some((p) => p === ".." || p === "")) return undefined;
   return join(projectDir, "Content", `${m[1]}.uasset`);
+}
+
+/**
+ * The file of an Unreal level's package in a project (/Game/Maps/Arena → Content/Maps/Arena.umap).
+ *
+ * @param projectDir - The folder with the .uproject.
+ * @param levelPath - The level's package or object path.
+ * @returns The file, or undefined for paths outside /Game.
+ */
+export function unrealLevelFile(projectDir: string, levelPath: string): string | undefined {
+  const file = unrealAssetFile(projectDir, levelPath);
+  return file?.replace(/\.uasset$/, ".umap");
 }
 
 /**
