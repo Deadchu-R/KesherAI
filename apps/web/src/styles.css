@@ -1472,8 +1472,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 /* Settings → Phone → Telegram */
 .telegram .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .telegram .dot.on { background: var(--good); }
-.cloud-hub .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-.cloud-hub .dot.on { background: var(--good); }
+.cloud-hub .dot, .tasks-sync .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.cloud-hub .dot.on, .tasks-sync .dot.on { background: var(--good); }
 .cloud-hub-url { display: flex; flex-direction: column; gap: 6px; }
 .cloud-hub-url input { min-width: 0; }
 .tg-steps { margin: 0; padding-inline-start: 20px; display: flex; flex-direction: column; gap: 4px; }
