@@ -2,7 +2,7 @@
  * {@link HubStore} on the Durable Object's SQLite (`ctx.storage.sql`). The schema is created on first use; every query
  * uses bound parameters.
  */
-import { cleanAgents, cleanOptIn, type HubDeviceKind, type SealedKind } from "../../../packages/shared/src/hub.js";
+import { cleanAgents, cleanDeviceKind, cleanOptIn, type SealedKind } from "../../../packages/shared/src/hub.js";
 import type { AgentEventRow, AuditRow, DeviceRow, HubStore, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
 import type { SqlStorage } from "./cf.js";
 
@@ -43,7 +43,7 @@ function toDevice(r: Row): DeviceRow {
   return {
     id: String(r.id),
     name: String(r.name),
-    kind: r.kind === "phone" ? "phone" : ("pc" as HubDeviceKind),
+    kind: cleanDeviceKind(r.kind),
     publicKey: String(r.public_key),
     tokenHash: String(r.token_hash),
     tokenIssuedAt: num(r.token_issued_at),
@@ -56,7 +56,7 @@ function toDevice(r: Row): DeviceRow {
   };
 }
 
-const toPairing = (r: Row): PairingRow => ({ codeHash: String(r.code_hash), pollHash: String(r.poll_hash), publicKey: String(r.public_key), kind: r.kind === "phone" ? "phone" : "pc", name: String(r.name), expiresAt: num(r.expires_at), approved: num(r.approved) === 1 });
+const toPairing = (r: Row): PairingRow => ({ codeHash: String(r.code_hash), pollHash: String(r.poll_hash), publicKey: String(r.public_key), kind: cleanDeviceKind(r.kind), name: String(r.name), expiresAt: num(r.expires_at), approved: num(r.approved) === 1 });
 const toAgentEvent = (r: Row): AgentEventRow => ({ seq: num(r.seq), to: String(r.recipient), from: String(r.sender), run: String(r.run), n: num(r.n), env: String(r.env), createdAt: num(r.created_at) });
 const toQueued = (r: Row): QueuedRow => ({ id: String(r.id), to: String(r.recipient), from: String(r.sender), kind: String(r.kind) as SealedKind, expiresAt: num(r.expires_at), env: String(r.env), createdAt: num(r.created_at) });
 

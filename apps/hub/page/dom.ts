@@ -107,3 +107,13 @@ export function when(t: number | string | undefined): string {
   if (days > 1 && days < 7) return `${d.toLocaleDateString(tag, { weekday: "long" })} ${time}`;
   return d.toLocaleDateString(tag, { day: "numeric", month: "short" }) + ` ${time}`;
 }
+
+/**
+ * A device kind's icon: a PC, a phone (or this page), or the Claude chat that develops KesherAI.
+ *
+ * @param kind - The device's kind (an unknown kind shows as a PC).
+ * @returns The icon.
+ */
+export function deviceIcon(kind: string | undefined): string {
+  return kind === "phone" ? "📱" : kind === "claude-chat" ? "💬" : "🖥";
+}

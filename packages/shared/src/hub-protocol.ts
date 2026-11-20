@@ -40,10 +40,28 @@ export const HUB_LIMITS = {
   /** A running agent's heartbeat, and how long without one before a viewer shows it as stale (the Cursor freeze lesson). */
   agentBeatMs: 25_000,
   agentStaleMs: 90_000,
+  /**
+   * A Claude-chat run (`tools/hub-report`) has no heartbeat: the lead reports start and end only, and its helper
+   * agents run for minutes, so it is shown as stale only after an hour without a report.
+   */
+  agentChatStaleMs: 3_600_000,
 } as const;
 
-/** What a paired device is. */
-export type HubDeviceKind = "pc" | "phone";
+/**
+ * What a paired device is. `claude-chat` is the Claude chat that develops KesherAI (a cloud container running
+ * `tools/hub-report`): it only reports its helper agents' activity; it never receives tasks or answers approvals.
+ */
+export type HubDeviceKind = "pc" | "phone" | "claude-chat";
+
+/**
+ * The device kind a pairing request asks for (anything unknown is a PC, as before the kind existed).
+ *
+ * @param x - Untrusted input.
+ * @returns The kind.
+ */
+export function cleanDeviceKind(x: unknown): HubDeviceKind {
+  return x === "phone" || x === "claude-chat" ? x : "pc";
+}
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
 export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task";
@@ -201,7 +219,7 @@ export interface HubInboxTask {
 // ---- live agent activity (docs/RESEARCH_LOG.md, "Live agent activity in the Kesher Cloud hub") ----
 
 /** Where an agent run comes from. */
-export type AgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud";
+export type AgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud" | "claude-chat";
 
 /** A run's state. `stale` is never sent: a viewer shows it when a going run's heartbeat stops for 90 seconds. */
 export type AgentRunStateName = "queued" | "running" | "waiting" | "done" | "failed" | "cancelled" | "stale";
@@ -233,7 +251,8 @@ export type ActivityEvent = { seq: number; t: number } & (
   | ({ type: "file" } & AgentFile)
   | { type: "usage"; tokensIn: number; tokensOut: number }
   | ({ type: "waiting" } & AgentWaiting)
-  | { type: "done"; steps: number; branch?: string; link?: string }
+  /** `summary`: a short result line the sender wrote itself (the Claude chat's report; at most 300 characters). */
+  | { type: "done"; steps: number; branch?: string; link?: string; summary?: string }
   | { type: "failed"; reason: string }
   | { type: "cancelled" }
 );
@@ -260,6 +279,8 @@ export interface AgentRunState {
   waiting?: AgentWaiting;
   branch?: string;
   link?: string;
+  /** The ended run's short result line (from its `done` event). */
+  summary?: string;
 }
 
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
@@ -489,7 +510,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
 
 const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
 const INBOX_EXECUTORS: readonly HubInboxExecutor[] = ["local", "antigravity", "claude"];
-const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
@@ -555,7 +576,7 @@ export function parseActivityEvent(x: unknown): ActivityEvent | null {
     }
     case "done": {
       const branch = str(e.branch, 200);
-      return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}) };
+      return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}), ...optStr("summary", e.summary, 300) };
     }
     case "failed":
       return { ...head, type: "failed", reason: str(e.reason, 200) };
@@ -599,5 +620,6 @@ export function parseAgentState(x: unknown, runId: string): AgentRunState | null
     ...(waiting ? { waiting } : {}),
     ...(branch ? { branch } : {}),
     ...(isSafeLink(s.link) ? { link: s.link } : {}),
+    ...optStr("summary", s.summary, 300),
   };
 }

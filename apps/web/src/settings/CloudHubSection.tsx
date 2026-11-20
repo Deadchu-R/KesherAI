@@ -190,7 +190,7 @@ export function CloudHubSection() {
               <h3>{L("מכשירים אחרים במרכז", "Other devices in the hub")}</h3>
               <ul className="device-list">
                 {s.devices.map((d) => (
-                  <li key={d.id} className="row"><span className={`dot ${d.online ? "on" : ""}`} aria-hidden="true" /> {d.kind === "pc" ? "🖥" : "📱"} {d.name} <span className="muted small">· {d.online ? L("מחובר", "Online") : L("כבוי", "Off")}</span></li>
+                  <li key={d.id} className="row"><span className={`dot ${d.online ? "on" : ""}`} aria-hidden="true" /> {d.kind === "pc" ? "🖥" : d.kind === "claude-chat" ? "💬" : "📱"} {d.name} <span className="muted small">· {d.online ? L("מחובר", "Online") : L("כבוי", "Off")}</span></li>
                 ))}
               </ul>
             </>

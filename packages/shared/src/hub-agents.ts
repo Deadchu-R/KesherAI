@@ -47,14 +47,16 @@ export function applyAgentBatch(cards: Map<string, AgentCard>, deviceId: string,
 }
 
 /**
- * The state to show now: a going run whose heartbeat stopped for {@link HUB_LIMITS.agentStaleMs} is `stale`.
+ * The state to show now: a going run whose heartbeat stopped for {@link HUB_LIMITS.agentStaleMs} is `stale` (a
+ * Claude-chat run, which has no heartbeat: after {@link HUB_LIMITS.agentChatStaleMs}).
  *
  * @param c - The card.
  * @param now - Now (ms).
  * @returns The state.
  */
 export function shownState(c: AgentCard, now: number): AgentRunStateName {
-  return GOING.has(c.state.state) && now - c.at > HUB_LIMITS.agentStaleMs ? "stale" : c.state.state;
+  const limit = c.state.source === "claude-chat" ? HUB_LIMITS.agentChatStaleMs : HUB_LIMITS.agentStaleMs;
+  return GOING.has(c.state.state) && now - c.at > limit ? "stale" : c.state.state;
 }
 
 /** Whether a run is still going (queued, running, waiting; a stale one counts as going). */

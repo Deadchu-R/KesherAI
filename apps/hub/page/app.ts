@@ -16,7 +16,7 @@
  */
 import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
 import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
-import { getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
+import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
@@ -367,12 +367,12 @@ function deviceRows(full: boolean): HTMLElement[] {
     // What this PC takes (its own opt-in), as one chip beside its agents.
     const takes = [d.optIn.acceptLocal && L("מקומי", "local"), d.optIn.acceptAntigravity && "Antigravity"].filter(Boolean).join(", ");
     const optIn = d.kind === "pc" ? [d.optIn.acceptTasks ? L("📥 מקבל משימות", "📥 Takes tasks") + (takes ? `: ${takes}` : "") : L("📥 לא מקבל משימות", "📥 Takes no tasks")] : [];
-    const sub = [d.kind === "pc" ? (d.version ? `KesherAI ${d.version}` : "") : me ? L("הדף הזה פתוח בו עכשיו", "This page is open on it now") : "", !d.online && d.lastSeen ? L("נראה לאחרונה ", "last seen ") + when(d.lastSeen) : "", full && fp ? L("טביעת אצבע ", "fingerprint ") + fp : ""].filter(Boolean).join(" · ");
+    const sub = [d.kind === "pc" ? (d.version ? `KesherAI ${d.version}` : "") : d.kind === "claude-chat" ? L("מדווח על הסוכנים של צ׳אט Claude", "Reports the Claude chat's agents") : me ? L("הדף הזה פתוח בו עכשיו", "This page is open on it now") : "", !d.online && d.lastSeen ? L("נראה לאחרונה ", "last seen ") + when(d.lastSeen) : "", full && fp ? L("טביעת אצבע ", "fingerprint ") + fp : ""].filter(Boolean).join(" · ");
     const why = offReason(d);
     return h(
       "div",
       { class: "dev" },
-      h("span", { class: "dev-ic", "aria-hidden": "true" }, d.kind === "pc" ? "🖥" : "📱"),
+      h("span", { class: "dev-ic", "aria-hidden": "true" }, deviceIcon(d.kind)),
       h(
         "div",
         { class: "grow min0" },
@@ -626,7 +626,7 @@ function pairTab(): HTMLElement {
         h("h3", null, L("2. השוו טביעת אצבע", "2. Compare the fingerprint")),
         h("span", { class: "sm lines" }, L("אותם 6 מספרים צריכים להופיע עכשיו גם על המסך של המכשיר החדש. כך המרכז לא יכול להחליף מפתח בלי שתשים לב.", "The same 6 digits must show on the new device's screen now. That way the hub cannot swap a key without you noticing.")),
         h("div", { class: "code6", dir: "ltr" }, app.peek.fingerprint),
-        h("div", { class: "row center mut sm" }, `${app.peek.kind === "pc" ? "🖥" : "📱"} ${app.peek.name}`),
+        h("div", { class: "row center mut sm" }, `${deviceIcon(app.peek.kind)} ${app.peek.name}`),
         h("div", { class: "row" }, h("button", { type: "button", class: "btn grow bad", onclick: () => { app.peek = undefined; app.pairCode = ""; render(); } }, L("לא תואם, בטל", "Does not match, cancel")), h("button", { type: "button", class: "btn pri grow", disabled: app.busy, onclick: () => void approveCode(code) }, L("תואם, חבר", "Matches, pair"))),
       )
     : null;

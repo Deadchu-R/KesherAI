@@ -13,7 +13,7 @@
  */
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSource, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
-import { h, L, when } from "./dom.js";
+import { deviceIcon, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
 
 /** What the agents view needs from the page. */
@@ -41,6 +41,7 @@ const SOURCE: Record<AgentSource, { icon: string; he: string; en: string }> = {
   inbox: { icon: "📥", he: "תיבת משימות", en: "Task inbox" },
   antigravity: { icon: "✦", he: "Antigravity", en: "Antigravity" },
   "claude-cloud": { icon: "✷", he: "Claude בענן", en: "Claude cloud" },
+  "claude-chat": { icon: "💬", he: "צ׳אט Claude", en: "Claude chat" },
 };
 
 const OP: Record<string, [string, string]> = { read: ["קרא", "read"], edit: ["ערך", "edited"], create: ["יצר", "created"], delete: ["מחק", "deleted"] };
@@ -111,7 +112,7 @@ function card(v: AgentsView, c: AgentCard, now: number, pc: HubPresence | undefi
   const st = shownState(c, now);
   const src = SOURCE[c.state.source];
   const key = `${c.deviceId}/${c.runId}`;
-  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : "";
+  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : (!isGoing(c) && c.state.summary) || "";
   return h(
     "div",
     { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
@@ -138,9 +139,12 @@ function cloudCard(v: AgentsView, t: PageTask): HTMLElement {
   );
 }
 
-/** A device's group header: name, on/off, last seen. */
+/** A device's group header: name, on/off, last seen (the Claude chat, which only connects to report: its last report). */
 function groupHead(name: string, icon: string, pc: HubPresence | undefined, count: number): HTMLElement {
   const on = pc?.online;
+  if (pc?.kind === "claude-chat") {
+    return h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, icon), h("b", null, name), pc.lastSeen ? h("span", { class: "sm mut" }, L("דיווח אחרון ", "last report ") + when(pc.lastSeen)) : null, h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(count)));
+  }
   return h(
     "div",
     { class: "row head wrap" },
@@ -175,7 +179,11 @@ export function agentsTab(v: AgentsView): HTMLElement {
   const rest = cards.filter((c) => c.state.state !== "waiting");
   const going = cards.filter(isGoing).length;
   const pcs = v.devices().filter((d) => d.kind === "pc");
-  const ids = [...new Set([...pcs.map((d) => d.id), ...rest.map((c) => c.deviceId)])];
+  // The Claude chat's runs are one group, however many chats paired (each chat pairs once); newest report first.
+  const chats = v.devices().filter((d) => d.kind === "claude-chat").sort((a, b) => Date.parse(b.lastSeen ?? "") - Date.parse(a.lastSeen ?? ""));
+  const isChat = (id: string) => chats.some((d) => d.id === id);
+  const chatRuns = rest.filter((c) => isChat(c.deviceId));
+  const ids = [...new Set([...pcs.map((d) => d.id), ...rest.map((c) => c.deviceId)])].filter((id) => !isChat(id));
   const cloud = cloudTasks(v, now);
   const empty = !cards.length && !cloud.length;
   return h(
@@ -194,6 +202,7 @@ export function agentsTab(v: AgentsView): HTMLElement {
         list.length ? h("div", { class: "alist" }, list.map((c) => card(v, c, now, pc))) : h("div", { class: "trow mut sm" }, pc && !pc.optIn.reportActivity ? L("המחשב הזה לא משתף פעילות סוכנים. במחשב: הגדרות › ענן Kesher › לשתף מה הסוכנים עושים.", "This PC does not share agent activity. On the PC: Settings › Kesher Cloud › Share what the agents do.") : L("אין סוכנים פעילים עכשיו.", "No agents running now.")),
       );
     }),
+    chats.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null,
     cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null,
     empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null,
   );
@@ -241,8 +250,8 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
     { class: "page" },
     back(v),
     h("div", { class: "row wrap" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow" }, s.title), stateTag(st)),
-    h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `🖥 ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)),
-    st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : st === "stale" ? h("div", { class: "note bad-note" }, L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null,
+    h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `${deviceIcon(pc?.kind)} ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)),
+    st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null,
     st !== "waiting" ? actions(v, c, pc) : null,
     h(
       "div",
@@ -253,6 +262,7 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
       fact("קבצים", "Files", String(s.files)),
     ),
     s.label && isGoing(c) ? h("div", { class: "sm" }, L("עכשיו: ", "Now: "), h("span", { class: "mono" }, s.label)) : null,
+    s.summary && !isGoing(c) ? h("section", { class: "card pad sm lines" }, s.summary) : null,
     s.fileNames.length ? h("section", { class: "sec" }, h("h3", { class: "sm" }, L(`קבצים שנגעו בהם (${s.files})`, `Files touched (${s.files})`)), h("ul", { class: "files" }, s.fileNames.map((f) => h("li", { class: "mono xs ell", dir: "ltr" }, f)))) : s.files ? h("div", { class: "mut sm" }, L(`נגע ב-${s.files} קבצים (השמות לא משותפים; במחשב: הגדרות › ענן Kesher).`, `Touched ${s.files} files (names are not shared; on the PC: Settings › Kesher Cloud).`)) : null,
     s.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono", dir: "ltr" }, s.branch)) : null,
     s.link && isSafeLink(s.link) ? h("a", { class: "btn", href: s.link, target: "_blank", rel: "noopener noreferrer" }, L("פתח ↗", "Open ↗")) : null,

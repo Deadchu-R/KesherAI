@@ -8,6 +8,7 @@
  */
 import {
   DEFAULT_OPT_IN,
+  cleanDeviceKind,
   exportPrivateJwk,
   generateHubKeys,
   HUB_LIMITS,
@@ -30,6 +31,12 @@ import { claudeTrigger, fireText, type ClaudeTrigger, type FireResult } from "./
 import { ownerCheck, type GoogleClaims } from "./google.js";
 import { LIMITS, RateLimiter } from "./rate-limit.js";
 import type { AuditRow, DeviceRow, HubStore } from "./store.js";
+
+/** A device's name when pairing gave none. */
+const DEFAULT_NAME: Record<HubDeviceKind, string> = { pc: "PC", phone: "Phone", "claude-chat": "Claude chat" };
+
+/** The Claude chat's fixed opt-in: it appears and reports agent activity, and accepts nothing. */
+const CLAUDE_CHAT_OPT_IN = { ...DEFAULT_OPT_IN, reportActivity: true } as const;
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -251,8 +258,8 @@ export class Hub {
     } catch {
       return fail(400, "A device key is needed.");
     }
-    const kind: HubDeviceKind = req.kind === "phone" ? "phone" : "pc";
-    const name = (typeof req.name === "string" ? req.name.trim() : "").slice(0, HUB_LIMITS.nameChars) || (kind === "pc" ? "PC" : "Phone");
+    const kind: HubDeviceKind = cleanDeviceKind(req.kind);
+    const name = (typeof req.name === "string" ? req.name.trim() : "").slice(0, HUB_LIMITS.nameChars) || DEFAULT_NAME[kind];
     const t = this.now();
     if (this.store.pairingCount(t) >= 20) return fail(429, "Too many pairings waiting.");
     const code = newCode();
@@ -318,7 +325,7 @@ export class Hub {
     const t = this.now();
     const deviceId = `d${randomB64url(12)}`;
     const token = `kh_${randomB64url(32)}`;
-    this.store.putDevice({ id: deviceId, name: p.name, kind: p.kind, publicKey: p.publicKey, tokenHash: await sha256Hex(token), tokenIssuedAt: t, createdAt: t, busy: false, optIn: { ...DEFAULT_OPT_IN }, agents: [] });
+    this.store.putDevice({ id: deviceId, name: p.name, kind: p.kind, publicKey: p.publicKey, tokenHash: await sha256Hex(token), tokenIssuedAt: t, createdAt: t, busy: false, optIn: { ...(p.kind === "claude-chat" ? CLAUDE_CHAT_OPT_IN : DEFAULT_OPT_IN) }, agents: [] });
     this.audit("pair-done", { deviceId, ipHash });
     this.broadcastPresence();
     return { status: "paired", deviceId, token, hubKey: (await this.ownKey())?.publicKey ?? "" };
@@ -563,8 +570,9 @@ export class Hub {
       case "hello":
       case "beat": {
         const next: DeviceRow = { ...d, busy: f.busy, agents: f.agents, ...(f.t === "hello" || f.optIn ? { optIn: f.optIn ?? d.optIn } : {}), ...(f.t === "hello" && f.version ? { version: f.version } : {}) };
-        // A phone's opt-in has no meaning (it is not a worker).
+        // A phone's opt-in has no meaning (it is not a worker); the Claude chat only reports activity, nothing else.
         if (next.kind === "phone") next.optIn = { ...DEFAULT_OPT_IN };
+        if (next.kind === "claude-chat") Object.assign(next, { optIn: CLAUDE_CHAT_OPT_IN, agents: [] });
         if (!next.optIn.reportLinks) next.agents = next.agents.map(({ link: _link, ...a }) => a);
         const changed = JSON.stringify([d.busy, d.optIn, d.agents, d.version]) !== JSON.stringify([next.busy, next.optIn, next.agents, next.version]);
         // Last seen is written at most once a minute (Durable Object rows written are counted).
@@ -591,7 +599,8 @@ export class Hub {
    * once to that phone's open sockets; nothing is queued or acked (the next batch carries the whole state again).
    */
   private agentActivity(from: DeviceRow, envs: SealedEnvelope[], refuse: (code: HubRefusal, id?: string) => void): void {
-    if (from.kind !== "pc" || !from.optIn.reportActivity) return refuse("not-allowed");
+    // A PC that opted in, or the Claude chat (its whole job is this; it never takes tasks).
+    if (!(from.kind === "pc" && from.optIn.reportActivity) && from.kind !== "claude-chat") return refuse("not-allowed");
     const t = this.now();
     for (const env of envs) {
       if (env.from !== from.id || !env.run) return refuse("not-allowed", env.id);
@@ -612,6 +621,8 @@ export class Hub {
     if (env.kind === "cloud" || env.kind === "cloud_started") return refuse("not-allowed", env.id);
     const to = this.store.device(env.to);
     if (!to || to.id === from.id) return refuse("no-recipient", env.id);
+    // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
+    if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
     // A task-inbox report goes from a PC to the owner's phones (and the hub page) only.
     if (env.kind === "inbox_task" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);

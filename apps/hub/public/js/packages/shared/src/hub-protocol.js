@@ -38,7 +38,21 @@ export const HUB_LIMITS = {
     /** A running agent's heartbeat, and how long without one before a viewer shows it as stale (the Cursor freeze lesson). */
     agentBeatMs: 25_000,
     agentStaleMs: 90_000,
+    /**
+     * A Claude-chat run (`tools/hub-report`) has no heartbeat: the lead reports start and end only, and its helper
+     * agents run for minutes, so it is shown as stale only after an hour without a report.
+     */
+    agentChatStaleMs: 3_600_000,
 };
+/**
+ * The device kind a pairing request asks for (anything unknown is a PC, as before the kind existed).
+ *
+ * @param x - Untrusted input.
+ * @returns The kind.
+ */
+export function cleanDeviceKind(x) {
+    return x === "phone" || x === "claude-chat" ? x : "pc";
+}
 const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
@@ -287,7 +301,7 @@ export function parseSealedBody(x, kind) {
 }
 const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
 const INBOX_EXECUTORS = ["local", "antigravity", "claude"];
-const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS = ["read", "edit", "create", "delete"];
 const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
@@ -357,7 +371,7 @@ export function parseActivityEvent(x) {
         }
         case "done": {
             const branch = str(e.branch, 200);
-            return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}) };
+            return { ...head, type: "done", steps: num(e.steps), ...(branch ? { branch } : {}), ...(isSafeLink(e.link) ? { link: e.link } : {}), ...optStr("summary", e.summary, 300) };
         }
         case "failed":
             return { ...head, type: "failed", reason: str(e.reason, 200) };
@@ -402,5 +416,6 @@ export function parseAgentState(x, runId) {
         ...(waiting ? { waiting } : {}),
         ...(branch ? { branch } : {}),
         ...(isSafeLink(s.link) ? { link: s.link } : {}),
+        ...optStr("summary", s.summary, 300),
     };
 }

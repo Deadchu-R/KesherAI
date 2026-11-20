@@ -15,3 +15,7 @@ ui-check/
 
 # Copied from @excalidraw/excalidraw at build (scripts/copy-excalidraw-fonts.mjs)
 apps/web/public/excalidraw-assets/
+
+# Claude chat hub-report pairing (key and token; normally in ~/.kesher-hub, never in git)
+.kesher-hub/
+claude-chat.json

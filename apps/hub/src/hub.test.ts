@@ -57,7 +57,7 @@ async function setup(config: Partial<HubConfig> = {}, fire = async () => ({ ok: 
 }
 
 /** Pairs a device through the full code flow and returns its id, token and keys. */
-async function pair(hub: Hub, kind: "pc" | "phone", name: string): Promise<{ id: string; token: string; keys: HubKeyPair }> {
+async function pair(hub: Hub, kind: "pc" | "phone" | "claude-chat", name: string): Promise<{ id: string; token: string; keys: HubKeyPair }> {
   const keys = await generateHubKeys(true);
   const start = await hub.pairStart("1.2.3.4", { publicKey: keys.publicKey, kind, name });
   assert.ok(!isHubError(start));
@@ -404,4 +404,43 @@ test("task-inbox reports: only from a PC to a phone, queued while the phone is o
   await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
   assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
   assert.ok(!JSON.stringify(store.auditList(100)).includes("inbox"));
+});
+
+test("Claude chat device: pairs by code, reports agent activity without PC opt-ins, never relays or takes tasks", async () => {
+  const { hub, store, sockets } = await setup();
+  const chat = await pair(hub, "claude-chat", "Claude chat");
+  const phone = await pair(hub, "phone", "Phone");
+  const pc = await pair(hub, "pc", "PC");
+  sockets.on.add(chat.id);
+  sockets.on.add(phone.id);
+  sockets.on.add(pc.id);
+  assert.equal(store.device(chat.id)?.kind, "claude-chat");
+  assert.equal(hub.presence().find((d) => d.id === chat.id)?.kind, "claude-chat");
+  // An unknown kind still pairs as a PC (old and odd clients keep working).
+  const odd = await hub.pairStart("1.2.3.4", { publicKey: (await generateHubKeys(true)).publicKey, kind: "toaster" });
+  assert.ok(!isHubError(odd) && !isHubError(await hub.pairPeek(odd.code)) && (await hub.pairPeek(odd.code) as { kind: string }).kind === "pc");
+
+  // Its hello cannot turn on worker opt-ins or report agents; activity stays on.
+  await hub.onFrame(chat.id, JSON.stringify({ t: "hello", version: "hub-report 1", busy: false, optIn: { appear: true, acceptTasks: true, acceptLocal: true }, agents: [{ kind: "local-model", state: "on" }] }));
+  const row = store.device(chat.id)!;
+  assert.equal(row.optIn.acceptTasks, false);
+  assert.equal(row.optIn.reportActivity, true);
+  assert.deepEqual(row.agents, []);
+
+  const state = { runId: "cc-1", title: "🔨 Build", source: "claude-chat", state: "running", step: 0, startedAt: 1, lastEventAt: 1, files: 0, fileNames: [] } as const;
+  const env = { ...(await sealMessage({ from: chat.id, to: phone.id, kind: "agent_event" }, { type: "agent_event", runId: "cc-1", state, events: [{ seq: 1, t: 1, type: "started", title: "🔨 Build", source: "claude-chat" }] }, chat.keys.privateKey, phone.keys.publicKey)), run: "cc-1", n: 1 };
+  await hub.onFrame(chat.id, JSON.stringify({ t: "agents", envs: [env] }));
+  const live = sockets.frames(phone.id, "deliver").at(-1) as { env: { run: string } };
+  assert.equal(live.env.run, "cc-1");
+  const body = await openEnvelope(live.env as never, phone.keys.privateKey, chat.keys.publicKey);
+  assert.ok(body.type === "agent_event" && body.state.source === "claude-chat");
+
+  // No relayed messages from it, and nothing relayed to it (a task, a result).
+  const task = await sealMessage({ from: chat.id, to: pc.id, kind: "task" }, { type: "task", taskId: "t1", title: "x", spec: "x", executor: "pc-any", ifOffline: "wait", createdAt: new Date().toISOString() }, chat.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(chat.id, JSON.stringify({ t: "send", env: task }));
+  assert.equal((sockets.frames(chat.id, "refused").at(-1) as { code: string }).code, "not-allowed");
+  const res = await sealMessage({ from: pc.id, to: chat.id, kind: "result" }, { type: "result", taskId: "t1", status: "done", text: "x" }, pc.keys.privateKey, chat.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: res }));
+  assert.equal((sockets.frames(pc.id, "refused").at(-1) as { code: string }).code, "not-allowed");
+  assert.equal(store.queued(chat.id).length, 0);
 });
