@@ -8,13 +8,15 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 /** `GET /api/tasks-sync` (packages/core/src/tasks-sync.ts). */
 interface TasksSyncStatus {
   enabled: boolean;
+  /** Claude's work list is shown on every device (default on). */
+  workList: boolean;
   configured: boolean;
   connected: boolean;
   needsReconnect: boolean;
   syncing: boolean;
   lastSync: string | null;
   lastError: string | null;
-  counts: { tasks: number; pending: number; received: number };
+  counts: { tasks: number; pending: number; received: number; workList: number };
 }
 
 /** "5 min ago" style time. */
@@ -59,6 +61,7 @@ export function TasksSyncSection() {
   };
   const toggle = (on: boolean) => run(async () => consent(await api<{ url?: string }>("/api/tasks-sync", { method: "POST", body: { enabled: on } })));
   const reconnect = () => run(async () => consent(await api<{ url?: string }>("/api/tasks-sync/reconnect", { method: "POST" })));
+  const showWorkList = (on: boolean) => run(() => api("/api/tasks-sync", { method: "POST", body: { workList: on } }));
   const syncNow = () => run(() => api("/api/tasks-sync/sync", { method: "POST" }));
   const cantTurnOn = !s.enabled && (remote || !s.connected);
 
@@ -100,6 +103,20 @@ export function TasksSyncSection() {
           </span>
         )}
       </div>
+      {s.enabled && (
+        <label className="row small tasks-sync-wl">
+          <input type="checkbox" checked={s.workList !== false} disabled={busy} onChange={(e) => void showWorkList(e.target.checked)} />
+          <span className="grow">
+            {L("להציג את רשימת העבודה של Claude", "Show Claude's work list")}
+            <span className="muted">
+              {" · "}
+              {s.workList !== false && s.counts.workList
+                ? L(`${s.counts.workList} פריטים, מתעדכנת כל 15 דקות`, `${s.counts.workList} items, updated every 15 minutes`)
+                : L("מ-docs/WORK_LIST.md בפרויקט של תיבת המשימות, בלשונית המשימות של המרכז ובטלפון", "From docs/WORK_LIST.md in the task inbox's project, in the hub's Tasks tab and on the phone")}
+            </span>
+          </span>
+        </label>
+      )}
       {s.enabled && s.lastError && !s.needsReconnect && <span className="bad small" dir="auto">{s.lastError}</span>}
       {remote && !s.enabled && <span className="muted small">{L("מפעילים את זה במחשב (צריך לאשר את Google שם).", "Turn this on at the PC (Google asks for permission there).")}</span>}
       {!remote && !s.connected && <span className="muted small">{L("קודם להתחבר ל-Google (כפתור החשבון למעלה).", "Sign in to Google first (the account button at the top).")}</span>}
