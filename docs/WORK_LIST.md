@@ -83,10 +83,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 🔨 Batch 1 server: cache_prompt + id_slot for llama.cpp, cached tokens in the usage event, stable tool order (Opus agent).
 - ✅ Batch 1 server (cache_prompt, id_slot, cached tokens, stable tool order) and screens (token line under answers, cache in Context); fixed: Store apps counted as games paused the inbox.
 - ✅ Design doc boards for the token line; 0.6.403 available.
-- 🔨 PC Health duplicates: never offer files inside projects (Unreal Content, git repos, node_modules); it offered Unreal StarterContent .uasset copies (Roee's cleanup 15:35: only 2 safe copies removed).
-- 🔨 PC Health: show the drive of each program/game; a 'move to another drive' for LM Studio / Ollama models (Roee's C: filled up).
+- ✅ PC Health duplicates: never offer files inside projects (Unreal Content, git repos, node_modules); it offered Unreal StarterContent .uasset copies (Roee's cleanup 15:35: only 2 safe copies removed).
+- ✅ PC Health: show the drive of each program/game; a 'move to another drive' for LM Studio / Ollama models (Roee's C: filled up).
 - ⬜ Roee (14:33): the hub must show ALL his tasks and what every agent works on, from any device he signs in with (today: "Kept on this device, the hub keeps no tasks"). Research how others sync (sealed per-account store vs devices publishing sealed snapshots), keep end-to-end sealing; then design doc, then build. Include kesher-inbox tasks and live agents.
-  ✅ Research (RESEARCH_LOG 2026-11-20, account key K, sealed records). Roee: inbox tasks show in full on every device; done tasks kept 90 days; recovery code: default at first setup (he asked what happens if everything resets: explained). ✅ Step 1 (shared seal module, 4396266). Roee (15:34): store the tasks in HIS Google Drive, fetched through the Google account on his devices and the hub; ✅ research (c1f9947: appDataFolder, create-only record files, K file in Drive). 🔨 Steps 1-2 (record names + Drive store) with an Opus agent. 👤 Later (Roee 15:45, resting): Google Cloud setup (Drive API, drive.appdata scope, publish to In production), reconnect Google on PC and phone., then the design doc, then batch builds.
+  ✅ Research (RESEARCH_LOG 2026-11-20, account key K, sealed records). Roee: inbox tasks show in full on every device; done tasks kept 90 days; recovery code: default at first setup (he asked what happens if everything resets: explained). ✅ Step 1 (shared seal module, 4396266). Roee (15:34): store the tasks in HIS Google Drive, fetched through the Google account on his devices and the hub; ✅ research (c1f9947: appDataFolder, create-only record files, K file in Drive). ✅ Steps 1-2 (record names + Drive store, d01aece). 🔨 Step 3: PC writer/reader + Settings switch. 👤 Later (Roee 15:45, resting): Google Cloud setup (Drive API, drive.appdata scope, publish to In production), reconnect Google on PC and phone., then the design doc, then batch builds.
 - ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
@@ -96,6 +96,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
 - ✅ 0.6.400 is available (Roee, 11:16: "add the 2 things, then a build and stop"). Stopped after it.
+- 🔨 0.6.404 building (PC Health project-safe cleanup + drive per program; Drive sync groundwork). Build 3 of 5 since scan 166.
+- ✅ 0.6.403 is available (token/cache line, prompt cache).
 - ✅ 0.6.402 is available (2026-11-20 ~13:55): the PC stays connected to the hub, inbox tasks and live agents in the hub.
 - ✅ 0.6.401 is available (19:5x): chat sub-agents, Kesher Cloud (PC pairing), task inbox, Phone/Computer/Cloud, scene guests, AI in video and sound. Two tasks on kesher-inbox (c-20261119-01 local, -02 Antigravity).
 - 🔨 Live agent tracking in the hub (Opus agent; on Roee's last usage credits, commits per step).
