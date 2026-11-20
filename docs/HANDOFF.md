@@ -75,5 +75,8 @@ so a new chat starts from a few small files.
   ComfyUI → Unity demo. Start with a gap list against the code.
 
 ## State (update on each move)
-- Last chat: 2026-11-14 → 2026-11-20 (chat 1). Last release: 0.6.401. Hub: hub.roeetal.com (Cloudflare Worker
+- Last chat: 2026-11-14 → 2026-11-20 (chat 1). Last release: 0.6.402 (2 builds since scan 166; scan due after 3 more).
+  Usage numbers of chat 1: docs/usage/history/2026-11-20_chat1.json (partial: only since its last compaction).
+  Next up: Roee checks 0.6.402 on the PC (Online in the hub, inbox tasks); then the usability gap list (WORK_LIST).
+  Previous build: Hub: hub.roeetal.com (Cloudflare Worker
   kesher-hub, auto-deploys from main). Claude cloud task: "Kesher hub (cloud)" (API trigger only).

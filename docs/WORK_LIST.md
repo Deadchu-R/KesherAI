@@ -69,8 +69,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Usage tracker: docs/usage (track.py + charts); re-run after each build.
 
 ## Next focus (Roee, 2026-11-20): finish the agents work, then focused usability (Gemini research in RESEARCH_LOG)
-- 🔨 Hub: why the PC shows Off; Claude's inbox tasks visible in the hub (Opus agent). Then build 0.6.402 (live agent
-  tracking + this) and check it with Roee.
+- ✅ Hub: why the PC showed Off (link never started at launch / after pairing; dead links) fixed; Claude's inbox tasks
+  in the hub ("from Claude"); this chat's agents in the hub (tools/hub-report, group "Claude chat"). In 0.6.402.
+- 👤 Roee: update the PC to 0.6.402, check it shows Online, turn on tasks + agent activity for it; approve the two inbox
+  tasks (c-20261119-01 local, -02 Antigravity). Next chat: pair it with tools/hub-report (he approves the code).
 - ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
