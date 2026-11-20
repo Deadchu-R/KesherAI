@@ -10,7 +10,8 @@ const MB = 1024 ** 2;
 const size = (b: number) => (b >= GB ? `${Math.round((b / GB) * 10) / 10} GB` : b >= MB ? `${Math.round(b / MB)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
 type Kind = "video" | "image" | "audio" | "document" | "archive" | "other";
-interface SFile { id: string; name: string; folder: string; bytes: number; kind: Kind; mtime: number }
+/** A file from the scan; `inProject` files (inside an Unreal/Unity/Godot/code project) are never picked by Select all. */
+interface SFile { id: string; name: string; folder: string; bytes: number; kind: Kind; mtime: number; inProject?: boolean }
 interface Card { id: "large" | "old-downloads" | "installers" | "duplicates" | "screenshots" | "compress-videos"; files: SFile[]; bytes: number }
 interface Scan { at: string; kinds: Record<Kind, number>; folders: Array<{ name: string; bytes: number }>; top: Record<Kind, SFile[]>; cards: Card[]; partial: boolean }
 interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string }
@@ -35,6 +36,9 @@ function FilesDialog({ title, files, compress, onClose, onChanged }: { title: st
   const [pick, setPick] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const chosen = files.filter((f) => pick.has(f.id));
+  // "Select all" never takes files that belong to a project (deleting them breaks it); they can be ticked one by one.
+  const safe = files.filter((f) => !f.inProject);
+  const allPicked = safe.length > 0 && safe.every((f) => pick.has(f.id));
   const total = chosen.reduce((n, f) => n + f.bytes, 0);
   const trash = async () => {
     if (!window.confirm(L(`להעביר ${chosen.length} קבצים לסל המיחזור? (אפשר לשחזר משם)`, `Move ${chosen.length} files to the Recycle Bin? (They can be restored from there.)`))) return;
@@ -68,7 +72,7 @@ function FilesDialog({ title, files, compress, onClose, onChanged }: { title: st
       <div className="dialog card stack storage-dialog" role="dialog" aria-modal="true" aria-label={title} onKeyDown={(e) => e.key === "Escape" && onClose()}>
         <div className="row wrap">
           <strong className="grow">{title}</strong>
-          <button type="button" onClick={() => setPick(pick.size === files.length ? new Set() : new Set(files.map((f) => f.id)))}>{pick.size === files.length ? L("נקה בחירה", "Clear") : L("בחר הכל", "Select all")}</button>
+          <button type="button" disabled={!safe.length && !pick.size} onClick={() => setPick(allPicked || !safe.length ? new Set() : new Set(safe.map((f) => f.id)))}>{allPicked || (!safe.length && pick.size) ? L("נקה בחירה", "Clear") : L("בחר הכל", "Select all")}</button>
         </div>
         <ul className="storage-files">
           {files.map((f) => (
@@ -77,6 +81,7 @@ function FilesDialog({ title, files, compress, onClose, onChanged }: { title: st
                 <input type="checkbox" checked={pick.has(f.id)} onChange={(e) => setPick((p) => { const n = new Set(p); if (e.target.checked) n.add(f.id); else n.delete(f.id); return n; })} />
                 <span className="stack grow storage-file">
                   <span dir="auto" className="storage-name">{f.name}</span>
+                  {f.inProject && <span className="storage-tag warn" title={L("מחיקה עלולה לשבור את הפרויקט; לא נבחר ב״בחר הכל״", "Deleting it may break the project; Select all skips it")}>{L("חלק מפרויקט", "Part of a project")}</span>}
                   <span className="muted small"><span dir="ltr">{size(f.bytes)}</span> · <span dir="ltr">{f.folder}</span> · {new Date(f.mtime).toLocaleDateString()}</span>
                 </span>
               </label>

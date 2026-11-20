@@ -2248,6 +2248,9 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 .storage-files li { padding: 6px 4px; border-bottom: 1px solid var(--border); gap: 8px; }
 .storage-file { min-width: 0; }
 .storage-name { overflow-wrap: anywhere; }
+/* A small word tag beside a file or program ("Part of a project", a drive letter). */
+.storage-tag { align-self: flex-start; display: inline-block; padding: 0 7px; border-radius: calc(999px * var(--r-scale, 1)); border: 1px solid var(--border-strong); font-size: 11.5px; line-height: 18px; color: var(--text-2); white-space: nowrap; }
+.storage-tag.warn { color: #fbbf24; border-color: #7a5a1a; }
 .storage-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--border); }
 .storage-bar .seg { min-width: 3px; }
 .storage-kinds { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }

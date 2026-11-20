@@ -32,6 +32,8 @@ export interface StorageFile {
   kind: FileKind;
   /** Last changed (ms). */
   mtime: number;
+  /** Part of a project (Unreal, Unity, Godot, code): shown, but never chosen by "Select all". */
+  inProject?: true;
 }
 
 /** One program on the computer. */
@@ -81,6 +83,22 @@ const SKIP_DIRS = new Set(["node_modules", "__pycache__", "venv", "site-packages
 /** Inside a Unity or Unreal project: the engine's own rebuildable folders. */
 const ENGINE_DIRS = new Set(["Library", "Temp", "Logs", "obj", "Intermediate", "DerivedDataCache", "Binaries", "Saved"]);
 const MB = 1024 ** 2;
+/** Folders whose files belong to a tool or an engine wherever they are (deleting them breaks something). */
+const PROJECT_DIRS = new Set(["node_modules", "Library", "Intermediate", "DerivedDataCache", "Saved"]);
+
+/**
+ * Whether a folder is the root of a project (deleting its files breaks the project): an Unreal `.uproject`, a
+ * Visual Studio `.sln`, Unity's Assets + ProjectSettings, Godot's project.godot, a package.json or a git repository.
+ *
+ * @param names - The names of the folder's entries (files and folders).
+ */
+export function isProjectRoot(names: Iterable<string>): boolean {
+  const set = names instanceof Set ? (names as Set<string>) : new Set(names);
+  if (set.has("project.godot") || set.has("package.json") || set.has(".git")) return true;
+  if (set.has("Assets") && set.has("ProjectSettings")) return true;
+  for (const n of set) if (/\.(uproject|sln)$/i.test(n)) return true;
+  return false;
+}
 
 /** What kind a file name is. */
 export function fileKind(name: string): FileKind {
@@ -141,6 +159,9 @@ async function sameHash(path: string, size: number, full: boolean): Promise<stri
   }
 }
 
+/** A file found by the walk. */
+type Found = { path: string; bytes: number; mtime: number; folder: string; inProject?: true };
+
 /** Keeps the files of the last scan and the programs of the last list, by id. */
 export class Storage {
   private files = new Map<string, string>();
@@ -155,10 +176,10 @@ export class Storage {
     return path.startsWith(this.home) ? `~${path.slice(this.home.length)}` : path;
   }
 
-  private remember(path: string, bytes: number, mtime: number): StorageFile {
+  private remember(path: string, bytes: number, mtime: number, inProject?: boolean): StorageFile {
     const id = createHash("sha1").update(path).digest("hex").slice(0, 16);
     this.files.set(id, path);
-    return { id, name: basename(path), folder: this.short(dirname(path)), bytes, kind: fileKind(path), mtime };
+    return { id, name: basename(path), folder: this.short(dirname(path)), bytes, kind: fileKind(path), mtime, ...(inProject ? { inProject: true as const } : {}) };
   }
 
   /** Walks the person's folders (at most 400,000 entries or 25 s, then partial). */
@@ -170,14 +191,15 @@ export class Storage {
   private async doScan(): Promise<StorageScan> {
     const started = Date.now();
     const folders = await userFolders(this.home);
-    const all: Array<{ path: string; bytes: number; mtime: number; folder: string }> = [];
+    const all: Found[] = [];
     let seen = 0;
     let partial = false;
     const totals = new Map<string, number>();
     // Folders are read side by side (32 at a time, one queue for all the person's folders, so a huge Desktop does
     // not leave Documents unread) and files are measured in parallel. Build and cache folders of tools are skipped:
     // they are not the person's files and hold most of the entries.
-    const queue: Array<{ dir: string; folder: string }> = folders.map((f) => ({ dir: f.path, folder: f.name }));
+    // Whether a folder is inside a project is carried down the walk (one answer per folder, no extra reads).
+    const queue: Array<{ dir: string; folder: string; inProject: boolean }> = folders.map((f) => ({ dir: f.path, folder: f.name, inProject: false }));
     const deadline = started + 45_000;
     const worker = async () => {
       while (queue.length) {
@@ -186,23 +208,24 @@ export class Storage {
           return;
         }
         // Take from the front: breadth first, every folder gets its turn.
-        const { dir, folder } = queue.shift()!;
+        const { dir, folder, inProject: parentInProject } = queue.shift()!;
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
         seen += entries.length;
         const files: string[] = [];
         const names = new Set(entries.map((e) => e.name));
         const project = (names.has("Assets") && names.has("ProjectSettings")) || entries.some((e) => e.isFile() && /\.uproject$/i.test(e.name));
+        const inProject = parentInProject || PROJECT_DIRS.has(basename(dir)) || isProjectRoot(names);
         for (const e of entries) {
           if (e.name.startsWith(".") || SKIP_DIRS.has(e.name) || (project && ENGINE_DIRS.has(e.name))) continue;
           const p = join(dir, e.name);
-          if (e.isDirectory()) queue.push({ dir: p, folder });
+          if (e.isDirectory()) queue.push({ dir: p, folder, inProject });
           else if (e.isFile()) files.push(p);
         }
         const stats = await Promise.all(files.map((p) => stat(p).then((st) => ({ p, st }), () => undefined)));
         for (const s of stats) {
           if (!s) continue;
           totals.set(folder, (totals.get(folder) ?? 0) + s.st.size);
-          all.push({ path: s.p, bytes: s.st.size, mtime: s.st.mtimeMs, folder });
+          all.push({ path: s.p, bytes: s.st.size, mtime: s.st.mtimeMs, folder, ...(inProject ? { inProject: true as const } : {}) });
         }
       }
     };
@@ -229,10 +252,10 @@ export class Storage {
     const kinds: Record<FileKind, number> = { video: 0, image: 0, audio: 0, document: 0, archive: 0, other: 0 };
     for (const f of all) kinds[fileKind(f.path)] += f.bytes;
     const bySize = [...all].sort((a, b) => b.bytes - a.bytes);
-    const top = Object.fromEntries((Object.keys(kinds) as FileKind[]).map((k) => [k, bySize.filter((f) => fileKind(f.path) === k).slice(0, 150).map((f) => this.remember(f.path, f.bytes, f.mtime))])) as Record<FileKind, StorageFile[]>;
+    const top = Object.fromEntries((Object.keys(kinds) as FileKind[]).map((k) => [k, bySize.filter((f) => fileKind(f.path) === k).slice(0, 150).map((f) => this.remember(f.path, f.bytes, f.mtime, f.inProject))])) as Record<FileKind, StorageFile[]>;
     const now = Date.now();
     const card = (id: StorageCard["id"], list: typeof all): StorageCard => {
-      const files = list.slice(0, 200).map((f) => this.remember(f.path, f.bytes, f.mtime));
+      const files = list.slice(0, 200).map((f) => this.remember(f.path, f.bytes, f.mtime, f.inProject));
       return { id, files, bytes: files.reduce((n, f) => n + f.bytes, 0) };
     };
     const cards: StorageCard[] = [
@@ -248,8 +271,11 @@ export class Storage {
     return result;
   }
 
-  /** Extra copies (the oldest of each group is kept and not listed); files of 1 MB and more. */
-  private async duplicates(bySize: Array<{ path: string; bytes: number; mtime: number; folder: string }>, started: number) {
+  /**
+   * Extra copies (the oldest of each group is kept and not listed); files of 1 MB and more. A file inside a
+   * project is never listed: when a group has one, it is the copy kept, and only copies outside projects are extra.
+   */
+  private async duplicates(bySize: Found[], started: number) {
     const groups = new Map<number, typeof bySize>();
     for (const f of bySize) if (f.bytes >= MB) groups.set(f.bytes, [...(groups.get(f.bytes) ?? []), f]);
     const extra: typeof bySize = [];
@@ -265,8 +291,9 @@ export class Storage {
         // Small enough to read whole (under 200 MB): confirm the copies are the same.
         const confirmed = same[0]!.bytes < 200 * MB ? await this.confirmSame(same) : same;
         if (confirmed.length < 2) continue;
-        const keep = confirmed.reduce((a, b) => (a.mtime <= b.mtime ? a : b));
-        extra.push(...confirmed.filter((f) => f !== keep));
+        const loose = confirmed.filter((f) => !f.inProject);
+        const keep = loose.length === confirmed.length ? confirmed.reduce((a, b) => (a.mtime <= b.mtime ? a : b)) : undefined;
+        extra.push(...loose.filter((f) => f !== keep));
       }
     }
     return extra.sort((a, b) => b.bytes - a.bytes);

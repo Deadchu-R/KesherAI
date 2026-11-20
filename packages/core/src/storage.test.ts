@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { fileKind, parseSize, Storage } from "./storage.js";
+import { fileKind, isProjectRoot, parseSize, Storage } from "./storage.js";
 
 test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "st-"));
@@ -41,6 +41,46 @@ test("storage: kinds, cards (large, old downloads, installers, duplicates, scree
   assert.equal(res.failed[0]!.id, "nope");
   assert.ok(!existsSync(join(home, "Downloads", "a (1).pdf")));
   assert.ok(!st.last!.cards.some((c) => c.id === "duplicates"));
+});
+
+test("storage: files inside projects are never offered as duplicates and are marked for Select all", async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "st-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const MB = 1024 * 1024;
+  const hdri = Buffer.alloc(2 * MB, 9);
+  // The same starter asset in two Unreal projects: both must stay.
+  for (const name of ["GameA", "GameB"]) {
+    const sc = join(home, "Documents", "Unreal Projects", name, "Content", "StarterContent");
+    mkdirSync(sc, { recursive: true });
+    writeFileSync(join(home, "Documents", "Unreal Projects", name, `${name}.uproject`), "{}");
+    writeFileSync(join(sc, "HDRI_Epic_Courtyard_Daylight.uasset"), hdri);
+  }
+  // A loose copy in Downloads is a real extra (the project copy is the one kept).
+  mkdirSync(join(home, "Downloads"));
+  writeFileSync(join(home, "Downloads", "HDRI_Epic_Courtyard_Daylight.uasset"), hdri);
+  // Two copies inside a git repository, and a big file under a Saved folder.
+  mkdirSync(join(home, "Desktop", "site", ".git"), { recursive: true });
+  writeFileSync(join(home, "Desktop", "site", "a.bin"), Buffer.alloc(MB, 3));
+  writeFileSync(join(home, "Desktop", "site", "b.bin"), Buffer.alloc(MB, 3));
+  mkdirSync(join(home, "Desktop", "Saved"));
+  writeFileSync(join(home, "Desktop", "Saved", "big.mp4"), Buffer.alloc(501 * MB));
+  const r = await new Storage(home).scan();
+  const card = (id: string) => r.cards.find((c) => c.id === id)?.files ?? [];
+  assert.deepEqual(card("duplicates").map((f) => f.folder), [`~${sep}Downloads`]);
+  const big = card("large").find((f) => f.name === "big.mp4");
+  assert.equal(big?.inProject, true);
+  assert.equal(r.top.other.find((f) => f.folder === `~${sep}Downloads`)?.inProject, undefined);
+});
+
+test("storage helpers: project roots", () => {
+  assert.ok(isProjectRoot(["Game.uproject", "Content"]));
+  assert.ok(isProjectRoot(["Assets", "ProjectSettings", "Packages"]));
+  assert.ok(isProjectRoot(["project.godot"]));
+  assert.ok(isProjectRoot(["App.SLN"]));
+  assert.ok(isProjectRoot(["package.json"]));
+  assert.ok(isProjectRoot([".git", "README.md"]));
+  assert.ok(!isProjectRoot(["Assets", "photos"]));
+  assert.ok(!isProjectRoot(["notes.pdf", "Projects"]));
 });
 
 test("storage helpers: kinds by name, Flatpak sizes", () => {
