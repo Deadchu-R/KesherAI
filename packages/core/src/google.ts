@@ -278,11 +278,14 @@ export class GoogleDrive {
    * Uploads a file of any size from this computer into a Drive folder, in 8 MB pieces (Google's resumable
    * upload), so a 200 MB game build never sits in memory whole.
    *
+   * @param path - The file on this computer.
+   * @param folderId - The Drive folder (from `ensureFolder`).
+   * @param onProgress - Called as pieces go up (bytes sent, total).
+   * @param name - The name in Drive (default: the file's own name).
    * @returns The new file's id and link.
    */
-  async uploadFile(path: string, folderId: string, onProgress?: (sent: number, total: number) => void): Promise<{ id: string; link: string; size: number }> {
+  async uploadFile(path: string, folderId: string, onProgress?: (sent: number, total: number) => void, name = basename(path)): Promise<{ id: string; link: string; size: number }> {
     const size = (await stat(path)).size;
-    const name = basename(path);
     const init = await fetch(`${this.endpoints.upload}/files?uploadType=resumable&fields=id,webViewLink`, {
       method: "POST",
       headers: { authorization: `Bearer ${await this.token()}`, "content-type": "application/json; charset=UTF-8", "x-upload-content-length": String(size) },

@@ -3,6 +3,8 @@ import { useState } from "react";
 import { CodeView } from "./ide/CodeView";
 import { getLocale, he$ } from "./i18n";
 import { withToken } from "./api";
+import { AssetEmbed } from "./MediaView";
+import { assetIdOf } from "./chat/chat-inline";
 import { ChartView } from "./ChartView";
 import { MathView, MermaidView } from "./MathMermaid";
 import { FunctionGraph } from "./FunctionGraph";
@@ -38,7 +40,7 @@ export function texText(tex: string): string {
 /** Inline Markdown: **bold**, *italic*, ~~struck~~, `code`, $math$, [links](https://…), pictures and bare https links. */
 function inline(text: string, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|\$[^$\s\d][^$\n]*?[=^_\\][^$\n]*?\$|https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?]|\*[^*\s][^*]*\*)/g;
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\((?:https?:\/\/|\/api\/assets\/)[^)\s]+\)|\$[^$\s\d][^$\n]*?[=^_\\][^$\n]*?\$|https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?]|\*[^*\s][^*]*\*)/g;
   let last = 0;
   let i = 0;
   for (const m of text.matchAll(re)) {
@@ -56,7 +58,8 @@ function inline(text: string, key: string): React.ReactNode[] {
     } else if (/^https?:/.test(tok)) out.push(<a key={k} href={tok} target="_blank" rel="noreferrer" dir="ltr">{tok}</a>);
     else if (tok.startsWith("[")) {
       const [, label, href] = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok)!;
-      out.push(<a key={k} href={href} target="_blank" rel="noreferrer">{label}</a>);
+      // KesherAI's own file (inside a sentence): the link carries the token, so it opens from the phone too.
+      out.push(<a key={k} href={assetIdOf(href!) ? withToken(`/api/assets/${assetIdOf(href!)}`) : href} target="_blank" rel="noreferrer">{label}</a>);
     } else out.push(<em key={k}>{tok.slice(1, -1)}</em>);
     last = m.index! + tok.length;
   }
@@ -154,6 +157,13 @@ export function RichText({ text }: { text: string }) {
         if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
           flush(`l${k}`);
           out.push(<hr key={k} className="md-hr" />);
+          return;
+        }
+        // A line that is only a link to (or a picture of) a file KesherAI made: its player and chips (Download, Drive, editor).
+        const own = /^\s*!?\[([^\]]*)\]\(([^)\s]+)\)\s*$/.exec(line);
+        if (own && assetIdOf(own[2]!)) {
+          flush(`l${k}`);
+          out.push(<AssetEmbed key={k} href={own[2]!} label={own[1] || own[2]!} />);
           return;
         }
         // A line that is only a link: a card with the site's name.

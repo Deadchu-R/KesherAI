@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Media } from "./MediaSpeed";
+import { FileChips, MadeMedia, MediaView, fileUrl } from "./MediaView";
+import { MemoryChip } from "./chat/MemoryChip";
+import { mediaKindOf } from "./chat/chat-inline";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { desktop } from "./library";
@@ -103,7 +105,8 @@ export function groupSummary(steps: Step[]): string {
 export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[] }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
-  const images = steps.flatMap((s) => (SCREEN.test(s.call.name) ? [] : s.result?.assetIds ?? []));
+  // A song's cover picture shows beside its player, not again as a picture.
+  const images = steps.flatMap((s) => (SCREEN.test(s.call.name) || s.result?.audioIds?.length ? [] : s.result?.assetIds ?? []));
   // Screen pictures: small, in order, on the folded line (open one to see it full size).
   const shots = steps.flatMap((s) => (SCREEN.test(s.call.name) ? s.result?.assetIds ?? [] : []));
   const videos = steps.flatMap((s) => s.result?.videoIds ?? []);
@@ -111,8 +114,13 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   const sounds = steps.flatMap((s) => (s.result?.audioIds ?? []).map((id) => {
     const input = (s.call.input ?? {}) as { title?: unknown; lyrics?: unknown };
     const lyrics = typeof input.lyrics === "string" && !/^\[instrumental\]$/i.test(input.lyrics.trim()) ? input.lyrics.trim() : "";
-    return { id, title: typeof input.title === "string" ? input.title.trim() : "", lyrics };
+    return { id, title: typeof input.title === "string" ? input.title.trim() : "", lyrics, cover: s.result?.assetIds?.[0] };
   }));
+  // Facts the model kept ("remember"), each with Undo (as Claude's "Saved memory").
+  const kept = steps.flatMap((s) => {
+    const input = (s.call.input ?? {}) as { note?: unknown; topic?: unknown };
+    return s.call.name === "remember" && s.result?.ok && /^Remembered\b/.test(s.result.output) && typeof input.note === "string" ? [{ key: s.call.callId, note: input.note, topic: typeof input.topic === "string" ? input.topic : undefined }] : [];
+  });
   // Older builds only said "Built dist/x.exe." in their output.
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
@@ -170,13 +178,19 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {after && after.length > 0 && <div className="hcards">{after}</div>}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
+      {kept.length > 0 && <div className="memory-chips">{kept.map((k) => <MemoryChip key={k.key} note={k.note} {...(k.topic ? { topic: k.topic } : {})} />)}</div>}
       {sounds.length > 0 && (
         <div className="activity-audio">
-          {sounds.map(({ id, title, lyrics }) => (
+          {sounds.map(({ id, title, lyrics, cover }) => (
             <div key={id} className="audio-card">
-              {title && <strong className="audio-title" dir="auto">{title}</strong>}
-              <Media kind="audio" src={withToken(`/api/assets/${id}`)} controls preload="metadata" />
-              <a href={withToken(`/api/assets/${id}`)} download={`${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || `kesher-music-${id.slice(0, 8)}`}.mp3`}>{t("download")}</a>
+              <MadeMedia
+                file={{ assetId: id }}
+                kind="audio"
+                name={`${title.replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || `kesher-music-${id.slice(0, 8)}`}.mp3`}
+                {...(title ? { title } : {})}
+                {...(cover ? { poster: withToken(`/api/assets/${cover}`) } : {})}
+                {...(convId ? { convId } : {})}
+              />
               {lyrics && (
                 <details className="audio-lyrics">
                   <summary>{t("songLyrics")}</summary>
@@ -189,22 +203,12 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       )}
       {videos.length > 0 && (
         <div className="activity-images">
-          {videos.map((id) => (
-            <div key={id} className="video-card">
-              <Media kind="video" src={withToken(`/api/assets/${id}`)} controls loop autoPlay muted playsInline className="asset" />
-              <a href={withToken(`/api/assets/${id}`)} download={`kesher-video-${id.slice(0, 8)}.webm`}>{t("download")}</a>
-            </div>
-          ))}
+          {videos.map((id) => <MadeMedia key={id} file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />)}
         </div>
       )}
       {images.length > 0 && (
         <div className="activity-images">
-          {images.map((id) => (
-            <div key={id} className="image-card">
-              <a href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer"><img src={withToken(`/api/assets/${id}`)} alt="" className="asset" /></a>
-              <a href={withToken(`/api/assets/${id}`)} download={`kesher-image-${id.slice(0, 8)}.png`}>{t("download")}</a>
-            </div>
-          ))}
+          {images.map((id) => <MadeMedia key={id} file={{ assetId: id }} kind="image" name={`kesher-image-${id.slice(0, 8)}.png`} {...(convId ? { convId } : {})} />)}
         </div>
       )}
     </div>
@@ -266,13 +270,13 @@ function ImageProgressLine() {
 }
 
 /**
- * A file the agent made, right in the conversation: download it, open its
- * folder, or (in the desktop app) run it.
+ * A file the agent made, right in the conversation: download it, save it to Drive, open it in its editor (a
+ * picture, video, sound or 3D model, which also plays here), open its folder, or (in the desktop app) run it.
  */
 export function FileCard({ convId, path }: { convId: string; path: string }) {
   const name = path.split("/").pop() ?? path;
   const runnable = /\.(exe|msi|bat|cmd|app)$/i.test(name);
-  const url = withToken(`/api/conversations/${convId}/files/download?path=${encodeURIComponent(path)}`);
+  const kind = mediaKindOf(null, name);
   const folder = async () => {
     const d = await api<{ folder: string }>(`/api/conversations/${convId}/files`);
     return `${d.folder.replace(/[\\/]+$/, "")}/${path}`;
@@ -284,13 +288,14 @@ export function FileCard({ convId, path }: { convId: string; path: string }) {
         <strong dir="ltr">{name}</strong>
         <p className="muted small" dir="ltr">{path}</p>
       </div>
-      <a className="button primary-link" href={url} download>{t("download")}</a>
+      <FileChips file={{ convId, path }} name={name} kind={kind} />
       {desktop()?.openPath && (
         <button type="button" onClick={() => void folder().then((p) => desktop()!.openPath!(p.replace(/[\\/][^\\/]+$/, "")))}>{t("openFolder")}</button>
       )}
       {runnable && desktop()?.runFile && (
         <button type="button" onClick={() => void folder().then((p) => desktop()!.runFile!(p))}>{t("runProgram")}</button>
       )}
+      {kind && kind !== "model" && <div className="file-card-media"><MediaView src={fileUrl({ convId, path })} kind={kind} name={name} /></div>}
     </div>
   );
 }

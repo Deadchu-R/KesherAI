@@ -749,6 +749,36 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .video-card video { max-width: min(560px, 100%); border-radius: calc(12px * var(--r-scale, 1)); }
 .video-card a, .image-card > a[download] { font-size: 13px; color: var(--accent); }
 
+/* Made files inline in the chat (MediaView.tsx): player, length, full screen, and the chips under it. */
+.made-media { display: grid; gap: 6px; max-width: min(560px, 100%); }
+.media-view { display: grid; gap: 4px; min-width: 0; }
+.media-view .asset { margin-top: 0; max-width: 100%; }
+.media-view.video video { width: 100%; max-height: 70vh; border-radius: calc(12px * var(--r-scale, 1)); background: #000; }
+.media-wait { width: min(420px, 100%); aspect-ratio: 16 / 9; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); }
+.media-view.audio .media-wait { aspect-ratio: auto; height: 54px; }
+.media-img-btn { padding: 0; border: 0; background: none; height: auto; cursor: zoom-in; justify-self: start; max-width: 100%; }
+.media-audio-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.media-audio-row .media-box { flex: 1; min-width: 0; }
+.media-audio-row audio { width: 100%; }
+.media-cover { width: 54px; height: 54px; object-fit: cover; border-radius: calc(8px * var(--r-scale, 1)); flex: none; }
+.media-bar { display: flex; align-items: center; gap: 8px; }
+.media-len { font-variant-numeric: tabular-nums; }
+.media-full { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / 0.88); display: grid; place-items: center; padding: 12px; cursor: zoom-out; }
+.media-full img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.media-full-close { position: fixed; top: max(12px, env(safe-area-inset-top)); inset-inline-end: 12px; width: 44px; height: 44px; border-radius: 999px; background: rgb(0 0 0 / 0.5); color: #fff; border: 1px solid rgb(255 255 255 / 0.3); }
+.file-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.file-chips .chip-text { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.file-card { flex-wrap: wrap; }
+.file-card-media { flex-basis: 100%; }
+/* Small pictures inside an open step (a browser shot): tap opens it full size. */
+.step-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.step-thumbs img { width: 120px; height: 75px; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--border); display: block; }
+/* "Saved to memory" with Undo, under the answer (MemoryChip.tsx). */
+.memory-chips { display: grid; gap: 6px; margin-top: 6px; }
+.memory-chip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); font-size: 13px; max-width: min(560px, 100%); }
+.memory-chip-text { min-width: 0; overflow-wrap: anywhere; }
+.memory-chip.undone { opacity: .7; }
+
 /* MCP servers (Connections) */
 .mcp-list { display: flex; flex-direction: column; gap: 10px; }
 .mcp-row { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); }

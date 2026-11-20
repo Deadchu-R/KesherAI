@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { branding } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { basename, extname } from "node:path";
+import { resolveInWorkspace } from "@kesher/agent";
 
 function page(title: string, text: string): string {
   const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
@@ -90,5 +92,47 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post("/api/google/disconnect", async () => {
     await s.google.disconnect();
     return { connected: false };
+  });
+
+  /**
+   * "Save to Drive" under a file the chat made: `{ assetId }` (a picture, video or sound KesherAI made) or
+   * `{ conversationId, path }` (a file in that chat's folder, path inside it). Goes into a "KesherAI" folder at the top
+   * of the user's Drive; returns the link (it opens on the phone too). Only files KesherAI keeps can be sent, never
+   * any path on the computer.
+   */
+  app.post<{ Body: { assetId?: string; conversationId?: string; path?: string } }>("/api/google/save-file", async (req, reply) => {
+    if (!s.google.connected) return reply.code(409).send({ error: "Not connected to Google Drive" });
+    let file: string;
+    let name: string;
+    const assetId = String(req.body?.assetId ?? "");
+    if (assetId) {
+      const asset = await s.assets.recordOf(assetId);
+      if (!asset) return reply.code(404).send({ error: "Asset not found" });
+      file = s.assets.fileOf(asset);
+      name = `kesher-${asset.mimeType.split("/")[0]}-${asset.id.slice(0, 8)}${extname(file)}`;
+    } else {
+      const conv = await s.library.getConversation(String(req.body?.conversationId ?? ""));
+      const root = conv ? s.conversations.workspaceOf(conv) : undefined;
+      if (!root) return reply.code(404).send({ error: "Conversation not found" });
+      try {
+        file = await resolveInWorkspace(root, String(req.body?.path ?? ""));
+      } catch (err) {
+        return reply.code(400).send({ error: (err as Error).message });
+      }
+      name = basename(file);
+    }
+    try {
+      let folder = await s.google.ensureFolder("KesherAI");
+      try {
+        return { link: (await s.google.uploadFile(file, folder, undefined, name)).link };
+      } catch (err) {
+        // A folder the user made by hand may not take KesherAI's files (drive.file): make KesherAI's own of that name.
+        if (!/\b(403|404)\b/.test((err as Error).message)) throw err;
+        folder = await s.google.ensureFolder("KesherAI", true);
+        return { link: (await s.google.uploadFile(file, folder, undefined, name)).link };
+      }
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
   });
 }
