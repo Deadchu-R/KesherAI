@@ -62,6 +62,10 @@ test("read with an outline, write with the old text kept, refuse a file changed 
     assert.equal((await readdir(join(home, "data", "game-backups", "godot"))).length, 1);
     const stale = await app.inject({ method: "PUT", url: "/api/games/source/file", payload: { engine: "godot", project: godot.path, path: "player/player.gd", text: "x\n", mtime: f.mtime - 5000 } });
     assert.equal(stale.statusCode, 409);
+    // Scan 168: overwriting an existing file without the time it was opened with is refused too.
+    const blind = await app.inject({ method: "PUT", url: "/api/games/source/file", payload: { engine: "godot", project: godot.path, path: "player/player.gd", text: "x\n" } });
+    assert.equal(blind.statusCode, 409);
+    assert.equal(await readFile(join(godot.path, "player", "player.gd"), "utf8"), "class_name Player\n");
     assert.equal((await app.inject({ url: `/api/games/source/files?engine=godot&project=%2Fetc` })).statusCode, 400);
     const def = (await app.inject({ url: `/api/games/source/definition?${q}&name=Player` })).json() as { definitions: Array<{ path: string; line: number }> };
     assert.deepEqual(def.definitions.map((d) => [d.path, d.line]), [["player/player.gd", 1]]);

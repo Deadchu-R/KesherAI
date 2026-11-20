@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GameCheckpoints, insideProject, pruneList, type GameCheckpoint } from "./game-checkpoints.js";
+import { GameCheckpoints, insideProject, pruneList, realInside, type GameCheckpoint } from "./game-checkpoints.js";
 
 const meta = (project: string, group: string) => ({ engine: "unity" as const, project, name: "Demo", source: "chat" as const, label: "make the door open", group });
 
@@ -91,4 +91,45 @@ test("a chat turn's engine writes share one checkpoint; reads and unnamed writes
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("a link put in the project is never copied, read or written through (scan 168)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-gcp-"));
+  try {
+    const project = join(root, "Demo");
+    const outside = join(root, "outside");
+    await mkdir(join(project, "Assets"), { recursive: true });
+    await mkdir(outside, { recursive: true });
+    await writeFile(join(outside, "secret.cs"), "secret\n");
+    await writeFile(join(project, "Assets", "Door.cs"), "class Door {}\n");
+    await symlink(join(outside, "secret.cs"), join(project, "Assets", "Link.cs"));
+    await symlink(outside, join(project, "Assets", "Out"));
+    await assert.rejects(realInside(project, join(project, "Assets", "Link.cs")));
+    await assert.rejects(realInside(project, join(project, "Assets", "Out", "new.cs")));
+    await realInside(project, join(project, "Assets", "Door.cs"));
+    await realInside(project, join(project, "Assets", "Sub", "new.cs"));
+    const store = new GameCheckpoints(() => join(root, "store"));
+    const a = await store.capture(meta(project, "g1"), ["Assets/Door.cs", "Assets/Link.cs"]);
+    assert.deepEqual(a?.checkpoint.files.map((f) => f.rel), ["Assets/Door.cs"]);
+    // Door.cs becomes a link out of the project after the checkpoint: the restore skips it, the outside file stays.
+    await rm(join(project, "Assets", "Door.cs"));
+    await symlink(join(outside, "secret.cs"), join(project, "Assets", "Door.cs"));
+    await assert.rejects(store.compare(a!.checkpoint.id, "Assets/Door.cs"));
+    const r = await store.restore(a!.checkpoint.id);
+    assert.equal(r.restored, 0);
+    assert.equal(r.skipped, 1);
+    assert.equal(await readFile(join(outside, "secret.cs"), "utf8"), "secret\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("prune counts a content shared by checkpoints once, until the last one using it goes", () => {
+  const now = Date.parse("2026-11-20T00:00:00Z");
+  const mb = 1024 * 1024;
+  const cp = (id: string, blobs: Array<[string, number]>): GameCheckpoint => ({ id, engine: "unity", project: "/p", name: "p", source: "chat", label: id, group: id, at: new Date(now - 1000).toISOString(), files: blobs.map(([b, size]) => ({ rel: `${b}.prefab`, size, blob: b })) });
+  // 160 MB in all; x (60 MB) is shared by a and b, so dropping a frees only y: 100 MB, still over 90, so b goes too.
+  const list = [cp("a", [["x", 60 * mb], ["y", 60 * mb]]), cp("b", [["x", 60 * mb]]), cp("c", [["z", 40 * mb]])];
+  assert.deepEqual(pruneList(list, { days: 30, maxMB: 90 }, now).map((c) => c.id), ["c"]);
+  assert.deepEqual(pruneList(list, { days: 30, maxMB: 110 }, now).map((c) => c.id), ["b", "c"]);
 });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
@@ -98,6 +98,28 @@ export function insideProject(project: string, file: string): { abs: string; rel
   if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("The file is not inside the project.");
   return { abs, rel: rel.split(sep).join("/") };
 }
+
+/**
+ * Checks that a file inside a project (by {@link insideProject}) is really there: the file itself is not a link, and
+ * its nearest folder that exists, with links followed, is still inside the project (security scan 168: a link put in
+ * a project after a checkpoint must not make a restore write, or a compare read, outside it).
+ *
+ * @param project - The project folder.
+ * @param abs - The file's full path.
+ * @throws When the file is a link or leads outside the project.
+ */
+export async function realInside(project: string, abs: string): Promise<void> {
+  const st = await lstat(abs).catch(() => undefined);
+  if (st?.isSymbolicLink()) throw new Error("The file is a link: not used here.");
+  let probe = st ? dirname(abs) : abs;
+  while (!existsSync(probe) && probe !== dirname(probe)) probe = dirname(probe);
+  const [root, real] = await Promise.all([realpath(project), realpath(probe)]);
+  const back = relative(root, real);
+  if (back.startsWith("..") || isAbsolute(back)) throw new Error("The file leads outside the project.");
+}
+
+/** A blob id as the store writes it (a sha256 in hex); anything else in the index is ignored. */
+const BLOB_ID = /^[0-9a-f]{64}$/;
 
 /**
  * Whether bytes look like text (no NUL in the first 8 KB), for the diff.
@@ -204,6 +226,8 @@ export class GameCheckpoints {
       let added = 0;
       for (const w of wanted) {
         if (cp.files.some((f) => f.rel === w.rel)) continue;
+        // A link (or a path through one out of the project) is not ours to copy.
+        if (!(await realInside(meta.project, w.abs).then(() => true, () => false))) continue;
         const st = await stat(w.abs).catch(() => undefined);
         if (!st || !st.isFile()) cp.files.push({ rel: w.rel, size: 0 });
         else if (st.size > MAX_FILE) cp.files.push({ rel: w.rel, size: st.size, skipped: true });
@@ -265,7 +289,7 @@ export class GameCheckpoints {
       let skipped = 0;
       for (const f of cp.files) {
         const { abs } = insideProject(cp.project, f.rel);
-        if (f.skipped) {
+        if (f.skipped || (f.blob && !BLOB_ID.test(f.blob)) || !(await realInside(cp.project, abs).then(() => true, () => false))) {
           skipped++;
           continue;
         }
@@ -298,6 +322,8 @@ export class GameCheckpoints {
     const f = cp?.files.find((x) => x.rel === rel);
     if (!cp || !f) throw new Error("No such file in this checkpoint.");
     const { abs } = insideProject(cp.project, f.rel);
+    await realInside(cp.project, abs);
+    if (f.blob && !BLOB_ID.test(f.blob)) throw new Error("No such file in this checkpoint.");
     const nowSt = await stat(abs).catch(() => undefined);
     const sizeNow = nowSt?.isFile() ? nowSt.size : 0;
     const out = { rel: f.rel, sizeBefore: f.size, sizeNow };
@@ -355,11 +381,16 @@ export class GameCheckpoints {
  * @param list - The checkpoints.
  */
 export function blobBytes(list: GameCheckpoint[]): number {
+  let n = 0;
+  for (const v of sizesOf(list).values()) n += v;
+  return n;
+}
+
+/** Each content's size, once per content (the newest listing wins, as before). */
+function sizesOf(list: GameCheckpoint[]): Map<string, number> {
   const seen = new Map<string, number>();
   for (const c of list) for (const f of c.files) if (f.blob) seen.set(f.blob, f.size);
-  let n = 0;
-  for (const v of seen.values()) n += v;
-  return n;
+  return seen;
 }
 
 /**
@@ -371,9 +402,25 @@ export function blobBytes(list: GameCheckpoint[]): number {
  */
 export function pruneList(list: GameCheckpoint[], limits: CheckpointLimits, now: number): GameCheckpoint[] {
   const days = Math.max(1, limits.days);
-  let keep = list.filter((c) => now - Date.parse(c.at) <= days * 86_400_000);
+  const keep = list.filter((c) => now - Date.parse(c.at) <= days * 86_400_000);
   const max = Math.max(1, limits.maxMB) * 1024 * 1024;
+  // How many kept checkpoints use each content, and their total once each: dropping the oldest only takes off the
+  // contents no newer one shares (one pass, not the whole sum again per drop: up to 2,000 checkpoints).
+  const uses = new Map<string, number>();
+  for (const c of keep) for (const f of c.files) if (f.blob) uses.set(f.blob, (uses.get(f.blob) ?? 0) + 1);
+  const sizes = sizesOf(keep);
+  let bytes = 0;
+  for (const v of sizes.values()) bytes += v;
+  let drop = 0;
   // The newest one always stays, even when it alone is over the size (it guards the latest change).
-  while (keep.length > 1 && blobBytes(keep) > max) keep = keep.slice(1);
-  return keep;
+  while (keep.length - drop > 1 && bytes > max) {
+    for (const f of keep[drop]!.files) {
+      if (!f.blob) continue;
+      const n = uses.get(f.blob)! - 1;
+      uses.set(f.blob, n);
+      if (n === 0) bytes -= sizes.get(f.blob) ?? 0;
+    }
+    drop++;
+  }
+  return drop ? keep.slice(drop) : keep;
 }

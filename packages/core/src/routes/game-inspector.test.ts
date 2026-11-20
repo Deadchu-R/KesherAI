@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gamesRoutes } from "./games.js";
@@ -50,6 +50,10 @@ test("Inspector: a prefab's values with Unity closed, a change queued, synced af
     // Outside the project, or not an asset: refused.
     assert.equal((await app.inject({ url: `/api/games/inspect?${q("../secret.prefab")}` })).statusCode, 400);
     assert.equal((await app.inject({ url: `/api/games/inspect?${q("Assets/Crate.prefab.meta")}` })).statusCode, 400);
+    // Scan 168: a prefab that is a link out of the project is neither read nor queued.
+    await writeFile(join(home, "outside.prefab"), "%YAML 1.1\n");
+    await symlink(join(home, "outside.prefab"), join(project, "Assets", "Linked.prefab"));
+    assert.equal((await app.inject({ url: `/api/games/inspect?${q("Assets/Linked.prefab")}` })).statusCode, 400);
     const body = (to: string, from = "1", name = "m_Mass") => ({ engine: "unity", project, path: "Assets/Crate.prefab", target: "540", name, from, to });
     assert.equal((await app.inject({ method: "POST", url: "/api/games/inspect/value", payload: body("heavy") })).statusCode, 400);
     assert.equal((await app.inject({ method: "POST", url: "/api/games/inspect/value", payload: body("5", "2") })).statusCode, 409);

@@ -4,7 +4,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 import type { GameProject } from "../game-projects.js";
-import { insideProject } from "../game-checkpoints.js";
+import { insideProject, realInside } from "../game-checkpoints.js";
 import { readGodotInspector, readUnityInspector, valueText, type InspectorObject, type ValueEdit, type ValueQueue } from "../game-inspector.js";
 import { assetsOf } from "./unity-scene.js";
 import { sameFolder } from "../unity-cli.js";
@@ -205,6 +205,7 @@ export function gameInspectorRoutes(app: FastifyInstance, s: KesherServices, fin
       const p = await known(req.query.engine, req.query.project);
       if (p.kind === "unreal" && /^Content\//i.test(String(req.query.path ?? ""))) {
         const { abs, rel } = unrealPath(p, String(req.query.path));
+        await realInside(p.path, abs);
         const h = await readUassetFile(abs);
         const asset = await unrealAssetView(p.path, rel, h);
         // A Blueprint with a copy saved by the Unreal page: its variables too.
@@ -229,6 +230,8 @@ export function gameInspectorRoutes(app: FastifyInstance, s: KesherServices, fin
         return { path, objects: [unrealObject(path, saved.graph)], savedAt: saved.savedAt, readOnly: true, pending: [] };
       }
       const { abs, rel } = inspectPath(p, String(req.query.path ?? ""));
+      // Links are not followed out of the project (security scan 168), as in the Source view.
+      await realInside(p.path, abs);
       const st = await stat(abs);
       if (st.size > MAX_BYTES) return reply.code(400).send({ error: "The file is too big to open here." });
       const text = await readFile(abs, "utf8");
@@ -258,6 +261,7 @@ export function gameInspectorRoutes(app: FastifyInstance, s: KesherServices, fin
       const p = await known(req.body?.engine, req.body?.project);
       if (p.kind === "unreal") return reply.code(400).send({ error: "Unreal values change through the Blueprint's page or a chat." });
       const { abs, rel } = inspectPath(p, String(req.body?.path ?? ""));
+      await realInside(p.path, abs);
       const target = String(req.body?.target ?? "").slice(0, 300);
       const name = String(req.body?.name ?? "").slice(0, 120);
       const text = await readFile(abs, "utf8");

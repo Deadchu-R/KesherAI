@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { COMPONENTS } from "./unity-scene.js";
+import { realInside } from "./game-checkpoints.js";
 
 /**
  * Inspector values with the engine closed (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20,
@@ -549,7 +550,9 @@ export class ValueQueue {
       for (const file of new Set(mine.map((x) => x.file))) {
         const abs = join(project, file);
         const edits = mine.filter((x) => x.file === file);
-        const text = await readFile(abs, "utf8").catch(() => undefined);
+        // A link put in the project since the value was queued is not written through (security scan 168).
+        const ok = await realInside(project, abs).then(() => true, () => false);
+        const text = ok ? await readFile(abs, "utf8").catch(() => undefined) : undefined;
         if (text === undefined) {
           failed += edits.length;
           continue;
