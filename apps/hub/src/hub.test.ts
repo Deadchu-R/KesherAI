@@ -358,3 +358,50 @@ test("live agent activity: only an opted-in PC, kept as a short ring per run, de
   hub.dropAgentActivity();
   assert.equal(store.agentEventCount(), 0);
 });
+
+test("older clients: a 0.6.401 PC (old opt-in, unknown fields) stays online; unknown frames are refused alone; ping", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Old PC");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  // 0.6.401's hello: an opt-in without the activity fields, plus fields this hub does not know.
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", version: "0.6.401", platform: "win32", busy: false, optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false }, agents: [{ kind: "local-model", state: "on", label: "Qwen", extra: 1 }], futureField: { x: 1 } }));
+  await hub.onFrame(pc.id, JSON.stringify({ t: "beat", busy: true, agents: [], somethingNew: true }));
+  // A frame from a newer client this hub does not know: refused, nothing else changes.
+  await hub.onFrame(pc.id, JSON.stringify({ t: "from-the-future", data: 1 }));
+  assert.deepEqual(sockets.frames(pc.id, "refused").at(-1), { t: "refused", code: "bad-frame" });
+  assert.equal(sockets.closed.includes(pc.id), false, "never disconnected for an unknown frame");
+  const d = (await hub.state()).devices.find((x) => x.id === pc.id)!;
+  assert.equal(d.online, true);
+  assert.equal(d.version, "0.6.401");
+  assert.equal(d.busy, true);
+  assert.equal(d.optIn.reportActivity, false, "missing opt-in fields take the defaults");
+  assert.ok(store.device(pc.id)?.lastSeen);
+  // The keep-alive ping is answered (on Cloudflare the auto-response does this without waking the hub).
+  await hub.onFrame(pc.id, JSON.stringify({ t: "ping" }));
+  assert.deepEqual(sockets.frames(pc.id, "pong").length, 1);
+});
+
+test("task-inbox reports: only from a PC to a phone, queued while the phone is off, never audited with content", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  await hub.onOpen(pc.id);
+  const body: SealedBody = { type: "inbox_task", taskId: "c-1120-01", title: "Fix the hub status", state: "running", executor: "antigravity", from: "claude", runId: "in-c-1120-01", at: 5 };
+  const env = await sealMessage({ from: pc.id, to: phone.id, kind: "inbox_task", ttl: 7 * 24 * 3600 }, body, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env }));
+  assert.deepEqual(sockets.frames(pc.id, "sent").at(-1), { t: "sent", id: env.id, queued: true });
+  assert.ok(!store.queued(phone.id)[0]!.env.includes("Fix the hub"), "the hub holds only ciphertext");
+  // The phone comes on: delivered and opened.
+  sockets.on.add(phone.id);
+  await hub.onOpen(phone.id);
+  const got = sockets.frames(phone.id, "deliver").at(-1);
+  assert.ok(got?.t === "deliver");
+  assert.deepEqual(await openEnvelope(got.env, phone.keys.privateKey, pc.keys.publicKey), body);
+  // A phone cannot send inbox reports (only the PC that has the inbox).
+  const fake = await sealMessage({ from: phone.id, to: pc.id, kind: "inbox_task" }, body, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
+  assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
+  assert.ok(!JSON.stringify(store.auditList(100)).includes("inbox"));
+});

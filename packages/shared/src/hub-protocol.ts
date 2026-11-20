@@ -46,9 +46,9 @@ export const HUB_LIMITS = {
 export type HubDeviceKind = "pc" | "phone";
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -133,7 +133,9 @@ export type DeviceFrame =
   | { t: "send"; env: SealedEnvelope }
   /** Live agent activity: one sealed `agent_event` per (viewer, run), kept by the hub as a short ring, never queued. */
   | { t: "agents"; envs: SealedEnvelope[] }
-  | { t: "ack"; id: string };
+  | { t: "ack"; id: string }
+  /** Keeps the link alive (on Cloudflare the hub answers `{"t":"pong"}` without waking up). */
+  | { t: "ping" };
 
 /** Why the hub refused a frame. */
 export type HubRefusal = "bad-frame" | "rate-limited" | "paused" | "no-recipient" | "not-accepting" | "too-big" | "cloud-off" | "cloud-failed" | "not-allowed";
@@ -146,7 +148,8 @@ export type HubFrame =
   | { t: "sent"; id: string; queued: boolean }
   | { t: "refused"; id?: string; code: HubRefusal }
   | { t: "pause"; paused: boolean }
-  | { t: "revoked" };
+  | { t: "revoked" }
+  | { t: "pong" };
 
 /** Who runs a task. */
 export type HubExecutor = "auto" | "claude-cloud" | "pc-local" | "pc-antigravity" | "pc-any";
@@ -166,7 +169,34 @@ export type SealedBody =
   | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny" }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
   /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
-  | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] };
+  | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
+  /** A task of the PC's task inbox (Claude's `kesher-inbox` branch) as the hub page lists it: metadata, never its text. */
+  | ({ type: "inbox_task" } & HubInboxTask);
+
+/** Where a task-inbox task stands, as the hub page shows it. */
+export type HubInboxState = "waiting" | "waiting-run" | "running" | "done" | "failed" | "partial";
+
+/** Who runs a task-inbox task: the PC's local model (self-work), Antigravity on the PC, or Claude (its Opus agent). */
+export type HubInboxExecutor = "local" | "antigravity" | "claude";
+
+/** A task-inbox task's metadata, sealed by the PC to the owner's phones and the hub page. */
+export interface HubInboxTask {
+  /** The inbox id (`tasks/<id>.md`). */
+  taskId: string;
+  title: string;
+  state: HubInboxState;
+  executor: HubInboxExecutor;
+  /** Who wrote it: Claude (the usual), Roee from the phone, or self-work. */
+  from: "claude" | "roee" | "self-work";
+  /** The work's branch (`agy/…`) once there is work on it. */
+  branch?: string;
+  /** A short result: the agent's report or why it failed (at most 300 characters). */
+  result?: string;
+  /** The live agent run (the Agents tab's card), while it has one. */
+  runId?: string;
+  /** When this state was reported (ms since epoch). */
+  at: number;
+}
 
 // ---- live agent activity (docs/RESEARCH_LOG.md, "Live agent activity in the Kesher Cloud hub") ----
 
@@ -243,6 +273,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   approval_answer: "approval_answer",
   cloud_started: "cloud_started",
   agent_event: "agent_event",
+  inbox_task: "inbox_task",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -385,6 +416,8 @@ export function parseDeviceFrame(raw: unknown): DeviceFrame | null {
     }
     case "ack":
       return isHubId(x.id) ? { t: "ack", id: x.id } : null;
+    case "ping":
+      return { t: "ping" };
     default:
       return null;
   }
@@ -440,11 +473,22 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const events = b.events.slice(0, HUB_LIMITS.agentBatchEvents).map(parseActivityEvent).filter((e): e is ActivityEvent => !!e);
       return { type: "agent_event", runId: b.runId, state, events };
     }
+    case "inbox_task": {
+      if (!isHubId(b.taskId)) return null;
+      const title = str(b.title, HUB_LIMITS.titleChars).trim();
+      const state = INBOX_STATES.includes(b.state as HubInboxState) ? (b.state as HubInboxState) : null;
+      if (!title || !state) return null;
+      const executor = INBOX_EXECUTORS.includes(b.executor as HubInboxExecutor) ? (b.executor as HubInboxExecutor) : "claude";
+      const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
+      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+    }
     default:
       return null;
   }
 }
 
+const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
+const INBOX_EXECUTORS: readonly HubInboxExecutor[] = ["local", "antigravity", "claude"];
 const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
 const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];

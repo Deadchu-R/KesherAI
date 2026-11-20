@@ -8,6 +8,7 @@
  * The hub never makes this PC run anything: a task becomes a board item like any other, under the board's own rules.
  * The device token and this PC's private key live in the encrypted config and are never logged or sent to a page.
  */
+import { createHash } from "node:crypto";
 import { hostname } from "node:os";
 import WebSocket from "ws";
 import {
@@ -23,12 +24,15 @@ import {
   type HubAgent,
   type HubCryptoKey,
   type HubFrame,
+  type HubInboxState,
+  type HubInboxTask,
   type HubOptIn,
   type HubPresence,
+  type InboxTaskView,
   type SealedBody,
   type SealedEnvelope,
 } from "@kesher/shared";
-import type { ActivityBatch, AgentActivity } from "./agent-activity.js";
+import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
 import type { TaskBoard } from "./task-board.js";
 
@@ -39,6 +43,8 @@ export type HubSettings = KesherConfig["hub"];
 export interface HubSocket {
   send(text: string): void;
   close(): void;
+  /** Drops a dead link at once, without the closing handshake (the watchdog); `close` when missing. */
+  kill?(): void;
 }
 
 /** Callbacks a socket calls. */
@@ -46,6 +52,8 @@ export interface HubSocketEvents {
   open(): void;
   message(text: string): void;
   close(): void;
+  /** Why the link failed (before `close`), e.g. "Unexpected server response: 401". */
+  error?(message: string): void;
 }
 
 /** An approval waiting in a chat on this PC (sent to the phone through the relay). */
@@ -85,7 +93,20 @@ export interface HubClientDeps {
   deviceName?: string;
   /** Live agent activity (agent-activity.ts): Stop from the hub page reaches its runs, and it slows down when told to. */
   activity?: Pick<AgentActivity, "has" | "cancel" | "slowDown">;
+  /** The task inbox's tasks (inbox-runner.ts), reported to the hub page's Tasks list as metadata. */
+  inboxTasks?: () => Promise<InboxTaskView[]>;
 }
+
+/**
+ * Why the link is not up, as a code the settings card words in Hebrew and English:
+ * - `unreachable`: the hub did not answer (no internet, a wrong address, the hub is down).
+ * - `refused`: the hub no longer knows this PC (removed on the hub page, or its token is gone): pair again.
+ * - `socket`: the hub answered, but the live link (WebSocket) did not open or was cut; it retries by itself.
+ * - `rate-limited`: too many tries for now; it retries by itself.
+ * - `hub-error`: the hub answered with an error; it retries by itself.
+ * - `dropped`: a message could not be opened and was dropped (the link itself is fine).
+ */
+export type HubErrorCode = "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped";
 
 /** What the settings card shows (never the token or the key). */
 export interface HubStatus {
@@ -99,11 +120,65 @@ export interface HubStatus {
   pairing?: { code: string; fingerprint: string; expiresAt: string };
   /** The other devices as the hub shows them (names and on/off). */
   devices: Array<{ id: string; name: string; kind: string; online: boolean }>;
+  /** The last problem in English (kept for older pages), and its code for the card's own words. */
   lastError?: string;
+  errorCode?: HubErrorCode;
+  /** ISO times: when the live link last opened, and when the next try is (while it is down). */
+  lastConnectedAt?: string;
+  nextRetryAt?: string;
 }
 
 const BEAT_MS = 45_000;
+/** A ping every 30 s (the hub answers it without waking up); a link that heard nothing for 100 s is dead. */
+const PING_MS = 30_000;
+const DEAD_MS = 100_000;
 const MARK = /hub-task:([\w-]{1,64}):([\w-]{1,64})/;
+
+/** How many of the newest inbox tasks are reported (older ones were reported when they changed). */
+const INBOX_REPORTED = 40;
+
+const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
+  waiting: "waiting",
+  queued: "waiting",
+  "deferred-quota": "waiting-run",
+  running: "running",
+  "needs-approval": "running",
+  done: "done",
+  partial: "partial",
+  failed: "failed",
+  declined: "failed",
+  skipped: "failed",
+};
+
+/**
+ * A task-inbox task as the hub page lists it: metadata only (title, state, executor, branch, a short result), never
+ * the task's text. Tasks that came from the hub are left out (the page that sent them already lists them).
+ *
+ * @param t - The task as the inbox keeps it.
+ * @param now - The report time (ms).
+ * @returns The report, or undefined when it is not reported.
+ */
+export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | undefined {
+  if (t.from === "hub" || !/^[\w-]{1,64}$/.test(t.id)) return undefined;
+  let state = INBOX_STATE[t.status];
+  // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
+  if (state === "waiting" && t.runBy === "antigravity") state = "waiting-run";
+  const ended = state === "done" || state === "partial" || state === "failed";
+  const result = (ended ? (t.status === "skipped" ? "Skipped." : t.status === "declined" ? t.note : (t.summary ?? t.note)) : t.status === "needs-approval" ? "Waits for an approval on the PC or the phone." : t.note)?.replace(/\s+/g, " ").trim().slice(0, 300);
+  const going = t.runBy === "antigravity" && (state === "running" || state === "waiting-run");
+  return {
+    taskId: t.id,
+    title: (t.title || t.id).slice(0, 200),
+    state,
+    executor: t.runBy === "opus" ? "claude" : t.runBy,
+    from: t.from === "roee" || t.from === "self-work" ? t.from : "claude",
+    // The branch shows once there is work on it (a started or ended run), never a planned name.
+    ...(t.branch && (t.startedAt || ended) && t.status !== "declined" ? { branch: t.branch } : {}),
+    ...(result ? { result } : {}),
+    ...(going ? { runId: inboxRunId(t.id) } : {}),
+    at: now,
+  };
+}
 
 /**
  * Checks a hub address: https, or http only for this computer (a local test hub).
@@ -129,8 +204,8 @@ function wsSocket(url: string, on: HubSocketEvents): HubSocket {
   ws.on("open", () => on.open());
   ws.on("message", (data) => on.message(String(data)));
   ws.on("close", () => on.close());
-  ws.on("error", () => undefined);
-  return { send: (t) => ws.send(t), close: () => ws.close() };
+  ws.on("error", (e) => on.error?.(e.message));
+  return { send: (t) => ws.send(t), close: () => ws.close(), kill: () => ws.terminate() };
 }
 
 /** The PC's link to the cloud hub. */
@@ -142,7 +217,16 @@ export class HubClient {
   private retry = 0;
   private retryTimer?: NodeJS.Timeout;
   private beatTimer?: NodeJS.Timeout;
+  private pingTimer?: NodeJS.Timeout;
   private pollTimer?: NodeJS.Timeout;
+  /** When the hub was last heard from on the open link, when it last opened, and when the next try is. */
+  private heardAt = 0;
+  private connectedAt?: number;
+  private retryAt?: number;
+  private errorCode?: HubErrorCode;
+  /** A ticket is being fetched (one try at a time), and which link is current (an old link's events are ignored). */
+  private connecting = false;
+  private gen = 0;
   private presence: HubPresence[] = [];
   private hubKey = "";
   private key?: Promise<{ privateKey: HubCryptoKey; publicKey: string }>;
@@ -174,7 +258,16 @@ export class HubClient {
       ...(this.pairing ? { pairing: { code: this.pairing.code, fingerprint: this.pairing.fingerprint, expiresAt: new Date(this.pairing.expiresAt).toISOString() } } : {}),
       devices: this.presence.filter((d) => d.id !== s.deviceId).map((d) => ({ id: d.id, name: d.name, kind: d.kind, online: d.online })),
       ...(this.lastError ? { lastError: this.lastError } : {}),
+      ...(this.errorCode ? { errorCode: this.errorCode } : {}),
+      ...(this.connectedAt ? { lastConnectedAt: new Date(this.connectedAt).toISOString() } : {}),
+      ...(!this.connected && !this.stopped && this.retryAt ? { nextRetryAt: new Date(this.retryAt).toISOString() } : {}),
     };
+  }
+
+  /** Records a problem (English for the log-free status, a code for the card's Hebrew and English). */
+  private fail(code: HubErrorCode, text: string): void {
+    this.errorCode = code;
+    this.lastError = text;
   }
 
   // ---- settings ----
@@ -289,13 +382,17 @@ export class HubClient {
           this.s.reported = [];
           this.pairing = undefined;
           this.lastError = undefined;
+          this.errorCode = undefined;
+          // Pairing is the user's "yes": the link turns on and connects now (it used to wait for the On switch,
+          // so a freshly paired PC showed Off on the hub page).
+          this.s.enabled = true;
           await this.deps.persist();
-          if (this.s.enabled) this.start();
+          this.start();
           return;
         }
         if (r.status >= 400 && r.status !== 429) {
           this.pairing = undefined;
-          this.lastError = typeof r.data.error === "string" ? r.data.error : "Pairing ended.";
+          this.fail("hub-error", typeof r.data.error === "string" ? r.data.error : "Pairing ended.");
           return;
         }
       } catch {
@@ -309,9 +406,19 @@ export class HubClient {
 
   // ---- connection ----
 
-  /** Connects when it is on and paired (called at start-up too). */
+  /**
+   * Connects when it is on and paired (called when the app starts, after pairing and by the On switch). Already
+   * running but waiting to retry: tries again now, from a short backoff.
+   */
   start(): void {
-    if (!this.s.enabled || !this.s.token || !this.s.url || !this.stopped) return;
+    if (!this.s.enabled || !this.s.token || !this.s.url) return;
+    if (!this.stopped) {
+      if (this.connected || this.connecting || this.socket) return;
+      clearTimeout(this.retryTimer);
+      this.retry = 0;
+      void this.connect();
+      return;
+    }
     this.stopped = false;
     void this.connect();
   }
@@ -319,75 +426,139 @@ export class HubClient {
   /** Disconnects and stops reconnecting. */
   stop(): void {
     this.stopped = true;
+    this.gen++;
     clearTimeout(this.retryTimer);
     clearInterval(this.beatTimer);
+    clearInterval(this.pingTimer);
     clearTimeout(this.pollTimer);
     this.socket?.close();
     this.socket = undefined;
     this.connected = false;
+    this.retryAt = undefined;
   }
 
   /** Reconnects later: 1 s doubling to 5 minutes, with jitter. */
   private later(): void {
     if (this.stopped) return;
-    const base = Math.min(300_000, 1000 * 2 ** this.retry++);
-    this.retryTimer = setTimeout(() => void this.connect(), base / 2 + Math.random() * (base / 2));
+    clearTimeout(this.retryTimer);
+    const base = Math.min(300_000, 1000 * 2 ** Math.min(this.retry++, 20));
+    const wait = base / 2 + Math.random() * (base / 2);
+    this.retryAt = Date.now() + wait;
+    this.retryTimer = setTimeout(() => void this.connect(), wait);
     this.retryTimer.unref?.();
   }
 
   /** Gets a one-use ticket (rotating the token when due), then opens the socket. */
   async connect(): Promise<void> {
-    if (this.stopped || !this.s.token || !this.s.url) return;
+    if (this.stopped || !this.s.token || !this.s.url || this.connecting || this.socket) return;
+    this.connecting = true;
+    try {
+      await this.openLink();
+    } finally {
+      this.connecting = false;
+    }
+  }
+
+  private async openLink(): Promise<void> {
+    if (!this.s.token || !this.s.url) return;
     let ticket: string;
     try {
       let r = await this.post("/api/ticket", {}, this.s.token);
-      if (r.status === 401) return this.lost("The hub no longer knows this PC. Pair it again.");
+      if (this.stopped) return;
+      if (r.status === 401 || r.status === 403) return this.lost("The hub no longer knows this PC. Pair it again.");
       if (r.status === 503) {
         this.paused = true;
         return this.later();
       }
-      if (r.status !== 200 || typeof r.data.ticket !== "string") return this.later();
+      if (r.status === 429) {
+        this.fail("rate-limited", "Too many tries; trying again soon.");
+        return this.later();
+      }
+      if (r.status !== 200 || typeof r.data.ticket !== "string") {
+        this.fail("hub-error", `The hub answered ${r.status}${typeof r.data.error === "string" ? `: ${r.data.error.slice(0, 120)}` : ""}.`);
+        return this.later();
+      }
       if (r.data.rotateDue === true) {
         const rot = await this.post("/api/rotate", {}, this.s.token);
         if (rot.status === 200 && typeof rot.data.token === "string") {
           this.s.token = rot.data.token;
           await this.deps.persist();
           r = await this.post("/api/ticket", {}, this.s.token);
-          if (r.status !== 200 || typeof r.data.ticket !== "string") return this.later();
+          if (r.status !== 200 || typeof r.data.ticket !== "string") {
+            this.fail("hub-error", `The hub answered ${r.status} after the token rotated.`);
+            return this.later();
+          }
         }
       }
       ticket = String(r.data.ticket);
     } catch {
-      this.lastError = "The hub did not answer.";
+      this.fail("unreachable", "The hub did not answer.");
       return this.later();
     }
+    if (this.stopped) return;
     const ws = `${this.s.url.replace(/^http/, "ws")}/ws/device?ticket=${encodeURIComponent(ticket)}`;
     const open = this.deps.openSocket ?? wsSocket;
+    let opened = false;
+    const gen = ++this.gen;
     this.socket = open(ws, {
       open: () => {
+        if (this.gen !== gen) return;
+        opened = true;
         this.connected = true;
         this.paused = false;
         this.retry = 0;
+        this.retryAt = undefined;
         this.lastError = undefined;
+        this.errorCode = undefined;
+        this.connectedAt = this.heardAt = Date.now();
         this.send({ t: "hello", version: this.deps.version, platform: process.platform, busy: this.deps.busy?.() ?? false, optIn: cleanOptIn(this.s.optIn), agents: this.agents() });
         clearInterval(this.beatTimer);
         this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
         this.beatTimer.unref?.();
+        clearInterval(this.pingTimer);
+        this.pingTimer = setInterval(() => this.ping(), PING_MS);
+        this.pingTimer.unref?.();
       },
-      message: (text) => void this.onMessage(text).catch(() => undefined),
+      message: (text) => {
+        this.heardAt = Date.now();
+        void this.onMessage(text).catch(() => undefined);
+      },
+      error: (message) => {
+        if (!opened) this.fail("socket", `The live link did not open: ${message.slice(0, 120)}`);
+      },
       close: () => {
+        if (this.gen !== gen) return;
+        if (opened && !this.errorCode) this.fail("socket", "The live link was cut; reconnecting.");
+        else if (!opened && !this.errorCode) this.fail("socket", "The live link did not open.");
         this.connected = false;
         clearInterval(this.beatTimer);
+        clearInterval(this.pingTimer);
         this.socket = undefined;
         this.later();
       },
     });
   }
 
+  /**
+   * Keeps the link honest: a ping the hub answers without waking up, and a link that heard nothing for a while (the
+   * laptop slept, the network changed) is dropped so the reconnect starts, instead of looking connected forever while
+   * the hub shows this PC as off.
+   */
+  private ping(): void {
+    if (!this.connected || !this.socket) return;
+    if (Date.now() - this.heardAt > DEAD_MS) {
+      this.fail("socket", "The hub stopped answering on the live link; reconnecting.");
+      const s = this.socket;
+      (s.kill ?? s.close).call(s);
+      return;
+    }
+    this.send({ t: "ping" });
+  }
+
   /** The hub refused this PC: forget the token and stop. */
   private async lost(why: string): Promise<void> {
     this.stop();
-    this.lastError = why;
+    this.fail("refused", why);
     delete this.s.token;
     delete this.s.deviceId;
     await this.deps.persist();
@@ -412,6 +583,7 @@ export class HubClient {
     this.send({ t: "beat", busy: this.deps.busy?.() ?? false, optIn: cleanOptIn(this.s.optIn), agents: this.agents() });
     void this.reportResults().catch(() => undefined);
     void this.sendApprovals().catch(() => undefined);
+    void this.reportInbox().catch(() => undefined);
   }
 
   // ---- messages ----
@@ -433,9 +605,12 @@ export class HubClient {
         this.hubKey = typeof f.hubKey === "string" ? f.hubKey : "";
         this.presence = Array.isArray(f.presence) ? f.presence : [];
         this.paused = f.paused === true;
+        void this.reportInbox().catch(() => undefined);
         return;
       case "presence":
         this.presence = Array.isArray(f.presence) ? f.presence : [];
+        // A phone that just paired gets the inbox's tasks too.
+        void this.reportInbox().catch(() => undefined);
         return;
       case "pause":
         this.paused = f.paused === true;
@@ -492,10 +667,10 @@ export class HubClient {
   }
 
   /** Seals and sends a message to a device. */
-  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody): Promise<boolean> {
+  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody, ttl?: number): Promise<boolean> {
     const pub = this.senderKey(to);
     if (!pub || !this.s.deviceId) return false;
-    const env = await sealMessage({ from: this.s.deviceId, to, kind }, body, (await this.ownKey()).privateKey, pub);
+    const env = await sealMessage({ from: this.s.deviceId, to, kind, ...(ttl ? { ttl } : {}) }, body, (await this.ownKey()).privateKey, pub);
     this.send({ t: "send", env });
     return true;
   }
@@ -511,7 +686,7 @@ export class HubClient {
     } catch {
       // Not for this PC, changed on the way, or from a device the hub no longer lists: dropped (acked so it is not
       // sent again), never acted on.
-      this.lastError = "A message from the hub could not be opened and was dropped.";
+      this.fail("dropped", "A message from the hub could not be opened and was dropped.");
       return ack();
     }
     if (!this.replay.first(env.id, env.ttl)) return ack();
@@ -581,6 +756,62 @@ export class HubClient {
     }
     if (changed) {
       this.s.reported = [...reported].slice(-200);
+      await this.deps.persist();
+    }
+  }
+
+  /**
+   * Reports the task inbox to the owner's phones and the hub page (the Tasks list, marked "from Claude"): each task's
+   * state, executor, branch and short result, sealed to each phone. Only what changed since the last report is sent;
+   * a phone that is off gets it from the hub's queue when it comes on.
+   */
+  async reportInbox(): Promise<void> {
+    // One report at a time; a call during one runs once more after it (so no change is missed or sent twice).
+    if (this.inboxRun) {
+      this.inboxAgain = true;
+      return this.inboxRun;
+    }
+    this.inboxRun = (async () => {
+      try {
+        do {
+          this.inboxAgain = false;
+          await this.reportInboxOnce();
+        } while (this.inboxAgain);
+      } finally {
+        this.inboxRun = undefined;
+      }
+    })();
+    return this.inboxRun;
+  }
+
+  private inboxRun?: Promise<void>;
+  private inboxAgain = false;
+
+  private async reportInboxOnce(): Promise<void> {
+    if (!this.deps.inboxTasks || !this.connected || !this.s.deviceId) return;
+    const phones = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
+    if (!phones.length) return;
+    const now = Date.now();
+    const tasks = (await this.deps.inboxTasks()).slice(-INBOX_REPORTED);
+    const sent = { ...this.s.inboxSent };
+    let changed = false;
+    for (const t of tasks) {
+      const report = hubInboxTask(t, now);
+      if (!report) continue;
+      const { at: _at, ...shape } = report;
+      const hash = createHash("sha256").update(JSON.stringify(shape)).digest("base64url").slice(0, 16);
+      for (const p of phones) {
+        const key = `${p.id}/${report.taskId}`;
+        if (sent[key] === hash) continue;
+        if (!(await this.sendSealed(p.id, "inbox_task", { type: "inbox_task", ...report }, HUB_LIMITS.maxTtl))) continue;
+        delete sent[key];
+        sent[key] = hash;
+        changed = true;
+      }
+    }
+    if (changed) {
+      // The newest 600 entries are kept (insertion order).
+      this.s.inboxSent = Object.fromEntries(Object.entries(sent).slice(-600));
       await this.deps.persist();
     }
   }

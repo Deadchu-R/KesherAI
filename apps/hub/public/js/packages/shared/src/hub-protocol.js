@@ -39,7 +39,7 @@ export const HUB_LIMITS = {
     agentBeatMs: 25_000,
     agentStaleMs: 90_000,
 };
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -54,6 +54,7 @@ export const BODY_FOR_KIND = {
     approval_answer: "approval_answer",
     cloud_started: "cloud_started",
     agent_event: "agent_event",
+    inbox_task: "inbox_task",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -202,6 +203,8 @@ export function parseDeviceFrame(raw) {
         }
         case "ack":
             return isHubId(x.id) ? { t: "ack", id: x.id } : null;
+        case "ping":
+            return { t: "ping" };
         default:
             return null;
     }
@@ -267,10 +270,23 @@ export function parseSealedBody(x, kind) {
             const events = b.events.slice(0, HUB_LIMITS.agentBatchEvents).map(parseActivityEvent).filter((e) => !!e);
             return { type: "agent_event", runId: b.runId, state, events };
         }
+        case "inbox_task": {
+            if (!isHubId(b.taskId))
+                return null;
+            const title = str(b.title, HUB_LIMITS.titleChars).trim();
+            const state = INBOX_STATES.includes(b.state) ? b.state : null;
+            if (!title || !state)
+                return null;
+            const executor = INBOX_EXECUTORS.includes(b.executor) ? b.executor : "claude";
+            const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+        }
         default:
             return null;
     }
 }
+const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
+const INBOX_EXECUTORS = ["local", "antigravity", "claude"];
 const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
 const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS = ["read", "edit", "create", "delete"];

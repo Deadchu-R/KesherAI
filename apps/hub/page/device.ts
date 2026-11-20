@@ -6,7 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, type HubExecutor, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 
@@ -28,7 +28,7 @@ export interface PendingPair {
 }
 
 /** Where a task is. */
-export type TaskStatus = "outbox" | "sent" | "waiting" | "running" | "done" | "failed" | "blocked" | "cancelled";
+export type TaskStatus = "outbox" | "sent" | "waiting" | "waiting-run" | "running" | "done" | "partial" | "failed" | "blocked" | "cancelled";
 
 /** One task this browser sent; kept only here. */
 export interface PageTask {
@@ -50,7 +50,22 @@ export interface PageTask {
   branch?: string;
   /** What happened, for the task's timeline. */
   history: Array<{ t: number; he: string; en: string }>;
+  /**
+   * A task of a PC's task inbox (Claude's `kesher-inbox` branch), reported by that PC: who wrote it, who runs it,
+   * the PC, and its live agent run while it has one. Not sent from here, so it cannot be resent or cancelled here.
+   */
+  inbox?: { from: HubInboxTask["from"]; executor: HubInboxTask["executor"]; deviceId: string; runId?: string; at: number };
 }
+
+/** The timeline words for an inbox task's states. */
+const INBOX_LABEL: Record<HubInboxTask["state"], { he: string; en: string }> = {
+  waiting: { he: "ממתין", en: "Waiting" },
+  "waiting-run": { he: "ממתין ל\"הפעל\"", en: "Waiting for Run" },
+  running: { he: "רץ", en: "Running" },
+  done: { he: "הסתיים", en: "Done" },
+  partial: { he: "הסתיים חלקית", en: "Partly done" },
+  failed: { he: "נכשל", en: "Failed" },
+};
 
 // ---- IndexedDB (one key-value store; structured clone keeps the CryptoKey usable but not exportable) ----
 
@@ -460,7 +475,8 @@ export class HubDevice {
     if (body.type === "approval_request") return;
     this.sendFrame({ t: "ack", id: env.id });
     if (!this.replay.first(env.id, env.ttl)) return;
-    const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId) : undefined;
+    if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
+    const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
     if (!task) return;
     const now = Date.now();
     if (body.type === "progress") {
@@ -483,6 +499,32 @@ export class HubDevice {
         task.history.push({ t: now, he: "התחיל ב-Claude בענן", en: "Started in Claude cloud" });
       }
     }
+    await this.saveTasks();
+  }
+
+  /**
+   * A PC's report of one of its task-inbox tasks: added to the task list, or its state, branch and result updated.
+   * Reports can arrive out of order from the hub's queue, so an older one never overwrites a newer one.
+   */
+  private async onInboxTask(from: string, r: HubInboxTask): Promise<void> {
+    const pc = this.presence.find((d) => d.id === from);
+    const status: TaskStatus = r.state;
+    let task = this.tasks.find((t) => t.inbox?.deviceId === from && t.taskId === r.taskId);
+    const label = INBOX_LABEL[r.state];
+    if (!task) {
+      task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
+      this.tasks.unshift(task);
+    } else if (task.inbox && task.inbox.at > r.at) {
+      return;
+    }
+    task.title = r.title;
+    task.status = status;
+    task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at };
+    if (r.result) task.line = r.result;
+    else delete task.line;
+    if (r.branch) task.branch = r.branch;
+    if (pc) task.toName = pc.name;
+    if (task.history.at(-1)?.en !== label.en) task.history.push({ t: r.at || Date.now(), ...label });
     await this.saveTasks();
   }
 
@@ -572,6 +614,6 @@ export class HubDevice {
    * @returns True when expired.
    */
   static expired(t: PageTask): boolean {
-    return (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
+    return !t.inbox && (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
   }
 }

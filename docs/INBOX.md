@@ -46,3 +46,8 @@ What to say at the end.
 
 `auto` routes: 1–2 files, low risk, with a check → the local model (self-work, through the board); 3–15 files, with
 acceptance and a check, not security → Antigravity; anything else → Claude's own Opus agent.
+
+In the Kesher Cloud hub: when the PC is paired, every inbox task (except ones the hub itself sent) shows in the hub
+page's Tasks list and dashboard, marked "from Claude": its state (waiting / waiting for Run / running / done / failed /
+partial), who runs it, the `agy/*` branch and a short result, with a link to its live agent card while it runs. The PC
+seals this metadata to the owner's phones (hub-client.ts, `reportInbox`); the task's text never leaves the PC.

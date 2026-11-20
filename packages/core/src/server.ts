@@ -574,6 +574,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     for (const r of helperRuns.list(chatId)) activity.observe(helperSnapshot(r, INBOX_ASKS), async () => helperRuns.stop(r.id));
   });
   taskInbox.onChange(() => {
+    // The hub page's Tasks list follows the inbox too (metadata, sealed to the phones; hub-client.ts).
+    void hubRef.client?.reportInbox().catch(() => undefined);
     void taskInbox.list().then((tasks) => {
       for (const t of tasks) {
         const snap = inboxSnapshot(t, t.runAsk, INBOX_ASKS);
@@ -588,6 +590,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     persist,
     board: taskBoard,
     inbox: (t, boardId) => taskInbox.fromHub(t, boardId),
+    inboxTasks: () => taskInbox.list(),
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",
@@ -767,6 +770,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     async listen() {
       const host = features.remote && config.remote.enabled ? "0.0.0.0" : "127.0.0.1";
       await app.listen({ port: config.port, host });
+      // Kesher Cloud: a paired PC that was on connects again when the app starts (before 0.6.402 it waited for the
+      // On switch, so the hub page showed it Off). The main app only, never a worker.
+      if (!options.worker) hub.start();
       if (config.remote.anywhere) {
         services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
       }

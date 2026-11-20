@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateHubKeys, openEnvelope, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
-import { cleanHubUrl, HubClient, type HubSettings, type HubSocketEvents } from "./hub-client.js";
+import type { InboxTaskView } from "@kesher/shared";
+import { cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
 
 const settings = (): HubSettings => ({ enabled: true, url: "https://hub.example.test", reported: [], optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false } });
@@ -143,4 +144,104 @@ test("pairs, connects with a one-use ticket, takes a sealed task onto the board 
   await r.client.onMessage(JSON.stringify({ t: "revoked" }));
   assert.equal(r.s.token, undefined);
   assert.equal(r.client.status().paired, false);
+});
+
+test("a PC that pairs while Off turns On and connects at once; a cut link reconnects; errors have codes", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  r.s.enabled = false;
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  assert.equal(r.s.enabled, true, "pairing turns the link on");
+  assert.equal(r.client.status().connected, true, "and it connects without the On switch");
+  assert.ok(r.client.status().lastConnectedAt);
+
+  // The hub cuts the link: it retries by itself (a backoff from about 1 s) and says why meanwhile.
+  r.events().close();
+  const st = r.client.status();
+  assert.equal(st.connected, false);
+  assert.equal(st.errorCode, "socket");
+  assert.ok(st.nextRetryAt && Date.parse(st.nextRetryAt) - Date.now() <= 1000);
+  // "Try now" (the On switch again) does not wait for the backoff.
+  await r.client.setEnabled(true);
+  for (let i = 0; i < 50 && !r.client.status().connected; i++) await wait(20);
+  assert.equal(r.client.status().connected, true);
+  assert.equal(r.client.status().errorCode, undefined);
+});
+
+test("connection problems: unreachable retries, a refused PC must pair again", async () => {
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  let mode: "down" | "refuse" = "down";
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    fetch: (async () => {
+      if (mode === "down") throw new TypeError("fetch failed");
+      return new Response("{}", { status: 401 });
+    }) as unknown as typeof fetch,
+    openSocket: () => assert.fail("no socket without a ticket"),
+  });
+  client.start();
+  await wait(20);
+  assert.equal(client.status().errorCode, "unreachable");
+  assert.ok(client.status().nextRetryAt, "it keeps retrying");
+  mode = "refuse";
+  client.start(); // "Try now"
+  await wait(20);
+  assert.equal(client.status().errorCode, "refused");
+  assert.equal(client.status().paired, false);
+  client.stop();
+});
+
+const inboxTask = (over: Partial<InboxTaskView>): InboxTaskView => ({ id: "c-1120-01", title: "Fix the hub status", executor: "auto", risk: "low", from: "claude", base: "origin/main", allowedPaths: [], forbiddenPaths: [], check: "", maxMinutes: 30, maxFiles: 15, goal: "SECRET GOAL TEXT", status: "waiting", runBy: "antigravity", branch: "agy/c-1120-01-fix", ...over });
+
+test("inbox tasks map to the hub's states and executors, metadata only", () => {
+  const w = hubInboxTask(inboxTask({}), 1)!;
+  assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", runId: "in-c-1120-01", at: 1 });
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1 }), 1)!.branch, "agy/c-1120-01-fix");
+  const done = hubInboxTask(inboxTask({ status: "done", startedAt: 1, summary: "Fixed the dot.\nAll checks pass." }), 1)!;
+  assert.equal(done.state, "done");
+  assert.equal(done.result, "Fixed the dot. All checks pass.");
+  assert.equal(done.runId, undefined);
+  assert.equal(hubInboxTask(inboxTask({ status: "partial", startedAt: 1 }), 1)!.state, "partial");
+  assert.equal(hubInboxTask(inboxTask({ status: "declined", note: "Touches release files." }), 1)!.state, "failed");
+  assert.equal(hubInboxTask(inboxTask({ status: "queued", runBy: "local", branch: "local/x" }), 1)!.state, "waiting");
+  assert.equal(hubInboxTask(inboxTask({ status: "queued", runBy: "local" }), 1)!.executor, "local");
+  assert.equal(hubInboxTask(inboxTask({ status: "queued", runBy: "opus" }), 1)!.executor, "claude");
+  assert.equal(hubInboxTask(inboxTask({ from: "hub" }), 1), undefined, "the hub page already lists its own tasks");
+  for (const st of ["waiting", "running", "done", "failed"] as const) assert.ok(!JSON.stringify(hubInboxTask(inboxTask({ status: st }), 1)).includes("SECRET"), "never the task's text");
+});
+
+test("inbox reports go sealed to each phone, only when a task changed", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  let tasks = [inboxTask({})];
+  (r.client as unknown as { deps: { inboxTasks: () => Promise<InboxTaskView[]> } }).deps.inboxTasks = async () => tasks;
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence: [{ id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} }] }));
+  await r.client.reportInbox();
+  const sends = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "inbox_task").map((f) => f.env as SealedEnvelope);
+  assert.equal(sends().length, 1);
+  const first = (await openEnvelope(sends()[0]!, phone.privateKey, pcPub)) as { state: string; from: string };
+  assert.equal(first.state, "waiting-run");
+  assert.equal(first.from, "claude");
+  assert.ok(sends()[0]!.ttl >= 24 * 3600, "kept for a phone that is off");
+  await r.client.reportInbox();
+  assert.equal(sends().length, 1, "nothing changed, nothing sent");
+  tasks = [inboxTask({ status: "done", startedAt: 1, summary: "Done." })];
+  await r.client.reportInbox();
+  assert.equal(sends().length, 2);
+  assert.equal(((await openEnvelope(sends()[1]!, phone.privateKey, pcPub)) as { branch?: string }).branch, "agy/c-1120-01-fix");
 });

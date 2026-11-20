@@ -9,6 +9,15 @@ import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuar
 import { DEFAULT_OPT_IN, HUB_LIMITS } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
+/** The timeline words for an inbox task's states. */
+const INBOX_LABEL = {
+    waiting: { he: "ממתין", en: "Waiting" },
+    "waiting-run": { he: "ממתין ל\"הפעל\"", en: "Waiting for Run" },
+    running: { he: "רץ", en: "Running" },
+    done: { he: "הסתיים", en: "Done" },
+    partial: { he: "הסתיים חלקית", en: "Partly done" },
+    failed: { he: "נכשל", en: "Failed" },
+};
 // ---- IndexedDB (one key-value store; structured clone keeps the CryptoKey usable but not exportable) ----
 const DB = "kesher-hub";
 let dbp;
@@ -417,7 +426,9 @@ export class HubDevice {
         this.sendFrame({ t: "ack", id: env.id });
         if (!this.replay.first(env.id, env.ttl))
             return;
-        const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId) : undefined;
+        if (body.type === "inbox_task")
+            return this.onInboxTask(env.from, body);
+        const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
         if (!task)
             return;
         const now = Date.now();
@@ -447,6 +458,37 @@ export class HubDevice {
                 task.history.push({ t: now, he: "התחיל ב-Claude בענן", en: "Started in Claude cloud" });
             }
         }
+        await this.saveTasks();
+    }
+    /**
+     * A PC's report of one of its task-inbox tasks: added to the task list, or its state, branch and result updated.
+     * Reports can arrive out of order from the hub's queue, so an older one never overwrites a newer one.
+     */
+    async onInboxTask(from, r) {
+        const pc = this.presence.find((d) => d.id === from);
+        const status = r.state;
+        let task = this.tasks.find((t) => t.inbox?.deviceId === from && t.taskId === r.taskId);
+        const label = INBOX_LABEL[r.state];
+        if (!task) {
+            task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
+            this.tasks.unshift(task);
+        }
+        else if (task.inbox && task.inbox.at > r.at) {
+            return;
+        }
+        task.title = r.title;
+        task.status = status;
+        task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at };
+        if (r.result)
+            task.line = r.result;
+        else
+            delete task.line;
+        if (r.branch)
+            task.branch = r.branch;
+        if (pc)
+            task.toName = pc.name;
+        if (task.history.at(-1)?.en !== label.en)
+            task.history.push({ t: r.at || Date.now(), ...label });
         await this.saveTasks();
     }
     // ---- tasks ----
@@ -533,6 +575,6 @@ export class HubDevice {
      * @returns True when expired.
      */
     static expired(t) {
-        return (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
+        return !t.inbox && (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
     }
 }

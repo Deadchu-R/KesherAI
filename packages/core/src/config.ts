@@ -203,6 +203,8 @@ export const KesherConfigSchema = z.object({
         .prefault({}),
       /** Hub task ids whose result was already sent back. */
       reported: z.array(z.string().max(64)).default([]),
+      /** Task-inbox reports already sent, as "<phone>/<task>" → a short hash of what was sent (only changes go again). */
+      inboxSent: z.record(z.string().max(140), z.string().max(40)).default({}),
     })
     .prefault({}),
   /**

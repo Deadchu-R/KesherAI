@@ -39,6 +39,45 @@ interface HubStatus {
   pairing?: { code: string; fingerprint: string; expiresAt: string };
   devices: Array<{ id: string; name: string; kind: string; online: boolean }>;
   lastError?: string;
+  errorCode?: "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped";
+  lastConnectedAt?: string;
+  nextRetryAt?: string;
+}
+
+/**
+ * The last problem in plain words (the server's English text stays for anything without a code).
+ * @param s - The status.
+ * @returns The words, or undefined when there is no problem.
+ */
+function problemText(s: HubStatus): string | undefined {
+  switch (s.errorCode) {
+    case "unreachable":
+      return L("אין גישה למרכז: בדוק את האינטרנט ואת כתובת המרכז.", "Can't reach the hub: check the internet and the hub address.");
+    case "refused":
+      return L("המרכז דחה את המחשב הזה (נותק בדף המרכז או שהמפתח שלו פג). חבר אותו שוב.", "The hub refused this PC (removed on the hub page, or its key is gone). Pair it again.");
+    case "socket":
+      return L("המרכז עונה, אבל הקישור החי לא נפתח או נקטע. מנסה שוב לבד.", "The hub answers, but the live link did not open or was cut. Retrying by itself.");
+    case "rate-limited":
+      return L("יותר מדי ניסיונות. מנסה שוב בעוד רגע.", "Too many tries. Retrying in a moment.");
+    case "hub-error":
+      return L(`המרכז החזיר שגיאה${s.lastError ? ` (${s.lastError})` : ""}. מנסה שוב לבד.`, `The hub returned an error${s.lastError ? ` (${s.lastError})` : ""}. Retrying by itself.`);
+    case "dropped":
+      return L("הודעה מהמרכז לא נפתחה ונמחקה (הקישור עצמו תקין).", "A message from the hub could not be opened and was dropped (the link itself is fine).");
+    default:
+      return s.lastError;
+  }
+}
+
+/**
+ * A short "in 3 min" / "3 min ago" for a time.
+ * @param iso - The time.
+ * @returns The words.
+ */
+function rel(iso: string): string {
+  const min = Math.round((Date.parse(iso) - Date.now()) / 60_000);
+  if (Math.abs(min) < 1) return min >= 0 ? L("בעוד רגע", "in a moment") : L("עכשיו", "just now");
+  const n = Math.abs(min) < 120 ? `${Math.abs(min)} ${L("דק׳", "min")}` : `${Math.round(Math.abs(min) / 60)} ${L("שע׳", "h")}`;
+  return min > 0 ? L(`בעוד ${n}`, `in ${n}`) : L(`לפני ${n}`, `${n} ago`);
 }
 
 /**
@@ -76,7 +115,9 @@ export function CloudHubSection() {
   if (!s) return null;
   const put = (body: Record<string, unknown>) => run(() => api("/api/hub", { method: "PUT", body }));
   const minutesLeft = s.pairing ? Math.max(0, Math.ceil((Date.parse(s.pairing.expiresAt) - Date.now()) / 60_000)) : 0;
-  const state = !s.paired ? L("לא מחובר למרכז", "Not paired with a hub") : !s.enabled ? L("כבוי", "Off") : s.paused ? L("המרכז מושהה", "The hub is paused") : s.connected ? L("מחובר", "Connected") : L("מתחבר…", "Connecting…");
+  const state = !s.paired ? L("לא מחובר למרכז", "Not paired with a hub") : !s.enabled ? L("כבוי: סמן \"פעיל\" כדי שהמרכז יראה את המחשב", "Off: tick \"On\" so the hub sees this PC") : s.paused ? L("המרכז מושהה", "The hub is paused") : s.connected ? L("מחובר", "Connected") : L("לא מחובר, מנסה שוב", "Not connected, retrying");
+  const problem = problemText(s);
+  const down = s.paired && s.enabled && !s.connected;
   const opt = (key: keyof OptIn, he: string, en: string, disabled = false) => (
     <label className="row small">
       <input type="checkbox" checked={s.optIn[key]} disabled={busy || disabled} onChange={(e) => void put({ optIn: { [key]: e.target.checked } })} /> {L(he, en)}
@@ -107,9 +148,18 @@ export function CloudHubSection() {
         <div className="row wrap">
           <span className={`dot ${s.connected ? "on" : "off"}`} aria-hidden="true" />
           <span>{state}</span>
-          {s.lastError && <span className="bad small">· {s.lastError}</span>}
           <a className="small" href={hubPageHref(s.url)} target="_blank" rel="noopener noreferrer">{L("פתח את דף המרכז ↗", "Open the hub page ↗")}</a>
         </div>
+      )}
+      {s.url && (problem || down || s.lastConnectedAt) && (
+        <div className="stack cloud-hub-why" role={problem ? "status" : undefined}>
+          {problem && <span className={s.connected ? "muted small" : "bad small"}>{problem}</span>}
+          <span className="muted small">
+            {[s.lastConnectedAt ? L(`חובר לאחרונה ${rel(s.lastConnectedAt)}`, `Last connected ${rel(s.lastConnectedAt)}`) : s.paired ? L("עוד לא התחבר מאז שהאפליקציה עלתה", "Not connected since the app started") : "", down && s.nextRetryAt ? L(`ניסיון הבא ${rel(s.nextRetryAt)}`, `Next try ${rel(s.nextRetryAt)}`) : ""].filter(Boolean).join(" · ")}
+          </span>
+          {down && (
+            <div><button type="button" disabled={busy} onClick={() => void put({ enabled: true })}>{L("נסה עכשיו", "Try now")}</button></div>
+          )}        </div>
       )}
 
       {s.url && !s.paired && (s.pairing ? (

@@ -555,6 +555,8 @@ export class Hub {
     if (!this.limits.take(`message:${deviceId}`, LIMITS.message)) return refuse("rate-limited");
     if (this.paused) return refuse("paused");
     const f = parseDeviceFrame(raw);
+    // An unknown or malformed frame is refused alone: the device stays connected and online (an older or newer
+    // KesherAI may send fields or frames this hub does not know).
     if (!f) return refuse("bad-frame");
     const t = this.now();
     switch (f.t) {
@@ -577,6 +579,10 @@ export class Hub {
         return this.relay(d, f.env, refuse);
       case "agents":
         return this.agentActivity(d, f.envs, refuse);
+      case "ping":
+        // On Cloudflare the hub's auto-response answers pings without waking; this is the local (test) path.
+        if (!d.lastSeen || t - d.lastSeen > MIN) this.store.putDevice({ ...d, lastSeen: t });
+        return void this.sockets.send(deviceId, { t: "pong" });
     }
   }
 
@@ -607,12 +613,14 @@ export class Hub {
     const to = this.store.device(env.to);
     if (!to || to.id === from.id) return refuse("no-recipient", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
+    // A task-inbox report goes from a PC to the owner's phones (and the hub page) only.
+    if (env.kind === "inbox_task" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     const t = this.now();
     const added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(env), createdAt: t });
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
     const online = this.sockets.send(to.id, { t: "deliver", env });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
-    if (env.kind !== "progress") this.audit(`relay-${env.kind}`, { deviceId: from.id });
+    if (env.kind !== "progress" && env.kind !== "inbox_task") this.audit(`relay-${env.kind}`, { deviceId: from.id });
   }
 
   /** The Claude path: open the one message sealed to the hub, fire the scheduled task, answer sealed to the sender. */

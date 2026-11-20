@@ -134,7 +134,11 @@ function statusTag(t) {
         case "outbox":
             return h("span", { class: "tag t-wait" }, L("⇡ ממתין לשליחה", "⇡ Waiting to send"));
         case "waiting":
-            return h("span", { class: "tag t-wait" }, L("מחכה למחשב", "Waiting for the PC"));
+            return h("span", { class: "tag t-wait" }, t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
+        case "waiting-run":
+            return h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
+        case "partial":
+            return h("span", { class: "tag t-ask" }, L("◐ חלקי", "◐ Partial"));
         case "sent":
             return h("span", { class: "tag t-run" }, L("נמסר", "Delivered"));
         case "running":
@@ -151,9 +155,25 @@ function statusTag(t) {
 }
 /** The route chip of a task (who runs it). */
 function routeChip(t) {
+    if (t.inbox) {
+        const ex = t.inbox.executor;
+        return ex === "claude" ? h("span", { class: "ex ex-opus" }, "✷ Claude") : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName} · ${ex === "antigravity" ? "✦ Antigravity" : L("מודל מקומי", "local model")}`);
+    }
     return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
 }
-const isOpen = (t) => !HubDevice.expired(t) && ["outbox", "waiting", "sent", "running"].includes(t.status);
+const isOpen = (t) => !HubDevice.expired(t) && ["outbox", "waiting", "waiting-run", "sent", "running"].includes(t.status);
+/** Where a task came from, as a chip: "from Claude" for Claude's task-inbox tasks. */
+function sourceChip(t) {
+    if (!t.inbox)
+        return null;
+    const [he, en] = t.inbox.from === "claude" ? ["✷ מ-Claude", "✷ from Claude"] : t.inbox.from === "roee" ? ["📥 מהטלפון", "📥 from the phone"] : ["🔁 מעבודה עצמית", "🔁 from self-work"];
+    return h("span", { class: "chip src" }, L(he, en));
+}
+/** The live agent card of an inbox task, while its run is on the Agents tab. */
+function liveCard(t) {
+    const key = t.inbox?.runId ? `${t.inbox.deviceId}/${t.inbox.runId}` : undefined;
+    return key && device.agents.has(key) ? key : undefined;
+}
 // ---- the frame: top bar, app switch, banner, tabs ----
 const TAB_LABEL = {
     dash: ["לוח", "Dashboard", "◉"],
@@ -250,13 +270,28 @@ function deviceRows(full) {
         const takes = [d.optIn.acceptLocal && L("מקומי", "local"), d.optIn.acceptAntigravity && "Antigravity"].filter(Boolean).join(", ");
         const optIn = d.kind === "pc" ? [d.optIn.acceptTasks ? L("📥 מקבל משימות", "📥 Takes tasks") + (takes ? `: ${takes}` : "") : L("📥 לא מקבל משימות", "📥 Takes no tasks")] : [];
         const sub = [d.kind === "pc" ? (d.version ? `KesherAI ${d.version}` : "") : me ? L("הדף הזה פתוח בו עכשיו", "This page is open on it now") : "", !d.online && d.lastSeen ? L("נראה לאחרונה ", "last seen ") + when(d.lastSeen) : "", full && fp ? L("טביעת אצבע ", "fingerprint ") + fp : ""].filter(Boolean).join(" · ");
-        return h("div", { class: "dev" }, h("span", { class: "dev-ic", "aria-hidden": "true" }, d.kind === "pc" ? "🖥" : "📱"), h("div", { class: "grow min0" }, h("div", { class: "row wrap" }, h("b", null, d.name, me ? L(" (זה)", " (this)") : ""), dot(s.dot), h("span", { class: `sm ${s.cls}` }, s.text)), sub ? h("div", { class: "mut sm" }, sub) : null, d.agents.length || optIn.length ? h("div", { class: "row wrap chips" }, d.agents.map((a) => h("span", { class: "chip" }, dot(a.state === "busy" ? "busy" : a.state === "on" && d.online ? "on" : "off"), a.label ? `${AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind} ${a.label}` : (AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind), a.link && isSafeLink(a.link) && d.optIn.reportLinks ? h("a", { href: a.link, target: "_blank", rel: "noopener noreferrer" }, " ↗") : null)), optIn.map((o) => h("span", { class: "chip" }, o))) : null), full && app.signedIn && !me
+        const why = offReason(d);
+        return h("div", { class: "dev" }, h("span", { class: "dev-ic", "aria-hidden": "true" }, d.kind === "pc" ? "🖥" : "📱"), h("div", { class: "grow min0" }, h("div", { class: "row wrap" }, h("b", null, d.name, me ? L(" (זה)", " (this)") : ""), dot(s.dot), h("span", { class: `sm ${s.cls}` }, s.text)), sub ? h("div", { class: "mut sm" }, sub) : null, why ? h("div", { class: "sm why" }, why) : null, d.agents.length || optIn.length ? h("div", { class: "row wrap chips" }, d.agents.map((a) => h("span", { class: "chip" }, dot(a.state === "busy" ? "busy" : a.state === "on" && d.online ? "on" : "off"), a.label ? `${AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind} ${a.label}` : (AGENT[a.kind]?.[getLocale() === "he" ? 0 : 1] ?? a.kind), a.link && isSafeLink(a.link) && d.optIn.reportLinks ? h("a", { href: a.link, target: "_blank", rel: "noopener noreferrer" }, " ↗") : null)), optIn.map((o) => h("span", { class: "chip" }, o))) : null), full && app.signedIn && !me
             ? h("button", { type: "button", class: "btn sm-btn bad", disabled: app.busy, onclick: () => confirm(L(`לנתק את ${d.name}? הוא יצטרך להתחבר מחדש עם קוד.`, `Disconnect ${d.name}? It will need a new code to pair again.`)) && void act(`/api/devices/${encodeURIComponent(d.id)}/revoke`, {}, { he: "המכשיר נותק", en: "The device was disconnected" }) }, L("נתק", "Disconnect"))
             : null);
     });
     if (!rows.length)
         rows.push(h("div", { class: "dev mut sm" }, L("אין עדיין מכשירים מחוברים. לשונית חיבור ›", "No devices paired yet. Pair tab ›")));
     return rows;
+}
+/**
+ * Why a PC shows Off, when the hub can tell: it never connected since it was paired, or since when it is gone and
+ * what to check on the PC (Settings › Kesher Cloud shows the PC's own reason).
+ */
+function offReason(d) {
+    if (d.online || d.kind !== "pc")
+        return undefined;
+    if (!d.lastSeen)
+        return L("לא התחבר מאז שחובר. במחשב: הגדרות › ענן Kesher, סמן \"פעיל\".", "Has not connected since it was paired. On the PC: Settings › Kesher Cloud, tick \"On\".");
+    const min = (Date.now() - Date.parse(d.lastSeen)) / 60_000;
+    if (min < 3)
+        return L("הקישור נקטע עכשיו. המחשב מתחבר שוב לבד.", "The link just dropped. The PC reconnects by itself.");
+    return L("אם KesherAI פתוח במחשב: הגדרות › ענן Kesher מראה למה הוא לא מחובר.", "If KesherAI is open on the PC: Settings › Kesher Cloud shows why it is not connected.");
 }
 /** Claude cloud as an agent row. */
 function cloudRow() {
@@ -313,34 +348,39 @@ function newTask() {
 /** The tasks tab (HubTasks / PhoneHubTasks). */
 function tasksTab() {
     const all = device.tasks;
-    const pick = (t) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" : app.filter === "expired" ? HubDevice.expired(t) : true);
+    const pick = (t) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : app.filter === "expired" ? HubDevice.expired(t) : true);
     const q = app.search.trim().toLowerCase();
-    const list = all.filter(pick).filter((t) => !q || t.spec.toLowerCase().includes(q));
-    const count = (f) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" : HubDevice.expired(t))).length;
+    const list = all.filter(pick).filter((t) => !q || `${t.title}\n${t.spec}`.toLowerCase().includes(q));
+    const count = (f) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : HubDevice.expired(t))).length;
     const chip = (f, he, en) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
     const open = all.find((t) => t.taskId === app.openTask);
     return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("נשמר במכשיר הזה (המרכז לא שומר משימות)", "Kept on this device (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), !device.paired ? pairThisCard() : null, h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד לא נשלחו משימות מהמכשיר הזה.", "No tasks were sent from this device yet."))), open ? taskDetail(open) : null);
 }
 /** One row of the task list. */
 function taskRow(t) {
-    const expired = HubDevice.expired(t);
-    const action = t.status === "outbox" || expired
-        ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void (expired ? device.resend(t, cloudAvailable()).then(() => device.remove(t.taskId)) : device.remove(t.taskId)); } }, expired ? L("שלח שוב", "Send again") : L("בטל", "Cancel"))
-        : t.status === "waiting" && cloudAvailable()
-            ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, true, "claude-cloud"); } }, L("שלח לענן במקום", "Send to the cloud instead"))
-            : t.status === "failed"
-                ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, cloudAvailable()); } }, L("נתב מחדש", "Route again"))
-                : t.link && isSafeLink(t.link)
-                    ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
-                    : null;
+    const expired = !t.inbox && HubDevice.expired(t);
+    const live = liveCard(t);
+    const action = t.inbox
+        ? live
+            ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); agentsView.setOpen(live); } }, L("● חי ›", "● Live ›"))
+            : null
+        : t.status === "outbox" || expired
+            ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void (expired ? device.resend(t, cloudAvailable()).then(() => device.remove(t.taskId)) : device.remove(t.taskId)); } }, expired ? L("שלח שוב", "Send again") : L("בטל", "Cancel"))
+            : t.status === "waiting" && cloudAvailable()
+                ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, true, "claude-cloud"); } }, L("שלח לענן במקום", "Send to the cloud instead"))
+                : t.status === "failed"
+                    ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, cloudAvailable()); } }, L("נתב מחדש", "Route again"))
+                    : t.link && isSafeLink(t.link)
+                        ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
+                        : null;
     return h("div", { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if (e.key === "Enter") {
             app.openTask = t.taskId;
             render();
-        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("b", { class: "w5 ell1" }, t.title), t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
+        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" && !t.inbox ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
 }
 /** The open task, with its answer and timeline. */
 function taskDetail(t) {
-    return h("section", { class: `card pad stack${t.status === "done" ? " done-card" : ""}` }, h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), routeChip(t), t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))), h("div", { class: "sm answer" }, t.line ?? t.spec), t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null, h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")));
+    return h("section", { class: `card pad stack${t.status === "done" ? " done-card" : ""}` }, h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), routeChip(t), liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))), t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""), t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null, h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")));
 }
 /** "Pair this device" (the page itself), for sending tasks. */
 function pairThisCard() {
