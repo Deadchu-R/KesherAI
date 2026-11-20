@@ -4240,7 +4240,8 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-top-links { margin: -4px 0 8px; }
 .games-cps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .games-cp { border: 1px solid var(--border); border-radius: 12px; min-width: 0; }
-.games-cp-head { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-height: 44px; padding: 10px; border: none; background: none; color: inherit; text-align: start; cursor: pointer; }
+.games-cp-head { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-height: 44px; height: auto; line-height: 1.35; white-space: normal; padding: 10px; border: none; background: none; color: inherit; text-align: start; cursor: pointer; }
+.games-cp-head > * { display: block; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; } /* the second line was clipped by the button height */
 .games-cp-label { overflow-wrap: anywhere; }
 .games-cp-meta { gap: 6px; align-items: center; }
 .games-cp-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
