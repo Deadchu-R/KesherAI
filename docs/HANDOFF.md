@@ -58,6 +58,18 @@ so a new chat starts from a few small files.
   No glow behind the newest board, no auto-zoom, no marker covering a design; every board visible on the canvas.
 - Steps: read the live doc first (keep his edits), tools/design/shotboard.py → design_marks.py → Artifact publish
   (file_path design2/project/canvas.json, root design2, files map) → open.
+- KesherAI renders boards itself (2026-11-20, `packages/core/src/design-render.ts`): one JSON per group in
+  `tools/design/scenarios/` (page, desktop/phone, he/en, mocked API with fixed times `{"$ago":"40m"}`, steps, title).
+  Render: `pnpm design:render [BoardId…]` (needs `pnpm build` + Playwright), or "צלם שוב" on the Design page
+  (#/design, also on the phone). It shoots the built app against a fresh empty server (no real data), and writes
+  `tools/design/out/kesher/`: `project/canvas.json` + changed `project/*.dc.html`, `shots/*.png`, `publish.json`.
+  Only new/changed boards (tolerant picture compare) get the newest note, above the board or beside it, never on one.
+  Roee's notes from the Design page go on the canvas beside the board (`dn-<Board>`, from notes.json).
+- Sync (Claude publishes; KesherAI never has Claude credentials): 1) pull: read the live artifact and write its
+  canvas.json to `tools/design/out/kesher/project/canvas.json` and its version to `tools/design/out/kesher/BASE_VERSION`;
+  2) KesherAI renders (or `pnpm design:render`); 3) publish_files with the entries of `publish.json` and
+  base_version = BASE_VERSION; 4) write the new version to BASE_VERSION (that tells KesherAI it was published: the
+  newest marks and publish.json start over at the next render). New boards: add a scenario, not a one-off script.
 
 ## Permissions Roee already gave (and limits)
 - Push to main; release by `git push -qf origin HEAD:release` (never force-push main). Commit without asking.
