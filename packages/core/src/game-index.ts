@@ -1,13 +1,17 @@
 import { basename, extname } from "node:path";
-import { bare, indexProject, listAssets, type AgentTool, type AssetEntry, type Indexed } from "@kesher/agent";
+import { join } from "node:path";
+import { bare, indexProject, listAssets, type AgentTool, type Indexed } from "@kesher/agent";
 import type { GameProject } from "./game-projects.js";
+import { packageFileOf, packageNameOf } from "./uasset.js";
+import { unrealAssetInfo, usersOf, withUnrealKinds, type IndexedAsset } from "./unreal-assets.js";
 
 /**
  * Project index and search with the engine closed (RESEARCH_LOG "Gap list: engine work without the engine open",
  * 2026-11-20, step 3): the code index the coding agent already keeps (code_map, find_symbol: every C#, C++, GDScript
  * and Verse file with its classes and functions, reused while a file's size and time stay the same) and the asset
  * list (find_assets: prefabs, scenes, Blueprints, materials…, a folder re-read only when its time changed), searched
- * together for the Game projects page and the chat tool `game_find`. Nothing here opens an engine.
+ * together for the Game projects page and the chat tool `game_find`. Unreal .uasset/.umap files get their class and
+ * Blueprint parent from their headers (step 7, unreal-assets.ts). Nothing here opens an engine.
  */
 
 /** The kinds of results, in the order the search sheet shows them. */
@@ -95,19 +99,21 @@ function scoreOf(words: string[], name: string, path: string, detail: string): n
 }
 
 /** Recent indexes by project folder: a search per key press reuses them for a few seconds. */
-const recent = new Map<string, { at: number; files: Indexed[]; assets: AssetEntry[] }>();
+const recent = new Map<string, { at: number; files: Indexed[]; assets: IndexedAsset[] }>();
 const RECENT_MS = 15_000;
 
 /**
  * The project's code index and assets (cached underneath by file and folder times; kept a few seconds here so typing
- * in the search box does not walk the folders on every key).
+ * in the search box does not walk the folders on every key). Unreal packages carry their class from their headers
+ * (read within a time budget; the rest on a later call).
  *
  * @param root - The project folder.
  */
-export async function projectIndex(root: string): Promise<{ files: Indexed[]; assets: AssetEntry[] }> {
+export async function projectIndex(root: string): Promise<{ files: Indexed[]; assets: IndexedAsset[] }> {
   const hit = recent.get(root);
   if (hit && Date.now() - hit.at < RECENT_MS) return hit;
-  const [files, assets] = await Promise.all([indexProject(root).then((f) => f.filter((x) => GAME_CODE.test(x.path))), listAssets(root)]);
+  const [files, listed] = await Promise.all([indexProject(root).then((f) => f.filter((x) => GAME_CODE.test(x.path))), listAssets(root)]);
+  const { assets } = await withUnrealKinds(root, listed);
   const item = { at: Date.now(), files, assets };
   recent.set(root, item);
   if (recent.size > 20) recent.delete(recent.keys().next().value!);
@@ -148,8 +154,9 @@ export async function searchGameProject(root: string, query: string, opts: { kin
     }
     for (const a of assets) {
       const name = basename(a.path).replace(/\.[^.]+$/, "");
-      const score = scoreOf(words, name, a.path, a.kind);
-      if (score) add({ kind: assetGroup(a.kind), name, path: a.path, detail: a.kind, score });
+      const detail = a.parent ? `${a.kind} · ${a.parent}` : a.kind;
+      const score = scoreOf(words, name, a.path, detail);
+      if (score) add({ kind: assetGroup(a.kind), name, path: a.path, detail, score });
     }
   } else {
     // No words: only the counts, for the sheet's header.
@@ -179,6 +186,30 @@ export async function definitionsOf(root: string, name: string): Promise<Array<{
   return out;
 }
 
+/**
+ * An Unreal package's references for the model: its class and parent, the /Game packages it uses and those that use
+ * it (read from the headers, no engine).
+ *
+ * @param root - The project folder.
+ * @param rel - The package's file (Content/…/X.uasset).
+ * @returns Lines, or "" for a file that is not an Unreal package.
+ */
+export async function unrealAssetText(root: string, rel: string): Promise<string> {
+  const pkg = packageNameOf(rel);
+  if (!pkg) return "";
+  const info = await unrealAssetInfo(join(root, rel));
+  if (!info?.className) return "";
+  const { assets } = await projectIndex(root);
+  await withUnrealKinds(root, assets, 4000);
+  const { users, complete } = usersOf(root, assets, pkg);
+  const list = (xs: string[]) => (xs.length ? xs.slice(0, 15).map((x) => packageFileOf(x) ?? x).join(", ") + (xs.length > 15 ? ` (+${xs.length - 15})` : "") : "none");
+  return [
+    `${pkg}: ${info.className}${info.parent ? `, parent ${info.parent}` : ""}`,
+    `  uses: ${list(info.uses)}${info.soft.length ? `; soft: ${list(info.soft)}` : ""}`,
+    `  used by: ${list(users.map((u) => u.path.replace(/\.(uasset|umap)$/i, "")))}${complete ? "" : " (not all files read yet)"}`,
+  ].join("\n");
+}
+
 /** The kind words a model may pass to game_find, in English. */
 const KIND_ARG: Record<string, HitKind> = { code: "code", symbol: "code", class: "code", function: "code", script: "script", file: "script", scene: "scene", level: "scene", prefab: "prefab", blueprint: "prefab", asset: "asset" };
 
@@ -206,7 +237,7 @@ export function gameFindTool(found: () => Promise<GameProject[]>, current: () =>
     spec: {
       name: "game_find",
       description:
-        "Search the user's game projects (Unity, Unreal, Godot) with the engine closed: classes and functions (file:line), C#/C++/GDScript/Verse scripts, scenes and levels, prefabs and Blueprints, materials, textures and other assets. Give `query` (names or kinds, e.g. 'Player', 'BP_Door', 'enemy prefab', 'main scene'); `project` (a name, else the one in use or all); `kind` to narrow (code, script, scene, prefab, asset). Then read the file you need. No query: what each project holds.",
+        "Search the user's game projects (Unity, Unreal, Godot) with the engine closed: classes and functions (file:line), C#/C++/GDScript/Verse scripts, scenes and levels, prefabs and Blueprints, materials, textures and other assets. Unreal .uasset/.umap results carry their class (and a Blueprint's parent) read from the file; an exact Unreal asset name also lists what it uses and what uses it. Give `query` (names or kinds, e.g. 'Player', 'BP_Door', 'enemy prefab', 'main scene'); `project` (a name, else the one in use or all); `kind` to narrow (code, script, scene, prefab, asset). Then read the file you need. No query: what each project holds.",
       inputSchema: {
         type: "object",
         properties: {
@@ -232,7 +263,11 @@ export function gameFindTool(found: () => Promise<GameProject[]>, current: () =>
         const r = await searchGameProject(p.path, query, { ...(kind ? { kind } : {}), limit: list.length > 1 ? 25 : 60 });
         const head = `## ${p.name} (${p.kind}${p.engine ? ` ${p.engine}` : ""})`;
         if (!query.trim()) parts.push(`${head}: ${r.files} scripts, ${r.counts.code} classes/functions, ${r.counts.scene} scenes/levels, ${r.counts.prefab} prefabs/Blueprints, ${r.counts.asset} other assets.`);
-        else parts.push(`${head}\n${r.hits.length ? hitsText(r) : "Nothing matches."}`);
+        else {
+          const best = r.hits[0];
+          const more = p.kind === "unreal" && best && best.score >= 100 ? await unrealAssetText(p.path, best.path) : "";
+          parts.push(`${head}\n${r.hits.length ? hitsText(r) : "Nothing matches."}${more ? `\n${more}` : ""}`);
+        }
       }
       if (all.length > list.length && !want) parts.push(`(Searched ${list.map((p) => p.name).join(", ")}; others: ${all.filter((p) => !list.includes(p)).map((p) => p.name).slice(0, 20).join(", ")})`);
       return { output: parts.join("\n\n") };

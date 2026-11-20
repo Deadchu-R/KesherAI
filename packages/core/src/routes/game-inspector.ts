@@ -8,12 +8,16 @@ import { insideProject } from "../game-checkpoints.js";
 import { readGodotInspector, readUnityInspector, valueText, type InspectorObject, type ValueEdit, type ValueQueue } from "../game-inspector.js";
 import { assetsOf } from "./unity-scene.js";
 import { sameFolder } from "../unity-cli.js";
+import { projectIndex } from "../game-index.js";
+import { packageFileOf, packageNameOf, readUassetFile, uassetSummary, type UassetHeader } from "../uasset.js";
+import { usersOf, withUnrealKinds } from "../unreal-assets.js";
 
 /**
  * The inspector with the engine closed (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20,
  * step 6): a project's scenes, prefabs and assets listed; one read into objects, components and values (Unity YAML,
- * Godot .tscn/.tres; Unreal: the variables of the Blueprint copies saved here, read only); a changed value queued for
- * the next sync, which writes it with the engine closed after a checkpoint and holds it on a clash (game-inspector.ts).
+ * Godot .tscn/.tres; Unreal: any .uasset/.umap read from its header (class, parent, exports, references, used by;
+ * step 7, uasset.ts), with a saved Blueprint copy's variables, read only); a changed value queued for the next sync,
+ * which writes it with the engine closed after a checkpoint and holds it on a clash (game-inspector.ts).
  */
 
 /** The files the inspector reads, per engine. */
@@ -104,6 +108,62 @@ function unrealObject(path: string, graph: { name: string; parent?: string; vari
   };
 }
 
+/** An Unreal package file inside the project's Content folder. */
+function unrealPath(p: Pick<GameProject, "path">, given: string): { abs: string; rel: string } {
+  const { abs, rel } = insideProject(p.path, String(given ?? "").replace(/\\/g, "/"));
+  if (!/^Content\/.+\.(uasset|umap)$/i.test(rel) || rel.split("/").some((part) => part.startsWith("."))) throw new Error("Only the project's .uasset and .umap files under Content can be opened here.");
+  return { abs, rel };
+}
+
+/** A /Game package as a reference on the page: its file in the project when there is one. */
+function refOf(pkg: string, files: Set<string>): { package: string; path?: string } {
+  const base = packageFileOf(pkg);
+  const path = base && [".uasset", ".umap"].map((e) => base + e).find((f) => files.has(f.toLowerCase()));
+  return { package: pkg, ...(path ? { path } : {}) };
+}
+
+/** The most exports, imports and tags sent to the page. */
+const MAX_LIST = 500;
+
+/**
+ * An Unreal package as the inspector shows it: what it is, its exports and the packages it uses and that use it.
+ *
+ * @param root - The project folder.
+ * @param rel - The package's file.
+ * @param h - Its header.
+ * @returns The page's view of it.
+ */
+export async function unrealAssetView(root: string, rel: string, h: UassetHeader & { size: number }) {
+  const name = rel.split("/").pop()!.replace(/\.[^.]+$/, "");
+  const sum = uassetSummary(h, name);
+  const pkg = packageNameOf(rel)!;
+  const { assets } = await projectIndex(root);
+  // "Used by" needs every header: read the rest now (bounded), then answer from the cache.
+  const { complete: allRead } = await withUnrealKinds(root, assets, 6000);
+  const used = usersOf(root, assets, pkg);
+  const files = new Set(assets.map((a) => a.path.toLowerCase()));
+  const project = (list: string[]) => list.filter((x) => !/^\/(Script|Engine)\//.test(x));
+  return {
+    name,
+    package: pkg,
+    ...sum,
+    engine: h.engine,
+    size: h.size,
+    unversioned: h.unversioned,
+    cooked: h.cooked,
+    thumbnails: h.thumbnails,
+    problems: h.ok ? h.problems : [h.error ?? "Not readable."],
+    exports: h.exports.slice(0, MAX_LIST).map((e) => ({ name: e.objectName, className: e.className, ...(e.superName ? { superName: e.superName } : {}), top: e.outer === 0, size: e.serialSize })),
+    exportCount: h.exports.length,
+    uses: project(h.hardPackages).slice(0, MAX_LIST).map((x) => refOf(x, files)),
+    soft: project(h.softPackages).slice(0, MAX_LIST).map((x) => refOf(x, files)),
+    engineUses: h.hardPackages.filter((x) => /^\/(Script|Engine)\//.test(x)).slice(0, 100),
+    usedBy: used.users.map((u) => ({ path: u.path, soft: u.soft })),
+    usedByComplete: used.complete && allRead,
+    tags: h.tags.slice(0, 20).map((t) => ({ object: t.object, className: t.className, tags: Object.entries(t.tags).slice(0, 60) })),
+  };
+}
+
 /**
  * The inspector's routes.
  *
@@ -129,9 +189,10 @@ export function gameInspectorRoutes(app: FastifyInstance, s: KesherServices, fin
     try {
       const p = await known(req.query.engine, req.query.project);
       if (p.kind === "unreal") {
-        if (!(await unrealCurrent(p))) return { files: [], note: "Open this project in Unreal once (with the KesherAI Bridge plugin) to list its Blueprints here." };
-        const list = await s.unreal.list();
-        return { files: list.blueprints.filter((b) => b.saved).map((b) => ({ path: b.path, size: 0 })), readOnly: true };
+        // Every package under Content, with its class read from its header (no engine).
+        const { assets } = await projectIndex(p.path);
+        const list = assets.filter((a) => /\.(uasset|umap)$/i.test(a.path)).sort((a, b) => a.path.localeCompare(b.path));
+        return { files: list.slice(0, 5000).map((a) => ({ path: a.path, size: 0, kind: a.kind, ...(a.parent ? { parent: a.parent } : {}) })), readOnly: true, ...(list.length > 5000 ? { truncated: true } : {}) };
       }
       return { files: await inspectableFiles(p), readOnly: false };
     } catch (err) {
@@ -142,6 +203,25 @@ export function gameInspectorRoutes(app: FastifyInstance, s: KesherServices, fin
   app.get<{ Querystring: { engine?: string; project?: string; path?: string } }>("/api/games/inspect", async (req, reply) => {
     try {
       const p = await known(req.query.engine, req.query.project);
+      if (p.kind === "unreal" && /^Content\//i.test(String(req.query.path ?? ""))) {
+        const { abs, rel } = unrealPath(p, String(req.query.path));
+        const h = await readUassetFile(abs);
+        const asset = await unrealAssetView(p.path, rel, h);
+        // A Blueprint with a copy saved by the Unreal page: its variables too.
+        let objects: InspectorObject[] = [];
+        let savedAt: string | undefined;
+        if (/Blueprint$/.test(asset.className ?? "") && (await unrealCurrent(p))) {
+          for (const path of [`${asset.package}.${asset.name}`, asset.package]) {
+            const saved = await s.unreal.savedGraph(path).catch(() => undefined);
+            if (saved) {
+              objects = [unrealObject(path, saved.graph)];
+              savedAt = saved.savedAt;
+              break;
+            }
+          }
+        }
+        return { path: rel, objects, asset, ...(savedAt ? { savedAt } : {}), readOnly: true, pending: [] };
+      }
       if (p.kind === "unreal") {
         const path = String(req.query.path ?? "");
         const saved = (await unrealCurrent(p)) && /^\/Game\//.test(path) ? await s.unreal.savedGraph(path) : undefined;

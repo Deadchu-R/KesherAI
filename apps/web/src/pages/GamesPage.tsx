@@ -71,7 +71,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   // The Source view of one project, over the list (a card's Code button, or a search result's file at its line).
   const [code, setCode] = useState<{ engine: Project["engine"]; path: string; name: string; open?: { path: string; line?: number } } | null>(null);
   // The inspector of one project (its card's Inspector button): values read from the files with the engine closed.
-  const [inspect, setInspect] = useState<Project | null>(null);
+  const [inspect, setInspect] = useState<(Project & { openFile?: string }) | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
   const busy = !!list?.projects.some((p) => p.running);
   useEffect(() => {
@@ -85,11 +85,18 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
       toast(L(`מסנכרן את ${p.name}…`, `Syncing ${p.name}…`));
       setTimeout(load, 800);
     }, (e: Error) => toast(e.message));
-  // A tapped search result: code opens in the Source view at its line; a scene, prefab or asset on its engine's page.
+  // A tapped search result: code opens in the Source view at its line; an Unreal package in the inspector (read from
+  // its header); another scene, prefab or asset on its engine's page.
   const openHit = (r: ProjectHits, h: GameHit) => {
     if (h.kind === "code" || h.kind === "script") {
       setSearch(null);
       setCode({ engine: r.engine, path: r.path, name: r.name, open: { path: h.path, ...(h.line ? { line: h.line } : {}) } });
+      return;
+    }
+    const proj = list?.projects.find((p) => p.engine === r.engine && p.path === r.path);
+    if (r.engine === "unreal" && proj && /^Content\/.+\.(uasset|umap)$/i.test(h.path)) {
+      setSearch(null);
+      setInspect({ ...proj, openFile: h.path });
       return;
     }
     location.hash = r.engine === "unity" ? "#/unity" : r.engine === "unreal" ? "#/unreal" : "#/godot";
@@ -103,7 +110,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
           <h1 className="grow" dir="auto">{L(`מפקח · ${inspect.name}`, `Inspector · ${inspect.name}`)}</h1>
           <span className="games-chip">{ENGINE[inspect.engine].label}</span>
         </div>
-        <GameInspector key={inspect.path} engine={inspect.engine} project={inspect.path} />
+        <GameInspector key={`${inspect.path}:${inspect.openFile ?? ""}`} engine={inspect.engine} project={inspect.path} {...(inspect.openFile ? { initialPath: inspect.openFile } : {})} />
       </div>
     );
   }

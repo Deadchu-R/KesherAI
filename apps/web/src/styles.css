@@ -4271,6 +4271,17 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-insp-edit { gap: 6px; }
 .games-insp-edit input { flex: 1 1 8em; min-width: 0; min-height: 40px; }
 .games-insp-edit button { min-height: 40px; }
+/* Unreal package read from its header (engine-closed step 7). */
+.games-ue { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.games-ue-chips { gap: 6px; }
+.games-ue-chips .games-chip { white-space: normal; overflow-wrap: anywhere; }
+.games-ue-warn { margin: 0; color: var(--warn); overflow-wrap: anywhere; }
+.games-ue-sec { border: 1px solid var(--border); border-radius: 10px; padding: 0 10px; min-width: 0; }
+.games-ue-sec[open] { padding-bottom: 8px; }
+.games-ue-sec > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.games-ue-sec > b { display: block; margin-top: 6px; }
+.games-ue-ref { display: block; padding: 6px 8px; }
+.games-inspector .games-hit > .games-chip { white-space: normal; overflow-wrap: anywhere; max-width: 50%; text-align: center; }
 @media (max-width: 480px) {
   /* A 390 px phone: the name above its value, so long vectors still fit. */
   .games-insp-field { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 4px 0; border-bottom: 1px solid var(--border); }
