@@ -81,4 +81,8 @@ export interface HubEnvBindings {
   /** Secret: the Claude Code scheduled task's trigger id and its per-task API token. */
   CLAUDE_TRIGGER_ID?: string;
   CLAUDE_FIRE_TOKEN?: string;
+  /** Web Push: the VAPID public key (plain variable, served to the page), its private "d" (secret) and contact. */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }

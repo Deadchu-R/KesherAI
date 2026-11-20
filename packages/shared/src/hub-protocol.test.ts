@@ -15,6 +15,10 @@ test("envelopes: shape, ids, sizes and ttl", () => {
   assert.equal(parseEnvelope({ ...env, ttl: 99 * 24 * 3600 })?.ttl, HUB_LIMITS.maxTtl);
   assert.equal(ttlFor("approval_request", 86400), HUB_LIMITS.approvalTtl, "approvals live 30 minutes at most");
   assert.equal(ttlFor("task", 1), 60);
+  // The clear waiting count (for the hub's push) only on an approvals snapshot, a whole number up to 999.
+  assert.equal(parseEnvelope({ ...env, kind: "approvals", waiting: 3 })?.waiting, 3);
+  assert.equal(parseEnvelope({ ...env, waiting: 3 })?.waiting, undefined);
+  for (const waiting of [-1, 1.5, 1000, "3"]) assert.equal(parseEnvelope({ ...env, kind: "approvals", waiting })?.waiting, undefined);
 });
 
 test("device frames: known shapes only, agents and links cleaned", () => {

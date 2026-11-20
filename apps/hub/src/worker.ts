@@ -7,6 +7,7 @@
  */
 import type { ExecutionContext, HubEnvBindings } from "./cf.js";
 import { json } from "./http.js";
+import { vapidFromEnv } from "./web-push.js";
 
 export { HubObject } from "./hub-do.js";
 
@@ -27,8 +28,9 @@ export default {
     if (env.HUB_DISABLED === "1") return json({ error: "The hub is switched off." }, 503);
     const url = new URL(req.url);
     if (url.pathname.startsWith("/internal/")) return json({ error: "Not found." }, 404);
-    // The page's settings: only the Google client id (public by design; it names the app, it opens nothing).
-    if (url.pathname === "/api/config" && req.method === "GET") return json({ googleClientId: env.GOOGLE_CLIENT_ID ?? "" });
+    // The page's settings: the Google client id and the Web Push public key (both public by design; they open nothing).
+    // The push key is offered only when the whole VAPID setup is there, so the page never subscribes to a hub that cannot send.
+    if (url.pathname === "/api/config" && req.method === "GET") return json({ googleClientId: env.GOOGLE_CLIENT_ID ?? "", vapidPublicKey: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT)?.publicKey ?? "" });
     if (url.pathname.startsWith("/api/") || url.pathname === "/ws/device") {
       const headers = new Headers(req.headers);
       // The DO trusts this header, so the Worker always overwrites it.

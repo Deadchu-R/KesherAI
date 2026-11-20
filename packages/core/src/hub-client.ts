@@ -718,10 +718,12 @@ export class HubClient {
   }
 
   /** Seals and sends a message to a device. */
-  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody, ttl?: number): Promise<boolean> {
+  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody, ttl?: number, waiting?: number): Promise<boolean> {
     const pub = this.senderKey(to);
     if (!pub || !this.s.deviceId) return false;
     const env = await sealMessage({ from: this.s.deviceId, to, kind, ...(ttl ? { ttl } : {}) }, body, (await this.ownKey()).privateKey, pub);
+    // `approvals` only: the count in clear, for the hub's "N waiting for you" push (see SealedEnvelope.waiting).
+    if (waiting !== undefined) env.waiting = waiting;
     this.send({ t: "send", env });
     return true;
   }
@@ -882,20 +884,24 @@ export class HubClient {
   /**
    * Sends everything waiting for approval on this PC (chats, their sub-agents, Antigravity's Run asks) to the owner's
    * online phones and hub pages, as one sealed snapshot that replaces the last: when the set changes, and to a phone
-   * that just came on. The hub only relays it (it cannot read it).
+   * that just came on. The hub only relays it (it cannot read it). When the set changes, the owner's phones that are
+   * off get it too (queued for 30 minutes): its clear `waiting` count is how the hub knows to push "N waiting for you"
+   * to a phone whose page is closed.
    */
   async sendApprovals(): Promise<void> {
     if (!this.deps.approvals || !this.connected || !this.s.deviceId) return;
-    const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
-    const items = fitApprovals(this.deps.approvals.pending().map(toHubApproval));
+    const allPhones = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
+    const phones = allPhones.filter((d) => d.online);
+    const pending = this.deps.approvals.pending();
+    const items = fitApprovals(pending.map(toHubApproval));
     const key = items.map((a) => a.requestId).join(",");
     const changed = key !== this.approvalsKey;
-    const to = phones.filter((p) => changed || !this.approvalsTo.has(p.id));
+    const to = changed ? allPhones : phones.filter((p) => !this.approvalsTo.has(p.id));
     this.approvalsKey = key;
     this.approvalsTo = new Set(phones.map((p) => p.id));
     if (!to.length || (!items.length && !changed)) return;
     const at = Date.now();
-    for (const p of to) await this.sendSealed(p.id, "approvals", { type: "approvals", items, at }, HUB_LIMITS.approvalTtl);
+    for (const p of to) await this.sendSealed(p.id, "approvals", { type: "approvals", items, at }, HUB_LIMITS.approvalTtl, Math.min(pending.length, 999));
   }
 }
 

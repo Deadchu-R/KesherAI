@@ -101,6 +101,11 @@ export interface SealedEnvelope {
   /** Set by the hub on an `agent_event` it delivers: its order number (for catch-up) and when it arrived (ms). */
   seq?: number;
   at?: number;
+  /**
+   * `approvals` only, in clear: how many things wait on the PC (the whole count, not only the listed ones). The one
+   * plain fact the hub reads, to tell the owner's phone "2 waiting for you" by Web Push when its page is closed.
+   */
+  waiting?: number;
 }
 
 /**
@@ -499,7 +504,10 @@ export function parseEnvelope(x: unknown): SealedEnvelope | null {
     if (!isHubId(e.run) || typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > HUB_LIMITS.agentBatchEvents) return null;
     return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, run: e.run, n };
   }
-  return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct };
+  // The waiting count of an approvals snapshot (anything else, or a bad value, is dropped, never refused).
+  const w = e.waiting;
+  const waiting = kind === "approvals" && typeof w === "number" && Number.isInteger(w) && w >= 0 && w <= 999 ? w : undefined;
+  return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}) };
 }
 
 /**

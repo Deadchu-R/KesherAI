@@ -31,6 +31,7 @@ import { claudeTrigger, fireText, type ClaudeTrigger, type FireResult } from "./
 import { ownerCheck, type GoogleClaims } from "./google.js";
 import { LIMITS, RateLimiter } from "./rate-limit.js";
 import type { AuditRow, DeviceRow, HubStore } from "./store.js";
+import { cleanPushSub, PUSH, sendPush, type StoredPushSub, type VapidKeys } from "./web-push.js";
 
 /** A device's name when pairing gave none. */
 const DEFAULT_NAME: Record<HubDeviceKind, string> = { pc: "PC", phone: "Phone", "claude-chat": "Claude chat" };
@@ -73,6 +74,8 @@ export interface HubConfig {
   /** The hub's ECDH private key as JWK text (for the Claude cloud path). */
   hubPrivateJwk?: string;
   claude?: { triggerId?: string; token?: string };
+  /** Web Push (VAPID keys and contact); without it the page offers no notifications. */
+  vapid?: VapidKeys;
 }
 
 /** What the hub needs from outside. */
@@ -84,6 +87,8 @@ export interface HubDeps {
   verifyIdToken: (token: string) => Promise<GoogleClaims>;
   /** Fires the Claude scheduled task. */
   fireClaude: (text: string, trigger: ClaudeTrigger) => Promise<FireResult>;
+  /** Calls a push service (tests pass their own; default the Worker's fetch). */
+  fetchPush?: typeof fetch;
   now?: () => number;
 }
 
@@ -112,6 +117,11 @@ function newCode(): string {
 /** The code as typed (any case, with or without the dash or spaces). */
 function normalCode(s: string): string {
   return s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** Where a device's push subscription is kept (in settings, deleted with the device). */
+function pushKey(deviceId: string): string {
+  return `push:${deviceId}`;
 }
 
 /** The hub. One instance lives in the Durable Object. */
@@ -398,6 +408,7 @@ export class Hub {
   revoke(deviceId: string): boolean {
     if (!this.store.device(deviceId)) return false;
     this.store.deleteDevice(deviceId);
+    this.store.setSetting(pushKey(deviceId), undefined);
     this.store.dropQueueFor(deviceId);
     this.store.dropAgentEventsFor(deviceId);
     this.sockets.send(deviceId, { t: "revoked" });
@@ -438,6 +449,7 @@ export class Hub {
     this.store.deleteAllSessions();
     for (const d of this.store.devices()) {
       this.store.deleteDevice(d.id);
+      this.store.setSetting(pushKey(d.id), undefined);
       this.sockets.send(d.id, { t: "revoked" });
     }
     this.store.dropQueue();
@@ -651,6 +663,82 @@ export class Hub {
     const online = this.sockets.send(to.id, { t: "deliver", env });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
     if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
+    if (env.kind === "approvals" && env.waiting !== undefined) await this.notifyWaiting(to.id, env.waiting, online);
+  }
+
+  // ---- Web Push ("N waiting for you" on a phone whose page is closed) ----
+
+  /**
+   * Keeps a browser's push subscription for the paired device that sends it (one per device; a new one replaces it).
+   *
+   * @param bearer - The device's token.
+   * @param body - `{endpoint, keys: {p256dh, auth}, lang}` from the page.
+   * @returns ok, or an error.
+   */
+  async pushSubscribe(bearer: string | undefined, body: unknown): Promise<{ ok: true } | HubError> {
+    const d = await this.deviceForToken(bearer);
+    if (!d) return fail(401, "Unknown device.");
+    if (d.kind !== "phone") return fail(403, "Only a phone or a hub page gets notifications.");
+    if (!this.deps.config.vapid) return fail(503, "Notifications are not set up on this hub.");
+    const sub = cleanPushSub(body);
+    if (!sub) return fail(400, "That is not a push subscription this hub can use.");
+    const row: StoredPushSub = { ...sub, count: 0, last: 0 };
+    this.store.setSetting(pushKey(d.id), JSON.stringify(row));
+    this.audit("push-on", { deviceId: d.id });
+    return { ok: true };
+  }
+
+  /**
+   * Forgets the device's push subscription ("Stop notifying this device").
+   *
+   * @param bearer - The device's token.
+   * @returns ok, or an error.
+   */
+  async pushUnsubscribe(bearer: string | undefined): Promise<{ ok: true } | HubError> {
+    const d = await this.deviceForToken(bearer);
+    if (!d) return fail(401, "Unknown device.");
+    this.store.setSetting(pushKey(d.id), undefined);
+    this.audit("push-off", { deviceId: d.id });
+    return { ok: true };
+  }
+
+  /** The device's push subscription, if any. */
+  private pushSub(deviceId: string): StoredPushSub | undefined {
+    const raw = this.store.getSetting(pushKey(deviceId));
+    if (!raw) return undefined;
+    try {
+      return JSON.parse(raw) as StoredPushSub;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * A PC's waiting count reached a phone. With the page open (online) it only notes what the phone saw. Closed, and
+   * the count grew past what it last saw or was told: one push, at most one per {@link PUSH.gapMs} (sooner ones
+   * collapse into the notification already shown). A subscription the push service calls gone (404, 410) is dropped.
+   */
+  private async notifyWaiting(deviceId: string, n: number, online: boolean): Promise<void> {
+    const sub = this.pushSub(deviceId);
+    const vapid = this.deps.config.vapid;
+    if (!sub || !vapid) return;
+    const t = this.now();
+    const save = (row: StoredPushSub) => this.store.setSetting(pushKey(deviceId), JSON.stringify(row));
+    if (online || n <= sub.count) {
+      if (n !== sub.count) save({ ...sub, count: n });
+      return;
+    }
+    if (t - sub.last < PUSH.gapMs) return;
+    save({ ...sub, count: n, last: t });
+    try {
+      const status = await sendPush(sub, n, vapid, { fetch: this.deps.fetchPush ?? fetch.bind(globalThis), now: t });
+      if (status === 404 || status === 410) {
+        this.store.setSetting(pushKey(deviceId), undefined);
+        this.audit("push-gone", { deviceId });
+      } else if (status >= 400) this.audit("push-failed", { deviceId });
+    } catch {
+      this.audit("push-failed", { deviceId });
+    }
   }
 
   /** The Claude path: open the one message sealed to the hub, fire the scheduled task, answer sealed to the sender. */
