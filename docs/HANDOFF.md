@@ -38,6 +38,7 @@ so a new chat starts from a few small files.
 - Tokens first: agents per LEAD_GUIDE (Opus builds, Sonnet research/docs, Haiku lookups), small tasks to the task inbox
   (local model / Antigravity), short reads and reports, little browser work. Remind him to /compact after each build;
   a new chat every 1–2 weeks with this file.
+- Daily feature review (Roee, 2026-11-20): scheduled task "KesherAI daily feature review vs competitors" (every night 03:17 Israel time, on his Claude account) reviews one area a day in rotation against competitors and writes docs/FEATURE_REVIEW.md (we do better / they do better / missing / ideas) plus ⬜ lines in the WORK_LIST backlog. Each new chat: read the latest FEATURE_REVIEW.md section, keep the task alive, and use its findings when planning.
 - Research competitors end to end before any new feature; every research goes into docs/RESEARCH_LOG.md with
   "Stopped at:". AI editors: in-depth research (Photoshop, Affinity…).
 - Quality: readable, documented (TSDoc), efficient, secure code; Hebrew + English for every text; works at 390 px and in
