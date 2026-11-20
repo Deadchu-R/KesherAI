@@ -58,6 +58,31 @@ export async function helperRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { stopped: helpers().runs.stop(req.params.hid) };
   });
 
+  /**
+   * Steer: a note to a running (or waiting) sub-agent from its card or the phone sheet. Its model reads it at its next
+   * step (after the tool it runs now); the note shows in its steps.
+   */
+  app.post<{ Params: { id: string; hid: string }; Body: { text?: string } }>("/api/conversations/:id/helpers/:hid/message", async (req, reply) => {
+    const r = runOf(req.params.id, req.params.hid);
+    if (!r) return reply.code(404).send({ error: "No such sub-agent" });
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) return reply.code(400).send({ error: "Write the note." });
+    if (!helpers().runs.message(r.id, text, "user")) return reply.code(409).send({ error: r.kind === "external" ? "An outside agent takes no notes." : "It has ended: continue it instead." });
+    return { ok: true };
+  });
+
+  /** Continue: an ended sub-agent goes on from its own conversation with the user's follow-up (same model and role). */
+  app.post<{ Params: { id: string; hid: string }; Body: { text?: string } }>("/api/conversations/:id/helpers/:hid/continue", async (req, reply) => {
+    if (!runOf(req.params.id, req.params.hid)) return reply.code(404).send({ error: "No such sub-agent" });
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) return reply.code(400).send({ error: "Write what it should do next." });
+    try {
+      return { run: await s.conversations.continueHelper(req.params.id, req.params.hid, text) };
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   /** "Stop all" in the strip: the helpers only (the chat's own Stop stops the chat and them). */
   app.post<{ Params: { id: string } }>("/api/conversations/:id/helpers/stop", async (req) => ({ stopped: helpers().runs.stopAll(req.params.id) }));
 

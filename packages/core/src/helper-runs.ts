@@ -11,6 +11,11 @@ import type { AgentMessage, HelperKind, HelperRunInfo, HelperUsage } from "@kesh
  * Events: `change` (chatId) whenever a run of that chat changed, `end` (the run's info) when one ended, `ask` (the
  * run's info) when one starts waiting for the user, `answered` (the run's info) when that wait ends, `save` (chatId)
  * when a run's transcript grew (helper-store.ts writes `change` and `save` to disk, so runs survive a restart).
+ *
+ * Steer and continue (docs/RESEARCH_LOG.md, "Gap list: agents and chat-first", A5 and A6; like Claude Code's
+ * subagents and ChatGPT agent's "interrupt and redirect"): `message` hands a running helper a note at its next model
+ * turn (queued while a tool runs, or while it waits to start), and `continueRun` starts an ended one again from its
+ * kept conversation with a follow-up, on the same model and role, its token totals going on.
  */
 
 /** What a running helper may do with its own run. */
@@ -47,8 +52,15 @@ export interface HelperControl {
    * @param messages - Its session's messages.
    */
   transcript(messages: AgentMessage[]): void;
-  /** Its conversation from before a restart (it continues from there), absent on a fresh run. */
+  /** Its conversation from before a restart or before it ended (it continues from there), absent on a fresh run. */
   resumed?: AgentMessage[];
+  /** A continued run's follow-up: sent as its next message after `resumed` (instead of the restart note). */
+  followUp?: string;
+  /**
+   * Where notes the user or the lead send while it runs go (its session's next turn); notes sent before this was set
+   * are handed over at once. `undefined` takes it away again (the run is finishing: later notes wait unread).
+   */
+  notes(sink: ((text: string) => void) | undefined): void;
 }
 
 /** One job to run. */
@@ -87,6 +99,33 @@ export const REPORT_CHARS = 6000;
 const OTHER_LIMIT = 4;
 /** Ended runs kept per chat. */
 const KEEP_ENDED = 20;
+/** Ended runs per chat that keep their conversation, so they can be continued (the newest ones). */
+const KEEP_TRANSCRIPTS = 5;
+/** The longest note or follow-up (characters). */
+export const NOTE_CHARS = 2000;
+
+/** Who sent a note or a follow-up: the user (card, phone sheet) or the lead model (its tools). */
+export type NoteFrom = "user" | "lead";
+
+/**
+ * What the helper's model reads for a note sent while it works.
+ *
+ * @param text - The note.
+ * @param from - Who sent it.
+ */
+export function noteText(text: string, from: NoteFrom): string {
+  return `${from === "user" ? "A note from the user" : "A note from the assistant that started you"} while you work (it changes or adds to your task; follow it, and say in your report what you did about it):\n${text}`;
+}
+
+/**
+ * What the helper's model reads when it is continued after it ended.
+ *
+ * @param text - The follow-up.
+ * @param from - Who sent it.
+ */
+export function followUpText(text: string, from: NoteFrom): string {
+  return `${from === "user" ? "The user" : "The assistant that started you"} continues your task with this follow-up. Your earlier work and report are above; go on from them (do not redo what is done) and finish with a new short report:\n${text}`;
+}
 
 interface Run {
   info: HelperRunInfo;
@@ -106,6 +145,12 @@ interface Run {
   transcript?: AgentMessage[];
   /** Paused by a restart: the queue skips it until `resume` gives it its work again. */
   held?: boolean;
+  /** Notes sent before it could take them (waiting, or between its steps before its session started). */
+  notes: string[];
+  /** Hands a note to its running session. */
+  noteSink?: (text: string) => void;
+  /** A continued run's follow-up, handed to its work at its next start. */
+  followUp?: string;
 }
 
 /** One run as it is saved on disk (helper-store.ts). */
@@ -117,6 +162,8 @@ export interface SavedHelperRun {
   delivered?: boolean;
   resume?: Record<string, unknown>;
   transcript?: AgentMessage[];
+  /** Notes sent to it that it had not read yet. */
+  notes?: string[];
 }
 
 /** The queue and the runs. */
@@ -150,6 +197,7 @@ export class HelperRuns extends EventEmitter {
       abort: new AbortController(),
       ended,
       end,
+      notes: [],
     };
     this.runs.set(id, run);
     this.prune(job.chatId);
@@ -166,15 +214,24 @@ export class HelperRuns extends EventEmitter {
   saved(chatId: string): SavedHelperRun[] {
     return [...this.runs.values()]
       .filter((r) => r.chatId === chatId)
-      .map((r) => ({
-        chatId: r.chatId,
-        info: { ...r.info, ...(r.full ? { report: r.full, cut: false } : {}) },
-        local: r.job.local,
-        timeMs: r.job.timeMs,
-        ...(r.delivered ? { delivered: true } : {}),
-        ...(r.job.resume ? { resume: r.job.resume } : {}),
-        ...(r.transcript && this.going(r) ? { transcript: r.transcript } : {}),
-      }));
+      .map((r) => this.toSaved(r));
+  }
+
+  /** One run as it is saved (and as a continue builds its work again from). */
+  private toSaved(r: Run): SavedHelperRun {
+    const info: HelperRunInfo = { ...r.info, ...(r.full ? { report: r.full, cut: false } : {}) };
+    delete info.canContinue;
+    return {
+      chatId: r.chatId,
+      info,
+      local: r.job.local,
+      timeMs: r.job.timeMs,
+      ...(r.delivered ? { delivered: true } : {}),
+      ...(r.job.resume ? { resume: r.job.resume } : {}),
+      // A going run's conversation (for a restart), and an ended one's that can still be continued.
+      ...(r.transcript ? { transcript: r.transcript } : {}),
+      ...(this.going(r) && r.notes.length ? { notes: r.notes } : {}),
+    };
   }
 
   /**
@@ -193,8 +250,9 @@ export class HelperRuns extends EventEmitter {
       const info: HelperRunInfo = { ...s.info, steps: [...(s.info.steps ?? [])] };
       delete info.runAsk;
       delete info.waitReason;
+      delete info.canContinue;
       const job: HelperJob = { chatId: s.chatId, kind: info.kind, title: info.title, background: info.background, maxSteps: info.maxSteps, timeMs: s.timeMs, local: s.local, model: info.model, ...(s.resume ? { resume: s.resume } : {}), run: async () => Promise.reject(new Error("Not resumed yet.")) };
-      const run: Run = { info, job, chatId: s.chatId, abort: new AbortController(), ended, end, ...(s.delivered ? { delivered: true } : {}), ...(s.transcript ? { transcript: s.transcript } : {}) };
+      const run: Run = { info, job, chatId: s.chatId, abort: new AbortController(), ended, end, notes: [...(s.notes ?? [])], ...(s.delivered ? { delivered: true } : {}), ...(s.transcript ? { transcript: s.transcript } : {}) };
       this.setReport(run, info.report ?? "");
       if (!info.report) delete info.report;
       this.runs.set(info.id, run);
@@ -204,7 +262,8 @@ export class HelperRuns extends EventEmitter {
       }
       // Its model's state (a swap, a model beside the chat's) is gone with the restart.
       delete info.swap;
-      if (s.resume) {
+      // A part the chat's model waited for ended with its turn; a background one goes on.
+      if (s.resume && info.background) {
         info.state = "waiting";
         info.restart = "paused";
         run.held = true;
@@ -241,13 +300,90 @@ export class HelperRuns extends EventEmitter {
 
   /** @returns The chat's runs, oldest first. */
   list(chatId: string): HelperRunInfo[] {
-    return [...this.runs.values()].filter((r) => r.chatId === chatId).map((r) => ({ ...r.info }));
+    return [...this.runs.values()].filter((r) => r.chatId === chatId).map((r) => this.view(r));
   }
 
   /** @returns One run, with its whole report (`full`) when the card's is cut. */
   get(id: string): (HelperRunInfo & { chatId: string; full?: string }) | undefined {
     const r = this.runs.get(id);
-    return r ? { ...r.info, chatId: r.chatId, ...(r.full ? { full: r.full } : {}) } : undefined;
+    return r ? { ...this.view(r), chatId: r.chatId, ...(r.full ? { full: r.full } : {}) } : undefined;
+  }
+
+  /** A run's info for the screen and the model, with whether it can be continued. */
+  private view(r: Run): HelperRunInfo {
+    return { ...r.info, ...(this.continuable(r) ? { canContinue: true } : {}) };
+  }
+
+  /** It ended, kept its conversation, and its work can be built again. */
+  private continuable(r: Run): boolean {
+    return !this.going(r) && !!r.transcript?.length && !!r.job.resume;
+  }
+
+  /**
+   * Sends a running (or waiting) helper a note: its model reads it at its next turn, after the tool it runs now. The
+   * note shows in its steps.
+   *
+   * @param id - The run.
+   * @param text - The note (cut to {@link NOTE_CHARS}).
+   * @param from - Who sends it.
+   * @returns Whether it was still going (an ended run takes no notes: continue it instead).
+   */
+  message(id: string, text: string, from: NoteFrom): boolean {
+    const r = this.runs.get(id);
+    const t = text.trim().slice(0, NOTE_CHARS);
+    if (!r || !t || !this.going(r) || r.job.kind === "external") return false;
+    const note = noteText(t, from);
+    if (r.noteSink) r.noteSink(note);
+    else r.notes.push(note);
+    this.noteStep(r, "note", from, t);
+    return true;
+  }
+
+  /**
+   * Continues an ended helper with a follow-up: it starts again (in the background, so its report reaches the chat's
+   * model as a background helper's does) from its kept conversation, on the same model and role; its step count starts
+   * over, its token totals go on.
+   *
+   * @param id - The run.
+   * @param text - The follow-up (cut to {@link NOTE_CHARS}).
+   * @param from - Who sends it.
+   * @param build - Builds its work again from the run as saved (delegate.ts); undefined when it cannot.
+   * @returns Its info (waiting or running), or undefined when it cannot be continued.
+   */
+  continueRun(id: string, text: string, from: NoteFrom, build: (saved: SavedHelperRun) => HelperJob["run"] | undefined): HelperRunInfo | undefined {
+    const r = this.runs.get(id);
+    const t = text.trim().slice(0, NOTE_CHARS);
+    if (!r || !t || !this.continuable(r)) return undefined;
+    const work = build(this.toSaved(r));
+    if (!work) return undefined;
+    let end!: (i: HelperRunInfo) => void;
+    r.ended = new Promise<HelperRunInfo>((res) => (end = res));
+    r.end = end;
+    r.abort = new AbortController();
+    r.why = undefined;
+    r.full = undefined;
+    r.delivered = false;
+    r.held = false;
+    r.notes = [];
+    r.followUp = followUpText(t, from);
+    r.job = { ...r.job, run: work, background: true };
+    const i = r.info;
+    for (const k of ["endedAt", "startedAt", "error", "report", "cut", "diff", "waitReason", "waitLimit", "restart", "swap", "runAsk"] as const) delete i[k];
+    i.state = "waiting";
+    i.background = true;
+    i.queuedAt = this.now();
+    i.step = 0;
+    i.continued = (i.continued ?? 0) + 1;
+    this.noteStep(r, "continue", from, t);
+    this.pump();
+    if (i.state === "waiting") this.changed(r);
+    return this.view(r);
+  }
+
+  /** Adds a note or a follow-up to the run's steps (not counted as a step). */
+  private noteStep(r: Run, what: "note" | "continue", from: NoteFrom, text: string): void {
+    r.info.steps = [...r.info.steps, `${what}(${from}): ${text.replace(/\s+/g, " ").slice(0, 150)}`].slice(-30);
+    this.changed(r);
   }
 
   /** @returns How many local helpers run now, and how many wait. */
@@ -366,9 +502,16 @@ export class HelperRuns extends EventEmitter {
     r.info.startedAt ??= this.now();
     this.armTimer(r);
     this.changed(r);
+    const followUp = r.followUp;
+    r.followUp = undefined;
     const ctl: HelperControl = {
       signal: r.abort.signal,
       ...(r.transcript?.length ? { resumed: r.transcript } : {}),
+      ...(followUp ? { followUp } : {}),
+      notes: (sink) => {
+        r.noteSink = sink;
+        if (sink) for (const n of r.notes.splice(0)) sink(n);
+      },
       transcript: (messages) => {
         r.transcript = messages;
         this.emit("save", r.chatId);
@@ -456,20 +599,27 @@ export class HelperRuns extends EventEmitter {
     // Stopped while it asked: the question is gone too (its notification is cleared).
     if (r.answer || r.info.state === "asking") this.emit("answered", { ...r.info, chatId: r.chatId });
     r.answer = undefined;
-    r.transcript = undefined;
+    r.noteSink = undefined;
+    r.notes = [];
+    // A run whose work can be built again keeps its conversation, so it can be continued with a follow-up.
+    if (!r.job.resume) r.transcript = undefined;
     r.info.state = state;
     r.info.endedAt = this.now();
     delete r.info.waitReason;
+    this.prune(r.chatId);
     this.changed(r);
-    this.emit("end", { ...r.info, chatId: r.chatId });
-    r.end({ ...r.info });
+    this.emit("end", { ...this.view(r), chatId: r.chatId });
+    r.end(this.view(r));
     this.pump();
   }
 
-  /** Keeps the newest ended runs of a chat. */
+  /** Keeps the newest ended runs of a chat, and the conversations of the newest of those. */
   private prune(chatId: string): void {
-    const ended = [...this.runs.values()].filter((r) => r.chatId === chatId && !this.going(r));
-    for (const r of ended.slice(0, Math.max(0, ended.length - KEEP_ENDED))) this.runs.delete(r.info.id);
+    // Oldest end first (a continued run ends again later than runs started after it).
+    const ended = [...this.runs.values()].filter((r) => r.chatId === chatId && !this.going(r)).sort((a, b) => (a.info.endedAt ?? 0) - (b.info.endedAt ?? 0));
+    const drop = Math.max(0, ended.length - KEEP_ENDED);
+    for (const r of ended.slice(0, drop)) this.runs.delete(r.info.id);
+    for (const r of ended.slice(drop, Math.max(drop, ended.length - KEEP_TRANSCRIPTS))) r.transcript = undefined;
   }
 
   private changed(r: Run): void {

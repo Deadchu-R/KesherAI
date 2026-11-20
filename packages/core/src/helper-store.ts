@@ -113,5 +113,5 @@ function isSaved(s: unknown, chatId: string): s is SavedHelperRun {
   if (!s || typeof s !== "object") return false;
   const r = s as Partial<SavedHelperRun>;
   const i = r.info;
-  return r.chatId === chatId && !!i && typeof i.id === "string" && typeof i.state === "string" && typeof i.title === "string" && typeof i.kind === "string" && Array.isArray(i.steps) && typeof r.timeMs === "number" && (r.transcript === undefined || Array.isArray(r.transcript));
+  return r.chatId === chatId && !!i && typeof i.id === "string" && typeof i.state === "string" && typeof i.title === "string" && typeof i.kind === "string" && Array.isArray(i.steps) && typeof r.timeMs === "number" && (r.transcript === undefined || Array.isArray(r.transcript)) && (r.notes === undefined || (Array.isArray(r.notes) && r.notes.every((n) => typeof n === "string")));
 }

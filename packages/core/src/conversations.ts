@@ -12,10 +12,10 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
+import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
-import { helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
+import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
 import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
@@ -292,6 +292,23 @@ export class ConversationManager {
 
   /** Each open chat's helper options (helpers paused by a restart continue with them). */
   private readonly delegateOptions = new Map<string, DelegateOptions>();
+
+  /**
+   * Continues an ended helper of a chat with the user's follow-up ("Continue with…" on its card or phone sheet).
+   *
+   * @param id - The chat.
+   * @param runId - The helper run.
+   * @param text - The follow-up.
+   * @returns Its info, now waiting or running.
+   * @throws Error when the chat is not found or the run cannot be continued.
+   */
+  async continueHelper(id: string, runId: string, text: string): Promise<HelperRunInfo> {
+    // Opening the chat builds its tools, and with them its helpers' options.
+    if (!(await this.open(id))) throw new Error("Conversation not found");
+    const o = this.delegateOptions.get(id);
+    if (!o) throw new Error("This chat cannot run sub-agents now.");
+    return continueHelperRun(o, runId, text, "user");
+  }
 
   private delegateFor(id: string, tools: AgentTool[]): AgentTool[] {
     if (Date.now() - this.chatModelsAt > 5 * 60_000) {

@@ -77,12 +77,18 @@ test("restore: ended runs come back as they were; a run that cannot continue end
   assert.equal(runs.resume("h-done", async () => ({ report: "" })), false, "only a paused run resumes");
 });
 
-test("a part the chat waits for is not saved to continue (the chat's own resume redoes it)", async () => {
+test("a part the chat waits for does not continue after a restart (the chat's own resume redoes it), but can take a follow-up", async () => {
   const runs = new HelperRuns({ limit: () => 2 });
   const turn: ModelTurn = async () => ({ text: "found", toolCalls: [] });
   const [d] = helperToolsFor({ tools: () => [readFile], currentModel: () => "m", turnFor: () => turn, models: () => [], runs, chatId: "c" });
   await d!.run({ parts: [{ task: "find x", type: "lookup" }] }, ctx);
-  assert.equal(runs.saved("c")[0]!.resume, undefined);
+  const saved = runs.saved("c")[0]!;
+  assert.equal((saved.resume as { task?: string }).task, "find x", "kept for a follow-up");
+  assert.equal(runs.get(saved.info.id)!.canContinue, true);
+  // Saved while it ran: after the restart it ends as failed instead of pausing.
+  const again = new HelperRuns({ limit: () => 2 });
+  assert.deepEqual(again.restore([{ ...saved, info: { ...saved.info, id: "h-fg", state: "running" } }]), []);
+  assert.equal(again.get("h-fg")!.state, "failed");
 });
 
 test("wake-up: a background helper that ends while its chat is idle wakes the chat's model once", async () => {

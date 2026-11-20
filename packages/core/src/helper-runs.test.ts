@@ -137,3 +137,84 @@ test("stopping a run that asks ends its ask once", async () => {
   assert.equal(answered, 1);
   assert.equal(runs.get(info.id)!.usage, undefined);
 });
+
+test("steer: a note waits until the run takes notes, shows in its steps, and an ended run takes none", async () => {
+  const runs = new HelperRuns({ limit: () => 1 });
+  const got: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const first = job();
+  runs.start(first);
+  // The second waits in the queue: its note is kept until it starts and asks for notes.
+  const info = runs.start(job({ run: async (ctl) => { ctl.notes((n) => got.push(n)); await gate; ctl.notes(undefined); return { report: "ok" }; } }));
+  assert.equal(info.state, "waiting");
+  assert.equal(runs.message(info.id, "  look in src/ too  ", "user"), true);
+  assert.match(runs.get(info.id)!.steps.at(-1)!, /^note\(user\): look in src\/ too$/);
+  assert.equal(runs.get(info.id)!.step, 0, "a note is not counted as a step");
+  first.release();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(got.length, 1);
+  assert.match(got[0]!, /A note from the user[\s\S]*look in src\/ too/);
+  assert.equal(runs.message(info.id, "and tests", "lead"), true);
+  assert.match(got[1]!, /assistant that started you[\s\S]*and tests/);
+  release();
+  await runs.wait([info.id]);
+  assert.equal(runs.message(info.id, "too late", "user"), false);
+  assert.equal(runs.message(info.id, "   ", "user"), false);
+});
+
+test("continue: an ended run with its conversation starts again in the background, keeping its tokens", async () => {
+  const runs = new HelperRuns({ limit: () => 2 });
+  const resumeSpec = { task: "find x", kind: "lookup", maxSteps: 8, write: false };
+  const info = runs.start(job({
+    resume: resumeSpec,
+    run: async (ctl) => {
+      ctl.usage({ input: 100, output: 10 });
+      ctl.transcript([{ role: "user", content: "find x" }, { role: "assistant", content: "in a.ts" }]);
+      return { report: "in a.ts" };
+    },
+  }));
+  await runs.wait([info.id]);
+  const ended = runs.get(info.id)!;
+  assert.equal(ended.canContinue, true);
+  // Without a follow-up, or while it builds nothing, it does not continue.
+  assert.equal(runs.continueRun(info.id, " ", "user", () => async () => ({ report: "" })), undefined);
+  assert.equal(runs.continueRun(info.id, "now b", "user", () => undefined), undefined);
+  let seen: { resumed?: number; followUp?: string; saved?: unknown } = {};
+  const again = runs.continueRun(info.id, "now find b", "user", (saved) => {
+    seen.saved = saved.resume;
+    return async (ctl) => {
+      seen = { ...seen, resumed: ctl.resumed?.length, followUp: ctl.followUp };
+      ctl.usage({ input: 50, output: 5 });
+      return { report: "b is in b.ts" };
+    };
+  })!;
+  assert.equal(again.continued, 1);
+  assert.equal(again.background, true);
+  assert.equal(again.canContinue, undefined, "a going run cannot be continued");
+  assert.match(again.steps.at(-1)!, /^continue\(user\): now find b$/);
+  const done = (await runs.wait([info.id]))[0]!;
+  assert.deepEqual(seen.saved, resumeSpec);
+  assert.equal(seen.resumed, 2, "it goes on from its own conversation");
+  assert.match(seen.followUp!, /The user continues your task[\s\S]*now find b/);
+  assert.equal(done.state, "done");
+  assert.equal(done.report, "b is in b.ts");
+  assert.equal(done.usage!.input, 150, "its token totals go on");
+  assert.equal(done.usage!.calls, 2);
+});
+
+test("continue: a run without a way to build it again (an outside agent) cannot be continued, and only the newest keep their conversation", async () => {
+  let t = 0;
+  const runs = new HelperRuns({ limit: () => 4, now: () => ++t });
+  const plain = runs.start(job({ run: async (ctl) => { ctl.transcript([{ role: "user", content: "x" }]); return { report: "x" }; } }));
+  await runs.wait([plain.id]);
+  assert.equal(runs.get(plain.id)!.canContinue, undefined);
+  const ids: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const r = runs.start(job({ resume: { task: `t${i}` }, run: async (ctl) => { ctl.transcript([{ role: "user", content: `t${i}` }]); return { report: "ok" }; } }));
+    await runs.wait([r.id]);
+    ids.push(r.id);
+  }
+  assert.deepEqual(ids.map((id) => !!runs.get(id)!.canContinue), [false, false, true, true, true, true, true]);
+  assert.equal(runs.saved("c1").filter((s) => s.transcript).length, 5);
+});

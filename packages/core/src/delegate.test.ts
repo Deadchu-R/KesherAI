@@ -229,3 +229,45 @@ test("a cloud helper asks once before reading the project; no means the web only
   await d.run({ parts: [{ task: "again" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
   assert.equal(runs.list("c")[1]!.state, "done", "not asked twice");
 });
+
+test("steer and continue through the lead's tools: a note reaches the helper's next turn; an ended helper goes on from its conversation", async () => {
+  const { HelperRuns } = await import("./helper-runs.js");
+  const { helperToolsFor } = await import("./delegate.js");
+  const runs = new HelperRuns({ limit: () => 2 });
+  const seen: string[][] = [];
+  let release!: () => void;
+  let gate = new Promise<void>((r) => (release = r));
+  let calls = 0;
+  const turn: ModelTurn = async (req) => {
+    seen.push(req.messages.map((m) => (typeof m.content === "string" ? m.content : "")));
+    calls++;
+    if (calls === 1) {
+      await gate;
+      return { text: "", toolCalls: [{ id: "t1", name: "read_file", input: { path: "a.ts" } }] };
+    }
+    return { text: `report ${calls}`, toolCalls: [] };
+  };
+  const tools = helperToolsFor({ tools: () => [tool("read_file", "read")], currentModel: () => "m", turnFor: () => turn, models: () => [], runs, chatId: "c" });
+  const byName = (n: string) => tools.find((t) => t.spec.name === n)!;
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  const out = await byName("delegate").run({ parts: [{ task: "find x", type: "lookup", background: true }] }, ctx);
+  const id = /id (h-\w+)/.exec(out.output)![1]!;
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match((await byName("helper_message").run({ id, text: "also check b.ts" }, ctx)).output, /Sent to/);
+  release();
+  const first = (await runs.wait([id]))[0]!;
+  assert.equal(first.state, "done");
+  assert.ok(seen[1]!.some((c) => /assistant that started you[\s\S]*also check b\.ts/.test(c)), "the note is in its next turn");
+  await assert.rejects(byName("helper_message").run({ id, text: "late" }, ctx), /helper_continue/);
+  // Continue: the same conversation and the follow-up.
+  gate = Promise.resolve();
+  const cont = await byName("helper_continue").run({ id, text: "now look at c.ts" }, ctx);
+  assert.match(cont.output, /Continued/);
+  const second = (await runs.wait([id]))[0]!;
+  assert.equal(second.state, "done");
+  assert.equal(second.continued, 1);
+  const last = seen.at(-1)!;
+  assert.ok(last.some((c) => c === "find x"), "it keeps its first task");
+  assert.ok(last.some((c) => /continues your task[\s\S]*now look at c\.ts/.test(c)), "and gets the follow-up");
+  await assert.rejects(byName("helper_continue").run({ id: "h-nope", text: "x" }, ctx), /No helper/);
+});

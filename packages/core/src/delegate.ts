@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
 import type { AgentMessage, HelperKind, HelperRunInfo } from "@kesher/shared";
 import { builtinHelpers, HELPER_STEPS, type AgentDef } from "./agents.js";
-import { HelperRuns, type HelperControl, type HelperJob, type SavedHelperRun } from "./helper-runs.js";
+import { HelperRuns, NOTE_CHARS, type HelperControl, type HelperJob, type NoteFrom, type SavedHelperRun } from "./helper-runs.js";
 
 /**
  * Helpers: the chat's model hands independent parts of a job to other
@@ -111,7 +111,8 @@ interface HelperSpec {
  * Runs one helper to the end and returns its final answer.
  *
  * @param onUsage - Each model call's tokens (the session's `usage` events), for the run's total.
- * @param saved - Its conversation from before a restart (it continues from there), and where to keep it as it grows.
+ * @param saved - Its conversation from before a restart or before it ended (it continues from there), a continued
+ *   run's follow-up, where to keep its conversation as it grows, and where the notes sent while it runs come from.
  */
 async function runHelper(
   p: HelperSpec,
@@ -119,7 +120,7 @@ async function runHelper(
   signal: AbortSignal,
   onStep: (text: string) => void,
   onUsage?: (u: { input: number; output: number; cached?: number; estimated: boolean }) => void,
-  saved?: { resumed?: AgentMessage[]; transcript?: (messages: AgentMessage[]) => void },
+  saved?: { resumed?: AgentMessage[]; followUp?: string; transcript?: (messages: AgentMessage[]) => void; notes?: HelperControl["notes"] },
 ): Promise<string> {
   const { agent, copy } = p;
   const worker = !!copy;
@@ -146,32 +147,50 @@ async function runHelper(
     ...(saved?.transcript ? { onChange: (x: AgentSession) => saved.transcript!(x.messages.slice()) } : {}),
   });
   let last = "";
-  const done = new Promise<void>((resolve) => {
-    s.on("event", (e) => {
-      if (e.type === "assistant") last = e.text;
-      else if (e.type === "tool_call") onStep(stepLine(e.name, e.input));
-      else if (e.type === "usage") onUsage?.({ input: e.input, output: e.output, ...(e.cached !== undefined ? { cached: e.cached } : {}), estimated: e.estimated });
-      else if (e.type === "question")
-        s.answer(
-          e.questionId,
-          "(No one can answer: decide yourself and say what you chose.)",
-        );
-      else if (e.type === "approval_request")
-        s.approve(e.requestId, "deny", "Helpers only read.");
-      else if (
-        e.type === "status" &&
-        (e.status === "idle" || e.status === "error")
-      )
-        resolve();
-    });
+  let idle: (() => void) | undefined;
+  /** @returns When the session next stops working (its answer, an error or a stop). */
+  const untilIdle = () => new Promise<void>((resolve) => (idle = resolve));
+  s.on("event", (e) => {
+    if (e.type === "assistant") last = e.text;
+    else if (e.type === "tool_call") onStep(stepLine(e.name, e.input));
+    else if (e.type === "usage") onUsage?.({ input: e.input, output: e.output, ...(e.cached !== undefined ? { cached: e.cached } : {}), estimated: e.estimated });
+    else if (e.type === "question")
+      s.answer(
+        e.questionId,
+        "(No one can answer: decide yourself and say what you chose.)",
+      );
+    else if (e.type === "approval_request")
+      s.approve(e.requestId, "deny", "Helpers only read.");
+    else if (
+      e.type === "status" &&
+      (e.status === "idle" || e.status === "error")
+    )
+      idle?.();
   });
+  // Notes the user or the lead send while it works go into its next model turn (after the tool it runs now).
+  const sent: string[] = [];
+  saved?.notes?.((note) => {
+    sent.push(note);
+    s.deliver(note);
+  });
+  const unread = () => sent.filter((n) => !s.messages.some((m) => m.role === "user" && typeof m.content === "string" && m.content.includes(n)));
   const stop = () => s.stop();
   if (signal.aborted) throw new Error("Stopped.");
   signal.addEventListener("abort", stop, { once: true });
   try {
-    s.send(saved?.resumed?.length ? RESUME_NOTE : p.task);
+    let done = untilIdle();
+    s.send(saved?.followUp ?? (saved?.resumed?.length ? RESUME_NOTE : p.task));
     await done;
+    // A note that came while it wrote its last answer was not read yet: one more round with it (at most twice).
+    for (let round = 0; round < 2 && !signal.aborted && unread().length; round++) {
+      done = untilIdle();
+      s.send(LATE_NOTE);
+      await done;
+    }
+    // Its whole conversation, with the last answer, kept for a follow-up ("Continue with…").
+    saved?.transcript?.(s.messages.slice());
   } finally {
+    saved?.notes?.(undefined);
     signal.removeEventListener("abort", stop);
   }
   if (signal.aborted) throw new Error("Stopped.");
@@ -182,7 +201,10 @@ async function runHelper(
 export const RESUME_NOTE =
   "KesherAI restarted (an update or a restart) while you were working on this. Continue the same task from where you stopped. First look at the last tool results above to see what was already done, and do not repeat finished steps.";
 
-/** What a helper run needs to be built again after a restart (saved with it, JSON only). */
+/** What a helper reads when a note came while it wrote its report (the note itself follows in the same turn). */
+export const LATE_NOTE = "A note reached you while you wrote your report. Read it below, do what it asks, and write your report again.";
+
+/** What a helper run needs to be built again after a restart or for a follow-up (saved with it, JSON only). */
 type HelperResume = {
   task: string;
   kind: Exclude<HelperKind, "external">;
@@ -231,12 +253,16 @@ function helperWork(
       if (m.prepare) modelId = await m.prepare(ctl, title);
       ctl.signal.throwIfAborted();
       if (write) copy = await o.worktree!()!.make(`helper-${(agent?.name ?? kind).toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) || "worker"}-${randomUUID().slice(0, 6)}`);
-      // A builder's copy is new after a restart: its earlier edits are in its conversation, not in the new copy.
-      const resumed = ctl.resumed && write ? [...ctl.resumed, { role: "user" as const, content: "(Your earlier file changes were lost with the restart: you are in a fresh copy of the project, so make them again.)" }] : ctl.resumed;
+      // A builder's copy is new after a restart or a follow-up: its earlier edits are in its conversation, not in the new
+      // copy (after a follow-up the assistant already has the earlier diff, but the new diff must hold the whole change).
+      const fresh = ctl.followUp
+        ? "(You are in a fresh copy of the project: your earlier file changes are not in it. Make them again together with what the follow-up asks, so your new diff holds the whole change.)"
+        : "(Your earlier file changes were lost with the restart: you are in a fresh copy of the project, so make them again.)";
+      const resumed = ctl.resumed && write ? [...ctl.resumed, { role: "user" as const, content: fresh }] : ctl.resumed;
       const report = await runHelper({ task, modelId, ...(agent ? { agent } : {}), ...(copy ? { copy: copy.path } : {}), maxSteps, webOnly }, o, ctl.signal, (step) => {
         ctl.step(step);
         progress?.(`${agent && agent.source !== "builtin" ? agent.name : kind} (${m.label}): ${step}\n`);
-      }, (u) => ctl.usage(u), { ...(resumed ? { resumed } : {}), transcript: (msgs) => ctl.transcript(msgs) });
+      }, (u) => ctl.usage(u), { ...(resumed ? { resumed } : {}), ...(ctl.followUp ? { followUp: ctl.followUp } : {}), transcript: (msgs) => ctl.transcript(msgs), notes: (sink) => ctl.notes(sink) });
       const diff = copy ? await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`) : undefined;
       copy = undefined;
       return { report, ...(diff !== undefined ? { diff } : {}) };
@@ -248,19 +274,18 @@ function helperWork(
 }
 
 /**
- * Continues a helper run that a restart paused (helper-store.ts): its work is built again from what was saved with it,
- * and it goes on from its saved conversation.
+ * Builds a helper run's work again from what was saved with it (after a restart, or for a follow-up): the same task,
+ * type, named agent and model choice.
  *
- * @param o - The chat's side (with its runs).
+ * @param o - The chat's side.
  * @param saved - The run as it was saved.
- * @returns Whether it was queued again (false when it was not paused or cannot be built again).
+ * @returns Its work, or undefined when it cannot be built again (an outside agent, a builder without a git project).
  */
-export function resumeHelperRun(o: DelegateOptions, saved: SavedHelperRun): boolean {
-  const runs = o.runs;
+function workFromSaved(o: DelegateOptions, saved: SavedHelperRun): HelperJob["run"] | undefined {
   const r = saved.resume as Partial<HelperResume> | undefined;
-  if (!runs || !r || typeof r.task !== "string" || !r.kind || !["lookup", "research", "build"].includes(r.kind)) return false;
+  if (!r || typeof r.task !== "string" || !r.kind || !["lookup", "research", "build"].includes(r.kind)) return undefined;
   const write = !!r.write;
-  if (write && !o.worktree?.()) return false;
+  if (write && !o.worktree?.()) return undefined;
   const agent = r.agent ? [...(o.agents?.() ?? []), ...builtinHelpers(o.limits?.().steps)].find((a) => a.name === r.agent) : undefined;
   const kind = r.kind;
   const asked = r.model;
@@ -278,7 +303,43 @@ export function resumeHelperRun(o: DelegateOptions, saved: SavedHelperRun): bool
     if (!fallback) throw new Error("No model to run it.");
     return { modelId: fallback, label: fallback.split("/").pop() ?? fallback, local: false };
   };
-  return runs.resume(saved.info.id, helperWork(o, { task: r.task, title: saved.info.title, kind, ...(agent ? { agent } : {}), model, maxSteps: r.maxSteps ?? saved.info.maxSteps, write }));
+  return helperWork(o, { task: r.task, title: saved.info.title, kind, ...(agent ? { agent } : {}), model, maxSteps: r.maxSteps ?? saved.info.maxSteps, write });
+}
+
+/**
+ * Continues a helper run that a restart paused (helper-store.ts): its work is built again from what was saved with it,
+ * and it goes on from its saved conversation.
+ *
+ * @param o - The chat's side (with its runs).
+ * @param saved - The run as it was saved.
+ * @returns Whether it was queued again (false when it was not paused or cannot be built again).
+ */
+export function resumeHelperRun(o: DelegateOptions, saved: SavedHelperRun): boolean {
+  const work = o.runs ? workFromSaved(o, saved) : undefined;
+  return !!work && o.runs!.resume(saved.info.id, work);
+}
+
+/**
+ * Continues an ended helper with a follow-up ("Continue with…" on its card, or the lead's helper_continue): it goes on
+ * from its kept conversation, on the same model and role, in the background.
+ *
+ * @param o - The chat's side (with its runs).
+ * @param id - The run.
+ * @param text - The follow-up.
+ * @param from - Who sends it.
+ * @returns Its info, now waiting or running.
+ * @throws Error when it is still going, ended too long ago (its conversation is no longer kept) or cannot continue.
+ */
+export function continueHelperRun(o: DelegateOptions, id: string, text: string, from: NoteFrom): HelperRunInfo {
+  const runs = o.runs;
+  const r = runs?.get(id);
+  if (!runs || !r || (o.chatId && r.chatId !== o.chatId)) throw new Error(`No sub-agent ${id} in this chat.`);
+  if (!text.trim()) throw new Error("Write what it should do next.");
+  if (r.state === "waiting" || r.state === "running" || r.state === "asking") throw new Error(`${id} is still working: send it a note instead (helper_message).`);
+  if (!r.canContinue) throw new Error(`${id} cannot be continued (an outside agent, or its conversation is no longer kept: only the newest ended sub-agents keep it). Start a new one with delegate.`);
+  const info = runs.continueRun(id, text, from, (saved) => workFromSaved(o, saved));
+  if (!info) throw new Error(`${id} cannot be continued here (a build agent needs this chat's git project).`);
+  return info;
 }
 
 /** A step for the card: the tool and what it got (a path, a query, a page). */
@@ -351,6 +412,34 @@ export function helperToolsFor(o: DelegateOptions): AgentTool[] {
       run: async (input) => {
         const r = mine(input.id);
         return { output: runs.stop(r.id) ? `Stopped ${r.id}.` : `${r.id} had already ended (${r.state}).` };
+      },
+    },
+    {
+      risk: "safe",
+      spec: {
+        name: "helper_message",
+        description: "Sends a running helper a note to change or add to its task (it reads it at its next step, after the tool it runs now). Use it to redirect a helper instead of stopping it and starting again.",
+        inputSchema: { type: "object", properties: { id: { type: "string", description: "The helper's id." }, text: { type: "string", description: `The note, everything it needs (up to ${NOTE_CHARS} characters).` } }, required: ["id", "text"] },
+      },
+      run: async (input) => {
+        const r = mine(input.id);
+        const text = typeof input.text === "string" ? input.text : "";
+        if (!text.trim()) throw new Error("Write the note.");
+        if (runs.message(r.id, text, "lead")) return { output: `Sent to ${r.id}: it reads it at its next step.` };
+        throw new Error(r.state === "waiting" || r.state === "running" || r.state === "asking" ? `${r.id} cannot take notes (an outside agent).` : `${r.id} has ended (${r.state}): continue it with helper_continue instead.`);
+      },
+    },
+    {
+      risk: "safe",
+      spec: {
+        name: "helper_continue",
+        description: "Continues a helper that ended (done, failed or stopped) with a follow-up: it goes on from its own conversation, on the same model and role, in the background. Its new report reaches you at your next turn, or ask with helper_result / helper_wait. Cheaper than a new helper when the follow-up builds on its work.",
+        inputSchema: { type: "object", properties: { id: { type: "string", description: "The helper's id." }, text: { type: "string", description: `What to do next (up to ${NOTE_CHARS} characters).` } }, required: ["id", "text"] },
+      },
+      run: async (input) => {
+        const r = mine(input.id);
+        const info = continueHelperRun(o, r.id, typeof input.text === "string" ? input.text : "", "lead");
+        return { output: `Continued ${info.id} in the background${info.state === "waiting" ? " (waiting in the queue)" : ""}. Its new report reaches you at your next turn, or ask with helper_result / helper_wait.` };
       },
     },
   ];
@@ -457,8 +546,9 @@ export function delegateTool(o: DelegateOptions): AgentTool {
           ...(m.note ? { modelNote: m.note } : {}),
           ...(m.noteHe ? { modelNoteHe: m.noteHe } : {}),
           ...(m.cloud ? { cloud: true } : {}),
-          // A background part continues after a restart; a part the chat waits for ends with the chat's turn.
-          ...(bg ? { resume: { task: String(p.task), kind, ...(agent ? { agent: agent.name } : {}), ...(asked && !m.note ? { model: m.modelId } : {}), maxSteps, write } satisfies HelperResume } : {}),
+          // What builds its work again: a background part after a restart (a part the chat waits for ends with the
+          // chat's turn), and any part for a follow-up after it ended.
+          resume: { task: String(p.task), kind, ...(agent ? { agent: agent.name } : {}), ...(asked && !m.note ? { model: m.modelId } : {}), maxSteps, write } satisfies HelperResume,
           run: helperWork(o, { task: String(p.task), title, kind, ...(agent ? { agent } : {}), model: m, maxSteps, write }, (text) => ctx.progress?.(text)),
         });
         results.push({ id: info.id, n: i + 1, background: info.background });

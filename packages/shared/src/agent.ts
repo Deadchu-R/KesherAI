@@ -152,6 +152,10 @@ export interface HelperRunInfo {
    * `resumed` once it continues from its saved steps (helper-store.ts).
    */
   restart?: "paused" | "resumed";
+  /** How many times it was continued with a follow-up after it ended ("Continue with…", or the lead's helper_continue). */
+  continued?: number;
+  /** It ended and kept its conversation, so it can be continued with a follow-up (same model, role and token totals). */
+  canContinue?: boolean;
 }
 
 /**
