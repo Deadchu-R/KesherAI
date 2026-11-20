@@ -31,6 +31,7 @@ import { BrowserPanel } from "../BrowserPanel";
 import { SourcesPanel } from "../SourcesPanel";
 import { WebPrefsChip } from "../WebPrefsChip";
 import { answerSources } from "../answerSources";
+import { answerTokens, cachePercent } from "../answer-tokens";
 import { SessionEnvBar } from "../CodeEnvironment";
 import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
@@ -335,6 +336,16 @@ export function ConversationPage({ id }: { id: string }) {
     return out;
   }, [events]);
 
+  /** The last main model call's prompt tokens and cache hits, for the context panel. */
+  const lastMainCall = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const e = events[i]!;
+      if (e.type === "usage" && e.role === "main") return { input: e.input, ...(e.cached !== undefined ? { cached: e.cached } : {}) };
+    }
+    return undefined;
+  }, [events]);
+  /** Tokens per answer (model, in/out, prompt cache) for the token line under each answer. */
+  const tokensByAnswer = useMemo(() => answerTokens(events), [events]);
   const sources = useMemo(() => answerSources(events), [events]);
 
   const byCall = useMemo(() => {
@@ -917,6 +928,22 @@ export function ConversationPage({ id }: { id: string }) {
                               </span>
                             );
                           })()}
+                          {(() => {
+                            // The token line: model · ↑in ↓out · cache % · saved (a phone shows cache and saved only).
+                            const tk = tokensByAnswer.get(e.seq);
+                            if (!tk) return null;
+                            const he = getLocale() === "he";
+                            const pct = cachePercent(tk.cached, tk.cacheBase);
+                            const est = tk.estimated ? "~" : "";
+                            return (
+                              <span className="answer-tokens small" dir="ltr" title={he ? `${tk.input} טוקנים נקראו, ${tk.output} נכתבו${tk.cached !== undefined ? `, ${tk.cached} מהם מהמטמון` : ""}` : `${tk.input} tokens read, ${tk.output} written${tk.cached !== undefined ? `, ${tk.cached} of them from the cache` : ""}`}>
+                                <span className="tk-chip tk-model">{shortModelName(tk.modelId)}</span>
+                                <span className="tk-chip tk-io">↑{est}{kTokens(tk.input)} ↓{est}{kTokens(tk.output)}</span>
+                                {pct !== undefined && <span className={`tk-chip tk-cache${pct >= 50 ? " good" : ""}`}>{he ? "מטמון" : "cache"} {pct}%</span>}
+                                {!!tk.cached && <span className="tk-chip tk-saved">{he ? "נחסכו" : "saved"} {kTokens(tk.cached)}</span>}
+                              </span>
+                            );
+                          })()}
                         </span>
                       );
                     })()}
@@ -1176,7 +1203,7 @@ export function ConversationPage({ id }: { id: string }) {
             {browserOpen && <BrowserPanel />}
             {stepsOpen && <StepsPanel steps={taskSteps.steps} busy={busy} fallback={stepsFallback} onClose={() => setStepsOpen(false)} />}
             {filesOpen && <FilesPanel convId={id} refresh={toolResults} onCount={(n) => setFileCount(n)} />}
-            {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} />}
+            {contextOpen && <ContextPanel convId={id} refresh={busy ? -1 : events.length} lastCall={lastMainCall} />}
             {coachOpen && <CoachPanel convId={id} refresh={events.length} onUsePrompt={(text) => setInput(text)} />}
           </div>
         </aside>

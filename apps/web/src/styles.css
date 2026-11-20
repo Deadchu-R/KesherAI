@@ -2122,6 +2122,13 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 .gpu-check > summary { cursor: pointer; }
 .gpu-check pre { max-height: 220px; overflow: auto; white-space: pre-wrap; }
 .answer-stats { margin-inline-start: 6px; font-variant-numeric: tabular-nums; opacity: .8; }
+/* The token line under an answer: small quiet chips in the .sources-btn / .pill style; wraps on narrow screens. */
+.answer-tokens { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-inline-start: 6px; font-variant-numeric: tabular-nums; opacity: .85; }
+.tk-chip { padding: 0 7px; border: 1px solid var(--border); border-radius: calc(999px * var(--r-scale, 1)); color: var(--muted); white-space: nowrap; }
+.tk-model { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
+.tk-cache { color: var(--text-2); }
+.tk-cache.good, .tk-saved { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+@media (max-width: 480px) { .answer-tokens .tk-model, .answer-tokens .tk-io { display: none; } }
 .conv-row { display: flex; align-items: center; position: relative; }
 .conv-row > .conv-link { flex: 1; min-width: 0; }
 .conv-row .conv-more { opacity: 0; flex: none; }

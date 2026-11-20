@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
+import { cachePercent } from "./answer-tokens";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -20,8 +21,13 @@ const ROLE: Record<string, [string, string]> = { user: ["את/ה", "You"], assis
  * The context explorer: exactly what the model reads on its next turn —
  * the system prompt, its tools and the messages — with the size of each
  * and how full the model's context is.
+ *
+ * @param props.convId - The conversation.
+ * @param props.refresh - Changes when the context should be read again.
+ * @param props.lastCall - The last main model call's prompt tokens and how many came from the engine's cache
+ *   (from its `usage` event); the cache share is shown only when the provider reported it.
  */
-export function ContextPanel({ convId, refresh }: { convId: string; refresh: number }) {
+export function ContextPanel({ convId, refresh, lastCall }: { convId: string; refresh: number; lastCall?: { input: number; cached?: number } }) {
   const [v, setV] = useState<View | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -49,6 +55,12 @@ export function ContextPanel({ convId, refresh }: { convId: string; refresh: num
         <span><i className="ctx-tools" /> {L("כלים", "Tools")} {k(toolTokens)}</span>
         <span><i className="ctx-msgs" /> {L("הודעות", "Messages")} {k(msgTokens)}</span>
       </div>
+      {(() => {
+        const pct = cachePercent(lastCall?.cached, lastCall?.input);
+        return pct === undefined ? null : (
+          <p className="muted small ctx-cache">{L(`בקריאה האחרונה ${pct}% מההקשר הגיעו מהמטמון (${k(lastCall!.cached!)} טוקנים נחסכו)`, `Last call: ${pct}% of the context came from the cache (${k(lastCall!.cached!)} tokens saved)`)}</p>
+        );
+      })()}
       {full > 0.85 && <p className="muted small">{L("ההקשר כמעט מלא: ההודעות הישנות יסוכמו. אפשר לפצל לענף חדש או לבחור מודל עם הקשר גדול יותר.", "The context is almost full: older messages will be summarized. You can branch, or pick a model with a larger context.")}</p>}
       <details>
         <summary>{L("הוראות המערכת", "System prompt")} · {k(v.system.tokens)}</summary>
