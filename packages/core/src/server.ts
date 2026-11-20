@@ -19,6 +19,7 @@ import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { beaconSecret, branding, features } from "@kesher/shared";
+import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
@@ -571,6 +572,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     fileNames: () => config.hub.optIn.reportFileNames,
   });
   const helperRuns = services.conversations.helpers.runs;
+  // A chat's helper that ended in the background or waits for an answer: on this computer and the phone (notify.ts).
+  const chatTitle = (id: string) => library.summary(id)?.title ?? "KesherAI";
+  helperRuns.on("end", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperEnd(r, chatTitle(r.chatId)));
+  helperRuns.on("ask", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperAsk(r, chatTitle(r.chatId)));
+  helperRuns.on("answered", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperAnswered(r));
   helperRuns.on("change", (chatId: string) => {
     for (const r of helperRuns.list(chatId)) {
       const snap = helperSnapshot(r, INBOX_ASKS);

@@ -126,3 +126,54 @@ test("a waiting note is marked answered, opens the chat, and a stopped run is no
   assert.ok(!n.sent.some((s) => s.title.startsWith("Done")), "stopped by the user: no Done");
   n.close();
 });
+
+/** A helper run as HelperRuns reports it, with its chat. */
+const helperRun = (over: Record<string, unknown> = {}) =>
+  ({ id: "h-1", chatId: "c1", kind: "research", title: "find the docs", model: "Qwen3-4B", state: "done", queuedAt: 0, startedAt: 0, endedAt: 120_000, step: 3, maxSteps: 8, steps: [], background: true, usage: { input: 12_000, output: 800, cached: 0, calls: 3, estimated: false }, ...over }) as import("@kesher/shared").HelperRunInfo & { chatId: string };
+
+test("a background sub-agent that ends notifies with a tap to its chat at that helper; the Agents switch turns it off", async () => {
+  const sent: Array<{ title: string; body: string; path?: string }> = [];
+  let agents = true;
+  const n = new Notifier(() => ({ ...settings, agents, minSeconds: 60, ntfy: { ...settings.ntfy, enabled: false } }), { desktop: (x) => (sent.push(x), true) });
+  n.onHelperEnd(helperRun(), "Unity chat");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.title, "Sub-agent done: find the docs");
+  assert.equal(sent[0]!.path, "#/c/c1/h/h-1");
+  assert.match(sent[0]!.body, /Unity chat · Qwen3-4B · after 2 min · 12\.8k tokens/);
+  // A foreground helper is part of the chat's answer; a stopped or short one says nothing; Agents off: nothing.
+  n.onHelperEnd(helperRun({ background: false }), "Unity chat");
+  n.onHelperEnd(helperRun({ state: "stopped" }), "Unity chat");
+  n.onHelperEnd(helperRun({ endedAt: 5_000 }), "Unity chat");
+  agents = false;
+  n.onHelperEnd(helperRun({ state: "failed", error: "boom" }), "Unity chat");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(sent.length, 1);
+});
+
+test("a Hebrew chat's sub-agent notification is in Hebrew; a failure says why", async () => {
+  const sent: Array<{ title: string; body: string }> = [];
+  const n = new Notifier(() => ({ ...settings, agents: true, ntfy: { ...settings.ntfy, enabled: false } }), { desktop: (x) => (sent.push(x), true) });
+  n.onHelperEnd(helperRun({ state: "failed", error: "Took longer than 10 min, so it was stopped.", title: "חפש את המסמכים" }), "צ׳אט");
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(sent[0]!.title, "סוכן משנה נכשל: חפש את המסמכים");
+  assert.match(sent[0]!.body, /Took longer than 10 min/);
+});
+
+test("a sub-agent that waits notifies after the wait, once; an answer before that sends nothing", async () => {
+  const sent: Array<{ title: string; path?: string; ref?: string }> = [];
+  const n = new Notifier(() => ({ ...settings, agents: true, waitingSeconds: 0, ntfy: { ...settings.ntfy, enabled: false } }), { desktop: (x) => (sent.push(x), true) });
+  n.onHelperAsk(helperRun({ state: "asking" }), "Unity chat");
+  n.onHelperAsk(helperRun({ state: "asking" }), "Unity chat");
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]!.title, "A sub-agent waits for you: find the docs");
+  assert.equal(sent[0]!.path, "#/c/c1/h/h-1");
+  n.onHelperAnswered({ id: "h-1", state: "running" });
+  assert.equal(n.sent.at(-1)!.resolved, "answered");
+  // Answered before the delay: no note at all.
+  const slow = new Notifier(() => ({ ...settings, agents: true, waitingSeconds: 60 }), { desktop: (x) => (sent.push(x), true) });
+  slow.onHelperAsk(helperRun({ id: "h-2", state: "asking" }), "Unity chat");
+  slow.onHelperAnswered({ id: "h-2", state: "running" });
+  assert.equal(slow.sent.length, 0);
+});

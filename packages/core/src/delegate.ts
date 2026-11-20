@@ -107,12 +107,17 @@ interface HelperSpec {
   webOnly?: boolean;
 }
 
-/** Runs one helper to the end and returns its final answer. */
+/**
+ * Runs one helper to the end and returns its final answer.
+ *
+ * @param onUsage - Each model call's tokens (the session's `usage` events), for the run's total.
+ */
 async function runHelper(
   p: HelperSpec,
   o: DelegateOptions,
   signal: AbortSignal,
   onStep: (text: string) => void,
+  onUsage?: (u: { input: number; output: number; cached?: number; estimated: boolean }) => void,
 ): Promise<string> {
   const { agent, copy } = p;
   const worker = !!copy;
@@ -140,6 +145,7 @@ async function runHelper(
     s.on("event", (e) => {
       if (e.type === "assistant") last = e.text;
       else if (e.type === "tool_call") onStep(stepLine(e.name, e.input));
+      else if (e.type === "usage") onUsage?.({ input: e.input, output: e.output, ...(e.cached !== undefined ? { cached: e.cached } : {}), estimated: e.estimated });
       else if (e.type === "question")
         s.answer(
           e.questionId,
@@ -364,7 +370,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
               const report = await runHelper({ task: String(p.task), modelId, ...(agent ? { agent } : {}), ...(copy ? { copy: copy.path } : {}), maxSteps, webOnly }, o, ctl.signal, (step) => {
                 ctl.step(step);
                 ctx.progress?.(`${agent && agent.source !== "builtin" ? agent.name : kind} (${m.label}): ${step}\n`);
-              });
+              }, (u) => ctl.usage(u));
               const diff = copy ? await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`) : undefined;
               copy = undefined;
               return { report, ...(diff !== undefined ? { diff } : {}) };

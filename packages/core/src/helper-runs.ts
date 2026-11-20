@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import type { HelperKind, HelperRunInfo } from "@kesher/shared";
+import type { HelperKind, HelperRunInfo, HelperUsage } from "@kesher/shared";
 
 /**
  * The helper runs of every chat (docs/RESEARCH_LOG.md, "Helper agents in the chat", plan steps 3, 5 and 6): a queue
@@ -8,7 +8,8 @@ import type { HelperKind, HelperRunInfo } from "@kesher/shared";
  * each. Local helpers share the graphics card, so at most `limit()` of them run at once (the rest wait, in order);
  * cloud and outside helpers do not use the card and are capped at 4 apart.
  *
- * Events: `change` (chatId) whenever a run of that chat changed, `end` (the run's info) when one ended.
+ * Events: `change` (chatId) whenever a run of that chat changed, `end` (the run's info) when one ended, `ask` (the
+ * run's info) when one starts waiting for the user, `answered` (the run's info) when that wait ends.
  */
 
 /** What a running helper may do with its own run. */
@@ -17,6 +18,12 @@ export interface HelperControl {
   signal: AbortSignal;
   /** One step done (a tool it used): counted, and the last ones are shown. */
   step(text: string): void;
+  /**
+   * Adds one model call's tokens to the run's total (its session's `usage` event).
+   *
+   * @param u - The call's prompt and answer tokens, the cached part of the prompt, and whether they were estimated.
+   */
+  usage(u: { input: number; output: number; cached?: number; estimated?: boolean }): void;
   /** Changes what the card shows (the model after a swap, the swap's phase…). */
   update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "swap" | "cloudFiles" | "cloud" | "runAsk">>): void;
   /**
@@ -254,6 +261,10 @@ export class HelperRuns extends EventEmitter {
         r.info.steps = [...r.info.steps, text.replace(/\s+/g, " ").trim().slice(0, 160)].slice(-30);
         this.changed(r);
       },
+      usage: (u) => {
+        r.info.usage = addUsage(r.info.usage, u);
+        this.changed(r);
+      },
       update: (p) => {
         Object.assign(r.info, p);
         for (const k of Object.keys(p) as Array<keyof typeof p>) if (p[k] === undefined) delete r.info[k];
@@ -264,6 +275,7 @@ export class HelperRuns extends EventEmitter {
         r.info.state = "asking";
         r.info.waitReason = why;
         this.changed(r);
+        this.emit("ask", { ...r.info, chatId: r.chatId });
         const stopped = new Promise<never>((_, reject) => {
           if (r.abort.signal.aborted) reject(new Error("aborted"));
           r.abort.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
@@ -275,6 +287,7 @@ export class HelperRuns extends EventEmitter {
           if (r.info.state === "asking") r.info.state = "running";
           if (!r.abort.signal.aborted) this.armTimer(r);
           this.changed(r);
+          this.emit("answered", { ...r.info, chatId: r.chatId });
         }
       },
       ask: (question) => {
@@ -283,6 +296,7 @@ export class HelperRuns extends EventEmitter {
         r.info.state = "asking";
         r.info.waitReason = question;
         this.changed(r);
+        this.emit("ask", { ...r.info, chatId: r.chatId });
         return new Promise<boolean>((done) => {
           r.answer = (yes) => {
             r.answer = undefined;
@@ -290,6 +304,7 @@ export class HelperRuns extends EventEmitter {
             if (r.info.state === "asking") r.info.state = "running";
             if (!r.abort.signal.aborted) this.armTimer(r);
             this.changed(r);
+            this.emit("answered", { ...r.info, chatId: r.chatId });
             done(yes);
           };
         });
@@ -321,6 +336,8 @@ export class HelperRuns extends EventEmitter {
 
   private finish(r: Run, state: "done" | "failed" | "stopped"): void {
     clearTimeout(r.timer);
+    // Stopped while it asked: the question is gone too (its notification is cleared).
+    if (r.answer || r.info.state === "asking") this.emit("answered", { ...r.info, chatId: r.chatId });
     r.answer = undefined;
     r.info.state = state;
     r.info.endedAt = this.now();
@@ -340,4 +357,17 @@ export class HelperRuns extends EventEmitter {
   private changed(r: Run): void {
     this.emit("change", r.chatId);
   }
+}
+
+/**
+ * Adds one model call's tokens to a run's total.
+ *
+ * @param total - The total so far (none before the first call).
+ * @param u - The call's tokens.
+ * @returns The new total (a new object).
+ */
+export function addUsage(total: HelperUsage | undefined, u: { input: number; output: number; cached?: number; estimated?: boolean }): HelperUsage {
+  const n = (v: number | undefined) => (Number.isFinite(v) && v! > 0 ? Math.round(v!) : 0);
+  const t = total ?? { input: 0, output: 0, cached: 0, calls: 0, estimated: false };
+  return { input: t.input + n(u.input), output: t.output + n(u.output), cached: t.cached + n(u.cached), calls: t.calls + 1, estimated: t.estimated || !!u.estimated };
 }

@@ -15,7 +15,7 @@ import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTo
 import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
-import { helperToolsFor } from "./delegate.js";
+import { helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
 import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
@@ -159,6 +159,13 @@ export class ConversationManager {
       workspace: (id) => this.sessions.get(id)?.workspace,
       worktree: (id) => this.helperWorktree(id),
       leadModel: (id) => this.sessions.get(id)?.modelId ?? deps.config.activeModels.chat,
+      open: async (id) => (await this.open(id))?.session,
+      resumeRun: async (id, saved) => {
+        // Opening the chat builds its tools, and with them its helpers' options.
+        if (!(await this.open(id))) return false;
+        const o = this.delegateOptions.get(id);
+        return !!o && resumeHelperRun(o, saved);
+      },
     });
     // Know at start whether Unreal is installed, so the first chat already has the Unreal tools.
     this.checkUnreal();
@@ -283,6 +290,9 @@ export class ConversationManager {
     ];
   }
 
+  /** Each open chat's helper options (helpers paused by a restart continue with them). */
+  private readonly delegateOptions = new Map<string, DelegateOptions>();
+
   private delegateFor(id: string, tools: AgentTool[]): AgentTool[] {
     if (Date.now() - this.chatModelsAt > 5 * 60_000) {
       this.chatModelsAt = Date.now();
@@ -291,7 +301,7 @@ export class ConversationManager {
         .then((l) => (this.chatModelIds = l.models.filter((m) => (m.category === "chat" || m.category === "code") && !/embed|whisper|tts|rerank|phonon/i.test(m.providerModelId)).map((m) => m.id)))
         .catch(() => undefined);
     }
-    return helperToolsFor({
+    const o: DelegateOptions = {
       tools: () => tools,
       currentModel: () => this.sessions.get(id)?.modelId ?? this.deps.config.activeModels.chat,
       turnFor: (modelId) => {
@@ -308,7 +318,9 @@ export class ConversationManager {
       modelFor: ({ kind, agent }) => this.helpers.modelFor(id, kind, agent),
       limits: () => this.helpers.limits(),
       cloudFiles: this.helpers.cloudFiles(id),
-    });
+    };
+    this.delegateOptions.set(id, o);
+    return helperToolsFor(o);
   }
 
   private teamCache = new Map<string, Teammate[]>();

@@ -16,6 +16,7 @@ interface Settings {
   minSeconds: number;
   includeText: boolean;
   waiting: boolean;
+  agents?: boolean;
   approveButtons?: boolean;
   waitingSeconds?: number;
   subscribeUrl: string;
@@ -80,6 +81,7 @@ export function NotificationsSection() {
           <label className="check" style={{ paddingInlineStart: 26 }}><input type="checkbox" checked={s.approveButtons ?? true} onChange={(e) => void put({ approveButtons: e.target.checked })} /> {L("כפתורי אשר / דחה בהתראה, גם בשעון חכם (צריך גישה \"מכל מקום\")", "Approve / Deny buttons on the notification, on a smartwatch too (needs \"Access from anywhere\")")}</label>
         </>
       )}
+      <label className="check"><input type="checkbox" checked={s.agents ?? true} onChange={(e) => void put({ agents: e.target.checked })} /> {L("סוכנים: כשסוכן משנה ברקע מסיים או נכשל, או מחכה לתשובה שלכם", "Agents: when a background sub-agent finishes or fails, or waits for your answer")}</label>
       <label className="check"><input type="checkbox" checked={s.includeText} onChange={(e) => void put({ includeText: e.target.checked })} /> {L("לכלול את תחילת התשובה בהתראה (עוברת דרך שרת ntfy)", "Include the start of the answer (it passes through the ntfy server)")}</label>
       <label className="row notify-min">
         {L("רק לעבודה שלקחה לפחות", "Only for work that took at least")}

@@ -4,6 +4,7 @@ import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
 import { toast } from "./library";
+import { kTokens } from "./chat-status";
 
 /**
  * Sub-agents in the chat (docs/RESEARCH_LOG.md, "Helper agents in the chat"; design boards HelpersStrip,
@@ -118,6 +119,27 @@ function ModelChip({ r }: { r: HelperRunInfo }) {
   return <span className="hmodel" title={note}>{r.model}</span>;
 }
 
+/**
+ * What a run used so far: tokens in and out, and how much of the prompt came from the cache (a run with no model call
+ * yet, or an outside agent, shows nothing). KesherAI has no price list for cloud models, so it shows tokens only.
+ */
+function UsageChip({ r }: { r: HelperRunInfo }) {
+  const u = r.usage;
+  if (!u || u.calls === 0) return null;
+  const est = u.estimated ? "~" : "";
+  const pct = u.input > 0 && u.cached > 0 ? Math.round((u.cached / u.input) * 100) : undefined;
+  const title = L(
+    `${u.input} טוקנים נקראו, ${u.output} נכתבו${u.cached ? `, ${u.cached} מהם מהמטמון` : ""} · ${u.calls} קריאות למודל ${r.model}`,
+    `${u.input} tokens read, ${u.output} written${u.cached ? `, ${u.cached} of them from the cache` : ""} · ${u.calls} calls to ${r.model}`,
+  );
+  return (
+    <span className="husage small" dir="ltr" title={title}>
+      <span className="tk-chip tk-io">↑{est}{kTokens(u.input)} ↓{est}{kTokens(u.output)}</span>
+      {pct !== undefined && <span className={`tk-chip tk-cache${pct >= 50 ? " good" : ""}`} dir={getLocale() === "he" ? "rtl" : "ltr"}>{L("מטמון", "cache")} {pct}%</span>}
+    </span>
+  );
+}
+
 /** The swap row: the build agent's model coming in, running, and the lead agent's coming back. */
 function SwapRow({ r, now }: { r: HelperRunInfo; now: number }) {
   const s = r.swap;
@@ -225,6 +247,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         <span className="htitle" title={r.title}>{r.title}</span>
         {r.cloud && <span className="htag t-wait">☁ {r.cloudFiles === false ? L("ענן · רק שאלה, בלי קבצי הפרויקט", "cloud · the question only, no project files") : L("ענן", "cloud")}</span>}
         <ModelChip r={r} />
+        <UsageChip r={r} />
         <StateTag r={r} now={now} />
         {going(r) ? (
           <button type="button" className="hbtn" onClick={() => stop(convId, r.id)}>■ {L("עצור", "Stop")}</button>
@@ -267,7 +290,7 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
           const t = elapsed(r, now);
           return (
             <div key={r.id} className={`hchip ${r.state === "waiting" ? "waiting" : ""}`}>
-              <button type="button" className="hchip-open" onClick={() => onOpen(r)} title={r.title}>
+              <button type="button" className="hchip-open" onClick={() => onOpen(r)} title={r.usage ? `${r.title} · ↑${kTokens(r.usage.input)} ↓${kTokens(r.usage.output)}` : r.title}>
                 <StateMark r={r} />
                 <span aria-hidden>{KINDS[r.kind].icon}</span>
                 <span className="hchip-name">{helperKindName(r)}<span className="hchip-task">: {r.title}</span></span>
@@ -310,7 +333,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
           <StateTag r={r} now={now} />
         </div>
         <div className="hsheet-task">{r.title}</div>
-        <div className="row small"><ModelChip r={r} />{note && <span className="muted">{note}</span>}</div>
+        <div className="row small"><ModelChip r={r} /><UsageChip r={r} />{note && <span className="muted">{note}</span>}</div>
         <div className="hprog small">
           <span>{L(`צעד ${r.step} מתוך ${r.maxSteps}`, `Step ${r.step} of ${r.maxSteps}`)}</span>
           <div className="hbar"><b style={{ width: `${Math.min(100, (r.step / Math.max(1, r.maxSteps)) * 100)}%` }} /></div>

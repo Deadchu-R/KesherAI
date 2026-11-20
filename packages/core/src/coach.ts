@@ -57,6 +57,54 @@ export interface CoachProfile {
 
 const NUDGE_NOTE = /^KesherAI asked the model/i;
 
+/** What a chat's helpers (sub-agents) used, from its saved `helper_usage` events. */
+export interface HelperUsageTotals {
+  /** Helper runs that made at least one model call. */
+  runs: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Of `inputTokens`, read from the server's prompt cache. */
+  cachedTokens: number;
+  estimated: boolean;
+  /** Tokens (in + out) and runs per role: the named agent, or the helper's type (lookup, research, build…). */
+  byRole: Record<string, { runs: number; tokens: number }>;
+  /** Tokens (in + out) per model (its short name, as the helper card shows it). */
+  byModel: Record<string, number>;
+}
+
+/** @returns Empty helper totals, to add to. */
+export function emptyHelperUsage(): HelperUsageTotals {
+  return { runs: 0, calls: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, estimated: false, byRole: {}, byModel: {} };
+}
+
+/**
+ * Adds a conversation's helper runs (its `helper_usage` events) to totals. The chat's own model is counted apart
+ * (requestStats), so helpers never double its numbers.
+ *
+ * @param events - The conversation's events.
+ * @param into - The totals to add to (changed in place); new ones when absent.
+ * @returns The totals.
+ */
+export function helperUsage(events: readonly AgentEvent[], into: HelperUsageTotals = emptyHelperUsage()): HelperUsageTotals {
+  for (const e of events) {
+    if (e.type !== "helper_usage" || e.calls <= 0) continue;
+    const n = e.input + e.output;
+    into.runs++;
+    into.calls += e.calls;
+    into.inputTokens += e.input;
+    into.outputTokens += e.output;
+    into.cachedTokens += e.cached;
+    into.estimated ||= e.estimated;
+    const role = e.agent ?? e.kind;
+    const r = (into.byRole[role] ??= { runs: 0, tokens: 0 });
+    r.runs++;
+    r.tokens += n;
+    into.byModel[e.model] = (into.byModel[e.model] ?? 0) + n;
+  }
+  return into;
+}
+
 /**
  * Splits a conversation's events into requests and measures each one.
  *

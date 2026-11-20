@@ -71,6 +71,8 @@ export class ChatHelpers {
     // A background helper's report reaches the chat's model at its next turn, unless it already asked for it
     // (helper_wait resolves in the same tick, so the check waits one turn of the event loop).
     this.runs.on("end", (info: HelperRunInfo & { chatId: string }) => {
+      // What it used is saved in the chat, so the Usage page counts helpers apart from the chat's own model.
+      if (info.usage) this.host.session(info.chatId)?.helperUsage({ runId: info.id, kind: info.kind, ...(info.agent ? { agent: info.agent } : {}), model: info.model, state: info.state, ...info.usage });
       setImmediate(() => {
         if (!this.runs.pending(info.id)) return;
         this.runs.delivered(info.id);

@@ -55,8 +55,14 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[]; interruptedAt?: string };
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
-/** One conversation: chat or code, with live events, approvals and questions. */
-export function ConversationPage({ id }: { id: string }) {
+/**
+ * One conversation: chat or code, with live events, approvals and questions.
+ *
+ * @param p.id - The chat.
+ * @param p.helper - A helper run to open once it is known (from a helper's notification): its card is scrolled to on
+ *   a computer, its bottom sheet opens on a phone.
+ */
+export function ConversationPage({ id, helper }: { id: string; helper?: string }) {
   const [conv, setConv] = useState<Loaded | null>(null);
   const [editingSeq, setEditingSeq] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
@@ -65,6 +71,15 @@ export function ConversationPage({ id }: { id: string }) {
   const helpers = useHelperRuns(id);
   const setHelperRuns = helpers.set;
   const [helperSheet, setHelperSheet] = useState<string | null>(null);
+  // Opened from a helper's notification: show that helper once its run arrives (the card if the thread has it).
+  const helperOpened = useRef(false);
+  useEffect(() => {
+    if (!helper || helperOpened.current || !helpers.runs.some((r) => r.id === helper)) return;
+    helperOpened.current = true;
+    const card = document.getElementById(`helper-${helper}`);
+    if (card && !matchMedia("(max-width: 760px)").matches) card.scrollIntoView({ block: "center", behavior: "smooth" });
+    else setHelperSheet(helper);
+  }, [helper, helpers.runs]);
   // A long chat opens with its latest part drawn; earlier parts on request (a long chat stays quick).
   const [shownBlocks, setShownBlocks] = useState(150);
   useEffect(() => {

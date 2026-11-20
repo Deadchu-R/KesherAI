@@ -302,7 +302,11 @@ export function App() {
 
   const { parts } = useParts();
   let page: React.ReactNode;
-  if (hash.startsWith("#/c/")) page = <ConversationPage key={hash} id={hash.slice(4)} />;
+  if (hash.startsWith("#/c/")) {
+    // `#/c/<chat>/h/<run>`: a helper's notification opens its chat at that helper (its card, or its sheet on a phone).
+    const [chat, helper] = hash.slice(4).split("/h/");
+    page = <ConversationPage key={hash} id={chat!} {...(helper ? { helper } : {})} />;
+  }
   else if (hash === "#/images") page = <ImagesPage />;
   else if (hash === "#/batch") page = <BatchImagesPage />;
   else if (hash === "#/memory") page = <MemoryPage />;

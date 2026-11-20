@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import type { AgentEvent } from "@kesher/shared";
+import type { AgentEvent, HelperRunInfo } from "@kesher/shared";
 import type { KesherConfig } from "./config.js";
 import type { PhoneMessage } from "./phone-push.js";
 import { phoneMessage } from "./phone-push.js";
@@ -242,6 +242,78 @@ export class Notifier {
     }
   }
 
+  /** Helper runs waiting for the user: the timer before the note, then the note's ref (to clear it). */
+  private readonly helperAsks = new Map<string, NodeJS.Timeout | true>();
+
+  /**
+   * A chat's helper (sub-agent) ended: a background one that finished or failed notifies (a foreground one is part
+   * of the chat's own answer, which notifies by itself). Stopped runs, short runs and the "Agents" setting off: none.
+   * A tap opens the chat at that helper (`#/c/<chat>/h/<run>`).
+   *
+   * @param run - The run as it ended, with its chat.
+   * @param chatTitle - The chat's title.
+   */
+  onHelperEnd(run: HelperRunInfo & { chatId: string }, chatTitle: string): void {
+    this.onHelperAnswered(run);
+    const s = this.settings();
+    if (s.agents === false || !run.background || (run.state !== "done" && run.state !== "failed")) return;
+    const took = (run.endedAt ?? Date.now()) - (run.startedAt ?? run.queuedAt);
+    if (took < s.minSeconds * 1000) return;
+    const he = isHebrew(`${chatTitle} ${run.title}`);
+    const failed = run.state === "failed";
+    const text = s.includeText && !failed ? (run.report ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
+    const used = run.usage ? ` · ${tokens(run.usage.input + run.usage.output)}${he ? " טוקנים" : " tokens"}` : "";
+    void this.send({
+      title: failed ? (he ? `סוכן משנה נכשל: ${run.title}` : `Sub-agent failed: ${run.title}`) : he ? `סוכן משנה סיים: ${run.title}` : `Sub-agent done: ${run.title}`,
+      body: failed
+        ? `${chatTitle} · ${(run.error ?? (he ? "פתחו את הצ׳אט כדי לראות מה קרה." : "Open the chat to see what happened.")).slice(0, 160)}`
+        : text || `${chatTitle} · ${run.model} · ${he ? `אחרי ${minutes(took, true)}` : `after ${minutes(took)}`}${used}`,
+      path: helperPath(run),
+      // Its own note on the phone (not the chat's: that one is the chat's own answer).
+      ref: `helper-${run.id}`,
+      tags: [failed ? "warning" : "white_check_mark"],
+    }).catch(() => undefined);
+  }
+
+  /**
+   * A chat's helper waits for the user (a yes/no on its card, or "Run this in Antigravity?"): after the "waiting"
+   * delay, if it still waits, a notification that opens the chat at that helper. Off with "Agents" or "waiting" off.
+   *
+   * @param run - The run as it started waiting, with its chat.
+   * @param chatTitle - The chat's title.
+   */
+  onHelperAsk(run: HelperRunInfo & { chatId: string }, chatTitle: string): void {
+    const s = this.settings();
+    if (s.agents === false || !s.waiting || this.helperAsks.has(run.id)) return;
+    const t = setTimeout(() => {
+      this.helperAsks.set(run.id, true);
+      const he = isHebrew(`${chatTitle} ${run.title}`);
+      void this.send({
+        title: he ? `סוכן משנה מחכה לך: ${run.title}` : `A sub-agent waits for you: ${run.title}`,
+        body: `${chatTitle} · ${he ? "ענו בכרטיס שלו בצ׳אט." : "Answer on its card in the chat."}`,
+        path: helperPath(run),
+        ref: `helper-${run.id}`,
+        tags: ["raised_hand"],
+        priority: 4,
+      }).catch(() => undefined);
+    }, s.waitingSeconds * 1000);
+    t.unref?.();
+    this.helperAsks.set(run.id, t);
+  }
+
+  /**
+   * A helper's wait ended (answered, stopped or ended): no note if it was not sent yet, else it is marked answered.
+   *
+   * @param run - The run.
+   */
+  onHelperAnswered(run: Pick<HelperRunInfo, "id" | "state">): void {
+    const w = this.helperAsks.get(run.id);
+    if (w === undefined) return;
+    this.helperAsks.delete(run.id);
+    if (w === true) this.resolve(`helper-${run.id}`, run.state === "stopped" ? "stopped" : "answered");
+    else clearTimeout(w);
+  }
+
   /** Chats whose running turn was asked from a phone (a paired device): their answer notifies the phone even when short. */
   private readonly askedFromPhone = new Set<string>();
 
@@ -329,9 +401,25 @@ export class Notifier {
   }
 }
 
-function minutes(ms: number): string {
+function minutes(ms: number, he = false): string {
   const m = Math.round(ms / 60_000);
+  if (he) return m < 1 ? `${Math.round(ms / 1000)} שניות` : m < 60 ? `${m} דק׳` : `${Math.floor(m / 60)} שע׳ ${m % 60} דק׳`;
   return m < 1 ? `${Math.round(ms / 1000)} s` : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+
+/** Whether a notification about this text should be in Hebrew (the chat's or the task's words are). */
+function isHebrew(text: string): boolean {
+  return /[\u0590-\u05ff]/.test(text);
+}
+
+/** A token count in a few characters: 950, 12.3k, 250k, 1.2M. */
+export function tokens(n: number): string {
+  return n < 1000 ? String(n) : n < 1_000_000 ? `${(n / 1000).toFixed(n < 100_000 ? 1 : 0)}k` : `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** Where a helper's notification opens: its chat, at that helper (the phone opens its sheet). */
+export function helperPath(run: { chatId: string; id: string }): string {
+  return `#/c/${run.chatId}/h/${run.id}`;
 }
 
 /** HTTP headers must be plain text; ntfy reads UTF-8 titles sent as RFC 2047. */

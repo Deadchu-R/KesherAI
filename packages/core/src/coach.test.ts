@@ -34,3 +34,23 @@ test("reads the coach's JSON even inside prose", () => {
   assert.deepEqual(r.learned, ["writes in Hebrew"]);
   assert.deepEqual(parseCoachJson("no json"), { suggestions: [], learned: [] });
 });
+
+test("sub-agents' saved runs add up apart from the chat's model, by role and by model", async () => {
+  const { helperUsage } = await import("./coach.js");
+  const events = [
+    { type: "user", text: "look it up" },
+    { type: "usage", modelId: "m", role: "main", input: 1000, output: 100, estimated: false, tools: [] },
+    { type: "helper_usage", runId: "h-1", kind: "research", model: "Qwen3-4B", state: "done", input: 3000, output: 300, cached: 1000, calls: 2, estimated: false },
+    { type: "helper_usage", runId: "h-2", kind: "build", agent: "tester", model: "Qwen3-14B", state: "failed", input: 500, output: 50, cached: 0, calls: 1, estimated: true },
+    { type: "helper_usage", runId: "h-3", kind: "external", model: "Antigravity", state: "done", input: 0, output: 0, cached: 0, calls: 0, estimated: false },
+  ].map((e, i) => ev(e, i + 1));
+  const h = helperUsage(events);
+  assert.equal(h.runs, 2);
+  assert.equal(h.inputTokens, 3500);
+  assert.equal(h.cachedTokens, 1000);
+  assert.equal(h.estimated, true);
+  assert.deepEqual(h.byRole, { research: { runs: 1, tokens: 3300 }, tester: { runs: 1, tokens: 550 } });
+  assert.deepEqual(h.byModel, { "Qwen3-4B": 3300, "Qwen3-14B": 550 });
+  // The chat's own requests do not count the helpers.
+  assert.equal(requestStats(events).reduce((n, r) => n + r.inputTokens, 0), 1000);
+});

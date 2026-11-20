@@ -519,6 +519,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.push({ type: "helpers", runs }, false);
   }
 
+  /**
+   * Saves what one ended helper run used (a `helper_usage` event, not shown in the thread), for the Usage page.
+   *
+   * @param u - The run's id, type, model, how it ended and its token totals.
+   */
+  helperUsage(u: Omit<Extract<AgentEvent, { type: "helper_usage" }>, "type" | "seq" | "at">): void {
+    this.push({ type: "helper_usage", ...u });
+  }
+
   /** Adds a short note to the conversation (shown in grey). */
   note(text: string): void {
     this.push({ type: "note", text });

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { requestStats } from "../coach.js";
+import { emptyHelperUsage, helperUsage, requestStats } from "../coach.js";
 import { modelTurnFor } from "../conversations.js";
 import type { KesherServices } from "../services.js";
 
@@ -38,15 +38,18 @@ export async function coachRoutes(app: FastifyInstance, s: KesherServices): Prom
     }
   });
 
-  /** Totals across every conversation: tokens, waste, per model and per day. */
+  /** Totals across every conversation: tokens, waste, per model and per day, and the sub-agents' apart. */
   app.get("/api/usage", async () => {
     const totals = { requests: 0, calls: 0, inputTokens: 0, outputTokens: 0, wastedTokens: 0, failedSteps: 0, estimated: false };
     const byModel: Record<string, number> = {};
     const byDay: Record<string, number> = {};
     const costly: Array<{ conversationId: string; title: string; prompt: string; tokens: number; wasted: number }> = [];
+    // Sub-agents apart from the chats' own models (their runs' saved totals), by role and by model.
+    const helpers = emptyHelperUsage();
     for (const summary of s.library.listConversations()) {
       const c = await s.library.getConversation(summary.id);
       if (!c) continue;
+      helperUsage(c.events, helpers);
       const stats = requestStats(c.events);
       const days = c.events.filter((e) => e.type === "user").map((e) => e.at.slice(0, 10));
       stats.forEach((r, i) => {
@@ -65,7 +68,7 @@ export async function coachRoutes(app: FastifyInstance, s: KesherServices): Prom
       });
     }
     costly.sort((a, b) => b.tokens - a.tokens);
-    return { totals, byModel, byDay, costly: costly.slice(0, 10) };
+    return { totals, byModel, byDay, costly: costly.slice(0, 10), helpers };
   });
 
   /** What the coach has learned about how the user works. */

@@ -101,3 +101,39 @@ test("background hand-off: an ended background run is pending until handed over;
   runs.delivered(r2.id);
   assert.equal(runs.pending(r2.id), false);
 });
+
+test("a run sums its model calls' tokens, and says when it asks and when the ask ends", async () => {
+  const runs = new HelperRuns({ limit: () => 1 });
+  const seen: string[] = [];
+  runs.on("ask", (i: { id: string }) => seen.push(`ask ${i.id}`));
+  runs.on("answered", (i: { id: string }) => seen.push(`answered ${i.id}`));
+  const info = runs.start(
+    job({
+      run: async (ctl) => {
+        ctl.usage({ input: 1000, output: 100, cached: 600, estimated: false });
+        ctl.usage({ input: 500, output: 50, estimated: true });
+        await ctl.ask("cloud-files");
+        return { report: "ok" };
+      },
+    }),
+  );
+  await new Promise((r) => setImmediate(r));
+  assert.equal(runs.get(info.id)!.state, "asking");
+  assert.deepEqual(seen, [`ask ${info.id}`]);
+  assert.ok(runs.answer(info.id, true));
+  const [ended] = await runs.wait([info.id]);
+  assert.deepEqual(seen, [`ask ${info.id}`, `answered ${info.id}`]);
+  assert.deepEqual(ended!.usage, { input: 1500, output: 150, cached: 600, calls: 2, estimated: true });
+});
+
+test("stopping a run that asks ends its ask once", async () => {
+  const runs = new HelperRuns({ limit: () => 1 });
+  let answered = 0;
+  runs.on("answered", () => answered++);
+  const info = runs.start(job({ run: async (ctl) => (await ctl.ask("cloud-files"), ctl.signal.throwIfAborted(), { report: "x" }) }));
+  await new Promise((r) => setImmediate(r));
+  runs.stop(info.id);
+  await runs.wait([info.id]);
+  assert.equal(answered, 1);
+  assert.equal(runs.get(info.id)!.usage, undefined);
+});

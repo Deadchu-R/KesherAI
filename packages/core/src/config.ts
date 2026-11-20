@@ -460,6 +460,8 @@ export const KesherConfigSchema = z.object({
       includeText: z.boolean().default(false),
       /** Tell when an agent waits for an approval or an answer for a minute. */
       waiting: z.boolean().default(true),
+      /** Tell when a chat's helper (sub-agent) ends or fails in the background, or waits for an answer. */
+      agents: z.boolean().default(true),
       /** Approve and Deny buttons on that notification (on the phone and a watch), with "Access from anywhere" on. */
       approveButtons: z.boolean().default(true),
       /** Seconds an agent waits for an approval before the phone is told. */

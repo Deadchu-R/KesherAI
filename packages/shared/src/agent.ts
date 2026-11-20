@@ -88,6 +88,18 @@ export type HelperKind = "lookup" | "research" | "build" | "external";
 /** Where a helper run is: queued, asking the user once (a cloud model and the project's files), working, or ended. */
 export type HelperState = "waiting" | "asking" | "running" | "done" | "failed" | "stopped";
 
+/** What one helper run used, summed over its model calls (its session's `usage` events). */
+export interface HelperUsage {
+  /** Prompt tokens, all calls together (`cached` of them came from the server's prompt cache). */
+  input: number;
+  output: number;
+  cached: number;
+  /** Model calls. */
+  calls: number;
+  /** Some counts were estimated from the text (the provider did not report them). */
+  estimated: boolean;
+}
+
 /** One helper run, as the chat's helpers strip and its card show it (sent live in a `helpers` event, never saved). */
 export interface HelperRunInfo {
   id: string;
@@ -133,6 +145,8 @@ export interface HelperRunInfo {
    * card, the phone or through the hub; `POST /api/task-inbox/run-answer`).
    */
   runAsk?: { requestId: string; until: number; left: number; text: string };
+  /** Tokens it used so far (absent until its first model call; an outside agent reports none). */
+  usage?: HelperUsage;
 }
 
 /**
@@ -216,6 +230,8 @@ export type AgentEvent = EventBase &
     | { type: "undo"; path: string; restored: "previous" | "deleted" }
     /** The chat's helper runs changed (not saved; `GET /api/conversations/:id/helpers` has them too). */
     | { type: "helpers"; runs: HelperRunInfo[] }
+    /** A helper run ended: what it used, saved so the Usage page can count helpers apart from the chat's own model. */
+    | ({ type: "helper_usage"; runId: string; kind: HelperKind; agent?: string; model: string; state: HelperState } & HelperUsage)
     /** After a run that changed files: what changed (paths as shown), with "Undo all" for the run. */
     | { type: "receipt"; run: string; files: Array<{ path: string; kind: "new" | "changed" | "deleted"; added: number; removed: number }> }
     /** A run's changes were undone. */
