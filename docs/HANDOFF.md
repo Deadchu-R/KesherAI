@@ -69,6 +69,9 @@ so a new chat starts from a few small files.
 - Downloads only with his yes; permanent deletes only with his yes. Nothing in git may show his email, Windows user
   name or personal paths.
 
+## Priority order (Roee, 2026-11-20)
+1) Agents; 2) everything from a normal chat like Claude (auto tool choice: computer, browser, documents, code); 3) game-engine features that work without the engine open, offline and remotely; 4) the rest. Details: top of WORK_LIST.md.
+
 ## The full wish list
 - docs/WORK_LIST.md (now / next / waiting on Roee) and docs/FUTURE_FEATURES.md (longer term).
 - Next focus (2026-11-20): finish the agents work in the hub (0.6.402), then focused usability from the Gemini research

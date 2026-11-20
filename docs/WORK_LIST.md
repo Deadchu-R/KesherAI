@@ -6,6 +6,12 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## Priority order (Roee, 2026-11-20 19:36)
+1. Agents (a lead + helper agents in KesherAI, like Claude's: models per helper, live status, results).
+2. Everything works from a normal chat, like Claude: the chat shows everything and picks the right tools by itself (computer control, browser, showing and writing documents, code and more).
+3. Game-engine work features that work well WITHOUT the engines open: good views, offline work, sync later, work remotely from the phone.
+4. Everything else.
+
 ## Now (2026-11-19): research and code only, no new builds (Roee, 10:13)
 - ✅ **Mark it and let the model work** (FUTURE_FEATURES), in all four editors:
   - ✅ Pictures: repaint the selection (earlier).
