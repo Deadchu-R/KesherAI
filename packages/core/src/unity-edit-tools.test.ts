@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnityCli, type CliRunner } from "./unity-cli.js";
 import { UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
-import { clampInt, describeSceneChange, modifyCs, parseSceneChanges } from "./unity-edit-tools.js";
+import { clampInt, describeSceneChange, modifyCs, parseSceneChanges, sniffImage } from "./unity-edit-tools.js";
 
 /** A Unity project and a fake `unity` CLI that records every call and answers `script eval` with `answer`. */
 async function setup(answer = "ok") {
@@ -113,4 +113,51 @@ test("unity_modify_scene: one schema, checked input, one Undo group, approval fo
   assert.match(preview, /1\. #-5: DELETE/);
   assert.match(preview, /2\. B: turn off/);
   assert.equal(describeSceneChange({ object: "A", action: "set_property", component: "Light", property: "m_Color", value: [1, 0, 0] }), "Light.m_Color = (1, 0, 0)");
+});
+
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+test("unity_import_sprite: copies a real picture to Assets/Generated (never over a file) and sets the importer", async () => {
+  const { root, project, ctx, calls, lastCs } = await setup("Imported");
+  const id = "0b5f7f6e-1c1e-4a7e-9a55-2f2d3c4b5a69";
+  const u = new UnityCli({ projects: [project], active: project }, async () => undefined, async (args) => {
+    calls.push(args);
+    return { code: 0, stdout: JSON.stringify({ success: true, result: "Imported" }), stderr: "" };
+  });
+  const recorded: string[] = [];
+  const tools = Object.fromEntries(
+    unityTools(u, join(root, "out"), async () => "a", () => [], async (a) => (a === id ? { data: PNG, mimeType: "image/png" } : undefined)).map((t) => [t.spec.name, t]),
+  );
+  const rctx = { ...ctx, recordChange: (p: string) => void recorded.push(p) };
+  const tool = tools.unity_import_sprite!;
+
+  const out = await tool.run({ file: id, name: "Hero/../x", pixels_per_unit: 32, filter: "point", compression: "none" }, rctx);
+  assert.match(out.output, /Copied the picture to Assets\/Generated\/Hero____x\.png\.\nImported/);
+  assert.deepEqual(await readFile(join(project, "Assets/Generated/Hero____x.png")), Buffer.from(PNG));
+  assert.deepEqual(recorded, [join(project, "Assets/Generated/Hero____x.png")]);
+  const cs = lastCs();
+  assert.match(cs, /spritePixelsPerUnit = 32;/);
+  assert.match(cs, /FilterMode\.Point;/);
+  assert.match(cs, /TextureImporterCompression\.Uncompressed;/);
+  assert.match(cs, /SpriteImportMode\.Single/);
+  // A second import with the same name gets its own file.
+  assert.match((await tool.run({ file: id, name: "Hero/../x" }, rctx)).output, /Hero____x-2\.png/);
+
+  // A file on this computer: only a real picture is copied; Assets/ paths are used in place.
+  const fake = join(root, "secret.png");
+  await writeFile(fake, "not a picture");
+  const n = calls.length;
+  assert.match((await tool.run({ file: fake }, rctx)).output, /not a picture Unity imports/);
+  const webp = join(root, "a.webp");
+  await writeFile(webp, Buffer.concat([Buffer.from("RIFF0000WEBP"), Buffer.alloc(8)]));
+  assert.match((await tool.run({ file: webp }, rctx)).output, /cannot import WebP/);
+  assert.match((await tool.run({ file: "relative.png" }, rctx)).output, /Give a picture/);
+  assert.match((await tool.run({ file: "Assets/../../x.png" }, rctx)).output, /outside/);
+  assert.equal(calls.length, n, "refused files never reach Unity");
+  await writeFile(join(project, "Assets/Tree.png"), PNG);
+  const inPlace = await tool.run({ file: "Assets/Tree.png" }, rctx);
+  assert.doesNotMatch(inPlace.output, /Copied/);
+  assert.ok(lastCs().includes('var path = "Assets/Tree.png";'));
+  assert.equal(sniffImage(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0])), "jpg");
+  assert.match(await tool.preview!({ file: id, name: "Hero" }, rctx), /to: Assets\/Generated\/Hero\n.*100 pixels per unit, bilinear filter, normal compression/);
 });

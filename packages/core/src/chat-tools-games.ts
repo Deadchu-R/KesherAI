@@ -35,7 +35,10 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
   const phones = () => chosenPhones(deps.config.phones?.targets ?? [], (deps.config.phones?.custom ?? []) as Phone[]);
   // Unity through its CLI: when it is installed here, or a Unity project was added (then unity_status explains a missing CLI).
   const unity = deps.unity && (deps.unity.cliKnown() || deps.unity.activeProject)
-    ? unityTools(deps.unity, join(deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, phones)
+    ? unityTools(deps.unity, join(deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, phones, async (assetId) => {
+        const got = await deps.assets.get(assetId);
+        return got && got.asset.mimeType.startsWith("image/") ? { data: got.data, mimeType: got.asset.mimeType } : undefined;
+      })
     : [];
   // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
   if (unity.length && p.unityInChat) notes.push(UNITY_NOTE);

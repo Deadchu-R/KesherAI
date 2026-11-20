@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
-import { clampInt, hierarchyCs, unityEditTools } from "./unity-edit-tools.js";
+import { clampInt, hierarchyCs, unityEditTools, type UnityEditDeps } from "./unity-edit-tools.js";
 
 /**
  * Unity in the chat, through Unity's own CLI (`unity`), the way Unity
@@ -33,6 +33,7 @@ export const UNITY_TOOL_NAMES = [
   "unity_console",
   "unity_create_gameobject",
   "unity_find_commands",
+  "unity_import_sprite",
   "unity_inspect_object",
   "unity_install_platform",
   "unity_list_scripts",
@@ -49,7 +50,7 @@ export const UNITY_TOOL_NAMES = [
 
 /** The workflow, for the model (Unity's own guidance for agents, in short). */
 export const UNITY_NOTE =
-  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene hierarchy (a compact tree: names, #ids, child counts; narrow it with depth, filter or root) to see what exists, then unity_inspect_object on the one object you need (its components and fields). 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too); unity_modify_scene moves, rotates, scales, renames, reparents, deletes, turns on/off or sets a field of existing objects (many changes in one call, one Undo step); then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look; unity_performance for FPS, draw calls and memory (in Play Mode, before and after an optimization). 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. For materials, particle effects or level dressing, first load the skill: use_skill materials-specialist / vfx-specialist / level-design-specialist. At the end, list exactly what changed (files and scene objects).";
+  "Unity tools work directly on the user's open Unity project through Unity's CLI. NEVER say you made, wrote, built or changed something in Unity unless a tool result in this chat shows it happened; if a tool fails, say so plainly. Do not make a build or a new folder unless the user asks for a build. The loop: 1) unity_status: is the Editor open and ready (in Safe Mode read the compile errors and fix them). 2) unity_list_scripts / unity_read_script / unity_scene hierarchy (a compact tree: names, #ids, child counts; narrow it with depth, filter or root) to see what exists, then unity_inspect_object on the one object you need (its components and fields). 3) unity_write_script writes C# into Assets/ and compiles it at once: if it reports errors, fix them and write again until it compiles. 4) unity_create_gameobject and unity_add_component put things in the scene (your new scripts too); unity_modify_scene moves, rotates, scales, renames, reparents, deletes, turns on/off or sets a field of existing objects (many changes in one call, one Undo step); then unity_scene save. 5) unity_console for errors and logs; unity_screenshot to look; unity_performance for FPS, draw calls and memory (in Play Mode, before and after an optimization). 6) unity_find_commands + unity_command for anything else the Editor offers (exact names only, never guessed); unity_script_eval for short C# with no command. To test a game: unity_command 'editor set_auto_tick' first, then 'editor.playmode start', screenshot and console, then 'editor.playmode stop'. Change scenes and prefabs through these tools, never by editing .unity or .prefab text. The project's files are reached ONLY through the unity_* tools (list_files, read_file and run_command do not see the project); unity_write_script makes missing folders itself. For a 2D picture (e.g. one you generated) use unity_import_sprite. For materials, prefabs and other assets use unity_script_eval with UnityEditor.AssetDatabase (e.g. AssetDatabase.CreateAsset, PrefabUtility.SaveAsPrefabAsset). Prefer 2D components (SpriteRenderer, BoxCollider2D) in 2D projects; a primitive already has a MeshRenderer and a 3D collider. A sprite made in code from a small texture needs pixelsPerUnit equal to the texture size (Sprite.Create(tex, rect, new Vector2(0.5f, 0.5f), tex.width)), else it is 100 times too small and nothing shows. Compiling is not proof the game works: in play mode take a game-view screenshot and check the board, pieces and text really show before saying it works; if you cannot see pictures, read the hierarchy and positions in play mode instead. When the user asks for a game they can run, unity_build (after saving the scene); for a phone build (android) install the platform first with unity_install_platform if the build says it is missing, and give the game on-screen touch buttons, since a phone has no keyboard. For materials, particle effects or level dressing, first load the skill: use_skill materials-specialist / vfx-specialist / level-design-specialist. At the end, list exactly what changed (files and scene objects).";
 
 const MAX_TEXT = 300_000;
 const CODE_EXT = /\.(cs|shader|hlsl|cginc|compute|uss|uxml|tss|asmdef|asmref)$/i;
@@ -108,8 +109,10 @@ function compileReport(code: number, out: string, err: string): string {
  * @param unity - The Unity CLI service (the page's active project).
  * @param outputsDir - Where screenshots are saved for the user.
  * @param saveAsset - Keeps a picture in the library; returns its id.
+ * @param targetPhones - The phones the user builds for (Android frame rate).
+ * @param readAsset - Reads a library picture by id (for unity_import_sprite and materials).
  */
-export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => []): AgentTool[] {
+export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => [], readAsset?: UnityEditDeps["readAsset"]): AgentTool[] {
   const project = () => unity.activeProject;
   const at = (): string[] => (project() ? ["--project-path", project()!] : []);
   const need = () => {
@@ -539,7 +542,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         return { output: cut(await evalCs(PERFORMANCE)) };
       },
     },
-    ...unityEditTools({ project, need, evalCs: async (code) => cut(await evalCs(code)) }),
+    ...unityEditTools({ project, need, evalCs: async (code) => cut(await evalCs(code)), ...(readAsset ? { readAsset } : {}) }),
     {
       risk: "read",
       spec: {

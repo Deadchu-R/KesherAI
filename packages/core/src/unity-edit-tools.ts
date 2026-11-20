@@ -1,5 +1,8 @@
-import type { AgentTool } from "@kesher/agent";
-import { csString } from "./unity-tools.js";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute } from "node:path";
+import type { AgentTool, ToolContext } from "@kesher/agent";
+import { csString, projectPath } from "./unity-tools.js";
 
 /**
  * Unity scene tools that read and change one object at a time (RESEARCH_LOG "Usability gap list against the code
@@ -16,6 +19,8 @@ export interface UnityEditDeps {
   need: () => void;
   /** Runs C# in the open Editor and returns what it returns (or a plain-words failure). */
   evalCs: (code: string) => Promise<string>;
+  /** Reads a picture of KesherAI's library by its id (a generated image), for the import tools. */
+  readAsset?: (id: string) => Promise<{ data: Uint8Array; mimeType: string } | undefined>;
 }
 
 /** Whole numbers in a range, with a default for anything else. */
@@ -381,11 +386,132 @@ foreach (var k in new string[] { ${keys.map(csString).join(", ")} }) { var o = R
 return sb.ToString();`;
 }
 
+
+/** Where imported pictures go inside the project. */
+export const GENERATED = "Assets/Generated";
+const MAX_IMAGE = 64 * 1024 * 1024;
+const IMAGE_EXT = /\.(png|jpe?g|tga|psd|tiff?|bmp|exr|hdr|gif)$/i;
+
+/**
+ * The picture type from its first bytes (so a file named .png that is not a picture is never copied). TGA has no
+ * signature: it is trusted by its name.
+ *
+ * @returns The file extension Unity imports it by, "webp" (Unity cannot import it), or undefined.
+ */
+export function sniffImage(data: Uint8Array, name = ""): string | undefined {
+  const b = (i: number) => data[i] ?? -1;
+  const text = (n: number) => String.fromCharCode(...data.slice(0, n));
+  if (b(0) === 0x89 && text(4).slice(1) === "PNG") return "png";
+  if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return "jpg";
+  if (text(4) === "GIF8") return "gif";
+  if (text(2) === "BM") return "bmp";
+  if (text(4) === "8BPS") return "psd";
+  if (text(4) === "II*\0" || text(4) === "MM\0*") return "tif";
+  if (b(0) === 0x76 && b(1) === 0x2f && b(2) === 0x31 && b(3) === 0x01) return "exr";
+  if (text(10) === "#?RADIANCE" || text(6) === "#?RGBE") return "hdr";
+  if (text(4) === "RIFF" && String.fromCharCode(...data.slice(8, 12)) === "WEBP") return "webp";
+  if (/\.tga$/i.test(name) && data.length > 18) return "tga";
+  return undefined;
+}
+
+/** A file name part from any text: letters, digits, space, _ and -, at most 60 characters. */
+export const safeName = (text: string, dflt: string): string => text.replace(/\.[a-z0-9]{2,4}$/i, "").replace(/[^\p{L}\p{N} _-]/gu, "_").trim().slice(0, 60) || dflt;
+
+/**
+ * Brings a picture into the project: a file already under Assets/ stays where it is; a library picture (its id) or a
+ * picture file on this computer (an absolute path) is copied to `folder` as `<name>.<ext>`, never over another file.
+ * The copy is recorded for KesherAI's Undo.
+ *
+ * @param d - The tools' dependencies (project, library reader).
+ * @param given - "Assets/…", a library id, or an absolute path.
+ * @param folder - Project-relative folder for copies (under Assets/Generated).
+ * @param name - The copy's name without extension (default: the source's).
+ * @param ctx - The tool call (records the new file).
+ * @returns The project-relative path and whether it was copied.
+ * @throws Error in plain words when the source is missing, too big or not a picture Unity imports.
+ */
+export async function bringImage(d: UnityEditDeps, given: string, folder: string, name: string | undefined, ctx: ToolContext): Promise<{ rel: string; copied: boolean }> {
+  const project = d.project()!;
+  const src = given.trim().replace(/\\/g, "/");
+  if (/^Assets\//i.test(src)) {
+    const { abs, rel } = projectPath(project, src, ["Assets"]);
+    if (!IMAGE_EXT.test(rel)) throw new Error(`${rel} is not a picture Unity imports (png, jpg, tga, psd, tif, bmp, exr, hdr, gif).`);
+    if (!(await stat(abs).catch(() => undefined))?.isFile()) throw new Error(`There is no file ${rel} in the project.`);
+    return { rel, copied: false };
+  }
+  let data: Uint8Array;
+  let from: string;
+  if (/^[0-9a-f-]{36}$/i.test(src)) {
+    const asset = await d.readAsset?.(src.toLowerCase());
+    if (!asset) throw new Error(`There is no picture ${src} in KesherAI's library.`);
+    data = asset.data;
+    from = `picture-${src.slice(0, 8)}`;
+  } else if (isAbsolute(src) || /^[a-z]:\//i.test(src)) {
+    const s = await stat(src).catch(() => undefined);
+    if (!s?.isFile()) throw new Error(`There is no file ${src}.`);
+    if (s.size > MAX_IMAGE) throw new Error(`${basename(src)} is too big (over 64 MB).`);
+    data = await readFile(src);
+    from = basename(src);
+  } else throw new Error("Give a picture: a path under Assets/, a library picture's id, or the full path of a picture file on this computer.");
+  if (data.length > MAX_IMAGE) throw new Error("That picture is too big (over 64 MB).");
+  const ext = sniffImage(data, from);
+  if (ext === "webp") throw new Error("Unity cannot import WebP pictures: save it as PNG first.");
+  if (!ext) throw new Error(`${from} is not a picture Unity imports (png, jpg, tga, psd, tif, bmp, exr, hdr, gif).`);
+  const base = safeName(name ?? "", safeName(from, "Picture"));
+  let rel = "";
+  for (let i = 1; i < 1000; i++) {
+    const candidate = `${folder}/${base}${i === 1 ? "" : `-${i}`}.${ext}`;
+    if (!existsSync(projectPath(project, candidate, ["Assets"]).abs)) {
+      rel = candidate;
+      break;
+    }
+  }
+  if (!rel) throw new Error(`Too many pictures named ${base} in ${folder}.`);
+  const { abs } = projectPath(project, rel, ["Assets"]);
+  await mkdir(dirname(abs), { recursive: true });
+  ctx.recordChange(abs, null);
+  await writeFile(abs, data);
+  return { rel, copied: true };
+}
+
+const FILTERS = { point: "Point", bilinear: "Bilinear", trilinear: "Trilinear" } as const;
+const COMPRESSIONS = { none: "Uncompressed", low: "CompressedLQ", normal: "Compressed", high: "CompressedHQ" } as const;
+
+/** Sprite import settings, checked (defaults: 100 pixels per unit, bilinear, normal compression). */
+export function spriteOptions(input: Record<string, unknown>): { ppu: number; filter: keyof typeof FILTERS; compression: keyof typeof COMPRESSIONS } {
+  const filter = (Object.keys(FILTERS) as Array<keyof typeof FILTERS>).find((k) => k === input.filter) ?? "bilinear";
+  const compression = (Object.keys(COMPRESSIONS) as Array<keyof typeof COMPRESSIONS>).find((k) => k === input.compression) ?? "normal";
+  return { ppu: clampInt(input.pixels_per_unit, 1, 10_000, 100), filter, compression };
+}
+
+/** C# that imports a picture of the project as a single sprite with these settings. */
+export function importSpriteCs(rel: string, o: ReturnType<typeof spriteOptions>): string {
+  return `var path = ${csString(rel)};
+UnityEditor.AssetDatabase.ImportAsset(path, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+var ti = UnityEditor.AssetImporter.GetAtPath(path) as UnityEditor.TextureImporter;
+if (ti == null) return "Unity did not import " + path + " as a picture.";
+ti.textureType = UnityEditor.TextureImporterType.Sprite;
+ti.spriteImportMode = UnityEditor.SpriteImportMode.Single;
+ti.spritePixelsPerUnit = ${o.ppu};
+ti.filterMode = UnityEngine.FilterMode.${FILTERS[o.filter]};
+ti.textureCompression = UnityEditor.TextureImporterCompression.${COMPRESSIONS[o.compression]};
+ti.alphaIsTransparency = true;
+ti.mipmapEnabled = false;
+int w, h; ti.GetSourceTextureWidthAndHeight(out w, out h);
+// Keep the full size (Unity's default limit is 2048).
+var size = 32; while (size < System.Math.Max(w, h) && size < 16384) size *= 2;
+ti.maxTextureSize = size;
+ti.SaveAndReimport();
+var sp = UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Sprite>(path);
+if (sp == null) return "Imported " + path + ", but Unity made no sprite from it.";
+return "Imported " + path + " as a sprite: " + w + "x" + h + " px, ${o.ppu} pixels per unit (" + (w / ${o.ppu}f) + " x " + (h / ${o.ppu}f) + " units), ${o.filter} filter, ${o.compression} compression. Use it with a SpriteRenderer (unity_modify_scene set_property SpriteRenderer m_Sprite = this path).";`;
+}
+
 /**
  * The Unity scene tools that work on single objects.
  *
  * @param d - The project, the "no project" check and C# in the open Editor (from `unityTools`).
- * @returns `unity_inspect_object` and `unity_modify_scene`.
+ * @returns `unity_inspect_object`, `unity_modify_scene` and `unity_import_sprite`.
  */
 export function unityEditTools(d: UnityEditDeps): AgentTool[] {
   return [
@@ -467,6 +593,44 @@ export function unityEditTools(d: UnityEditDeps): AgentTool[] {
         const changes = parseSceneChanges(input.changes);
         if (typeof changes === "string") return { output: changes };
         return { output: await d.evalCs(modifyCs(changes)) };
+      },
+    },
+    {
+      risk: "write",
+      spec: {
+        name: "unity_import_sprite",
+        description: `Put a picture into the Unity project as a 2D sprite: a library picture (its id, e.g. one you generated), a picture file on this computer (full path) or one already under Assets/. A copy goes to ${GENERATED}/; the import is set to Sprite (single), pixels per unit, filter and compression. Pixel art: filter point, compression none. Returns the sprite's asset path.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            file: { type: "string", description: "Library picture id, full path on this computer, or Assets/… path." },
+            name: { type: "string", description: "The copy's file name (default: the source's)." },
+            pixels_per_unit: { type: "number", description: "Default 100: a 100 px wide picture is 1 unit wide." },
+            filter: { type: "string", enum: Object.keys(FILTERS) },
+            compression: { type: "string", enum: Object.keys(COMPRESSIONS) },
+          },
+          required: ["file"],
+        },
+      },
+      preview: async (input) => {
+        const o = spriteOptions(input);
+        const file = String(input.file ?? "");
+        const where = /^Assets\//i.test(file.replace(/\\/g, "/")) ? file : `${GENERATED}/${input.name ? safeName(String(input.name), "Picture") : extname(file) ? basename(file) : "…"}`;
+        return `Import a sprite into ${d.project() ?? "(no project)"}\nfrom: ${file}\nto: ${where}\nSprite (single), ${o.ppu} pixels per unit, ${o.filter} filter, ${o.compression} compression`;
+      },
+      run: async (input, ctx) => {
+        d.need();
+        const o = spriteOptions(input);
+        let brought: { rel: string; copied: boolean };
+        try {
+          brought = await bringImage(d, String(input.file ?? ""), GENERATED, input.name ? String(input.name) : undefined, ctx);
+        } catch (e) {
+          return { output: (e as Error).message };
+        }
+        const head = brought.copied ? `Copied the picture to ${brought.rel}.` : "";
+        const said = await d.evalCs(importSpriteCs(brought.rel, o));
+        const failed = /^(Unity did not run it|C# failed)/.test(said);
+        return { output: `${head}${head ? "\n" : ""}${failed ? `${said}\nThe file is in the project; run unity_import_sprite again on ${brought.rel} once the Editor is ready (unity_status).` : said}` };
       },
     },
   ];
