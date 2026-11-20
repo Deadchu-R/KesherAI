@@ -42,7 +42,7 @@ export interface ConversationDeps {
   /** Video generation (Wan on stable-diffusion.cpp): finds or downloads the model, and makes a clip. */
   video?: {
     ensure(): Promise<{ path?: string; message?: string }>;
-    generate(path: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }): Promise<{ data: Uint8Array; mimeType: string; meta?: Record<string, unknown> }>;
+    generate(path: string, req: { prompt: string; negativePrompt?: string; seconds?: number; seed: number }, signal?: AbortSignal, onProgress?: (p: import("@kesher/shared").JobProgress) => void): Promise<{ data: Uint8Array; mimeType: string; meta?: Record<string, unknown> }>;
   };
   /** The ready-made ComfyUI flows (music, 3D), run from the chat. */
   flows?: {
@@ -52,6 +52,8 @@ export interface ConversationDeps {
       id: string,
       edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void,
       signal: AbortSignal,
+      /** Live steps and preview frames (ComfyUI's socket), for the chat bubble. */
+      onProgress?: (p: import("@kesher/shared").JobProgress) => void,
     ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
   };
   /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */

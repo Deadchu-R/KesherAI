@@ -9,6 +9,17 @@
  * @packageDocumentation
  */
 
+/** A media job's progress, as a tool reports it (ComfyUI's `/ws` messages, the built-in engine's console). */
+export interface JobProgress {
+  /** What it is doing: "queued", "loading", "sampling", "decoding", "saving"; free text from the engine otherwise. */
+  phase?: string;
+  /** Step x of `steps` (sampling). */
+  step?: number;
+  steps?: number;
+  /** The newest preview frame, a small `data:image/jpeg` or `data:image/png` URL (at most about 200 KB). */
+  preview?: string;
+}
+
 /** A tool call a model asked for. */
 export interface ToolCall {
   /** Id from the model, echoed back with the result. */
@@ -220,6 +231,11 @@ export type AgentEvent = EventBase &
      * result has the output that matters. Clients show the last lines under the running step.
      */
     | { type: "tool_output"; callId: string; text: string }
+    /**
+     * A running media job's progress (not saved): a picture, video, song or 3D model from ComfyUI or the built-in
+     * engine. The chat bubble shows the step, the newest preview frame and Cancel; the result comes as `tool_result`.
+     */
+    | { type: "tool_progress"; callId: string; progress: JobProgress }
     | {
         type: "approval_request";
         requestId: string;

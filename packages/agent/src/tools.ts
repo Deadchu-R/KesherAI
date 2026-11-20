@@ -45,6 +45,8 @@ export interface ToolContext {
   recordChange(absolutePath: string, before: string | null): void;
   /** Shows live output of a long tool while it runs (builds, commands). Optional. */
   progress?(text: string): void;
+  /** Reports a media job's step, phase and preview frame (shown in the chat bubble, not saved). Optional. */
+  jobProgress?(p: import("@kesher/shared").JobProgress): void;
   /** The model's id for this call (a helper's card in the thread belongs to its `delegate` call). */
   callId?: string;
   /** Environment variables for commands (the project's environment). */

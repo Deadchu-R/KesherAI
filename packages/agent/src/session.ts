@@ -8,6 +8,7 @@ import type {
   AgentSessionInfo,
   AgentStatus,
   HelperRunInfo,
+  JobProgress,
   ApprovalDecision,
   PermissionMode,
   ToolCall,
@@ -632,6 +633,24 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     };
   }
 
+  /**
+   * A media job's progress for one running tool, sent to the clients (not saved): the step and phase at once when they
+   * change, a new preview frame at most once a second (frames are small pictures, but a fast sampler sends many).
+   */
+  private jobProgress(callId: string): (p: JobProgress) => void {
+    let lastFrame = 0;
+    let last = "";
+    return (p: JobProgress) => {
+      const now = Date.now();
+      const frame = p.preview && now - lastFrame >= 1000 && p.preview.length <= 300_000 ? p.preview : undefined;
+      const key = `${p.phase ?? ""}|${p.step ?? ""}|${p.steps ?? ""}`;
+      if (!frame && key === last) return;
+      if (frame) lastFrame = now;
+      last = key;
+      const { preview: _drop, ...rest } = p;
+      this.push({ type: "tool_progress", callId, progress: { ...rest, ...(frame ? { preview: frame } : {}) } }, false);
+    };
+  }
   private push(e: NewEvent, persist = true): AgentEvent {
     const event = { ...e, seq: persist ? this.events.length + 1 : 0, at: new Date().toISOString() } as AgentEvent;
     if (persist) this.events.push(event);
@@ -1400,6 +1419,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       signal,
       recordChange: (path, before) => this.changes.push({ path, before }),
       progress: this.liveOutput(call.id),
+      jobProgress: this.jobProgress(call.id),
       callId: call.id,
       ...(this.envOf ? { env: this.envOf() } : {}),
       ...(this.webOf?.() ? { web: this.webOf()! } : {}),

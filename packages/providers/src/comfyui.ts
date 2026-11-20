@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { makeModelId, type ModelInfo, type ModelLocation } from "@kesher/shared";
+import { makeModelId, type JobProgress, type ModelInfo, type ModelLocation } from "@kesher/shared";
 import type { GeneratedFile, Provider, ProviderConfig, ProviderFactory, ProviderImageRequest, ProviderVideoRequest } from "./provider.js";
 import { fetchOk } from "./sse.js";
+import { cancelComfy, watchComfy } from "./comfy-progress.js";
 
 /** A ComfyUI workflow in "API format": node id → `{ class_type, inputs }`. */
 export type ComfyWorkflow = Record<string, { class_type: string; inputs: Record<string, unknown> }>;
@@ -144,31 +145,17 @@ export class ComfyUIProvider implements Provider {
       "9": { class_type: "VAEDecode", inputs: { samples: ["8", 0], vae: ["3", 0] } },
       "10": { class_type: "SaveAnimatedWEBP", inputs: { filename_prefix: "KesherAI/video", fps: 16, lossless: false, quality: 90, method: "default", images: ["9", 0] } },
     };
-    return this.run(workflow, { prompt: request.prompt, seed: request.seed }, signal, 30 * 60_000);
+    return this.run(workflow, { prompt: request.prompt, seed: request.seed }, signal, 30 * 60_000, request.onProgress);
   }
 
   /** @inheritDoc */
   async generateImage(request: ProviderImageRequest, signal?: AbortSignal): Promise<GeneratedFile[]> {
-    return this.run(this.buildWorkflow(request), { prompt: request.prompt, seed: request.seed, steps: request.steps }, signal);
+    return this.run(this.buildWorkflow(request), { prompt: request.prompt, seed: request.seed, steps: request.steps }, signal, undefined, request.onProgress);
   }
 
   /** Queues a workflow, waits for it, and fetches what it saved. */
-  private async run(workflow: ComfyWorkflow, meta: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number): Promise<GeneratedFile[]> {
-    const queued = await fetchOk(`${this.baseUrl}/prompt`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal,
-      body: JSON.stringify({ prompt: workflow, client_id: randomUUID() }),
-    });
-    const { prompt_id: promptId, node_errors: nodeErrors } = (await queued.json()) as {
-      prompt_id: string;
-      node_errors?: Record<string, unknown>;
-    };
-    if (nodeErrors && Object.keys(nodeErrors).length > 0) {
-      throw new Error(`ComfyUI rejected the workflow: ${JSON.stringify(nodeErrors).slice(0, 500)}`);
-    }
-
-    const outputs = await this.waitForOutputs(promptId, signal, timeoutMs);
+  private async run(workflow: ComfyWorkflow, meta: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number, onProgress?: (p: JobProgress) => void): Promise<GeneratedFile[]> {
+    const { promptId, outputs } = await this.submit(workflow, "workflow", signal, timeoutMs, onProgress);
     const files: GeneratedFile[] = [];
     for (const image of outputs) {
       const params = new URLSearchParams({ filename: image.filename, subfolder: image.subfolder, type: image.type });
@@ -191,11 +178,8 @@ export class ComfyUIProvider implements Provider {
    * @param timeoutMs - How long to wait (default 30 minutes).
    * @returns The saved files with their names.
    */
-  async runFlow(flow: ComfyWorkflow, signal?: AbortSignal, timeoutMs = 30 * 60_000): Promise<Array<GeneratedFile & { filename: string }>> {
-    const queued = await fetchOk(`${this.baseUrl}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ prompt: flow, client_id: randomUUID() }) });
-    const { prompt_id: promptId, node_errors: nodeErrors } = (await queued.json()) as { prompt_id: string; node_errors?: Record<string, unknown> };
-    if (nodeErrors && Object.keys(nodeErrors).length > 0) throw new Error(`ComfyUI rejected the flow: ${JSON.stringify(nodeErrors).slice(0, 500)}`);
-    const outputs = await this.waitForOutputs(promptId, signal, timeoutMs);
+  async runFlow(flow: ComfyWorkflow, signal?: AbortSignal, timeoutMs = 30 * 60_000, onProgress?: (p: JobProgress) => void): Promise<Array<GeneratedFile & { filename: string }>> {
+    const { promptId, outputs } = await this.submit(flow, "flow", signal, timeoutMs, onProgress);
     const files: Array<GeneratedFile & { filename: string }> = [];
     for (const o of outputs) {
       const params = new URLSearchParams({ filename: o.filename, subfolder: o.subfolder, type: o.type });
@@ -203,6 +187,37 @@ export class ComfyUIProvider implements Provider {
       files.push({ data: new Uint8Array(await res.arrayBuffer()), mimeType: mimeFor(o.filename, res.headers.get("content-type")), filename: o.filename, meta: { comfyPromptId: promptId } });
     }
     return files;
+  }
+
+  /**
+   * Queues a workflow and waits for its saved files. With `onProgress`, ComfyUI's socket reports steps and preview
+   * frames while it runs; Stop (the signal) takes it off the queue or interrupts it, so the card is freed at once.
+   *
+   * @param flow - The workflow in API format.
+   * @param what - "workflow" or "flow", for the error text.
+   * @param signal - Stop.
+   * @param timeoutMs - How long to wait.
+   * @param onProgress - Live progress (optional).
+   * @returns The prompt's id and its output files.
+   */
+  private async submit(flow: ComfyWorkflow, what: string, signal?: AbortSignal, timeoutMs?: number, onProgress?: (p: JobProgress) => void): Promise<{ promptId: string; outputs: Array<{ filename: string; subfolder: string; type: string }> }> {
+    const clientId = randomUUID();
+    const watch = onProgress ? watchComfy(this.baseUrl, clientId, onProgress) : undefined;
+    let promptId = "";
+    const cancel = () => void (promptId && cancelComfy(this.baseUrl, promptId));
+    try {
+      onProgress?.({ phase: "queued" });
+      const queued = await fetchOk(`${this.baseUrl}/prompt`, { method: "POST", headers: { "content-type": "application/json" }, signal, body: JSON.stringify({ prompt: flow, client_id: clientId }) });
+      const answer = (await queued.json()) as { prompt_id: string; node_errors?: Record<string, unknown> };
+      if (answer.node_errors && Object.keys(answer.node_errors).length > 0) throw new Error(`ComfyUI rejected the ${what}: ${JSON.stringify(answer.node_errors).slice(0, 500)}`);
+      promptId = answer.prompt_id;
+      watch?.setPrompt(promptId);
+      signal?.addEventListener("abort", cancel, { once: true });
+      return { promptId, outputs: await this.waitForOutputs(promptId, signal, timeoutMs) };
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      watch?.close();
+    }
   }
 
   /**

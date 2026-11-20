@@ -1,4 +1,4 @@
-import type { AgentMessage, CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation, ToolCall, ToolSpec } from "@kesher/shared";
+import type { AgentMessage, JobProgress, CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation, ToolCall, ToolSpec } from "@kesher/shared";
 
 /**
  * Settings for one provider instance, as stored in the user's config file.
@@ -43,6 +43,8 @@ export interface ProviderVideoRequest {
   /** Length, in seconds (the provider rounds it to what the model can make). */
   seconds?: number;
   seed?: number;
+  /** Live progress while it runs (steps, preview frames); providers that cannot tell leave it uncalled. */
+  onProgress?: (p: JobProgress) => void;
 }
 
 /** Input to {@link Provider.chatWithTools}. */
@@ -111,6 +113,8 @@ export interface ProviderImageRequest {
   mask?: Uint8Array;
   /** How much to change the starting picture, 0–1. */
   strength?: number;
+  /** Live progress while it runs (steps, preview frames); providers that cannot tell leave it uncalled. */
+  onProgress?: (p: JobProgress) => void;
 }
 
 /** A file a provider produced, before the core server stores it as an Asset. */

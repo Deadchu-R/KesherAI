@@ -5,7 +5,7 @@
  */
 import { randomInt } from "node:crypto";
 import { type AgentTool } from "@kesher/agent";
-import { APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, cleanAppearance, type Appearance } from "@kesher/shared";
+import { type JobProgress, APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, cleanAppearance, type Appearance } from "@kesher/shared";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 
@@ -63,7 +63,7 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
           required: ["prompt"],
         },
       },
-      run: async (input) => {
+      run: async (input, ctx) => {
         let imageModel = deps.config.activeModels.image;
         let switched = "";
         if (!usable(imageModel)) {
@@ -83,7 +83,8 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
           height: Number(input.height ?? 1024),
           steps: 0, // 0 = the model family's own default (4 for FLUX schnell, 8 for turbo models)
           seed: randomInt(2 ** 31),
-        }).catch((err: Error) => {
+          ...(ctx.jobProgress ? { onProgress: ctx.jobProgress } : {}),
+        }, ctx.signal).catch((err: Error) => {
           if (/getting ready|still downloading/i.test(err.message)) throw new Error(`${err.message} ${WAIT_NOTE}`);
           throw err;
         });
@@ -115,11 +116,11 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
           required: ["prompt"],
         },
       },
-      run: async (input) => {
+      run: async (input, ctx) => {
         const r = await video.ensure();
         if (!r.path) return { output: `${r.message ?? "No video model is available."} ${WAIT_NOTE}` };
         const file = await video
-          .generate(r.path, { prompt: String(input.prompt ?? ""), ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}), seconds: Number(input.seconds ?? 2), seed: randomInt(2 ** 31) })
+          .generate(r.path, { prompt: String(input.prompt ?? ""), ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}), seconds: Number(input.seconds ?? 2), seed: randomInt(2 ** 31) }, ctx.signal, ctx.jobProgress)
           .catch((err: Error) => {
             if (/getting ready|still downloading/i.test(err.message)) throw new Error(`${err.message} ${WAIT_NOTE}`);
             throw err;
@@ -352,7 +353,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
           const key = musicKey(input.key);
           if (key) enc.keyscale = key;
         }
-      }, ctx.signal);
+      }, ctx.signal, ctx.jobProgress);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
       const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: id === "music-ace-step-15-xl" ? "comfyui/ace-step-1.5-xl" : v15 ? "comfyui/ace-step-1.5" : "comfyui/ace-step", meta: { tags: String(input.tags ?? "").slice(0, 1000), lyrics: String(input.lyrics ?? "").slice(0, 8000), ...(input.title ? { title: String(input.title).slice(0, 200) } : {}) } })));
@@ -393,7 +394,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
         flow["3"]!.inputs.text = prompt;
         flow["5"]!.inputs.seconds = seconds;
         flow["6"]!.inputs.seed = randomInt(2 ** 31);
-      }, ctx.signal);
+      }, ctx.signal, ctx.jobProgress);
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
       const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: "comfyui/stable-audio-3-small-sfx", meta: { prompt } })));
@@ -440,7 +441,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
         flow["5"]!.inputs.text = String(input.prompt ?? "").slice(0, 1000);
         Object.assign(flow["7"]!.inputs, { width: tall ? 704 : 1280, height: tall ? 1280 : 704, length: frames });
         flow["9"]!.inputs.seed = randomInt(2 ** 31);
-      }, ctx.signal);
+      }, ctx.signal, ctx.jobProgress);
       const vid = files.find((f) => f.mimeType.startsWith("video/"));
       if (!vid) return { output: "ComfyUI finished but saved no video." };
       const asset = await deps.assets.save(vid.data, vid.mimeType, { sourceModelId: "comfyui/wan-2.2-ti2v-5b", meta: { prompt: String(input.prompt ?? "").slice(0, 1000) } });
@@ -468,7 +469,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       const blocked = gate(colours ? "3d-trellis2" : "3d-hunyuan3d", input.download);
       if (blocked) return { output: blocked };
       if (!ctx.workspace) return { output: "There is no folder for this chat to read the picture from." };
-      const made = await pictureTo3d(flows, ctx.workspace, String(input.image ?? ""), ctx.signal, colours);
+      const made = await pictureTo3d(flows, ctx.workspace, String(input.image ?? ""), ctx.signal, colours, ctx.jobProgress);
       if ("error" in made) return { output: made.error };
       const out = made.path;
       return { output: `Made the 3D model ${out} (GLB, ${colours ? "with its colours and materials" : "shape only"}); the user can download it and open it in Blender, Unreal or Unity.`, files: [out.split("\\").join("/")] };
@@ -488,7 +489,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
  * @param colours - With its colours and materials (TRELLIS.2, PBR textures) instead of the shape only (Hunyuan3D 2).
  * @returns The model's path in the folder, or what went wrong.
  */
-export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, image: string, signal: AbortSignal, colours = false): Promise<{ path: string } | { error: string }> {
+export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>, workspace: string, image: string, signal: AbortSignal, colours = false, onProgress?: (p: JobProgress) => void): Promise<{ path: string } | { error: string }> {
   const rel = image.replace(/^\[?Attached:\s*/i, "").replace(/\]$/, "").trim();
   const { resolve: resolvePath, relative, join: joinPath, dirname, basename } = await import("node:path");
   const { readFile, writeFile, mkdir } = await import("node:fs/promises");
@@ -506,7 +507,7 @@ export async function pictureTo3d(flows: NonNullable<ConversationDeps["flows"]>,
       flow["2"]!.inputs.image = name;
       flow["7"]!.inputs.seed = randomInt(2 ** 31);
     }
-  }, signal);
+  }, signal, onProgress);
   const glb = files.find((f) => /\.glb$/i.test(f.filename) || f.mimeType === "model/gltf-binary");
   if (!glb) return { error: "ComfyUI finished but saved no 3D model." };
   const out = joinPath("3d", `${basename(file).replace(/\.[^.]+$/, "")}-${Date.now().toString(36)}.glb`);

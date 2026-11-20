@@ -29,7 +29,7 @@ import { readMedia, speechTools } from "../speech-tools.js";
 import { SideEngine, sideEngineOf, translatorModelId } from "../side-engine.js";
 import { type AgentTool } from "@kesher/agent";
 import { ComfyUIProvider } from "@kesher/providers";
-import { cleanAppearance } from "@kesher/shared";
+import { cleanAppearance, type JobProgress } from "@kesher/shared";
 import { existsSync } from "node:fs";
 import { readFile as readFileFs } from "node:fs/promises";
 import { join } from "node:path";
@@ -219,7 +219,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         const flow = readyFlows().find((f) => f.id === id)!;
         await setupFlow(flow, paths.models, downloads);
       },
-      run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal) => {
+      run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal, onProgress?: (p: JobProgress) => void) => {
         if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
         const flow = readyFlows().find((f) => f.id === id)!;
         if (!comfy.status().running) {
@@ -232,7 +232,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         await edit(graph, (data, name, subfolder) => provider.uploadImage(data, name, subfolder));
         await guard.before("comfyui", signal);
         try {
-          return await provider.runFlow(graph, signal);
+          return await provider.runFlow(graph, signal, undefined, onProgress);
         } finally {
           guard.after();
           // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
@@ -254,14 +254,15 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         }
         return ensureVideoModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist });
       },
-      generate: async (path, req) => {
+      generate: async (path, req, signal, onProgress) => {
         if (!existsSync(path)) {
           const target = registry.resolve(path);
-          const [file] = (await target.provider.generateVideo?.({ providerModelId: target.providerModelId, ...req })) ?? [];
+          const [file] = (await target.provider.generateVideo?.({ providerModelId: target.providerModelId, ...req, ...(onProgress ? { onProgress } : {}) }, signal)) ?? [];
           if (!file) throw new Error("The video model made no video.");
           return file;
         }
-        return sd.generateVideo(path, req);
+        // The built-in engine: the chat reads its progress with GET /api/engines/image/progress.
+        return sd.generateVideo(path, req, signal);
       },
     },
     aboutUser: () => aboutUserNote(config.user),
