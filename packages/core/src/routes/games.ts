@@ -8,6 +8,7 @@ import { gameSourceRoutes } from "./game-source.js";
 import { HIT_KINDS, searchGameProject, type GameHit, type HitKind } from "../game-index.js";
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
+import { editorOpen, runningUnity, type UnityProcesses } from "../unity-running.js";
 import type { BlueprintJson, QueuedEdit } from "../unreal-bridge.js";
 import { makeDiff } from "@kesher/agent";
 import type { GameCheckpoint } from "../game-checkpoints.js";
@@ -91,8 +92,9 @@ export function syncNote(r: SyncReport): { title: string; body: string } | undef
  *
  * @param app - Fastify instance.
  * @param s - Services.
+ * @param unityProcesses - The running Unity editors (tests give their own).
  */
-export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
+export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unityProcesses: () => Promise<UnityProcesses | undefined> = runningUnity): Promise<void> {
   // Notify only on a failure or a clash; tapping the note opens the Sync and conflicts sheet.
   const onSync = (r: SyncReport) => {
     const n = syncNote(r);
@@ -155,7 +157,8 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
         const shown = !!s.unity.activeProject && sameFolder(s.unity.activeProject, p.path);
         return {
           ...base,
-          open: (shown && s.unity.connected) || existsSync(join(p.path, "Temp", "UnityLockfile")),
+          // A lock file alone can be left by a crash: it counts only with a running Unity for the project.
+          open: (shown && s.unity.connected) || editorOpen(p.path, existsSync(join(p.path, "Temp", "UnityLockfile")), existsSync(join(p.path, "Temp", "UnityLockfile")) ? await unityProcesses() : undefined),
           pending: mine.length + moves + vs.length,
           ...(moves ? { moves } : {}),
           ...(vs.length ? { values: vs.length } : {}),

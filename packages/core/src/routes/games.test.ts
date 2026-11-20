@@ -9,6 +9,7 @@ import { UnityCli, type CliRunner } from "../unity-cli.js";
 import { UnrealBridge } from "../unreal-bridge.js";
 import type { KesherServices } from "../services.js";
 import type { Note } from "../notify.js";
+import type { UnityProcesses } from "../unity-running.js";
 import { GameCheckpoints } from "../game-checkpoints.js";
 
 test("a sync note only for a failure or a clash", () => {
@@ -35,7 +36,15 @@ test("Game projects: a Unity project with a clash, both sides on the sheet, and 
   process.env.HOME = home;
   const app = Fastify();
   try {
-    await gamesRoutes(app, s);
+    // A lock file left by a crash (no Unity runs) is not an open editor; with a Unity running on it, it is.
+    await mkdir(join(project, "Temp"));
+    await writeFile(join(project, "Temp", "UnityLockfile"), "");
+    let procs: UnityProcesses = { projects: [], unnamed: false };
+    await gamesRoutes(app, s, async () => procs);
+    const openNow = async () => ((await app.inject({ url: "/api/games" })).json() as { projects: Array<{ engine: string; open: boolean }> }).projects.find((x) => x.engine === "unity")!.open;
+    assert.equal(await openNow(), false, "stale lock file");
+    procs = { projects: [project], unnamed: false };
+    assert.equal(await openNow(), true);
     const q = await unity.enqueue({ project, path: "Assets/Door.asset", graph: "", ops: [{ op: "add", type: "branch" }], baseAt: new Date(Date.now() - 60_000).toISOString(), baseSig: { u1: "Start" } });
     const t = Date.now() / 1000;
     await utimes(join(project, "Assets", "Door.asset"), t, t);
