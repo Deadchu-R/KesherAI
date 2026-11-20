@@ -373,6 +373,31 @@ export class LlamaEngine {
   /** Tokens each chat (slot) can hold, as llama-server reported it (`n_ctx_slot`). */
   private slotTokens?: number;
 
+  /** Slots the last started server was given (`-np`/`--parallel` in its arguments; 1 without). */
+  private startedSlots = 0;
+
+  /**
+   * How many slots (chats held at once, each with its own cached prompt) the running server has, so requests can be
+   * pinned to a slot with `id_slot`. Counts the `-np` the server really got, also when the user's own arguments set it.
+   *
+   * @returns The slot count, or 0 when no server is running.
+   */
+  slots(): number {
+    return this.proc && this.proc.exitCode === null ? this.startedSlots : 0;
+  }
+
+  /**
+   * The slot count in a llama-server argument list (`-np N` or `--parallel N`; llama.cpp's default is 1).
+   *
+   * @param args - The server's arguments.
+   * @returns The slot count (at least 1).
+   */
+  static slotsIn(args: string[]): number {
+    const i = args.findIndex((a) => a === "-np" || a === "--parallel");
+    const n = i >= 0 ? Math.round(Number(args[i + 1])) : 1;
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  }
+
   /** @returns The context each chat gets on the running server, if it said. */
   slotContext(): number | undefined {
     return this.proc && this.proc.exitCode === null ? this.slotTokens : undefined;
@@ -844,6 +869,7 @@ export class LlamaEngine {
       env: { ...process.env, ...(env ?? {}), LLAMA_API_KEY: this.apiKey },
     });
     this.proc = proc;
+    this.startedSlots = LlamaEngine.slotsIn(args);
     this.modelPath = modelPath;
     this.promptTps = undefined;
     this.slotTokens = undefined;

@@ -295,7 +295,7 @@ export class ConversationManager {
       currentModel: () => this.sessions.get(id)?.modelId ?? this.deps.config.activeModels.chat,
       turnFor: (modelId) => {
         this.deps.registry.resolve(modelId);
-        return modelTurnFor(this.deps.registry, modelId);
+        return modelTurnFor(this.deps.registry, modelId, undefined, "helper");
       },
       models: () => this.chatModelIds,
       workspace: () => this.sessions.get(id)?.workspace,
@@ -640,7 +640,7 @@ export class ConversationManager {
       id,
       modelId: conversation.modelId,
       ...(outside ? { external: outside } : {}),
-      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params),
+      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params, "main"),
       mode: conversation.mode,
       ...(workspace ? { workspace } : {}),
       tools,
@@ -1062,7 +1062,7 @@ export class ConversationManager {
       session.setTools(tools);
       session.systemPrompt = await this.promptFor(next, notes);
     }
-    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId));
+    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main"));
     if (patch.mode) session.setMode(patch.mode);
     return this.deps.library.saveConversation({
       ...next,

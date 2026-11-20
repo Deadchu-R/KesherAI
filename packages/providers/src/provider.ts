@@ -61,13 +61,29 @@ export interface ProviderToolChatRequest {
   maxTokens?: number;
   /** llama.cpp only: texts whose tokens get this bias (e.g. other alphabets made unlikely in a Hebrew answer). */
   logitBias?: Array<[string, number]>;
+  /**
+   * llama.cpp only: who is asking, so each kind keeps its own slot (and its cached prompt) when the server has
+   * enough slots. Unset counts as `other`. Other providers ignore it.
+   */
+  slotKind?: SlotKind;
+}
+
+/** Which agent asks: the chat's main model, a helper (sub-agent), or anything else (router, teammate, side jobs). */
+export type SlotKind = "main" | "helper" | "other";
+
+/** Tokens one model call used, as the provider reported them. */
+export interface ProviderUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Of `inputTokens`, how many came from the server's prompt cache (llama.cpp `timings.cache_n`, OpenAI `cached_tokens`). */
+  cachedTokens?: number;
 }
 
 /** One finished model turn: its text and the tools it wants to call. */
 export interface ProviderToolChatResult {
   text: string;
   toolCalls: ToolCall[];
-  usage?: { inputTokens?: number; outputTokens?: number };
+  usage?: ProviderUsage;
 }
 
 /** Input to {@link Provider.chat}. The model is the provider's own id. */

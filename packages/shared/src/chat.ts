@@ -35,5 +35,6 @@ export type ChatRequest = z.infer<typeof ChatRequestSchema>;
  */
 export type ChatStreamEvent =
   | { type: "delta"; text: string }
-  | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number } }
+  /** `cachedTokens`: of the input, how many the server read from its prompt cache (when it says). */
+  | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }
   | { type: "error"; message: string };

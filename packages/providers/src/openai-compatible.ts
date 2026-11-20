@@ -7,6 +7,8 @@ import type {
   ProviderFactory,
   ProviderToolChatRequest,
   ProviderToolChatResult,
+  ProviderUsage,
+  SlotKind,
 } from "./provider.js";
 import { parseToolArguments } from "./tool-args.js";
 import { fetchOk, readSSE } from "./sse.js";
@@ -20,6 +22,9 @@ import { fetchOk, readSSE } from "./sse.js";
  *
  * Options (`ProviderConfig.options`):
  * - `headers` (`Record<string, string>`): extra headers sent with every request.
+ * - `llamaCpp` (`{ slots?: () => number }`): the server is llama.cpp's `llama-server` (KesherAI's own engine). Requests
+ *   then ask it to keep the prompt cache (`cache_prompt`) and, when it has enough slots, pin each agent kind to its
+ *   own slot (`id_slot`). Never set for other servers: they may reject unknown fields.
  *
  * Models whose id contains `embed` are listed in the `embedding` category;
  * everything else in `chat`.
@@ -36,6 +41,8 @@ export class OpenAICompatibleProvider implements Provider {
   private readonly headers: Record<string, string>;
   /** How long to keep trying while the server cannot be reached (the main KesherAI restarting for an update). */
   private readonly waitMs: number;
+  /** Set for llama.cpp's server: how many slots it has now (see {@link llamaCppFields}). */
+  private readonly llamaCpp?: { slots?: () => number };
 
   /**
    * @param config - Needs `baseUrl` ending in `/v1` (or the API's equivalent).
@@ -48,6 +55,8 @@ export class OpenAICompatibleProvider implements Provider {
     this.location = config.location ?? "server";
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.waitMs = Number(config.options?.waitForServerMs ?? 0) || 0;
+    const llama = config.options?.llamaCpp;
+    if (llama) this.llamaCpp = typeof llama === "object" ? (llama as { slots?: () => number }) : {};
     this.headers = {
       "content-type": "application/json",
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
@@ -111,20 +120,18 @@ export class OpenAICompatibleProvider implements Provider {
         max_tokens: request.maxTokens,
         stream: true,
         stream_options: { include_usage: true },
+        ...(this.llamaCpp ? llamaCppFields(undefined, this.llamaCpp.slots?.() ?? 0) : {}),
       }),
     });
     if (!res.body) throw new Error("Empty response body");
 
-    let usage: { inputTokens?: number; outputTokens?: number } | undefined;
+    let usage: ProviderUsage | undefined;
     for await (const data of readSSE(res.body)) {
       if (data === "[DONE]") break;
-      const chunk = JSON.parse(data) as {
-        choices?: Array<{ delta?: { content?: string | null } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
-      };
+      const chunk = JSON.parse(data) as UsageReport & { choices?: Array<{ delta?: { content?: string | null } }> };
       const text = chunk.choices?.[0]?.delta?.content;
       if (text) yield { type: "delta", text };
-      if (chunk.usage) usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+      usage = readUsage(chunk, usage);
     }
     yield { type: "done", ...(usage ? { usage } : {}) };
   }
@@ -192,6 +199,7 @@ export class OpenAICompatibleProvider implements Provider {
         max_tokens: request.maxTokens,
         stream: true,
         stream_options: { include_usage: true },
+        ...(this.llamaCpp ? llamaCppFields(request.slotKind, this.llamaCpp.slots?.() ?? 0) : {}),
       }),
     }), signal);
     if (!res.body) throw new Error("Empty response body");
@@ -201,14 +209,13 @@ export class OpenAICompatibleProvider implements Provider {
     let usage: ProviderToolChatResult["usage"];
     for await (const data of readSSE(res.body)) {
       if (data === "[DONE]") break;
-      const chunk = JSON.parse(data) as {
+      const chunk = JSON.parse(data) as UsageReport & {
         choices?: Array<{
           delta?: {
             content?: string | null;
             tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
           };
         }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
         error?: { message?: string };
       };
       if (chunk.error) throw new Error(chunk.error.message ?? "Model server error");
@@ -225,7 +232,7 @@ export class OpenAICompatibleProvider implements Provider {
         if (tc.function?.arguments) entry.args += tc.function.arguments;
         calls.set(index, entry);
       }
-      if (chunk.usage) usage = { inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens };
+      usage = readUsage(chunk, usage);
     }
     const toolCalls: ToolCall[] = [...calls.entries()]
       .sort(([a], [b]) => a - b)
@@ -268,6 +275,57 @@ export function toOpenAIMessages(messages: AgentMessage[]): Array<Record<string,
     }
     return [{ role: m.role, content: m.content }];
   });
+}
+
+/** The slot each agent kind keeps on llama.cpp's server, so one kind's prompt never pushes out another's cache. */
+const SLOT_OF: Record<SlotKind, number> = { main: 0, helper: 1, other: 2 };
+
+/**
+ * The extra request fields for llama.cpp's server: always `cache_prompt` (reuse the cached part of the prompt),
+ * and `id_slot` (the kind's own slot) only when the server has a slot for every kind; with fewer slots llama.cpp
+ * picks the slot itself (pinning there would make chats wait for each other or name a slot that does not exist).
+ *
+ * @param kind - Who asks (unset: `other`).
+ * @param slots - How many slots the running server has (0 when unknown).
+ * @returns The fields to add to the request body.
+ */
+export function llamaCppFields(kind: SlotKind | undefined, slots: number): { cache_prompt: true; id_slot?: number } {
+  const enough = slots >= Object.keys(SLOT_OF).length;
+  return { cache_prompt: true, ...(enough ? { id_slot: SLOT_OF[kind ?? "other"] } : {}) };
+}
+
+/** The usage parts of an OpenAI-style answer or stream chunk, with llama.cpp's own `timings`. */
+export interface UsageReport {
+  usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } | null } | null;
+  /** llama.cpp: `cache_n` prompt tokens came from the cache, `prompt_n` were read now, `predicted_n` were written. */
+  timings?: { cache_n?: number; prompt_n?: number; predicted_n?: number } | null;
+}
+
+/**
+ * Reads token counts from one answer (non-streaming) or one stream chunk, keeping what earlier chunks reported.
+ * llama.cpp sends `timings` on its last chunk(s), possibly apart from `usage`; its cached count is `cache_n`, and
+ * the whole prompt is `cache_n + prompt_n` when `usage` is missing. OpenAI-style servers report
+ * `usage.prompt_tokens_details.cached_tokens`.
+ *
+ * @param chunk - The parsed answer or chunk.
+ * @param prev - What earlier chunks reported.
+ * @returns The usage so far, or `undefined` while nothing was reported.
+ */
+export function readUsage(chunk: UsageReport, prev?: ProviderUsage): ProviderUsage | undefined {
+  const u = chunk.usage;
+  const t = chunk.timings;
+  if (!u && !t) return prev;
+  const out: ProviderUsage = { ...prev };
+  if (u?.prompt_tokens !== undefined) out.inputTokens = u.prompt_tokens;
+  if (u?.completion_tokens !== undefined) out.outputTokens = u.completion_tokens;
+  const cached = u?.prompt_tokens_details?.cached_tokens;
+  if (typeof cached === "number") out.cachedTokens = cached;
+  if (t) {
+    if (typeof t.cache_n === "number") out.cachedTokens = t.cache_n;
+    if (out.inputTokens === undefined && typeof t.prompt_n === "number") out.inputTokens = t.prompt_n + (t.cache_n ?? 0);
+    if (out.outputTokens === undefined && typeof t.predicted_n === "number") out.outputTokens = t.predicted_n;
+  }
+  return out;
 }
 
 /** Factory for {@link OpenAICompatibleProvider}. */

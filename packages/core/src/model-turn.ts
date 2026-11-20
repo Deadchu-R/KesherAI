@@ -6,7 +6,7 @@
 import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
 import { OTHER_SCRIPTS_BIAS } from "@kesher/shared";
-import type { ProviderRegistry } from "@kesher/providers";
+import type { ProviderRegistry, SlotKind } from "@kesher/providers";
 
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
 
@@ -27,10 +27,13 @@ export function onModelSpeed(fn: typeof speedRecorder): void {
  *
  * @param registry - Provider registry.
  * @param modelId - Global model id.
+ * @param params - A persona's sampling settings, if any.
+ * @param slotKind - Who asks (the chat's main model, a helper, or other), so llama.cpp keeps each kind's prompt
+ *   cache in its own slot. Default `other`.
  * @returns The turn function.
  */
-export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams): ModelTurn {
-  const inner = rawTurnFor(registry, modelId, params);
+export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind): ModelTurn {
+  const inner = rawTurnFor(registry, modelId, params, slotKind);
   return async (req, signal, onText) => {
     let first = 0;
     let chars = 0;
@@ -73,7 +76,7 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string, params
   };
 }
 
-function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams): ModelTurn {
+function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind): ModelTurn {
   return async (req, signal, onText) => {
     const { provider, providerModelId } = registry.resolve(modelId);
     // A persona's own settings (temperature, top_p, stop), when it has them.
@@ -83,7 +86,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       const last = [...req.messages].reverse().find((m) => m.role === "user");
       const he = (last?.content.match(/[\u0590-\u05FF]/g) ?? []).length;
       const hebrew = provider.id === "llamacpp" && he >= 2 && he >= (last?.content.match(/[A-Za-z]/g) ?? []).length;
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}) }, signal, onText);
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

@@ -149,3 +149,11 @@ test("a model's own settings do not bring the old -ngl 99 back on builds that fi
   assert.deepEqual(LlamaEngine.userArgs(["-ngl", "99"], ["--n-cpu-moe", "20"], "b6000"), ["-ngl", "99", "--n-cpu-moe", "20"], "older builds keep it");
   assert.deepEqual(LlamaEngine.userArgs(["-ngl", "40"], ["-ngl", "30"], "b12110"), ["-ngl", "30"], "the model's own wins");
 });
+
+test("slotsIn reads the slot count the server was started with", () => {
+  assert.equal(LlamaEngine.slotsIn(["-ngl", "99"]), 1);
+  assert.equal(LlamaEngine.slotsIn(LlamaEngine.serverArgs([], true, 3)), 3);
+  assert.equal(LlamaEngine.slotsIn(["--parallel", "4"]), 4);
+  assert.equal(LlamaEngine.slotsIn(["-np", "x"]), 1);
+  assert.equal(new LlamaEngine({ dir: "", port: 1, args: [] }).slots(), 0);
+});

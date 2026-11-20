@@ -50,7 +50,7 @@ export class SideEngine {
     this.engine = new LlamaEngine({ dir: this.deps.dir, binaryPath: binary, ...(this.deps.version ? { version: this.deps.version } : {}), port: await freePort(), args: this.deps.args, parallel: 1 });
     await this.engine.load(modelPath);
     this.deps.registry.remove(SIDE_PROVIDER);
-    this.deps.registry.add({ id: SIDE_PROVIDER, type: "openai-compatible", name: "KesherAI engine, beside (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey });
+    this.deps.registry.add({ id: SIDE_PROVIDER, type: "openai-compatible", name: "KesherAI engine, beside (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey, options: { llamaCpp: { slots: () => this.engine?.slots() ?? 0 } } });
     return SideEngine.idOf(modelPath);
   }
 
