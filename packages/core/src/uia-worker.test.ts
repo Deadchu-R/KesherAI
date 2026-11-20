@@ -121,10 +121,20 @@ test("uia script: ASCII only, every op answered, release script lets go in rever
   assert.match(s, /mouse_event\(4,/);
 });
 
-test("uia worker on Windows: the real PowerShell worker lists windows and is killed", { skip: process.platform !== "win32" }, async () => {
+test("uia worker on Windows: the real PowerShell worker lists windows and is killed", { skip: process.platform !== "win32" }, async (t) => {
   const w = new UiaWorker(powershellWorker);
   try {
-    const r = await w.call<{ windows: unknown[]; monitors: Array<{ index: number }> }>("windows", {}, { timeoutMs: 30_000 });
+    let r: { windows: unknown[]; monitors: Array<{ index: number }> };
+    try {
+      r = await w.call<{ windows: unknown[]; monitors: Array<{ index: number }> }>("windows", {}, { timeoutMs: 30_000 });
+    } catch (e) {
+      // CI runners run as administrator, which the worker refuses on purpose: that refusal is the expected answer there.
+      if (/administrator/i.test(String((e as Error).message))) {
+        t.skip("the CI runner is elevated");
+        return;
+      }
+      throw e;
+    }
     assert.ok(Array.isArray(r.windows));
     assert.ok(r.monitors.length >= 1);
     const c = await w.call<{ x: number; y: number }>("cursor");

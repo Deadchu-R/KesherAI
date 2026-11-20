@@ -26,8 +26,9 @@ test("a file with a size but no space on disk is a placeholder on Windows only",
     // Small files may sit inside the MFT record: left to the read-error check.
     assert.equal(looksCloudOnly({ size: 900, blocks: 0 }, "win32", probe), false);
     // When this Node reports no sizes on disk at all, nothing is taken for a placeholder.
+    // (Only where truncate makes a real sparse file: on Windows it allocates, so the probe does report sizes.)
     resetCloudOnlyCheck();
-    assert.equal(looksCloudOnly({ size: 64 * 1024, blocks: 0 }, "win32", hole), false);
+    if ((await stat(hole)).blocks === 0) assert.equal(looksCloudOnly({ size: 64 * 1024, blocks: 0 }, "win32", hole), false);
     resetCloudOnlyCheck();
   } finally {
     await rm(dir, { recursive: true, force: true });
