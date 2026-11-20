@@ -93,7 +93,7 @@ async function setup(opts: { enabled?: boolean; scope?: boolean; extra?: Partial
   const sync = new TasksSync({ settings: () => settings, setEnabled: async (on) => void (settings.enabled = on), google, inbox, file, drive: () => drive, home: "/home/someone", ...opts.extra });
   const done = () => {
     sync.stop();
-    return rm(dir, { recursive: true, force: true });
+    return rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }) // a last save may still be landing;
   };
   return { dir, drive, tasks, received, settings, google, sync, file, done, workList };
 }
