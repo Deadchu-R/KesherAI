@@ -130,6 +130,8 @@ rows=[
  (174900, ['AgentsLabel.dc.html','AgentsLabelPhone.dc.html']),
  (176850, ['InboxAssign.dc.html','InboxAssignPhone.dc.html']),
  (179510, ['HubAgentLabel.dc.html','HubAgentLabelPhone.dc.html']),
+ (181400, ['GamesCheckpoints.dc.html','GamesCheckpointsPhone.dc.html']),
+ (183800, ['GamesInspector.dc.html','GamesInspectorPhone.dc.html']),
 ]
 SIDE=300
 for y,names in rows:
