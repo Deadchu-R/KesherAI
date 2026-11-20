@@ -21,7 +21,8 @@ import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
-import { agentSnapshots, mergeTasks, parseAppToken } from "./drive-view.js";
+import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
+import { WORK_LIST_STATUSES, type WorkListStatus } from "../../../packages/shared/src/work-list.js";
 
 /** What the signed-in owner sees (`GET /api/state`). */
 interface OwnerState {
@@ -61,6 +62,9 @@ const app = {
   filter: "all" as "all" | "open" | "done" | "failed" | "expired",
   search: "",
   openTask: undefined as string | undefined,
+  /** Claude's work list: the statuses shown (done is hidden at first) and the items opened to their full text. */
+  wlShow: new Set<WorkListStatus>(["doing", "next", "roee", "paused"]),
+  wlOpen: new Set<string>(),
   /** The agent card open in the agents tab (device/run, or cloud:<taskId>). */
   openAgent: undefined as string | undefined,
   pairCode: "",
@@ -610,6 +614,59 @@ function tasksTab(): HTMLElement {
       list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
     ),
     open ? taskDetail(open) : null,
+    workListGroup(q),
+  );
+}
+
+/**
+ * Claude's work list (HubWorkList / PhoneHubWorkList): the items the PC copies from docs/WORK_LIST.md to Drive,
+ * by section, with a colour-coded status, filter chips by status (done hidden at first) and each item's full text
+ * a tap away. Nothing when Drive has no list (Settings on the PC: "Show Claude's work list").
+ *
+ * @param q - The search text (lower case), shared with the task list.
+ */
+function workListGroup(q: string): HTMLElement | null {
+  const view = workListView(drive.records(), app.wlShow);
+  if (!view.total) return null;
+  const chip = (st: WorkListStatus) => {
+    const w = WORK_LIST_STATUS[st];
+    const on = app.wlShow.has(st);
+    return h("button", { type: "button", class: `chip wl-chip ${w.cls}${on ? " chip-on" : ""}`, "aria-pressed": String(on), onclick: () => { if (on) app.wlShow.delete(st); else app.wlShow.add(st); render(); } }, `${w.icon} ${L(w.he, w.en)} ${view.counts[st]}`);
+  };
+  const sections = view.sections
+    .map((s) => ({ ...s, items: s.items.filter((i) => !q || `${i.title}\n${i.text}\n${s.section}`.toLowerCase().includes(q)) }))
+    .filter((s) => s.items.length);
+  return h(
+    "section",
+    { class: "card clip wl", "aria-label": L("רשימת העבודה של Claude", "Claude's work list") },
+    h("div", { class: "row wrap head" }, h("b", null, L("📋 רשימת העבודה של Claude", "📋 Claude's work list")), h("span", { class: "mut xs" }, L("מהמחשב, מתעדכנת כל 15 דקות", "From the PC, updated every 15 minutes"))),
+    h("div", { class: "row wrap filters wl-filters" }, WORK_LIST_STATUSES.map(chip)),
+    sections.length
+      ? sections.map((s) =>
+          h(
+            "div",
+            { class: "wl-sec" },
+            h("h3", { class: "wl-h", dir: "auto" }, s.section),
+            s.items.map((i) => {
+              const w = WORK_LIST_STATUS[i.status];
+              const open = app.wlOpen.has(i.id);
+              const more = i.text.length > i.title.length + 1;
+              return h(
+                "div",
+                { class: `wl-item ${w.cls}` },
+                h(
+                  "button",
+                  { type: "button", class: "trow wl-row", "aria-expanded": more ? String(open) : undefined, disabled: !more, onclick: () => { if (open) app.wlOpen.delete(i.id); else app.wlOpen.add(i.id); render(); } },
+                  h("span", { class: `tag ${w.cls}`, title: L(w.he, w.en) }, w.icon, h("span", { class: "hide-sm" }, ` ${L(w.he, w.en)}`)),
+                  h("span", { class: "grow wl-title", dir: "auto" }, i.title),
+                  more ? h("span", { class: "mut xs", "aria-hidden": "true" }, open ? "▴" : "▾") : null,
+                ),
+                open ? h("div", { class: "wl-text sm", dir: "auto" }, i.text) : null,
+              );
+            }),
+          ),
+        )
+      : h("div", { class: "trow mut sm" }, L("אין פריטים כאלה. אפשר לבחור מצבים נוספים למעלה.", "No such items. Pick more statuses above.")),
   );
 }
 

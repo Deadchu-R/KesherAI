@@ -17,6 +17,7 @@
  * WebCrypto only: the same code runs in Node, the Cloudflare Worker and the phone's WebView.
  */
 import { fromB64url, randomB64url, toB64url } from "./hub-crypto.js";
+import { WORK_LIST_STATUSES } from "./work-list.js";
 /** The record format version (part of the authenticated data). */
 export const SYNC_VERSION = 1;
 /** Sizes, counts and times for synced records (every device keeps to them). */
@@ -50,7 +51,7 @@ export const SINGLE_WRITER_KINDS = new Set(["task", "run", "agent"]);
 const RUN_STATES = ["outbox", "waiting", "waiting-run", "running", "done", "partial", "failed", "blocked", "cancelled"];
 /** States a run stays in for good. */
 export const TERMINAL_RUN_STATES = new Set(["done", "partial", "failed", "blocked", "cancelled"]);
-const ORIGINS = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work"];
+const ORIGINS = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work", "work-list"];
 const AGENT_SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -132,7 +133,7 @@ export function cleanSyncBody(x, kind) {
                 const origin = oneOf(b.origin, ORIGINS);
                 if (!origin || typeof b.title !== "string")
                     return undefined;
-                return { type: "task", title: str(b.title, 200), spec: str(b.spec, 8000), origin, executor: str(b.executor, 40), createdAt: str(b.createdAt, 40), ...opt("target", optStr(b.target, 64)), ...opt("risk", optStr(b.risk, 20)) };
+                return { type: "task", title: str(b.title, 200), spec: str(b.spec, 8000), origin, executor: str(b.executor, 40), createdAt: str(b.createdAt, 40), ...opt("target", optStr(b.target, 64)), ...opt("risk", optStr(b.risk, 20)), ...opt("workList", origin === "work-list" ? workListInfo(b.workList) : undefined) };
             }
             case "run": {
                 const state = oneOf(b.state, RUN_STATES);
@@ -179,6 +180,16 @@ export function cleanSyncBody(x, kind) {
         }
     })();
     return out;
+}
+/** A work-list item's info, checked (undefined when it does not fit). */
+function workListInfo(x) {
+    if (!x || typeof x !== "object")
+        return undefined;
+    const w = x;
+    const status = oneOf(w.status, WORK_LIST_STATUSES);
+    if (!status || typeof w.section !== "string" || !Number.isSafeInteger(w.order) || w.order < 0)
+        return undefined;
+    return { section: str(w.section, 200), status, order: w.order };
 }
 /** `{ [k]: v }` when v is set, else `{}` (keeps optional fields absent rather than undefined). */
 function opt(k, v) {

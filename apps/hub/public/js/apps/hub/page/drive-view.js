@@ -80,6 +80,9 @@ export function mergeTasks(local, records, ctx) {
     for (const r of records) {
         if (r.head.deleted || !r.body)
             continue;
+        // Claude's work list has its own group ({@link workListView}).
+        if (r.head.kind === "task" && r.body.origin === "work-list")
+            continue;
         if (r.head.kind === "task")
             tasks.set(r.head.id, { writer: r.head.writer, body: r.body });
         else if (r.head.kind === "run")
@@ -212,4 +215,44 @@ export function parseAppToken(hash, now) {
     if (!/^[\w.~-]{20,4096}$/.test(token) || !Number.isInteger(secs) || secs < 60 || secs > 3600)
         return undefined;
     return { token, expiresAt: now + secs * 1000 };
+}
+/** The statuses as chips: words, an icon and the CSS class of the colour (done green … paused muted). */
+export const WORK_LIST_STATUS = {
+    done: { icon: "✅", he: "בוצע", en: "Done", cls: "wl-done" },
+    doing: { icon: "🔨", he: "בעבודה", en: "In progress", cls: "wl-doing" },
+    next: { icon: "⬜", he: "הבא", en: "Next", cls: "wl-next" },
+    roee: { icon: "👤", he: "מחכה לך", en: "Waiting on you", cls: "wl-roee" },
+    paused: { icon: "⏸", he: "מושהה", en: "Paused", cls: "wl-paused" },
+};
+/**
+ * Claude's work list from Drive (task records with origin `work-list`, written by the PC from docs/WORK_LIST.md),
+ * grouped by section in the list's order. Items whose status is not in `show` are left out, and so are sections
+ * left empty.
+ *
+ * @param records - The records this page has from Drive.
+ * @param show - The statuses to show (all when left out).
+ * @returns The sections, and how many items each status has (before the filter).
+ */
+export function workListView(records, show) {
+    const counts = { done: 0, doing: 0, next: 0, roee: 0, paused: 0 };
+    const items = [];
+    for (const r of records) {
+        const b = r.body;
+        if (r.head.kind !== "task" || r.head.deleted || b?.origin !== "work-list" || !b.workList)
+            continue;
+        counts[b.workList.status]++;
+        if (show && !show.has(b.workList.status))
+            continue;
+        items.push({ id: r.head.id, status: b.workList.status, title: b.title, text: b.spec, section: b.workList.section, order: b.workList.order });
+    }
+    items.sort((a, b) => a.order - b.order);
+    const sections = [];
+    for (const { section, order: _order, ...row } of items) {
+        const last = sections[sections.length - 1];
+        if (last && last.section === section)
+            last.items.push(row);
+        else
+            sections.push({ section, items: [row] });
+    }
+    return { sections, counts, total: Object.values(counts).reduce((a, b) => a + b, 0) };
 }

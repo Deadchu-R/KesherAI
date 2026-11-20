@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { StoredRecord } from "../../../packages/shared/src/drive-sync.js";
 import type { SyncBody, SyncKind } from "../../../packages/shared/src/hub-sync.js";
 import type { PageTask } from "../page/device.js";
-import { agentSnapshots, deviceLabel, hubInboxId, mergeTasks, pageTaskBody, parseAppToken } from "../page/drive-view.js";
+import { agentSnapshots, deviceLabel, hubInboxId, mergeTasks, pageTaskBody, parseAppToken, workListView } from "../page/drive-view.js";
 
 const ctx = { me: "page-mine1234", pcNames: ["Office PC"], deviceName: (id: string) => (id === "dev-pc" ? "Office PC" : undefined) };
 
@@ -117,4 +117,18 @@ test("parseAppToken takes only a well-formed token with a sane lifetime", () => 
   assert.equal(parseAppToken("#kdt=short&kde=3599", 0), undefined);
   assert.equal(parseAppToken("#kdt=ya29.a0AfB_byC-1234567890abcdef&kde=999999", 0), undefined);
   assert.equal(parseAppToken("#kdt=ya29.a0AfB_byC<script>567890abcdef&kde=3599", 0), undefined);
+});
+
+test("workListView groups Claude's work list by section in order, filters by status, and keeps it out of the tasks", () => {
+  const item = (id: string, section: string, status: "done" | "doing" | "next" | "roee" | "paused", order: number): StoredRecord =>
+    rec("task", id, "pc-1", { type: "task", title: `item ${id}`, spec: `text ${id}`, origin: "work-list", executor: "claude", createdAt: "2026-11-20T00:00:00Z", workList: { section, status, order } });
+  const records = [item("w-c", "Waiting", "roee", 2), item("w-a", "Now", "done", 0), item("w-b", "Now", "doing", 1), item("w-d", "Later", "next", 3), rec("task", "w-gone", "pc-1", null, true)];
+  const all = workListView(records);
+  assert.deepEqual(all.sections.map((s) => [s.section, s.items.map((i) => i.id)]), [["Now", ["w-a", "w-b"]], ["Waiting", ["w-c"]], ["Later", ["w-d"]]]);
+  assert.deepEqual(all.counts, { done: 1, doing: 1, next: 1, roee: 1, paused: 0 });
+  assert.equal(all.total, 4);
+  const open = workListView(records, new Set(["doing", "next", "roee", "paused"] as const));
+  assert.deepEqual(open.sections.map((s) => s.section), ["Now", "Waiting", "Later"]);
+  assert.deepEqual(open.sections[0]!.items.map((i) => [i.id, i.status, i.title, i.text]), [["w-b", "doing", "item w-b", "text w-b"]]);
+  assert.equal(mergeTasks([], records, ctx).length, 0, "work-list items are not tasks");
 });

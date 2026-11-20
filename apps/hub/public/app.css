@@ -191,3 +191,25 @@ button.chip { cursor: pointer; min-height: 30px; }
 .drive-line .grow { min-width: 180px; }
 .chip.src.dev { border-color: var(--line); color: #c9c9ce; }
 .acard.snap { cursor: default; opacity: .9; }
+
+/* Claude's work list in the Tasks tab (workListGroup in page/app.ts): status colours, done green … paused muted. */
+.wl .head { padding: 12px 14px 4px; gap: 8px; align-items: baseline; }
+.wl-filters { padding: 4px 14px 10px; }
+.wl-sec { border-top: 1px solid #222226; }
+.wl-h { padding: 10px 14px 4px; font-size: 13px; color: #c9c9ce; font-weight: 600; }
+.wl-row { width: 100%; border: 0; border-top: 1px solid #1f1f23; background: none; color: inherit; font: inherit; text-align: start; }
+.wl-sec .wl-item:first-of-type .wl-row { border-top: 0; }
+.wl-row:disabled { cursor: default; opacity: 1; }
+.wl-title { white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.wl-text { padding: 0 14px 12px; padding-inline-start: calc(14px + 2.2em); white-space: pre-wrap; overflow-wrap: anywhere; color: #b9b9c0; line-height: 1.5; }
+.tag.wl-done { background: #1f2a24; color: var(--ok); } .tag.wl-doing { background: #262a45; color: #c3cbff; }
+.tag.wl-next { background: #26262a; color: #a9a9b0; } .tag.wl-roee { background: #2a2520; color: var(--warn); }
+.tag.wl-paused { background: transparent; border: 1px dashed #3a3a40; color: #77777e; }
+.wl-item.wl-paused .wl-title, .wl-item.wl-done .wl-title { color: #8d8d95; }
+.chip.wl-chip.chip-on.wl-done { border-color: #2f5a41; } .chip.wl-chip.chip-on.wl-doing { border-color: #4a5390; }
+.chip.wl-chip.chip-on.wl-roee { border-color: #6a4a2a; } .chip.wl-chip.chip-on.wl-paused { border-style: dashed; }
+@media (max-width: 760px) {
+  .wl .head, .wl-filters { padding-inline: 12px; }
+  .wl-row { flex-wrap: nowrap; }
+  .wl-text { padding-inline: 12px; }
+}

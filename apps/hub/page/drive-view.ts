@@ -14,6 +14,7 @@
 import type { StoredRecord } from "../../../packages/shared/src/drive-sync.js";
 import type { SyncAgentBody, SyncAgentSource, SyncMetaBody, SyncOrigin, SyncRunBody, SyncTaskBody } from "../../../packages/shared/src/hub-sync.js";
 import type { HubExecutor } from "../../../packages/shared/src/hub-protocol.js";
+import type { WorkListStatus } from "../../../packages/shared/src/work-list.js";
 import type { PageTask, TaskStatus } from "./device.js";
 
 /** A short text in both languages. */
@@ -132,6 +133,8 @@ export function mergeTasks(local: readonly PageTask[], records: readonly StoredR
   const hidden = new Set<string>();
   for (const r of records) {
     if (r.head.deleted || !r.body) continue;
+    // Claude's work list has its own group ({@link workListView}).
+    if (r.head.kind === "task" && (r.body as SyncTaskBody).origin === "work-list") continue;
     if (r.head.kind === "task") tasks.set(r.head.id, { writer: r.head.writer, body: r.body as SyncTaskBody });
     else if (r.head.kind === "run") runs.set(r.head.id, r.body as SyncRunBody);
     else if (r.head.kind === "meta" && (r.body as SyncMetaBody).archived) hidden.add(r.head.id);
@@ -263,4 +266,56 @@ export function parseAppToken(hash: string, now: number): AppToken | undefined {
   const secs = Number(q.get("kde"));
   if (!/^[\w.~-]{20,4096}$/.test(token) || !Number.isInteger(secs) || secs < 60 || secs > 3600) return undefined;
   return { token, expiresAt: now + secs * 1000 };
+}
+
+/** One item of Claude's work list, as the page shows it. */
+export interface WorkListRow {
+  id: string;
+  status: WorkListStatus;
+  title: string;
+  text: string;
+}
+
+/** A section of Claude's work list with its items, in the file's order. */
+export interface WorkListSection {
+  section: string;
+  items: WorkListRow[];
+}
+
+/** The statuses as chips: words, an icon and the CSS class of the colour (done green … paused muted). */
+export const WORK_LIST_STATUS: Record<WorkListStatus, Words & { icon: string; cls: string }> = {
+  done: { icon: "✅", he: "בוצע", en: "Done", cls: "wl-done" },
+  doing: { icon: "🔨", he: "בעבודה", en: "In progress", cls: "wl-doing" },
+  next: { icon: "⬜", he: "הבא", en: "Next", cls: "wl-next" },
+  roee: { icon: "👤", he: "מחכה לך", en: "Waiting on you", cls: "wl-roee" },
+  paused: { icon: "⏸", he: "מושהה", en: "Paused", cls: "wl-paused" },
+};
+
+/**
+ * Claude's work list from Drive (task records with origin `work-list`, written by the PC from docs/WORK_LIST.md),
+ * grouped by section in the list's order. Items whose status is not in `show` are left out, and so are sections
+ * left empty.
+ *
+ * @param records - The records this page has from Drive.
+ * @param show - The statuses to show (all when left out).
+ * @returns The sections, and how many items each status has (before the filter).
+ */
+export function workListView(records: readonly StoredRecord[], show?: ReadonlySet<WorkListStatus>): { sections: WorkListSection[]; counts: Record<WorkListStatus, number>; total: number } {
+  const counts: Record<WorkListStatus, number> = { done: 0, doing: 0, next: 0, roee: 0, paused: 0 };
+  const items: Array<WorkListRow & { section: string; order: number }> = [];
+  for (const r of records) {
+    const b = r.body as SyncTaskBody | null;
+    if (r.head.kind !== "task" || r.head.deleted || b?.origin !== "work-list" || !b.workList) continue;
+    counts[b.workList.status]++;
+    if (show && !show.has(b.workList.status)) continue;
+    items.push({ id: r.head.id, status: b.workList.status, title: b.title, text: b.spec, section: b.workList.section, order: b.workList.order });
+  }
+  items.sort((a, b) => a.order - b.order);
+  const sections: WorkListSection[] = [];
+  for (const { section, order: _order, ...row } of items) {
+    const last = sections[sections.length - 1];
+    if (last && last.section === section) last.items.push(row);
+    else sections.push({ section, items: [row] });
+  }
+  return { sections, counts, total: Object.values(counts).reduce((a, b) => a + b, 0) };
 }
