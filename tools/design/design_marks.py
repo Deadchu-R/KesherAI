@@ -132,6 +132,10 @@ rows=[
  (179510, ['HubAgentLabel.dc.html','HubAgentLabelPhone.dc.html']),
  (181400, ['GamesCheckpoints.dc.html','GamesCheckpointsPhone.dc.html']),
  (183800, ['GamesInspector.dc.html','GamesInspectorPhone.dc.html']),
+ (185200, ['ChatHunkReview.dc.html','ChatHunkReviewPhone.dc.html']),
+ (187300, ['ChatAttachMenu.dc.html','ChatAttachMenuPhone.dc.html']),
+ (189100, ['ChatAttachTree.dc.html','ChatAttachTreePhone.dc.html']),
+ (190900, ['GamesUnrealAsset.dc.html','GamesUnrealAssetPhone.dc.html']),
 ]
 SIDE=300
 for y,names in rows:
