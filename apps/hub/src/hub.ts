@@ -639,8 +639,9 @@ export class Hub {
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
     // A task-inbox report and the approvals waiting on a PC go from a PC to the owner's phones (and the hub page) only.
     if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
-    // An approval answer goes from a paired phone (or the hub page) to a PC only, at a human pace.
-    if (env.kind === "approval_answer") {
+    // An approval answer or a command (Run, Cancel) goes from a paired phone (or the hub page) to a PC only, at a human pace.
+    if (env.kind === "command_result" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    if (env.kind === "approval_answer" || env.kind === "command") {
       if (from.kind !== "phone" || to.kind !== "pc") return refuse("not-allowed", env.id);
       if (!this.limits.take(`command:${from.id}`, LIMITS.command)) return refuse("rate-limited", env.id);
     }
@@ -649,7 +650,7 @@ export class Hub {
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
     const online = this.sockets.send(to.id, { t: "deliver", env });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
-    if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals") this.audit(`relay-${env.kind}`, { deviceId: from.id });
+    if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
   }
 
   /** The Claude path: open the one message sealed to the hub, fire the scheduled task, answer sealed to the sender. */

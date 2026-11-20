@@ -222,3 +222,4 @@ button.chip { cursor: pointer; min-height: 30px; }
 .wprev { margin: 0; max-height: 7.5em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #141416; border: 1px solid #2a2a2f; border-radius: 8px; padding: 6px 8px; color: #c9c9ce; }
 .wfor { gap: 4px; flex-wrap: nowrap; }
 .inp.wsel { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; }
+.runacts { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

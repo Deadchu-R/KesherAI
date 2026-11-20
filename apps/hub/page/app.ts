@@ -681,11 +681,31 @@ function workListGroup(q: string): HTMLElement | null {
   );
 }
 
+/**
+ * Run / Cancel for a task that waits for Run on a PC (an Antigravity task from the inbox or from another device),
+ * then the PC's answer ("Sent to the PC…", "Started on the PC.", or why not).
+ */
+function runButtons(t: PageTask): HTMLElement | null {
+  const a = device.taskActions.get(t.taskId);
+  if (a && !a.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
+  const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} ell1`, title: a.result.text }, a.result.text) : null;
+  if (!device.canRun(t)) return note;
+  const press = (action: "inbox-run" | "inbox-cancel") => (e: Event) => {
+    e.stopPropagation();
+    if (action === "inbox-cancel" && !confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`))) return;
+    void device.inboxCommand(t, action);
+  };
+  return h("span", { class: "row runacts" }, h("button", { type: "button", class: "btn sm-btn pri", onclick: press("inbox-run") }, L("▶ הרץ", "▶ Run")), h("button", { type: "button", class: "btn sm-btn", onclick: press("inbox-cancel") }, L("בטל", "Cancel")), note);
+}
+
 /** One row of the task list. */
 function taskRow(t: PageTask): HTMLElement {
   const expired = !t.inbox && HubDevice.expired(t);
   const live = liveCard(t);
-  const action = t.drive?.only
+  const run = runButtons(t);
+  const action = run
+    ? run
+    : t.drive?.only
     ? t.link && isSafeLink(t.link)
       ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח", "Open"))
       : null
@@ -808,6 +828,7 @@ const AUDIT: Record<string, [string, string]> = {
   "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
   "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
   "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
+  "relay-command": ["הרצה או ביטול של משימה נשלחו למחשב", "Run or Cancel of a task sent to a PC"],
 };
 
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */

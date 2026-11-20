@@ -63,7 +63,7 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -122,6 +122,8 @@ export const BODY_FOR_KIND = {
     agent_event: "agent_event",
     inbox_task: "inbox_task",
     approvals: "approvals",
+    command: "command",
+    command_result: "command_result",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -199,7 +201,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -327,6 +329,14 @@ export function parseSealedBody(x, kind) {
             const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }
+        case "command":
+            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel"))
+                return null;
+            return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
+        case "command_result":
+            if (!isHubId(b.commandId) || !isHubId(b.taskId))
+                return null;
+            return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300) };
         case "approvals":
             if (!Array.isArray(b.items))
                 return null;

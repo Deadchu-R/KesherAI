@@ -292,3 +292,31 @@ test("approvals: one sealed snapshot to online phones when the set changes; answ
   assert.equal(snaps().length, 2);
   assert.deepEqual(((await openEnvelope(snaps()[1]!, phone.privateKey, pcPub)) as { items: unknown[] }).items, []);
 });
+
+test("Run / Cancel commands: only from a paired phone; the PC answers sealed with the result", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  const did: string[] = [];
+  (r.client as unknown as { deps: { inboxCommand: unknown } }).deps.inboxCommand = async (action: string, taskId: string, from: { id: string; kind: string }) => (did.push(`${action} ${taskId} ${from.id} ${from.kind}`), { ok: true, text: "Started on the PC." });
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const other = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const presence = [
+    { id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} },
+    { id: "dpc2", name: "Other PC", kind: "pc", publicKey: other.publicKey, online: true, busy: false, agents: [], optIn: {} },
+  ];
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence }));
+  const cmd: SealedBody = { type: "command", commandId: "k1", action: "inbox-run", taskId: "agy-1" };
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: await sealMessage({ from: "dpc2", to: "dpc", kind: "command" }, cmd, other.privateKey, pcPub) }));
+  assert.deepEqual(did, [], "a PC cannot press Run");
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: await sealMessage({ from: "dphone", to: "dpc", kind: "command" }, cmd, phone.privateKey, pcPub) }));
+  assert.deepEqual(did, ["inbox-run agy-1 dphone phone"]);
+  const res = r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "command_result").map((f) => f.env as SealedEnvelope);
+  assert.equal(res.length, 1);
+  assert.deepEqual(await openEnvelope(res[0]!, phone.privateKey, pcPub), { type: "command_result", commandId: "k1", taskId: "agy-1", ok: true, text: "Started on the PC." });
+});

@@ -74,9 +74,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -205,11 +205,22 @@ export type SealedBody =
   | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny"; forMinutes?: number }
   /** Everything waiting for the user's approval on a PC, whole (the newest snapshot replaces the last). */
   | { type: "approvals"; items: HubApproval[]; at: number }
+  /** The owner's press on the hub page or the phone, for a task of a PC's task inbox (see {@link HubCommandAction}). */
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string }
+  /** The PC's answer to a command: done, or why not (a short line). */
+  | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
   /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
   | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
   /** A task of the PC's task inbox (Claude's `kesher-inbox` branch) as the hub page lists it: metadata, never its text. */
   | ({ type: "inbox_task" } & HubInboxTask);
+
+/**
+ * What the owner can press for a task of a PC's task inbox from another device: `inbox-run` runs a task that waits for
+ * Run (as the PC's own Run button, one press one run, within the daily limit), `inbox-cancel` skips a waiting task or
+ * stops a running one. The task is named by its inbox id or by its Google Drive record id.
+ */
+export type HubCommandAction = "inbox-run" | "inbox-cancel";
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -382,6 +393,8 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   agent_event: "agent_event",
   inbox_task: "inbox_task",
   approvals: "approvals",
+  command: "command",
+  command_result: "command_result",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -461,7 +474,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -574,6 +587,12 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
+    case "command":
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel")) return null;
+      return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
+    case "command_result":
+      if (!isHubId(b.commandId) || !isHubId(b.taskId)) return null;
+      return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300) };
     case "approvals":
       if (!Array.isArray(b.items)) return null;
       return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a): a is HubApproval => !!a), at: num(b.at) };

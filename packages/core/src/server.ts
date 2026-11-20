@@ -64,6 +64,7 @@ import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
+import { inboxCommand } from "./hub-commands.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxSnapshot } from "./agent-activity.js";
 
 /** The hub approval list's name for the task inbox's run asks. */
@@ -606,6 +607,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     board: taskBoard,
     inbox: (t, boardId) => taskInbox.fromHub(t, boardId),
     inboxTasks: () => taskInbox.list(),
+    // Run / Cancel pressed on the owner's phone or hub page (hub-client.ts checks the sender; hub-commands.ts).
+    inboxCommand: (action, taskId, from) =>
+      inboxCommand(
+        {
+          ids: async () => (await taskInbox.list()).map((t) => t.id),
+          fromDrive: async (id) => services.tasksSync?.inboxIdOf(id),
+          run: (id, by) => taskInbox.run(id, { approvedBy: by }),
+          running: async (id) => ["running", "needs-approval"].includes((await taskInbox.task(id)).status),
+          stop: (id) => taskInbox.stop(id),
+          skip: (id) => taskInbox.skip(id),
+        },
+        action,
+        taskId,
+        from,
+      ),
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",

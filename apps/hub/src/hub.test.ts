@@ -513,3 +513,31 @@ test("approvals: a PC's snapshot goes to phones only; answers go from a phone to
   }
   assert.equal(sockets.frames(phone.id, "refused").at(-1)?.t === "refused" && (sockets.frames(phone.id, "refused").at(-1) as { code: string }).code, "rate-limited");
 });
+
+test("Run / Cancel commands: from a phone to a PC only (audited without content); results from a PC to a phone only", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  for (const d of [pc, phone]) {
+    sockets.on.add(d.id);
+    await hub.onOpen(d.id);
+  }
+  const cmd: SealedBody = { type: "command", commandId: "k1", action: "inbox-run", taskId: "agy-secret-task" };
+  const ok = await sealMessage({ from: phone.id, to: pc.id, kind: "command" }, cmd, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: ok }));
+  const got = sockets.frames(pc.id, "deliver").at(-1);
+  assert.ok(got?.t === "deliver" && got.env.id === ok.id);
+  assert.deepEqual(await openEnvelope(got.env, pc.keys.privateKey, phone.keys.publicKey), cmd);
+  const bad = await sealMessage({ from: pc.id, to: phone.id, kind: "command" }, cmd, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: bad }));
+  assert.deepEqual(sockets.frames(pc.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: bad.id });
+  const result: SealedBody = { type: "command_result", commandId: "k1", taskId: "agy-secret-task", ok: true, text: "Started on the PC." };
+  const fake = await sealMessage({ from: phone.id, to: pc.id, kind: "command_result" }, result, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
+  assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
+  const back = await sealMessage({ from: pc.id, to: phone.id, kind: "command_result" }, result, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: back }));
+  assert.equal(sockets.frames(phone.id, "deliver").at(-1)?.t, "deliver");
+  const audit = JSON.stringify(store.auditList(100));
+  assert.ok(audit.includes("relay-command") && !audit.includes("relay-command_result") && !audit.includes("agy-secret"));
+});

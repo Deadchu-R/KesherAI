@@ -6,7 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import type { DriveMark } from "./drive-view.js";
@@ -171,6 +171,8 @@ export class HubDevice {
    */
   approvals = new Map<string, { items: HubApproval[]; at: number }>();
   approvalActions = new Map<string, string>();
+  /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
+  taskActions = new Map<string, { action: HubCommandAction; commandId: string; left: number; result?: { ok: boolean; text: string } }>();
   private agentSeq = 0;
   private catchingUp = false;
   /** Called when another device wrote to Google Drive (its bare `sync` ping). */
@@ -519,6 +521,7 @@ export class HubDevice {
     if (body.type === "approval_request") return;
     if (!this.replay.first(env.id, env.ttl)) return;
     if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
+    if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
     const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
     if (!task) return;
@@ -553,6 +556,60 @@ export class HubDevice {
     this.approvals.set(from, { items, at });
     // An answer sent from here is settled once its request has left the PC's list.
     for (const key of [...this.approvalActions.keys()]) if (key.startsWith(`${from}/`) && !items.some((a) => `${from}/${a.requestId}` === key)) this.approvalActions.delete(key);
+    this.changed();
+  }
+
+  /**
+   * Whether a task waits for the owner's Run on a PC (an Antigravity task of a PC's inbox, or one in Google Drive that a
+   * PC will queue), and a PC that could take the press is on.
+   *
+   * @param t - The task.
+   * @returns True when Run / Cancel can be offered.
+   */
+  canRun(t: PageTask): boolean {
+    const waits = t.inbox ? t.status === "waiting-run" : !!t.drive?.only && t.executor === "pc-antigravity" && t.status === "waiting";
+    return waits && this.connected && this.commandTargets(t).length > 0;
+  }
+
+  /** The PCs a command for a task goes to: its inbox's PC, or (a Drive task) every PC that is on. */
+  private commandTargets(t: PageTask): HubPresence[] {
+    return this.presence.filter((d) => d.kind === "pc" && d.online && (!t.inbox || d.id === t.inbox.deviceId));
+  }
+
+  /**
+   * Run or Cancel for a task that waits for Run: a sealed `command` to its PC (a Drive task: to each PC that is on;
+   * only the one that queued it acts). The PC checks it came from the owner's paired phone or hub page, then runs it
+   * as its own Run button does (one press, one run) or skips it.
+   *
+   * @param t - The task.
+   * @param action - Run or Cancel.
+   * @returns Whether it was sent.
+   */
+  async inboxCommand(t: PageTask, action: HubCommandAction): Promise<boolean> {
+    const id = this.ident;
+    const to = this.commandTargets(t);
+    if (!id || !this.connected || !to.length) return false;
+    const commandId = randomB64url(12);
+    let sent = 0;
+    for (const pc of to) {
+      const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action, taskId: t.taskId }, id.privateKey, pc.publicKey);
+      if (this.sendFrame({ t: "send", env })) sent++;
+    }
+    if (sent) this.taskActions.set(t.taskId, { action, commandId, left: sent });
+    this.changed();
+    return sent > 0;
+  }
+
+  /**
+   * A PC's answer to Run / Cancel, shown on the task. A Drive task's command went to every PC that is on: the one that
+   * acted answers yes; a "no" is shown only when every PC said no (the last one's words).
+   */
+  private onCommandResult(commandId: string, taskId: string, ok: boolean, text: string): void {
+    const a = this.taskActions.get(taskId);
+    if (!a || a.commandId !== commandId || a.result?.ok) return;
+    a.left--;
+    if (!ok && a.left > 0) return;
+    a.result = { ok, text };
     this.changed();
   }
 

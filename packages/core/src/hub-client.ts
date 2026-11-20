@@ -24,6 +24,7 @@ import {
   sealMessage,
   syncPinger,
   type HubAgent,
+  type HubCommandAction,
   type HubApproval,
   type HubCryptoKey,
   type HubFrame,
@@ -109,6 +110,11 @@ export interface HubClientDeps {
   activity?: Pick<AgentActivity, "has" | "cancel" | "slowDown">;
   /** The task inbox's tasks (inbox-runner.ts), reported to the hub page's Tasks list as metadata. */
   inboxTasks?: () => Promise<InboxTaskView[]>;
+  /**
+   * Run or Cancel for a task-inbox task, pressed on the owner's paired phone or hub page (`from`: that verified
+   * device). Returns whether it was done, or why not in a short line.
+   */
+  inboxCommand?: (action: HubCommandAction, taskId: string, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
 }
@@ -751,6 +757,13 @@ export class HubClient {
         if (kind === "phone") await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, kind }, body.forMinutes).catch(() => false);
         // The answered approval leaves the snapshot at once (not at the next check).
         void this.sendApprovals().catch(() => undefined);
+        return ack();
+      }
+      case "command": {
+        // Run / Cancel from the owner's paired phone or hub page only (the same check as an approval answer).
+        const kind = this.presence.find((d) => d.id === env.from)?.kind;
+        const r = kind !== "phone" ? { ok: false, text: "Only your phone or the hub page can do this." } : !this.deps.inboxCommand ? { ok: false, text: "This PC has no task inbox." } : await this.deps.inboxCommand(body.action, body.taskId, { id: env.from, kind }).catch((e: Error) => ({ ok: false, text: e.message || "It did not work." }));
+        if (kind === "phone") await this.sendSealed(env.from, "command_result", { type: "command_result", commandId: body.commandId, taskId: body.taskId, ok: r.ok, text: r.text.slice(0, 300) }, HUB_LIMITS.approvalTtl);
         return ack();
       }
       default:

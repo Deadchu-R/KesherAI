@@ -472,6 +472,18 @@ export class TasksSync {
     return this.sync;
   }
 
+  /**
+   * The task-inbox id this PC gave a task another device wrote to Google Drive (for Run / Cancel from the hub page,
+   * which names the task by its Drive record).
+   *
+   * @param recordId - The Drive record id.
+   * @returns The inbox id, or undefined when this PC did not queue it.
+   */
+  async inboxIdOf(recordId: string): Promise<string | undefined> {
+    await this.load();
+    return Object.entries(this.saved.received).find(([, r]) => r === recordId)?.[0];
+  }
+
   /** Queues tasks other devices wrote (meant for any device or this one, not finished, not already queued). */
   private async receive(sync: DriveSync): Promise<void> {
     const runs = new Map(sync.records().filter((r) => r.head.kind === "run").map((r) => [r.head.id, r]));

@@ -464,27 +464,49 @@ function workListGroup(q) {
         })))
         : h("div", { class: "trow mut sm" }, L("אין פריטים כאלה. אפשר לבחור מצבים נוספים למעלה.", "No such items. Pick more statuses above.")));
 }
+/**
+ * Run / Cancel for a task that waits for Run on a PC (an Antigravity task from the inbox or from another device),
+ * then the PC's answer ("Sent to the PC…", "Started on the PC.", or why not).
+ */
+function runButtons(t) {
+    const a = device.taskActions.get(t.taskId);
+    if (a && !a.result)
+        return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
+    const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} ell1`, title: a.result.text }, a.result.text) : null;
+    if (!device.canRun(t))
+        return note;
+    const press = (action) => (e) => {
+        e.stopPropagation();
+        if (action === "inbox-cancel" && !confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`)))
+            return;
+        void device.inboxCommand(t, action);
+    };
+    return h("span", { class: "row runacts" }, h("button", { type: "button", class: "btn sm-btn pri", onclick: press("inbox-run") }, L("▶ הרץ", "▶ Run")), h("button", { type: "button", class: "btn sm-btn", onclick: press("inbox-cancel") }, L("בטל", "Cancel")), note);
+}
 /** One row of the task list. */
 function taskRow(t) {
     const expired = !t.inbox && HubDevice.expired(t);
     const live = liveCard(t);
-    const action = t.drive?.only
-        ? t.link && isSafeLink(t.link)
-            ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח", "Open"))
-            : null
-        : t.inbox
-            ? live
-                ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); agentsView.setOpen(live); } }, L("● חי ›", "● Live ›"))
+    const run = runButtons(t);
+    const action = run
+        ? run
+        : t.drive?.only
+            ? t.link && isSafeLink(t.link)
+                ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח", "Open"))
                 : null
-            : t.status === "outbox" || expired
-                ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void (expired ? device.resend(t, cloudAvailable()).then(() => device.remove(t.taskId)) : device.remove(t.taskId)); } }, expired ? L("שלח שוב", "Send again") : L("בטל", "Cancel"))
-                : t.status === "waiting" && cloudAvailable()
-                    ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, true, "claude-cloud"); } }, L("שלח לענן במקום", "Send to the cloud instead"))
-                    : t.status === "failed"
-                        ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, cloudAvailable()); } }, L("נתב מחדש", "Route again"))
-                        : t.link && isSafeLink(t.link)
-                            ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
-                            : null;
+            : t.inbox
+                ? live
+                    ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); agentsView.setOpen(live); } }, L("● חי ›", "● Live ›"))
+                    : null
+                : t.status === "outbox" || expired
+                    ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void (expired ? device.resend(t, cloudAvailable()).then(() => device.remove(t.taskId)) : device.remove(t.taskId)); } }, expired ? L("שלח שוב", "Send again") : L("בטל", "Cancel"))
+                    : t.status === "waiting" && cloudAvailable()
+                        ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, true, "claude-cloud"); } }, L("שלח לענן במקום", "Send to the cloud instead"))
+                        : t.status === "failed"
+                            ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); void device.resend(t, cloudAvailable()); } }, L("נתב מחדש", "Route again"))
+                            : t.link && isSafeLink(t.link)
+                                ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
+                                : null;
     return h("div", { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if (e.key === "Enter") {
             app.openTask = t.taskId;
             render();
@@ -552,6 +574,7 @@ const AUDIT = {
     "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
     "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
     "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
+    "relay-command": ["הרצה או ביטול של משימה נשלחו למחשב", "Run or Cancel of a task sent to a PC"],
 };
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */
 function settingsTab() {
