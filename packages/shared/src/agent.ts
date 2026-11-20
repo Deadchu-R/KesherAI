@@ -155,6 +155,8 @@ export interface HelperRunInfo {
   cut?: boolean;
   /** The changes a build helper made in its own copy, as a diff (shortened). */
   diff?: string;
+  /** The user's review of `diff` (diff-review.ts): per file path, per hunk index, kept or rejected. */
+  review?: Record<string, Record<number, "accepted" | "rejected">>;
   /** It waits for the user's approval of one of its steps: the request in its chat (hub snapshots answer it there). */
   approval?: { requestId: string; chatId: string; tool: string };
   /** A build helper's last test run in its copy (the `run_tests` tool): passed or not, and the command. */

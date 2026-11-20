@@ -549,6 +549,17 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * Remembers a file change made outside the model's tools (a sub-agent's hunks the user accepted), so the chat's
+   * Undo can put the file back.
+   *
+   * @param path - The file's full path.
+   * @param before - Its text before the change (`null` when it did not exist).
+   */
+  rememberChange(path: string, before: string | null): void {
+    this.changes.push({ path, before });
+  }
+
+  /**
    * Hands the model a note at its next turn (a background helper's report): in this run when it is working,
    * otherwise with the next message. The user sees it in the helper's card, not as a message.
    *

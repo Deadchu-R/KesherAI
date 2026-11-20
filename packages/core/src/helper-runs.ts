@@ -139,6 +139,8 @@ interface Run {
   /** Why it was aborted: the user, the chat's Stop, or the time cap. */
   why?: "stop" | "time";
   full?: string;
+  /** A build helper's whole diff, when the card's `info.diff` is shortened (kept in memory only). */
+  fullDiff?: string;
   timer?: NodeJS.Timeout;
   answer?: (yes: boolean) => void;
   ended: Promise<HelperRunInfo>;
@@ -387,7 +389,8 @@ export class HelperRuns extends EventEmitter {
     r.followUp = followUpText(t, from);
     r.job = { ...r.job, run: work, background: true };
     const i = r.info;
-    for (const k of ["endedAt", "startedAt", "error", "report", "cut", "diff", "waitReason", "waitLimit", "restart", "swap", "runAsk", "approval", "tests"] as const) delete i[k];
+    for (const k of ["endedAt", "startedAt", "error", "report", "cut", "diff", "review", "waitReason", "waitLimit", "restart", "swap", "runAsk", "approval", "tests"] as const) delete i[k];
+    delete r.fullDiff;
     i.state = "waiting";
     i.background = true;
     i.queuedAt = this.now();
@@ -502,6 +505,26 @@ export class HelperRuns extends EventEmitter {
     const out = signal ? await Promise.race([all, new Promise<never>((_, no) => signal.addEventListener("abort", () => no(new Error("Stopped.")), { once: true }))]) : await all;
     for (const r of runs) r.delivered = true;
     return out;
+  }
+
+  /** @returns A build run's whole diff (the card's shortened one after a restart), or undefined. */
+  diffOf(id: string): string | undefined {
+    const r = this.runs.get(id);
+    return r ? r.fullDiff ?? r.info.diff : undefined;
+  }
+
+  /**
+   * Keeps the user's decisions on a build run's hunks (shown on its card, saved with the run).
+   *
+   * @param id - The run.
+   * @param decisions - Per file path, per hunk index: kept or rejected.
+   */
+  setReview(id: string, decisions: Record<string, Record<number, "accepted" | "rejected">>): void {
+    const r = this.runs.get(id);
+    if (!r) return;
+    const review = (r.info.review ??= {});
+    for (const [path, hunks] of Object.entries(decisions)) review[path] = { ...review[path], ...hunks };
+    this.changed(r);
   }
 
   /** Marks a run's report as handed to the chat's model (so it is not handed again at its next turn). */
@@ -637,6 +660,7 @@ export class HelperRuns extends EventEmitter {
       if (r.abort.signal.aborted) throw new Error("aborted");
       this.setReport(r, out.report);
       if (out.diff) r.info.diff = out.diff.slice(0, 30_000);
+      if (out.diff && out.diff.length > 30_000) r.fullDiff = out.diff.slice(0, 5_000_000);
       this.finish(r, "done");
     } catch (err) {
       if (r.why === "stop") this.finish(r, "stopped");

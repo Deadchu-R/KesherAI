@@ -83,6 +83,24 @@ export async function helperRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
   });
 
+  /**
+   * Accept / Reject on a build sub-agent's changes (its card, from the PC or the phone): one hunk (`path` + `hunks`),
+   * a file (`path`) or all. Accepted hunks go into the chat's project only where the file still matches the diff;
+   * the others come back as `conflicts`.
+   */
+  app.post<{ Params: { id: string; hid: string }; Body: { path?: unknown; hunks?: unknown; decision?: unknown } }>("/api/conversations/:id/helpers/:hid/review", async (req, reply) => {
+    if (!runOf(req.params.id, req.params.hid)) return reply.code(404).send({ error: "No such sub-agent" });
+    const b = req.body ?? {};
+    if (b.decision !== "accepted" && b.decision !== "rejected") return reply.code(400).send({ error: "decision is accepted or rejected." });
+    if (b.path !== undefined && typeof b.path !== "string") return reply.code(400).send({ error: "path is a string." });
+    if (b.hunks !== undefined && (!Array.isArray(b.hunks) || !b.hunks.every((n) => Number.isInteger(n) && n >= 0) || b.path === undefined)) return reply.code(400).send({ error: "hunks are indexes of one file's hunks." });
+    try {
+      return await s.conversations.reviewHelper(req.params.id, req.params.hid, { decision: b.decision, ...(b.path !== undefined ? { path: b.path as string } : {}), ...(b.hunks ? { hunks: b.hunks as number[] } : {}) });
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
   /** "Stop all" in the strip: the helpers only (the chat's own Stop stops the chat and them). */
   app.post<{ Params: { id: string } }>("/api/conversations/:id/helpers/stop", async (req) => ({ stopped: helpers().runs.stopAll(req.params.id) }));
 

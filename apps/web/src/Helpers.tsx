@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { agentDoing, stepTool, type AgentLabel, type HelperRunInfo, type LabelWords } from "@kesher/shared";
+import { agentDoing, parseDiff, stepTool, type AgentLabel, type DiffFile, type HelperRunInfo, type LabelWords } from "@kesher/shared";
 import { AgentLabelEditor, AgentLabelLines, words } from "./AgentLabel";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
@@ -345,9 +345,80 @@ function Report({ r, convId }: { r: HelperRunInfo; convId: string }) {
       {r.diff !== undefined && (
         <details className="hdiff">
           <summary>{r.diff ? L(`השינויים בעותק שלו (${files} קבצים)`, `Its changes in its own copy (${files} files)`) : L("בלי שינויים", "No changes")}</summary>
-          {r.diff && <pre dir="ltr">{r.diff}</pre>}
+          {r.diff && (r.kind === "build" ? <DiffReview r={r} convId={convId} /> : <pre dir="ltr">{r.diff}</pre>)}
         </details>
       )}
+    </div>
+  );
+}
+
+/** A hunk's mark on the card. */
+const DECIDED = { accepted: ["✓ נשמר", "✓ Kept"], rejected: ["✕ נדחה", "✕ Rejected"] } as const;
+
+/**
+ * A build sub-agent's changes for review (chat step 9b; as Cursor's Accept / Reject per change): a card per file with
+ * each hunk's Accept / Reject, the file's Accept all / Reject all, and the same for every file at the top. The server
+ * applies accepted hunks to the project only where the file still matches, and tells the lead agent; conflicts show
+ * under the hunk. Decisions come back on the run, so the phone in remote shows the same.
+ */
+export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [conflicts, setConflicts] = useState<Record<string, string>>({});
+  const files = parseDiff(r.diff ?? "");
+  const review = r.review ?? {};
+  const open = (f: DiffFile) => f.hunks.some((_, i) => !review[f.path]?.[i]);
+  const send = async (decision: "accepted" | "rejected", path?: string, hunk?: number) => {
+    setBusy(true);
+    try {
+      const out = await api<{ conflicts: Array<{ path: string; hunk: number; reason: string }> }>(`/api/conversations/${convId}/helpers/${r.id}/review`, { method: "POST", body: { decision, ...(path !== undefined ? { path } : {}), ...(hunk !== undefined ? { hunks: [hunk] } : {}) } });
+      setConflicts((c) => ({ ...c, ...Object.fromEntries(out.conflicts.map((x) => [`${x.path}#${x.hunk}`, x.reason])) }));
+      if (out.conflicts.length) toast(L(`${out.conflicts.length} שינויים לא הוחלו: הקובץ השתנה מאז`, `${out.conflicts.length} changes were not applied: the file changed since`));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const Buttons = ({ path, hunk, all }: { path?: string; hunk?: number; all?: boolean }) => (
+    <span className="hrev-btns">
+      <button type="button" className="small primary" disabled={busy} onClick={() => void send("accepted", path, hunk)}>{all ? L("אישור הכול", "Accept all") : L("אישור", "Accept")}</button>
+      <button type="button" className="small" disabled={busy} onClick={() => void send("rejected", path, hunk)}>{all ? L("דחיית הכול", "Reject all") : L("דחייה", "Reject")}</button>
+    </span>
+  );
+  return (
+    <div className="hrev">
+      {files.some(open) && files.length > 1 && (
+        <div className="hrev-top">
+          <span className="muted small">{L("כל הקבצים:", "Every file:")}</span>
+          <Buttons all />
+        </div>
+      )}
+      {files.map((f) => (
+        <div key={f.path} className="hrev-file">
+          <div className="hrev-head">
+            <code className="hrev-path" dir="ltr" title={f.path}>{f.path}</code>
+            {f.kind !== "modify" && <span className="muted small">{f.kind === "add" ? L("חדש", "new") : f.kind === "delete" ? L("נמחק", "deleted") : L("בינארי", "binary")}</span>}
+            {open(f) && f.hunks.length > 1 && <Buttons path={f.path} all />}
+          </div>
+          {f.hunks.map((h, i) => {
+            const d = review[f.path]?.[i];
+            const why = conflicts[`${f.path}#${i}`];
+            return (
+              <div key={i} className={`hrev-hunk${d ? ` ${d}` : ""}`}>
+                <pre className="code diff" dir="ltr">
+                  <span className="hunk">{h.header}{"\n"}</span>
+                  {h.lines.map((l, j) => <span key={j} className={l[0] === "+" ? "add" : l[0] === "-" ? "del" : ""}>{l}{"\n"}</span>)}
+                </pre>
+                <div className="hrev-row">
+                  {d ? <span className={`small ${d === "accepted" ? "ok" : "muted"}`}>{L(DECIDED[d][0], DECIDED[d][1])}</span> : <Buttons path={f.path} hunk={i} />}
+                  {why && !d && <span className="bad small" dir="auto">{L("לא הוחל: הקובץ השתנה מאז שהסוכן קרא אותו.", "Not applied: the file changed since the agent read it.")}</span>}
+                </div>
+              </div>
+            );
+          })}
+          {f.cut && <p className="muted small">{L("השינויים בקובץ הזה ארוכים מדי להצגה כאן; השאר לא מוצג ולא יוחל.", "This file's changes are too long to show here; the rest is not shown and is not applied.")}</p>}
+        </div>
+      ))}
     </div>
   );
 }

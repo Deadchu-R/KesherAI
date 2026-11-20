@@ -18,6 +18,7 @@ import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
 import { deepResearchTool } from "./deep-research.js";
 import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
+import { reviewHunks, type ReviewOutcome, type ReviewRequest } from "./helper-review.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
 import { findEngines, readProject } from "./unreal-install.js";
@@ -335,6 +336,35 @@ export class ConversationManager {
 
   /** Each open chat's helper options (helpers paused by a restart continue with them). */
   private readonly delegateOptions = new Map<string, DelegateOptions>();
+
+  /**
+   * The user's Accept / Reject on a build sub-agent's changes (its card's diff, per hunk, file or all): accepted hunks
+   * are applied to the chat's project where the file still matches, the decisions are kept on the run (the phone sees
+   * them too), each written file can be undone with the chat's Undo, and the lead agent reads one line about it at its
+   * next turn.
+   *
+   * @param id - The chat.
+   * @param runId - The build run.
+   * @param request - The decision and its scope.
+   * @returns The decisions made now and the hunks that could not be applied.
+   * @throws Error when the run has no diff, the chat has no project, or a path leads outside it.
+   */
+  async reviewHelper(id: string, runId: string, request: ReviewRequest): Promise<Pick<ReviewOutcome, "decisions" | "conflicts">> {
+    const run = this.helpers.runs.get(runId);
+    if (!run || run.chatId !== id) throw new Error("No such sub-agent.");
+    const full = this.helpers.runs.diffOf(runId);
+    if (run.kind !== "build" || run.state !== "done" || !run.diff || !full) throw new Error("This sub-agent has no changes to review.");
+    const opened = await this.open(id);
+    const ws = opened?.session.workspace;
+    if (!opened || !ws) throw new Error("This chat has no project folder.");
+    // The diff's paths are relative to the repository's top folder (the worktree was made from it).
+    const root = (await this.git(ws, ["rev-parse", "--show-toplevel"])).trim();
+    const out = await reviewHunks({ root, shown: run.diff, full, ...(run.review ? { done: run.review } : {}), request });
+    if (Object.keys(out.decisions).length) this.helpers.runs.setReview(runId, out.decisions);
+    for (const w of out.written) opened.session.rememberChange(w.path, w.before);
+    if (out.summary) opened.session.deliver(out.summary);
+    return { decisions: out.decisions, conflicts: out.conflicts };
+  }
 
   /**
    * Continues an ended helper of a chat with the user's follow-up ("Continue with…" on its card or phone sheet).
