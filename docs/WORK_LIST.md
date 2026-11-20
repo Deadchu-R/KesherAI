@@ -278,3 +278,9 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ Live avatar instead of the camera in video calls, with a warning to the user
 - ⬜ Approvals from a Wear OS watch
 - ⬜ Paid models fully supported for other users (not needed for himself)
+
+### Roee's answers for the night of 2026-11-20 (22:46)
+- Downloads for browser/computer control (local vision model, Playwright browser etc.): allowed to drive E, no size limit, official sources only, through KesherAI; list them in the morning report.
+- Night tests of browser control: only KesherAI's built-in browser on the PC, test sites, no sign-ins, no purchases or forms; never his Chrome.
+- A decision that comes up at night: take the recommended option if it can be undone and mark it in the 10:00 report; anything that can't be undone waits for him.
+- No design-doc publishes overnight; boards ready under tools/design/out/, one publish with him at 10:00.
