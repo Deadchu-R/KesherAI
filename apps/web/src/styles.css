@@ -4040,9 +4040,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* Who does it (AssignPicker.tsx; boards InboxAssign, PhoneInboxAssign, InboxWorkList). */
 .assign { display: inline-flex; flex-direction: column; gap: 6px; max-width: 100%; }
 .assign-list { display: flex; flex-direction: column; gap: 4px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 6px; min-width: min(260px, 100%); }
-.assign-opt { display: flex; gap: 8px; align-items: flex-start; text-align: start; height: auto; padding: 6px 8px; white-space: normal; }
+.assign-opt { display: flex; gap: 8px; align-items: flex-start; text-align: start; height: auto; min-height: 0; padding: 6px 8px; white-space: normal; line-height: 1.35; }
 .assign-opt.on { outline: 1px solid var(--accent); }
-.assign-t { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.assign-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.assign-t > span { display: block; line-height: 1.35; } /* the grey sub-line sat on the title (button line-height) */
 .tinbox-wl-item { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 8px; }
 .tinbox-wl-t { min-width: min(220px, 100%); overflow-wrap: anywhere; }
 /* Agent names and notes (AgentLabel.tsx; boards HelperCardLabel, PhoneHelperLabel, InboxTaskLabel). */
