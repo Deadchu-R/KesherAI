@@ -1,0 +1,630 @@
+{
+ "group": "צ'אט",
+ "now": "2026-11-20T10:00:00Z",
+ "boards": [
+  {
+   "id": "ChatHunkReview",
+   "title": "צ'אט: אישור או דחייה לכל שינוי של סוכן בנייה",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 1000,
+    "phone": 1300
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תיקון מסך ההתחברות",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תתקן את מסך ההתחברות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "סוכן בנייה סיים. אפשר לעבור על השינויים שלו ולאשר או לדחות כל אחד."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [
+       {
+        "kind": "build",
+        "model": "Qwen3-Coder-30B",
+        "state": "done",
+        "queuedAt": {
+         "$agoMs": "9m"
+        },
+        "startedAt": {
+         "$agoMs": "8m"
+        },
+        "endedAt": {
+         "$agoMs": "3m"
+        },
+        "step": 14,
+        "maxSteps": 30,
+        "background": true,
+        "steps": [
+         "read_file: apps/web/src/Login.tsx",
+         "edit_file: apps/web/src/Login.tsx"
+        ],
+        "id": "h1",
+        "title": "לתקן את מסך ההתחברות",
+        "report": "הוספתי מצב טעינה לכפתור הכניסה כדי שלא ילחצו עליו פעמיים.",
+        "diff": "diff --git a/apps/web/src/Login.tsx b/apps/web/src/Login.tsx\n--- a/apps/web/src/Login.tsx\n+++ b/apps/web/src/Login.tsx\n@@ -12,3 +12,7 @@\n   const [email, setEmail] = useState(\"\");\n-  const submit = () => api(\"/api/login\", { email });\n+  const [busy, setBusy] = useState(false);\n+  const submit = async () => {\n+    setBusy(true);\n+    await api(\"/api/login\", { email }).finally(() => setBusy(false));\n+  };\n   return (\n@@ -40,2 +40,2 @@\n-      <button onClick={submit}>כניסה</button>\n+      <button disabled={busy} onClick={submit}>כניסה</button>\n     </form>\ndiff --git a/apps/web/src/styles.css b/apps/web/src/styles.css\n--- a/apps/web/src/styles.css\n+++ b/apps/web/src/styles.css\n@@ -88,0 +88,1 @@\n.login-card { max-width: 360px; }\n+.login-card button:disabled { opacity: .6; }\n",
+        "review": {
+         "apps/web/src/Login.tsx": {
+          "0": "accepted"
+         }
+        },
+        "tests": {
+         "ok": true,
+         "command": "pnpm -s typecheck"
+        }
+       }
+      ],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".hcard"
+    },
+    {
+     "click": ".hdiff summary"
+    },
+    {
+     "wait": ".hrev-hunk"
+    }
+   ]
+  },
+  {
+   "id": "ChatAttachMenu",
+   "title": "צ'אט: תפריט + עם תיקייה מהמכשיר הזה וצ'יפים של קבצים מצורפים",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בדיקת מסכים",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "[קובץ מצורף: shared/PlatformerUI]\n[קובץ מצורף: shared/screens.zip]\nתעבור על המסכים האלה ותגיד מה חסר"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "קראתי את התיקייה ואת ה-ZIP. חסר מסך הגדרות וכפתור חזרה."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/game-projects",
+     "json": {
+      "projects": [
+       {
+        "kind": "unity",
+        "name": "DungeonKeep",
+        "path": "D:/Games/DungeonKeep",
+        "engine": "6000.0"
+       },
+       {
+        "kind": "godot",
+        "name": "Platformer",
+        "path": "D:/Games/Platformer",
+        "engine": "4.4"
+       },
+       {
+        "kind": "unreal",
+        "name": "SkyHarbor",
+        "path": "D:/Games/SkyHarbor",
+        "engine": "5.5"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".attach-chip"
+    },
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "text=קוד או פרויקט"
+    },
+    {
+     "wait": "text=תיקייה מהמכשיר הזה"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".attach-chip"
+    },
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible",
+     "optional": true
+    },
+    {
+     "click": "text=קוד או פרויקט"
+    },
+    {
+     "wait": "text=תיקייה מהמכשיר הזה"
+    }
+   ]
+  },
+  {
+   "id": "ChatAttachTree",
+   "title": "צ'אט: תצוגה מקדימה של עץ תיקייה או ZIP",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בדיקת מסכים",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "[קובץ מצורף: shared/PlatformerUI]\n[קובץ מצורף: shared/screens.zip]\nתעבור על המסכים האלה ותגיד מה חסר"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "קראתי את התיקייה ואת ה-ZIP. חסר מסך הגדרות וכפתור חזרה."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/conversations/c1/files/preview*",
+     "json": {
+      "kind": "text",
+      "name": "PlatformerUI",
+      "text": "PlatformerUI/\n  Login.tsx\n  Menu.tsx\n  styles.css\n  assets/\n    logo.png\n    bg.jpg\n  screens/\n    Settings.tsx\n    Shop.tsx"
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".attach-chip"
+    },
+    {
+     "click": ".attach-chip >> nth=0"
+    },
+    {
+     "wait": ".attach-body"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
+  },
+  {
+   "id": "ChatTools",
+   "title": "צ'אט: תפריט \"כלים בצ'אט הזה\" (קבוצות וקונקטורים, כל אחד דלוק או כבוי)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תיקון מסך ההתחברות",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תתקן את מסך ההתחברות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מה לעשות?"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/conversations/c1/tool-switches",
+     "json": {
+      "groups": [
+       {
+        "id": "files",
+        "he": "קבצים וקוד",
+        "en": "Files and code",
+        "tools": 12,
+        "on": true
+       },
+       {
+        "id": "web",
+        "he": "אינטרנט",
+        "en": "Web",
+        "tools": 4,
+        "on": true
+       },
+       {
+        "id": "computer",
+        "he": "שליטה במחשב",
+        "en": "Computer control",
+        "tools": 9,
+        "on": false
+       },
+       {
+        "id": "browser",
+        "he": "דפדפן",
+        "en": "Browser",
+        "tools": 15,
+        "on": true
+       },
+       {
+        "id": "media",
+        "he": "תמונות ווידאו",
+        "en": "Pictures and video",
+        "tools": 5,
+        "on": true
+       }
+      ],
+      "connectors": [
+       {
+        "id": "mcp-github",
+        "name": "GitHub",
+        "tools": 18,
+        "on": true
+       },
+       {
+        "id": "mcp-drive",
+        "name": "Google Drive",
+        "tools": 6,
+        "on": false
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "text=כלים בצ'אט הזה"
+    },
+    {
+     "wait": "text=קונקטורים"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible",
+     "optional": true
+    },
+    {
+     "click": "text=כלים בצ'אט הזה"
+    },
+    {
+     "wait": "text=קונקטורים"
+    }
+   ]
+  },
+  {
+   "id": "ChatInstall",
+   "title": "צ'אט: כפתור \"להתקנה\" ומה שהחלון אומר (מה זה, גודל, איפה נשמר)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תמונת טירה",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 4,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תיצור לי תמונה של טירה בשקיעה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "אין עדיין מודל תמונות במחשב. אפשר להתקין אותו בלחיצה."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_call",
+        "callId": "k1",
+        "name": "offer_install",
+        "input": {
+         "id": "image-model",
+         "why": "כדי ליצור את התמונה"
+        }
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "tool_result",
+        "callId": "k1",
+        "name": "offer_install",
+        "ok": true,
+        "output": "Install button shown for image-model."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/installables/image-model",
+     "json": {
+      "id": "image-model",
+      "he": "מודל תמונות",
+      "en": "Image model",
+      "aboutHe": "יוצר תמונות במחשב שלך (Qwen-Image או FLUX, לפי כרטיס המסך).",
+      "aboutEn": "Makes pictures",
+      "sizeGb": 12.4,
+      "approx": true,
+      "where": "D:/KesherAI/models",
+      "changeHref": "#/settings/storage",
+      "ready": false,
+      "busy": false
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".install-offer"
+    },
+    {
+     "click": ".install-offer button.primary"
+    },
+    {
+     "wait": ".install-dialog"
+    }
+   ]
+  }
+ ]
+}

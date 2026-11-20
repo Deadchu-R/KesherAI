@@ -1,0 +1,141 @@
+{
+ "group": "עיצוב",
+ "now": "2026-11-20T10:00:00Z",
+ "boards": [
+  {
+   "id": "DesignPage",
+   "title": "עיצוב: הלוחות שהאפליקציה מצלמת, מה חדש ומה הערה",
+   "route": "#/design",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/design",
+     "json": {
+      "available": true,
+      "boards": [
+       {
+        "name": "ChatHunkReview.dc.html",
+        "title": "צ'אט: אישור או דחייה לכל שינוי",
+        "group": "צ'אט",
+        "viewport": "desktop",
+        "w": 1200,
+        "h": 800,
+        "hash": "ChatHunkReview.dc.html",
+        "changedAt": {
+         "$ago": "30m"
+        },
+        "newest": true,
+        "note": ""
+       },
+       {
+        "name": "ChatHunkReviewPhone.dc.html",
+        "title": "צ'אט: אישור או דחייה לכל שינוי · בטלפון",
+        "group": "צ'אט",
+        "viewport": "phone",
+        "w": 390,
+        "h": 800,
+        "hash": "ChatHunkReviewPhone.dc.html",
+        "changedAt": {
+         "$ago": "30m"
+        },
+        "newest": true,
+        "note": ""
+       },
+       {
+        "name": "GamesProjects.dc.html",
+        "title": "משחקים: הפרויקטים",
+        "group": "משחקים",
+        "viewport": "desktop",
+        "w": 1200,
+        "h": 800,
+        "hash": "GamesProjects.dc.html",
+        "changedAt": {
+         "$ago": "1d"
+        },
+        "newest": false,
+        "note": "להוסיף כפתור סנכרון לכולם"
+       },
+       {
+        "name": "GamesProjectsPhone.dc.html",
+        "title": "משחקים: הפרויקטים · בטלפון",
+        "group": "משחקים",
+        "viewport": "phone",
+        "w": 390,
+        "h": 800,
+        "hash": "GamesProjectsPhone.dc.html",
+        "changedAt": {
+         "$ago": "1d"
+        },
+        "newest": false,
+        "note": ""
+       },
+       {
+        "name": "AgentsLabel.dc.html",
+        "title": "סוכנים: שם והערה",
+        "group": "סוכנים ומשימות",
+        "viewport": "desktop",
+        "w": 1200,
+        "h": 800,
+        "hash": "AgentsLabel.dc.html",
+        "changedAt": {
+         "$ago": "1d"
+        },
+        "newest": false,
+        "note": ""
+       },
+       {
+        "name": "AgentsLabelPhone.dc.html",
+        "title": "סוכנים: שם והערה · בטלפון",
+        "group": "סוכנים ומשימות",
+        "viewport": "phone",
+        "w": 390,
+        "h": 800,
+        "hash": "AgentsLabelPhone.dc.html",
+        "changedAt": {
+         "$ago": "1d"
+        },
+        "newest": false,
+        "note": ""
+       }
+      ],
+      "last": {
+       "at": {
+        "$ago": "30m"
+       },
+       "ms": 41000,
+       "diff": {
+        "added": [
+         "ChatHunkReview.dc.html",
+         "ChatHunkReviewPhone.dc.html"
+        ],
+        "changed": [],
+        "same": [],
+        "removed": []
+       },
+       "errors": []
+      },
+      "baseVersion": "1795206626-5541",
+      "running": null,
+      "error": ""
+     }
+    },
+    {
+     "url": "**/api/design/shot/**",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='260'><rect width='400' height='260' fill='#e9ebf2'/><rect x='20' y='20' width='360' height='30' rx='6' fill='#c9cee0'/><rect x='20' y='70' width='170' height='150' rx='6' fill='#d6daea'/><rect x='210' y='70' width='170' height='150' rx='6' fill='#d6daea'/></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".design-board"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
+  }
+ ]
+}

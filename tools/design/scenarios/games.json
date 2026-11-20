@@ -577,6 +577,164 @@
      "wait": ".games-clash"
     }
    ]
+  },
+  {
+   "id": "GamesUnrealAsset",
+   "title": "משחקים: נכס Unreal נקרא מהכותרת, בלי המנוע",
+   "route": "#/games",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "locale": "he",
+   "height": {
+    "desktop": 1100,
+    "phone": 1500
+   },
+   "fullPage": false,
+   "mocks": [
+    {
+     "url": "**/api/games/inspect/files?*",
+     "json": {
+      "files": [
+       {
+        "path": "Content/Blueprints/BP_Door.uasset",
+        "size": 48230,
+        "kind": "Blueprint",
+        "parent": "Actor"
+       },
+       {
+        "path": "Content/Blueprints/BP_Gate.uasset",
+        "size": 31000,
+        "kind": "Blueprint",
+        "parent": "Actor"
+       },
+       {
+        "path": "Content/Maps/L_Harbor.umap",
+        "size": 900000,
+        "kind": "level"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/games/inspect?*",
+     "json": {
+      "path": "Content/Blueprints/BP_Door.uasset",
+      "objects": [],
+      "readOnly": true,
+      "pending": [],
+      "asset": {
+       "name": "BP_Door",
+       "package": "/Game/Blueprints/BP_Door",
+       "className": "Blueprint",
+       "kind": "Blueprint",
+       "parent": "Actor",
+       "engine": "5.5",
+       "size": 48230,
+       "unversioned": false,
+       "cooked": false,
+       "thumbnails": 1,
+       "problems": [],
+       "exports": [
+        {
+         "name": "BP_Door",
+         "className": "Blueprint",
+         "top": true,
+         "size": 2100
+        },
+        {
+         "name": "BP_Door_C",
+         "className": "BlueprintGeneratedClass",
+         "superName": "Actor",
+         "top": true,
+         "size": 9800
+        },
+        {
+         "name": "Door_Mesh",
+         "className": "StaticMeshComponent",
+         "top": false,
+         "size": 640
+        },
+        {
+         "name": "OpenTimeline",
+         "className": "TimelineTemplate",
+         "top": false,
+         "size": 1200
+        }
+       ],
+       "exportCount": 4,
+       "uses": [
+        {
+         "package": "/Game/Meshes/SM_Door",
+         "path": "Content/Meshes/SM_Door.uasset"
+        },
+        {
+         "package": "/Game/Materials/M_Wood",
+         "path": "Content/Materials/M_Wood.uasset"
+        }
+       ],
+       "soft": [
+        {
+         "package": "/Game/Audio/S_DoorCreak"
+        }
+       ],
+       "engineUses": [
+        "Engine",
+        "CoreUObject",
+        "UMG"
+       ],
+       "usedBy": [
+        {
+         "path": "Content/Maps/L_Harbor.umap",
+         "soft": false
+        },
+        {
+         "path": "Content/Blueprints/BP_Gate.uasset",
+         "soft": true
+        }
+       ],
+       "usedByComplete": true,
+       "tags": [
+        {
+         "object": "BP_Door",
+         "className": "Blueprint",
+         "tags": [
+          [
+           "ParentClass",
+           "/Script/Engine.Actor"
+          ],
+          [
+           "NativeParentClass",
+           "/Script/Engine.Actor"
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card >> nth=2 >> button:has-text(\"מפקח\")"
+    },
+    {
+     "wait": ".games-inspector"
+    },
+    {
+     "click": ".games-inspector .games-hit >> nth=0"
+    },
+    {
+     "wait": ".games-ue"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
   }
  ]
 }

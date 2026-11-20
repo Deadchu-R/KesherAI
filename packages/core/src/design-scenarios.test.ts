@@ -44,3 +44,12 @@ test("several files: a broken one is reported, the rest still render; names must
   assert.equal(r.errors.length, 2);
   assert.match(r.errors[1]!, /c\.json: board Games\.dc\.html is already in a\.json/);
 });
+
+test("every scenario file in the repo parses, with no board name used twice", async () => {
+  const { readdir, readFile } = await import("node:fs/promises");
+  const dir = new URL("../../../tools/design/scenarios/", import.meta.url);
+  const names = (await readdir(dir)).filter((f) => f.endsWith(".json")).sort();
+  const r = parseScenarios(await Promise.all(names.map(async (name) => ({ name, text: await readFile(new URL(name, dir), "utf8") }))));
+  assert.deepEqual(r.errors, []);
+  assert.ok(r.jobs.length >= 28);
+});
