@@ -72,19 +72,19 @@
    * A Google access token for the hub page's tasks list (Drive's hidden app folder), from the app's own Google sign-in,
    * so the page needs no hourly "Reconnect Drive" tap. Only when that sign-in granted `drive.appdata` (signed in before
    * it was asked: sign out and in again once). Never stored by the page; it goes in the address fragment, which is not
-   * sent to any server.
+   * sent to any server. Least privilege: a fresh token asked for the app-folder scope alone (not the app's own token,
+   * which also opens Drive files and the profile); kept apart from the app's stored token.
    */
   async function driveToken() {
+    const APPDATA = "https://www.googleapis.com/auth/drive.appdata";
     const Google = window.Capacitor?.Plugins?.KesherGoogle;
     let g = null;
     try { g = JSON.parse(localStorage.getItem("kesherai-google") || "null"); } catch { /* none */ }
-    if (!Google || !g?.refreshToken || !String(g.scope || "").split(" ").includes("https://www.googleapis.com/auth/drive.appdata")) return null;
-    if (g.accessToken && g.expires > Date.now() + 5 * 60_000) return { token: g.accessToken, secs: Math.floor((g.expires - Date.now()) / 1000) };
+    if (!Google || !g?.refreshToken || !String(g.scope || "").split(" ").includes(APPDATA)) return null;
     const c = await fetch("google-client.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (!c?.clientId) return null;
-    const r = await Google.refresh({ clientId: c.clientId, clientSecret: c.clientSecret, refreshToken: g.refreshToken });
-    localStorage.setItem("kesherai-google", JSON.stringify({ ...g, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, ...(r.scope ? { scope: r.scope } : {}) }));
-    return { token: r.accessToken, secs: r.expiresIn };
+    const r = await Google.refresh({ clientId: c.clientId, clientSecret: c.clientSecret, refreshToken: g.refreshToken, scope: APPDATA });
+    return r?.accessToken ? { token: r.accessToken, secs: r.expiresIn } : null;
   }
   /** Opens the hub page, which shows the Phone / Computer / ☁ Cloud switch when it knows it runs in the app. */
   const open = async (hub) => {

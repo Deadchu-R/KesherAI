@@ -179,6 +179,8 @@ public class KesherGooglePlugin extends Plugin {
         final String clientId = call.getString("clientId");
         final String clientSecret = call.getString("clientSecret", "");
         final String refreshToken = call.getString("refreshToken");
+        // Optional: a narrower set of the scopes already granted, for a token handed to a web page (least privilege).
+        final String scope = call.getString("scope", "");
         if (clientId == null || refreshToken == null) {
             call.reject("clientId and refreshToken are required");
             return;
@@ -186,7 +188,8 @@ public class KesherGooglePlugin extends Plugin {
         new Thread(() -> {
             try {
                 call.resolve(result(post("https://oauth2.googleapis.com/token", "grant_type=refresh_token&refresh_token=" + enc(refreshToken)
-                        + "&client_id=" + enc(clientId) + (clientSecret.isEmpty() ? "" : "&client_secret=" + enc(clientSecret)))));
+                        + "&client_id=" + enc(clientId) + (clientSecret.isEmpty() ? "" : "&client_secret=" + enc(clientSecret))
+                        + (scope.isEmpty() ? "" : "&scope=" + enc(scope)))));
             } catch (Exception e) {
                 call.reject(e.getMessage() != null ? e.getMessage() : e.toString());
             }

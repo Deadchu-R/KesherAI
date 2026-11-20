@@ -1587,3 +1587,36 @@ S5 an outside scanner's rules for Electron.
   name is the device's; cameras are three finite numbers each, the field of view 1–179, at most 50 ids of 300
   characters; 12 people a room, 50 rooms, gone after 6 s of silence; a 32 KB body limit. In memory only.
 - Performance: one small request a second per open scene; hidden tabs do not beat. Nothing to fix.
+
+## Scan 167 (2026-11-20): Kesher Cloud hub, tasks through Google Drive, hub-report, prompt cache, PC Health, games
+Scope: everything since scan 166 (54 commits): hub Worker routes and CSP, agent activity ring and catch-up, sync
+pings, pairing of `claude-chat`; tasks sync (sealing, K, token handling, the app's token hand-off); hub-report; the
+llama.cpp `id_slot` per kind; PC Health's project detection and drives; the Store-app game fix.
+- **Fixed (medium): the token handed to the hub page was the app's full token.** cloud.html put the phone app's own
+  Google access token (openid, email, profile, `drive.file` and `drive.appdata`) in the hub page's fragment. It now
+  asks Google for a fresh token with `drive.appdata` alone (refresh with `scope`, added to the KesherGoogle plugin),
+  and no longer overwrites the app's stored token with it. Test: apps/hub/src/app-token.test.ts. Needs a new APK;
+  an older plugin ignores `scope` (same as before, no break).
+- **Checked, fine:** fragment parsed then wiped at once with `replaceState` (before any other script; `location.replace`
+  leaves no back entry); taken only with `?app=` = the app's localhost origin and an Android WebView user agent; kept in
+  memory only, never logged or sent to the hub; CSP unchanged (self + accounts.google.com/gsi + googleapis). Sealing:
+  AES-GCM per write (HKDF salt, random IV), AAD covers version, kid, id, kind, rev, deleted, done and writer; tombstones
+  final; done runs never go back. PC state file 0600, write-then-rename; errors scrub Bearer/token text. Hub: `agents`
+  frames ≤ `agentFrameEnvs`, per-run ring ≤ 50 events, 7-day prune, dropped on revoke and kill; `claude-chat` reports only
+  (no relay, fixed opt-in); sync pings 1/5 s per device and not sent to `claude-chat`. hub-report: https only (or
+  localhost), key file 600 in a 700 folder outside the repo. `id_slot` only with ≥ 3 slots. PC Health: deletes still only
+  ids from the last scan; project files flagged and never kept-copy candidates. Store apps no longer count as games.
+- **Left for the lead (low/medium, files another helper is editing):**
+  - Medium (design): a task from Drive (`fromDrive`) is queued as `from: "roee"` and runs with the local/opus runners
+    like a git inbox task; anyone with the Drive app-folder token (the hub page in a browser) can queue PC work. Same
+    trust as the git inbox, but worth a "from another device" origin and, for risk ≥ medium, the PC's Run ask.
+  - Low: tasks-sync.ts `saved.sent` / `saved.received` grow by one entry per inbox task forever (prune ids no longer in
+    the inbox / older than KEEP_FINISHED_MS).
+  - Low (perf): tasks-sync.ts `send()` runs `sync.records().some(...)` for every inbox task (O(tasks × records) each
+    3 minutes); a Set of task ids built once per sync.
+  - Low: `onPing` re-arms a 2 s timer on every ping, so steady pings < 2 s apart (several devices, or a bad hub) delay
+    the pull; keep the earlier timer instead of replacing it.
+  - Low: the hub keeps no total cap on agent-event rows (only per run and 7 days); a cap per sender would bound a
+    misbehaving PC within the free plan's 100k writes a day.
+- Performance otherwise: PC pulls every 3 min (backoff on errors), hub page every 60 s only while visible, Drive lists
+  by changes feed after the first full list; agent snapshots at most every 5 min per run, 50 runs followed. Nothing else.
