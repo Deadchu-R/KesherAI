@@ -84,3 +84,6 @@ so a new chat starts from a few small files.
   Next up: Roee checks 0.6.402 on the PC (Online in the hub, inbox tasks); then the usability gap list (WORK_LIST).
   Previous build: Hub: hub.roeetal.com (Cloudflare Worker
   kesher-hub, auto-deploys from main). Claude cloud task: "Kesher hub (cloud)" (API trigger only).
+
+## Updating KesherAI on Roee's PC (2026-11-20)
+Use the Claude desktop app's built-in browser (remote-devices Claude_Browser tools) at http://127.0.0.1:7420/#/updates: "בדוק עדכונים" → "הורד והתקן", then poll /api/version. No computer-use approval needed (computer-use access expires after 30 min and blocks at night). Overnight runs: no design-doc publishes (prepare boards under tools/design/out/, publish once in the morning with Roee).
