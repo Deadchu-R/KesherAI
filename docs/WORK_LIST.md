@@ -22,6 +22,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ⬜ Chat step 6: one MediaView (audio/video/image) in tool cards, Download/Save chips, remembered chip with undo, browser thumbnail in steps.
 - ⬜ Chat step 7: documents as a side panel in the chat; artifact versions.
 - ⬜ Chat step 8: routing by meaning (Hebrew too), tool and connector toggles in the + menu.
+- ⬜ Design doc made by KesherAI (Roee 20:12): (1) shot scenarios as files in the repo (tools/design/scenarios/*.json: screen, size, mocked routes) + one script that renders every board with Playwright, no model needed; (2) a Design page in KesherAI (also phone/hub) that shows the boards from the repo, with the newest-change marker and comments; (3) sync: git is the single source; Claude's artifact is published from the same files by a script; KesherAI's self-work can run the script when the PC is on.
 - ⬜ Chat step 8b (Roee 19:38): when the chat wants a tool that is not installed, it says so and shows an "Install" button in the chat; the button opens a floating window with what it is, its size and where to save it (default the heavy-data drive), then installs and continues.
 - ⬜ Chat step 9: file reading in the + menu (audio, video, code), per-hunk accept/reject on helper diffs.
 
