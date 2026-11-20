@@ -11,23 +11,27 @@ import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
 import { TaskInbox, type RunCmd } from "../inbox-runner.js";
 import type { Notifier } from "../notify.js";
+import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
 import type { TaskBoard } from "../task-board.js";
 
 /**
- * Runs a program with an argument list (never a shell, except on Windows for `.cmd` programs such as pnpm, where
- * the arguments were already checked to hold no shell syntax), at low priority, keeping up to 4 MB of output (a diff
- * or a task file must not be cut).
+ * Runs a program at (optionally) low priority, keeping up to 4 MB of output (a diff or a task file must not be cut).
+ *
+ * @param kind - "git": the arguments are git's own and git runs as itself, never through a shell (on Windows the
+ *   inbox once ran `fetch …` through cmd.exe and never got a task); "run": a check command, program first
+ *   (inbox-spawn.ts `commandPlan`).
+ * @param lowPriority - Lower the child's priority (checks and builds), so the PC stays responsive.
  */
-function runner(lowPriority: boolean): RunCmd {
+function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
+  let git: string | undefined;
   return (cwd, args, timeoutMs = 10 * 60_000) =>
     new Promise((resolve) => {
-      const [cmd, ...rest] = args;
-      if (!cmd) return resolve({ code: -1, out: "No command." });
-      const shell = process.platform === "win32" && cmd !== "git";
-      if (shell && args.some((a) => /[&|<>^%"`;()]/.test(a))) return resolve({ code: -1, out: "Refused: shell characters." });
+      const plan = kind === "git" ? gitPlan((git ??= findGit()), args) : commandPlan(args);
+      if ("refused" in plan) return resolve({ code: -1, out: plan.refused });
+      const isGit = kind === "git" || /^git(\.exe)?$/i.test(plan.program);
       let out = "";
-      const child = spawn(cmd, rest, { cwd, shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
+      const child = spawn(plan.program, plan.args, { cwd, shell: plan.shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
       if (lowPriority && child.pid) {
         try {
           setPriority(child.pid, 10);
@@ -44,7 +48,9 @@ function runner(lowPriority: boolean): RunCmd {
       child.stderr?.on("data", add);
       child.on("error", (e) => {
         clearTimeout(timer);
-        resolve({ code: -1, out: e.message });
+        // Git not installed: look for it again next time (it may be installed while KesherAI runs).
+        if (kind === "git" && (e as NodeJS.ErrnoException).code === "ENOENT") git = undefined;
+        resolve({ code: -1, out: startErrorText(e, isGit) });
       });
       child.on("close", (code) => {
         clearTimeout(timer);
@@ -61,7 +67,7 @@ function runner(lowPriority: boolean): RunCmd {
  * @returns The inbox (fetching starts when it is on).
  */
 export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard }): TaskInbox {
-  const git = runner(false);
+  const git = runner("git", false);
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
   let gpuHighSince: number | undefined;
@@ -81,7 +87,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     settings: () => p.config.taskInbox,
     file: join(p.root, "task-inbox.json"),
     git,
-    run: runner(true),
+    run: runner("run", true),
     // The unmodified Antigravity CLI in ACP mode, in the task's worktree only; no token or key passes through KesherAI.
     startAgent: async (cwd, h) => {
       const local = agyPath();

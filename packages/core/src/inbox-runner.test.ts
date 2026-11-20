@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agent } from "@agentclientprotocol/sdk";
+import { INBOX_GIT_MISSING } from "@kesher/shared";
 import { AcpAgent } from "./acp.js";
 import { TaskInbox, isQuotaError, quotaUntil, type RunCmd } from "./inbox-runner.js";
 import { TaskBoard } from "./task-board.js";
@@ -304,6 +305,24 @@ test("inbox: Claude's work list is read from origin/main through git, and missin
     await sh(claude, "push", "-q", "origin", "main");
     assert.equal(await inbox.workList(), "## Now\n- ⬜ Next thing.\n");
     assert.equal(existsSync(join(repo, "docs", "WORK_LIST.md")), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: git missing (Windows without Git) shows as such, not as \"no inbox branch yet\"", async () => {
+  const root = mkdtempSync(join(tmpdir(), "kesher-inbox-"));
+  const repo = join(root, "repo");
+  mkdirSync(join(repo, ".git"), { recursive: true });
+  // What the runner answers when git cannot be started (server/build-inbox.ts, inbox-spawn.ts startErrorText).
+  const noGit: RunCmd = async () => ({ code: -1, out: INBOX_GIT_MISSING });
+  const inbox = new TaskInbox({ settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }), file: join(root, "inbox.json"), git: noGit, run: noGit, startAgent: () => Promise.reject(new Error("no")), notify: () => undefined, busy: async () => ({ free: true, reasons: [] }) });
+  try {
+    await inbox.sync();
+    const s = await inbox.state(true);
+    assert.equal(s.lastError, INBOX_GIT_MISSING);
+    assert.deepEqual(s.tasks, []);
+    assert.equal(await inbox.workList(), undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import type { InboxState, InboxStatus, InboxTaskView } from "@kesher/shared";
+import { INBOX_GIT_MISSING, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -134,7 +134,13 @@ export function TaskInboxPage({ id }: { id?: string }) {
         <span className="tinbox-chip" dir="ltr">⟳ {s.settings.branch}{s.lastFetch ? ` · ${ago(Date.now() - s.lastFetch)}` : ""}</span>
         <button type="button" className="chip-text" disabled={busy || !s.settings.enabled} onClick={() => void act("/api/task-inbox/sync")}>{L("בדוק עכשיו", "Check now")}</button>
       </div>
-      {s.lastError && <p className="small tinbox-err">{s.lastError}</p>}
+      {s.lastError && (
+        <p className="small tinbox-err" dir="auto">
+          {s.lastError === INBOX_GIT_MISSING
+            ? L("Git לא מותקן במחשב (או שלא נמצא): התקן את Git for Windows מ-git-scm.com (או winget install Git.Git) והפעל מחדש את KesherAI.", "Git for Windows is not installed / not found: install it from git-scm.com (or winget install Git.Git) and restart KesherAI.")
+            : s.lastError}
+        </p>
+      )}
       {!s.settings.repo && <p className="muted">{L("עוד לא נבחר פרויקט. ", "No project yet. ")}<a href="#/settings/inbox">{L("הגדרות › תיבת משימות", "Settings › Task inbox")}</a></p>}
 
       <TermsNote />

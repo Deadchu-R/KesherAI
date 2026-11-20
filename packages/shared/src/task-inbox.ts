@@ -163,6 +163,12 @@ export interface InboxBusy {
   games?: number;
 }
 
+/**
+ * The inbox's `lastError` when the git program cannot be started (not installed, or not on PATH). The page shows its
+ * own Hebrew and English text for it instead of the raw system message (on Windows, cmd.exe's "is not recognized").
+ */
+export const INBOX_GIT_MISSING = "Git for Windows is not installed / not found: install it from git-scm.com (or `winget install Git.Git`) and restart KesherAI.";
+
 /** `GET /api/task-inbox`: the queue and its state. */
 export interface InboxState {
   settings: InboxSettings;

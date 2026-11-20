@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { InboxApprovalAsk, InboxBusy, InboxRunAsk, InboxCheck, InboxSettings, InboxState, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
+import { INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
@@ -21,7 +21,10 @@ import { agentPrompt, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, push
  * result file on the inbox branch. Local-model tasks go to self-work through the board; Opus tasks stay for Claude.
  */
 
-/** Runs git or a check: arguments as a list, never through a shell. */
+/**
+ * Runs a command: arguments as a list, never through a shell. For {@link TaskInboxDeps.git} the list holds only git's
+ * arguments (`["fetch", …]`, without "git"); for {@link TaskInboxDeps.run} the program comes first.
+ */
 export type RunCmd = (cwd: string, args: string[], timeoutMs?: number) => Promise<{ code: number; out: string }>;
 
 /** What the inbox needs from KesherAI (injected, so it can be tested with a local bare repo and a fake agent). */
@@ -30,6 +33,7 @@ export interface TaskInboxDeps {
   settings: () => Partial<InboxSettings>;
   /** Where the queue is kept (KesherAI's data folder). */
   file: string;
+  /** Runs git with these arguments (the program is git itself; the list starts with the git command, e.g. "fetch"). */
   git: RunCmd;
   /** Runs one check command (an argument list), at low priority. */
   run: RunCmd;
@@ -309,7 +313,8 @@ export class TaskInbox {
     this.saved.lastFetch = this.now();
     if (fetched.code !== 0) {
       // No inbox branch yet is not an error: nothing was sent.
-      this.saved.lastError = /couldn't find remote ref|not found/i.test(fetched.out) ? undefined : `git fetch: ${fetched.out.slice(0, 200)}`;
+      // Git itself missing comes first: its message would otherwise read as "no inbox branch yet".
+      this.saved.lastError = fetched.out === INBOX_GIT_MISSING ? INBOX_GIT_MISSING : /couldn't find remote ref|not found/i.test(fetched.out) ? undefined : `git fetch: ${fetched.out.slice(0, 200)}`;
       if (!this.saved.lastError) delete this.saved.lastError;
     } else {
       delete this.saved.lastError;
