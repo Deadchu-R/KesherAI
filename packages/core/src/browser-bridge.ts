@@ -6,6 +6,8 @@ import { withControlInfo } from "./control-gate.js";
 import { CdpPage, type CdpTransport } from "./cdp.js";
 import { cdpBrowserTools, isCdpRef, snapshotText } from "./browser-cdp-tools.js";
 import { ExtensionCdp, extensionHasCdp } from "./browser-ext-cdp.js";
+import { browserFindTool, matchSnapshot } from "./vision-find-tools.js";
+import type { Grounding } from "./vision-service.js";
 
 /** The part of a WebSocket the bridge uses. */
 export interface BridgeSocket {
@@ -416,7 +418,7 @@ const ALWAYS_ASK: Record<string, string> = {
  * @param opts.ffmpeg - FFmpeg's program when it is on the computer (WebM recordings); never downloads it.
  * @returns The tools, or none when no browser is connected.
  */
-export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeType: string) => Promise<string>, opts: { ffmpeg?: () => Promise<string | undefined> } = {}): AgentTool[] {
+export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeType: string) => Promise<string>, opts: { ffmpeg?: () => Promise<string | undefined>; vision?: () => Grounding | undefined } = {}): AgentTool[] {
   if (!b.status().connected) return [];
   const both = b.status().pane && b.status().extension;
   /** Whether snapshot refs and CDP options exist (KesherAI's pane, or Chrome with extension 0.3.0+). */
@@ -586,6 +588,20 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
   ];
   // The CDP tools (snapshot refs, console, network…): KesherAI's own pane, and the user's Chrome with extension 0.3.0+.
   if (b.status().pane || b.status().extensionCdp) tools.push(...cdpBrowserTools(b, { tabArg, onSite, ...(saveShot ? { saveAsset: saveShot } : {}), ...(opts.ffmpeg ? { ffmpeg: opts.ffmpeg } : {}) }));
+  // browser_find_visual (Phase 6): the page's accessibility snapshot first, then the local vision model.
+  if ((b.status().pane || b.status().extensionCdp) && opts.vision)
+    tools.push(
+      browserFindTool({
+        tabArg,
+        vision: opts.vision,
+        snapshotMatch: (input, query, signal) => b.withCdp(input, async (p) => matchSnapshot((await p.snapshot()).tree, query), signal),
+        shot: async (input, signal) => {
+          const s = await b.withCdp(input, (p) => p.screenshot(), signal);
+          return { png: s.data, width: s.width, height: s.height };
+        },
+        around: async (input, x, y, signal) => (await b.withCdp(input, (p) => p.screenshot({ area: { x: x - 120, y: y - 75, width: 240, height: 150 } }), signal)).data,
+      }),
+    );
   /** Where a call acts, for safety v2's gate and approval card v2: the site, the element and a picture of it. */
   const where = async (input: Record<string, unknown>, ctx: { signal: AbortSignal }) => {
     let url = typeof input.url === "string" ? input.url : undefined;
@@ -603,7 +619,10 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       // The element's own picture over CDP (a snapshot ref): only made when a card is shown; at most 1.5 MB.
       ...(ref && viaCdp(input)
         ? { crop: async () => { const shot = await b.withCdp(input, (p) => p.screenshot({ ref }), ctx.signal); return shot.data.length <= 1.5 * 1024 * 1024 ? shot.data : undefined; } }
-        : {}),
+        : // A click at a point (browser_find_visual's answer): the area around it, so the card shows what is hit.
+          !ref && typeof input.x === "number" && typeof input.y === "number" && b.canCdp(input)
+          ? { crop: async () => (await b.withCdp(input, (p) => p.screenshot({ area: { x: Number(input.x) - 120, y: Number(input.y) - 75, width: 240, height: 150 } }), ctx.signal)).data }
+          : {}),
     };
   };
   return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(t)), where));

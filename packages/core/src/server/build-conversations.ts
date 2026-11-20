@@ -8,6 +8,7 @@ import { aboutUserNote } from "../user-profile.js";
 import { engineAsk } from "../tool-router.js";
 import { ConversationManager } from "../conversations.js";
 import { browserTools } from "../browser-bridge.js";
+import { visionServiceOf } from "../vision-service.js";
 import { fabTools } from "../fab-tools.js";
 import { canvasTools } from "../canvas.js";
 import { deckStoreFor, deckTools } from "../decks.js";
@@ -183,7 +184,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     mcpTools: () => [
       ...googleTools(google),
       ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
-      ...(config.parts.browser === false ? [] : browserTools(browser, async (data, mimeType) => (await assets.save(data, mimeType)).id, { ffmpeg: () => findFfmpeg(paths.engines) })),
+      ...(config.parts.browser === false ? [] : browserTools(browser, async (data, mimeType) => (await assets.save(data, mimeType)).id, { ffmpeg: () => findFfmpeg(paths.engines), vision: () => visionServiceOf(config) })),
       ...(config.parts.browser === false || !browser.status().pane ? [] : fabTools(browser)),
       ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
       ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({

@@ -683,9 +683,10 @@ export class CdpPage {
   /**
    * A picture of the visible area, the whole page or one element, as PNG, in CSS pixels (at most 1600 wide).
    *
-   * @param o - `full` for the whole page, or `ref` for one element.
+   * @param o - `full` for the whole page, `ref` for one element, or `area` for a part of the last picture of the
+   *   visible area (in its pixels: the approval card's crop around a point, vision search's look).
    */
-  async screenshot(o: { full?: boolean; ref?: string } = {}): Promise<{ data: Buffer; width: number; height: number }> {
+  async screenshot(o: { full?: boolean; ref?: string; area?: { x: number; y: number; width: number; height: number } } = {}): Promise<{ data: Buffer; width: number; height: number }> {
     this.noDialog();
     const m = (await this.t.send("Page.getLayoutMetrics")) as { cssVisualViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number }; cssContentSize?: { width: number; height: number } };
     const v = m.cssVisualViewport;
@@ -702,10 +703,16 @@ export class CdpPage {
         return { x: Math.min(...xs) + after.cssVisualViewport.pageX, y: Math.min(...ys) + after.cssVisualViewport.pageY, width: Math.max(1, Math.max(...xs) - Math.min(...xs)), height: Math.max(1, Math.max(...ys) - Math.min(...ys)) };
       });
     } else if (o.full && m.cssContentSize) clip = { x: 0, y: 0, width: m.cssContentSize.width, height: Math.min(m.cssContentSize.height, 12_000) };
+    else if (o.area) {
+      const k = this.shotScale || 1;
+      const x = Math.max(0, o.area.x / k - this.shotOrigin.x);
+      const y = Math.max(0, o.area.y / k - this.shotOrigin.y);
+      clip = { x: x + v.pageX, y: y + v.pageY, width: Math.max(1, Math.min(o.area.width / k, v.clientWidth - x)), height: Math.max(1, Math.min(o.area.height / k, v.clientHeight - y)) };
+    }
     const scale = Math.min(1, 1600 / Math.max(1, clip.width));
     const r = (await this.painted(() => this.t.send("Page.captureScreenshot", { format: "png", clip: { ...clip, scale }, captureBeyondViewport: !!o.full || !!o.ref }))) as { data: string };
     // Only a picture of the visible area maps back to clicks.
-    if (!o.full && !o.ref) {
+    if (!o.full && !o.ref && !o.area) {
       this.shotScale = scale;
       this.shotOrigin = { x: 0, y: 0 };
     }

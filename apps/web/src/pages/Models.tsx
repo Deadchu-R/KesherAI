@@ -3,7 +3,8 @@ import { loadReasonText, type LoadReason } from "../load-reason";
 import { ComfyOnlyKind, ModelKindCard } from "../ModelKinds";
 import { ComfySection } from "../ComfySection";
 import { useEffect, useState } from "react";
-import { BUILT_IN_CATEGORIES, pickSetup, type ResourceLevel } from "@kesher/shared";
+import { BUILT_IN_CATEGORIES, VISION_CATEGORY, pickSetup, type ResourceLevel } from "@kesher/shared";
+import { VisionModelsSection } from "../settings/VisionModelsSection";
 import { api } from "../api";
 import { getLocale, t, he$ } from "../i18n";
 
@@ -364,7 +365,7 @@ export function ModelsPage() {
     { id: "video", label: categoryLabel("video"), kinds: ["video"] },
     { id: "music", label: categoryLabel("music"), kinds: ["music"] },
     { id: "speech", label: L("דיבור", "Speech"), kinds: ["speech-to-text", "text-to-speech"] },
-    { id: "more", label: L("עוד", "More"), kinds: ["embedding", "3d"] },
+    { id: "more", label: L("עוד", "More"), kinds: ["embedding", "3d", VISION_CATEGORY.id] },
     { id: "storage", label: t("storage"), kinds: ["storage"] },
   ];
   const group = groups.find((g) => g.kinds.includes(tab)) ?? groups[0]!;
@@ -419,10 +420,11 @@ export function ModelsPage() {
       {tab === "image" && <ComfySection />}
       {(tab === "video" || tab === "speech-to-text" || tab === "text-to-speech" || tab === "embedding") && <ModelKindCard kind={tab} />}
       {(tab === "music" || tab === "3d") && <ComfyOnlyKind kind={tab} />}
+      {tab === VISION_CATEGORY.id && <VisionModelsSection compact />}
       {(tab === "video" || tab === "music" || tab === "3d") && <ComfySection />}
       {current.engine === "soon" && <p className="card muted">{t("engineSoon", { category: current.label })}</p>}
 
-      {tab !== "storage" && (
+      {tab !== "storage" && tab !== VISION_CATEGORY.id && (
         <>
           {local.filter(ofTab).length > 0 && (
             <section className="card stack">
@@ -554,6 +556,7 @@ function BesideButton({ path }: { path: string }) {
 }
 
 function categoryLabel(id: string): string {
+  if (id === VISION_CATEGORY.id) return VISION_CATEGORY.label[getLocale() === "he" ? "he" : "en"];
   const c = BUILT_IN_CATEGORIES.find((x) => x.id === id);
   return c ? (c.label[getLocale()] ?? c.label.en) : id;
 }

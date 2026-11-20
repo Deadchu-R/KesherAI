@@ -18,6 +18,7 @@ export * from "./agent-label.js";
 export * from "./task-assign.js";
 export * from "./store.js";
 export * from "./recommended.js";
+export * from "./vision-models.js";
 export * from "./explain.js";
 export * from "./parts.js";
 export * from "./roles.js";

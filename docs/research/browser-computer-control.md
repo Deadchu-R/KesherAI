@@ -191,6 +191,23 @@ Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can
   overflow, an 8-frame GIF read back by Pillow); the drawer rendered with mock data at 390 and 1280 px in Hebrew and
   English (no page overflow, no cut text). Not checked here: the WebM path (no FFmpeg in this box), Overlay pick mode
   inside the Electron pane.
+- **Phase 6 (local vision models, 2026-11-21):** catalog `vision-models.ts` (shared): Qwen3-VL 8B from
+  `Qwen/Qwen3-VL-8B-Instruct-GGUF` (`Qwen3VL-8B-Instruct-Q4_K_M.gguf` 5.03 GB + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
+  1.16 GB, the default) and UI-TARS-1.5 7B from `Mungert/UI-TARS-1.5-7B-GGUF` (Q4_K_M about 4.78 GB + its `mmproj`
+  file, size not listed: about 0.85 GB; ByteDance ships no GGUF). Saved under `<heavy-data folder>/gui-vision/<repo>/`
+  (`vision-service.ts`), run in their own llama.cpp server (`-c 8192`, the projector named, one request at a time,
+  unloaded after 10 idle minutes). `vision-ground.ts`: prompts (Qwen3-VL JSON `point_2d` 0–1000; UI-TARS' grounding
+  line, `(x,y)` in its 28-multiple resize), parsing, confidence = geometric mean of the number tokens' probabilities
+  (`logprobs`), name matching for the tree-first path. Tools (`vision-find-tools.ts`): `computer_find` (UIA tree of
+  the window in front, then a screenshot) and `browser_find_visual` (accessibility snapshot → a ref, then the visible
+  area → a point for `browser_click_at`); both return a crop; approval cards for clicks at a point now show the area
+  around it (`CdpPage.screenshot({ area })`, `zoom` for the computer). No model → the tool's answer carries
+  `[offer_install:vision-model]` and the chat shows the Install button (size and folder). Bench (`vision-bench.ts`,
+  Settings → Privacy → "Test vision models", `POST /api/vision/bench`): 10 fixture pages (5 web, 5 Notepad-like)
+  drawn in a new pane tab, success = point inside the target's box (4 px slack), median time and load time per model,
+  last 10 runs in `vision-bench.json`. Checked with a fake vision engine and a fake llama server. **Not checked
+  here:** real models on the 3090 (latency still the estimate above), whether llama.cpp's resize for UI-TARS matches
+  `smartResize` exactly, the pane's new-tab debugger timing for the bench.
 
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?

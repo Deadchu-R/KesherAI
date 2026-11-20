@@ -8,6 +8,10 @@ import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-
 import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
 import { deletesFiles, isSecureWindow, isSystemSettings } from "./computer-safety.js";
 import { withControlInfo } from "./control-gate.js";
+import { computerFindTool } from "./vision-find-tools.js";
+import { bestNameMatch } from "./vision-ground.js";
+import type { Grounding } from "./vision-service.js";
+import type { UiaNode, UiaWindow } from "./computer-uia-tools.js";
 
 /**
  * Computer control: lets a model with vision look at the screen and click,
@@ -600,6 +604,8 @@ export class ComputerControl {
   private readonly uiaRefs = new Map<string, Map<string, UiaRef>>();
   /** Per conversation: the app in front as last seen (for rules that must answer at once). */
   private readonly front = new Map<string, Foreground>();
+  /** The local vision models for computer_find (Phase 6); set later by the server when it has them. */
+  vision: (() => Grounding | undefined) | undefined;
 
   /**
    * @param enabled - Whether the user turned computer control on.
@@ -607,13 +613,15 @@ export class ComputerControl {
    * @param be - Platform backend (tests pass a fake).
    * @param opts.uia - The UI Automation worker (default: PowerShell on Windows, none elsewhere; tests pass a fake).
    * @param opts.peer - The browser's Stop (its time, and how to press it), so one Stop ends both.
+   * @param opts.vision - The local vision models (computer_find), when the app has them.
    */
   constructor(
     private readonly enabled: () => boolean,
     private readonly onStop: (conversationIds: string[]) => void,
     private readonly be: Backend = backend(),
-    opts: { uia?: UiaClient | null; peer?: { stoppedAt(): number; stop(): void } } = {},
+    opts: { uia?: UiaClient | null; peer?: { stoppedAt(): number; stop(): void }; vision?: () => Grounding | undefined } = {},
   ) {
+    this.vision = opts.vision;
     this.uia =
       opts.uia === null
         ? undefined
@@ -1268,6 +1276,42 @@ export class ComputerControl {
         }),
       );
     }
+    // computer_find (Phase 6): the window's controls first, then the local vision model on a screenshot.
+    const zoomFn = this.be.zoom?.bind(this.be);
+    list.push(
+      computerFindTool({
+        gate: () => this.gate(conversationId),
+        shoot: async () => (await shoot()).shot,
+        ...(uia
+          ? {
+              treeMatch: async (query: string, signal?: AbortSignal) => {
+                const r = await uia.call<{ window: UiaWindow; nodes: UiaNode[] }>("tree", { scope: conversationId.slice(0, 64), depth: 10, max: 400 }, { ...(signal ? { signal } : {}), timeoutMs: 25_000 });
+                // Only an app the user allowed, never a sign-in or UAC window (computer_tree's rule).
+                if (!this.allowed.get(conversationId)?.has(r.window.app.replace(/\.exe$/i, "").toLowerCase()) || isSecureWindow(r.window.app, r.window.title)) return undefined;
+                const n = bestNameMatch(query, r.nodes.filter((x) => x.rect && x.rect[2] > 1 && x.rect[3] > 1 && !x.offscreen));
+                if (!n?.rect) return undefined;
+                await shoot();
+                const v = view();
+                const refs = this.uiaRefs.get(conversationId) ?? new Map<string, UiaRef>();
+                this.uiaRefs.set(conversationId, refs);
+                refs.set(n.ref, { node: n, window: r.window });
+                const cx = n.rect[0] + n.rect[2] / 2, cy = n.rect[1] + n.rect[3] / 2;
+                return { x: Math.round((cx - v.left) * v.scale), y: Math.round((cy - v.top) * v.scale), label: `${n.type} "${n.name.slice(0, 80)}"`, ref: n.ref };
+              },
+            }
+          : {}),
+        ...(zoomFn
+          ? {
+              around: async (x: number, y: number) => {
+                const p = toScreen(x, y);
+                return (await zoomFn(Math.max(0, p.x - 120), Math.max(0, p.y - 75), 240, 150, 320)).png;
+              },
+            }
+          : {}),
+        record: (action, ok, note) => this.record({ conversationId, action, app: this.front.get(conversationId)?.app ?? "", ok, ...(note ? { note } : {}) }),
+        vision: () => this.vision?.(),
+      }),
+    );
     // Where each call acts, for safety v2's gate and approval card v2: the app, its window, the control and its picture.
     const refsOf = this.uiaRefs.get(conversationId);
     const where = async (input: Record<string, unknown>) => {
@@ -1285,7 +1329,10 @@ export class ComputerControl {
         // A little around the control, at most 320 px wide: only made when a card is shown.
         ...(rect && zoom && rect[2] > 2 && rect[3] > 2
           ? { crop: async () => (await zoom(Math.max(0, rect[0] - 8), Math.max(0, rect[1] - 8), rect[2] + 16, rect[3] + 16, 320)).png }
-          : {}),
+          : // A click at a point (computer_find's answer, a screenshot point): the area around it, so the card shows what is hit.
+            !r && zoom && typeof input.x === "number" && typeof input.y === "number"
+            ? { crop: async () => { const p = toScreen(input.x, input.y); return (await zoom(Math.max(0, p.x - 120), Math.max(0, p.y - 75), 240, 150, 320)).png; } }
+            : {}),
       };
     };
     return list.map((t) => withControlInfo(t, where));

@@ -7,6 +7,8 @@ import { INSTALLABLES, type InstallableInfo } from "../installables.js";
 import { ensureImageModel, ensureVideoModel, imageModelPick, videoStatus } from "../sdcpp.js";
 import { ensureFfmpeg, ffmpegInstalled } from "../ffmpeg.js";
 import { ensureEngine } from "./engine.js";
+import { VISION_MODELS } from "@kesher/shared";
+import { visionServiceOf } from "../vision-service.js";
 
 /** One installable's live side: is it here, is it installing, how big, and how to install it with the app's own installer. */
 interface Live {
@@ -83,6 +85,22 @@ function liveOf(s: KesherServices): Record<string, Live> {
       sizeGb: async () => s.kokoro.status().sizeMb / 1024,
       start: async () => void s.kokoro.prepare().catch(() => undefined),
     },
+    // The vision models (Phase 6): saved on the heavy-data drive, run in their own slot by vision-service.ts.
+    ...Object.fromEntries(
+      VISION_MODELS.map((m): [string, Live] => [
+        m.installId,
+        {
+          ready: async () => !!(await visionServiceOf(s.config)?.files(m)),
+          busy: async () => !!visionServiceOf(s.config)?.busy(m.id),
+          sizeGb: async () => (await visionServiceOf(s.config)?.sizeGb(m)) ?? m.sizeGb + m.mmprojGb,
+          start: async () => {
+            const v = visionServiceOf(s.config);
+            if (!v) throw new Error("Vision models run in the main KesherAI app.");
+            void v.install(m).catch(() => undefined);
+          },
+        },
+      ]),
+    ),
     ffmpeg: {
       ready: () => ffmpegInstalled(s.paths.engines),
       busy: async () => ffmpegBusy,
@@ -128,7 +146,7 @@ export async function installableRoutes(app: FastifyInstance, s: KesherServices)
       ...info,
       ...(sizeGb !== undefined ? { sizeGb: Math.round(sizeGb * 10) / 10 } : {}),
       ...(l.approx ? { approx: true } : {}),
-      where: info.folder === "models" ? s.paths.models : s.paths.engines,
+      where: info.folder === "vision" ? (visionServiceOf(s.config)?.dir() ?? s.paths.models) : info.folder === "models" ? s.paths.models : s.paths.engines,
       changeHref: info.folder === "models" ? "#/models" : "#/settings/computer",
       ready,
       busy: busy && !ready,

@@ -130,7 +130,10 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   // Something the request needs is not installed (offer_install): an Install button, never folded.
   const offers = steps.flatMap((s) => {
     const input = (s.call.input ?? {}) as { id?: unknown; why?: unknown };
-    return s.call.name === "offer_install" && s.result?.ok && /Install button/.test(s.result.output) && typeof input.id === "string" ? [{ key: s.call.callId, id: input.id, why: typeof input.why === "string" ? input.why : undefined }] : [];
+    if (s.call.name === "offer_install") return s.result?.ok && /Install button/.test(s.result.output) && typeof input.id === "string" ? [{ key: s.call.callId, id: input.id, why: typeof input.why === "string" ? input.why : undefined }] : [];
+    // computer_find / browser_find_visual without a vision model: the tool itself asks for the button (vision-find-tools.ts).
+    const mark = /^(computer_find|browser_find_visual)$/.test(s.call.name) ? /\[offer_install:([\w-]+)\]/.exec(s.result?.output ?? "") : null;
+    return mark ? [{ key: s.call.callId, id: mark[1]!, why: undefined }] : [];
   });
   // Older builds only said "Built dist/x.exe." in their output.
   // Inline action buttons (design ChatQuickActions): what this chat's buttons can run, which step made each picture,

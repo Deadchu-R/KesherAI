@@ -109,6 +109,7 @@ import { registerRoutes } from "./server/routes.js";
 import { startEngines } from "./server/start-engines.js";
 import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSelfWork } from "./server/build-extras.js";
 import { Study } from "./study.js";
+import { VisionService, visionServiceOf } from "./vision-service.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
@@ -183,6 +184,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // When each model was last loaded (PC Health's "Fix it for me": models nobody used for 30 days).
   const modelUse = new ModelUse(join(paths.root, "model-use.json"));
   const engine = buildLlamaEngine(paths, config, modelUse);
+  // The local vision models for computer_find and browser_find_visual (Phase 6): their own llama.cpp slot, on the main
+  // app only (a self-work worker shares the main app's graphics card and does not load a second model).
+  if (!worker) {
+    const vision = visionServiceOf(config, () => new VisionService({ paths, config, downloads, binary: () => engine.status().binaryPath }))!;
+    void vision.refresh();
+    computer.vision = () => vision;
+  }
   downloads.limit = config.downloadLimitMBps * 1024 * 1024;
   const assets = new AssetStore(paths.assets);
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.

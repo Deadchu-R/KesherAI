@@ -202,3 +202,22 @@ test("batch, zoom, other monitors and bringing an app to the front", async () =>
   assert.match(r2.output, /1 of 3.*password, sign-in or payment/);
   assert.equal(r2.isError, true);
 });
+
+test("computer_find: the local vision model's point maps to the same screen pixels computer_click uses", async () => {
+  const f = fake({ app: "notepad", title: "Untitled - Notepad" });
+  const { VISION_MODELS } = await import("@kesher/shared");
+  const { VisionGrounder } = await import("./vision-ground.js");
+  const g = new VisionGrounder(async () => ({ text: '{"point_2d": [500, 500]}' }));
+  const model = VISION_MODELS[0]!;
+  const cc = new ComputerControl(() => true, () => undefined, f.be, {
+    uia: null,
+    vision: () => ({ model: () => model, missing: () => ({ installId: "vision-model", name: model.name, sizeGb: 6.2, where: "E:" }), ground: (r) => g.ground(model, r) }),
+  });
+  const tool = (n: string) => cc.tools("c1").find((t) => t.spec.name === n)!;
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  await tool("computer_use_app").run({ app: "Notepad" }, ctx);
+  const found = await tool("computer_find").run({ query: "the play icon" }, ctx);
+  assert.match(found.output, /x=640, y=360.*confidence unknown/);
+  await tool("computer_click").run({ x: 640, y: 360 }, ctx);
+  assert.deepEqual(f.done, ["click 1280,720"]);
+});

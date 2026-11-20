@@ -9,8 +9,11 @@
  */
 import type { AgentTool } from "@kesher/agent";
 
-/** Where an installable is saved: the models folder, or the engines folder (which moves to the heavy-data drive). */
-export type InstallFolder = "models" | "engines";
+/**
+ * Where an installable is saved: the models folder, the engines folder (which moves to the heavy-data drive), or the
+ * vision models' folder (on the heavy-data drive too, vision-service.ts).
+ */
+export type InstallFolder = "models" | "engines" | "vision";
 
 /** What the Install window shows about one thing, before any live state. */
 export interface InstallableInfo {
@@ -31,6 +34,8 @@ export const INSTALLABLES: readonly InstallableInfo[] = [
   { id: "chat-engine", he: "מנוע הצ'אט המובנה", en: "Built-in chat engine", aboutHe: "llama.cpp: מריץ מודלי שפה במחשב שלך.", aboutEn: "llama.cpp: runs language models on your computer.", folder: "engines" },
   { id: "speech-to-text", he: "המרת דיבור לטקסט", en: "Speech to text", aboutHe: "whisper.cpp: מתמלל הקלטות וסרטונים.", aboutEn: "whisper.cpp: transcribes recordings and videos.", folder: "engines" },
   { id: "text-to-speech", he: "הקראה בקול", en: "Text to speech", aboutHe: "Kokoro: מקריא טקסט בקול טבעי.", aboutEn: "Kokoro: reads text aloud in a natural voice.", folder: "engines" },
+  { id: "vision-model", he: "מודל ראייה למחשב ולדפדפן", en: "Computer & browser vision model", aboutHe: "Qwen3-VL 8B: מוצא כפתורים ואייקונים בצילום מסך כשאין להם שם (משחקים, Unity, קנבס).", aboutEn: "Qwen3-VL 8B: finds buttons and icons on a screenshot when they have no name (games, Unity, canvases).", folder: "vision" },
+  { id: "vision-model-uitars", he: "UI-TARS (ראייה למחשב)", en: "UI-TARS (computer vision)", aboutHe: "UI-TARS-1.5 7B: מודל שאומן למצוא דברים על המסך; דעה שנייה לבדיקת מודלי הראייה.", aboutEn: "UI-TARS-1.5 7B: trained to find things on screens; a second opinion for the vision test.", folder: "vision" },
   { id: "ffmpeg", he: "FFmpeg", en: "FFmpeg", aboutHe: "קורא וממיר קבצי שמע ווידאו.", aboutEn: "Reads and converts audio and video files.", folder: "engines" },
 ];
 

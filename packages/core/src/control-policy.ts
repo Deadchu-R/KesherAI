@@ -187,7 +187,7 @@ const KIND_WORDS: Record<SensitiveKind, string> = {
 /** Tools that only look (no change, no navigation), by name, for both families. */
 const READ_TOOLS = new Set([
   "browser_tabs", "browser_read", "browser_snapshot", "browser_screenshot", "browser_console", "browser_network",
-  "browser_network_request", "browser_inspect", "browser_wait",
+  "browser_network_request", "browser_inspect", "browser_wait", "browser_find_visual",
   "computer_screenshot", "computer_tree", "computer_windows", "computer_cursor_position", "computer_zoom", "computer_wait",
   "computer_find",
 ]);

@@ -414,7 +414,13 @@ export const KesherConfigSchema = z.object({
     })
     .prefault({}),
   /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */
-  computer: z.object({ enabled: z.boolean().default(false) }).prefault({}),
+  computer: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** The local vision model computer_find and browser_find_visual use (vision-models.ts); auto: the first installed. */
+      visionModel: z.enum(["auto", "qwen3-vl-8b", "ui-tars-1.5-7b"]).default("auto"),
+    })
+    .prefault({}),
   /** The coach (prompt and usage advice). */
   coach: z
     .object({

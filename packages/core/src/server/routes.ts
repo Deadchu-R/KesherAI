@@ -65,6 +65,7 @@ import { pagesRoutes } from "../routes/pages.js";
 import { pairRoutes } from "../routes/pair.js";
 import { speechRoutes } from "../routes/speech.js";
 import { computerRoutes } from "../routes/computer.js";
+import { visionRoutes } from "../routes/vision.js";
 import { mcpRoutes } from "../routes/mcp.js";
 import { journalRoutes } from "../routes/journal.js";
 import { gameRoutes } from "../routes/game.js";
@@ -139,6 +140,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await remoteDesktopRoutes(app, services);
   await pluginRoutes(app, services);
   await computerRoutes(app, services);
+  await visionRoutes(app, services);
   await speechRoutes(app, services);
   await mcpRoutes(app, services);
   await journalRoutes(app, services);
