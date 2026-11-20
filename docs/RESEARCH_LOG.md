@@ -4163,3 +4163,77 @@ needed for non-sensitive scopes, expect an "unverified app" notice once (Advance
   developers.google.com/workspace/drive/api/guides/limits; developers.google.com/docs/authentication (refresh token expiry); developers.google.com/identity/oauth2/web/guides/use-token-model; developer.android.com/identity/authorization;
   developers.google.com/identity/protocols/CrossClientAuth; support.google.com/cloud/answer/13464323; discourse.joplinapp.org/t/if-you-want-to-sync-joplin-via-google-drive/9041; tasks.org/docs/google_tasks_intro; ctrl.blog/entry/keepass-file-conflicts-android;
   code: apps/hub/src/google.ts, http.ts (CSP), worker.ts; packages/core/src/google.ts, google-tools.ts; apps/android/plugins/google, www/index.html; docs/GOOGLE_DRIVE.md; packages/shared/src/hub-sync.ts.
+
+## Gap list: agents and chat-first (2026-11-20, Roee's priorities)
+Bar: claude.ai + Claude Code (subagents, background agents, agent teams: peer messages, a shared task list, plan approval before a teammate edits; addyosmani.com/blog/claude-code-agent-teams), ChatGPT (agent mode: its own browser/terminal, takeover, approval before acts, canvas, inline files), Gemini (Deep Research: plan you edit, runs in the background, report in Canvas; Canvas; inline Veo/Lyria/images). Earlier entries (2026-11-13 Claude parity, 2026-11-14 Agents, 2026-11-19 Helper agents) hold the detail; this entry only checks them against the code today. Legend: ✅ done, 🟡 partial, ⬜ missing. Size S/M/L. Owner: Opus = build task for the lead's Opus; inbox = small, self-work can take it. Design = screen needing a design-doc board first.
+
+### 1. Agents (lead + helpers in a chat)
+| # | Item | State | Where / what is missing | Size | Owner | Design |
+|---|---|---|---|---|---|---|
+| A1 | Launch helpers in parallel | ✅ | `delegate.ts` (`delegate` tool, parts, queue under a limit via `helper-runs.ts`, `helperLimit` in `helper-model.ts:142`) | - | - | - |
+| A2 | Model per helper (type, file, `@name`) | ✅ | `helper-model.ts:84 pickHelperModel`, `agents.ts` (`tier`, `model`), Settings > Agents (`Settings.tsx:60`), swap row `Helpers.tsx:122` | - | - | - |
+| A3 | Live status and steps | ✅ | `helper-runs.ts` states waiting/running/asking/done/failed/stopped, strip `Helpers.tsx:254`, card :215, sheet :298 (bottom sheet on the phone), hub snapshots (`SyncAgentSource "chat-helper"`) | - | - | - |
+| A4 | Cancel one / all | ✅ | `helper-runs.ts:147,161`, `routes/helpers.ts` stop routes, time cap | - | - | - |
+| A5 | Steer a running helper (send it a message, change course) | ⬜ | no route or event; Claude Code agent teams and Cursor resume let you message a helper; `HelperControl` (`helper-runs.ts:15`) has only `ask` | M | Opus | helper sheet: a "tell it something" field |
+| A6 | Resume a finished helper by id (follow-up with its context) | ⬜ | `delegate.ts` always starts a fresh `AgentSession`; Cursor/Claude Code "resume" | M | Opus | card: "Continue" |
+| A7 | Tokens and cost per helper, in the card and Usage | ⬜ | no token fields in `HelperRunInfo` (grep: none in `delegate.ts`/`helper-runs.ts`); `Usage.tsx` has no helper line; Cursor shows the model per run, Claude Code shows tokens per subagent | S | inbox (add counters from session events), Usage line Opus | card chip, Usage board |
+| A8 | Results folded into the answer | 🟡 | report capped 6000 chars (`helper-runs.ts:64`) and handed to the lead; foreground waits (`Promise.all`); background reports arrive at the lead's next turn. Missing: when the lead is idle and a background helper ends, nothing wakes the lead to write the final answer (Claude's background agents do) | M | Opus | - |
+| A9 | Background runs that survive closing the chat / restarting | ⬜ | `HelperRuns.runs` is an in-memory Map (`helper-runs.ts:88`): runs and reports are lost on restart; chat Stop kills all. Task inbox (`inbox-runner.ts`) is the only durable background path and it runs Antigravity, not chat helpers. Closing the tab alone does not stop them (server side) but nothing shows the result afterwards | M | Opus | strip shows "finished while you were away" |
+| A10 | Notification when a helper ends or needs an answer | ⬜ | `notify.ts`, `chat-timers.ts` exist, nothing sends for helpers; `asking` state (`helper-runs.ts:264`) has no push to phone/hub. Hub already gets snapshots so a push on `done/asking/failed` is small | S | Opus | - |
+| A11 | Phone view of helpers | 🟡 | strip + bottom sheet work in remote (same chat stream); hub list of agents exists. Missing: a list of all helpers across chats on the phone (hub "Agents" tab shows snapshots only, no stop/steer) | S-M | Opus | hub Agents: Stop button |
+| A12 | Helpers using tools: read, web | ✅ | `delegate.ts:95` read/safe tools minus `NEVER` | - | - | - |
+| A13 | Helpers using browser, computer, code run, media | ⬜ | `NEVER` (`delegate.ts:31`) blocks `computer_`, `browser_`, `generate_`, `make_`, `run`-like tools; builders only edit in a worktree (no run_command? check `write: true` set). Claude Code subagents and ChatGPT agent run commands/browser. Safe first step: a `test` builder that may run the project's tests in the worktree; browser helper only in its own pane tab | L | Opus | helper card "using the browser" with a view |
+| A14 | Approvals from helpers | 🟡 | helper approvals are auto-denied (`delegate.ts:148`) except the once-per-project "cloud files" ask (`ctl.ask`, :351) and builders in the worktree; no way for the user to allow a helper step (Codex shows which agent asks; Claude Code routes it to the main session). Needed together with A13 | M | Opus | approval card with the helper's name |
+| A15 | Plan first, user edits the plan (Gemini Deep Research, agent teams plan approval) | ⬜ | `presentPlanSpec` exists for the lead (`session.ts` plan mode); no "research plan card" for a multi-helper job | M | Opus | plan card with edit/start |
+| A16 | Deep research mode (many helpers, sources, report in a document) | ⬜ | `research` helper type exists; no orchestrated flow with a source list and a Docs-like report (`docs.ts` document tool exists to write into) | L | Opus | report board |
+| A17 | Helper worktrees: diff review and merge | 🟡 | builder returns a diff (`delegate.ts:364`); `RunReceipt` "Undo all"; no per-helper accept/reject hunks in the card | M | Opus | card with `Diff` (`ChatCards.tsx:29` has `onHunk`) |
+| A18 | Shared task list between lead and helpers (agent teams) | ⬜ | the board (`task-board.ts`) is Claude's/self-work's, not the chat's | L | later | leave out for now |
+| A19 | Per-agent permission list (which helpers the lead may start) | ⬜ | `agents.ts` has `tools`; no allow-list of launchable helpers (OpenCode) | S | inbox | Settings row |
+
+### 2. Chat-first (one chat that picks tools and shows everything)
+| # | Item | State | Where / what is missing | Size | Owner | Design |
+|---|---|---|---|---|---|---|
+| C1 | Tool routing | 🟡 | `session.ts:852 loadToolsFor` matches the message against tool NAMES only (words, used-before); `find_tools` (:194, :~880) lists tools with a 90-char description; `CORE_TOOLS` (`conversations.ts:69`); groups `chat-tool-groups.ts` (computer, Telegram filter). Missing: a router by meaning (a "Hebrew word -> tool" miss: "תצייר" does not hit `generate_image` unless the name's English word is in the text), tool groups on/off per chat in the + menu, a "tools used" chip after the answer | M | Opus | + menu "Tools" sheet |
+| C2 | Step accordion inline | ✅ | `ChatCards.tsx` tool card as `<details>`, `Activity.tsx`, `StepsPanel.tsx` (Steps pane) | - | - | - |
+| C3 | Artifacts: HTML/SVG in a side panel | 🟡 | `ArtifactPanel.tsx:43 isArtifact` only ```html and ```svg. Missing: versions of an artifact, edit-in-place by asking, React/Mermaid/markdown-document artifacts as panel items (Mermaid and math render inline in `MathMermaid.tsx`), "copy / download / publish link" | M | Opus | ArtifactPanel board update |
+| C4 | Documents (Docs-like) in the chat | 🟡 | `docs.ts:209` `document` tool (Markdown, 20 versions) and `sheets.ts:172`, slides; live in separate pages (`DocsPage.tsx`, `SheetsPage.tsx`, `SlidesPage.tsx`). The chat shows only a tool card: no inline document card with "Open", live preview or side-panel editor (Claude artifact / ChatGPT canvas / Gemini Canvas open beside the chat and edit by highlighting a passage and asking) | L | Opus | doc side panel in chat |
+| C5 | Code with diffs and environments | ✅ | `Diff` (`ChatCards.tsx:29`), hunks, `RunReceipt.tsx`, `CodeEnvironment.tsx`, session worktrees (`session-worktrees.ts`) | - | - | - |
+| C6 | Browser control | ✅ | `BrowserPanel.tsx`, `browser-bridge.ts`, per-site approvals (2026-11-13 entry). Missing only: shown inline as a live thumbnail in the step | S | inbox | - |
+| C7 | Computer control | ✅ | `computer.ts`, `chat-tool-groups.ts` COMPUTER_NOTE; Activity shows screenshots (`Activity.tsx:108`). Missing: stays blocked on Telegram by design | - | - | - |
+| C8 | Images inline | ✅ | `ChatCards.tsx:95` assets, `RichText.tsx:244 AnswerImage` | - | - | - |
+| C9 | Video and audio inline in the answer | 🟡 | players exist in `Activity.tsx` (song title and lyrics, t80), `MediaSpeed.tsx`; `ChatCards.tsx:95` renders only `<img>` for `assetIds`, so a result from a tool card has no player, only the Activity block does; links to `/api/assets/..` in Markdown are plain links. Fix: one `MediaView` by asset mime in cards and in Markdown | S-M | inbox | check RichChat board |
+| C10 | Files in (+ menu) | 🟡 | `ChatAttach.tsx` photo, annotated image, folder; images as images, documents as text, audio/video/code files only as a path, no OCR (2026-11-17 audit). Plan (2) of that entry was "+ reads audio and video (Whisper transcript + frames) and code files": check if done before building | M | Opus | PlusMenu board |
+| C11 | Files out | 🟡 | `FilesPanel.tsx`; no "Download / Save to Drive" chip under a made file in the answer (Claude's file creation, ChatGPT download link) | S | inbox | - |
+| C12 | Memory | ✅ | `memory-tools.ts`, `memory-store.ts`, MemoryPage, incognito (`App.tsx:122`). Missing: a "remembered X" chip with undo in the answer | S | inbox | - |
+| C13 | Connectors / MCP | ✅ | `mcp.ts`, `McpSection.tsx`, `McpAppView.tsx` (MCP Apps under the step), `Connections.tsx`. Missing: connector toggle inside the chat (+ menu) | S | Opus | PlusMenu |
+| C14 | Approvals inline, with a time limit | ✅ | `ChatCards.tsx` approval card, `approval-rules.ts`, 2026-11-14 time limit, notifications 2026-11-10 | - | - | - |
+| C15 | Ask-the-user questions | ✅ | `ask_user` (`ChatCards.tsx:71`), guiding questions entry 2026-11-17 | - | - | - |
+| C16 | Plan mode | ✅ | `session.ts` `presentPlanSpec` | - | - | - |
+| C17 | Projects (instructions + files shared by chats) | 🟡 | folders/projects, Knowledge page, shares; no claude.ai-style "Project" with custom instructions picked in the chat header (personas cover part) | M | later | - |
+| C18 | Scheduled / recurring tasks from the chat | 🟡 | `chat-timers.ts` (timers), task inbox; no "run this every morning" from the chat | M | later | - |
+| C19 | Voice in the chat | ✅ | `VoiceMode.tsx`, `Dictate.tsx` | - | - | - |
+| C20 | Search past chats | ✅ | in the chat list (library); incognito out of search | - | - | - |
+
+Notes where the code check was thin (do these first inside the build, cheap): A13 (confirm what `write: true` builders may run), C10 (is audio/video reading built?), C9 (which message kinds reach `Activity.tsx` vs the Markdown renderer).
+
+### What to leave out
+Agent-team peer messaging and a shared task list between helpers (A18: needs a second protocol; the lead as the only coordinator already matches Roee's rule); nested helpers; a learned per-step model router; helper browser/computer control before approvals (A14) work; ChatGPT-style "takeover" of a helper's browser until the browser helper exists; claude.ai Projects clone (C17) until the above is done.
+
+### Build order, about 2 days (each line one Opus build task; each ships remote-checked on the phone)
+Day 1 (agents)
+1. A10 + A7 + A9a: notifications for helpers (done / asking / failed) over the existing notify, hub and phone paths, tokens and cost per helper in `HelperRunInfo`, card and Usage line. (S, no design except two chips.)
+2. A9b + A8: persist helper runs (a small JSON store per chat, reload on start, mark "stopped when the app closed" for runs that were running), and wake the lead with the report when a background helper ends while the chat is idle. Design board: "finished while you were away".
+3. A5 + A6: steer and continue a helper (a message into the running `AgentSession`; resume by id with its context). Design: field in the helper sheet, "Continue" on the card.
+4. A14 + A13 (first slice): approval card that names the helper, and a `test` builder that runs the project's tests in its worktree; later the browser helper. Design: approval card with helper name.
+5. A15 + A16: plan card for a multi-helper job (edit, start) and a deep-research flow writing a report with sources into a `document`. Design: plan card and report board.
+Day 2 (chat-first)
+6. C9 + C11 + C12 + C6: one `MediaView` (audio/video/image by mime) in tool cards and Markdown links; a Download / Save chip under made files; the "remembered" chip; the browser thumbnail in the step. (inbox-sized pieces, one Opus task or self-work.)
+7. C4 + C3: the document as a side panel in the chat (open `document`/`sheet`/slides in `ArtifactPanel` with edit-by-selection and versions; HTML artifacts get versions and copy/download). Design: ArtifactPanel update + a doc panel board.
+8. C1 + C13: routing by meaning (small keyword table he/en per group plus tool descriptions in `find_tools`, group toggles and connector toggles in the + menu, "tools used" chip). Design: + menu Tools sheet.
+9. C10 check and fill (audio/video transcribe, code files, OCR), then A17 hunk accept/reject in the helper card.
+
+### Open questions for Roee
+1. Should a background helper be allowed to keep running after PC restart (needs the persisted store, step 2) or only be shown as stopped? 2. May a helper ever use the browser or computer on its own (needs approvals from step 4), or only read the web? 3. Document as a side panel (like Claude/Gemini) or keep the Docs page and add an "Open" card? Recommended: the side panel, same editor.
+
+- Stopped at: code anchors checked for agents (`delegate.ts`, `helper-runs.ts`, `helper-model.ts`, `agents.ts`, routes, `Helpers.tsx`) and chat-first (`session.ts`, `chat-tool-groups.ts`, `canvas.ts`, `docs.ts`, `ArtifactPanel.tsx`, `ChatCards.tsx`, `RichText.tsx`, `Activity.tsx`). Not read: what builder helpers may run (A13), the + menu's full item list and whether audio/video reading was built (C10), how background reports wake an idle lead (A8, only inferred from `delegate.ts` header), the hub Agents tab's controls, ChatGPT agent and Gemini Deep Research current docs (known from memory, only agent teams were web-checked this session).
+- Sources: code files named above; docs/RESEARCH_LOG.md entries 2026-11-13 (Claude parity), 2026-11-14 (Agents), 2026-11-17 (Claude/Gemini-level main chat), 2026-11-19 (Helper agents; Live agent activity in the hub); addyosmani.com/blog/claude-code-agent-teams and code.claude.com/docs/en/sub-agents (via the earlier entries).
