@@ -18,7 +18,7 @@ import type {
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, openToolOutput, pinnedOutputs, pruneToolOutputs } from "./budget.js";
+import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
@@ -151,6 +151,11 @@ export interface AgentSessionOptions {
    */
   toolSearch?: () => readonly string[] | undefined;
   /**
+   * With tool search: the most tools sent in full per turn (default 24); the rest are listed in `more_tools`. Read on
+   * every request. See capTools in budget.ts.
+   */
+  toolCap?: () => number | undefined;
+  /**
    * Routing by meaning: before the model answers a message, the tools it points at (by Hebrew and English words, or a
    * tiny model call) are loaded, and `note` (e.g. "an image model is not installed") goes to the model with it.
    * Read once per message; a failure or no answer leaves the message as it was.
@@ -207,8 +212,10 @@ const toolOutputSpec: ToolSpec = {
   inputSchema: { type: "object", properties: { id: { type: "string", description: "The id from the line." }, from: { type: "number", description: "The first character, for the rest of a long output (default 0)." } }, required: ["id"] },
 };
 
-/** The tool that loads the others when tool search is on. */
-export const FIND_TOOLS_TOOL = "find_tools";
+/** The tool that loads the others when tool search is on (the per-turn cap's overflow is listed in it too). */
+export const FIND_TOOLS_TOOL = "more_tools";
+/** Its earlier name: still answered, for saved chats whose model learned it. */
+const OLD_FIND_TOOLS = "find_tools";
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 /** What the model reads on its next turn, for the context explorer. */
@@ -281,6 +288,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private toolsUnsupported = false;
   private readonly team?: () => TeamMember[];
   private readonly toolSearch?: () => readonly string[] | undefined;
+  private readonly toolCap?: () => number | undefined;
   private readonly route?: AgentSessionOptions["route"];
   /** The message waiting for the router (set by send, routed at the start of the run). */
   private routeText?: string;
@@ -288,6 +296,18 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly repeats = new Map<string, number>();
   /** Tools the model loaded with find_tools in this conversation. */
   private readonly loadedTools = new Set<string>();
+  /** When each loaded tool was last loaded (a counter), and the counter at the start of this message (capTools). */
+  private readonly toolRank = new Map<string, number>();
+  private rankTick = 0;
+  private rankSince = 0;
+  /** Characters of tool instructions the per-turn cap left out of the last request. */
+  private lastCappedChars = 0;
+
+  /** Loads a tool for tool search and marks it as the newest (the per-turn cap ranks by it). */
+  private loadTool(name: string): void {
+    this.loadedTools.add(name);
+    this.toolRank.set(name, ++this.rankTick);
+  }
   /** Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. */
   queued: Array<{ id: string; text: string; data?: unknown }> = [];
   /** Set after Stop: the queue waits until the user sends again. */
@@ -330,6 +350,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.team = opts.team;
     if (opts.undoStore) this.undoStore = opts.undoStore;
     this.toolSearch = opts.toolSearch;
+    this.toolCap = opts.toolCap;
     this.route = opts.route;
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
@@ -441,6 +462,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (images?.length) for (const m of this.messages) if (m.images) delete m.images;
     this.messages.push({ role: "user", content: context ? `${text}\n\n---\n${context}` : text, ...(images?.length ? { images } : {}) });
     this.repeats.clear();
+    this.rankSince = this.rankTick;
     this.loadToolsFor(text);
     this.routeText = text;
     this.push({ type: "user", text });
@@ -813,7 +835,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
     const cached = result.usage?.cachedTokens;
     // What the token budget left out of this call (main model only; teammates get their own short prompts).
-    const pruned = role === "main" ? Math.round(this.lastPrunedChars / this.charsPerToken) : 0;
+    const pruned = role === "main" ? Math.round((this.lastPrunedChars + this.lastCappedChars) / this.charsPerToken) : 0;
     this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
   }
 
@@ -1061,7 +1083,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const used = new Set(this.events.flatMap((e) => (e.type === "tool_call" ? [e.name] : [])));
     for (const name of this.tools.keys()) {
       const own = name.split("_").filter((w) => w.length > 2 && !COMMON_TOOL_WORDS.has(w));
-      if (lower.includes(name) || used.has(name) || own.some((w) => words.has(w))) this.loadedTools.add(name);
+      if (lower.includes(name) || own.some((w) => words.has(w))) this.loadTool(name);
+      else if (used.has(name)) this.loadedTools.add(name);
     }
   }
 
@@ -1075,7 +1098,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (text === undefined || !this.route) return;
     const r = await this.route(text, signal).catch(() => undefined);
     if (!r) return;
-    for (const name of r.tools) if (this.tools.has(name)) this.loadedTools.add(name);
+    // The router's first pick ranks highest (loaded last).
+    for (const name of [...r.tools].reverse()) if (this.tools.has(name)) this.loadTool(name);
     const last = this.messages.at(-1);
     if (r.note && last?.role === "user") last.content += `\n\n${r.note}`;
   }
@@ -1090,7 +1114,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (!core?.length) return [...base, ...all];
     // Tool search: the core tools and the ones loaded so far in full; the rest by name only. Loaded tools come after
     // the core ones, so loading one changes only the end of the list.
-    const full = [...all.filter((t) => core.includes(t.name)), ...all.filter((t) => !core.includes(t.name) && this.loadedTools.has(t.name))];
+    const loaded = [...all.filter((t) => core.includes(t.name)), ...all.filter((t) => !core.includes(t.name) && this.loadedTools.has(t.name))];
+    // The per-turn cap: past it, the lowest-ranked tools are listed by name in more_tools like the unloaded ones.
+    const { keep: full, over } = capTools(loaded, { core, rank: this.toolRank, since: this.rankSince, cap: this.toolCap?.() ?? DEFAULT_TOOL_CAP });
+    this.lastCappedChars = over.length ? JSON.stringify(loaded.filter((t) => over.includes(t.name))).length : 0;
     const rest = all.filter((t) => !full.includes(t));
     if (!rest.length) return [...base, ...full];
     const short = (d: string) => (d.split(/(?<=\.)\s/)[0] ?? d).slice(0, 90);
@@ -1445,9 +1472,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         return fail((err as Error).message);
       }
     }
-    if (call.name === FIND_TOOLS_TOOL) {
+    if (call.name === FIND_TOOLS_TOOL || call.name === OLD_FIND_TOOLS) {
       const names = (Array.isArray(call.arguments.names) ? call.arguments.names : [call.arguments.names]).map(String).filter((n) => this.tools.has(n));
-      for (const n of names) this.loadedTools.add(n);
+      for (const n of names) this.loadTool(n);
       const output = names.length ? `Loaded: ${names.join(", ")}. Use them now.` : "None of those names is a tool; use names from the list.";
       this.push({ type: "tool_result", callId: call.id, name: call.name, ok: names.length > 0, output });
       return output;

@@ -74,7 +74,7 @@ export interface NewConversation {
 
 /**
  * The tools a local model always gets in full when tool search is on; the
- * others are listed by name and loaded with find_tools when needed (fewer
+ * others are listed by name and loaded with more_tools when needed (fewer
  * tokens on every message, faster answers on the computer).
  */
 const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "code_map", "find_symbol", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
@@ -860,6 +860,8 @@ export class ConversationManager {
       // Read on every request, so adding or removing a teammate applies to the next message.
       team: () => this.teamOf(id),
       toolSearch,
+      // The per-turn cap on tools sent in full (Settings → Models → the model team).
+      toolCap: () => this.deps.config.toolCap,
       // Routing by meaning (tool-router.ts): the tools a message points at, and a note when what it needs is not installed.
       route: async (text, signal) => {
         const r = await this.router.route(text, this.sessions.get(id)?.toolNames() ?? [], this.deps.library.summary(id)?.toolsOff ?? [], !!toolSearch()?.length, signal);

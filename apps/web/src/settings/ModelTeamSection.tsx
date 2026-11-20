@@ -14,11 +14,15 @@ interface Model { id: string; name: string; category?: string }
  */
 export function ModelTeamSection() {
   const [translator, setTranslator] = useState<string | null>(null);
+  const [toolCap, setToolCap] = useState(24);
   const [models, setModels] = useState<Model[]>([]);
   // Downloaded translation models (TranslateGemma…): chosen by file, loaded beside the main model when needed.
   const [files, setFiles] = useState<Array<{ path: string; name: string }>>([]);
   useEffect(() => {
-    void api<{ translator: string }>("/api/model-team").then((r) => setTranslator(r.translator), () => undefined);
+    void api<{ translator: string; toolCap?: number }>("/api/model-team").then((r) => {
+      setTranslator(r.translator);
+      if (r.toolCap) setToolCap(r.toolCap);
+    }, () => undefined);
     void api<{ models: Model[] }>("/api/models").then((r) => setModels(r.models.filter((m) => (m.category ?? "chat") === "chat")), () => undefined);
     void api<Array<{ path: string; name: string; gguf?: boolean; source?: string }>>("/api/models/local").then((r) => setFiles(r.filter((m) => m.gguf && m.source === "KesherAI" && /translat/i.test(m.name)).map((m) => ({ path: m.path, name: m.name.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") }))), () => undefined);
   }, []);
@@ -26,6 +30,10 @@ export function ModelTeamSection() {
   const save = (v: string) => {
     setTranslator(v);
     void api("/api/model-team", { method: "PUT", body: { translator: v } }).catch((e: Error) => toast(e.message));
+  };
+  const saveCap = (n: number) => {
+    setToolCap(n);
+    void api("/api/model-team", { method: "PUT", body: { toolCap: n } }).catch((e: Error) => toast(e.message));
   };
   return (
     <section className="card stack">
@@ -41,6 +49,13 @@ export function ModelTeamSection() {
         </select>
       </label>
       <p className="muted small">{L("מודל תרגום קטן (TranslateGemma) מהיר יותר מהמודל הגדול. הורד אותו מעמוד המודלים ובחר אותו כאן.", "A small translation model (TranslateGemma) is faster than the big one. Download it on the Models page and choose it here.")}</p>
+      <label className="row">
+        <span className="grow">🧰 {L("כלים מלאים בכל סבב", "Tools in full per turn")}</span>
+        <select value={toolCap} onChange={(e) => saveCap(Number(e.target.value))} aria-label={L("כלים מלאים בכל סבב", "Tools in full per turn")}>
+          {[...new Set([12, 16, 24, 32, 48, toolCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <p className="muted small">{L("במודל מקומי נשלחים במלואם רק הכלים שהסבב צריך, עד המספר הזה; השאר זמינים לפי שם (more_tools). פחות כלים = פחות טוקנים ותשובה מהירה יותר.", "On a local model only the tools a turn needs are sent in full, up to this number; the rest stay available by name (more_tools). Fewer tools = fewer tokens and a faster answer.")}</p>
     </section>
   );
 }

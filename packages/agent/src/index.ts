@@ -17,6 +17,7 @@ export { REQUEST_ACCESS_TOOL, requestAccessSpec } from "./tools.js";
 export { resolveForTool } from "./workspace.js";
 export { buildExecutableTool } from "./build.js";
 export * from "./context.js";
+export { DEFAULT_TOOL_CAP, TOOL_OUTPUT_TOOL } from "./budget.js";
 
 export { documentText, formatPages, readDocumentTool, type DocumentText } from "./documents.js";
 export { csvRows, docxHtml, openZip, pptxSlides, sheetText, xlsxSheets, type Sheet } from "./office.js";

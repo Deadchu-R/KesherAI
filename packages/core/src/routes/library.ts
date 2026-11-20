@@ -18,6 +18,7 @@ import { join as joinPath } from "node:path";
 import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-export.js";
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
+import { DEFAULT_TOOL_CAP } from "@kesher/agent";
 import { InstallWhenFree, type FreeState } from "../install-when-free.js";
 import { feedName, newestFeed, parseRange, safeFeedFile } from "../update-feed.js";
 import { compareVersions } from "../updates.js";
@@ -826,13 +827,22 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { on };
   });
   // The model team (design ModelTeam): which model translates an answer written in another language than the user's.
-  app.get("/api/model-team", async () => ({ translator: s.config.translator ?? "main" }));
-  app.put<{ Body: { translator?: string } }>("/api/model-team", async (req, reply) => {
-    const t = String(req.body?.translator ?? "").trim();
-    if (!t || t.length > 300) return reply.code(400).send({ error: "Choose a translator." });
-    s.config.translator = t;
+  // Also the token budget's per-turn tool cap (budget.ts in the agent package).
+  const team = () => ({ translator: s.config.translator ?? "main", toolCap: s.config.toolCap ?? DEFAULT_TOOL_CAP });
+  app.get("/api/model-team", async () => team());
+  app.put<{ Body: { translator?: string; toolCap?: number } }>("/api/model-team", async (req, reply) => {
+    if (req.body?.translator !== undefined) {
+      const t = String(req.body.translator).trim();
+      if (!t || t.length > 300) return reply.code(400).send({ error: "Choose a translator." });
+      s.config.translator = t;
+    }
+    if (req.body?.toolCap !== undefined) {
+      const n = Number(req.body.toolCap);
+      if (!Number.isInteger(n) || n < 8 || n > 80) return reply.code(400).send({ error: "The tool cap is a whole number from 8 to 80." });
+      s.config.toolCap = n;
+    }
     await s.saveConfig();
-    return { translator: t };
+    return team();
   });
   app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Approvals can only be changed on this computer." });

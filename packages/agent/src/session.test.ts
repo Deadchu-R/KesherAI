@@ -398,7 +398,7 @@ test("plan mode: reading works, changes are refused, present_plan shows the plan
   assert.ok(!session.events.some((e) => e.type === "approval_request"));
 });
 
-test("tool search: only core tools in full, find_tools loads the others for the next step", async () => {
+test("tool search: only core tools in full, more_tools (or its old name find_tools) loads the others for the next step", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-ts-"));
   const { model, seen } = scripted([
     { calls: [{ name: "find_tools", arguments: { names: ["write_file", "nope"] } }] },
@@ -409,8 +409,8 @@ test("tool search: only core tools in full, find_tools loads the others for the 
   session.send("make a.txt");
   await waitFor(session, (e) => e.type === "status" && e.status === "idle");
   const names = (i: number) => seen[i]!.tools.map((t) => t.name);
-  assert.ok(names(0).includes("read_file") && names(0).includes("find_tools") && !names(0).includes("write_file"));
-  assert.match(seen[0]!.tools.find((t) => t.name === "find_tools")!.description, /write_file \(/);
+  assert.ok(names(0).includes("read_file") && names(0).includes("more_tools") && !names(0).includes("write_file"));
+  assert.match(seen[0]!.tools.find((t) => t.name === "more_tools")!.description, /write_file \(/);
   assert.ok(names(1).includes("write_file"), "loaded for the next step");
   assert.equal(await readFile(join(workspace, "a.txt"), "utf8"), "hi");
 });
@@ -904,4 +904,18 @@ test("token budget: tool results from before the last two turns go as a summary 
   session.pinOutput("c1_0", true);
   assert.equal(session.contextView().messages.find((m) => m.toolName === "read_file")!.pruned, undefined);
   assert.throws(() => session.pinOutput("nope", true));
+});
+
+test("per-turn tool cap: past it, the lowest-ranked loaded tools go back to the more_tools list", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-cap-"));
+  const { model, seen } = scripted([{ calls: [{ name: "more_tools", arguments: { names: ["write_file", "edit_file"] } }] }, { text: "done" }]);
+  const session = new AgentSession({ id: "cap", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", toolSearch: () => ["read_file", "list_files"], toolCap: () => 3 });
+  session.send("look at the files");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  const second = seen[1]!.tools.map((t) => t.name);
+  // Cap 3: the two tools this message loaded rank first, then the first core tool; list_files waits in more_tools.
+  assert.ok(second.includes("write_file") && second.includes("edit_file") && second.includes("read_file"));
+  assert.ok(!second.includes("list_files"));
+  assert.match(seen[1]!.tools.find((t) => t.name === "more_tools")!.description, /list_files \(/);
+  assert.ok(session.events.some((e) => e.type === "usage" && (e.pruned ?? 0) > 0), "the left-out instructions count as pruned");
 });

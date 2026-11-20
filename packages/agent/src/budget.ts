@@ -116,3 +116,33 @@ export function pinnedOutputs(events: ReadonlyArray<{ type: string; callId?: str
   }
   return pinned;
 }
+
+/** Tool instructions sent in full per turn when nothing else is set (Settings → Models → the model team). */
+export const DEFAULT_TOOL_CAP = 24;
+
+/**
+ * The per-turn cap on loaded tools: which tools go to the model in full when there are more than `cap`. Ranked: the
+ * tools this message loaded (routed, named, or asked for with more_tools; newest first), then the chat's core tools
+ * in their order, then tools loaded earlier (newest first). The chat's core set is never cut below its own size (a
+ * Unity chat keeps every Unity tool). The kept tools stay in their given order, so the prompt's start does not move.
+ *
+ * @param full - The tools that would go in full, in prompt order.
+ * @param opts.core - The chat's core tool names, most needed first.
+ * @param opts.rank - When each loaded tool was last loaded (higher is newer).
+ * @param opts.since - The rank at the start of this message (higher ranks were loaded by it).
+ * @param opts.cap - The most tools in full.
+ * @returns The tools to keep (prompt order) and the names left for more_tools.
+ */
+export function capTools<T extends { name: string }>(full: readonly T[], opts: { core: readonly string[]; rank: ReadonlyMap<string, number>; since: number; cap: number }): { keep: T[]; over: string[] } {
+  const limit = Math.max(1, Math.floor(opts.cap), full.filter((t) => opts.core.includes(t.name)).length);
+  if (full.length <= limit) return { keep: [...full], over: [] };
+  const score = (name: string): number => {
+    const r = opts.rank.get(name) ?? -1;
+    if (r > opts.since) return 2e9 + r;
+    const c = opts.core.indexOf(name);
+    if (c >= 0) return 1e9 - c;
+    return r;
+  };
+  const kept = new Set([...full].sort((a, b) => score(b.name) - score(a.name)).slice(0, limit).map((t) => t.name));
+  return { keep: full.filter((t) => kept.has(t.name)), over: full.filter((t) => !kept.has(t.name)).map((t) => t.name) };
+}

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentMessage } from "@kesher/shared";
-import { PRUNED_MARK, isTurnStart, openToolOutput, pinnedOutputs, pruneToolOutputs, summaryLine } from "./budget.js";
+import { PRUNED_MARK, capTools, isTurnStart, openToolOutput, pinnedOutputs, pruneToolOutputs, summaryLine } from "./budget.js";
 
 const long = (tag: string) => `${tag} first line\n${"x".repeat(2000)}`;
 /** A turn: the user's message, one tool call and its result, an answer. */
@@ -72,4 +72,22 @@ test("summaryLine and pinnedOutputs", () => {
   assert.equal(summaryLine("z".repeat(300)).length, 158);
   const pins = pinnedOutputs([{ type: "tool_pin", callId: "a", pinned: true }, { type: "tool_pin", callId: "b", pinned: true }, { type: "note" }, { type: "tool_pin", callId: "a", pinned: false }]);
   assert.deepEqual([...pins], ["b"]);
+});
+
+describe("capTools", () => {
+  const tools = ["a", "b", "c", "x", "y", "z"].map((name) => ({ name }));
+  test("under the cap: everything stays", () => {
+    assert.deepEqual(capTools(tools, { core: ["a"], rank: new Map(), since: 0, cap: 10 }).over, []);
+  });
+  test("this message's tools first, then core, then older loads; prompt order kept", () => {
+    const rank = new Map([["x", 1], ["y", 5], ["z", 6]]);
+    const r = capTools(tools, { core: ["a", "b", "c"], rank, since: 4, cap: 4 });
+    assert.deepEqual(r.keep.map((t) => t.name), ["a", "b", "y", "z"]);
+    assert.deepEqual(r.over, ["c", "x"]);
+  });
+  test("the core set is never cut below its size", () => {
+    const r = capTools(tools, { core: ["a", "b", "c", "x"], rank: new Map([["z", 2]]), since: 1, cap: 2 });
+    assert.equal(r.keep.length, 4);
+    assert.ok(r.keep.some((t) => t.name === "z"), "the newest load still ranks first");
+  });
 });
