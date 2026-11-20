@@ -17,7 +17,8 @@ interface Scan { at: string; kinds: Record<Kind, number>; folders: Array<{ name:
 interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string; drive?: string }
 interface Game { name: string; source: "steam" | "epic" | "store" | "xbox"; bytes?: number; folder?: string; drive?: string; uninstallUrl?: string; lastPlayed?: string }
 const SOURCE_NAME: Record<string, string> = { steam: "Steam", epic: "Epic", store: "Microsoft Store", xbox: "Xbox" };
-interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number }>; failed: Array<{ name: string; error: string }> }
+/** Compressions; `originalGone` = the original is already in the bin, `ready` = its copy is whole and plays. */
+interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number; originalGone?: boolean; ready?: boolean }>; failed: Array<{ name: string; error: string }>; originals?: { count: number; bytes: number } }
 
 const KINDS: Kind[] = ["video", "image", "audio", "document", "archive", "other"];
 const kindName = (k: Kind) => ({ video: L("סרטונים", "Videos"), image: L("תמונות", "Pictures"), audio: L("מוזיקה ושמע", "Music & audio"), document: L("מסמכים", "Documents"), archive: L("קבצים דחוסים והתקנות", "Archives & installers"), other: L("אחר", "Other") })[k];
@@ -379,6 +380,18 @@ export function StorageSection() {
       toast((e as Error).message);
     }
   };
+  /** All originals whose smaller copy is whole and plays, to the bin with one question. */
+  const trashAllOriginals = async () => {
+    const o = comp?.originals;
+    if (!o?.count || !window.confirm(L(`להעביר ${o.count} סרטונים מקוריים (⁦${size(o.bytes)}⁩) לסל המיחזור? הגרסאות המכווצות נשארות, ואפשר לשחזר מהסל.`, `Move ${o.count} original videos (${size(o.bytes)}) to the Recycle Bin? The smaller copies stay, and they can be restored from the bin.`))) return;
+    try {
+      const r = await api<{ done: string[]; freed: number; failed: Array<{ error: string }> }>("/api/storage/compress/originals/trash", { method: "POST" });
+      toast(r.failed.length ? L(`הועברו ${r.done.length}, נכשלו ${r.failed.length}: ${r.failed[0]!.error}`, `Moved ${r.done.length}, failed ${r.failed.length}: ${r.failed[0]!.error}`) : L(`התפנו ⁦${size(r.freed)}⁩`, `${size(r.freed)} freed`));
+      loadComp();
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   return (
     <section className="card stack">
       {open && <FilesDialog {...open} onClose={() => setOpen(null)} onChanged={() => { load(false); loadComp(); }} />}
@@ -395,10 +408,11 @@ export function StorageSection() {
       {comp && (comp.running || comp.queue.length > 0 || comp.done.length > 0 || comp.failed.length > 0) && (
         <div className="stack storage-compress">
           {comp.running && <p className="small" dir="auto">{L(`מכווץ: ${comp.running.name} · ⁦${comp.running.percent}%⁩`, `Compressing: ${comp.running.name} · ${comp.running.percent}%`)}{comp.queue.length ? L(` (עוד ${comp.queue.length} בתור)`, ` (${comp.queue.length} more waiting)`) : ""}</p>}
+          {!!comp.originals?.count && <button type="button" className="primary" onClick={() => void trashAllOriginals()}>{L(`כל המקורות לסל (${comp.originals.count}, ⁦${size(comp.originals.bytes)}⁩)`, `Move all originals to the bin (${comp.originals.count}, ${size(comp.originals.bytes)})`)}</button>}
           {comp.done.map((d) => (
             <div key={d.result.id} className="row wrap small">
               <span className="grow" dir="auto">✅ {d.result.name} · {L(`נחסכו ⁦${size(d.saved)}⁩`, `${size(d.saved)} saved`)}</span>
-              <button type="button" onClick={() => void trashOriginal(d.original.id)}>{L("מקור לסל המיחזור", "Original to the bin")}</button>
+              {d.originalGone ? <span className="muted">{L("המקור בסל", "Original in the bin")}</span> : <button type="button" onClick={() => void trashOriginal(d.original.id)}>{L("מקור לסל המיחזור", "Original to the bin")}</button>}
             </div>
           ))}
           {comp.failed.map((f, i) => <p key={i} className="small muted" dir="auto">⚠️ {f.name}: {f.error}</p>)}

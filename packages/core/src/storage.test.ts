@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { driveOf, fileKind, isProjectRoot, parseSize, Storage } from "./storage.js";
+import { copyLooksWhole, driveOf, fileKind, isProjectRoot, parseDuration, parseSize, Storage } from "./storage.js";
 
 test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "st-"));
@@ -99,4 +99,47 @@ test("storage helpers: kinds by name, Flatpak sizes", () => {
   assert.equal(fileKind("c.msi"), "archive");
   assert.equal(parseSize("1.5 GB"), Math.round(1.5 * 1024 ** 3));
   assert.equal(parseSize("300 MB"), 300 * 1024 ** 2);
+});
+
+test("storage: a compressed video's original stays removable after a new scan, and all ready originals go at once", async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "st-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(join(home, "Videos"));
+  const v = (n: string, bytes: number) => {
+    writeFileSync(join(home, "Videos", n), Buffer.alloc(bytes, 1));
+    return join(home, "Videos", n);
+  };
+  const st = new Storage(home);
+  const a = await st.addCompressed(v("a.mp4", 1000), v("a.compressed.mp4", 400), true);
+  const b = await st.addCompressed(v("b.mp4", 1000), v("b.compressed.mp4", 5), true); // under 1%: broken copy
+  const c = await st.addCompressed(v("c.mp4", 1000), v("c.compressed.mp4", 400), false); // never checked to play
+  const d = await st.addCompressed(v("d.mp4", 1000), v("d.compressed.mp4", 300), true);
+  assert.ok(a && b && c && d);
+  assert.equal(await st.addCompressed(join(home, "Videos", "none.mp4"), join(home, "Videos", "a.mp4"), true), undefined);
+  // A new scan clears the scan's ids (small files are not listed); the originals still resolve.
+  await st.scan();
+  assert.equal(st.pathOf(a.original.id), join(home, "Videos", "a.mp4"));
+  const bin = join(home, "bin");
+  mkdirSync(bin);
+  const toBin = async (p: string) => renameSync(p, join(bin, p.split(sep).pop()!));
+  const one = await st.remove([d.original.id], toBin);
+  assert.deepEqual(one.done, [d.original.id]);
+  const state = await st.compressedOriginals();
+  assert.deepEqual(state.map((o) => [o.gone, o.ready]), [[false, true], [false, false], [false, false], [true, false]]);
+  const all = await st.removeOriginals(toBin);
+  assert.deepEqual(all.done, [a.original.id]);
+  assert.equal(all.freed, 1000);
+  assert.ok(existsSync(join(home, "Videos", "a.compressed.mp4")) && existsSync(join(home, "Videos", "b.mp4")) && existsSync(join(home, "Videos", "c.mp4")));
+  assert.equal((await st.compressedOriginals([a.original.id]))[0]!.gone, true);
+  // An id KesherAI never listed is still refused.
+  assert.equal((await st.remove(["0123456789abcdef"], toBin)).failed.length, 1);
+});
+
+test("storage helpers: whole copies and ffmpeg's length", () => {
+  assert.ok(copyLooksWhole(1000, 400));
+  assert.ok(!copyLooksWhole(1000, 0));
+  assert.ok(!copyLooksWhole(1000, 10));
+  assert.ok(!copyLooksWhole(1000, 1000));
+  assert.equal(parseDuration("  Duration: 01:02:03.50, start: 0.000000, bitrate: 5000 kb/s"), 3723.5);
+  assert.equal(parseDuration("Invalid data found when processing input"), undefined);
 });

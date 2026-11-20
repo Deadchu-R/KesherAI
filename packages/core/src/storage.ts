@@ -8,7 +8,8 @@
  * - every program on the computer, biggest first, with its own uninstaller.
  *
  * Safety: deleted files go to the Recycle Bin / Trash (they can be restored), never deleted outright. The page sends
- * only ids from the last scan; each id is a file or program this computer listed, so no outside path is acted on.
+ * only ids from the last scan (or of videos KesherAI compressed); each id is a file or program this computer listed,
+ * so no outside path is acted on.
  * Only the person's own folders are scanned (never Windows or program folders). Uninstalling runs the program's
  * own uninstaller, which asks the person itself.
  */
@@ -172,12 +173,51 @@ async function sameHash(path: string, size: number, full: boolean): Promise<stri
   }
 }
 
+/**
+ * Whether a compressed copy looks whole enough for its original to go to the bin: it has bytes, it is smaller than
+ * the original, and it is more than 1% of it (a copy that small is a broken or empty encode).
+ *
+ * @param originalBytes - The original video's size.
+ * @param copyBytes - The compressed copy's size.
+ */
+export function copyLooksWhole(originalBytes: number, copyBytes: number): boolean {
+  return copyBytes > 0 && copyBytes < originalBytes && copyBytes > originalBytes * 0.01;
+}
+
+/**
+ * A media file's length in seconds from ffmpeg's own report ("Duration: 01:02:03.45"), or undefined when it has
+ * none (not a video, or a broken file).
+ *
+ * @param ffmpegText - What ffmpeg printed (its stderr) about the file.
+ */
+export function parseDuration(ffmpegText: string): number | undefined {
+  const m = /Duration: (\d+):(\d+):([\d.]+)/.exec(ffmpegText);
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined;
+}
+
+/** Where an original video stands after it was made smaller (for the page's rows and its "all originals" button). */
+export interface CompressedOriginal {
+  /** The original's id (the same one the scan gives it). */
+  id: string;
+  /** The original is no longer there (moved to the bin). */
+  gone: boolean;
+  /** Its copy is there, whole and checked: the original may go to the bin with the others. */
+  ready: boolean;
+  /** The original's size now (0 when gone). */
+  bytes: number;
+}
+
 /** A file found by the walk. */
 type Found = { path: string; bytes: number; mtime: number; folder: string; inProject?: true };
 
 /** Keeps the files of the last scan and the programs of the last list, by id. */
 export class Storage {
   private files = new Map<string, string>();
+  /**
+   * Originals of videos KesherAI made smaller, by the original's id, with their copy. Kept across scans (a new scan
+   * lists only the biggest files, so it may leave these out), so "Original to the bin" keeps working.
+   */
+  private compressed = new Map<string, { original: string; copy: string; checked: boolean }>();
   private apps = new Map<string, { app: InstalledApp; uninstall: { file: string; args: string[] } }>();
   private scanning: Promise<StorageScan> | undefined;
   last: StorageScan | undefined;
@@ -327,9 +367,44 @@ export class Storage {
     return st?.isFile() ? this.remember(path, st.size, st.mtimeMs) : undefined;
   }
 
-  /** The path of a file from the last scan (undefined when it is not one). */
+  /**
+   * Lists a video KesherAI just made smaller and its copy, and keeps the pair (across scans) so the original can go
+   * to the bin later. Undefined when either file is not there.
+   *
+   * @param original - The original video's path (one this scan listed).
+   * @param copy - The compressed copy KesherAI wrote.
+   * @param checked - The copy was opened and has the original's length (it plays).
+   */
+  async addCompressed(original: string, copy: string, checked: boolean): Promise<{ original: StorageFile; result: StorageFile } | undefined> {
+    const o = await this.add(original);
+    const r = await this.add(copy);
+    if (!o || !r) return undefined;
+    this.compressed.set(o.id, { original, copy, checked });
+    return { original: o, result: r };
+  }
+
+  /**
+   * Where each compressed video's original stands: gone, or there and ready to go to the bin with the others (its
+   * copy is there, whole, and was checked to play).
+   *
+   * @param ids - The originals' ids; all known ones when left out.
+   */
+  async compressedOriginals(ids?: string[]): Promise<CompressedOriginal[]> {
+    const list = ids ?? [...this.compressed.keys()];
+    return Promise.all(
+      list.map(async (id) => {
+        const pair = this.compressed.get(id);
+        const o = pair && (await stat(pair.original).catch(() => undefined));
+        if (!pair || !o?.isFile()) return { id, gone: !!pair, ready: false, bytes: 0 };
+        const c = await stat(pair.copy).catch(() => undefined);
+        return { id, gone: false, ready: pair.checked && !!c?.isFile() && copyLooksWhole(o.size, c.size), bytes: o.size };
+      }),
+    );
+  }
+
+  /** The path of a file from the last scan or a compressed video's original (undefined when it is neither). */
   pathOf(id: string): string | undefined {
-    return this.files.get(id);
+    return this.files.get(id) ?? this.compressed.get(id)?.original;
   }
 
   /**
@@ -342,7 +417,7 @@ export class Storage {
     const failed: Array<{ id: string; error: string }> = [];
     let freed = 0;
     for (const id of ids.slice(0, 2000)) {
-      const path = this.files.get(id);
+      const path = this.pathOf(id);
       if (!path) {
         failed.push({ id, error: "Not in the last scan; scan again." });
         continue;
@@ -363,6 +438,17 @@ export class Storage {
       this.last.cards = this.last.cards.map((c) => ({ ...c, files: c.files.filter((f) => !gone.has(f.id)) })).map((c) => ({ ...c, bytes: c.files.reduce((n, f) => n + f.bytes, 0) })).filter((c) => c.files.length);
     }
     return { done, failed, freed };
+  }
+
+  /**
+   * Moves to the bin every compressed video's original whose copy is ready (there, whole and checked); the others
+   * stay.
+   *
+   * @param trash - Moves one path to the bin.
+   */
+  async removeOriginals(trash: (path: string) => Promise<void>): Promise<{ done: string[]; failed: Array<{ id: string; error: string }>; freed: number }> {
+    const ready = (await this.compressedOriginals()).filter((o) => o.ready).map((o) => o.id);
+    return this.remove(ready, trash);
   }
 
   /** Every program on the computer, biggest first. */
