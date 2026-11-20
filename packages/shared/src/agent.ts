@@ -99,6 +99,31 @@ export interface AskItem {
  */
 export type HelperKind = "lookup" | "research" | "build" | "operate" | "external";
 
+/**
+ * Approval card v2 for a browser or computer action (safety v2, Phase 4): where it acts, on what, a picture of the
+ * target, why it is asked, and when an unanswered card counts as denied. The same card shows on the phone.
+ */
+export interface ControlCard {
+  kind: "browser" | "computer";
+  /** The site's host ("mail.example.com"), for browser actions. */
+  site?: string;
+  /** The app's process name and its window's title, for computer actions. */
+  app?: string;
+  window?: string;
+  /** What it acts on, e.g. `button "Send"`. */
+  target?: string;
+  /** The tool's action, e.g. click, type, open (the card words it in the user's language). */
+  verb: string;
+  /** Asset id of a small picture of the target, cut from a screenshot. */
+  crop?: string;
+  /** Why it is asked: manual, sensitive, origin, js, always-ask, review. */
+  why: string[];
+  /** The sensitive list's reason (bank, payment, email, account, government, user). */
+  sensitive?: string;
+  /** When an unanswered card counts as denied (ISO time). */
+  expiresAt: string;
+}
+
 /** The sub-agent behind an approval request shown in its chat (the card and the notification name it). */
 export interface HelperAsker {
   /** The helper run's id. */
@@ -256,6 +281,8 @@ export type AgentEvent = EventBase &
         helper?: HelperAsker;
         /** The card offers no "Always" (a helper on a web site, while Settings → Browser keeps helpers asking each time). */
         noAlways?: boolean;
+        /** A browser or computer action: approval card v2 (site or app, target, picture, why, time limit). */
+        control?: ControlCard;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */

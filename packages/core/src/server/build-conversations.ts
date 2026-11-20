@@ -138,6 +138,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
     browserPane: () => browser.status().pane,
+    controlLog: browser.decisions,
+    saveImage: async (data: Buffer, mimeType: string) => (await assets.save(data, mimeType)).id,
     // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
     ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),
     // The translator, when it is a GGUF file (Settings → Chats → Model team): loaded beside the main model.

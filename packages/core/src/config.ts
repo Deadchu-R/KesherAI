@@ -435,6 +435,18 @@ export const KesherConfigSchema = z.object({
    * on every site, whatever the chat allowed (decided by Claude overnight, 2026-11-20; reversible here).
    */
   browserHelperAlways: z.boolean().default(false),
+  /**
+   * Safety v2 for browser and computer control (control-policy.ts, Settings → Browser and computer): the chat's mode
+   * (manual: ask each action; auto: a local reviewer first; skip: no asking, only with `controlSkipAllowed`), the
+   * helpers' mode (never skip), the JavaScript policy, the user's sensitive sites (always asked) and blocked sites.
+   */
+  controlMode: z.enum(["manual", "auto", "skip"]).default("manual"),
+  controlHelperMode: z.enum(["manual", "auto"]).default("manual"),
+  /** The owner's explicit yes for Skip mode, given after a warning; without it Skip works as Manual. */
+  controlSkipAllowed: z.boolean().default(false),
+  controlJs: z.enum(["ask", "local", "off"]).default("ask"),
+  controlSensitive: z.array(z.string()).default([]),
+  controlBlocked: z.array(z.string()).default([]),
   /** The user's keyboard shortcuts (Settings → Keyboard): a combination per id, or null for off (see shortcuts.ts). */
   keyboardShortcuts: z.record(z.string(), z.string().nullable()).default({}),
   /** Turn off KesherAI's in-app shortcuts (global ones are turned off one by one). */

@@ -96,6 +96,46 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /**
+   * Safety v2 for browser and computer (Settings → Browser and computer): modes, JavaScript policy, sensitive and
+   * blocked sites. Skip needs `skipAllowed` (the owner's yes after a warning); helpers are never on Skip.
+   */
+  const controlSettings = () => ({
+    mode: s.config.controlMode,
+    helperMode: s.config.controlHelperMode,
+    skipAllowed: s.config.controlSkipAllowed === true,
+    js: s.config.controlJs,
+    sensitive: s.config.controlSensitive ?? [],
+    blocked: s.config.controlBlocked ?? [],
+    helperAlways: s.config.browserHelperAlways === true,
+  });
+  app.get("/api/control/settings", async () => controlSettings());
+  app.put<{ Body: { mode?: string; helperMode?: string; skipAllowed?: boolean; js?: string; sensitive?: unknown; blocked?: unknown } }>("/api/control/settings", async (req, reply) => {
+    const b = req.body ?? {};
+    const sites = (v: unknown) =>
+      Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]!).filter((x) => /^[a-z0-9.*:-]{1,253}$/.test(x)))].slice(0, 200) : undefined;
+    if (b.mode !== undefined && !["manual", "auto", "skip"].includes(b.mode)) return reply.code(400).send({ error: "mode is manual, auto or skip" });
+    if (b.helperMode !== undefined && !["manual", "auto"].includes(b.helperMode)) return reply.code(400).send({ error: "helperMode is manual or auto" });
+    if (b.js !== undefined && !["ask", "local", "off"].includes(b.js)) return reply.code(400).send({ error: "js is ask, local or off" });
+    if (typeof b.skipAllowed === "boolean") s.config.controlSkipAllowed = b.skipAllowed;
+    // Skip only after the owner's yes: asking for it without that yes is refused, not silently kept.
+    if (b.mode === "skip" && !s.config.controlSkipAllowed) return reply.code(400).send({ error: "Turn on 'Allow Skip' first (it shows the warning)." });
+    if (b.mode) s.config.controlMode = b.mode as "manual" | "auto" | "skip";
+    if (!s.config.controlSkipAllowed && s.config.controlMode === "skip") s.config.controlMode = "manual";
+    if (b.helperMode) s.config.controlHelperMode = b.helperMode as "manual" | "auto";
+    if (b.js) s.config.controlJs = b.js as "ask" | "local" | "off";
+    const sens = sites(b.sensitive);
+    if (sens) s.config.controlSensitive = sens;
+    const blk = sites(b.blocked);
+    if (blk) s.config.controlBlocked = blk;
+    await s.saveConfig();
+    return controlSettings();
+  });
+  /** The action log: every browser and computer decision (who, site or app, what, allowed or denied, by whom). */
+  app.get<{ Querystring: { chat?: string; n?: string } }>("/api/control/decisions", async (req) => ({
+    decisions: s.browser.decisions.last(Math.min(200, Math.max(1, Number(req.query.n) || 50)), req.query.chat || undefined),
+  }));
+
   /** Whether helpers may also use "Always on this site" (off: they ask before every action; Settings → Browser). */
   app.post<{ Body: { on?: boolean } }>("/api/browser/helper-always", async (req) => {
     s.config.browserHelperAlways = req.body?.on === true;

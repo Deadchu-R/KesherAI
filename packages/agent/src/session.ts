@@ -18,7 +18,7 @@ import type {
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
 const PLAN_NOTE =
@@ -131,6 +131,8 @@ export interface AgentSessionOptions {
   reviewer?: () => Reviewer | undefined;
   /** "Always" given for a scope (a web site): the app keeps it (Settings lists it and can take it back). */
   onAlwaysScope?(scope: string): void;
+  /** A helper's session: its name, for tools that decide by who asks (browser and computer gates). */
+  helperName?: string;
   /** Environment variables for the session's commands (read on each command). */
   env?(): Record<string, string>;
   /** The chat's web search settings (read on each tool call). */
@@ -258,6 +260,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly alwaysAllowed = new Set<string>();
   private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
   private readonly onAlwaysScope?: (scope: string) => void;
+  private readonly helperName?: string;
   private readonly envOf?: () => Record<string, string>;
   private readonly webOf?: () => import("@kesher/shared").WebPrefs | undefined;
   private readonly torOf?: AgentSessionOptions["viaTor"];
@@ -311,6 +314,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.reviewerOf = opts.reviewer;
     this.polishAnswer = opts.polishAnswer;
     this.onAlwaysScope = opts.onAlwaysScope;
+    this.helperName = opts.helperName;
     this.envOf = opts.env;
     this.webOf = opts.web;
     this.torOf = opts.viaTor;
@@ -507,6 +511,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       this.push({ type: "approval_request", ...req, requestId });
       this.setStatus("waiting");
     });
+  }
+
+  /** The user's last three messages as they typed them (without attached files), oldest first. */
+  private askedLately(): string[] {
+    return this.messages.filter((m) => m.role === "user" && typeof m.content === "string").slice(-3).map((m) => String(m.content).split("\n\n---\n")[0]!.trim());
   }
 
   /**
@@ -1492,16 +1501,25 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const alwaysKey = scope ?? tool.spec.name;
     const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope);
     let verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
+    // Browser and computer tools decide themselves (safety v2: modes, sensitive sites, the origin gate, the local
+    // reviewer); a gate that fails asks the user.
+    const gate = tool.gate
+      ? await tool.gate(call.arguments, ctx, { always, ...(scope ? { scope } : {}), ...(this.helperName ? { helper: this.helperName } : {}), asked: this.askedLately(), plan: this.mode === "plan", sessionId: this.id }).catch((e: Error): GateResult => ({ action: "ask", reason: `The safety check failed (${e.message}), so you decide.`, noAlways: true }))
+      : undefined;
+    if (gate) {
+      verdict = gate.action === "allow" ? { action: "allow" } : { action: gate.action, reason: gate.reason };
+      if (gate.note) this.push({ type: "note", text: gate.note });
+    }
     // A call the tool says the person must agree to (a download of several GB): asked every time, in every mode.
-    const mustAsk = tool.askFirst?.(call.arguments);
+    const mustAsk = gate ? undefined : tool.askFirst?.(call.arguments);
     if (mustAsk && verdict.action !== "deny") verdict = { action: "ask", reason: mustAsk };
     // Smart auto approvals: a plain command in "auto-edit" (not on the always-ask list, not one the tool insists on
     // asking about) goes to the reviewer, which sees only what the person asked and the command. "No", an error or a
     // slow answer leaves the question to the person, as before.
     const command = tool.commandOf?.(call.arguments);
     const reviewer = this.reviewerOf?.();
-    if (reviewer && verdict.action === "ask" && !mustAsk && this.mode === "auto-edit" && tool.risk === "exec" && command && !dangerReason(command)) {
-      const asked = this.messages.filter((m) => m.role === "user" && typeof m.content === "string").slice(-3).map((m) => String(m.content).split("\n\n---\n")[0]!.trim());
+    if (!gate && reviewer && verdict.action === "ask" && !mustAsk && this.mode === "auto-edit" && tool.risk === "exec" && command && !dangerReason(command)) {
+      const asked = this.askedLately();
       const review = await reviewer({ tool: tool.spec.name, command, input: call.arguments, asked, ...(this.workspace ? { folder: this.workspace } : {}) }, signal).catch(() => undefined);
       if (review?.allow) {
         this.push({ type: "note", text: `✓ Approved by the reviewer: ${command.slice(0, 120)}${review.reason ? ` (${review.reason})` : ""}` });
@@ -1519,14 +1537,32 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         return fail((err as Error).message);
       }
       const requestId = randomUUID();
-      const { decision, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
-        this.approvals.set(requestId, resolve);
+      const noAlways = gate?.noAlways === true;
+      const { decision: answered, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
+        // A gate's time limit (browser and computer: 5 minutes): no answer counts as denied, and the model is told.
+        const timer = gate?.timeoutMs
+          ? setTimeout(() => {
+              if (this.approvals.get(requestId) !== settle) return;
+              this.approvals.delete(requestId);
+              settle({ decision: "expired", feedback: "No answer in 5 minutes, so it counts as denied." });
+              if (this.statusValue === "waiting" && !this.approvals.size && !this.questions.size) this.setStatus(signal.aborted ? "idle" : "running");
+            }, gate.timeoutMs)
+          : undefined;
+        timer?.unref?.();
+        const settle = (d: { decision: ApprovalDecision; feedback?: string }) => {
+          if (timer) clearTimeout(timer);
+          resolve(d);
+        };
+        this.approvals.set(requestId, settle);
         const given = typeof call.arguments.purpose === "string" ? call.arguments.purpose.trim() : "";
         const purpose = (given || this.lastSaid).slice(0, 400);
         const folder = tool.risk === "exec" ? this.workspace : undefined;
-        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason, ...(purpose ? { purpose } : {}), ...(folder ? { folder } : {}), ...(scope ? { scope } : {}) });
+        this.push({ type: "approval_request", requestId, callId: call.id, name: call.name, input: call.arguments, preview, reason: verdict.reason, ...(purpose ? { purpose } : {}), ...(folder ? { folder } : {}), ...(scope ? { scope } : {}), ...(noAlways ? { noAlways: true } : {}), ...(gate?.control ? { control: gate.control } : {}) });
         this.setStatus("waiting");
       });
+      // "Always" where the card offers none (a sensitive site, a helper without the setting) counts as once.
+      const decision: ApprovalDecision = answered === "always" && noAlways ? "allow" : answered;
+      gate?.decided?.(decision, feedback?.startsWith("No answer in 5 minutes") ? "timeout" : "user");
       this.push({ type: "approval_result", requestId, decision, ...(feedback ? { feedback } : {}) });
       if (decision === "deny" || decision === "expired") {
         const msg = `The user denied this action.${feedback ? ` Their note: ${feedback}` : ""} Do not retry it unchanged; ask or try another way.`;

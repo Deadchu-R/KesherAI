@@ -57,6 +57,39 @@ export interface ToolContext {
   viaTor?(url: string, signal: AbortSignal): Promise<{ url: string; status: number; type: string; body: string }>;
 }
 
+/** What the session tells a tool's gate about the call. */
+export interface GateInfo {
+  /** Whether a saved "Always" covers it (the call's scope: a site or an app). */
+  always: boolean;
+  /** The scope "Always" would cover ("site:example.com"), when the tool has one. */
+  scope?: string;
+  /** The helper's name when a helper's session asks; undefined in the chat itself. */
+  helper?: string;
+  /** The user's last messages, oldest first. */
+  asked: string[];
+  /** The chat is in plan mode. */
+  plan: boolean;
+  /** The chat's id, for the action log. */
+  sessionId: string;
+}
+
+/** A gate's answer. */
+export interface GateResult {
+  action: "allow" | "ask" | "deny";
+  /** One sentence: shown on the card (ask) or told to the model (deny). */
+  reason: string;
+  /** The card must not offer "Always", and an "always" answer counts as once. */
+  noAlways?: boolean;
+  /** Approval card v2's facts. */
+  control?: import("@kesher/shared").ControlCard;
+  /** An unanswered card counts as denied after this long. */
+  timeoutMs?: number;
+  /** A line for the thread (e.g. "approved by the local reviewer"). */
+  note?: string;
+  /** Called with the final decision, for the action log. */
+  decided?(decision: "allow" | "always" | "deny" | "expired", by: "user" | "timeout"): void;
+}
+
 /**
  * A tool the agent can call. Plugins and the core server add their own
  * (for example the media tools of the active models) next to the built-ins.
@@ -78,6 +111,11 @@ export interface AgentTool {
    * reason shown on the approval card. Undefined for calls that need no extra yes.
    */
   askFirst?(input: Record<string, unknown>): string | undefined;
+  /**
+   * Decides the call itself instead of the chat's mode (browser and computer tools, safety v2): run, ask the user
+   * (with approval card v2) or refuse. When set, `askFirst` and the command reviewer are the gate's business.
+   */
+  gate?(input: Record<string, unknown>, ctx: ToolContext, info: GateInfo): Promise<GateResult>;
   /** What the user sees in an approval request: a diff, a command. */
   preview?(input: Record<string, unknown>, ctx: ToolContext): Promise<string>;
   /** Runs the tool. Throw an Error to report a failure to the model. */

@@ -7,6 +7,7 @@ import type { AgentTool } from "@kesher/agent";
 import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-worker.js";
 import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
 import { deletesFiles, isSecureWindow, isSystemSettings } from "./computer-safety.js";
+import { withControlInfo } from "./control-gate.js";
 
 /**
  * Computer control: lets a model with vision look at the screen and click,
@@ -1267,6 +1268,26 @@ export class ComputerControl {
         }),
       );
     }
-    return list;
+    // Where each call acts, for safety v2's gate and approval card v2: the app, its window, the control and its picture.
+    const refsOf = this.uiaRefs.get(conversationId);
+    const where = async (input: Record<string, unknown>) => {
+      const fg = this.front.get(conversationId);
+      const app = (typeof input.app === "string" && input.app.trim() ? input.app.trim() : fg?.app ?? "").replace(/\.exe$/i, "");
+      const r = input.ref !== undefined ? refsOf?.get(String(input.ref).trim()) : undefined;
+      const rect = r?.node.rect;
+      const zoom = this.be.zoom?.bind(this.be);
+      return {
+        ...(app ? { app } : {}),
+        ...(r ? { window: r.window.title } : fg?.title ? { window: fg.title } : {}),
+        ...(r ? { target: `${r.node.type} "${r.node.name.slice(0, 80)}"` } : {}),
+        granted: !!app && !!this.allowed.get(conversationId)?.has(app.toLowerCase()),
+        ...(typeof input.text === "string" ? { typedChars: input.text.length } : typeof input.value === "string" ? { typedChars: input.value.length } : {}),
+        // A little around the control, at most 320 px wide: only made when a card is shown.
+        ...(rect && zoom && rect[2] > 2 && rect[3] > 2
+          ? { crop: async () => (await zoom(Math.max(0, rect[0] - 8), Math.max(0, rect[1] - 8), rect[2] + 16, rect[3] + 16, 320)).png }
+          : {}),
+      };
+    };
+    return list.map((t) => withControlInfo(t, where));
   }
 }

@@ -1,4 +1,7 @@
 import { UNTRUSTED_RULE } from "./browser-safety.js";
+import { gateControlTools } from "./control-gate.js";
+import { ControlLog } from "./control-policy.js";
+import { localControlReviewer } from "./control-reviewer.js";
 import { guestFileTools } from "./guests.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
@@ -268,7 +271,8 @@ export class ConversationManager {
     // "Check my change" (like Claude's browser pane): in a code chat with KesherAI's own browser, look at the result.
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
-    const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])];
+    // Browser and computer tools: safety v2 decides each call (modes, sensitive sites, origin gate, local reviewer).
+    const all = this.gateControl(id, [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
     // Page text is data, never instructions (browser-safety.ts); said once wherever the browser tools are.
     if (all.some((t) => t.spec.name.startsWith("browser_"))) media.notes.push(UNTRUSTED_RULE);
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
@@ -292,6 +296,58 @@ export class ConversationManager {
     const result = { tools: [...all, offerInstallTool((what) => this.installReady?.(what) ?? Promise.resolve(false))], notes: [...media.notes, ...group.notes] };
     // A chat written from Telegram never controls the screen or the browser, whatever else is on (chat-tool-groups.ts).
     return id && this.deps.library.summary(id)?.source === "telegram" ? forTelegram(result) : result;
+  }
+
+  /** Sites the user approved per chat: the origin gate's task sites (control-gate.ts). */
+  private readonly controlSites = new Map<string, Set<string>>();
+  /** Safety v2's action log, when the server did not give one. */
+  private ownControlLog?: ControlLog;
+
+  /**
+   * Puts the safety v2 gate in front of a chat's browser and computer tools.
+   *
+   * @param id - The chat (none: the tools as they are, e.g. for the tool list).
+   * @param tools - All the chat's tools.
+   */
+  private gateControl(id: string | undefined, tools: AgentTool[]): AgentTool[] {
+    if (!id) return tools;
+    const sites = this.controlSites.get(id) ?? new Set<string>();
+    this.controlSites.set(id, sites);
+    const cfg = this.deps.config;
+    return gateControlTools(tools, {
+      chatId: id,
+      settings: () => ({
+        mode: cfg.controlMode ?? "manual",
+        helperMode: cfg.controlHelperMode ?? "manual",
+        skipAllowed: cfg.controlSkipAllowed === true,
+        js: cfg.controlJs ?? "ask",
+        sensitive: cfg.controlSensitive ?? [],
+        blocked: cfg.controlBlocked ?? [],
+        helperAlways: cfg.browserHelperAlways === true,
+      }),
+      // The reviewer runs on a local model only (the chat's when it is local, otherwise the main chat model when that
+      // one is): page-adjacent decisions never go to a cloud model.
+      reviewer: () =>
+        localControlReviewer(() => {
+          for (const m of [this.deps.library.summary(id)?.modelId, cfg.activeModels.chat]) {
+            if (!m || m.startsWith("agent/")) continue;
+            try {
+              if (this.deps.registry.resolve(m).provider.location !== "cloud") return { model: modelTurnFor(this.deps.registry, m, undefined, "helper"), local: true };
+            } catch {
+              // Not a model this computer knows: try the next.
+            }
+          }
+          return undefined;
+        }),
+      log: this.controlLog(),
+      sites,
+      ...(this.deps.saveImage ? { saveCrop: (png: Buffer) => this.deps.saveImage!(png, "image/png") } : {}),
+    });
+  }
+
+  /** @returns Safety v2's action log (the server's, or this object's own). */
+  controlLog(): ControlLog {
+    return this.deps.controlLog ?? (this.ownControlLog ??= new ControlLog());
   }
 
   /** Chat models seen on the last listing, for the helpers' description (refreshed in the background). */

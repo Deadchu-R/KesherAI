@@ -106,6 +106,10 @@ export interface ConversationDeps {
   onEvent?(conversationId: string, event: AgentEvent, title: () => string, lastAnswer: () => string | undefined): void;
   /** Whether KesherAI's own browser pane (the desktop app) is there. */
   browserPane?(): boolean;
+  /** Browser and computer decisions (safety v2's action log), shared with the routes. */
+  controlLog?: import("./control-policy.js").ControlLog;
+  /** Keeps a picture as an asset (approval card v2's crop of the target); its id. */
+  saveImage?(data: Buffer, mimeType: string): Promise<string>;
   /** The built-in engine as helpers need it (chat-helpers.ts): what is loaded, the card, model files, loading. */
   helperEngine?: HelperEngine;
   /** The translator's model id: a GGUF translator (TranslateGemma) is loaded beside the main model when needed. */

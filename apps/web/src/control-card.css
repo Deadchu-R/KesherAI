@@ -1,0 +1,28 @@
+/* Approval card v2 for browser and computer actions (ControlApproval.tsx). Works at 390 px: nothing is cut. */
+.cc-card.cc-warn { border-color: rgb(255 120 100 / 0.6); }
+.cc-card .cc-title { line-height: 1.45; overflow-wrap: anywhere; }
+.cc-card .cc-target { font-weight: 600; }
+.cc-card .cc-body { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.cc-card .cc-crop { width: 160px; max-width: 100%; max-height: 120px; object-fit: contain; border-radius: 8px; border: 1px solid var(--border, rgba(127,127,127,.3)); background: #fff; }
+.cc-card .cc-facts { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-card .cc-where, .cc-card .cc-window { margin: 0; overflow-wrap: anywhere; }
+.cc-card .cc-badges { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-card .cc-badges li { font-size: 12.5px; padding: 3px 8px; border-radius: 999px; background: var(--hover, rgba(127,127,127,.12)); overflow-wrap: anywhere; }
+.cc-card .cc-badges li.warn { color: var(--live); }
+.cc-card .cc-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.cc-card .cc-buttons button { flex: 1 1 auto; min-height: 40px; white-space: normal; }
+.cc-card .cc-left { margin: 0; }
+
+/* Settings → Browser and computer safety (settings/ControlSafetySection.tsx). */
+.cs-section h3 { margin: 6px 0 0; font-size: 15px; }
+.cs-radios { display: flex; flex-direction: column; gap: 6px; }
+.cs-radio { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--border, rgba(127,127,127,.3)); border-radius: 10px; line-height: 1.4; overflow-wrap: anywhere; cursor: pointer; }
+.cs-radio.on { border-color: var(--accent); }
+.cs-radio.off { opacity: 0.55; cursor: default; }
+.cs-radio input { margin-top: 3px; flex: none; width: auto; }
+.cs-radio > span { flex: 1; min-width: 0; }
+.cs-warning { border: 1px solid #b4232a; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cs-warning p { margin: 0; line-height: 1.5; }
+.cs-section textarea { width: 100%; box-sizing: border-box; }
+.cs-log li { line-height: 1.5; overflow-wrap: anywhere; }
+.cs-log .cs-no { color: var(--live); }

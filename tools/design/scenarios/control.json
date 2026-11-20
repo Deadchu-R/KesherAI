@@ -1,0 +1,310 @@
+{
+ "group": "דפדפן",
+ "now": "2026-11-21T10:05:00Z",
+ "boards": [
+  {
+   "id": "ControlCardBrowser",
+   "title": "אישור v2: סוכן עזר באתר רגיש",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".cc-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "חשבונית לדנה",
+      "kind": "chat",
+      "modelId": "qwen3-8b",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "c2",
+       "status": "waiting",
+       "modelId": "qwen3-8b",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תשלח לדנה את החשבונית דרך mail.example.com"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "שלחתי סוכן עזר לכתוב את המייל. לפני השליחה הוא צריך את האישור שלך."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "b1",
+        "name": "browser_click",
+        "input": {
+         "ref": "e3"
+        },
+        "preview": "Click button \"Send\" (ref e3) on mail.example.com",
+        "reason": "mail.example.com is email, so every action there is asked, in every mode.",
+        "purpose": "לשלוח לדנה את המייל עם החשבונית שצירפתי",
+        "scope": "site:mail.example.com",
+        "noAlways": true,
+        "helper": {
+         "id": "h1",
+         "title": "כותב המייל",
+         "kind": "research"
+        },
+        "control": {
+         "kind": "browser",
+         "verb": "click",
+         "site": "mail.example.com",
+         "target": "button \"Send\"",
+         "crop": "crop-send",
+         "why": [
+          "sensitive",
+          "manual"
+         ],
+         "sensitive": "email",
+         "expiresAt": "2026-11-21T10:09:12Z"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ]
+  },
+  {
+   "id": "ControlCardComputer",
+   "title": "אישור v2: פעולה במחשב אחרי הבודק המקומי",
+   "route": "#/c/c3",
+   "height": {
+    "desktop": 800,
+    "phone": 1200
+   },
+   "steps": [
+    {
+     "wait": ".cc-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c3",
+     "json": {
+      "id": "c3",
+      "projectId": null,
+      "title": "Notes",
+      "kind": "chat",
+      "modelId": "qwen3-8b",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c3",
+       "status": "waiting",
+       "modelId": "qwen3-8b",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r2"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "user",
+        "text": "Save my notes in Notepad"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r2",
+        "callId": "k1",
+        "name": "computer_invoke",
+        "input": {
+         "ref": "u7"
+        },
+        "preview": "Press Button \"Save\" in notepad",
+        "reason": "The local reviewer left it to you: saving replaces the file.",
+        "noAlways": true,
+        "control": {
+         "kind": "computer",
+         "verb": "invoke",
+         "app": "notepad",
+         "window": "notes.txt - Notepad",
+         "target": "Button \"Save\"",
+         "crop": "crop-save",
+         "why": [
+          "review"
+         ],
+         "expiresAt": "2026-11-21T10:08:30Z"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c3/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c3/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='110'><rect width='320' height='110' fill='#ffffff'/><rect x='90' y='30' width='140' height='50' rx='4' fill='#e8e8e8' stroke='#888'/><text x='160' y='63' font-size='22' text-anchor='middle' fill='#111' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ]
+  },
+  {
+   "id": "ControlSettings",
+   "title": "הגדרות: בטיחות בדפדפן ובמחשב",
+   "route": "#/settings/developers",
+   "height": {
+    "desktop": 1500,
+    "phone": 2400
+   },
+   "steps": [
+    {
+     "wait": ".cs-section"
+    },
+    {
+     "click": ".cs-section label.row input[type=checkbox]"
+    },
+    {
+     "wait": ".cs-warning"
+    },
+    {
+     "scroll": ".cs-section"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/control/settings",
+     "json": {
+      "mode": "manual",
+      "helperMode": "manual",
+      "skipAllowed": false,
+      "js": "ask",
+      "sensitive": [
+       "portal.mycorp.example"
+      ],
+      "blocked": [
+       "ads.tracker.example"
+      ],
+      "helperAlways": false
+     }
+    },
+    {
+     "url": "**/api/control/decisions*",
+     "json": {
+      "decisions": [
+       {
+        "at": "2026-11-21T09:58:00Z",
+        "kind": "browser",
+        "tool": "browser_open",
+        "site": "shop.example",
+        "decision": "allow",
+        "by": "user"
+       },
+       {
+        "at": "2026-11-21T10:00:00Z",
+        "helper": "כותב המייל",
+        "kind": "browser",
+        "tool": "browser_type",
+        "site": "mail.example.com",
+        "target": "textbox \"To\"",
+        "decision": "allow",
+        "by": "user"
+       },
+       {
+        "at": "2026-11-21T10:02:00Z",
+        "kind": "computer",
+        "tool": "computer_invoke",
+        "app": "notepad",
+        "target": "Button \"Save\"",
+        "decision": "allow",
+        "by": "reviewer"
+       },
+       {
+        "at": "2026-11-21T10:03:00Z",
+        "helper": "Researcher",
+        "kind": "browser",
+        "tool": "browser_click",
+        "site": "bank.example",
+        "target": "link \"Transfer\"",
+        "decision": "expired",
+        "by": "timeout"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
 import { BrowserLog, hostOf, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
+import { ControlLog } from "./control-policy.js";
+import { withControlInfo } from "./control-gate.js";
 import { CdpPage, type CdpTransport } from "./cdp.js";
 import { cdpBrowserTools, isCdpRef, snapshotText } from "./browser-cdp-tools.js";
 import { ExtensionCdp, extensionHasCdp } from "./browser-ext-cdp.js";
@@ -49,6 +51,8 @@ export class BrowserBridge {
   private stoppedAt = 0;
   /** What the browser tools did (the pane's activity strip, the phone). */
   readonly log = new BrowserLog();
+  /** Safety v2's decisions for browser and computer actions of every chat (control-policy.ts): the action log. */
+  readonly decisions = new ControlLog();
   /** The last page read per browser and tab ("pane:front", "chrome:7"): ref → what the element is, for approval cards. */
   readonly labels = new Map<string, Map<string, string>>();
 
@@ -582,5 +586,25 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
   ];
   // The CDP tools (snapshot refs, console, network…): KesherAI's own pane, and the user's Chrome with extension 0.3.0+.
   if (b.status().pane || b.status().extensionCdp) tools.push(...cdpBrowserTools(b, { tabArg, onSite, ...(saveShot ? { saveAsset: saveShot } : {}), ...(opts.ffmpeg ? { ffmpeg: opts.ffmpeg } : {}) }));
-  return tools.map((t) => logged(t.spec.name === "browser_tabs" ? t : scoped(t)));
+  /** Where a call acts, for safety v2's gate and approval card v2: the site, the element and a picture of it. */
+  const where = async (input: Record<string, unknown>, ctx: { signal: AbortSignal }) => {
+    let url = typeof input.url === "string" ? input.url : undefined;
+    if (!url) {
+      const tabs = await b.call<BrowserTab[]>("tabs", { browser: input.browser }, ctx.signal).catch(() => [] as BrowserTab[]);
+      url = (typeof input.tabId === "number" ? tabs.find((x) => x.id === input.tabId) : tabs.find((x) => x.active))?.url;
+    }
+    const site = url ? hostOf(url) : undefined;
+    const ref = input.ref !== undefined ? String(input.ref) : "";
+    return {
+      ...(site ? { site } : {}),
+      ...(url ? { url } : {}),
+      ...(ref ? { target: await labelOf(input, ctx.signal) } : {}),
+      ...(typeof input.text === "string" ? { typedChars: input.text.length } : {}),
+      // The element's own picture over CDP (a snapshot ref): only made when a card is shown; at most 1.5 MB.
+      ...(ref && viaCdp(input)
+        ? { crop: async () => { const shot = await b.withCdp(input, (p) => p.screenshot({ ref }), ctx.signal); return shot.data.length <= 1.5 * 1024 * 1024 ? shot.data : undefined; } }
+        : {}),
+    };
+  };
+  return tools.map((t) => withControlInfo(logged(t.spec.name === "browser_tabs" ? t : scoped(t)), where));
 }

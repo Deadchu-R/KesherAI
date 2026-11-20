@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 export { AgentSession, lineDelta, type AgentSessionOptions, type RunFiles, type UndoStore, type ExternalAgent, type ExternalIO, type ContextView, type ModelTurn, type TeamMember } from "./session.js";
-export { CODE_TOOLS, ASK_USER_TOOL, askUserSpec, makeDiff, truncate, type AgentTool, type ToolContext, type ToolOutput } from "./tools.js";
+export { CODE_TOOLS, ASK_USER_TOOL, askUserSpec, makeDiff, truncate, type AgentTool, type GateInfo, type GateResult, type ToolContext, type ToolOutput } from "./tools.js";
 export { decide, dangerReason, type PermissionVerdict } from "./permissions.js";
 export { modelReviewer, parseReview, reviewPrompt, REVIEW_SYSTEM, type Reviewer, type ReviewRequest, type ReviewVerdict } from "./reviewer.js";
 export { resolveInWorkspace, displayPath, globToRegExp, IGNORED_DIRS } from "./workspace.js";

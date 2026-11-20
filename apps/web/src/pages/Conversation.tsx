@@ -43,6 +43,7 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
+import { ControlApproval } from "../ControlApproval";
 import { ItemCard } from "../DocPanel";
 import { itemFromResult } from "../doc-items";
 import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
@@ -989,7 +990,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   </div>
                 );
               case "approval_request":
-                return <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
+                // Browser and computer actions: approval card v2 (site or app, target picture, why, 5-minute limit).
+                return e.control ? <ControlApproval key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} /> : <ApprovalCard key={e.seq} convId={id} ev={e} pending={!!info?.pendingApprovals.includes(e.requestId)} result={approvalResults.get(e.requestId)} />;
               case "plan":
                 return (
                   <div key={e.seq} className="plan-card">

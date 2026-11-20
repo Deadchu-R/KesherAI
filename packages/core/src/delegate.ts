@@ -229,7 +229,7 @@ async function runHelper(
   onStep: (text: string) => void,
   onUsage?: (u: { input: number; output: number; cached?: number; estimated: boolean }) => void,
   saved?: { resumed?: AgentMessage[]; followUp?: string; transcript?: (messages: AgentMessage[]) => void; notes?: HelperControl["notes"] },
-  ask?: { approve: (req: Omit<HelperApproval, "helper" | "requestId">) => Promise<{ decision: ApprovalDecision; feedback?: string }> },
+  ask?: { approve: (req: Omit<HelperApproval, "helper" | "requestId">, signal?: AbortSignal) => Promise<{ decision: ApprovalDecision; feedback?: string }> },
   onTests?: (r: { ok: boolean; command: string }) => void,
 ): Promise<string> {
   const { agent, copy } = p;
@@ -250,6 +250,8 @@ async function runHelper(
     // Only the rules made on helper cards count (`helper:<tool>`), and sites allowed in the browser.
     // A site the user allowed counts for helpers only when Settings → Browser says so (off by default).
     ...(o.isAlwaysAllowed ? { isAlwaysAllowed: (tool: string, modelId: string, command?: string, scope?: string) => (scope?.startsWith("site:") ? siteAlways() && o.isAlwaysAllowed!(tool, modelId, command, scope) : o.isAlwaysAllowed!(`${HELPER_RULE}${tool}`, modelId, command, scope)) } : {}),
+    // Browser and computer gates decide by who asks (helpers: Manual by default, never Skip).
+    helperName: p.who?.title ?? "helper",
     ...(o.onAlwaysScope ? { onAlwaysScope: (scope: string) => { if (siteAlways()) o.onAlwaysScope!(scope); } } : {}),
     ...(copy ? { workspace: copy } : !p.webOnly && o.workspace?.() ? { workspace: o.workspace()! } : {}),
     tools,
@@ -270,6 +272,8 @@ async function runHelper(
   let idle: (() => void) | undefined;
   /** @returns When the session next stops working (its answer, an error or a stop). */
   const untilIdle = () => new Promise<void>((resolve) => (idle = resolve));
+  /** The helper's open cards, shown on the chat's card: closed when the helper's own card ends first. */
+  const relays = new Map<string, AbortController>();
   s.on("event", (e) => {
     if (e.type === "assistant") last = e.text;
     else if (e.type === "tool_call") onStep(stepLine(e.name, e.input));
@@ -285,13 +289,20 @@ async function runHelper(
       else {
         const { requestId } = e;
         // On a site, without the setting: no "Always" on the card, and an "always" (an older card) counts as once.
-        const once = !!e.scope?.startsWith("site:") && !siteAlways();
-        const req = { callId: e.callId, name: e.name, input: e.input, preview: e.preview, reason: e.reason, ...(e.purpose ? { purpose: e.purpose } : {}), ...(e.folder ? { folder: e.folder } : {}), ...(e.scope ? { scope: e.scope } : {}), ...(once ? { noAlways: true } : {}) };
-        void ask.approve(req).then(
+        const once = (!!e.scope?.startsWith("site:") && !siteAlways()) || e.noAlways === true;
+        const req = { callId: e.callId, name: e.name, input: e.input, preview: e.preview, reason: e.reason, ...(e.purpose ? { purpose: e.purpose } : {}), ...(e.folder ? { folder: e.folder } : {}), ...(e.scope ? { scope: e.scope } : {}), ...(once ? { noAlways: true } : {}), ...(e.control ? { control: e.control } : {}) };
+        // The helper's own card may end first (5 minutes without an answer): the chat's card closes with it.
+        const closed = new AbortController();
+        relays.set(requestId, closed);
+        void ask.approve(req, closed.signal).then(
           (d) => s.approve(requestId, d.decision === "allow" || d.decision === "always" ? (once ? "allow" : d.decision) : "deny", d.feedback ?? (d.decision === "expired" ? "No answer: the helper stopped." : undefined)),
           () => s.approve(requestId, "deny", "Could not ask the user."),
-        );
+        ).finally(() => relays.delete(requestId));
       }
+    }
+    else if (e.type === "approval_result") {
+      relays.get(e.requestId)?.abort();
+      relays.delete(e.requestId);
     }
     else if (
       e.type === "status" &&
@@ -396,11 +407,11 @@ export function helperWork(
       // A step that needs the user: shown on the chat's card naming this helper; its card says it waits, and the time cap waits.
       const ask = approve
         ? {
-            approve: async (req: Omit<HelperApproval, "helper" | "requestId">) => {
+            approve: async (req: Omit<HelperApproval, "helper" | "requestId">, closed?: AbortSignal) => {
               const requestId = randomUUID();
               ctl.update({ approval: { requestId, chatId: o.chatId ?? "", tool: req.name } });
               try {
-                return await ctl.hold(approve({ ...req, requestId, helper: who }, ctl.signal), `Waits for your approval: ${req.name}`);
+                return await ctl.hold(approve({ ...req, requestId, helper: who }, closed ? AbortSignal.any([ctl.signal, closed]) : ctl.signal), `Waits for your approval: ${req.name}`);
               } finally {
                 ctl.update({ approval: undefined });
               }

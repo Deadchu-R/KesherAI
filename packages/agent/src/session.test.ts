@@ -843,3 +843,33 @@ test("runDirect: a button runs a tool without a model turn, the model hears of i
   assert.match(JSON.stringify(seen[0]!.messages), /pressed a button under a result that ran upscale_image/);
   await assert.rejects(session.runDirect("nope", {}), /no tool called/);
 });
+
+test("a tool's gate decides: its card carries card v2, Always counts as once, and no answer in time counts as denied", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const decided: string[] = [];
+  let runs = 0;
+  const gated = {
+    spec: { name: "browser_click", description: "click", inputSchema: { type: "object" } },
+    risk: "read" as const,
+    gate: async (_i: Record<string, unknown>, _c: unknown, info: { helper?: string; asked: string[] }) => ({
+      action: "ask" as const,
+      reason: `asked by ${info.helper ?? "chat"}: ${info.asked.join("|")}`,
+      noAlways: true,
+      timeoutMs: 60,
+      control: { kind: "browser" as const, verb: "click", site: "mail.example", why: ["sensitive"], expiresAt: new Date().toISOString() },
+      decided: (d: string, by: string) => decided.push(`${d}/${by}`),
+    }),
+    run: async () => ((runs += 1), { output: "clicked" }),
+  };
+  const { model } = scripted([{ calls: [{ name: "browser_click", arguments: {} }] }, { calls: [{ name: "browser_click", arguments: { n: 2 } }] }, { text: "ok" }]);
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [gated], systemPrompt: "sys", helperName: "Shopper" });
+  session.send("send it");
+  const req = await waitFor(session, (e) => e.type === "approval_request");
+  assert.ok(req.type === "approval_request" && req.noAlways && req.control?.site === "mail.example");
+  assert.match(req.type === "approval_request" ? req.reason : "", /asked by Shopper: send it/);
+  session.approve(req.type === "approval_request" ? req.requestId : "", "always");
+  await waitFor(session, (e) => e.type === "approval_result" && e.decision === "expired");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  assert.equal(runs, 1);
+  assert.deepEqual(decided, ["allow/user", "expired/timeout"]);
+});
