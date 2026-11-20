@@ -1,12 +1,16 @@
 /**
- * Kesher Cloud hub: sealed records, so every device of the account sees every task and agent (docs/RESEARCH_LOG.md,
- * "Hub: every task and agent on every device", 2026-11-20).
+ * Kesher Cloud: sealed records, so every device of the account sees every task and agent (docs/RESEARCH_LOG.md,
+ * "Hub: every task and agent on every device" and "Tasks in Roee's Google Drive instead of the hub", 2026-11-20).
+ *
+ * The records live in the owner's own Google Drive (its hidden appDataFolder), one immutable file per revision, named
+ * after the record's head ({@link recordFileName}); files are only created and deleted, never updated, so two devices
+ * cannot overwrite each other. Each device keeps its own Drive `changeToken` as the sync cursor.
  *
  * The owner's devices share one random **account key** K. A record is sealed with AES-GCM-256 under
  * HKDF-SHA-256(K, salt = random per write, info = "kesher-sync v1"), so each write has its own key and no GCM nonce
- * budget is shared. The authenticated data binds `v|kid|id|kind|rev|deleted|done|writer`, so the hub (which stores
- * the records and never holds K) cannot move a ciphertext to another record, change its revision or writer, or flip
- * a tombstone. The plain text is padded to 256-byte steps, so the hub sees sizes only roughly.
+ * budget is shared. The authenticated data binds `v|kid|id|kind|rev|deleted|done|writer`, so whoever stores the
+ * files cannot move a ciphertext to another record (or rename its file), change its revision or writer, or flip a
+ * tombstone. The plain text is padded to 256-byte steps, so the store sees sizes only roughly.
  *
  * One id names one task; its kinds are facets with their own writer: `task` (the origin device, once), `run` (the
  * device that runs it), `meta` (any device: the owner's marks), and `agent` (a finished agent run's snapshot).
@@ -17,30 +21,26 @@ import { fromB64url, randomB64url, toB64url, type HubCryptoKey } from "./hub-cry
 /** The record format version (part of the authenticated data). */
 export const SYNC_VERSION = 1;
 
-/** Sizes and counts for synced records (the hub enforces them; devices keep to them). */
+/** Sizes, counts and times for synced records (every device keeps to them). */
 export const SYNC_LIMITS = {
-  /** Live records the hub keeps for the account. */
-  records: 2000,
-  /** Bytes of sealed data the hub keeps (salt + iv + ciphertext, as stored). */
-  bytes: 16 * 1024 * 1024,
   /** Largest ciphertext of one record, in base64url characters (64 KB). */
   recordChars: 64 * 1024,
-  /** Records in one `PUT /api/sync`. */
-  batch: 20,
-  /** Largest `PUT /api/sync` body, in characters (a full batch with room for the record heads). */
-  bodyChars: 20 * (64 * 1024 + 1024),
-  /** Records in one `GET /api/sync` page. */
-  page: 200,
   /** Plain text is padded up to a multiple of this many bytes. */
   padBytes: 256,
   /** Entries in a run's timeline, and characters of its fields. */
   timeline: 30,
   summaryChars: 500,
   noteChars: 2000,
-  /** How long the hub keeps a finished task (its run is done), a tombstone and an agent snapshot. */
+  /** How long a finished task (its run is done), a tombstone and an agent snapshot are kept before compaction. */
   doneKeepMs: 90 * 24 * 3600 * 1000,
   tombstoneKeepMs: 30 * 24 * 3600 * 1000,
   agentKeepMs: 30 * 24 * 3600 * 1000,
+  /** How often an open app pulls the Drive changes feed. */
+  pollMs: 60_000,
+  /** A revision's file is deleted once a newer revision of its facet has existed this long. */
+  compactAfterMs: 24 * 3600 * 1000,
+  /** Files in one Drive `files.list` / `changes.list` page (Drive's largest). */
+  driveListPage: 1000,
 } as const;
 
 /** The facets of one synced id. */
@@ -126,7 +126,7 @@ export type SyncBody = SyncTaskBody | SyncRunBody | SyncMetaBody | SyncAgentBody
 /** What a record's kind holds. */
 type BodyOf<K extends SyncKind> = Extract<SyncBody, { type: K }>;
 
-/** A sealed record as the hub stores and sends it. Everything but `ct` is visible to the hub. */
+/** A sealed record. Everything but `ct` is visible to the store (its head is the file name). */
 export interface SyncRecord {
   v: typeof SYNC_VERSION;
   /** Random, opaque (the same for a task's facets). */
@@ -134,23 +134,20 @@ export interface SyncRecord {
   kind: SyncKind;
   /** Grows by one with each write of this facet. */
   rev: number;
-  /** The device that wrote this revision (the hub checks it is the sender). */
+  /** The device that wrote this revision. */
   writer: string;
-  /** A tombstone: the facet was deleted (it still carries a sealed, empty body, so the hub cannot forge one). */
+  /** A tombstone: the facet was deleted (it still carries a sealed, empty body, so the store cannot forge one). */
   deleted?: boolean;
-  /** A finished run (terminal state): tells the hub when it may forget the task. */
+  /** A finished run (terminal state): tells compaction when the task may be forgotten. */
   done?: boolean;
   /** Which account key sealed it (keys are replaced when a device is removed). */
   kid: number;
   salt: string;
   iv: string;
   ct: string;
-  /** Set by the hub: its order number (the sync cursor) and when it stored this revision. */
-  seq?: number;
-  at?: number;
 }
 
-/** The head of a record: what merging and the hub's checks look at. */
+/** The head of a record: what merging and compaction look at (and what its file name holds). */
 export type SyncHead = Pick<SyncRecord, "id" | "kind" | "rev" | "writer"> & Partial<Pick<SyncRecord, "deleted" | "done">>;
 
 const enc = new TextEncoder();
@@ -192,7 +189,7 @@ const oneOf = <T extends string>(v: unknown, list: readonly T[]): T | undefined 
 const posInt = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 /**
- * Checks a record's shape from untrusted input (the hub on `PUT`, a device on `GET`). Does not open it.
+ * Checks a record's shape from untrusted input (a file read from Drive). Does not open it.
  *
  * @param x - The value.
  * @returns The record with only its known fields, or undefined when it does not fit.
@@ -208,8 +205,6 @@ export function parseSyncRecord(x: unknown): SyncRecord | undefined {
   const rec: SyncRecord = { v: SYNC_VERSION, id: r.id, kind: r.kind as SyncKind, rev: r.rev, writer: r.writer, kid: r.kid, salt: r.salt as string, iv: r.iv as string, ct: r.ct as string };
   if (r.deleted) rec.deleted = true;
   if (r.done) rec.done = true;
-  if (posInt(r.seq)) rec.seq = r.seq;
-  if (posInt(r.at)) rec.at = r.at;
   return rec;
 }
 
@@ -281,7 +276,7 @@ function opt<K extends string, V>(k: K, v: V | undefined): { [P in K]?: V } {
 
 // ---- sealing ----
 
-/** The authenticated data: every field the hub sees and could otherwise change. */
+/** The authenticated data: every field the store sees and could otherwise change. */
 function aad(r: Pick<SyncRecord, "kid" | "id" | "kind" | "rev" | "writer"> & { deleted?: boolean; done?: boolean }): Uint8Array<ArrayBuffer> {
   return enc.encode(`kesher-sync v${SYNC_VERSION}|${r.kid}|${r.id}|${r.kind}|${r.rev}|${r.deleted ? 1 : 0}|${r.done ? 1 : 0}|${r.writer}`);
 }
@@ -300,7 +295,7 @@ function padded(text: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** What to seal: the head without the hub's fields. `id` is a new random one when left out. */
+/** What to seal: the head and key id. `id` is a new random one when left out. */
 export interface SyncSealHead {
   id?: string;
   kind: SyncKind;
@@ -315,7 +310,7 @@ export interface SyncSealHead {
  * @param head - Id, kind, revision, writer and key id.
  * @param body - The content (its type must be the kind), or null for a tombstone.
  * @param accountKey - K, from {@link importAccountKey}.
- * @returns The record to send with `PUT /api/sync`.
+ * @returns The sealed record (store it with {@link recordFileName} and {@link recordFileContent}).
  */
 export async function sealRecord(head: SyncSealHead, body: SyncBody | null, accountKey: HubCryptoKey): Promise<SyncRecord> {
   if (body && body.type !== head.kind) throw new Error(`A ${head.kind} record cannot hold a ${body.type}.`);
@@ -361,7 +356,7 @@ export async function openRecord(rec: SyncRecord, accountKey: HubCryptoKey): Pro
 
 /**
  * Whether revision `b` of a facet beats `a`: a higher `rev` wins; at equal `rev` the larger writer id wins, so every
- * device (and the hub) picks the same one without clocks.
+ * device picks the same one without clocks.
  *
  * @param a - The revision kept now (undefined: none yet).
  * @param b - The one that came in.
@@ -379,8 +374,8 @@ export interface OpenedRecord {
 }
 
 /**
- * Picks what a device keeps for one facet when another revision comes in (from the hub or its own outbox).
- * Rules: a tombstone is final (the hub refuses writes over one too, so a stale device cannot bring a task back); a terminal run never goes back to a
+ * Picks what a device keeps for one facet when another revision comes in (from Drive or its own outbox).
+ * Rules: a tombstone is final (so a stale device cannot bring a task back); a terminal run never goes back to a
  * going state, whatever its revision (a late `running` from a stale device must not hide a `done`); otherwise
  * {@link beats} decides.
  *
@@ -399,37 +394,27 @@ export function mergeRecord(local: OpenedRecord | undefined, incoming: OpenedRec
 }
 
 /**
- * Remembers the highest revision seen per facet and the hub's newest `seq`, so a device notices when the hub withholds
- * or rolls back data (it cannot read it, but it could serve an older copy). Kept by the device next to its records.
+ * Remembers the highest revision seen per facet and this device's Drive changes cursor, so a device notices when an
+ * older revision shows up again (restored from Drive history, or a stale device) and knows where to pull from next.
+ * Kept by the device next to its records.
  */
 export class RevGuard {
   private revs = new Map<string, number>();
-  /** The highest `seq` seen (the cursor for the next `GET /api/sync?since=`). */
-  seq = 0;
+  /** This device's Drive `changes.list` page token (undefined: not synced yet, start with a full list). */
+  changeToken: string | undefined;
 
   /**
-   * Records one record from the hub.
+   * Records one revision seen in Drive.
    *
-   * @param rec - Its head and `seq`.
+   * @param rec - Its head.
    * @returns `ok`, or `rollback` when its revision is lower than one already seen (keep the local copy and warn).
    */
-  see(rec: Pick<SyncRecord, "id" | "kind" | "rev" | "seq">): "ok" | "rollback" {
+  see(rec: Pick<SyncHead, "id" | "kind" | "rev">): "ok" | "rollback" {
     const k = `${rec.kind}:${rec.id}`;
     const had = this.revs.get(k) ?? 0;
-    if (rec.seq !== undefined) this.seq = Math.max(this.seq, rec.seq);
     if (rec.rev < had) return "rollback";
     this.revs.set(k, rec.rev);
     return "ok";
-  }
-
-  /**
-   * Checks the hub's newest `seq` (from a `sync` frame or a page): it must never go backwards.
-   *
-   * @param seq - What the hub says is newest.
-   * @returns False when it is lower than what this device already pulled.
-   */
-  checkSeq(seq: number): boolean {
-    return seq >= this.seq;
   }
 
   /**
@@ -442,4 +427,181 @@ export class RevGuard {
   nextRev(kind: SyncKind, id: string): number {
     return (this.revs.get(`${kind}:${id}`) ?? 0) + 1;
   }
+}
+
+// ---- Drive file names ----
+
+/** The file-name prefix of record files (`r` + the format version). */
+export const RECORD_FILE_PREFIX = `r${SYNC_VERSION}.`;
+/** The file-name prefix of account-key files. */
+export const KEY_FILE_PREFIX = "key.";
+/** The flag letter at the end of a record file name: live, deleted (tombstone) or finished (a done run). */
+const FLAG = { live: "l", deleted: "d", done: "f" } as const;
+
+/**
+ * Names the Drive file of one record revision: `r1.<kind>.<id>.<rev>.<writer>.<l|d|f>` (`d` a tombstone, `f` a
+ * finished run). Ids and writers hold no dots, so the name splits back exactly. The name is the record's head; the
+ * sealed content binds the same head, so a renamed file fails to open.
+ *
+ * @param head - The record's head.
+ * @returns The file name; throws on a bad head.
+ */
+export function recordFileName(head: SyncHead): string {
+  if (!SYNC_KINDS.includes(head.kind) || !ID_RE.test(head.id) || !WRITER_RE.test(head.writer) || !Number.isSafeInteger(head.rev) || head.rev < 1) throw new Error("Bad record head.");
+  if (head.deleted && head.done) throw new Error("A tombstone is not a finished run.");
+  const flag = head.deleted ? FLAG.deleted : head.done ? FLAG.done : FLAG.live;
+  return `${RECORD_FILE_PREFIX}${head.kind}.${head.id}.${head.rev}.${head.writer}.${flag}`;
+}
+
+/**
+ * Reads a record file name back into its head (untrusted: any file in the folder).
+ *
+ * @param name - The Drive file name.
+ * @returns The head, or undefined when the name is not a valid record file name.
+ */
+export function parseRecordFileName(name: string): SyncHead | undefined {
+  if (typeof name !== "string" || name.length > 220 || !name.startsWith(RECORD_FILE_PREFIX)) return undefined;
+  const parts = name.slice(RECORD_FILE_PREFIX.length).split(".");
+  if (parts.length !== 5) return undefined;
+  const [kind, id, revText, writer, flag] = parts as [string, string, string, string, string];
+  if (!oneOf(kind, SYNC_KINDS) || !ID_RE.test(id) || !WRITER_RE.test(writer) || !/^[1-9]\d{0,14}$/.test(revText)) return undefined;
+  if (flag !== FLAG.live && flag !== FLAG.deleted && flag !== FLAG.done) return undefined;
+  if (flag === FLAG.done && kind !== "run") return undefined;
+  const head: SyncHead = { id, kind: kind as SyncKind, rev: Number(revText), writer };
+  if (flag === FLAG.deleted) head.deleted = true;
+  if (flag === FLAG.done) head.done = true;
+  return head;
+}
+
+/**
+ * The content of a record's file: the sealed part only (the head is the file name).
+ *
+ * @param rec - The sealed record.
+ * @returns JSON text `{kid, salt, iv, ct}`.
+ */
+export function recordFileContent(rec: SyncRecord): string {
+  return JSON.stringify({ kid: rec.kid, salt: rec.salt, iv: rec.iv, ct: rec.ct });
+}
+
+/**
+ * Puts a record back together from its file name's head and its file content, with the shape checks of
+ * {@link parseSyncRecord}. Open it with {@link openRecord} (which fails when the name was changed).
+ *
+ * @param head - From {@link parseRecordFileName}.
+ * @param content - The file's text.
+ * @returns The record, or undefined when the content does not fit.
+ */
+export function recordFromFile(head: SyncHead, content: string): SyncRecord | undefined {
+  if (typeof content !== "string" || content.length > SYNC_LIMITS.recordChars + 256) return undefined;
+  let x: unknown;
+  try {
+    x = JSON.parse(content);
+  } catch {
+    return undefined;
+  }
+  if (!x || typeof x !== "object") return undefined;
+  const { kid, salt, iv, ct } = x as Record<string, unknown>;
+  return parseSyncRecord({ v: SYNC_VERSION, ...head, kid, salt, iv, ct });
+}
+
+/**
+ * Names the Drive file that holds account key `kid`.
+ *
+ * @param kid - The key id (1 and up).
+ * @returns `key.<kid>`.
+ */
+export function keyFileName(kid: number): string {
+  if (!Number.isSafeInteger(kid) || kid < 1) throw new Error("kid starts at 1.");
+  return `${KEY_FILE_PREFIX}${kid}`;
+}
+
+/**
+ * Reads the key id from an account-key file name.
+ *
+ * @param name - The Drive file name.
+ * @returns The key id, or undefined when it is not a key file name.
+ */
+export function parseKeyFileName(name: string): number | undefined {
+  const m = typeof name === "string" ? /^key\.([1-9]\d{0,8})$/.exec(name) : null;
+  return m ? Number(m[1]) : undefined;
+}
+
+// ---- the store ----
+
+/** A file in the store, as listed: its Drive id, name and when it was created (ms since 1970; 0 when unknown). */
+export interface DriveFileInfo {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+/** One page of a full listing. */
+export interface DriveListPage {
+  files: DriveFileInfo[];
+  /** Pass to the next {@link DriveStore.list} call; absent on the last page. */
+  nextPageToken?: string;
+}
+
+/** One entry of the changes feed: a file created (with its info) or removed (only its id). */
+export interface DriveChange {
+  fileId: string;
+  removed: boolean;
+  file?: DriveFileInfo;
+}
+
+/** One page of the changes feed. */
+export interface DriveChangesPage {
+  changes: DriveChange[];
+  /** More pages follow: pass it to the next {@link DriveStore.changes} call. */
+  nextPageToken?: string;
+  /** The last page: save it as the device's `changeToken` for the next pull. */
+  newStartPageToken?: string;
+}
+
+/**
+ * Where records are kept: the app's hidden folder in the owner's Google Drive, or a fake in tests. Files are only
+ * created, read and deleted, never updated. Implemented over REST in `drive-sync.ts`.
+ */
+export interface DriveStore {
+  /**
+   * Lists the folder's files, one page at a time.
+   *
+   * @param pageToken - From the previous page (none: the first page).
+   * @param prefix - Only names starting with this (letters, digits, dots, `_` and `-`).
+   */
+  list(pageToken?: string, prefix?: string): Promise<DriveListPage>;
+  /** The changes-feed position of now (read it before a full listing, so nothing written meanwhile is missed). */
+  startToken(): Promise<string>;
+  /**
+   * Reads one page of the changes feed.
+   *
+   * @param pageToken - The saved `changeToken`, or a `nextPageToken`.
+   */
+  changes(pageToken: string): Promise<DriveChangesPage>;
+  /**
+   * Makes ids for files not created yet, so a retried create cannot make a second file.
+   *
+   * @param count - How many.
+   */
+  newIds(count: number): Promise<string[]>;
+  /**
+   * Creates a file (a retry with the same id after a lost answer is not an error).
+   *
+   * @param name - Its name.
+   * @param content - Its text.
+   * @param id - An id from {@link DriveStore.newIds}.
+   */
+  create(name: string, content: string, id?: string): Promise<DriveFileInfo>;
+  /**
+   * Reads a file's text.
+   *
+   * @param id - The file id.
+   */
+  read(id: string): Promise<string>;
+  /**
+   * Deletes a file for good (a file already gone is not an error).
+   *
+   * @param id - The file id.
+   */
+  delete(id: string): Promise<void>;
 }
