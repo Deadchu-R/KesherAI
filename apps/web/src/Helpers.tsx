@@ -91,6 +91,7 @@ function StateTag({ r, now }: { r: HelperRunInfo; now: number }) {
   const t = elapsed(r, now);
   const [cls, he, en] =
     r.state === "running" ? ["t-run", "רץ", "Running"]
+    : r.state === "waiting" && r.restart === "paused" ? ["t-wait", "הושהה בהפעלה מחדש", "Paused by restart"]
     : r.state === "waiting" ? ["t-wait", "ממתין", "Waiting"]
     : r.state === "asking" ? ["t-ask", "שואל", "Asking"]
     : r.state === "done" ? ["t-ok", "הסתיים", "Done"]
@@ -101,6 +102,12 @@ function StateTag({ r, now }: { r: HelperRunInfo; now: number }) {
       {L(he, en)} · <span className="mono">{t === undefined ? "—" : clock(t)}</span>
     </span>
   );
+}
+
+/** "Resumed" after a restart (the tag says "Paused by restart" before it continues). */
+function ResumedTag({ r }: { r: HelperRunInfo }) {
+  if (r.restart !== "resumed") return null;
+  return <span className="htag t-run" title={L("KesherAI הופעל מחדש והסוכן ממשיך מהצעד שבו עצר", "KesherAI restarted and the helper goes on from the step where it stopped")}>↻ {L("חודש", "Resumed")}</span>;
 }
 
 /** The state's mark at the start of a row. */
@@ -248,6 +255,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         {r.cloud && <span className="htag t-wait">☁ {r.cloudFiles === false ? L("ענן · רק שאלה, בלי קבצי הפרויקט", "cloud · the question only, no project files") : L("ענן", "cloud")}</span>}
         <ModelChip r={r} />
         <UsageChip r={r} />
+        <ResumedTag r={r} />
         <StateTag r={r} now={now} />
         {going(r) ? (
           <button type="button" className="hbtn" onClick={() => stop(convId, r.id)}>■ {L("עצור", "Stop")}</button>
@@ -256,7 +264,8 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         ) : null}
       </div>
       {note && (going(r) || open) && <div className="hnote muted small">{note}</div>}
-      {r.state === "waiting" && <div className="hsteps warn">{L(`ממתין לתור: עד ${r.waitLimit ?? 1} בבת אחת על כרטיס המסך הזה. יתחיל כשאחד יסתיים.`, `Waiting in the queue: up to ${r.waitLimit ?? 1} at once on this graphics card. Starts when one ends.`)}</div>}
+      {r.state === "waiting" && r.restart === "paused" && <div className="hsteps warn">{L("KesherAI הופעל מחדש באמצע העבודה. הסוכן ימשיך לבד מהצעד שבו עצר כשהמודל מוכן.", "KesherAI restarted while it worked. It goes on by itself from the step where it stopped once the model is ready.")}</div>}
+      {r.state === "waiting" && !r.restart && <div className="hsteps warn">{L(`ממתין לתור: עד ${r.waitLimit ?? 1} בבת אחת על כרטיס המסך הזה. יתחיל כשאחד יסתיים.`, `Waiting in the queue: up to ${r.waitLimit ?? 1} at once on this graphics card. Starts when one ends.`)}</div>}
       {r.state === "asking" && (r.runAsk ? <RunAskRow r={r} /> : <AskRow r={r} convId={convId} />)}
       {(r.state === "running" || open) && <Steps r={r} all={open} />}
       <SwapRow r={r} now={now} />
@@ -295,7 +304,7 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
                 <span aria-hidden>{KINDS[r.kind].icon}</span>
                 <span className="hchip-name">{helperKindName(r)}<span className="hchip-task">: {r.title}</span></span>
                 <span className="hmodel">{r.model}</span>
-                {r.state === "waiting" ? <span className="warn small">{L("בתור", "queued")}</span> : r.state === "asking" ? <span className="ask small">{L("שואל", "asking")}</span> : <span className="mono muted">{t === undefined ? "" : clock(t)}</span>}
+                {r.state === "waiting" && r.restart === "paused" ? <span className="warn small">{L("הושהה", "paused")}</span> : r.state === "waiting" ? <span className="warn small">{L("בתור", "queued")}</span> : r.state === "asking" ? <span className="ask small">{L("שואל", "asking")}</span> : <span className="mono muted">{t === undefined ? "" : clock(t)}</span>}
               </button>
               <button type="button" className="hx" aria-label={L("עצור", "Stop")} title={L("עצור", "Stop")} onClick={() => stop(convId, r.id)}>■</button>
             </div>
@@ -330,6 +339,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
           <span aria-hidden>{KINDS[r.kind].icon}</span>
           <b>{helperKindName(r)}</b>
           <span className="grow" />
+          <ResumedTag r={r} />
           <StateTag r={r} now={now} />
         </div>
         <div className="hsheet-task">{r.title}</div>
