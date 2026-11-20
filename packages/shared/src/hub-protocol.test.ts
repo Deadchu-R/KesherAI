@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chooseRoute } from "./hub-route.js";
-import { cleanAgents, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, ttlFor, type HubPresence } from "./hub-protocol.js";
+import { cleanAgents, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, syncPinger, ttlFor, type HubPresence } from "./hub-protocol.js";
 
 const env = { v: 1, id: "m1", from: "pc1", to: "phone1", kind: "result", ttl: 3600, iv: "AAAAAAAAAAAAAAAA", ct: "abc_-" };
 
@@ -59,4 +59,27 @@ test("routing: a PC that is on, else Claude cloud or wait, by opt-in", () => {
   assert.equal(chooseRoute({ executor: "auto", ifOffline: "wait" }, [pc("home", { optIn: DEFAULT_OPT_IN })], cloud).route, "none", "a PC takes no tasks until it opts in");
   assert.equal(chooseRoute({ executor: "claude-cloud", ifOffline: "wait" }, [], { cloudAvailable: false }).route, "none");
   assert.equal(chooseRoute({ executor: "auto", ifOffline: "wait" }, [pc("p", { kind: "phone" })], cloud).route, "none", "a phone is not a worker");
+});
+
+test("sync pinger: the first ping at once, pings within 5 seconds become one at the end of the gap", () => {
+  let now = 0;
+  let sent = 0;
+  const timers: { cb: () => void; at: number }[] = [];
+  const p = syncPinger(() => sent++, { now: () => now, setTimer: (cb, ms) => timers.push({ cb, at: now + ms }) && timers.at(-1), clearTimer: (t) => timers.splice(timers.indexOf(t as never), 1) });
+  p.ping();
+  assert.equal(sent, 1);
+  now = 1000;
+  p.ping();
+  p.ping();
+  assert.equal(sent, 1);
+  assert.equal(timers.length, 1, "held back once");
+  assert.equal(timers[0]!.at, HUB_LIMITS.syncPingMs);
+  now = timers[0]!.at;
+  timers.shift()!.cb();
+  assert.equal(sent, 2, "the last write is still announced");
+  now += 1000;
+  p.ping();
+  p.cancel();
+  assert.equal(timers.length, 0);
+  assert.deepEqual(parseDeviceFrame(JSON.stringify({ t: "sync", extra: "x" })), { t: "sync" });
 });

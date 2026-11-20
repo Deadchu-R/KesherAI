@@ -7,22 +7,30 @@ import {
   DriveRest,
   DriveSync,
   ensureAccountKey,
+  SYNC_LIMITS,
   TERMINAL_RUN_STATES,
   type DriveStore,
   type DriveSyncState,
   type DriveTokenGetter,
   type InboxTaskView,
+  type SyncAgentBody,
   type SyncOrigin,
   type SyncRunBody,
   type SyncRunState,
   type SyncTaskBody,
 } from "@kesher/shared";
+import type { RunSnapshot } from "./agent-activity.js";
 
 /**
  * "Tasks on all your devices" on the PC (docs/RESEARCH_LOG.md, "Tasks in Roee's Google Drive instead of the hub",
  * step 3): the task inbox's tasks and their runs are written as sealed records to the hidden KesherAI folder
  * (`appDataFolder`) of the user's own Google Drive, and tasks the phone or the hub page wrote there are pulled into
  * the inbox (once each). Off until the user turns it on, on this PC.
+ *
+ * It also writes an `agent` snapshot of each agent run on this PC (chat helpers on a local or cloud model,
+ * Antigravity): when it starts, every few minutes while it goes, and when it ends, so the hub page can show "last
+ * seen" cards while the PC is off (step 5). After a sync that wrote something it asks the hub to send the other
+ * devices a bare `sync` ping, and a ping from them makes it pull within seconds instead of at the next timer.
  *
  * The private state (opened records, the changes cursor, what was sent) is kept in a file in the data folder, never
  * in git or logs; Google tokens never pass through here except to the Drive store.
@@ -38,6 +46,10 @@ const MAX_BACKOFF_MS = 30 * 60_000;
 const DEBOUNCE_MS = 5_000;
 /** Finished inbox tasks older than this are not written (Drive would compact them right away). */
 const KEEP_FINISHED_MS = 90 * 24 * 3600_000;
+/** Agent runs followed at once (the oldest seen is dropped beyond this; a run that never ends cannot grow it). */
+const AGENTS_MAX = 50;
+/** States of a going agent run. */
+const AGENT_GOING = new Set<RunSnapshot["state"]>(["queued", "running", "waiting"]);
 
 /** What the service needs from the Google sign-in (google.ts). */
 export interface TasksSyncGoogle {
@@ -71,6 +83,8 @@ export interface TasksSyncDeps {
   now?: () => number;
   /** The home folder, scrubbed from task text before it is sealed. */
   home?: string;
+  /** A sync wrote to Drive: tell the other devices (the hub's bare `sync` ping, hub-client.ts). */
+  onWrote?: () => void;
 }
 
 /** The status the Settings section shows (`GET /api/tasks-sync`). */
@@ -196,6 +210,10 @@ export class TasksSync {
   private failures = 0;
   private saving: Promise<void> = Promise.resolve();
   private stopInbox?: () => void;
+  /** Agent runs to snapshot, by run id: the newest look, and when (and what) was last written. */
+  private readonly agents = new Map<string, { snap: RunSnapshot; summary?: string; sentAt?: number; sentFp?: string }>();
+  /** Something was written to Drive during the current sync (the others get a ping). */
+  private wrote = false;
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TasksSyncDeps) {}
@@ -275,6 +293,38 @@ export class TasksSync {
     this.timer = undefined;
   }
 
+  /**
+   * One agent run as it is now (agent-activity.ts makes the snapshot). Only runs seen going are followed; its
+   * snapshot is written at the next sync when it is new, when it ended (a sync then comes in 5 seconds) or when
+   * {@link SYNC_LIMITS.agentWriteEveryMs} passed with a change.
+   *
+   * @param s - The run.
+   * @param summary - A short result line, when the run has one (scrubbed and cut here).
+   */
+  observeAgent(s: RunSnapshot, summary?: string): void {
+    if (!this.ready) return void this.agents.clear();
+    const known = this.agents.get(s.runId);
+    if (!known && !AGENT_GOING.has(s.state)) return;
+    this.agents.delete(s.runId);
+    this.agents.set(s.runId, { ...known, snap: s, ...(summary ? { summary } : {}) });
+    if (this.agents.size > AGENTS_MAX) this.agents.delete(this.agents.keys().next().value!);
+    if (!known || !AGENT_GOING.has(s.state)) this.soon(DEBOUNCE_MS);
+  }
+
+  /**
+   * Another device wrote to Drive (its `sync` ping came through the hub): pull in a moment, or right after the sync
+   * that is running now.
+   */
+  onPing(): void {
+    if (this.ready && this.stopInbox) this.soon(SYNC_LIMITS.pingPullDelayMs);
+  }
+
+  /** A sync in `ms`, counted from the end of the one running now (a sync already going may have missed the news). */
+  private soon(ms: number): void {
+    if (this.running) void this.running.finally(() => this.schedule(ms));
+    else this.schedule(ms);
+  }
+
   private schedule(ms: number): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
@@ -313,12 +363,15 @@ export class TasksSync {
   private async doSync(): Promise<TasksSyncStatus> {
     await this.load();
     if (!this.ready) return this.status();
+    this.wrote = false;
     try {
       const sync = await this.open();
       await sync.pull();
       await this.receive(sync);
       await this.send(sync);
+      await this.sendAgents(sync);
       const flushed = await sync.flush();
+      if (flushed.sent) this.wrote = true;
       if (flushed.error) throw flushed.error;
       if (this.now() - (this.saved.lastCompact ?? 0) >= COMPACT_EVERY_MS) {
         await sync.compact(50);
@@ -328,6 +381,7 @@ export class TasksSync {
       delete this.saved.lastError;
       delete this.saved.needsReconnect;
       this.failures = 0;
+      if (this.wrote) this.d.onWrote?.();
     } catch (e) {
       this.failures++;
       this.saved.lastError = errorText(e);
@@ -398,6 +452,7 @@ export class TasksSync {
           risk: t.risk,
         };
         await sync.write("task", id, task);
+        this.wrote = true;
       }
       const run: SyncRunBody = {
         type: "run",
@@ -413,6 +468,7 @@ export class TasksSync {
       if (this.saved.sent[t.id] === fp) continue;
       try {
         await sync.write("run", id, run);
+        this.wrote = true;
       } catch (e) {
         // Another device already owns this run (or the task was deleted): note it once, do not retry every sync.
         this.d.log?.(`Tasks sync: a run was not written (${errorText(e).slice(0, 80)}).`);
@@ -420,4 +476,59 @@ export class TasksSync {
       this.saved.sent[t.id] = fp;
     }
   }
+
+  /** Writes the snapshots that are due (see {@link TasksSync.observeAgent}); an ended run is then forgotten. */
+  private async sendAgents(sync: DriveSync): Promise<void> {
+    const now = this.now();
+    for (const [runId, a] of this.agents) {
+      const going = AGENT_GOING.has(a.snap.state);
+      const body = agentBody(a.snap, a.summary, this.d.home);
+      const fp = hash(body);
+      const due = fp !== a.sentFp && (!going || a.sentAt === undefined || now - a.sentAt >= SYNC_LIMITS.agentWriteEveryMs);
+      if (due) {
+        try {
+          await sync.write("agent", agentSyncId(runId), { ...body, updatedAt: new Date(now).toISOString() });
+          this.wrote = true;
+        } catch (e) {
+          this.d.log?.(`Tasks sync: an agent snapshot was not written (${errorText(e).slice(0, 80)}).`);
+        }
+        a.sentAt = now;
+        a.sentFp = fp;
+      }
+      if (!going) this.agents.delete(runId);
+    }
+  }
+}
+
+/**
+ * The record id of an agent run's snapshot: `a-` and a hash of its run id (stable, so each run is one facet whose
+ * newest revision is the one kept).
+ *
+ * @param runId - The run id (agent-activity.ts).
+ */
+export function agentSyncId(runId: string): string {
+  return `a-${createHash("sha256").update(runId).digest("hex").slice(0, 20)}`;
+}
+
+/**
+ * An agent run as a snapshot body: who, what, which model, how far, and a short result. Titles and results are
+ * scrubbed of the home folder; nothing of the prompt, files or output is in it.
+ *
+ * @param s - The run.
+ * @param summary - Its result line, if any.
+ * @param home - The home folder to scrub.
+ */
+export function agentBody(s: RunSnapshot, summary: string | undefined, home = homedir()): SyncAgentBody {
+  const result = summary ?? s.failReason ?? (s.branch ? `Branch ${s.branch}` : undefined);
+  return {
+    type: "agent",
+    title: scrubText(s.title, home).slice(0, 200),
+    source: s.source,
+    state: s.state,
+    ...(s.model ? { model: s.model.slice(0, 80) } : {}),
+    ...(s.step ? { steps: s.step } : {}),
+    ...(iso(s.startedAt) ? { startedAt: iso(s.startedAt) } : {}),
+    ...(iso(s.endedAt) ? { endedAt: iso(s.endedAt) } : {}),
+    ...(result ? { summary: scrubText(result, home).slice(0, SYNC_LIMITS.summaryChars) } : {}),
+  };
 }

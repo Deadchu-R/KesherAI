@@ -444,3 +444,32 @@ test("Claude chat device: pairs by code, reports agent activity without PC opt-i
   assert.equal((sockets.frames(pc.id, "refused").at(-1) as { code: string }).code, "not-allowed");
   assert.equal(store.queued(chat.id).length, 0);
 });
+
+test("sync ping: passed on bare to the other devices (not the sender, not the Claude chat), one per 5 seconds", async () => {
+  const { hub, sockets, tick } = await setup();
+  const pc = await pair(hub, "pc", "PC");
+  const phone = await pair(hub, "phone", "Phone");
+  const chat = await pair(hub, "claude-chat", "Claude chat");
+  for (const d of [pc, phone, chat]) {
+    sockets.on.add(d.id);
+    await hub.onOpen(d.id);
+  }
+  await hub.onFrame(pc.id, JSON.stringify({ t: "sync", data: "ignored" }));
+  assert.deepEqual(sockets.frames(phone.id, "sync"), [{ t: "sync" }], "nothing but the ping itself");
+  assert.equal(sockets.frames(pc.id, "sync").length, 0, "not back to the sender");
+  assert.equal(sockets.frames(chat.id, "sync").length, 0, "the Claude chat has no Drive");
+  // A burst of 2 for jitter, then dropped without a refusal (that would slow the PC's live activity).
+  await hub.onFrame(pc.id, JSON.stringify({ t: "sync" }));
+  await hub.onFrame(pc.id, JSON.stringify({ t: "sync" }));
+  assert.equal(sockets.frames(phone.id, "sync").length, 2);
+  assert.equal(sockets.frames(pc.id, "refused").length, 0);
+  tick(5000);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "sync" }));
+  assert.equal(sockets.frames(phone.id, "sync").length, 3, "one more after 5 seconds");
+  // The phone (hub page) pings the PC; the Claude chat cannot ping anyone.
+  await hub.onFrame(phone.id, JSON.stringify({ t: "sync" }));
+  assert.equal(sockets.frames(pc.id, "sync").length, 1);
+  await hub.onFrame(chat.id, JSON.stringify({ t: "sync" }));
+  assert.equal(sockets.frames(pc.id, "sync").length, 1);
+  assert.equal(sockets.frames(phone.id, "sync").length, 3);
+});

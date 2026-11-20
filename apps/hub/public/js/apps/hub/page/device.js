@@ -6,7 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage } from "../../../packages/shared/src/hub-crypto.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
 /** The timeline words for an inbox task's states. */
@@ -110,6 +110,10 @@ export class HubDevice {
     agentActions = new Map();
     agentSeq = 0;
     catchingUp = false;
+    /** Called when another device wrote to Google Drive (its bare `sync` ping). */
+    syncListeners = new Set();
+    /** This page's own `sync` pings, at most one per 5 seconds (the last one held back, never lost). */
+    syncPings = syncPinger(() => void this.sendFrame({ t: "sync" }), { setTimer: (cb, ms) => window.setTimeout(cb, ms), clearTimer: (t) => window.clearTimeout(t) });
     /** Loads the saved identity and tasks, and connects when paired. */
     async load() {
         try {
@@ -147,6 +151,21 @@ export class HubDevice {
     changed() {
         for (const cb of this.listeners)
             cb();
+    }
+    /**
+     * Calls back when another device wrote to the owner's Google Drive (pull now instead of at the next timer).
+     *
+     * @param cb - The callback.
+     * @returns A function that stops it.
+     */
+    onSyncPing(cb) {
+        this.syncListeners.add(cb);
+        return () => this.syncListeners.delete(cb);
+    }
+    /** Tells the owner's other devices that this page wrote to Google Drive (a bare ping; skipped while offline). */
+    pingSync() {
+        if (this.connected)
+            this.syncPings.ping();
     }
     async saveTasks() {
         // The newest 200 are kept (older ones were finished long ago).
@@ -214,6 +233,7 @@ export class HubDevice {
     stop() {
         clearTimeout(this.retryTimer);
         clearInterval(this.pingTimer);
+        this.syncPings.cancel();
         this.ws?.close();
         this.ws = undefined;
         this.connected = false;
@@ -297,6 +317,10 @@ export class HubDevice {
             case "pause":
                 this.paused = f.paused;
                 return this.changed();
+            case "sync":
+                for (const cb of this.syncListeners)
+                    cb();
+                return;
             case "revoked":
                 this.error = { he: "הדפדפן הזה נותק מהמרכז", en: "This browser was disconnected from the hub" };
                 return this.forget();

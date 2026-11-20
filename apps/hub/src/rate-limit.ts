@@ -21,6 +21,8 @@ export const LIMITS = {
   task: { burst: 30, perMs: 3_600_000 },
   /** Any socket frame per device. */
   message: { burst: 120, perMs: 60_000 },
+  /** `sync` pings per device: one per 5 seconds on average (a burst of 2 allows for network jitter). */
+  syncPing: { burst: 2, perMs: 10_000 },
 } as const satisfies Record<string, Limit>;
 
 /** Buckets by key ("signIn:<ip hash>", "task:<device id>"). */

@@ -44,7 +44,7 @@ export interface DriveViewContext {
   deviceName: (hubId: string) => string | undefined;
 }
 
-/** A finished agent run's snapshot from Drive (the Agents tab's "last seen" cards while the PCs are off). */
+/** An agent run's last snapshot from Drive (the Agents tab's "last seen" cards while the PCs are off). */
 export interface SyncedAgent {
   id: string;
   device: Words;
@@ -224,7 +224,7 @@ export function pageTaskBody(t: PageTask): SyncTaskBody | undefined {
  * @returns The snapshots.
  */
 export function agentSnapshots(records: readonly StoredRecord[], ctx: Pick<DriveViewContext, "me" | "pcNames">, max = 30): SyncedAgent[] {
-  const end = (a: SyncAgentBody) => ms(a.endedAt ?? a.startedAt, 0);
+  const end = (a: SyncAgentBody) => ms(a.endedAt ?? a.updatedAt ?? a.startedAt, 0);
   return records
     .filter((r) => r.head.kind === "agent" && !r.head.deleted && r.body)
     .map((r) => ({ id: r.head.id, device: deviceLabel(r.head.writer, ctx), body: r.body as SyncAgentBody }))
@@ -238,6 +238,7 @@ export const SNAPSHOT_SOURCE: Record<SyncAgentSource, Words & { icon: string }> 
   inbox: { icon: "📥", he: "תיבת משימות", en: "Task inbox" },
   antigravity: { icon: "✦", he: "Antigravity", en: "Antigravity" },
   "claude-cloud": { icon: "✷", he: "Claude בענן", en: "Claude cloud" },
+  "claude-chat": { icon: "💬", he: "צ׳אט Claude", en: "Claude chat" },
 };
 
 /** A Google access token handed to the page by the KesherAI phone app. */

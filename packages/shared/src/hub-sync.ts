@@ -37,6 +37,10 @@ export const SYNC_LIMITS = {
   agentKeepMs: 30 * 24 * 3600 * 1000,
   /** How often an open app pulls the Drive changes feed. */
   pollMs: 60_000,
+  /** After another device's `sync` ping, wait this long before pulling (Drive's changes feed lags a write a little). */
+  pingPullDelayMs: 2000,
+  /** A going agent run's snapshot is written again at most this often (and when it ends). */
+  agentWriteEveryMs: 5 * 60_000,
   /** A revision's file is deleted once a newer revision of its facet has existed this long. */
   compactAfterMs: 24 * 3600 * 1000,
   /** Files in one Drive `files.list` / `changes.list` page (Drive's largest). */
@@ -61,8 +65,8 @@ export type SyncOrigin = "phone" | "pc" | "page" | "inbox-claude" | "inbox-roee"
 const ORIGINS: readonly SyncOrigin[] = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work"];
 
 /** What an agent snapshot came from. */
-export type SyncAgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud";
-const AGENT_SOURCES: readonly SyncAgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+export type SyncAgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud" | "claude-chat";
+const AGENT_SOURCES: readonly SyncAgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 
 /** A task, written once by the device it came from. */
 export interface SyncTaskBody {
@@ -108,14 +112,21 @@ export interface SyncMetaBody {
   note?: string;
 }
 
-/** A finished agent run's snapshot (live steps keep using `agent_event`). */
+/**
+ * An agent run's last known state: written when it starts, every few minutes while it goes, and when it ends (live
+ * steps keep using `agent_event`). One facet per run, so compaction keeps only the newest.
+ */
 export interface SyncAgentBody {
   type: "agent";
   title: string;
   source: SyncAgentSource;
   state: string;
+  /** The model's short name (e.g. `Qwen3-4B`). */
+  model?: string;
   steps?: number;
   startedAt?: string;
+  /** When this snapshot was taken (a going run's "last seen"). */
+  updatedAt?: string;
   endedAt?: string;
   summary?: string;
 }
@@ -256,8 +267,10 @@ export function cleanSyncBody<K extends SyncKind>(x: unknown, kind: K): BodyOf<K
           title: str(b.title, 200),
           source,
           state: str(b.state, 20),
+          ...opt("model", optStr(b.model, 100)),
           ...opt("steps", posInt(b.steps) ? b.steps : undefined),
           ...opt("startedAt", optStr(b.startedAt, 40)),
+          ...opt("updatedAt", optStr(b.updatedAt, 40)),
           ...opt("endedAt", optStr(b.endedAt, 40)),
           ...opt("summary", optStr(b.summary, SYNC_LIMITS.summaryChars)),
         };

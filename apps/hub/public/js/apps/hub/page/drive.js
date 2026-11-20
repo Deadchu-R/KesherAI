@@ -36,6 +36,8 @@ export class PageDrive {
     written = new Set();
     running;
     timer;
+    /** Something was written to Drive during the current sync (the others get a ping). */
+    wrote = false;
     tokenClient;
     /** @param o - The client id, Google's script, the app origin, the page's tasks and the change callback. */
     constructor(o) {
@@ -159,11 +161,31 @@ export class PageDrive {
         return this.running;
     }
     /**
+     * Another device wrote to Drive (its `sync` ping came through the hub): pull in a moment, or right after the sync
+     * that is running now (it may have missed the news).
+     */
+    onPing() {
+        if (!this.hasToken())
+            return;
+        const later = () => {
+            clearTimeout(this.timer);
+            this.timer = window.setTimeout(() => void this.syncNow(), SYNC_LIMITS.pingPullDelayMs);
+        };
+        if (this.running)
+            void this.running.finally(later);
+        else
+            later();
+    }
+    /**
      * Writes the record of a task this page just sent (it reaches Drive now, or with the next sync).
      */
     async taskSent() {
-        if (this.sync && this.hasToken())
-            await this.writeTasks(this.sync).catch(() => undefined);
+        if (!this.sync || !this.hasToken())
+            return;
+        this.wrote = false;
+        await this.writeTasks(this.sync).catch(() => undefined);
+        if (this.wrote)
+            this.o.onWrote?.();
     }
     async doSync() {
         if (!this.hasToken()) {
@@ -172,17 +194,22 @@ export class PageDrive {
             return;
         }
         this.status = "syncing";
+        this.wrote = false;
         this.o.onChange();
         try {
             const sync = await this.open();
             await sync.pull();
             await this.writeTasks(sync);
             const f = await sync.flush();
+            if (f.sent)
+                this.wrote = true;
             if (f.error)
                 throw f.error;
             this.status = "ok";
             this.lastSync = Date.now();
             delete this.error;
+            if (this.wrote)
+                this.o.onWrote?.();
         }
         catch (e) {
             this.onError(e);
@@ -237,8 +264,10 @@ export class PageDrive {
             if (this.written.has(t.taskId))
                 continue;
             const body = pageTaskBody(t);
-            if (body && !have.has(t.taskId))
+            if (body && !have.has(t.taskId)) {
                 await sync.write("task", t.taskId, body);
+                this.wrote = true;
+            }
             this.written.add(t.taskId);
             changed = true;
         }

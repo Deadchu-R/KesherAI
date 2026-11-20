@@ -6,7 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import type { DriveMark } from "./drive-view.js";
@@ -167,6 +167,10 @@ export class HubDevice {
   agentActions = new Map<string, string>();
   private agentSeq = 0;
   private catchingUp = false;
+  /** Called when another device wrote to Google Drive (its bare `sync` ping). */
+  private syncListeners = new Set<() => void>();
+  /** This page's own `sync` pings, at most one per 5 seconds (the last one held back, never lost). */
+  private readonly syncPings = syncPinger(() => void this.sendFrame({ t: "sync" }), { setTimer: (cb, ms) => window.setTimeout(cb, ms), clearTimer: (t) => window.clearTimeout(t as number) });
 
   /** Loads the saved identity and tasks, and connects when paired. */
   async load(): Promise<void> {
@@ -207,6 +211,22 @@ export class HubDevice {
 
   private changed(): void {
     for (const cb of this.listeners) cb();
+  }
+
+  /**
+   * Calls back when another device wrote to the owner's Google Drive (pull now instead of at the next timer).
+   *
+   * @param cb - The callback.
+   * @returns A function that stops it.
+   */
+  onSyncPing(cb: () => void): () => void {
+    this.syncListeners.add(cb);
+    return () => this.syncListeners.delete(cb);
+  }
+
+  /** Tells the owner's other devices that this page wrote to Google Drive (a bare ping; skipped while offline). */
+  pingSync(): void {
+    if (this.connected) this.syncPings.ping();
   }
 
   private async saveTasks(): Promise<void> {
@@ -280,6 +300,7 @@ export class HubDevice {
   private stop(): void {
     clearTimeout(this.retryTimer);
     clearInterval(this.pingTimer);
+    this.syncPings.cancel();
     this.ws?.close();
     this.ws = undefined;
     this.connected = false;
@@ -363,6 +384,9 @@ export class HubDevice {
       case "pause":
         this.paused = f.paused;
         return this.changed();
+      case "sync":
+        for (const cb of this.syncListeners) cb();
+        return;
       case "revoked":
         this.error = { he: "הדפדפן הזה נותק מהמרכז", en: "This browser was disconnected from the hub" };
         return this.forget();

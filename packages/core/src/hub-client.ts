@@ -21,6 +21,7 @@ import {
   openEnvelope,
   ReplayGuard,
   sealMessage,
+  syncPinger,
   type HubAgent,
   type HubCryptoKey,
   type HubFrame,
@@ -95,6 +96,8 @@ export interface HubClientDeps {
   activity?: Pick<AgentActivity, "has" | "cancel" | "slowDown">;
   /** The task inbox's tasks (inbox-runner.ts), reported to the hub page's Tasks list as metadata. */
   inboxTasks?: () => Promise<InboxTaskView[]>;
+  /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
+  onSync?: () => void;
 }
 
 /**
@@ -235,10 +238,22 @@ export class HubClient {
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
+  /** `sync` pings, at most one per 5 seconds (the last one held back, never lost). */
+  private readonly syncPings = syncPinger(() => {
+    if (this.connected) this.send({ t: "sync" });
+  });
 
   /** @param deps - Config, board, notifications and the outside calls. */
   constructor(private readonly deps: HubClientDeps) {
     this.fetch = deps.fetch ?? fetch;
+  }
+
+  /**
+   * Tells the owner's other devices that this PC wrote to Google Drive, so they pull now instead of waiting for
+   * their timers. Carries nothing; skipped while the link is down (the others' timers pull anyway).
+   */
+  pingSync(): void {
+    if (this.connected) this.syncPings.ping();
   }
 
   private get s(): HubSettings {
@@ -431,6 +446,7 @@ export class HubClient {
     clearInterval(this.beatTimer);
     clearInterval(this.pingTimer);
     clearTimeout(this.pollTimer);
+    this.syncPings.cancel();
     this.socket?.close();
     this.socket = undefined;
     this.connected = false;
@@ -619,6 +635,8 @@ export class HubClient {
         return this.lost("This PC was removed from the hub.");
       case "deliver":
         return this.onEnvelope(f.env);
+      case "sync":
+        return this.deps.onSync?.();
       case "refused":
         // Over the hub's rate (or the free plan's quota): live activity goes every 10 seconds for a while.
         if (f.code === "rate-limited") this.deps.activity?.slowDown();

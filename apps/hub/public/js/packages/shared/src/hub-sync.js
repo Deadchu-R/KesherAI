@@ -35,6 +35,10 @@ export const SYNC_LIMITS = {
     agentKeepMs: 30 * 24 * 3600 * 1000,
     /** How often an open app pulls the Drive changes feed. */
     pollMs: 60_000,
+    /** After another device's `sync` ping, wait this long before pulling (Drive's changes feed lags a write a little). */
+    pingPullDelayMs: 2000,
+    /** A going agent run's snapshot is written again at most this often (and when it ends). */
+    agentWriteEveryMs: 5 * 60_000,
     /** A revision's file is deleted once a newer revision of its facet has existed this long. */
     compactAfterMs: 24 * 3600 * 1000,
     /** Files in one Drive `files.list` / `changes.list` page (Drive's largest). */
@@ -47,7 +51,7 @@ const RUN_STATES = ["outbox", "waiting", "waiting-run", "running", "done", "part
 /** States a run stays in for good. */
 export const TERMINAL_RUN_STATES = new Set(["done", "partial", "failed", "blocked", "cancelled"]);
 const ORIGINS = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work"];
-const AGENT_SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud"];
+const AGENT_SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const subtle = () => globalThis.crypto.subtle;
@@ -162,8 +166,10 @@ export function cleanSyncBody(x, kind) {
                     title: str(b.title, 200),
                     source,
                     state: str(b.state, 20),
+                    ...opt("model", optStr(b.model, 100)),
                     ...opt("steps", posInt(b.steps) ? b.steps : undefined),
                     ...opt("startedAt", optStr(b.startedAt, 40)),
+                    ...opt("updatedAt", optStr(b.updatedAt, 40)),
                     ...opt("endedAt", optStr(b.endedAt, 40)),
                     ...opt("summary", optStr(b.summary, SYNC_LIMITS.summaryChars)),
                 };

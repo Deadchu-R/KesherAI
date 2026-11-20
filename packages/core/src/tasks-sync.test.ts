@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DriveError, DriveSync, ensureAccountKey, type DriveChange, type DriveFileInfo, type DriveStore, type InboxTaskView, type SyncRunBody } from "@kesher/shared";
-import { inboxIdFor, scrubText, syncIdFor, TasksSync } from "./tasks-sync.js";
+import type { RunSnapshot } from "./agent-activity.js";
+import { agentBody, agentSyncId, inboxIdFor, scrubText, syncIdFor, TasksSync, type TasksSyncDeps } from "./tasks-sync.js";
 
 /** An in-memory appDataFolder (the DriveStore interface, no REST). */
 class MemDrive implements DriveStore {
@@ -67,7 +68,7 @@ function task(id: string, over: Partial<InboxTaskView> = {}): InboxTaskView {
   return { id, title: "Fix the gap", executor: "antigravity", risk: "medium", from: "claude", base: "origin/main", allowedPaths: [], forbiddenPaths: [], check: "", maxMinutes: 15, maxFiles: 15, goal: "Open /home/someone/kesher/a.ts", status: "waiting", runBy: "antigravity", branch: `agy/${id}-fix`, ...over };
 }
 
-async function setup(opts: { enabled?: boolean; scope?: boolean } = {}) {
+async function setup(opts: { enabled?: boolean; scope?: boolean; extra?: Partial<TasksSyncDeps> } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "kesher-tasks-sync-"));
   const drive = new MemDrive();
   const tasks: InboxTaskView[] = [];
@@ -84,8 +85,12 @@ async function setup(opts: { enabled?: boolean; scope?: boolean } = {}) {
     onChange: () => () => undefined,
   };
   const file = join(dir, "tasks-sync.json");
-  const sync = new TasksSync({ settings: () => settings, setEnabled: async (on) => void (settings.enabled = on), google, inbox, file, drive: () => drive, home: "/home/someone" });
-  return { dir, drive, tasks, received, settings, google, sync, file, done: () => rm(dir, { recursive: true, force: true }) };
+  const sync = new TasksSync({ settings: () => settings, setEnabled: async (on) => void (settings.enabled = on), google, inbox, file, drive: () => drive, home: "/home/someone", ...opts.extra });
+  const done = () => {
+    sync.stop();
+    return rm(dir, { recursive: true, force: true });
+  };
+  return { dir, drive, tasks, received, settings, google, sync, file, done };
 }
 
 test("tasks sync: off by default does not touch Drive", async () => {
@@ -173,4 +178,52 @@ test("tasks sync: ids and scrubbing", () => {
   assert.match(syncIdFor("ab"), /^i-[0-9a-f]{20}$/);
   assert.match(inboxIdFor("AbC_123-xyz"), /^g-[0-9a-f]{16}$/);
   assert.equal(scrubText("see /home/someone/x and C:\\Users\\Someone\\y and /Users/bob/z", "/home/someone"), "see ~/x and C:\\Users\\~\\y and /Users/~/z");
+});
+
+test("tasks sync: agent snapshots when a run starts, every 5 minutes with a change, and when it ends; a ping after writes", async () => {
+  let now = Date.parse("2026-11-20T10:00:00Z");
+  let pings = 0;
+  const t = await setup({ extra: { now: () => now, onWrote: () => pings++ } });
+  const run = (over: Partial<RunSnapshot> = {}): RunSnapshot => ({ runId: "h-1", source: "chat-helper", title: "Check /home/someone/kesher", model: "Qwen3-4B", state: "running", step: 1, startedAt: now, ...over });
+  // A run that ended before it was seen (old history) is not written.
+  t.sync.observeAgent(run({ runId: "h-old", state: "done", endedAt: now }));
+  t.sync.observeAgent(run());
+  await t.sync.syncNow();
+  assert.equal(t.drive.names("agent").length, 1, "written when it starts");
+  assert.ok(t.drive.names("agent")[0]!.includes(agentSyncId("h-1")));
+  assert.equal(pings, 1, "the others are pinged after a write");
+  now += 60_000;
+  t.sync.observeAgent(run({ step: 3 }));
+  await t.sync.syncNow();
+  assert.equal(t.drive.names("agent").length, 1, "not again within 5 minutes");
+  assert.equal(pings, 1, "no ping when nothing was written");
+  now += 5 * 60_000;
+  await t.sync.syncNow();
+  assert.equal(t.drive.names("agent").length, 2, "after 5 minutes with a change");
+  now += 60_000;
+  t.sync.observeAgent(run({ step: 4, state: "done", endedAt: now }));
+  await t.sync.syncNow();
+  assert.equal(t.drive.names("agent").length, 3, "at once when it ends");
+  t.sync.observeAgent(run({ step: 4, state: "done", endedAt: now }));
+  await t.sync.syncNow();
+  assert.equal(t.drive.names("agent").length, 3, "an ended run is forgotten");
+  assert.equal(pings, 3);
+  assert.ok(![...t.drive.files.values()].some((f) => f.content.includes("Check")), "sealed");
+  // Compaction keeps only the newest revision of the run's snapshot.
+  now += 2 * 24 * 3600_000;
+  const peer = await DriveSync.create({ drive: t.drive, writer: "peer-1", keys: await ensureAccountKey(t.drive), save: async () => undefined, now: () => now });
+  await peer.pull();
+  await peer.compact(50);
+  assert.equal(t.drive.names("agent").length, 1);
+  const kept = peer.records().find((r) => r.head.kind === "agent");
+  assert.equal((kept?.body as { state?: string } | null)?.state, "done");
+  await t.done();
+});
+
+test("tasks sync: an agent snapshot body is short, scrubbed and has no prompt or files", () => {
+  const b = agentBody({ runId: "in-1", source: "antigravity", title: "Fix C:\\Users\\someone\\x", state: "failed", step: 7, startedAt: 1, endedAt: 2, failReason: "Took too long", files: [{ path: "a.ts", op: "edit" }], label: "edit" }, undefined, "/home/someone");
+  assert.deepEqual(Object.keys(b).sort(), ["endedAt", "source", "startedAt", "state", "steps", "summary", "title", "type"]);
+  assert.equal(b.summary, "Took too long");
+  assert.ok(!b.title.includes("someone"));
+  assert.equal(agentBody({ runId: "x", source: "chat-helper", title: "t", state: "done", step: 0, startedAt: 0 }, "x".repeat(900)).summary?.length, 500);
 });

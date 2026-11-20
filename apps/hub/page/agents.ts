@@ -142,7 +142,10 @@ function cloudCard(v: AgentsView, t: PageTask): HTMLElement {
   );
 }
 
-/** A finished run's snapshot from Google Drive ("last seen" while the PC is off): read-only. */
+/**
+ * A run's last snapshot from Google Drive ("last seen" while the PC is off): read-only. A run that was still going
+ * when its PC went off shows "Did not finish" and when it was last seen.
+ */
 function snapshotCard(a: SyncedAgent): HTMLElement {
   const b = a.body;
   const st = (["done", "failed", "cancelled"] as const).find((x) => x === b.state);
@@ -151,8 +154,16 @@ function snapshotCard(a: SyncedAgent): HTMLElement {
   return h(
     "div",
     { class: "acard snap" },
-    h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, b.state)),
-    h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : ""].filter(Boolean).join(" · "))),
+    h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))),
+    h(
+      "div",
+      { class: "row wrap mut sm" },
+      h("span", null, `${src.icon} ${L(src.he, src.en)}`),
+      h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`),
+      b.model ? h("span", { class: "xs ell1" }, `· ${b.model}`) : null,
+      h("span", { class: "grow" }),
+      h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · ")),
+    ),
     b.summary ? h("div", { class: "sm ell" }, b.summary) : null,
   );
 }

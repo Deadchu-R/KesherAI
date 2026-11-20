@@ -107,13 +107,16 @@ function cloudCard(v, t) {
     const st = t.status === "done" ? "done" : t.status === "failed" || t.status === "blocked" ? "failed" : t.status === "cancelled" ? "cancelled" : undefined;
     return h("div", { class: "acard", role: "button", tabindex: 0, "aria-label": t.title, onclick: () => v.setOpen(`cloud:${t.taskId}`), onkeydown: (e) => e.key === "Enter" && v.setOpen(`cloud:${t.taskId}`) }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "busy"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, t.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("מצב לא ידוע", "Status unknown"))), h("div", { class: "row wrap mut sm" }, h("span", null, `✷ ${L("Claude בענן", "Claude cloud")}`), h("span", { class: "grow" }), h("span", { class: "xs" }, L("התחיל ", "Started ") + when(t.createdAt))), h("div", { class: "row wrap" }, h("span", { class: "sm mut grow" }, L("רץ ב-Claude. פתחו כדי לצפות.", "Runs in Claude. Open it to watch.")), t.link && isSafeLink(t.link) ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח ב-Claude ↗", "Open in Claude ↗")) : null));
 }
-/** A finished run's snapshot from Google Drive ("last seen" while the PC is off): read-only. */
+/**
+ * A run's last snapshot from Google Drive ("last seen" while the PC is off): read-only. A run that was still going
+ * when its PC went off shows "Did not finish" and when it was last seen.
+ */
 function snapshotCard(a) {
     const b = a.body;
     const st = ["done", "failed", "cancelled"].find((x) => x === b.state);
     const src = SNAPSHOT_SOURCE[b.source];
     const span = b.startedAt && b.endedAt ? Date.parse(b.endedAt) - Date.parse(b.startedAt) : NaN;
-    return h("div", { class: "acard snap" }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, b.state)), h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : ""].filter(Boolean).join(" · "))), b.summary ? h("div", { class: "sm ell" }, b.summary) : null);
+    return h("div", { class: "acard snap" }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))), h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), b.model ? h("span", { class: "xs ell1" }, `· ${b.model}`) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · "))), b.summary ? h("div", { class: "sm ell" }, b.summary) : null);
 }
 /** A device's group header: name, on/off, last seen (the Claude chat, which only connects to report: its last report). */
 function groupHead(name, icon, pc, count) {

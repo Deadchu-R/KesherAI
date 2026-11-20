@@ -43,6 +43,11 @@ export const HUB_LIMITS = {
      * agents run for minutes, so it is shown as stale only after an hour without a report.
      */
     agentChatStaleMs: 3_600_000,
+    /**
+     * The content-free `sync` ping (a device wrote to Google Drive; the others pull now): one per device per this gap.
+     * Devices hold back pings sent sooner ({@link syncPinger}); the hub drops what still comes faster.
+     */
+    syncPingMs: 5000,
 };
 /**
  * The device kind a pairing request asks for (anything unknown is a PC, as before the kind existed).
@@ -219,6 +224,8 @@ export function parseDeviceFrame(raw) {
             return isHubId(x.id) ? { t: "ack", id: x.id } : null;
         case "ping":
             return { t: "ping" };
+        case "sync":
+            return { t: "sync" };
         default:
             return null;
     }
@@ -417,5 +424,42 @@ export function parseAgentState(x, runId) {
         ...(branch ? { branch } : {}),
         ...(isSafeLink(s.link) ? { link: s.link } : {}),
         ...optStr("summary", s.summary, 300),
+    };
+}
+/**
+ * Holds `sync` pings to one per {@link HUB_LIMITS.syncPingMs}: the first goes at once, the ones asked for within the
+ * gap become a single ping at its end (so the last write is always announced, and the hub never drops it).
+ *
+ * @param send - Sends the frame (the device's socket).
+ * @param o - The gap and the clock (tests pass their own).
+ * @returns The pinger.
+ */
+export function syncPinger(send, o = {}) {
+    const gap = o.gapMs ?? HUB_LIMITS.syncPingMs;
+    const now = o.now ?? Date.now;
+    const setTimer = o.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
+    const clearTimer = o.clearTimer ?? ((t) => clearTimeout(t));
+    let last = -Infinity;
+    let held;
+    const fire = () => {
+        held = undefined;
+        last = now();
+        send();
+    };
+    return {
+        ping() {
+            if (held !== undefined)
+                return;
+            const wait = last + gap - now();
+            if (wait <= 0)
+                return fire();
+            held = setTimer(fire, wait);
+            held.unref?.();
+        },
+        cancel() {
+            if (held !== undefined)
+                clearTimer(held);
+            held = undefined;
+        },
     };
 }

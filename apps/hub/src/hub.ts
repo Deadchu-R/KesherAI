@@ -591,7 +591,20 @@ export class Hub {
         // On Cloudflare the hub's auto-response answers pings without waking; this is the local (test) path.
         if (!d.lastSeen || t - d.lastSeen > MIN) this.store.putDevice({ ...d, lastSeen: t });
         return void this.sockets.send(deviceId, { t: "pong" });
+      case "sync":
+        return this.syncPing(d);
     }
+  }
+
+  /**
+   * A device wrote to the owner's Google Drive: tell the other devices to pull now. The hub only passes the bare
+   * ping on (it never sees Drive data); the Claude chat has no Drive and gets none. Pings faster than one per
+   * {@link HUB_LIMITS.syncPingMs} are dropped without an answer (a `refused` would slow the sender's live activity,
+   * and the timers pull anyway).
+   */
+  private syncPing(from: DeviceRow): void {
+    if (from.kind === "claude-chat" || !this.limits.take(`sync:${from.id}`, LIMITS.syncPing)) return;
+    for (const d of this.store.devices()) if (d.id !== from.id && d.kind !== "claude-chat") this.sockets.send(d.id, { t: "sync" });
   }
 
   /**

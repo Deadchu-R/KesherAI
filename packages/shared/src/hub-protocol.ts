@@ -45,6 +45,11 @@ export const HUB_LIMITS = {
    * agents run for minutes, so it is shown as stale only after an hour without a report.
    */
   agentChatStaleMs: 3_600_000,
+  /**
+   * The content-free `sync` ping (a device wrote to Google Drive; the others pull now): one per device per this gap.
+   * Devices hold back pings sent sooner ({@link syncPinger}); the hub drops what still comes faster.
+   */
+  syncPingMs: 5000,
 } as const;
 
 /**
@@ -153,7 +158,9 @@ export type DeviceFrame =
   | { t: "agents"; envs: SealedEnvelope[] }
   | { t: "ack"; id: string }
   /** Keeps the link alive (on Cloudflare the hub answers `{"t":"pong"}` without waking up). */
-  | { t: "ping" };
+  | { t: "ping" }
+  /** "I wrote to Google Drive": the hub passes it on to the owner's other devices, which pull now. Carries nothing. */
+  | { t: "sync" };
 
 /** Why the hub refused a frame. */
 export type HubRefusal = "bad-frame" | "rate-limited" | "paused" | "no-recipient" | "not-accepting" | "too-big" | "cloud-off" | "cloud-failed" | "not-allowed";
@@ -167,7 +174,9 @@ export type HubFrame =
   | { t: "refused"; id?: string; code: HubRefusal }
   | { t: "pause"; paused: boolean }
   | { t: "revoked" }
-  | { t: "pong" };
+  | { t: "pong" }
+  /** Another device wrote to Google Drive: pull now instead of waiting for the timer (no data, no sender). */
+  | { t: "sync" };
 
 /** Who runs a task. */
 export type HubExecutor = "auto" | "claude-cloud" | "pc-local" | "pc-antigravity" | "pc-any";
@@ -439,6 +448,8 @@ export function parseDeviceFrame(raw: unknown): DeviceFrame | null {
       return isHubId(x.id) ? { t: "ack", id: x.id } : null;
     case "ping":
       return { t: "ping" };
+    case "sync":
+      return { t: "sync" };
     default:
       return null;
   }
@@ -621,5 +632,48 @@ export function parseAgentState(x: unknown, runId: string): AgentRunState | null
     ...(branch ? { branch } : {}),
     ...(isSafeLink(s.link) ? { link: s.link } : {}),
     ...optStr("summary", s.summary, 300),
+  };
+}
+
+/** What {@link syncPinger} gives back. */
+export interface SyncPinger {
+  /** Asks for a ping: sent now, or once at the end of the gap when one went out less than the gap ago. */
+  ping(): void;
+  /** Drops a held-back ping (the link closed). */
+  cancel(): void;
+}
+
+/**
+ * Holds `sync` pings to one per {@link HUB_LIMITS.syncPingMs}: the first goes at once, the ones asked for within the
+ * gap become a single ping at its end (so the last write is always announced, and the hub never drops it).
+ *
+ * @param send - Sends the frame (the device's socket).
+ * @param o - The gap and the clock (tests pass their own).
+ * @returns The pinger.
+ */
+export function syncPinger(send: () => void, o: { gapMs?: number; now?: () => number; setTimer?: (cb: () => void, ms: number) => unknown; clearTimer?: (t: unknown) => void } = {}): SyncPinger {
+  const gap = o.gapMs ?? HUB_LIMITS.syncPingMs;
+  const now = o.now ?? Date.now;
+  const setTimer = o.setTimer ?? ((cb: () => void, ms: number) => setTimeout(cb, ms));
+  const clearTimer = o.clearTimer ?? ((t: unknown) => clearTimeout(t as ReturnType<typeof setTimeout>));
+  let last = -Infinity;
+  let held: unknown;
+  const fire = () => {
+    held = undefined;
+    last = now();
+    send();
+  };
+  return {
+    ping() {
+      if (held !== undefined) return;
+      const wait = last + gap - now();
+      if (wait <= 0) return fire();
+      held = setTimer(fire, wait);
+      (held as { unref?: () => void }).unref?.();
+    },
+    cancel() {
+      if (held !== undefined) clearTimer(held);
+      held = undefined;
+    },
   };
 }

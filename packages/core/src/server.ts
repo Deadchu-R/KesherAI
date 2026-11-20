@@ -572,7 +572,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   const helperRuns = services.conversations.helpers.runs;
   helperRuns.on("change", (chatId: string) => {
-    for (const r of helperRuns.list(chatId)) activity.observe(helperSnapshot(r, INBOX_ASKS), async () => helperRuns.stop(r.id));
+    for (const r of helperRuns.list(chatId)) {
+      const snap = helperSnapshot(r, INBOX_ASKS);
+      activity.observe(snap, async () => helperRuns.stop(r.id));
+      // Its last state also goes to the user's Google Drive, for "last seen" while this PC is off (tasks-sync.ts).
+      services.tasksSync?.observeAgent(snap);
+    }
   });
   taskInbox.onChange(() => {
     // The hub page's Tasks list follows the inbox too (metadata, sealed to the phones; hub-client.ts).
@@ -580,7 +585,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     void taskInbox.list().then((tasks) => {
       for (const t of tasks) {
         const snap = inboxSnapshot(t, t.runAsk, INBOX_ASKS);
-        if (snap) activity.observe(snap, () => taskInbox.stop(t.id));
+        if (!snap) continue;
+        activity.observe(snap, () => taskInbox.stop(t.id));
+        services.tasksSync?.observeAgent(snap, t.summary);
       }
     }, () => undefined);
   });
@@ -595,6 +602,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),
     busy: () => services.selfWork?.current?.status === "running",
+    // Another device wrote to the user's Google Drive: pull now (tasks-sync.ts).
+    onSync: () => services.tasksSync?.onPing(),
     approvals: {
       pending: () => [
         ...services.conversations.pendingApprovals().map(({ conversationId, requestId, title, tool, preview, reason }) => ({ conversationId, requestId, title, tool, preview, reason })),
@@ -632,6 +641,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     inbox: taskInbox,
     file: join(paths.root, "tasks-sync.json"),
     log: (m) => console.warn(`[tasks-sync] ${m}`),
+    // The other devices pull at once instead of at their next timer (a bare ping through the hub).
+    onWrote: () => hub.pingSync(),
   });
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.

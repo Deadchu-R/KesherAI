@@ -180,7 +180,7 @@ export function pageTaskBody(t) {
  * @returns The snapshots.
  */
 export function agentSnapshots(records, ctx, max = 30) {
-    const end = (a) => ms(a.endedAt ?? a.startedAt, 0);
+    const end = (a) => ms(a.endedAt ?? a.updatedAt ?? a.startedAt, 0);
     return records
         .filter((r) => r.head.kind === "agent" && !r.head.deleted && r.body)
         .map((r) => ({ id: r.head.id, device: deviceLabel(r.head.writer, ctx), body: r.body }))
@@ -193,6 +193,7 @@ export const SNAPSHOT_SOURCE = {
     inbox: { icon: "📥", he: "תיבת משימות", en: "Task inbox" },
     antigravity: { icon: "✦", he: "Antigravity", en: "Antigravity" },
     "claude-cloud": { icon: "✷", he: "Claude בענן", en: "Claude cloud" },
+    "claude-chat": { icon: "💬", he: "צ׳אט Claude", en: "Claude chat" },
 };
 /**
  * Reads a Drive access token the KesherAI phone app put in the address's fragment (`#kdt=<token>&kde=<seconds>`;

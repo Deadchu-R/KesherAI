@@ -61,7 +61,10 @@ const drive = new PageDrive({
     },
     tasks: () => device.tasks,
     onChange: () => renderSoon(),
+    // The other devices pull at once (a bare ping through the hub; it never sees Drive data).
+    onWrote: () => device.pingSync(),
 });
+device.onSyncPing(() => drive.onPing());
 /** The task list: this device's tasks and every task in Drive (drive-view.ts). */
 function allTasks() {
     return mergeTasks(device.tasks, drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name), deviceName: (id) => devices().find((d) => d.id === id)?.name });
