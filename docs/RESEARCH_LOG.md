@@ -4291,3 +4291,9 @@ Roee (21:29): give agents names and notes about what they are doing. Short look 
 - **Codex cloud tasks** and **GitHub Copilot agent sessions**: titled from the prompt (Copilot: the PR title, which is editable; comments act as notes); the live log shows the current step. Take: the original title stays visible as a subtitle once renamed, so the task is never lost.
 - **Plan for KesherAI**: one label per run (`name`, `note`, `labelAt`) kept on the PC (source of truth, survives restarts); the name replaces the title everywhere with the title as a subtitle; Roee's note is shown on the card and the agent's page and is not given to the model; a separate automatic "doing now" line from the latest tool/step/state (verbs in Hebrew and English). The hub/phone edits through the sealed `command` path (`agent-label`), the PC answers with `command_result` and pushes the new state (live batch and the Drive snapshot).
 - Stopped at: done (no deep competitor UI study; enough for this feature).
+
+## Design-doc publish approvals (2026-11-20, Roee)
+Why each design-doc publish asks Roee for approval, from code.claude.com/docs/en/artifacts and reported issues:
+- A publish asks when Claude can't read the published file without approval (a file outside the session's working folders); an allow rule doesn't skip that. The board files were under /home/claude/design-work, outside the working folder (/home/claude/kesherai).
+- A publish also asks when it runs in a turn a scheduled task started rather than a typed prompt, and in plan mode / manual-ask modes; auto mode lets a classifier approve instead.
+- Change: board files are now written to tools/design/out/ inside the repo (gitignored) and published by the lead from there, in a turn Roee started where possible. If it still asks, the remaining lever is the chat's approval mode (Roee's choice).

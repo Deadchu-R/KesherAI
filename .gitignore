@@ -19,3 +19,4 @@ apps/web/public/excalidraw-assets/
 # Claude chat hub-report pairing (key and token; normally in ~/.kesher-hub, never in git)
 .kesher-hub/
 claude-chat.json
+tools/design/out/
