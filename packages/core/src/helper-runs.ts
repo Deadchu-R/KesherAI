@@ -97,8 +97,41 @@ export interface HelperJob {
   run(ctl: HelperControl): Promise<{ report: string; diff?: string }>;
 }
 
-/** The longest report kept in the card and handed to the chat's model (about 1,500 tokens). */
+/**
+ * The findings pack: the longest report handed to the chat's model at once (about 1,500 tokens). A longer one is kept
+ * whole (the card opens it, and the model reads the rest with helper_result's `from`), so one helper never fills the
+ * lead's context.
+ */
 export const REPORT_CHARS = 6000;
+
+/**
+ * Where a long report is cut: at the last line break before the limit when there is one in its last third, so the
+ * pack ends with whole lines.
+ *
+ * @param text - The whole report.
+ * @param from - Where this part starts.
+ * @returns The end of the part (exclusive).
+ */
+export function packEnd(text: string, from = 0): number {
+  const limit = from + REPORT_CHARS;
+  if (text.length <= limit) return text.length;
+  const nl = text.lastIndexOf("\n", limit);
+  return nl > from + REPORT_CHARS * 0.66 ? nl : limit;
+}
+
+/**
+ * One part of a long report, for the chat's model.
+ *
+ * @param text - The whole report.
+ * @param id - The run's id (for the "rest" line).
+ * @param from - The first character.
+ * @returns The part, with where the rest starts when there is more.
+ */
+export function reportPart(text: string, id: string, from: number): string {
+  const start = Math.max(0, Math.min(Math.floor(from) || 0, text.length));
+  const end = packEnd(text, start);
+  return `${text.slice(start, end)}${end < text.length ? `\n(characters ${start}-${end} of ${text.length}; the rest: helper_result id "${id}" from ${end})` : ""}`;
+}
 /** Outside helpers and cloud helpers at once. */
 const OTHER_LIMIT = 4;
 /** Ended runs kept per chat. */
@@ -689,7 +722,7 @@ export class HelperRuns extends EventEmitter {
     const t = text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
     if (t.length > REPORT_CHARS) {
       r.full = t;
-      r.info.report = `${t.slice(0, REPORT_CHARS)}…`;
+      r.info.report = `${t.slice(0, packEnd(t))}…`;
       r.info.cut = true;
     } else r.info.report = t;
   }

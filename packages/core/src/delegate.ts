@@ -4,7 +4,7 @@ import type { AgentEvent, AgentMessage, ApprovalDecision, HelperAsker, HelperKin
 import { builtinHelpers, HELPER_STEPS, type AgentDef } from "./agents.js";
 import { runTestsTool } from "./helper-tests.js";
 import { UNTRUSTED_RULE } from "./browser-safety.js";
-import { HelperRuns, NOTE_CHARS, type HelperControl, type HelperJob, type NoteFrom, type SavedHelperRun } from "./helper-runs.js";
+import { HelperRuns, NOTE_CHARS, packEnd, reportPart, type HelperControl, type HelperJob, type NoteFrom, type SavedHelperRun } from "./helper-runs.js";
 
 /**
  * Helpers: the chat's model hands independent parts of a job to other
@@ -522,11 +522,12 @@ function kindOf(part: Record<string, unknown>, agent: AgentDef | undefined): Exc
 }
 
 /** A run's report as the chat's model reads it. */
-export function reportFor(r: HelperRunInfo, n?: number): string {
+export function reportFor(r: HelperRunInfo & { full?: string }, n?: number): string {
   const who = `${n !== undefined ? `Part ${n} — ` : ""}${r.agent && !["lookup", "research", "build", "operate"].includes(r.agent) ? `agent ${r.agent}` : r.kind} — ${r.model}${r.modelNote?.startsWith("asked for") ? ` (${r.modelNote})` : ""} (id ${r.id})`;
   if (r.state === "done") {
     const diff = r.diff !== undefined ? `\n\nIts changes, made in its own copy (nothing is in the user's folder yet; make the ones you want with your own edit tools, which the user approves):\n\`\`\`diff\n${r.diff || "(no changes)"}\n\`\`\`` : "";
-    return `## ${who}\n${r.report || "(no answer)"}${r.cut ? "\n(cut: the user can open the whole report on its card)" : ""}${diff}`;
+    const rest = r.cut ? (r.full ? `\n(The findings pack is cut at ${packEnd(r.full)} of ${r.full.length} characters; the rest is saved: read it with helper_result id "${r.id}" from ${packEnd(r.full)} only if you need it. The user can open the whole report on its card.)` : "\n(cut: the user can open the whole report on its card)") : "";
+    return `## ${who}\n${r.report || "(no answer)"}${rest}${diff}`;
   }
   if (r.state === "stopped") return `## ${who}\nStopped by the user after ${r.step} steps.${r.report ? `\n${r.report}` : ""}`;
   if (r.state === "failed") return `## ${who}\nFailed: ${r.error ?? "unknown"}`;
@@ -554,9 +555,10 @@ export function helperToolsFor(o: DelegateOptions): AgentTool[] {
     d,
     {
       risk: "safe",
-      spec: { name: "helper_result", description: "A background helper's state, and its report when it has ended (then it is not handed to you again).", inputSchema: { type: "object", properties: { id: { type: "string", description: "The helper's id." } }, required: ["id"] } },
+      spec: { name: "helper_result", description: "A background helper's state, and its report when it has ended (then it is not handed to you again). A long report comes as a findings pack; with from, the rest of it.", inputSchema: { type: "object", properties: { id: { type: "string", description: "The helper's id." }, from: { type: "number", description: "Where to go on reading a long report (from its cut line)." } }, required: ["id"] } },
       run: async (input) => {
         const r = mine(input.id);
+        if (input.from !== undefined && r.full) return { output: reportPart(r.full, r.id, Number(input.from)) };
         if (r.state === "done" || r.state === "failed" || r.state === "stopped") runs.delivered(r.id);
         return { output: reportFor(r) };
       },
@@ -568,7 +570,7 @@ export function helperToolsFor(o: DelegateOptions): AgentTool[] {
         const list = (Array.isArray(input.ids) ? input.ids : []).slice(0, 8).map((id) => mine(id).id);
         if (!list.length) throw new Error("Give the helpers' ids.");
         const done = await runs.wait(list, ctx.signal);
-        return { output: done.map((r) => reportFor(r)).join("\n\n") };
+        return { output: done.map((r) => reportFor(runs.get(r.id) ?? r)).join("\n\n") };
       },
     },
     {

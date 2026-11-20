@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HelperRuns, REPORT_CHARS, type HelperJob } from "./helper-runs.js";
+import { HelperRuns, REPORT_CHARS, packEnd, reportPart, type HelperJob } from "./helper-runs.js";
+import { reportFor } from "./delegate.js";
 
 /** A job that ends when `release` is called (or stops with its signal). */
 function job(over: Partial<HelperJob> = {}): HelperJob & { release: (text?: string) => void } {
@@ -217,4 +218,20 @@ test("continue: a run without a way to build it again (an outside agent) cannot 
   }
   assert.deepEqual(ids.map((id) => !!runs.get(id)!.canContinue), [false, false, true, true, true, true, true]);
   assert.equal(runs.saved("c1").filter((s) => s.transcript).length, 5);
+});
+
+test("findings pack: a long report is cut at a line, the rest is read in parts by id", () => {
+  const line = `${"a".repeat(99)}\n`;
+  const text = line.repeat(150); // 15,000 characters
+  const end = packEnd(text);
+  assert.ok(end <= REPORT_CHARS && end > REPORT_CHARS * 0.66);
+  assert.equal(text[end], "\n", "ends with whole lines");
+  assert.equal(packEnd("short"), 5);
+  const second = reportPart(text, "h1", end);
+  assert.match(second, /the rest: helper_result id "h1" from \d+\)$/);
+  const last = reportPart(text, "h1", 12_500);
+  assert.doesNotMatch(last, /the rest/);
+  const card = reportFor({ id: "h1", kind: "research", model: "m", state: "done", step: 3, maxSteps: 10, report: text.slice(0, end), cut: true, full: text } as Parameters<typeof reportFor>[0]);
+  assert.match(card, new RegExp(`helper_result id "h1" from ${end}`));
+  assert.ok(card.length < REPORT_CHARS + 600, "the lead gets about 1,500 tokens, not the whole report");
 });
