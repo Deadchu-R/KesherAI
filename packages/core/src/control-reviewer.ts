@@ -79,15 +79,21 @@ export function localControlReviewer(pick: () => LocalModelPick | undefined, tim
     const p = pick();
     if (!p) return { allow: false, reason: "no local model for the reviewer" };
     if (!p.local) return { allow: false, reason: "the reviewer only uses a local model" };
+    // A plain (referenced) timer, not AbortSignal.timeout: that one's timer is unref'd, so a wait on it alone can
+    // end the process's event loop before it fires (seen on Windows).
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(new Error("the reviewer took too long")), timeoutMs);
     try {
       const out = await p.model(
         { messages: [{ role: "system", content: CONTROL_REVIEW_SYSTEM }, { role: "user", content: controlReviewPrompt(m) }], tools: [] },
-        AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+        AbortSignal.any([signal, ctl.signal]),
         () => undefined,
       );
       return parseReview(out.text);
     } catch {
       return { allow: false, reason: "the reviewer did not answer" };
+    } finally {
+      clearTimeout(timer);
     }
   };
 }
