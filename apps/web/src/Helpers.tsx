@@ -13,6 +13,10 @@ import { kTokens } from "./chat-status";
  * notice while a build agent's model is swapped in. Everything comes from the chat's own event stream (`helpers`
  * events), so the phone in remote shows the same.
  *
+ * Steer and continue (RESEARCH_LOG "Gap list: agents and chat-first", A5 and A6): a running sub-agent's card and sheet
+ * take a note ("Add a note"), read at its next step; an ended one can be continued with a follow-up ("Continue
+ * with…"), from its own conversation on the same model. Both go through the server, so they work from the phone too.
+ *
  * Wording (Roee, 2026-11-19): "סוכנים" / agents, never "עוזרים"; the chat's model is the lead agent, the others are
  * sub-agents ("סוכן מחקר", "research agent"…).
  */
@@ -110,6 +114,79 @@ function ResumedTag({ r }: { r: HelperRunInfo }) {
   return <span className="htag t-run" title={L("KesherAI הופעל מחדש והסוכן ממשיך מהצעד שבו עצר", "KesherAI restarted and the helper goes on from the step where it stopped")}>↻ {L("חודש", "Resumed")}</span>;
 }
 
+/** "Continued" after a follow-up (how many times when more than once). */
+function ContinuedTag({ r }: { r: HelperRunInfo }) {
+  if (!r.continued) return null;
+  const n = r.continued > 1 ? ` ×${r.continued}` : "";
+  return <span className="htag t-run" title={L("הסוכן הזה הוסיף לעבוד מהשיחה שלו עם הנחיה חדשה", "This agent went on from its own conversation with a follow-up")}>↪ {L("המשך", "Continued")}{n}</span>;
+}
+
+/** A note or follow-up line in the steps (`note(user): …`, `continue(lead): …`), as helper-runs.ts writes it. */
+const NOTE_STEP = /^(note|continue)\((user|lead)\): ([\s\S]*)$/;
+
+/** @returns The step as the user reads it: a tool step as is, a note or a follow-up with who sent it. */
+function stepText(step: string): { text: string; note: boolean } {
+  const m = NOTE_STEP.exec(step);
+  if (!m) return { text: step, note: false };
+  const who = m[1] === "note"
+    ? (m[2] === "user" ? L("ההנחיה שלך", "Your note") : L("הנחיה מהסוכן הראשי", "Lead agent's note"))
+    : (m[2] === "user" ? L("המשך ממך", "Your follow-up") : L("המשך מהסוכן הראשי", "Lead agent's follow-up"));
+  return { text: `${who}: ${m[3]}`, note: true };
+}
+
+/**
+ * The note box on a running sub-agent ("Add a note"), or "Continue with…" on an ended one that kept its conversation.
+ * The note is read at its next step (after the tool it runs now); a follow-up starts it again in the background.
+ *
+ * @param p.r - The run.
+ * @param p.convId - The chat.
+ */
+function HelperTalk({ r, convId }: { r: HelperRunInfo; convId: string }) {
+  const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const live = going(r) && r.kind !== "external";
+  if (!live && !r.canContinue) return null;
+  if (!live && !open) {
+    return (
+      <div className="htalk-row">
+        <button type="button" className="hbtn" onClick={() => setOpen(true)}>↪ {L("המשך עם…", "Continue with…")}</button>
+      </div>
+    );
+  }
+  const send = () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    void api(`/api/conversations/${convId}/helpers/${r.id}/${live ? "message" : "continue"}`, { method: "POST", body: { text: t } }).then(
+      () => {
+        setText("");
+        setOpen(false);
+        toast(live ? L("ההנחיה נשלחה: הסוכן יקרא אותה בצעד הבא", "Note sent: the agent reads it at its next step") : L("הסוכן ממשיך ברקע", "The agent goes on in the background"));
+      },
+      (e) => toast((e as Error).message),
+    ).finally(() => setBusy(false));
+  };
+  const label = live ? L("הוסף הנחיה", "Add a note") : L("המשך עם…", "Continue with…");
+  return (
+    <form className="htalk" onSubmit={(e) => { e.preventDefault(); send(); }}>
+      <input
+        type="text"
+        value={text}
+        maxLength={2000}
+        dir="auto"
+        aria-label={label}
+        placeholder={live ? L("הוסף הנחיה: מה לשנות או להוסיף…", "Add a note: what to change or add…") : L("המשך עם: מה לעשות עכשיו…", "Continue with: what to do next…")}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape" && !live) setOpen(false); }}
+        autoFocus={!live}
+      />
+      <button type="submit" className="primary" disabled={!text.trim() || busy}>{live ? L("שלח", "Send") : L("המשך", "Continue")}</button>
+      {!live && <button type="button" onClick={() => setOpen(false)}>{L("ביטול", "Cancel")}</button>}
+    </form>
+  );
+}
+
 /** The state's mark at the start of a row. */
 function StateMark({ r }: { r: HelperRunInfo }) {
   if (r.state === "running") return <span className="hspin" aria-hidden />;
@@ -203,8 +280,10 @@ function Steps({ r, all }: { r: HelperRunInfo; all?: boolean }) {
   return (
     <div className="hsteps">
       {list.map((s, i) => {
+        const st = stepText(s);
+        if (st.note) return <span key={`${i}-${s}`} className="hstep-note">✎ {st.text}</span>;
         const current = r.state === "running" && i === list.length - 1;
-        return <span key={`${i}-${s}`} className={current ? "acc" : ""}>{current ? "◌" : "✓"} {s}{current ? ` · ${L(`צעד ${r.step} מתוך ${r.maxSteps}`, `step ${r.step} of ${r.maxSteps}`)}` : ""}</span>;
+        return <span key={`${i}-${s}`} className={current ? "acc" : ""}>{current ? "◌" : "✓"} {st.text}{current ? ` · ${L(`צעד ${r.step} מתוך ${r.maxSteps}`, `step ${r.step} of ${r.maxSteps}`)}` : ""}</span>;
       })}
       {!list.length && r.state === "running" && <span className="acc">◌ {L("מתחיל…", "Starting…")}</span>}
     </div>
@@ -256,6 +335,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         <ModelChip r={r} />
         <UsageChip r={r} />
         <ResumedTag r={r} />
+        <ContinuedTag r={r} />
         <StateTag r={r} now={now} />
         {going(r) ? (
           <button type="button" className="hbtn" onClick={() => stop(convId, r.id)}>■ {L("עצור", "Stop")}</button>
@@ -270,6 +350,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
       {(r.state === "running" || open) && <Steps r={r} all={open} />}
       <SwapRow r={r} now={now} />
       <Report r={r} convId={convId} />
+      <HelperTalk r={r} convId={convId} />
     </div>
   );
 }
@@ -340,6 +421,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
           <b>{helperKindName(r)}</b>
           <span className="grow" />
           <ResumedTag r={r} />
+          <ContinuedTag r={r} />
           <StateTag r={r} now={now} />
         </div>
         <div className="hsheet-task">{r.title}</div>
@@ -353,6 +435,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
         <b className="small">{L("צעדים", "Steps")}</b>
         <Steps r={r} all />
         <Report r={r} convId={convId} />
+        <HelperTalk r={r} convId={convId} />
         <div className="row hsheet-actions">
           <button type="button" onClick={() => { onClose(); setTimeout(() => document.getElementById(`helper-${r.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}>{L("הצג בצ׳אט", "Show in chat")}</button>
           {going(r) && <button type="button" className="bad" onClick={() => stop(convId, r.id)}>■ {L("עצור את הסוכן", "Stop the agent")}</button>}

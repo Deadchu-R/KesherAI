@@ -3987,6 +3987,11 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .hswap.done { background: color-mix(in srgb, #7fd6a4 10%, var(--panel)); }
 .hask { display: flex; flex-direction: column; gap: 8px; background: color-mix(in srgb, #ffc96b 10%, var(--panel)); border-radius: 9px; padding: 8px 10px; }
 .hask .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.htalk { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.htalk input { flex: 1 1 180px; min-width: 0; font-size: 14px; }
+@media (max-width: 600px) { .htalk input { font-size: 16px; } }
+.htalk-row { display: flex; }
+.hstep-note { color: var(--accent); font-style: italic; }
 .hstrip { display: flex; gap: 8px; align-items: center; padding: 8px 10px; margin-bottom: 8px; border-radius: 14px; background: var(--panel); border: 1px solid var(--border); min-width: 0; }
 .hstrip-title, .hstrip-count { white-space: nowrap; }
 .hchips { display: flex; gap: 8px; align-items: center; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
