@@ -82,8 +82,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Usability gap list against the code (RESEARCH_LOG 2026-11-20; written by a parallel chat 2, which Roee closed: chat 3 continues).
 - 🔨 Batch 1 server: cache_prompt + id_slot for llama.cpp, cached tokens in the usage event, stable tool order (Opus agent).
 - ✅ Batch 1 server (cache_prompt, id_slot, cached tokens, stable tool order) and screens (token line under answers, cache in Context); fixed: Store apps counted as games paused the inbox.
-- 🔨 Design doc boards for the token line, then build 0.6.403.
-- ⬜ Roee (14:33): the hub must show ALL his tasks and what every agent works on, from any device he signs in with (today: "Kept on this device, the hub keeps no tasks"). Research how others sync (sealed per-account store vs devices publishing sealed snapshots), keep end-to-end sealing; then design doc, then build. Include kesher-inbox tasks and live agents., then the design doc, then batch builds.
+- ✅ Design doc boards for the token line; 0.6.403 available.
+- ⬜ PC Health: show the drive of each program/game; a 'move to another drive' for LM Studio / Ollama models (Roee's C: filled up).
+- ⬜ Roee (14:33): the hub must show ALL his tasks and what every agent works on, from any device he signs in with (today: "Kept on this device, the hub keeps no tasks"). Research how others sync (sealed per-account store vs devices publishing sealed snapshots), keep end-to-end sealing; then design doc, then build. Include kesher-inbox tasks and live agents.
+  ✅ Research (RESEARCH_LOG 2026-11-20, account key K, sealed records). Roee: inbox tasks show in full on every device; done tasks kept 90 days; recovery code: default at first setup (he asked what happens if everything resets: explained). 🔨 Steps 1-2 (shared seal module + hub records API) with an Opus agent., then the design doc, then batch builds.
 - ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
