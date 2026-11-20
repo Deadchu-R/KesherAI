@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AgentTool } from "@kesher/agent";
+import { scenePreview } from "@kesher/shared";
 import type { GodotBridge } from "./godot-bridge.js";
+import { godotEditDiff } from "./scene-diff-build.js";
 
 /** One short line while no Godot editor is connected (few tokens). */
 export const GODOT_IDLE_NOTE = "Godot: godot_status says whether the editor is connected; godot_connect adds KesherAI's addon to a Godot project and opens it.";
@@ -71,7 +73,14 @@ export function godotTools(bridge: GodotBridge, saveImage: (png: Buffer) => Prom
         description: "Change the open scene, one undo step per change. ops: [{op:\"add\", parent, type (a node class or res://scene.tscn), name} | {op:\"set\", path, property, value} | {op:\"remove\", path} | {op:\"attach_script\", path, script:\"res://…\"}]. Then godot_scene save.",
         inputSchema: { type: "object", properties: { ops: { type: "array", items: { type: "object" } } }, required: ["ops"] },
       },
-      preview: async (input) => JSON.stringify(input.ops ?? [], null, 1).slice(0, 2000),
+      preview: async (input) => {
+        const ops = Array.isArray(input.ops) ? (input.ops as Array<Record<string, unknown>>).slice(0, 50) : [];
+        // The values the "set" ops replace, read from the editor (at most 10 nodes; a node it cannot read shows only the new value).
+        const paths = [...new Set(ops.filter((o) => o.op === "set" || o.op === "attach_script").map((o) => String(o.path ?? "")))].slice(0, 10);
+        const current: Record<string, Record<string, unknown> | undefined> = {};
+        for (const path of paths) current[path] = await req<{ properties?: Record<string, unknown> }>("get", { path }, 5000).then((r) => r.properties, () => undefined);
+        return scenePreview(godotEditDiff(ops, current));
+      },
       run: async (input) => {
         const ops = Array.isArray(input.ops) ? (input.ops as Array<Record<string, unknown>>).slice(0, 50) : [];
         const lines: string[] = [];

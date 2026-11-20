@@ -2,6 +2,8 @@ import { existsSync, realpathSync } from "node:fs";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
+import { scenePreview } from "@kesher/shared";
+import { unityAddComponentDiff, unityCreateDiff } from "./scene-diff-build.js";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
 import { clampInt, hierarchyCs, unityEditTools, type UnityEditDeps } from "./unity-edit-tools.js";
@@ -340,6 +342,7 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
           required: ["name"],
         },
       },
+      preview: async (input) => scenePreview(unityCreateDiff(input)),
       run: async (input) => {
         need();
         const name = String(input.name ?? "").trim().slice(0, 120) || "GameObject";
@@ -370,6 +373,7 @@ return "Added " + PathOf(go.transform) + report + " (not saved yet: unity_scene 
         description: "Add components (by type name: Rigidbody2D, AudioSource, or the project's own compiled scripts) to an existing GameObject of the open scene, found by its path like 'Player' or 'Level/Door'.",
         inputSchema: { type: "object", properties: { gameObject: { type: "string" }, components: { type: "array", items: { type: "string" } } }, required: ["gameObject", "components"] },
       },
+      preview: async (input) => scenePreview(unityAddComponentDiff(input)),
       run: async (input) => {
         need();
         const comps = toTypes(input.components);

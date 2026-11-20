@@ -1,0 +1,192 @@
+{
+ "group": "משחקים",
+ "now": "2026-11-21T10:05:00Z",
+ "boards": [
+  {
+   "id": "SceneDiffUnity",
+   "title": "אישור שינוי סצנה: רשימת אובייקטים וערכים ישן → חדש",
+   "route": "#/c/sd1",
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".sd-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/sd1",
+     "json": {
+      "id": "sd1",
+      "projectId": null,
+      "title": "אויבים בשלב 1",
+      "kind": "chat",
+      "modelId": "qwen3-8b",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "sd1",
+       "status": "waiting",
+       "modelId": "qwen3-8b",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "user",
+        "text": "תוסיף גובלין ליד הכניסה, תמחק את הארגז השבור ותעשה שהשחקן יקפוץ גבוה יותר"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "בדקתי את הסצנה. הנה מה שישתנה:"
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "k1",
+        "name": "unity_modify_scene",
+        "input": {
+         "changes": []
+        },
+        "preview": "Unity scene: 1 added, 1 removed, 1 changed\n+ Level/Enemies/Goblin (Capsule) +Rigidbody +EnemyAI\n    position: (4, 0, 12)\n- Level/Props/BrokenCrate_LongNameThatWrapsOnPhones #-4212\n~ Player #-1180\n    position: (0.00, 1.00, 0.00) → (2, 1, -3)\n    Rigidbody.m_Mass: 1 → 2.5\n    PlayerController.jumpHeight: 1.2 → 2\n<!--kesher-scene {\"engine\":\"unity\",\"undo\":\"undo\",\"readBefore\":true,\"objects\":[{\"kind\":\"added\",\"name\":\"Level/Enemies/Goblin\",\"type\":\"Capsule\",\"components\":{\"added\":[\"Rigidbody\",\"EnemyAI\"]},\"props\":[{\"name\":\"position\",\"to\":\"(4, 0, 12)\"}]},{\"kind\":\"removed\",\"name\":\"Level/Props/BrokenCrate_LongNameThatWrapsOnPhones #-4212\"},{\"kind\":\"changed\",\"name\":\"Player #-1180\",\"props\":[{\"name\":\"position\",\"from\":\"(0.00, 1.00, 0.00)\",\"to\":\"(2, 1, -3)\"},{\"name\":\"Rigidbody.m_Mass\",\"from\":\"1\",\"to\":\"2.5\"},{\"name\":\"PlayerController.jumpHeight\",\"from\":\"1.2\",\"to\":\"2\"}]}]}-->",
+        "reason": "Changes 3 objects in the Unity scene, deleting 1."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/sd1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/sd1/events*",
+     "json": null
+    }
+   ]
+  },
+  {
+   "id": "SceneDiffUnreal",
+   "title": "אישור חומר ב-Unreal כשהעורך סגור: ממתין לסנכרון",
+   "route": "#/c/sd2",
+   "height": {
+    "desktop": 800,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": ".sd-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/sd2",
+     "json": {
+      "id": "sd2",
+      "projectId": null,
+      "title": "Harbor",
+      "kind": "chat",
+      "modelId": "qwen3-8b",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "sd2",
+       "status": "waiting",
+       "modelId": "qwen3-8b",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "user",
+        "text": "Put the rusty metal material on the big crate"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "Unreal is closed, so this waits for the sync:"
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "k1",
+        "name": "unreal_apply_material",
+        "input": {
+         "level": "/Game/Maps/Harbor",
+         "actor": "Crate_Big",
+         "material": "/Game/Materials/MI_RustyMetal"
+        },
+        "preview": "Unreal level /Game/Maps/Harbor: 1 changed\n~ Crate_Big (StaticMeshActor)\n    StaticMeshComponent0 slot 0: /Game/Materials/M_Wood.M_Wood → /Game/Materials/MI_RustyMetal\n<!--kesher-scene {\"engine\":\"unreal\",\"scene\":\"/Game/Maps/Harbor\",\"undo\":\"queued\",\"readBefore\":true,\"objects\":[{\"kind\":\"changed\",\"name\":\"Crate_Big\",\"type\":\"StaticMeshActor\",\"props\":[{\"name\":\"StaticMeshComponent0 slot 0\",\"from\":\"/Game/Materials/M_Wood.M_Wood\",\"to\":\"/Game/Materials/MI_RustyMetal\"}]}]}-->",
+        "reason": "Changes the project."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/sd2/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/sd2/events*",
+     "json": null
+    }
+   ]
+  }
+ ]
+}

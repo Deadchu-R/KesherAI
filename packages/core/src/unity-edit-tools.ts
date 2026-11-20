@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute } from "node:path";
 import type { AgentTool, ToolContext } from "@kesher/agent";
+import { scenePreview } from "@kesher/shared";
+import { parseUnityBefore, unityModifyDiff } from "./scene-diff-build.js";
 import { csString, projectPath } from "./unity-tools.js";
 
 /**
@@ -91,24 +93,8 @@ if (more > 0) sb.AppendLine("… " + more + " more: narrow it with filter, root 
 return sb.ToString();`;
 }
 
-/**
- * C# that lists one object's components and their serialized fields (property path = value), at most `limit` fields
- * per component, with a hint for the rest.
- *
- * @param key - The object's id ("#-1234") or path.
- * @param component - Only this component (type name), or "" for all.
- * @param limit - Fields per component.
- */
-export function inspectCs(key: string, component: string, limit: number): string {
-  return `${SCENE_PRELUDE}
-var go = Resolve(${csString(key)});
-if (go == null) return "No GameObject " + ${csString(key)} + " in the open scene (see unity_scene hierarchy).";
-var only = ${csString(component)}; var cap = ${limit};
-var sb = new System.Text.StringBuilder();
-var tr = go.transform;
-sb.AppendLine(PathOf(tr) + " #" + go.GetInstanceID() + (go.activeSelf ? "" : " (inactive)") + (go.activeInHierarchy || !go.activeSelf ? "" : " (a parent is inactive)") + ", tag " + go.tag + ", layer " + UnityEngine.LayerMask.LayerToName(go.layer) + (go.isStatic ? ", static" : "") + ", " + tr.childCount + " children");
-sb.AppendLine("Transform: local position " + tr.localPosition + ", rotation " + tr.localEulerAngles + ", scale " + tr.localScale + "; world position " + tr.position);
-System.Func<UnityEditor.SerializedProperty, string> Val = p => {
+/** C#: `Val(p)`, a serialized property's value in short words (shared by the inspector and the approval card's read). */
+const SERIALIZED_VAL = `System.Func<UnityEditor.SerializedProperty, string> Val = p => {
   switch (p.propertyType) {
     case UnityEditor.SerializedPropertyType.Integer: case UnityEditor.SerializedPropertyType.LayerMask: case UnityEditor.SerializedPropertyType.Character: return p.intValue.ToString();
     case UnityEditor.SerializedPropertyType.Boolean: return p.boolValue ? "true" : "false";
@@ -127,7 +113,26 @@ System.Func<UnityEditor.SerializedProperty, string> Val = p => {
     case UnityEditor.SerializedPropertyType.Quaternion: return "euler " + p.quaternionValue.eulerAngles;
     default: return p.isArray ? "list of " + p.arraySize : "(" + p.type + ")";
   }
-};
+};`;
+
+/**
+ * C# that lists one object's components and their serialized fields (property path = value), at most `limit` fields
+ * per component, with a hint for the rest.
+ *
+ * @param key - The object's id ("#-1234") or path.
+ * @param component - Only this component (type name), or "" for all.
+ * @param limit - Fields per component.
+ */
+export function inspectCs(key: string, component: string, limit: number): string {
+  return `${SCENE_PRELUDE}
+var go = Resolve(${csString(key)});
+if (go == null) return "No GameObject " + ${csString(key)} + " in the open scene (see unity_scene hierarchy).";
+var only = ${csString(component)}; var cap = ${limit};
+var sb = new System.Text.StringBuilder();
+var tr = go.transform;
+sb.AppendLine(PathOf(tr) + " #" + go.GetInstanceID() + (go.activeSelf ? "" : " (inactive)") + (go.activeInHierarchy || !go.activeSelf ? "" : " (a parent is inactive)") + ", tag " + go.tag + ", layer " + UnityEngine.LayerMask.LayerToName(go.layer) + (go.isStatic ? ", static" : "") + ", " + tr.childCount + " children");
+sb.AppendLine("Transform: local position " + tr.localPosition + ", rotation " + tr.localEulerAngles + ", scale " + tr.localScale + "; world position " + tr.position);
+${SERIALIZED_VAL}
 var comps = go.GetComponents<UnityEngine.Component>();
 var found = false;
 foreach (var c in comps) {
@@ -378,14 +383,41 @@ UnityEditor.Undo.CollapseUndoOperations(group);
 return log.ToString() + "(one Undo step in Unity; not saved yet: unity_scene save)";`;
 }
 
-/** C# that names each key's object ("Level/Door #-12") for the approval card, or "(not found)". */
-function namesCs(keys: string[]): string {
+/**
+ * C# that reads, for each change, the object's path and id and the value the change replaces (for the approval card's
+ * old → new list). One line per change: `path #id<TAB>old value`, or "(not found)".
+ *
+ * @param changes - The checked changes of `unity_modify_scene`.
+ */
+export function beforeCs(changes: SceneChange[]): string {
+  const read = (c: SceneChange): string => {
+    switch (c.action) {
+      case "move": return c.space === "world" ? "tr.position.ToString()" : "tr.localPosition.ToString()";
+      case "rotate": return c.space === "world" ? "tr.eulerAngles.ToString()" : "tr.localEulerAngles.ToString()";
+      case "scale": return "tr.localScale.ToString()";
+      case "rename": return "go.name";
+      case "reparent": return `(tr.parent == null ? "(top)" : PathOf(tr.parent))`;
+      case "set_active": return `(go.activeSelf ? "true" : "false")`;
+      case "delete": return `""`;
+      case "set_property": return `Prop(go, ${csString(c.component ?? "")}, ${csString(c.property ?? "")})`;
+    }
+  };
   return `${SCENE_PRELUDE}
+${SERIALIZED_VAL}
+System.Func<UnityEngine.GameObject, string, string, string> Prop = (o, type, path) => {
+  UnityEngine.Object target = null;
+  if (type == "GameObject") target = o;
+  else foreach (var c in o.GetComponents<UnityEngine.Component>()) if (c != null && (c.GetType().Name == type || c.GetType().FullName == type)) { target = c; break; }
+  if (target == null) return "(no " + type + ")";
+  var p = new UnityEditor.SerializedObject(target).FindProperty(path);
+  return p == null ? "(no such property)" : Val(p);
+};
 var sb = new System.Text.StringBuilder();
-foreach (var k in new string[] { ${keys.map(csString).join(", ")} }) { var o = Resolve(k); sb.AppendLine(o == null ? "(not found)" : PathOf(o.transform) + " #" + o.GetInstanceID()); }
+UnityEngine.GameObject go; UnityEngine.Transform tr;
+${changes.map((c) => `go = Resolve(${csString(c.object)});
+if (go == null) sb.AppendLine("(not found)"); else { tr = go.transform; sb.AppendLine(PathOf(tr) + " #" + go.GetInstanceID() + "\\t" + (${read(c)}).Replace("\\n", " ").Replace("\\t", " ")); }`).join("\n")}
 return sb.ToString();`;
 }
-
 
 /** Where imported pictures go inside the project. */
 export const GENERATED = "Assets/Generated";
@@ -711,16 +743,9 @@ export function unityEditTools(d: UnityEditDeps): AgentTool[] {
       preview: async (input) => {
         const changes = parseSceneChanges(input.changes);
         if (typeof changes === "string") return changes;
-        // The real names of #ids, when the Editor answers (else the card shows what the model gave).
-        const keys = [...new Set(changes.map((c) => c.object))];
-        const named = d.project() ? (await d.evalCs(namesCs(keys)).catch(() => "")).split("\n").map((l) => l.trim()) : [];
-        const label = (k: string) => {
-          const n = named[keys.indexOf(k)];
-          return n && n.includes("#") && named.length >= keys.length ? n : k;
-        };
-        const { objects, deletes } = sceneReach(changes);
-        const lines = changes.map((c, i) => `${i + 1}. ${label(c.object)}: ${describeSceneChange(c)}`);
-        return `Unity scene: ${objects} object${objects === 1 ? "" : "s"}${deletes ? `, ${deletes} deleted` : ""} (one Undo step)\n${lines.join("\n")}`;
+        // The real names and the values each change replaces, when the Editor answers (else only the new values).
+        const before = d.project() ? parseUnityBefore(await d.evalCs(beforeCs(changes)).catch(() => ""), changes.length) : undefined;
+        return scenePreview(unityModifyDiff(changes, before));
       },
       run: async (input) => {
         d.need();

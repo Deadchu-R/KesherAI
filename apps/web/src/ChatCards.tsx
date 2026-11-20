@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
-import { explainCommand } from "@kesher/shared";
+import { explainCommand, parseScenePreview } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { stepLabel } from "./Activity";
 import { getLocale, t, he$ } from "./i18n";
@@ -10,6 +10,7 @@ import { Select } from "./ui/Select";
 import { durations } from "./settings/PermissionsSection";
 import { McpAppView } from "./McpAppView";
 import { helperAskerName } from "./Helpers";
+import { SceneDiffCard } from "./SceneDiffCard";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -219,8 +220,11 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
   const parts = cmd ? explainCommand(cmd) : [];
   const he = getLocale() === "he";
   const path = typeof ev.input.path === "string" ? ev.input.path : "";
+  // A Unity, Unreal or Godot scene change: the objects and old → new values, instead of the raw preview.
+  const scene = parseScenePreview(ev.preview);
   const headline =
-    ev.name === "run_command" ? t("apRun")
+    scene ? L("לשנות את הסצנה", "Change the scene")
+    : ev.name === "run_command" ? t("apRun")
     : ev.name === "install_tool" ? t("apInstall", { what: String(ev.input.name ?? "") })
     : ev.name === "build_executable" ? t("apBuild", { what: String(ev.input.entry ?? "") })
     : ev.name === "download_file" ? t("apDownload")
@@ -246,7 +250,7 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
           <p dir="auto">{ev.purpose}</p>
         </div>
       )}
-      {ev.name === "run_command" ? <pre className="code" dir="ltr">{ev.preview}</pre> : ev.preview.startsWith("---") || ev.preview.includes("@@") ? <Diff diff={ev.preview} /> : <pre className="code" dir="ltr">{ev.preview}</pre>}
+      {scene ? <SceneDiffCard diff={scene.diff} /> : ev.name === "run_command" ? <pre className="code" dir="ltr">{ev.preview}</pre> : ev.preview.startsWith("---") || ev.preview.includes("@@") ? <Diff diff={ev.preview} /> : <pre className="code" dir="ltr">{ev.preview}</pre>}
       {parts.length > 0 && (
         <div className="ap-what">
           <span className="muted small">{t("apWhat")}</span>

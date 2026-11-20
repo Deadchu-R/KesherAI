@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { parseScenePreview } from "@kesher/shared";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,9 +110,9 @@ test("unity_modify_scene: one schema, checked input, one Undo group, approval fo
 
   // The approval card lists every change, with the objects' real names when Unity answers.
   const preview = await tool.preview!({ changes: [{ object: "#-5", action: "delete" }, { object: "B", action: "set_active", value: false }] }, ctx);
-  assert.match(preview, /2 objects, 1 deleted/);
-  assert.match(preview, /1\. #-5: DELETE/);
-  assert.match(preview, /2\. B: turn off/);
+  // The approval card's scene diff: the deleted object and the changed value (no Editor here, so no old values).
+  assert.match(preview, /^Unity scene: 1 removed, 1 changed\n- #-5\n~ B\n {4}active: false\n/);
+  assert.equal(parseScenePreview(preview)?.diff.readBefore, false);
   assert.equal(describeSceneChange({ object: "A", action: "set_property", component: "Light", property: "m_Color", value: [1, 0, 0] }), "Light.m_Color = (1, 0, 0)");
 });
 

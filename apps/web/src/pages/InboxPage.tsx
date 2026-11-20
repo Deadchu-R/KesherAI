@@ -1,3 +1,4 @@
+import { previewText } from "@kesher/shared";
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -124,7 +125,7 @@ export function InboxBell() {
                   <div className="small" dir="auto"><code dir="ltr">{p.tool}</code> {p.purpose || p.reason}</div>
                   <details>
                     <summary className="muted small">{L("מה בדיוק", "Details")}</summary>
-                    <pre className="ctx-text" dir="ltr">{p.preview}</pre>
+                    <pre className="ctx-text" dir="ltr">{previewText(p.preview)}</pre>
                   </details>
                   <div className="row">
                     <button type="button" className="primary small" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אשר", "Allow")}</button>
@@ -247,7 +248,7 @@ export function InboxPage({ tab: first }: { tab?: InboxTab }) {
             </div>
             <div className="row wrap"><code dir="ltr">{p.tool}</code>{p.purpose && <span dir="auto">{p.purpose}</span>}</div>
             {p.reason && <p className="muted small" dir="auto">{p.reason}</p>}
-            <pre className="ctx-text inbox-preview" dir="ltr">{p.preview}</pre>
+            <pre className="ctx-text inbox-preview" dir="ltr">{previewText(p.preview)}</pre>
             <div className="row inbox-actions">
               <button type="button" className="primary" disabled={busy === p.requestId} onClick={() => void answer(p, "allow")}>{L("אישור", "Allow")}</button>
               <button type="button" disabled={busy === p.requestId} onClick={() => void answer(p, "deny")}>{L("דחייה", "Deny")}</button>
