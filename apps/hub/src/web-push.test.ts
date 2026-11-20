@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -77,7 +78,7 @@ test("VAPID: needs all three values; the ES256 token verifies with the public ke
 });
 
 test("tools/hub-vapid.mjs prints a pair the hub takes and signs with", async () => {
-  const out = execFileSync(process.execPath, [new URL("../../../tools/hub-vapid.mjs", import.meta.url).pathname]).toString();
+  const out = execFileSync(process.execPath, [fileURLToPath(new URL("../../../tools/hub-vapid.mjs", import.meta.url))]).toString();
   const v = vapidFromEnv(/VAPID_PUBLIC_KEY=(\S+)/.exec(out)?.[1], /VAPID_PRIVATE_KEY=(\S+)/.exec(out)?.[1], "mailto:owner@example.com");
   assert.ok(v);
   assert.match(await vapidAuth(FCM, v, Date.now()), /^vapid t=/);
