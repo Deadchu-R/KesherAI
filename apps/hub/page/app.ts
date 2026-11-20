@@ -184,7 +184,8 @@ function statusTag(t: PageTask): HTMLElement {
 function routeChip(t: PageTask): HTMLElement {
   if (t.inbox) {
     const ex = t.inbox.executor;
-    return ex === "claude" ? h("span", { class: "ex ex-opus" }, "✷ Claude") : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName} · ${ex === "antigravity" ? "✦ Antigravity" : L("מודל מקומי", "local model")}`);
+    // The executor only (the column is narrow); the PC's name is in the tooltip and the task's detail.
+    return ex === "claude" ? h("span", { class: "ex ex-opus" }, "✷ Claude") : h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${ex === "antigravity" ? "✦ Antigravity" : L("מודל מקומי", "Local model")}`);
   }
   return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
 }
@@ -581,7 +582,7 @@ function taskDetail(t: PageTask): HTMLElement {
   return h(
     "section",
     { class: `card pad stack${t.status === "done" ? " done-card" : ""}` },
-    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), routeChip(t), liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
+    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
     t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""),
     t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null,
     h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")),
