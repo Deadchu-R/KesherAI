@@ -11,6 +11,7 @@ import { fabTools } from "../fab-tools.js";
 import { canvasTools } from "../canvas.js";
 import { deckStoreFor, deckTools } from "../decks.js";
 import { docStoreFor, docTools } from "../docs.js";
+import { versionNumber } from "../versions.js";
 import { sheetStoreFor, sheetTools } from "../sheets.js";
 import { timerTools } from "../chat-timers.js";
 import { Checkpoints } from "../checkpoints.js";
@@ -264,6 +265,16 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // None in an incognito chat: a timer is written to disk (scan 65).
     // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
     canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? ""), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),
+    // A deep research's report: a new document of the chat (none in an incognito chat).
+    writeReport: async (convId, title, body) => {
+      if (library.summary(convId)?.incognito) return undefined;
+      const store = docStoreFor(join(paths.root, "docs"));
+      const d = await store.create({ title, convId });
+      const saved = await store.update(d.id, (x) => {
+        x.body = body;
+      }, true);
+      return { id: saved.id, ver: versionNumber(saved) };
+    },
     timerTools: (convId) => (library.summary(convId)?.incognito ? [] : timerTools(chatTimers, convId, (title, body) => notifier.send({ title, body, path: `#/c/${convId}`, tags: ["bell"] }).then(() => undefined))),
     memory,
   });

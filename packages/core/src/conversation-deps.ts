@@ -80,6 +80,12 @@ export interface ConversationDeps {
   timerTools?(convId: string): AgentTool[];
   /** The `canvas` tool for a chat (canvas.ts). */
   canvasTools?(convId: string): AgentTool[];
+  /**
+   * Saves a deep research's report as a new document of the chat (docs.ts), opened beside the chat.
+   *
+   * @returns Its id and version, or undefined when the chat keeps no documents (incognito).
+   */
+  writeReport?(convId: string, title: string, body: string): Promise<{ id: string; ver: number } | undefined>;
   /** The user's memory by topic: read into prompts, filled after turns. */
   memory?: MemoryStore;
   /** Saved personas. */

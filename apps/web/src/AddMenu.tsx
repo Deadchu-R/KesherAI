@@ -195,7 +195,8 @@ export function AddMenu(p: AddMenuProps) {
         {p.onAnnotate && <MenuItem icon="🖍" onSelect={() => p.onAnnotate!("file")}>{L("סימון על תמונה", "Mark up a picture")}</MenuItem>}
       </MenuSub>
       <MenuSeparator />
-      <MenuItem icon="🔬" onSelect={() => { p.onWeb(true); p.onInsert(L("מחקר מעמיק: חפש כמה פעמים, השווה בין מקורות, וצטט כל מקור.\n", "Deep research: search several times, compare sources, and cite each one.\n")); }}>{L("מחקר מעמיק", "Deep research")}</MenuItem>
+      {/* The lead plans sub-questions and runs research sub-agents at once; the report opens beside the chat (deep-research.ts). The tool's name in the text loads it. */}
+      <MenuItem icon="🔬" title={L("כמה סוכני מחקר במקביל, ודוח עם מקורות שנפתח ליד הצ׳אט", "Several research agents at once, and a report with sources that opens beside the chat")} onSelect={() => p.onInsert(L("מחקר מעמיק (deep_research): ", "Research deeply (deep_research): "))}>{L("מחקר מעמיק", "Research deeply")}</MenuItem>
       <MenuSub icon="🧰" label={L("עוד כלים", "More tools")}>
         <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
           {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (

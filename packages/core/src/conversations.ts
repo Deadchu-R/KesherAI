@@ -16,6 +16,7 @@ import { branding, type AgentEvent, type AgentMessage, type Conversation, type C
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
+import { deepResearchTool } from "./deep-research.js";
 import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
 import { doctorTool } from "./doctor.js";
 import { projectAgents, type AgentDef } from "./agents.js";
@@ -355,8 +356,11 @@ export class ConversationManager {
         }
       },
     };
+    // A deep research's report becomes a document of the chat (none in an incognito chat: the answer has it).
+    const writeReport = this.deps.writeReport;
+    if (writeReport) o.report = (title, body) => writeReport(id, title, body);
     this.delegateOptions.set(id, o);
-    return helperToolsFor(o);
+    return [...helperToolsFor(o), deepResearchTool(o)];
   }
 
   private teamCache = new Map<string, Teammate[]>();
