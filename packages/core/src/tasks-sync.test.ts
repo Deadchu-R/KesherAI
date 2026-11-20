@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -304,4 +304,48 @@ test("tasks sync: hiding the work list removes its items; a list that cannot be 
   // Phone and page tasks are still received; work-list items are never queued in the inbox.
   assert.deepEqual(t.received, []);
   await t.done();
+});
+
+test("tasks sync: sent and received entries are pruned once their task is gone (security scan 167)", async () => {
+  const t = await setup();
+  t.tasks.push(task("c-20261120-01"), task("c-20261120-02"));
+  const keys = await ensureAccountKey(t.drive);
+  const phone = await DriveSync.create({ drive: t.drive, writer: "phone-1", keys });
+  const { head } = await phone.write("task", undefined, { type: "task", title: "From the phone", spec: "x", origin: "phone", executor: "local", createdAt: "2026-11-20T10:00:00Z" });
+  await t.sync.syncNow();
+  let saved = JSON.parse(await readFile(t.file, "utf8")) as { sent: Record<string, string>; received: Record<string, string> };
+  assert.equal(Object.keys(saved.sent).length, 3);
+  assert.equal(Object.keys(saved.received).length, 1);
+  // One inbox task leaves the inbox; the phone's task is deleted in Drive and leaves the inbox too.
+  t.tasks.splice(0, t.tasks.length, t.tasks[1]!);
+  await phone.write("task", head.id, null);
+  await t.sync.syncNow();
+  saved = JSON.parse(await readFile(t.file, "utf8")) as typeof saved;
+  assert.deepEqual(Object.keys(saved.sent), ["c-20261120-02"]);
+  assert.deepEqual(saved.received, {});
+  await t.done();
+});
+
+test("tasks sync: steady pings do not postpone the pull", async () => {
+  const t = await setup();
+  await t.sync.syncNow();
+  t.sync.start();
+  mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  try {
+    let pulls = 0;
+    const real = t.sync.syncNow.bind(t.sync);
+    t.sync.syncNow = () => {
+      pulls++;
+      return real();
+    };
+    // The start's own 5 s sync is due; pings every second must neither postpone it nor add more timers.
+    for (let i = 0; i < 6; i++) {
+      t.sync.onPing();
+      mock.timers.tick(1000);
+    }
+    assert.ok(pulls >= 1, "a pull happened while pings kept coming");
+  } finally {
+    mock.timers.reset();
+    await t.done();
+  }
 });

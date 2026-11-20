@@ -33,7 +33,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
 
 const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus"]);
 const RISKS = new Set<InboxRisk>(["low", "medium", "high"]);
-const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub"]);
+const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub", "device"]);
 /** The biggest task file read (bigger ones are refused, not cut). */
 export const MAX_TASK_BYTES = 32 * 1024;
 

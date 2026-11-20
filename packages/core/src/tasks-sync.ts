@@ -168,7 +168,7 @@ export function scrubText(text: string, home = homedir()): string {
   return t.replace(/\b([A-Za-z]:[\\/]+Users[\\/]+)[^\\/\s"']+/gi, "$1~").replace(/(\/(?:home|Users)\/)[^/\s"']+/g, "$1~");
 }
 
-const ORIGIN: Record<InboxTaskView["from"], SyncOrigin> = { claude: "inbox-claude", roee: "inbox-roee", "self-work": "self-work", hub: "page" };
+const ORIGIN: Record<InboxTaskView["from"], SyncOrigin> = { claude: "inbox-claude", roee: "inbox-roee", "self-work": "self-work", hub: "page", device: "phone" };
 
 /** The inbox's state as a synced run state. */
 function runState(t: InboxTaskView): SyncRunState {
@@ -219,6 +219,10 @@ export class TasksSync {
   private sync?: DriveSync;
   private running?: Promise<TasksSyncStatus>;
   private timer?: ReturnType<typeof setTimeout>;
+  /** When the timer fires (ms), so a ping never postpones a pull already due sooner. */
+  private timerAt = 0;
+  /** A pull after the running sync is already arranged (pings during a sync arrange only one). */
+  private afterRun = false;
   private failures = 0;
   private saving: Promise<void> = Promise.resolve();
   private stopInbox?: () => void;
@@ -338,7 +342,23 @@ export class TasksSync {
    * that is running now.
    */
   onPing(): void {
-    if (this.ready && this.stopInbox) this.soon(SYNC_LIMITS.pingPullDelayMs);
+    if (!this.ready || !this.stopInbox) return;
+    const ms = SYNC_LIMITS.pingPullDelayMs;
+    if (this.running) {
+      // One pull after the running sync, however many pings come meanwhile.
+      if (this.afterRun) return;
+      this.afterRun = true;
+      void this.running.finally(() => {
+        this.afterRun = false;
+        this.pullBy(ms);
+      });
+    } else this.pullBy(ms);
+  }
+
+  /** A sync within `ms`: keeps a timer that fires sooner (steady pings must not postpone a pull forever). */
+  private pullBy(ms: number): void {
+    if (this.timer && this.timerAt <= Date.now() + ms) return;
+    this.schedule(ms);
   }
 
   /** A sync in `ms`, counted from the end of the one running now (a sync already going may have missed the news). */
@@ -349,6 +369,7 @@ export class TasksSync {
 
   private schedule(ms: number): void {
     if (this.timer) clearTimeout(this.timer);
+    this.timerAt = Date.now() + ms;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       void this.syncNow().finally(() => {
@@ -473,11 +494,16 @@ export class TasksSync {
   /** Writes each inbox task once, and its run whenever it changed. */
   private async send(sync: DriveSync): Promise<void> {
     const now = this.now();
-    for (const t of await this.d.inbox.list()) {
+    const list = await this.d.inbox.list();
+    // Task record ids this device has (live or tombstoned), once per sync rather than once per inbox task.
+    const known = new Set(sync.records().filter((r) => r.head.kind === "task").map((r) => r.head.id));
+    const written = new Set<string>();
+    for (const t of list) {
       if (t.endedAt && now - t.endedAt > KEEP_FINISHED_MS) continue;
+      written.add(t.id);
       const fromDrive = this.saved.received[t.id];
       const id = fromDrive ?? syncIdFor(t.id);
-      if (!fromDrive && !sync.records().some((r) => r.head.kind === "task" && r.head.id === id)) {
+      if (!fromDrive && !known.has(id)) {
         const task: SyncTaskBody = {
           type: "task",
           title: scrubText(t.title, this.d.home).slice(0, 200),
@@ -512,6 +538,19 @@ export class TasksSync {
       }
       this.saved.sent[t.id] = fp;
     }
+    this.prune(sync, list, written);
+  }
+
+  /**
+   * Forgets what is no longer needed, so the state file does not grow forever (security scan 167): `sent` for inbox
+   * tasks that are gone from the inbox or too old to write, `received` for Drive tasks whose record was deleted or
+   * compacted and that the inbox no longer holds (while it does, the entry keeps the task under its Drive id).
+   */
+  private prune(sync: DriveSync, list: readonly InboxTaskView[], written: ReadonlySet<string>): void {
+    for (const id of Object.keys(this.saved.sent)) if (!written.has(id)) delete this.saved.sent[id];
+    const inInbox = new Set(list.map((t) => t.id));
+    const live = new Set(sync.records().filter((r) => r.head.kind === "task" && !r.head.deleted).map((r) => r.head.id));
+    for (const [id, rid] of Object.entries(this.saved.received)) if (!inInbox.has(id) && !live.has(rid)) delete this.saved.received[id];
   }
 
   /**

@@ -239,7 +239,13 @@ test("inbox: a declined task file, the daily cap, and the quota", async () => {
     assert.equal(await inbox.fromDrive({ id: "g-0123456789abcdef", title: "Again", goal: "x", executor: "local" }), false);
     assert.equal(await inbox.fromDrive({ id: "Bad id", title: "x", goal: "x", executor: "local" }), false);
     const drive = await inbox.task("g-0123456789abcdef");
-    assert.deepEqual([drive.runBy, drive.from, drive.title], ["opus", "roee", "From Drive"]);
+    assert.deepEqual([drive.runBy, drive.from, drive.title], ["opus", "device", "From Drive"]);
+    // Security scan 167: a Drive task is never taken by a runner by itself; local and auto go to Antigravity's Run ask.
+    for (const [id, executor] of [["g-1111111111aaaaaa", "local"], ["g-2222222222bbbbbb", "auto"]] as const) {
+      assert.equal(await inbox.fromDrive({ id, title: "Device task", goal: "Do it", executor }), true);
+      const d = await inbox.task(id);
+      assert.deepEqual([d.runBy, d.from, d.status, !!d.runAsk], ["antigravity", "device", "waiting", true]);
+    }
     settings.dailyCap = 0;
     await assert.rejects(inbox.run("c-20261119-06", { here: true }), /limit of 0/);
     assert.ok(isQuotaError("RESOURCE_EXHAUSTED: quota exceeded, retry in 1h35m"));

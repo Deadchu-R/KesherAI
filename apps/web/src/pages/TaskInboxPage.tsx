@@ -40,7 +40,7 @@ function executorChip(runBy: InboxTaskView["runBy"]): { text: string; cls: strin
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
 }
 
-const fromName = (f: InboxTaskView["from"]) => ({ claude: "Claude", roee: L("רועי", "Roee"), "self-work": L("עבודה עצמית", "self-work"), hub: L("ענן Kesher", "Kesher Cloud") })[f];
+const fromName = (f: InboxTaskView["from"]) => ({ claude: "Claude", roee: L("רועי", "Roee"), "self-work": L("עבודה עצמית", "self-work"), hub: L("ענן Kesher", "Kesher Cloud"), device: L("מכשיר אחר", "another device") })[f];
 
 /** "2 min ago" / "in 1 h 35 min". */
 function ago(ms: number): string {

@@ -11,8 +11,8 @@ export type InboxExecutor = "auto" | "antigravity" | "local" | "opus";
 /** How risky a task is (security, git, auth, releases are always `high`). */
 export type InboxRisk = "low" | "medium" | "high";
 
-/** Where a task came from. */
-export type InboxFrom = "claude" | "roee" | "self-work" | "hub";
+/** Where a task came from (`device`: another of the user's devices, through Google Drive; it always waits for Run). */
+export type InboxFrom = "claude" | "roee" | "self-work" | "hub" | "device";
 
 /**
  * A task's state in the queue:
