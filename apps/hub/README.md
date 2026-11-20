@@ -14,7 +14,9 @@ Design and reasons: `docs/RESEARCH_LOG.md`, entry "Kesher Cloud hub" (with its a
 
 - **Keeps:** each paired device's name, public key, a hash of its token, when it was last seen, and what it reports
   (busy, which work it accepts, its agents). Sealed messages only until the recipient acknowledges them (at most 7 days;
-  approvals 30 minutes). An activity log with event type, device id and time only (30 days).
+  approvals 30 minutes). An activity log with event type, device id and time only (30 days). For a phone with
+  notifications on: its browser's push address and keys, and the last "waiting" count it was told (a number a PC sends
+  in clear for this, nothing else).
 - **Never:** task text, results, files, chat, passwords or tokens in plain form. Messages are sealed on the sending
   device to the receiving device's key. The one exception is a task you send to **Claude cloud**: the hub opens that
   one message in memory to start the scheduled task, and stores nothing of it.
@@ -60,6 +62,9 @@ the phone's browser" (`?kesher-external=1`, which the app opens in the browser).
 | `CLAUDE_FIRE_TOKEN` | The scheduled task's API token (step 5). | For the Claude path |
 | `HUB_PRIVATE_KEY` | Leave unset: the hub makes its own key on first start and keeps it in its storage. | No |
 | `HUB_DISABLED` | Set to `1` to switch the whole hub off at once (kill switch outside the hub). | No |
+| `VAPID_PUBLIC_KEY` | Notifications (step 7): the public key. Type **Text** is fine (it is public). | For notifications |
+| `VAPID_PRIVATE_KEY` | Notifications (step 7): the private key. **Secret**, never in a file or in git. | For notifications |
+| `VAPID_SUBJECT` | Notifications (step 7): `https://` + your hub address (or `mailto:` an address you read). Type **Text**. | For notifications |
 
 The dashboard keeps these on every deploy (`keep_vars = true`).
 
@@ -76,6 +81,23 @@ shows on the hub page (signed in), after checking that the 6-digit fingerprint m
 this PC accepts (tasks, local-model tasks, Antigravity tasks, vendor session links). A new PC accepts no tasks until you
 turn that on.
 
+### 7. Notifications on your phone (optional, free)
+The hub can tell your phone "KesherAI: 2 waiting for you" when something on a PC waits for your approval or a Run press,
+wherever the phone is, with the hub page closed. It is standard Web Push through the browser's own push service (Google's
+for Chrome on Android), so there is no extra app and no cost. The notification carries a count only: the hub never
+learns what waits.
+
+1. Make a key pair once: `node tools/hub-vapid.mjs` (it prints three lines and writes nothing).
+2. Put them into the Worker (step 4): `VAPID_PUBLIC_KEY` and `VAPID_SUBJECT` as Text, and paste `VAPID_PRIVATE_KEY`
+   yourself as a **Secret**. Keep the same pair afterwards: a new pair means every phone turns notifications on again.
+3. On the phone, open the hub **in Chrome** (inside the KesherAI app, Settings › Notifications has "Open in the phone's
+   browser"; an app's WebView cannot get Web Push), pair it as a device, then Chrome's menu › **Add to Home screen** /
+   **Install**. On an iPhone this step is required (iOS 16.4 or later).
+4. Open the hub from the home screen: **Settings › Notifications › Notify this device**, and allow notifications.
+
+A phone is notified only while its hub page is closed, at most once per 30 seconds, and only when the count grows; a tap
+opens "Waiting for you". "Notify this device" off, "Forget this device" or revoking the device stops it.
+
 ## Kill switches
 1. **Pause hub** (hub page): stops routing and closes every device connection; data kept.
 2. **Sign out everywhere and revoke all devices** (hub page).
@@ -88,8 +110,10 @@ turn that on.
   `pending` or `{deviceId, token, hubKey}` once.
 - Device token (`Authorization: Bearer kh_…`): `POST /api/ticket` → a one-use 60-second `ticket` (and `rotateDue`
   after 30 days), `POST /api/rotate` → a new token (the old one stops at once). Tokens older than 180 days are refused.
+  A phone or hub page: `POST /api/push/subscribe` `{endpoint, keys: {p256dh, auth}, lang}` (known push services only)
+  and `POST /api/push/unsubscribe`.
 - Socket: `GET /ws/device?ticket=…`. Frames in `packages/shared/src/hub-protocol.ts`.
-- Page: `GET /api/config` → `{googleClientId}` (public).
+- Page: `GET /api/config` → `{googleClientId, vapidPublicKey}` (public; the key is empty until all three VAPID values are set).
 - Signed in (cookie, same origin): `GET /api/state`, `POST /api/signout`, `POST /api/pair/check` `{code}` (the
   fingerprint, before approving), `POST /api/pair/approve` `{code, name}`,
   `POST /api/devices/:id/revoke`, `POST /api/kill` `{what: pause|resume|cloud-off|cloud-on|drop-queue|everything}`.
@@ -98,7 +122,8 @@ Live chat with a PC does not go through the hub; it stays on the direct links Ke
 
 ## For developers
 - Code: `src/hub.ts` (all logic, as a plain class), `src/hub-do.ts` (the Durable Object), `src/worker.ts` (entry),
-  `src/sql-store.ts` / `src/store.ts` (storage), `src/google.ts`, `src/claude-cloud.ts`, `src/rate-limit.ts`. The
+  `src/sql-store.ts` / `src/store.ts` (storage), `src/google.ts`, `src/claude-cloud.ts`, `src/rate-limit.ts`,
+  `src/web-push.ts` (Web Push on WebCrypto; subscriptions are kept in settings as `push:<device id>`). The
   protocol, sealing and routing are shared with the PC and the phone in `packages/shared/src/hub*.ts` (imported by
   path, so the Worker needs no install step).
 - The page: `page/*.ts` (no framework), compiled with the shared hub code into `public/js` by

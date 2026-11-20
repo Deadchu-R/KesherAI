@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createDecipheriv, createECDH, hkdfSync, randomBytes } from "node:crypto";
 import { webPushEncrypt } from "../../../packages/core/src/phone-push.js";
 import { fromB64url, generateHubKeys, sealMessage, toB64url, type HubKeyPair, type SealedBody } from "../../../packages/shared/src/hub.js";
@@ -73,6 +74,13 @@ test("VAPID: needs all three values; the ES256 token verifies with the public ke
   const pub = await crypto.subtle.importKey("raw", fromB64url(v.publicKey), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
   assert.equal(fromB64url(m[3]!).length, 64, "r‖s");
   assert.ok(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, pub, fromB64url(m[3]!), new TextEncoder().encode(`${m[1]}.${m[2]}`)));
+});
+
+test("tools/hub-vapid.mjs prints a pair the hub takes and signs with", async () => {
+  const out = execFileSync(process.execPath, [new URL("../../../tools/hub-vapid.mjs", import.meta.url).pathname]).toString();
+  const v = vapidFromEnv(/VAPID_PUBLIC_KEY=(\S+)/.exec(out)?.[1], /VAPID_PRIVATE_KEY=(\S+)/.exec(out)?.[1], "mailto:owner@example.com");
+  assert.ok(v);
+  assert.match(await vapidAuth(FCM, v, Date.now()), /^vapid t=/);
 });
 
 test("payload: aes128gcm equals the PC's Node encryption byte for byte, and the browser can open it", async () => {
