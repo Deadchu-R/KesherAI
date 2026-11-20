@@ -16,6 +16,7 @@
  * device that runs it), `meta` (any device: the owner's marks), and `agent` (a finished agent run's snapshot).
  * WebCrypto only: the same code runs in Node, the Cloudflare Worker and the phone's WebView.
  */
+import { cleanAgentLabel } from "./agent-label.js";
 import { fromB64url, randomB64url, toB64url } from "./hub-crypto.js";
 import { WORK_LIST_STATUSES } from "./work-list.js";
 /** The record format version (part of the authenticated data). */
@@ -53,6 +54,11 @@ const RUN_STATES = ["outbox", "waiting", "waiting-run", "running", "done", "part
 export const TERMINAL_RUN_STATES = new Set(["done", "partial", "failed", "blocked", "cancelled"]);
 const ORIGINS = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work", "work-list"];
 const AGENT_SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
+/** An agent snapshot's name and note, cleaned. */
+function cleanLabel(b) {
+    const l = cleanAgentLabel(b);
+    return { ...(l.name ? { name: l.name } : {}), ...(l.note ? { note: l.note } : {}) };
+}
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const subtle = () => globalThis.crypto.subtle;
@@ -173,6 +179,7 @@ export function cleanSyncBody(x, kind) {
                     ...opt("updatedAt", optStr(b.updatedAt, 40)),
                     ...opt("endedAt", optStr(b.endedAt, 40)),
                     ...opt("summary", optStr(b.summary, SYNC_LIMITS.summaryChars)),
+                    ...cleanLabel(b),
                 };
             }
             default:

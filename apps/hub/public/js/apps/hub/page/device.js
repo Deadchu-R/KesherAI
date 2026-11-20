@@ -10,6 +10,7 @@ import { dropLocalPush } from "./push.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
+import { sameLabel } from "../../../packages/shared/src/agent-label.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
     waiting: { he: "ממתין", en: "Waiting" },
@@ -109,6 +110,16 @@ export class HubDevice {
     agents = new Map();
     /** Actions sent from an agent card and not yet answered by a new state ("stop", "allow", "deny"), by card key. */
     agentActions = new Map();
+    /**
+     * Names and notes sent from here (by card key): waiting for the PC (shown at once), saved (shown until the run's new
+     * state comes, at most 15 seconds), or the PC's "no" in its words.
+     */
+    agentLabels = new Map();
+    /**
+     * "Who does it" sent from here (by task or work-list item id): waiting for the PCs, then the answer; `ask` is the
+     * PC's question before it stops a running task or runs a finished one again (in memory only).
+     */
+    assignActions = new Map();
     /**
      * What waits for the owner on each PC (its newest sealed snapshot; in memory, the PC sends it again when the page
      * connects), and the answers sent from here that the PC has not taken yet, by `<pc id>/<request id>`.
@@ -419,6 +430,9 @@ export class HubDevice {
         // A new state answers a pending Stop or Approve: the card shows the PC's word again.
         if (body.events.length)
             this.agentActions.delete(`${card.deviceId}/${card.runId}`);
+        const sent = this.agentLabels.get(`${card.deviceId}/${card.runId}`);
+        if (sent?.savedAt && sameLabel(card.state, sent.label))
+            this.agentLabels.delete(`${card.deviceId}/${card.runId}`);
         if (live)
             this.changed();
     }
@@ -444,6 +458,45 @@ export class HubDevice {
         if (!w)
             return false;
         return this.sendToAgent(c, "approval_answer", { type: "approval_answer", requestId: w.requestId, conversationId: w.conversationId, decision }, decision);
+    }
+    /**
+     * Renames a run and sets its note on its PC: a sealed `agent-label` command, which the PC takes only from the
+     * owner's paired phone or hub page; the PC keeps it and sends the run's state again.
+     *
+     * @param c - The card.
+     * @param label - The new name and note (empty fields clear them).
+     * @returns Whether it was sent.
+     */
+    async labelAgent(c, label) {
+        const id = this.ident;
+        const pc = this.presence.find((d) => d.id === c.deviceId);
+        if (!id || !pc?.online || !this.connected)
+            return false;
+        const commandId = randomB64url(12);
+        const clean = { ...(label.name?.trim() ? { name: label.name.trim() } : {}), ...(label.note?.trim() ? { note: label.note.trim() } : {}) };
+        const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "agent-label", taskId: c.runId, label: clean }, id.privateKey, pc.publicKey);
+        if (!this.sendFrame({ t: "send", env }))
+            return false;
+        this.agentLabels.set(`${c.deviceId}/${c.runId}`, { commandId, label: clean });
+        this.changed();
+        return true;
+    }
+    /**
+     * The name and note to show for a run: one sent from here and not yet answered or just saved, else the PC's.
+     *
+     * @param c - The card.
+     * @returns The label, and whether it waits for the PC or the PC refused it.
+     */
+    shownLabel(c) {
+        const sent = this.agentLabels.get(`${c.deviceId}/${c.runId}`);
+        const pc = { ...(c.state.name ? { name: c.state.name } : {}), ...(c.state.note ? { note: c.state.note } : {}) };
+        if (!sent)
+            return { label: pc };
+        if (sent.error)
+            return { label: pc, error: sent.error };
+        if (sent.savedAt && Date.now() - sent.savedAt > 15_000)
+            return { label: pc };
+        return { label: sent.label, pending: !sent.savedAt };
     }
     async sendToAgent(c, kind, body, action) {
         const id = this.ident;
@@ -483,7 +536,7 @@ export class HubDevice {
         if (body.type === "approvals")
             return this.onApprovals(env.from, body.items, body.at);
         if (body.type === "command_result")
-            return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text);
+            return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
         if (body.type === "inbox_task")
             return this.onInboxTask(env.from, body);
         const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
@@ -541,6 +594,45 @@ export class HubDevice {
         const waits = t.inbox ? t.status === "waiting-run" : !!t.drive?.only && t.executor === "pc-antigravity" && t.status === "waiting";
         return waits && this.connected && this.commandTargets(t).length > 0;
     }
+    /** The PCs that are on (a work-list item is sent to one of them). */
+    onlinePcs() {
+        return this.presence.filter((d) => d.kind === "pc" && d.online);
+    }
+    /**
+     * The PCs a task's "Who does it" goes to: its inbox's PC, or (a Drive task) every PC that is on.
+     *
+     * @param t - The task.
+     * @returns The PCs.
+     */
+    assignTargets(t) {
+        return this.commandTargets(t);
+    }
+    /**
+     * "Who does it": a sealed `assign` command to the PCs (each checks it came from the owner's paired phone or hub
+     * page). Only the PC that has the task acts; the others answer no.
+     *
+     * @param taskId - The inbox task id, its Drive record id, or a work-list item's record id.
+     * @param pcs - The PCs to send it to.
+     * @param to - Who does it now.
+     * @param confirm - The user's yes to the PC's question (stop a running task, run a finished one again).
+     * @returns Whether it was sent.
+     */
+    async assign(taskId, pcs, to, confirm = false) {
+        const id = this.ident;
+        if (!id || !this.connected || !pcs.length)
+            return false;
+        const commandId = randomB64url(12);
+        let sent = 0;
+        for (const pc of pcs) {
+            const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "assign", taskId, to, ...(confirm ? { confirm: true } : {}) }, id.privateKey, pc.publicKey);
+            if (this.sendFrame({ t: "send", env }))
+                sent++;
+        }
+        if (sent)
+            this.assignActions.set(taskId, { commandId, to, pcs: pcs.map((p) => p.id), left: sent });
+        this.changed();
+        return sent > 0;
+    }
     /** The PCs a command for a task goes to: its inbox's PC, or (a Drive task) every PC that is on. */
     commandTargets(t) {
         return this.presence.filter((d) => d.kind === "pc" && d.online && (!t.inbox || d.id === t.inbox.deviceId));
@@ -575,7 +667,25 @@ export class HubDevice {
      * A PC's answer to Run / Cancel, shown on the task. A Drive task's command went to every PC that is on: the one that
      * acted answers yes; a "no" is shown only when every PC said no (the last one's words).
      */
-    onCommandResult(commandId, taskId, ok, text) {
+    onCommandResult(commandId, taskId, ok, text, ask) {
+        const as = this.assignActions.get(taskId);
+        if (as && as.commandId === commandId && !as.result?.ok && !as.result?.ask) {
+            as.left--;
+            // Sent to several PCs: a "no" shows only when every PC said no; the one that has it answers yes or asks.
+            if (!ok && !ask && as.left > 0)
+                return;
+            as.result = { ok, text, ...(ask ? { ask } : {}) };
+            return this.changed();
+        }
+        for (const sent of this.agentLabels.values()) {
+            if (sent.commandId !== commandId)
+                continue;
+            if (ok)
+                sent.savedAt = Date.now();
+            else
+                sent.error = text || "It did not work.";
+            return this.changed();
+        }
         const a = this.taskActions.get(taskId);
         if (!a || a.commandId !== commandId || a.result?.ok)
             return;

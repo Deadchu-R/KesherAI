@@ -7,6 +7,8 @@
  * Everything here is plain data and small validators, with no Node or browser API, so the Worker, the PC (core) and
  * the phone page share one copy.
  */
+import { cleanAgentLabel } from "./agent-label.js";
+import { parseAssignTo } from "./task-assign.js";
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1;
 /** Size and time limits shared by both sides. */
@@ -333,13 +335,19 @@ export function parseSealedBody(x, kind) {
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }
         case "command":
-            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel"))
+            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label" && b.action !== "assign"))
                 return null;
+            if (b.action === "assign") {
+                const to = parseAssignTo(b.to);
+                return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
+            }
+            if (b.action === "agent-label")
+                return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
             return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
         case "command_result":
             if (!isHubId(b.commandId) || !isHubId(b.taskId))
                 return null;
-            return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300) };
+            return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300), ...(b.ask === "running" || b.ask === "finished" ? { ask: b.ask } : {}) };
         case "approvals":
             if (!Array.isArray(b.items))
                 return null;
@@ -492,7 +500,13 @@ export function parseAgentState(x, runId) {
         ...(branch ? { branch } : {}),
         ...(isSafeLink(s.link) ? { link: s.link } : {}),
         ...optStr("summary", s.summary, 300),
+        ...labelOf(s),
     };
+}
+/** The owner's label carried in a run's state, cleaned (agent-label.ts). */
+function labelOf(s) {
+    const l = cleanAgentLabel(s, typeof s.labelAt === "number" ? s.labelAt : undefined);
+    return { ...(l.name ? { name: l.name } : {}), ...(l.note ? { note: l.note } : {}), ...(l.at ? { labelAt: l.at } : {}) };
 }
 /**
  * Holds `sync` pings to one per {@link HUB_LIMITS.syncPingMs}: the first goes at once, the ones asked for within the

@@ -19,6 +19,7 @@ import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when } from "./dom.js";
 import { HubDevice, post } from "./device.js";
 import { agentsSummary, agentsTab } from "./agents.js";
+import { assignBox } from "./assign.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
 import { clearShown, notifySection, startPush } from "./push.js";
 import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
@@ -462,10 +463,11 @@ function workListGroup(q) {
             const w = WORK_LIST_STATUS[i.status];
             const open = app.wlOpen.has(i.id);
             const more = i.text.length > i.title.length + 1;
-            return h("div", { class: `wl-item ${w.cls}` }, h("button", { type: "button", class: "trow wl-row", "aria-expanded": more ? String(open) : undefined, disabled: !more, onclick: () => { if (open)
+            const pcs = device.onlinePcs();
+            return h("div", { class: `wl-item ${w.cls}` }, h("button", { type: "button", class: "trow wl-row", "aria-expanded": String(open), onclick: () => { if (open)
                     app.wlOpen.delete(i.id);
                 else
-                    app.wlOpen.add(i.id); render(); } }, h("span", { class: `tag ${w.cls}`, title: L(w.he, w.en) }, w.icon, h("span", { class: "hide-sm" }, ` ${L(w.he, w.en)}`)), h("span", { class: "grow wl-title", dir: "auto" }, i.title), more ? h("span", { class: "mut xs", "aria-hidden": "true" }, open ? "▴" : "▾") : null), open ? h("div", { class: "wl-text sm", dir: "auto" }, i.text) : null);
+                    app.wlOpen.add(i.id); render(); } }, h("span", { class: `tag ${w.cls}`, title: L(w.he, w.en) }, w.icon, h("span", { class: "hide-sm" }, ` ${L(w.he, w.en)}`)), h("span", { class: "grow wl-title", dir: "auto" }, i.title), h("span", { class: "mut xs", "aria-hidden": "true" }, open ? "▴" : "▾")), open && more ? h("div", { class: "wl-text sm", dir: "auto" }, i.text) : null, open && i.status !== "done" ? h("div", { class: "wl-assign" }, assignBox({ device, render, taskId: i.id, pcs, onePc: true, label: { he: "שלח לסוכן", en: "Send to an agent" } })) : null);
         })))
         : h("div", { class: "trow mut sm" }, L("אין פריטים כאלה. אפשר לבחור מצבים נוספים למעלה.", "No such items. Pick more statuses above.")));
 }
@@ -567,7 +569,7 @@ function taskRow(t) {
 }
 /** The open task, with its answer and timeline. */
 function taskDetail(t) {
-    return h("section", { class: `card pad stack${t.status === "done" ? " done-card" : ""}` }, h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))), t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""), t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null, h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")));
+    return h("section", { class: `card pad stack${t.status === "done" ? " done-card" : ""}` }, h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))), t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""), t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null, t.inbox || t.drive ? assignBox({ device, render, taskId: t.taskId, pcs: device.assignTargets(t), current: t.inbox ? (t.inbox.executor === "claude" ? "claude" : t.inbox.executor) : undefined }) : null, h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")));
 }
 /** "Pair this device" (the page itself), for sending tasks. */
 function pairThisCard() {
