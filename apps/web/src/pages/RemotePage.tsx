@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, isRemote, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { DrawChange } from "../DrawChange";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -130,6 +131,20 @@ function RemoteControl() {
   };
   const [src, setSrc] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
+  // "Draw a change": the frame on screen now, copied (the live one is freed when the next arrives) and marked up.
+  const [frozen, setFrozen] = useState<string | null>(null);
+  const drawChange = async () => {
+    if (!src) return;
+    try {
+      setFrozen(URL.createObjectURL(await (await fetch(src)).blob()));
+    } catch {
+      toast(L("לא הצלחתי לקחת את התמונה.", "Could not take the picture."));
+    }
+  };
+  const endDraw = () => {
+    if (frozen) URL.revokeObjectURL(frozen);
+    setFrozen(null);
+  };
   const [text, setText] = useState("");
   const img = useRef<HTMLImageElement>(null);
   const press = useRef<{ t: number; timer?: ReturnType<typeof setTimeout>; long: boolean; lastTap: number }>({ t: 0, long: false, lastTap: 0 });
@@ -248,9 +263,11 @@ function RemoteControl() {
         ))}
         <button type="button" aria-label={L("גלול למעלה", "Scroll up")} onClick={() => send({ kind: "scroll", x: (img.current?.naturalWidth ?? 0) / 2, y: (img.current?.naturalHeight ?? 0) / 2, amount: -5 })}>▲</button>
         <button type="button" aria-label={L("גלול למטה", "Scroll down")} onClick={() => send({ kind: "scroll", x: (img.current?.naturalWidth ?? 0) / 2, y: (img.current?.naturalHeight ?? 0) / 2, amount: 5 })}>▼</button>
+        <button type="button" disabled={!src} onClick={() => void drawChange()}>✎ {L("לצייר שינוי", "Draw a change")}</button>
         <button type="button" onClick={() => setZoom(zoom === 1 ? 2 : 1)}>{zoom === 1 ? "🔍 ×2" : "🔍 ×1"}</button>
         <button type="button" className="danger" onClick={() => void api("/api/remote-desktop/end", { method: "POST" }).finally(() => stop())}>{L("נתק", "Disconnect")}</button>
       </div>
+      {frozen && <DrawChange src={frozen} onClose={endDraw} />}
     </div>
   );
 }

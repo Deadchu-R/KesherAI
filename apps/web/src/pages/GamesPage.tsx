@@ -6,6 +6,7 @@ import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch
 import { GameSource } from "../engine/GameSource";
 import { GameCheckpoints } from "../engine/GameCheckpoints";
 import { GameInspector } from "../engine/GameInspector";
+import { DrawChange } from "../DrawChange";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -74,6 +75,8 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   const [code, setCode] = useState<{ engine: Project["engine"]; path: string; name: string; open?: { path: string; line?: number } } | null>(null);
   // The inspector of one project (its card's Inspector button): values read from the files with the engine closed.
   const [inspect, setInspect] = useState<(Project & { openFile?: string }) | null>(null);
+  // "Draw a change" for one project: a picture of its game or editor view, marked up, sent to a chat.
+  const [draw, setDraw] = useState<Project | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
   const busy = !!list?.projects.some((p) => p.running);
   useEffect(() => {
@@ -183,6 +186,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
                 <button type="button" onClick={() => setInspect(p)}>🔧 {L("מפקח", "Inspector")}</button>
                 <button type="button" onClick={() => setSearch({ project: p, q: "" })} aria-label={L(`חיפוש ב-${p.name}`, `Search ${p.name}`)}>🔍 {L("חיפוש", "Search")}</button>
                 <button type="button" onClick={() => setCps({ project: p })} aria-label={L(`נקודות שחזור של ${p.name}`, `Checkpoints of ${p.name}`)}>↺ {L("שחזור", "Restore")}</button>
+                <button type="button" onClick={() => setDraw(p)} aria-label={L(`לצייר שינוי ב-${p.name}`, `Draw a change in ${p.name}`)}>✎ {L("לצייר שינוי", "Draw a change")}</button>
                 <a className="button" href={p.page}>{L("לעמוד הפרויקט", "Project page")}</a>
               </div>
             </section>
@@ -191,6 +195,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
       )}
       {search && <GameSearch key={search.project?.path ?? "all"} {...(search.project ? { project: search.project } : {})} initial={search.q} onOpen={openHit} onClose={() => setSearch(null)} />}
       {cps && <GameCheckpoints key={cps.project?.path ?? "all"} {...(cps.project ? { project: { engine: cps.project.engine, path: cps.project.path, name: cps.project.name } } : {})} onClose={() => setCps(null)} />}
+      {draw && <DrawChange project={{ engine: draw.engine, name: draw.name, path: draw.path }} onClose={() => setDraw(null)} />}
       {sheet && <SyncSheet {...(sheet.project ? { project: sheet.project } : {})} onClose={() => setSheet(null)} onChange={load} />}
     </div>
   );

@@ -106,3 +106,36 @@ test("Game projects: checkpoints listed, compared, restored, and the limits save
     await app.close();
   }
 });
+
+test("Draw a change: the engine's view when it gives one; the whole screen only from this computer", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kesher-games-shot-"));
+  const project = join(home, "Game");
+  await mkdir(join(project, "Assets"), { recursive: true });
+  await mkdir(join(project, "ProjectSettings"));
+  const config = { unity: { projects: [project] } };
+  // The Unity CLI fails (no Editor open): no picture from the engine.
+  const unity = new UnityCli(config.unity, async () => undefined, async () => ({ code: 1, stdout: "", stderr: "no editor" }), join(home, "data", "unity"));
+  const unreal = new UnrealBridge(join(home, "data", "unreal"));
+  const screen = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const s = { unity, unreal, config, paths: { root: join(home, "data") }, screen: { shot: async () => ({ png: screen, jpeg: screen, tiny: screen }) }, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async () => [] } } as unknown as KesherServices;
+  const oldHome = process.env.HOME;
+  process.env.HOME = home;
+  const app = Fastify();
+  try {
+    await gamesRoutes(app, s);
+    const body = { engine: "unity", project };
+    const here = await app.inject({ method: "POST", url: "/api/games/screenshot", payload: body, headers: { host: "127.0.0.1:3000" } });
+    assert.equal(here.statusCode, 200);
+    assert.equal(here.headers["x-shot-source"], "screen");
+    assert.deepEqual(here.rawPayload, screen);
+    // The phone (through the tunnel or the hub): never the whole screen from here.
+    const phone = await app.inject({ method: "POST", url: "/api/games/screenshot", payload: body, headers: { host: "127.0.0.1:3000", "x-forwarded-for": "203.0.113.5" } });
+    assert.equal(phone.statusCode, 409);
+    assert.equal(phone.json().code, "no-shot");
+    // Only projects found on this computer.
+    assert.equal((await app.inject({ method: "POST", url: "/api/games/screenshot", payload: { engine: "unity", project: "/etc" } })).statusCode, 400);
+  } finally {
+    process.env.HOME = oldHome;
+    await app.close();
+  }
+});

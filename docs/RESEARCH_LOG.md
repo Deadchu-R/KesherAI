@@ -4332,3 +4332,9 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Take:** buttons that call the tool directly with known inputs (zero tokens; the model hears about it through the chat's inbox next turn), approval rules unchanged; one side panel for docs, images (zoom/compare/history), PBR sets (grid + lit sphere) and diffs; ComfyUI `/ws` progress and preview frames + `/interrupt` on Stop, shown inside the bubble.
 - **Leave:** a per-tool plugin UI system (MCP Apps already covers it), node-graph views in chat, cloud upscalers.
 - Stopped at: product knowledge only (no pages fetched); plan built in "Chat: …" commits of 2026-11-21.
+
+## Draw on a phone screenshot and send it to the engine (2026-11-21, short competitor check, from product knowledge)
+- **Unity AI** ("Edit Screen Capture" in the Assistant): capture the Game/Scene view, draw on it, attach to the prompt; the agent edits the scene with its tools. **Figma / design-review tools** (Markup, BugHerd): pin + note on a screenshot, the note text travels beside the picture. **Claude / ChatGPT apps**: image + words, no engine context.
+- **Take:** capture from the engine itself where it can (Unity Pipeline CLI Game/Scene view, Godot bridge), else a photo; marks drawn into the picture plus numbered notes as text; the chat opened with the project line (so the engine's tools load by name) in "ask" mode, so each change waits for the approval card with the scene diff (035a5f2).
+- **Leave:** a full-screen capture from the phone through this path (the screen goes only through Remote control's PIN; its screen view has its own "Draw a change"); Unreal viewport capture until the Bridge plugin offers one.
+- Stopped at: product knowledge only; built in "Games: draw a change on a screenshot" (2026-11-21). Open: Unreal viewport capture through the Bridge plugin.

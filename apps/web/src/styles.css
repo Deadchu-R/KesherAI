@@ -4136,6 +4136,11 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .hstop-all { flex: none; }
 .hsheet-wrap { position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, .45); display: flex; align-items: flex-end; justify-content: center; }
 .hsheet { width: 100%; max-width: 560px; max-height: 82vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-bottom: none; border-radius: 20px 20px 0 0; padding: 10px 16px 18px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+/* "Draw a change" (DrawChange.tsx): the marked-up picture fits the sheet; buttons wrap on a 390 px phone. */
+.draw-change-preview { width: 100%; max-height: 38vh; object-fit: contain; border-radius: 10px; border: 1px solid var(--border); background: #000; }
+.draw-change-notes { margin: 0; padding-inline-start: 20px; overflow-wrap: anywhere; }
+.draw-change-actions { gap: 8px; justify-content: flex-end; }
+.draw-change textarea, .draw-change select { width: 100%; box-sizing: border-box; }
 .hsheet-handle { width: 40px; height: 4px; border-radius: 4px; background: var(--border-strong); align-self: center; }
 .hsheet-task { font-size: 15px; font-weight: 600; }
 .hsheet .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

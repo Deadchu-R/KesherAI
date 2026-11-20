@@ -3,10 +3,10 @@ import { getLocale, he$ } from "./i18n";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-type Tool = "pen" | "arrow" | "box" | "pin" | "text";
+type Tool = "pen" | "arrow" | "box" | "circle" | "pin" | "text";
 type Mark =
   | { kind: "pen"; color: string; pts: Array<[number, number]> }
-  | { kind: "arrow" | "box"; color: string; a: [number, number]; b: [number, number] }
+  | { kind: "arrow" | "box" | "circle"; color: string; a: [number, number]; b: [number, number] }
   | { kind: "pin"; color: string; at: [number, number]; n: number; note: string }
   | { kind: "text"; color: string; at: [number, number]; text: string };
 
@@ -29,8 +29,9 @@ const COLORS = ["#ff3b30", "#ffd60a", "#34c759", "#0a84ff", "#ffffff"];
  *
  * @param props.src - The picture (an object URL or a link).
  * @param props.onDone - Gets the result; nothing when cancelled.
+ * @param props.doneLabel - The finish button's words (default "Attach"; the engine change request says "Send").
  */
-export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated | null) => void }) {
+export function Annotator({ src, onDone, doneLabel }: { src: string; onDone: (r: Annotated | null) => void; doneLabel?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [error, setError] = useState("");
@@ -70,6 +71,11 @@ export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated 
         ctx.stroke();
       } else if (m.kind === "box") {
         ctx.strokeRect(Math.min(m.a[0], m.b[0]), Math.min(m.a[1], m.b[1]), Math.abs(m.b[0] - m.a[0]), Math.abs(m.b[1] - m.a[1]));
+      } else if (m.kind === "circle") {
+        // An ellipse inside the dragged box: "this thing here".
+        ctx.beginPath();
+        ctx.ellipse((m.a[0] + m.b[0]) / 2, (m.a[1] + m.b[1]) / 2, Math.abs(m.b[0] - m.a[0]) / 2, Math.abs(m.b[1] - m.a[1]) / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
       } else if (m.kind === "arrow") {
         const [x1, y1] = m.a;
         const [x2, y2] = m.b;
@@ -144,11 +150,11 @@ export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated 
   const move = (e: React.PointerEvent) => {
     if (!draft) return;
     const p = at(e);
-    setDraft(draft.kind === "pen" ? { ...draft, pts: [...draft.pts, p] } : draft.kind === "arrow" || draft.kind === "box" ? { ...draft, b: p } : draft);
+    setDraft(draft.kind === "pen" ? { ...draft, pts: [...draft.pts, p] } : draft.kind === "arrow" || draft.kind === "box" || draft.kind === "circle" ? { ...draft, b: p } : draft);
   };
   const up = () => {
     if (!draft) return;
-    const tiny = (draft.kind === "arrow" || draft.kind === "box") && Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]) < unit * 3;
+    const tiny = (draft.kind === "arrow" || draft.kind === "box" || draft.kind === "circle") && Math.hypot(draft.b[0] - draft.a[0], draft.b[1] - draft.a[1]) < unit * 3;
     if (!tiny && !(draft.kind === "pen" && draft.pts.length < 2)) setMarks((m) => [...m, draft]);
     setDraft(null);
   };
@@ -181,6 +187,7 @@ export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated 
     ["pin", "①", L("נעץ ממוספר עם הערה", "Numbered pin with a note")],
     ["arrow", "↗", L("חץ", "Arrow")],
     ["box", "▭", L("מסגרת", "Box")],
+    ["circle", "◯", L("עיגול", "Circle")],
     ["pen", "✎", L("ציור חופשי", "Pen")],
     ["text", "T", L("טקסט", "Text")],
   ];
@@ -198,7 +205,7 @@ export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated 
         <button type="button" onClick={undo} disabled={!marks.length} title={L("בטל", "Undo")} aria-label={L("בטל", "Undo")}>↶</button>
         <span className="grow" />
         <button type="button" onClick={() => onDone(null)}>{L("ביטול", "Cancel")}</button>
-        <button type="button" className="primary" disabled={!img || busy} onClick={save}>{busy ? "…" : L("צרף לצ'אט", "Attach")}</button>
+        <button type="button" className="primary" disabled={!img || busy} onClick={save}>{busy ? "…" : doneLabel ?? L("צרף לצ'אט", "Attach")}</button>
       </div>
       {error && <p className="error">{error}</p>}
       <div className="annot-stage">
@@ -222,7 +229,7 @@ export function Annotator({ src, onDone }: { src: string; onDone: (r: Annotated 
           ))}
         </ol>
       )}
-      <p className="muted small annot-hint">{L("① מסמן מקום עם הערה (הכי ברור למודל) · ↗ חץ · ▭ מסגרת · ✎ ציור · T טקסט", "① marks a spot with a note (clearest for the model) · ↗ arrow · ▭ box · ✎ pen · T text")}</p>
+      <p className="muted small annot-hint">{L("① מסמן מקום עם הערה (הכי ברור למודל) · ↗ חץ · ▭ מסגרת · ◯ עיגול · ✎ ציור · T טקסט", "① marks a spot with a note (clearest for the model) · ↗ arrow · ▭ box · ◯ circle · ✎ pen · T text")}</p>
     </div>
   );
 }

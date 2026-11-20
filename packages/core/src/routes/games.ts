@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 import { findGameProjects, type GameProject } from "../game-projects.js";
@@ -9,6 +10,8 @@ import { HIT_KINDS, projectIndex, searchGameProject, type GameHit, type HitKind 
 import { cloudOnlyCount } from "../unreal-assets.js";
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
+import { unityCapture } from "../unity-tools.js";
+import { isLocalRequest } from "../auth.js";
 import { editorOpen, runningUnity, type UnityProcesses } from "../unity-running.js";
 import type { BlueprintJson, QueuedEdit } from "../unreal-bridge.js";
 import { makeDiff } from "@kesher/agent";
@@ -193,6 +196,36 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
     const order = { unity: 0, unreal: 1, godot: 2 } as const;
     projects.sort((a, b) => b.clashes - a.clashes || b.pending - a.pending || Number(b.open) - Number(a.open) || order[a.engine] - order[b.engine] || a.name.localeCompare(b.name));
     return { projects, clashes: projects.reduce((n, p) => n + p.clashes, 0) };
+  });
+
+  /**
+   * "Draw a change" (Game projects, the phone too): a picture of the running game or editor view to mark up and send
+   * as a change request. The engine's own view when it can give one (Godot: the editor's view through the bridge;
+   * Unity: the Game or Scene view through the Pipeline CLI). The whole screen only for a request from this computer:
+   * from the phone the screen goes through Remote control and its PIN, never through here.
+   */
+  app.post<{ Body: { engine?: string; project?: string; view?: string } }>("/api/games/screenshot", async (req, reply) => {
+    const p = await findOne(req.body?.engine, req.body?.project);
+    if (!p) return reply.code(400).send({ error: "Choose one of the projects found on this computer." });
+    const view = req.body?.view === "scene" ? "scene" : "game";
+    let png: Buffer | undefined;
+    if (p.kind === "godot" && s.godot.status().connected) {
+      png = await s.godot.request<{ png: string }>("screenshot", view === "scene" ? { view: "3d" } : {}, 20_000).then((r) => Buffer.from(r.png, "base64"), () => undefined);
+    } else if (p.kind === "unity" && s.unity.hasProject(p.path)) {
+      const dir = await mkdtemp(join(tmpdir(), "kesher-shot-"));
+      png = await unityCapture(s.unity, p.path, view, join(dir, "view.png")).catch(() => undefined);
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+    let source = "engine";
+    if (!png && isLocalRequest(req) && s.screen) {
+      png = await s.screen.shot().then((x) => x.png, () => undefined);
+      source = "screen";
+    }
+    if (!png?.length) {
+      const how = p.kind === "unreal" ? "Unreal gives no picture of its view to KesherAI yet" : `Open the project in ${p.kind === "unity" ? "Unity" : "Godot"} (with the KesherAI bridge) first`;
+      return reply.code(409).send({ error: `${how}. On the phone, use Remote control's screen view and "Draw a change" there, or choose a photo.`, code: "no-shot" });
+    }
+    return reply.type("image/png").header("cache-control", "no-store").header("x-shot-source", source).send(png);
   });
 
   /** "Sync now" for one project: started in the background (it can take minutes); the page follows /api/games. */

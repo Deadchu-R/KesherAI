@@ -576,17 +576,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         await mkdir(outputsDir, { recursive: true });
         const view = input.view === "scene" ? "scene" : "game";
         const file = join(outputsDir, `unity-${view}-${Date.now()}.png`);
-        // Pipeline 0.10+: `capture screenshot --view game|scene --output-path <file>`; older: --output (game) / scene_view --save_path.
-        const r = await unity.cliRawReady(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--view", view, "--output-path", file], 60_000);
-        if (r.code !== 0 || !existsSync(file)) {
-          if (view === "game") await unity.cli(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--output", file], 60_000);
-          else {
-            const rel = `Temp/kesher-scene-${Date.now()}.png`;
-            await unity.cli(["command", "capture", "scene_view", ...at(), "--result-only", "--", "--save_path", rel], 60_000);
-            await writeFile(file, await readFile(join(project()!, rel)));
-          }
-        }
-        const data = await readFile(file);
+        const data = await unityCapture(unity, project()!, view, file);
         const id = await saveAsset(data, "image/png");
         return { output: `Took a picture of the ${view} view.`, assetIds: [id], images: [{ mimeType: "image/png", data: data.toString("base64") }] };
       },
@@ -595,6 +585,31 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
   if (!turn) return tools;
   // One Undo step per chat turn: a tool that changes the Editor opens the turn's group first.
   return tools.map((t) => (UNITY_EDIT_TOOLS.has(t.spec.name) ? { ...t, run: async (input, ctx) => (await turn.beforeEdit(), t.run(input, ctx)) } : t));
+}
+
+/**
+ * A picture of the open Unity Editor's Game view or Scene view, through the Pipeline package's CLI (the chat's
+ * unity_screenshot, and the phone's "Draw a change" on the Game projects page).
+ *
+ * @param unity - The Unity CLI.
+ * @param project - The project folder.
+ * @param view - Which view.
+ * @param file - Where the PNG is written (its folder must exist).
+ * @returns The PNG.
+ */
+export async function unityCapture(unity: UnityCli, project: string, view: "game" | "scene", file: string): Promise<Buffer> {
+  const at = ["--project-path", project];
+  // Pipeline 0.10+: `capture screenshot --view game|scene --output-path <file>`; older: --output (game) / scene_view --save_path.
+  const r = await unity.cliRawReady(["command", "capture", "screenshot", ...at, "--result-only", "--", "--view", view, "--output-path", file], 60_000);
+  if (r.code !== 0 || !existsSync(file)) {
+    if (view === "game") await unity.cli(["command", "capture", "screenshot", ...at, "--result-only", "--", "--output", file], 60_000);
+    else {
+      const rel = `Temp/kesher-scene-${Date.now()}.png`;
+      await unity.cli(["command", "capture", "scene_view", ...at, "--result-only", "--", "--save_path", rel], 60_000);
+      await writeFile(file, await readFile(join(project, rel)));
+    }
+  }
+  return readFile(file);
 }
 
 /** Checks component type names. @returns The names, or a plain-words refusal. */

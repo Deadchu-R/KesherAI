@@ -1,0 +1,162 @@
+{
+ "group": "משחקים: לצייר שינוי",
+ "mocks": [
+  {
+   "url": "**/api/games",
+   "json": {
+    "projects": [
+     {
+      "engine": "unity",
+      "name": "Platformer",
+      "path": "D:/Games/Platformer",
+      "version": "6000.0.32f1",
+      "open": true,
+      "pending": 0,
+      "clashes": 0,
+      "canSync": true,
+      "page": "#/unity"
+     }
+    ],
+    "clashes": 0
+   }
+  },
+  {
+   "url": "**/api/games/screenshot*",
+   "method": "POST",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\"><rect width=\"1280\" height=\"720\" fill=\"#7ec8ff\"/><rect y=\"560\" width=\"1280\" height=\"160\" fill=\"#4a8f3c\"/><rect x=\"180\" y=\"440\" width=\"70\" height=\"120\" fill=\"#d94f4f\"/><rect x=\"620\" y=\"380\" width=\"120\" height=\"180\" fill=\"#8a5a2b\"/><circle cx=\"980\" cy=\"420\" r=\"34\" fill=\"#ffd60a\"/><rect x=\"380\" y=\"470\" width=\"160\" height=\"24\" fill=\"#6b4a2b\"/></svg>",
+   "contentType": "image/svg+xml"
+  }
+ ],
+ "boards": [
+  {
+   "id": "DrawChangeMark",
+   "title": "משחקים: לצייר שינוי על צילום המשחק",
+   "route": "#/games",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card button:has-text(\"לצייר שינוי\")"
+    },
+    {
+     "wait": ".annot-canvas"
+    },
+    {
+     "click": ".annot-canvas"
+    },
+    {
+     "wait": ".annot-notes input"
+    },
+    {
+     "fill": ".annot-notes input",
+     "value": "להזיז את הדלת ימינה"
+    }
+   ]
+  },
+  {
+   "id": "DrawChangeSend",
+   "title": "משחקים: בקשת שינוי נשלחת לצ׳אט עם הפרויקט",
+   "route": "#/games",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card button:has-text(\"לצייר שינוי\")"
+    },
+    {
+     "wait": ".annot-canvas"
+    },
+    {
+     "click": ".annot-canvas"
+    },
+    {
+     "wait": ".annot-notes input"
+    },
+    {
+     "fill": ".annot-notes input",
+     "value": "להזיז את הדלת ימינה"
+    },
+    {
+     "click": ".annot-bar .primary"
+    },
+    {
+     "wait": ".draw-change-preview"
+    },
+    {
+     "fill": ".draw-change textarea",
+     "value": "וגם להגדיל את המטבע"
+    }
+   ]
+  },
+  {
+   "id": "DrawChangeNoShot",
+   "title": "משחקים: אין צילום מהמנוע — לבחור תמונה",
+   "route": "#/games",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/games/screenshot*",
+     "method": "POST",
+     "status": 409,
+     "json": {
+      "error": "Unreal gives no picture of its view to KesherAI yet. On the phone, use Remote control's screen view and \"Draw a change\" there, or choose a photo.",
+      "code": "no-shot"
+     }
+    },
+    {
+     "url": "**/api/games",
+     "json": {
+      "projects": [
+       {
+        "engine": "unreal",
+        "name": "Shooter",
+        "path": "D:/Games/Shooter",
+        "version": "5.8",
+        "open": false,
+        "pending": 0,
+        "clashes": 0,
+        "canSync": false,
+        "page": "#/unreal"
+       }
+      ],
+      "clashes": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card button:has-text(\"לצייר שינוי\")"
+    },
+    {
+     "wait": ".draw-change .error"
+    }
+   ]
+  }
+ ]
+}
