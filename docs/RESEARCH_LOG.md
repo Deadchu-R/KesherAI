@@ -3905,3 +3905,136 @@ which ComfyUI nodes or model to depend on (needs a licence check, Gemini researc
 Stopped at: gap list written from grep/line checks; not verified by running the app (e.g. whether llama-server's default
 `cache_prompt` already applies, whether phone push fires on new approvals, the compaction threshold). Next: Batch 1 design-doc
 boards (footer, usage page) after Roee's pick on the open questions.
+
+## Hub: every task and agent on every device (2026-11-20, Roee asked)
+Question: signing in to hub.roeetal.com from any device must show all tasks on the account and what every agent does now,
+including the PC's task inbox. Today a task sent from the phone is invisible on a PC browser.
+
+### 1. What the hub does today (read in code 2026-11-20)
+- **Per-pair sealing, no shared state.** Each device (PC, phone, the hub page itself = kind `phone`, `claude-chat`) has an ECDH P-256 key;
+  a message A->B is AES-GCM under HKDF(ECDH(A,B), salt = message id), AAD = `v|id|from|to|kind` (`packages/shared/src/hub-crypto.ts`). The
+  hub keeps devices (name, public key, token hash, busy, opt-in, agents), queued sealed envelopes until ack (<= 7 days, approvals 30 min),
+  an agent-event ring (50 per run, 7 days, ciphertext, per recipient) and an audit log. Pairing is RFC 8628 style with a 6-digit key
+  fingerprint shown on both screens; approval happens on a signed-in (Google) hub page.
+- **Tasks live only in the sender's browser** (`page/device.ts` `tasks` in IndexedDB, 200 max; `page/app.ts` ~543). The sender seals a `task`
+  to the PC; no other device ever receives a copy. So phone B or a new PC browser sees nothing.
+- **Inbox tasks and agent activity are fan-out copies**: the PC seals `inbox_task` (`hub-client.ts reportInbox`, ttl 7 d) and `agent_event`
+  once per paired phone/page; `tools/hub-report` seals once per phone present at that moment. A device paired later gets none of the
+  earlier ones, and one that is off gets them only while the TTL lasts. This is the real gap: state is pushed to devices, not stored per account.
+
+### 2. How others do it (read 2026-11-20; "-" = not read)
+- **Bitwarden Trusted Devices** (bitwarden.com/help/about-trusted-devices): the account encryption key is wrapped with each trusted device's
+  RSA public key; the device private key is encrypted under a Device Key that "never leaves the client"; "approve from another device"
+  makes the new client obtain and decrypt the account key. The server stores only wrapped keys. Take: **account key wrapped per device,
+  released by an existing device**, not by the server.
+- **Signal linked devices** (signal.org/blog/a-synchronized-start-for-linked-devices): the primary packs history into one compressed
+  archive under a one-time 256-bit AES key; the key travels in the provisioning message encrypted to the new device's public key (from the
+  QR); the server relays only ciphertext; the new device drops the key after use; archives and media expire (45 days). Take: **one-time
+  key sealed to the new device's public key, over a QR/code the user confirms**, and expiry of the transfer.
+- **Standard Notes** (standardnotes.org/help/79): account keys derived from the account password; synced data is "encrypted with account keys
+  before it leaves the device"; keys sit in the keychain or are wrapped by a local passcode. The page does not say how a new device gets
+  keys (it re-derives them from the password). Take: password-derived key = simplest new-device story, but its strength is the password's.
+- **Joplin** (joplinapp.org/help/dev/spec/e2ee): several master keys, each encrypted with the user's password and synced; each item's header
+  names its master key id so offline clients that start encrypting separately still read each other later; a new client downloads the keys and
+  asks for the password. Take: **a key id in every record header** (rotation, no big-bang re-encrypt).
+- **Obsidian Sync** (obsidian.md/help/sync/security): E2EE default; password -> scrypt -> AES-256-GCM; the server still sees which device
+  wrote/deleted what, when, and the (encrypted) path-to-content mapping; file hashes are deterministic so it can deduplicate; **lost password =
+  data unrecoverable, all devices must reconnect to a new vault**. Take: be explicit that metadata is visible and recovery needs a key you saved.
+- **Trilium sync** (docs.triliumnotes.org/developer-guide/concepts/sync): an `entity_changes` log with a monotonically increasing id; peers pull
+  rows after their last synced id; content conflicts are last-write-wins by modified time; deletes leave tombstones (never collected).
+  Take: cursor sync + tombstones; leave: wall-clock LWW (a phone with a wrong clock wins).
+- **Agent status across devices** (details in the entry "Live agent activity ...", 2026-11-19): Claude Code Remote Control / claude.ai/code show a
+  session list synced on every device; Copilot cloud agent has an agents panel + mobile list; Cursor cloud agents have a list API + SSE stream;
+  Codex mobile and Devin sync thread state through a relay/cloud list. All of them keep the list **server-side in plaintext** (the vendor
+  can read it); none is end-to-end encrypted. KesherAI's difference: the list is stored but sealed.
+- Not researched: Proton (Drive/Calendar key model), Excalidraw+, Jules beyond the earlier note. Not needed for the decision.
+
+### 3. Recommended design: account key + sealed records on the hub
+**Decision.** Add an **account key K** (random 256-bit AES) shared by the owner's paired devices, and let the hub store **sealed records**
+(not messages) with a cursor. Every device keeps its own full local copy and pulls what it lacks; a brand-new browser that is approved sees
+everything. The existing per-pair relay stays for commands (task to PC, cancel, approval) and for live step events.
+
+**Keys and adding a device (Bitwarden + Signal pattern).**
+1. First device with the feature (the PC, always on) makes K, keeps it in its OS-protected store (like its device key). K never goes to the hub in the clear.
+2. New device pairs as today (code + fingerprint). Google sign-in only proves "this is the owner's account"; it does **not** release K.
+   Release is a sealed `account_key` message from a device that already holds K, sent after the user taps **"Share my tasks with <name>, code 123 456"**
+   on that device. It reuses the pairwise seal (so the hub only relays ciphertext), TTL 10 min, one use.
+   Why: if the hub (or the Google account) were taken over, an attacker could pair a rogue device; without this tap it would read everything.
+3. **Recovery code** (optional, shown once): 128-bit random code (Crockford base32, 26 chars) -> PBKDF2-SHA-256 (600k) -> wraps K; the wrap is stored
+   on the hub. Lets a fresh browser sign in when no device is at hand (a phone lost in a week the PC is off). A random code, not a user password,
+   so a stolen hub database cannot be brute-forced. If skipped and every device is lost, history is gone (Obsidian's lesson; the hub can start fresh).
+4. **Removing a device** = new K (id `kid`+1), wrapped again to the remaining devices; old records are re-sealed lazily on next write. A removed
+   device keeps what it already saw (say so in the UI).
+
+**Record format** (what the hub stores; table `records` in the DO's SQLite):
+`id` (random 128-bit, opaque) | `kind` (`task`, `run`, `meta`, `agent`) | `rev` (integer) | `writer` (device id) | `deleted` | `seq` (hub counter, the sync cursor) |
+`at` (hub time) | `kid` | `salt` | `iv` | `ct`. Per-record key = HKDF(K, salt) (so no GCM nonce budget issue and a leaked record key opens one record);
+AAD = `v|kid|id|kind|rev|deleted|writer`, so the hub cannot move a ciphertext to another record or flip a tombstone. The hub **can see**: ids, kind,
+rev, which device wrote, when, size (round up to 256 B), deleted flag, counts. It **cannot see** titles, specs, results, paths, labels. It can
+**withhold or roll back** to an older rev (detect: devices remember the highest rev they saw per id and warn when `seq` goes backwards or a rev drops).
+- **`task`** (written once by the origin device): title, spec (<= 8,000 chars; Hebrew is 2 B/char, so allow `recordCtChars` 32 KB for sync, not the 16 KB
+  socket limit), origin (`phone|pc|page|inbox-claude|inbox-roee|self-work`), route/executor, target device, created time, risk.
+- **`run`** (written only by the executing device, so no write race with viewers): state (`outbox|waiting|waiting-run|running|done|partial|failed|blocked|cancelled`),
+  one-line status, timeline (<= 30 entries), result (<= 4,000 chars), link (vendor session URL), branch, model, tokens, started/ended. Terminal states are
+  sticky: a late `running` never overwrites `done`.
+- **`meta`** (any viewer; user's own marks): archived, pinned, note. Last-writer-wins by `rev`.
+- **`agent`** (PC): the run's final snapshot (title, source `chat-helper|inbox|antigravity|claude-cloud`, state, steps, started/ended, summary <= 500). Live steps keep using `agent_event`.
+**Conflicts.** Splitting by writer removes almost all of them. Remaining ones (meta): writer sends `rev = lastSeen + 1`; the hub accepts if `rev` is higher,
+or equal with a larger writer id (deterministic), and answers with the winner otherwise. No wall clocks (Trilium's weakness).
+
+**API** (existing device token, same rate limiter): `PUT /api/sync` (<= 20 records; each CAS as above; returns accepted ids + latest `seq`),
+`GET /api/sync?since=<seq>&limit=200` (records + `next` + `more`), and a tiny socket frame `{t:"sync", seq}` so open devices pull at once (outgoing
+frames are free on the Free plan). The page and the phone's hub tab use the same code (`packages/shared/src/hub-sync.ts`, no Node API). Offline: each device
+queues local writes (IndexedDB on the page, the core DB on the PC) and sends on reconnect; pulls are idempotent by `id+rev`; first sync = `since=0`.
+
+**Retention and limits.** Hub keeps 2,000 live records and 16 MB total; `done`/`failed` tasks and their `run` for 90 days, `agent` snapshots 30 days,
+tombstones 30 days, then drops them (devices keep their local copy, so "Done" history older than that is still on the PC). A device may write 120 records/min.
+Free-plan check: 50 tasks/day x ~6 writes (task, ~4 run states, meta) = ~300 rows/day vs 100k/day; live agents add ~7,000 (existing estimate), still < 10%.
+A purge button ("delete all synced tasks from the hub") like the agent purge.
+
+**Who feeds in.**
+- **Phone / page / PC UI tasks**: write `task` (+ `run` state `outbox`), seal the command to the PC as today; the PC writes the `run` updates.
+  PC off: record shows `waiting` ("at the hub until the PC is on"), exactly as now but visible everywhere.
+- **PC task inbox** (`task-inbox.ts`, `inbox-runner.ts`): `task` + `run` records from each inbox file/result (metadata and title; the file text stays on the PC unless
+  the owner opts in), replacing the `inbox_task` fan-out (keep reading it for one release). Executors `local`, `antigravity`, `claude` map to `run.executor`.
+- **Chat helper agents / Antigravity runs**: `agent-activity.ts` (planned in the 2026-11-19 entry) seals `agent_event` once under K instead of once per phone;
+  the hub ring stays 50/run, 7 days, but is now readable by a device paired later. `agent` snapshot at the end.
+- **Claude cloud**: the sending device writes the `run` when the hub's `cloud_started` arrives (the hub cannot write sealed records; it has no K); the result
+  comes back through the `kesher-inbox` results the PC polls (or any K-holding device), per the earlier plan.
+- **`claude-chat` (tools/hub-report)**: must **not** hold K (a cloud container would read all tasks). Keep it on per-viewer sealing for now. Later (step 7) give the
+  account an ECDH key pair whose private half is wrapped by K: the container seals to the public half and cannot read back.
+
+**Screens that change (design doc first).** (a) Hub page Tasks: remove "Kept on this device (the hub keeps no tasks)"; new line "Synced across your devices, sealed";
+list shows origin icon + device name + state; filters unchanged. (b) Hub page / phone Cloud tab Agents: same cards, now from the synced store, plus "last seen" for PC off.
+(c) New **Share with this device** card (on the K-holding device: name + fingerprint + Allow/Deny) and a waiting state on the new device ("Ask one of your devices to
+allow this one, or enter the recovery code"). (d) Settings > Kesher Cloud: **Recovery code** (create / show once / replace), device list with Remove (explains rotation),
+"Delete synced tasks from the hub". (e) PC task-inbox screen: a small "also shown on all your devices" badge and the opt-in for sending the task text. All 390 px, Hebrew + English, remote check on the phone.
+
+**Security pitfalls.** Release K only after the explicit on-device tap with the fingerprint (hub-approved pairing alone is not enough); never log or audit K or record ids with
+titles; AAD must bind kid/id/kind/rev; keep K non-extractable where WebCrypto allows (the page's IndexedDB CryptoKey, as the device key is today) and wrap it for backup only
+via the recovery code; scrub home paths/usernames before sealing (existing scrubber); do not let a viewer write `task` with another device's `origin`; rate-limit and size-limit
+before parsing; HKDF salt random per write; the page is JS served by the hub, so a hub compromise can ship a malicious page (same limit as today; note it, mitigate later with a
+pinned-hash PWA/app build); keep the audit log metadata-only; tombstone, not delete, so a stale device does not resurrect a task.
+
+### 4. Plan in steps (S ~ half a build, M ~ one, L ~ two)
+1. **S** `packages/shared/src/hub-sync.ts`: record type, seal/open (HKDF per record, AAD), rev/tiebreak merge, sticky terminal states, limits in `HUB_LIMITS`; tests (swap, rollback, tamper).
+2. **M** Hub: `records` table in `sql-store.ts` + `MemoryStore`, `PUT/GET /api/sync`, `sync` socket frame, retention in the existing 5-minute alarm, purge, rate limit; tests in `hub.test.ts`.
+3. **M** Keys: K creation on the PC, `account_key` sealed kind + Share-with-device card, recovery-code wrap (PBKDF2), device removal rotation; page and PC code; tests.
+4. **M** PC writer: `task`/`run` records from `task-inbox.ts`/`inbox-runner.ts` and from tasks the PC runs; PC pulls so its inbox list shows phone-sent tasks too.
+5. **M** Page + phone: tasks list from the synced store (migrate the 200 local tasks once, write them as records), Agents from the store; offline queue; design doc boards first.
+6. **S** Agent events sealed once under K (`agent-activity.ts` step of the 2026-11-19 plan); `agent` snapshots.
+7. **S/M** Claude-cloud run records and the claude-chat write-only account key pair (optional, after 1-6 are used for a week).
+Ship order for value: 1, 2, 3, 5 (phone and browser see each other's tasks) then 4, 6, 7.
+
+### 5. Leave out
+Server-side plaintext task list (what Claude Code/Cursor do; breaks the hub's "never reads tasks" promise); Google sign-in alone deriving K; wall-clock LWW; CRDTs (overkill for three
+record kinds with single writers); history of edits; giving the Claude container K; attachments or diffs in records; a second server or database.
+
+### 6. Open questions for Roee
+(1) Create a recovery code at first setup, or only when he asks (default: ask once, easy to skip, warn that losing every device loses the hub history)? (2) Should inbox task **text** (not just
+title/state) be visible on the phone? (default off). (3) Keep 90 days for done tasks on the hub? (4) One review of the K-sharing tap wording on the design doc.
+- Stopped at: hub code read (hub-protocol, hub-crypto, device.ts, hub.ts relay rules, hub-report); sources below read as fetched; Standard Notes' new-device flow, Proton, Excalidraw+ not found/read;
+  `sql-store.ts` schema and the exact DO write-quota math for the new table not re-checked; nothing built.
+- Sources: bitwarden.com/help/about-trusted-devices; signal.org/blog/a-synchronized-start-for-linked-devices; standardnotes.org/help/79; joplinapp.org/help/dev/spec/e2ee;
+  obsidian.md/help/sync/security; docs.triliumnotes.org/developer-guide/concepts/sync; earlier entry "Live agent activity ..." (Claude Code remote control, Copilot, Cursor, Codex, Devin docs);
+  code: apps/hub/src/hub.ts, store.ts, page/device.ts, page/app.ts, packages/shared/src/hub-protocol.ts, hub-crypto.ts, packages/core/src/hub-client.ts, tools/hub-report/hub-report.ts.
