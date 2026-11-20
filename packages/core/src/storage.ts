@@ -195,6 +195,51 @@ export function parseDuration(ffmpegText: string): number | undefined {
   return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : undefined;
 }
 
+/**
+ * Whether a compressed copy plays about to the original's end: it opened as media and is at least 90% of the
+ * original's length, less a second (streams the copy leaves out, like subtitles, can make the original a little longer).
+ *
+ * @param originalSeconds - The original's length (undefined when it could not be read).
+ * @param copySeconds - The copy's length (undefined when it did not open as media).
+ */
+export function playsToEnd(originalSeconds: number | undefined, copySeconds: number | undefined): boolean {
+  if (copySeconds === undefined || !(copySeconds > 0)) return false;
+  return !originalSeconds || copySeconds >= originalSeconds * 0.9 - 1;
+}
+
+/** A compressed copy's name ("<name>.compressed.mp4", "<name>.compressed-2.mp4"); group 1 is the original's name. */
+const COMPRESSED = /^(.*)\.compressed(?:-(\d+))?\.mp4$/i;
+
+/**
+ * Pairs videos with the compressed copies KesherAI left beside them in the same folder (from an earlier session,
+ * before an update): "<name>.<ext>" with "<name>.compressed.mp4" (or "-2", "-3"…, the lowest first). A name that
+ * two originals share (a.mov and a.mkv) is left unpaired.
+ *
+ * @param paths - The files found.
+ */
+export function compressedSiblings(paths: string[]): Array<{ original: string; copy: string }> {
+  const copies = new Map<string, { path: string; n: number }>();
+  const originals = new Map<string, string[]>();
+  for (const p of paths) {
+    const name = basename(p);
+    const m = COMPRESSED.exec(name);
+    if (m) {
+      const key = join(dirname(p), m[1]!);
+      const n = Number(m[2] ?? 1);
+      if (!copies.has(key) || copies.get(key)!.n > n) copies.set(key, { path: p, n });
+    } else if (fileKind(name) === "video") {
+      const key = join(dirname(p), basename(name, extname(name)));
+      originals.set(key, [...(originals.get(key) ?? []), p]);
+    }
+  }
+  const out: Array<{ original: string; copy: string }> = [];
+  for (const [key, c] of copies) {
+    const o = originals.get(key);
+    if (o?.length === 1) out.push({ original: o[0]!, copy: c.path });
+  }
+  return out;
+}
+
 /** Where an original video stands after it was made smaller (for the page's rows and its "all originals" button). */
 export interface CompressedOriginal {
   /** The original's id (the same one the scan gives it). */
@@ -218,6 +263,8 @@ export class Storage {
    * lists only the biggest files, so it may leave these out), so "Original to the bin" keeps working.
    */
   private compressed = new Map<string, { original: string; copy: string; checked: boolean }>();
+  /** Pairs the last scan found on disk (copies from an earlier session), for the compressions list. */
+  private found: Array<{ original: StorageFile; result: StorageFile }> = [];
   private apps = new Map<string, { app: InstalledApp; uninstall: { file: string; args: string[] } }>();
   private scanning: Promise<StorageScan> | undefined;
   last: StorageScan | undefined;
@@ -307,6 +354,17 @@ export class Storage {
     const bySize = [...all].sort((a, b) => b.bytes - a.bytes);
     const top = Object.fromEntries((Object.keys(kinds) as FileKind[]).map((k) => [k, bySize.filter((f) => fileKind(f.path) === k).slice(0, 150).map((f) => this.remember(f.path, f.bytes, f.mtime, f.inProject))])) as Record<FileKind, StorageFile[]>;
     const now = Date.now();
+    // Videos already made smaller in an earlier session: paired again (to be checked before the bin), not offered again.
+    const siblings = compressedSiblings(all.map((f) => f.path));
+    const done = new Set(siblings.map((p) => p.original));
+    const byPath = new Map(all.map((f) => [f.path, f]));
+    this.found = siblings.map((p) => {
+      const o = byPath.get(p.original)!;
+      const c = byPath.get(p.copy)!;
+      const original = this.remember(o.path, o.bytes, o.mtime, o.inProject);
+      if (!this.compressed.has(original.id)) this.compressed.set(original.id, { original: p.original, copy: p.copy, checked: false });
+      return { original, result: this.remember(c.path, c.bytes, c.mtime, c.inProject) };
+    });
     const card = (id: StorageCard["id"], list: typeof all): StorageCard => {
       const files = list.slice(0, 200).map((f) => this.remember(f.path, f.bytes, f.mtime, f.inProject));
       return { id, files, bytes: files.reduce((n, f) => n + f.bytes, 0) };
@@ -316,7 +374,7 @@ export class Storage {
       card("old-downloads", bySize.filter((f) => f.folder === "Downloads" && now - f.mtime > 90 * DAY && !INSTALLER.test(f.path))),
       card("installers", bySize.filter((f) => f.folder === "Downloads" && INSTALLER.test(f.path) && now - f.mtime > 7 * DAY)),
       card("screenshots", bySize.filter((f) => fileKind(f.path) === "image" && SCREENSHOT.test(f.path) && now - f.mtime > 60 * DAY)),
-      card("compress-videos", bySize.filter((f) => fileKind(f.path) === "video" && f.bytes >= 300 * MB && !/\.compressed\./i.test(f.path))),
+      card("compress-videos", bySize.filter((f) => fileKind(f.path) === "video" && f.bytes >= 300 * MB && !/\.compressed[.-]/i.test(f.path) && !done.has(f.path))),
       card("duplicates", await this.duplicates(bySize, started)),
     ].filter((c) => c.files.length > 0);
     const result: StorageScan = { at: new Date().toISOString(), kinds, folders: folders.map((f) => ({ name: f.name, bytes: totals.get(f.name) ?? 0 })), top, cards, partial };
@@ -400,6 +458,26 @@ export class Storage {
         return { id, gone: false, ready: pair.checked && !!c?.isFile() && copyLooksWhole(o.size, c.size), bytes: o.size };
       }),
     );
+  }
+
+  /**
+   * The compressed pairs the last scan found on disk, with whether each still needs its copy checked to play.
+   */
+  foundCompressed(): Array<{ original: StorageFile; result: StorageFile; checked: boolean; originalPath: string; copyPath: string }> {
+    return this.found.flatMap((f) => {
+      const pair = this.compressed.get(f.original.id);
+      return pair ? [{ ...f, checked: pair.checked, originalPath: pair.original, copyPath: pair.copy }] : [];
+    });
+  }
+
+  /**
+   * Marks a compressed video's copy as checked to play (its original may then go to the bin with the others).
+   *
+   * @param id - The original's id.
+   */
+  markChecked(id: string): void {
+    const pair = this.compressed.get(id);
+    if (pair) pair.checked = true;
   }
 
   /** The path of a file from the last scan or a compressed video's original (undefined when it is neither). */

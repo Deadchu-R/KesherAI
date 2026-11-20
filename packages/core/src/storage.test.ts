@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { copyLooksWhole, driveOf, fileKind, isProjectRoot, parseDuration, parseSize, Storage } from "./storage.js";
+import { compressedSiblings, copyLooksWhole, driveOf, fileKind, isProjectRoot, parseDuration, parseSize, playsToEnd, Storage } from "./storage.js";
 
 test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "st-"));
@@ -142,4 +142,39 @@ test("storage helpers: whole copies and ffmpeg's length", () => {
   assert.ok(!copyLooksWhole(1000, 1000));
   assert.equal(parseDuration("  Duration: 01:02:03.50, start: 0.000000, bitrate: 5000 kb/s"), 3723.5);
   assert.equal(parseDuration("Invalid data found when processing input"), undefined);
+});
+
+test("storage: copies from an earlier session are paired on a scan, need a check, and their originals are not offered again", async (t) => {
+  const home = mkdtempSync(join(tmpdir(), "st-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(join(home, "Videos"));
+  const MB = 1024 * 1024;
+  writeFileSync(join(home, "Videos", "trip.mov"), Buffer.alloc(301 * MB));
+  writeFileSync(join(home, "Videos", "trip.compressed.mp4"), Buffer.alloc(100 * MB));
+  writeFileSync(join(home, "Videos", "other.mp4"), Buffer.alloc(301 * MB));
+  const st = new Storage(home);
+  const r = await st.scan();
+  assert.deepEqual(r.cards.find((c) => c.id === "compress-videos")?.files.map((f) => f.name), ["other.mp4"]);
+  const found = st.foundCompressed();
+  assert.deepEqual(found.map((f) => [f.original.name, f.result.name, f.checked]), [["trip.mov", "trip.compressed.mp4", false]]);
+  const id = found[0]!.original.id;
+  // Not checked to play yet: not in "all originals".
+  assert.equal((await st.compressedOriginals([id]))[0]!.ready, false);
+  st.markChecked(id);
+  assert.equal((await st.compressedOriginals([id]))[0]!.ready, true);
+  // A new scan keeps the check.
+  await st.scan();
+  assert.equal(st.foundCompressed()[0]!.checked, true);
+});
+
+test("storage helpers: compressed siblings and plays to the end", () => {
+  const d = join("v");
+  const p = (n: string) => join(d, n);
+  assert.deepEqual(compressedSiblings([p("a.mkv"), p("a.compressed-3.mp4"), p("a.compressed-2.mp4"), p("b.mov"), p("b.mp4"), p("b.compressed.mp4"), p("c.compressed.mp4"), join("w", "a.compressed.mp4")]), [{ original: p("a.mkv"), copy: p("a.compressed-2.mp4") }]);
+  assert.ok(playsToEnd(100, 99));
+  assert.ok(playsToEnd(100, 89.5));
+  assert.ok(!playsToEnd(100, 50));
+  assert.ok(!playsToEnd(100, undefined));
+  assert.ok(!playsToEnd(100, 0));
+  assert.ok(playsToEnd(undefined, 10));
 });

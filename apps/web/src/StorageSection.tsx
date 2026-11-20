@@ -17,8 +17,8 @@ interface Scan { at: string; kinds: Record<Kind, number>; folders: Array<{ name:
 interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string; drive?: string }
 interface Game { name: string; source: "steam" | "epic" | "store" | "xbox"; bytes?: number; folder?: string; drive?: string; uninstallUrl?: string; lastPlayed?: string }
 const SOURCE_NAME: Record<string, string> = { steam: "Steam", epic: "Epic", store: "Microsoft Store", xbox: "Xbox" };
-/** Compressions; `originalGone` = the original is already in the bin, `ready` = its copy is whole and plays. */
-interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number; originalGone?: boolean; ready?: boolean }>; failed: Array<{ name: string; error: string }>; originals?: { count: number; bytes: number } }
+/** Compressions (`checking`: copies from an earlier session are being checked); `originalGone` = the original is already in the bin, `ready` = its copy is whole and plays. */
+interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number; originalGone?: boolean; ready?: boolean }>; failed: Array<{ name: string; error: string }>; originals?: { count: number; bytes: number }; checking?: boolean }
 
 const KINDS: Kind[] = ["video", "image", "audio", "document", "archive", "other"];
 const kindName = (k: Kind) => ({ video: L("סרטונים", "Videos"), image: L("תמונות", "Pictures"), audio: L("מוזיקה ושמע", "Music & audio"), document: L("מסמכים", "Documents"), archive: L("קבצים דחוסים והתקנות", "Archives & installers"), other: L("אחר", "Other") })[k];
@@ -360,15 +360,18 @@ export function StorageSection() {
   const [comp, setComp] = useState<Compress | null>(null);
   const load = (fresh: boolean) => {
     setBusy(true);
-    void api<Scan>(`/api/storage${fresh ? "?fresh=1" : ""}`).then(setScan, (e: Error) => toast(e.message)).finally(() => setBusy(false));
+    void api<Scan>(`/api/storage${fresh ? "?fresh=1" : ""}`).then(setScan, (e: Error) => toast(e.message)).finally(() => {
+      setBusy(false);
+      loadComp();
+    });
   };
   const loadComp = () => void api<Compress>("/api/storage/compress").then(setComp, () => undefined);
   useEffect(loadComp, []);
   useEffect(() => {
-    if (!comp?.running && !comp?.queue.length) return;
+    if (!comp?.running && !comp?.queue.length && !comp?.checking) return;
     const t = setInterval(loadComp, 2000);
     return () => clearInterval(t);
-  }, [comp?.running, comp?.queue.length]);
+  }, [comp?.running, comp?.queue.length, comp?.checking]);
   const total = scan ? KINDS.reduce((n, k) => n + scan.kinds[k], 0) : 0;
   const trashOriginal = async (id: string) => {
     if (!window.confirm(L("להעביר את הסרטון המקורי לסל המיחזור? הגרסה המכווצת נשארת.", "Move the original video to the Recycle Bin? The smaller copy stays."))) return;
@@ -405,9 +408,10 @@ export function StorageSection() {
       <Boost />
       {!scan && !busy && <p className="muted small">{L("סריקה של התיקיות שלכם (מסמכים, הורדות, תמונות, סרטונים, מוזיקה, שולחן העבודה): מה תופס מקום, ומה אפשר לנקות בלחיצה. שום דבר לא נמחק בלי שתבחרו.", "A scan of your folders (Documents, Downloads, Pictures, Videos, Music, Desktop): what takes the space and what can be cleaned in one press. Nothing is deleted unless you choose it.")}</p>}
       {busy && !scan && <p className="muted small">{L("סורק… זה יכול לקחת עד דקה.", "Scanning… this can take up to a minute.")}</p>}
-      {comp && (comp.running || comp.queue.length > 0 || comp.done.length > 0 || comp.failed.length > 0) && (
+      {comp && (comp.running || comp.checking || comp.queue.length > 0 || comp.done.length > 0 || comp.failed.length > 0) && (
         <div className="stack storage-compress">
           {comp.running && <p className="small" dir="auto">{L(`מכווץ: ${comp.running.name} · ⁦${comp.running.percent}%⁩`, `Compressing: ${comp.running.name} · ${comp.running.percent}%`)}{comp.queue.length ? L(` (עוד ${comp.queue.length} בתור)`, ` (${comp.queue.length} more waiting)`) : ""}</p>}
+          {comp.checking && <p className="small muted">{L("בודק סרטונים שכווצו קודם…", "Checking videos compressed earlier…")}</p>}
           {!!comp.originals?.count && <button type="button" className="primary" onClick={() => void trashAllOriginals()}>{L(`כל המקורות לסל (${comp.originals.count}, ⁦${size(comp.originals.bytes)}⁩)`, `Move all originals to the bin (${comp.originals.count}, ${size(comp.originals.bytes)})`)}</button>}
           {comp.done.map((d) => (
             <div key={d.result.id} className="row wrap small">

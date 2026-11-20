@@ -4,7 +4,7 @@ import { basename, dirname, extname, join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
-import { moveToTrash, parseDuration, Storage, type CompressedOriginal, type StorageFile } from "../storage.js";
+import { moveToTrash, parseDuration, playsToEnd, Storage, type CompressedOriginal, type StorageFile } from "../storage.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
 import { cleanSpotsNow, measureSpots } from "../pc-clean.js";
 import { clearUpdateCache, closeProgram, emptyRecycleBin, memoryPrograms, recycleBin, startupPrograms, updateCacheBytes } from "../pc-boost.js";
@@ -44,7 +44,34 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
   const storage = new Storage();
   const compress: CompressState = { queue: [], done: [], failed: [] };
 
-  app.get<{ Querystring: { fresh?: string } }>("/api/storage", async (req) => (req.query.fresh === "1" || !storage.last ? storage.scan() : storage.last));
+  /**
+   * Copies made in an earlier session (found by the scan beside their originals): each is checked to play, then
+   * listed with the compressions so its original can go to the bin too. One check at a time.
+   */
+  let adopting: Promise<void> | undefined;
+  const adopt = (): Promise<void> =>
+    (adopting ??= (async () => {
+      const found = storage.foundCompressed().filter((f) => !compress.done.some((d) => d.original.id === f.original.id));
+      if (!found.length) return;
+      const ffmpeg = await ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }).catch(() => undefined);
+      for (const f of found) {
+        if (!f.checked) {
+          // Both must open: an original whose length cannot be read gives nothing to compare the copy with.
+          const before = ffmpeg && (await mediaLength(ffmpeg, f.originalPath));
+          if (!ffmpeg || !before || !playsToEnd(before, await mediaLength(ffmpeg, f.copyPath))) continue;
+          storage.markChecked(f.original.id);
+        }
+        if (!compress.done.some((d) => d.original.id === f.original.id)) compress.done.push({ original: f.original, result: f.result, saved: Math.max(0, f.original.bytes - f.result.bytes) });
+      }
+      compress.done = compress.done.slice(0, 100);
+    })().finally(() => (adopting = undefined)));
+  const scan = async () => {
+    const r = await storage.scan();
+    void adopt();
+    return r;
+  };
+
+  app.get<{ Querystring: { fresh?: string } }>("/api/storage", async (req) => (req.query.fresh === "1" || !storage.last ? scan() : storage.last));
   app.post<{ Body: { ids?: unknown } }>("/api/storage/trash", async (req, reply) => {
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as unknown[]).map(String) : [];
     if (!ids.length) return reply.code(400).send({ error: "Nothing chosen." });
@@ -132,7 +159,7 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
       // The copy must open as a video and play nearly to the original's end (streams it leaves out, like subtitles,
       // can make the original a little longer), else it is not kept.
       const length = await mediaLength(ffmpeg, output);
-      if (length === undefined || (total && length < total * 0.9 - 1)) throw new Error("The smaller copy did not come out whole; the original stays.");
+      if (!playsToEnd(total || undefined, length)) throw new Error("The smaller copy did not come out whole; the original stays.");
       const pair = await storage.addCompressed(input, output, true);
       if (pair) compress.done.unshift({ ...pair, saved: before - after });
       compress.done = compress.done.slice(0, 100);
@@ -152,6 +179,7 @@ export async function storageRoutes(app: FastifyInstance, s: KesherServices): Pr
     const ready = state.filter((o) => o.ready);
     return {
       ...compress,
+      ...(adopting ? { checking: true } : {}),
       done: compress.done.map((d) => ({ ...d, originalGone: by.get(d.original.id)?.gone ?? false, ready: by.get(d.original.id)?.ready ?? false })),
       originals: { count: ready.length, bytes: ready.reduce((n, o) => n + o.bytes, 0) },
     };
