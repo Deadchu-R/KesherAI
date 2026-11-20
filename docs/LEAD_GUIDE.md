@@ -22,6 +22,16 @@ What the lead Claude session needs after a compact, besides [WORK_LIST.md](WORK_
 - Reports to Roee in Hebrew: the changes as ✅/⬜ and what is next (the full list is in WORK_LIST.md); then start it.
 - Security scan every 5 builds; while working, tests for what changed; the full suite before each build.
 
+## Saving Claude tokens first (Roee, 2026-11-20: the top priority, before KesherAI's own efficiency)
+- Small, clear tasks go to the task inbox (kesher-inbox) for KesherAI's local model or Antigravity (his Gemini plan),
+  not to a Claude agent. Claude agents only for work that needs Claude (design decisions, big builds, security review).
+- Builds: Opus. Research, docs, test fixing, screenshot boards: Sonnet. Lookups: Haiku. One agent per task, no
+  follow-up rounds unless needed.
+- The lead does not read big files, logs or transcripts: grep -n with ranges, `tail -n 20`, agents report ≤12 lines.
+- Browser work only when there is no other way, and with text tools (find, get_page_text), not screenshots.
+- Batch steps; no polling; one background wait per release.
+- After each build, re-run docs/usage/track.py and compare; remind Roee to /compact after each build.
+
 ## Design doc (artifact https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U)
 Roee watches it live: every new or changed screen goes in before the build, no approval needed.
 1. Screenshots of the real screen (desktop 1280 wide, phone 390 at deviceScaleFactor 2) from Playwright.

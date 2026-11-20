@@ -29,6 +29,12 @@ when the task needs it: [CODE_GUIDE.md](CODE_GUIDE.md), [ARCHITECTURE.md](ARCHIT
   each editor, not imported across plugins. A change to one copy goes into every copy.
 - New or changed screens: say so in the report (which screen, what changed), so the lead updates the design doc.
 
+## Tokens (Roee's top priority)
+- Read only what the task needs: grep -n and line ranges, not whole large files; don't re-read files you just edited.
+- Short outputs: `| tail -n 20`; no full logs in your context. Playwright: text/DOM checks; screenshots only when the
+  lead asks for design-doc boards.
+- Commit per working step so nothing is redone if the session stops.
+
 ## Checking the work (cheap first, full before a release)
 - After each change: `pnpm -s typecheck` and `pnpm -s lint` for the whole repo (they catch cross-file breaks).
 - Tests: only the files for what changed, from the repo root:
