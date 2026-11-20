@@ -75,6 +75,7 @@ import { moodleRoutes } from "../routes/moodle.js";
 import { webImageRoutes } from "../routes/web-image.js";
 import { studyPlanRoutes } from "../routes/study-plans.js";
 import { ideasRoutes } from "../routes/ideas.js";
+import { designRoutes } from "../routes/design.js";
 import { deckRoutes } from "../routes/decks.js";
 import { deckStoreFor } from "../decks.js";
 import { docRoutes } from "../routes/docs.js";
@@ -152,6 +153,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await webImageRoutes(app);
   await studyPlanRoutes(app, services);
   await ideasRoutes(app, services);
+  await designRoutes(app, services);
   await canvasRoutes(app, canvases, (convId) => library.summary(convId)?.title);
   await deckRoutes(app, deckStoreFor(join(paths.root, "decks")));
   {

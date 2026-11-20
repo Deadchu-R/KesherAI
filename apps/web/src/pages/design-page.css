@@ -1,0 +1,32 @@
+/* The Design page (pages/DesignPage.tsx): the design doc's boards that KesherAI renders. */
+.design-page { display: flex; flex-direction: column; gap: 12px; }
+.design-head { gap: 8px; flex-wrap: wrap; }
+.design-error, .design-error-text { color: var(--bad); }
+.design-error { border-color: var(--bad); overflow-wrap: anywhere; }
+.design-status bdi { overflow-wrap: anywhere; }
+.design-group h2 { font-size: 16px; margin: 8px 0; }
+.design-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.design-board { height: auto; font-weight: 400; display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; text-align: start; cursor: pointer; color: inherit; font: inherit; min-width: 0; }
+.design-board.newest { border-color: var(--warn); }
+.design-board:active:not(:disabled) { transform: none; }
+.design-thumb { display: block; height: 180px; background: var(--bg); overflow: hidden; border-bottom: 1px solid var(--border); }
+.design-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.design-meta { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px 10px; min-width: 0; }
+.design-meta strong { font-size: 14px; overflow-wrap: anywhere; }
+.design-new { align-self: flex-start; font-size: 12px; font-weight: 700; color: var(--bg); background: var(--warn); border-radius: 999px; padding: 1px 8px; }
+.design-note-line { overflow-wrap: anywhere; }
+.design-view-backdrop { align-items: flex-start; overflow-y: auto; }
+.design-view { width: min(1280px, 100%); max-height: none; }
+.design-full { overflow: auto; max-height: 75vh; background: var(--bg); border-radius: var(--radius-sm); display: flex; justify-content: center; }
+.design-full img { display: block; max-width: 100%; height: auto; }
+.design-full.phone img { width: 390px; }
+.design-view textarea { width: 100%; box-sizing: border-box; }
+.design-view-actions { gap: 8px; flex-wrap: wrap; }
+.design-view-actions .grow { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .design-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .design-thumb { height: 150px; }
+  .design-view-backdrop { padding: 0; }
+  .design-view { border-radius: 0; min-height: 100%; }
+  .design-full { max-height: 62vh; }
+}
