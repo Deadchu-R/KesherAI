@@ -1006,7 +1006,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       study: s.studyBusy?.() ?? 0,
     };
   };
-  const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, apply: () => s.updater.apply() });
+  const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, beforeApply: async () => s.resume?.save("update"), apply: () => s.updater.apply() });
   app.addHook("onClose", async () => whenFree.stop());
   app.get("/api/updates/ready", async () => ({ ...(await freeState()), whenFree: whenFree.on }));
   app.post<{ Body: { on?: boolean } | undefined }>("/api/updates/when-free", async (req) => {
@@ -1018,9 +1018,11 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const working = Object.keys(s.conversations.activity());
     if (working.length && req.body?.force !== true) {
       const titles = working.map((id) => s.library.summary(id)?.title ?? id).slice(0, 5);
-      return reply.code(409).send({ error: `${working.length} chat(s) are working now: ${titles.join(", ")}. The update restarts KesherAI and stops them (they can continue afterwards).`, code: "chats-working", chats: titles });
+      return reply.code(409).send({ error: `${working.length} chat(s) are working now: ${titles.join(", ")}. The update restarts KesherAI and stops them (after it, "Continue what was running" brings them back).`, code: "chats-working", chats: titles });
     }
     try {
+      // The record of what runs now, so nothing the update cuts off is lost (the card after the start lists it).
+      await s.resume?.save("update").catch(() => undefined);
       return await s.updater.apply();
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });

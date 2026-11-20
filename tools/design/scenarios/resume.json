@@ -1,0 +1,100 @@
+{
+ "group": "המשך אחרי הפעלה מחדש",
+ "mocks": [
+  {
+   "url": "**/api/resume",
+   "method": "GET",
+   "json": {
+    "reason": "update",
+    "at": {
+     "$ago": "3m"
+    },
+    "items": [
+     {
+      "id": "chat:c1",
+      "kind": "media",
+      "title": "כרזה למשחק הפלטפורמה",
+      "detail": "generate_image",
+      "at": {
+       "$ago": "3m"
+      },
+      "auto": false,
+      "link": "#/c/c1"
+     },
+     {
+      "id": "chat:c2",
+      "kind": "chat",
+      "title": "תיקון מסך ההתחברות",
+      "detail": "run_tests",
+      "at": {
+       "$ago": "3m"
+      },
+      "auto": false,
+      "link": "#/c/c2"
+     },
+     {
+      "id": "engine-sync:unity:D:/Games/Platformer",
+      "kind": "engine-sync",
+      "title": "Platformer",
+      "detail": "Unity",
+      "at": {
+       "$ago": "3m"
+      },
+      "auto": false,
+      "link": "#/games"
+     },
+     {
+      "id": "inbox:t12",
+      "kind": "inbox",
+      "title": "t12: כפתור הגדרות בטלפון בזמן חיבור",
+      "at": {
+       "$ago": "3m"
+      },
+      "auto": false,
+      "link": "#/task-inbox"
+     },
+     {
+      "id": "helper:h1",
+      "kind": "helper",
+      "title": "השוואת מסך ההגדרות למתחרים",
+      "at": {
+       "$ago": "2m"
+      },
+      "auto": true,
+      "link": "#/c/c2"
+     },
+     {
+      "id": "download:Qwen/Qwen3.6-27B-GGUF · Qwen3.6-27B-Q4_K_M.gguf",
+      "kind": "download",
+      "title": "Qwen/Qwen3.6-27B-GGUF · Qwen3.6-27B-Q4_K_M.gguf",
+      "at": {
+       "$ago": "2m"
+      },
+      "auto": true,
+      "link": "#/models"
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "ResumeCard",
+   "title": "המשך את מה שרץ: אחרי עדכון או הפעלה מחדש",
+   "route": "#/",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1200
+   },
+   "steps": [
+    {
+     "wait": ".resume-row"
+    }
+   ]
+  }
+ ]
+}

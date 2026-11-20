@@ -36,6 +36,11 @@ export interface InstallWhenFreeDeps {
   available: () => Promise<boolean>;
   /** Installs it (restarts KesherAI). */
   apply: () => Promise<unknown>;
+  /**
+   * Called just before {@link apply}: writes the "Continue what was running" record (resume-board.ts), so work that
+   * still runs (a helper, a sync; the free check does not wait for those) shows on the card after the update.
+   */
+  beforeApply?: () => Promise<unknown>;
   /** How often to look, in ms (default 30 s). */
   everyMs?: number;
   /** How often to ask whether a version is ready, in ms (default 5 min). */
@@ -92,6 +97,7 @@ export class InstallWhenFree {
       }
       if (!this.ready || !isFree(await this.deps.state())) return false;
       this.stop();
+      await this.deps.beforeApply?.().catch(() => undefined);
       await this.deps.apply();
       return true;
     } catch {

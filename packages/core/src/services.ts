@@ -199,6 +199,8 @@ export interface KesherServices {
   restartApp?: () => void;
   /** Set while KesherAI restarts (the tunnel is kept for the next start). */
   restarting?: boolean;
+  /** "Continue what was running" after a restart (resume-board.ts); the main app only, never a worker. */
+  resume?: import("./resume-board.js").ResumeBoard;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
   /** "Access from anywhere" (Cloudflare tunnel). */

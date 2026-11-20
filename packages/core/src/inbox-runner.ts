@@ -228,6 +228,17 @@ export class TaskInbox {
     await this.active?.done;
   }
 
+  /**
+   * The task running now, for the "Continue what was running" record written on shutdown (after the start it is
+   * marked failed, and runs again only on the user's Run).
+   *
+   * @returns Its id and title, or undefined when none runs.
+   */
+  runningTask(): { id: string; title: string } | undefined {
+    const t = this.active && this.saved.tasks.find((x) => x.id === this.active!.id);
+    return t ? { id: t.id, title: t.title } : undefined;
+  }
+
   /** One task with its diff. */
   async task(id: string): Promise<InboxTaskView> {
     await this.load();

@@ -206,7 +206,13 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
    */
   const pendingFile = join(s.paths.root, "downloads-pending.json");
   const pending = new Map<string, DownloadBody>();
-  const savePending = () => writeFile(pendingFile, JSON.stringify([...pending.values()]), "utf8").catch(() => undefined);
+  /** The downloads a close cut off, until each starts again (the card's Drop can still take one out). */
+  let toStart: DownloadBody[] = [];
+  // Started ones, and the ones a restart has not started again yet (once each).
+  const savePending = () => {
+    const all = new Map([...pending.values(), ...toStart].map((b) => [`${b.repo}\n${b.path}`, b]));
+    return writeFile(pendingFile, JSON.stringify([...all.values()]), "utf8").catch(() => undefined);
+  };
   const start = async (body: DownloadBody): Promise<DownloadJob | { refused: number; error: string }> => {
     const files = await listHubFiles(body.repo, { token: token() });
     const file = files.find((f) => f.path === body.path);
@@ -231,18 +237,37 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
   s.downloads.on("update", (job: DownloadJob) => {
     if ((job.status === "done" || job.status === "cancelled") && pending.delete(job.id)) void savePending();
   });
-  void readFile(pendingFile, "utf8").then(
+  const restarted = readFile(pendingFile, "utf8").then(
     (text) => {
       const list = (JSON.parse(text) as DownloadBody[]).filter((b) => typeof b?.repo === "string" && typeof b?.path === "string").slice(0, 50);
+      toStart = [...list];
       // A little after start, so the network and the models folder are ready.
       const t = setTimeout(() => void (async () => {
-        for (const b of list) await start(b).catch(() => undefined);
+        for (const b of list) if (toStart.includes(b)) await start(b).catch(() => undefined);
+        toStart = [];
         void savePending();
       })(), 8000);
       t.unref?.();
+      return list;
     },
-    () => undefined,
+    () => [] as DownloadBody[],
   );
+  // On the "Continue what was running" card: they go on by themselves (the user started them); Drop cancels one.
+  const labelOf = (b: DownloadBody) => `${b.repo} · ${b.path}`;
+  const jobOf = (label: string) => s.downloads.list().find((j) => j.label === label && !["done", "failed", "cancelled"].includes(j.status));
+  s.resume?.add("download", {
+    found: async () =>
+      (await restarted).map((b) => ({ id: `download:${labelOf(b)}`.slice(0, 300), source: "download", kind: "download" as const, title: labelOf(b).slice(0, 300), at: new Date().toISOString(), auto: true, link: "#/models", ref: labelOf(b).slice(0, 1000) })),
+    alive: (i) => toStart.some((b) => labelOf(b) === i.ref) || !!jobOf(i.ref),
+    continue: async () => undefined,
+    drop: async (i) => {
+      toStart = toStart.filter((b) => labelOf(b) !== i.ref);
+      const job = jobOf(i.ref);
+      if (job) s.downloads.cancel(job.id);
+      else for (const [id, b] of pending) if (labelOf(b) === i.ref) pending.delete(id);
+      void savePending();
+    },
+  });
 
   app.post<{ Body: DownloadBody }>("/api/downloads", async (req, reply) => {
     try {

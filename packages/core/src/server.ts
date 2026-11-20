@@ -44,6 +44,7 @@ import { partSegRoutes } from "./routes/part-seg.js";
 import { BgRemover } from "./bg-remove.js";
 import { bgRemoveRoutes } from "./routes/bg-remove.js";
 import { localCall } from "./local-call.js";
+import { buildResume } from "./server/build-resume.js";
 import { scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
@@ -570,6 +571,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
   const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard });
   services.taskInbox = taskInbox;
+  // "Continue what was running" after a restart (resume-board.ts): the main app only; a worker has no card.
+  if (!options.worker) services.resume = buildResume(paths.root, services);
   // The chat's @antigravity agent asks the same "Run this in Antigravity?" before each message it sends.
   services.conversations.helpers.askAntigravity = (info) => taskInbox.askMessage(info);
   // Live agent activity for the hub page and the phone's Cloud tab (agent-activity.ts): off until the PC's opt-in.
@@ -924,7 +927,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       if (!options.worker) hub.start();
       if (!options.worker) services.tasksSync?.start();
       // Helpers a restart stopped continue (and the ended ones show again); the main app only, never a worker.
-      if (!options.worker) void services.conversations.helpers.resumeSaved().catch((err: Error) => console.warn(`[helpers] ${err.message}`));
+      // Then the "Continue what was running" card reads the record of the last close (it lists those helpers too).
+      if (!options.worker)
+        void services.conversations.helpers
+          .resumeSaved()
+          .catch((err: Error) => console.warn(`[helpers] ${err.message}`))
+          .then(() => services.resume?.start())
+          .catch((err: Error) => console.warn(`[resume] ${err.message}`));
       if (config.remote.anywhere) {
         services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
       }
@@ -962,6 +971,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       void comfy.stop();
       routines.close();
       void semantic?.stop();
+      // What is running now goes into the record first (a chat's tool, the inbox run, a sync), while it can still be seen.
+      await services.resume?.save(services.restarting ? "restart" : "shutdown").catch(() => undefined);
       await services.conversations.closeAll();
       await app.close();
       await engine.stop();

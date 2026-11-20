@@ -112,6 +112,9 @@ export class ChatHelpers {
     s.wake(text, `סוכן עזר ${what[0]}: ${r.title} · Helper ${what[1]}: ${r.title}`);
   }
 
+  /** The runs that went on by themselves after the last start (the "Continue what was running" card lists them). */
+  resumed: Array<{ id: string; chatId: string; title: string }> = [];
+
   /**
    * After a start: puts the runs saved before the restart back (ended ones show again, "finished while you were
    * away"), and continues the ones that were going (paused by restart until each is built again; its model is made
@@ -121,6 +124,7 @@ export class ChatHelpers {
    */
   async resumeSaved(): Promise<number> {
     if (!this.store) return 0;
+    this.resumed = [];
     const saved = await this.store.load();
     const paused = new Set(this.runs.restore(saved));
     // A background report that ended just before the restart and never reached the chat's model goes there now.
@@ -129,7 +133,10 @@ export class ChatHelpers {
     for (const s of saved) {
       if (!paused.has(s.info.id)) continue;
       const ok = await (this.host.resumeRun?.(s.chatId, s) ?? Promise.resolve(false)).catch(() => false);
-      if (ok) n++;
+      if (ok) {
+        n++;
+        this.resumed.push({ id: s.info.id, chatId: s.chatId, title: s.info.title });
+      }
       // Its chat or project is gone, or a builder's chat lost its git project: it ends with the reason.
       else this.runs.resume(s.info.id, async () => Promise.reject(new Error("Could not continue after the restart (its chat or project is no longer here).")));
     }

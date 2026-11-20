@@ -36,3 +36,11 @@ test("does nothing without a ready version, or when off", async () => {
   w.stop();
   assert.equal(applied, 0);
 });
+
+test("writes the resume record before it installs, and installs even if writing fails", async () => {
+  const order: string[] = [];
+  const w = new InstallWhenFree({ state: async () => idle, available: async () => true, beforeApply: async () => { order.push("save"); throw new Error("disk full"); }, apply: async () => void order.push("apply"), everyMs: 60_000 });
+  w.set(true);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(order, ["save", "apply"]);
+});

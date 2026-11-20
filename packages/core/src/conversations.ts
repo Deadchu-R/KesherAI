@@ -1628,6 +1628,24 @@ export class ConversationManager {
     return out;
   }
 
+  /**
+   * The tool a working chat is in right now (its last call without a result), for the "Continue what was running"
+   * record: a picture or video job, a render, or plain chat work.
+   *
+   * @param id - The chat.
+   * @returns The tool's name, or undefined when the model is writing (or the chat is not open).
+   */
+  runningTool(id: string): string | undefined {
+    const events = this.sessions.get(id)?.events ?? [];
+    const done = new Set<string>();
+    for (let i = events.length - 1; i >= 0 && i >= events.length - 400; i--) {
+      const e = events[i]!;
+      if (e.type === "tool_result") done.add(e.callId);
+      else if (e.type === "tool_call") return done.has(e.callId) ? undefined : e.name;
+    }
+    return undefined;
+  }
+
   /** Where the chats stopped by a restart are kept (so they can continue after it). */
   private get interruptedFile(): string {
     return join(this.deps.outputsDir, "..", "interrupted.json");

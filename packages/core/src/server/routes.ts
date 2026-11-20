@@ -99,6 +99,7 @@ import { downloadRoutes } from "../routes/downloads.js";
 import { openAIRoutes } from "../routes/openai.js";
 import { libraryRoutes } from "../routes/library.js";
 import { helperRoutes } from "../routes/helpers.js";
+import { resumeRoutes } from "../routes/resume.js";
 import { taskInboxRoutes } from "../routes/task-inbox.js";
 import { tasksSyncRoutes } from "../routes/tasks-sync.js";
 import { fileRoutes } from "../routes/files.js";
@@ -190,6 +191,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
   await helperRoutes(app, services);
+  await resumeRoutes(app, services);
   if (services.taskInbox) await taskInboxRoutes(app, services, services.taskInbox);
   if (services.tasksSync) await tasksSyncRoutes(app, services, services.tasksSync);
   await fileRoutes(app, services);
