@@ -1620,3 +1620,58 @@ llama.cpp `id_slot` per kind; PC Health's project detection and drives; the Stor
     misbehaving PC within the free plan's 100k writes a day.
 - Performance otherwise: PC pulls every 3 min (backoff on errors), hub page every 60 s only while visible, Drive lists
   by changes feed after the first full list; agent snapshots at most every 5 min per run, 50 runs followed. Nothing else.
+
+## Scan 168 (2026-11-20): hub Web Push, agent names and "who does it", games without the engine, Install button
+Scope: everything since scan 167 (de70c8f..5c302ab, 0.6.406–0.6.410, 67 commits): hub Web Push (web-push.ts,
+sw.js, subscriptions, VAPID), the sealed `agent-label` and `assign` commands, task-assign, Antigravity runs without
+the busy gate (31dca4a), /api/games/* (Source view, checkpoints, inspector, search, sync), uasset.ts, Unity/Unreal
+batch sync, offer_install and /api/installables, the tool router and per-chat tool switches, tasks-sync reconnect.
+- **Fixed (medium): game checkpoints and the inspector followed links out of the project.** `insideProject` checked
+  the path by its text only, so a link put in a project (a file, or a folder on the way) made a checkpoint restore
+  write a kept file through it, a compare read (and show) a file outside up to 1 MB, a capture copy an outside file
+  into the store, and the inspector read, queue and, at sync, write a `.prefab`/`.unity`/`.tscn`/`.tres` outside.
+  New `realInside` (game-checkpoints.ts): the file is not a link and its nearest existing folder, links followed, is
+  inside the project; used by capture (skips), restore (skips, counted), compare, the inspector routes and
+  `ValueQueue.sync`. Blob ids from index.json must be sha256 hex. Tests: game-checkpoints.test.ts,
+  routes/game-inspector.test.ts. (The Source view already used `projectPath`, which does the same.)
+- **Fixed (low): a Source view save without `mtime` overwrote the file blindly.** The "changed since it was opened"
+  check ran only when the page sent a time; an existing file now needs it (the page always sends it). Test:
+  routes/game-source.test.ts.
+- **Fixed (perf):** checkpoint pruning summed every kept content again for each dropped checkpoint (up to 2,000);
+  now one pass with use counts. Searches typed while a big project's index is built share that one walk
+  (game-index.ts). Tasks sync: state saves made while a write waits join it (Drive sync saves on every change); the
+  file was already write-then-rename (0600), so "seen mid-write" was most likely its `.tmp` beside it. The Unity
+  stand-in's `KesherAI/pending-moves.json` (read by the Unity package) is now written then renamed.
+- **Checked, fine:** Web Push: endpoint https only, no port or user info, hosts limited to Google, Mozilla, Apple and
+  Windows push services (subdomains), keys checked (65-byte uncompressed P-256, 16-byte auth); `redirect: "manual"`;
+  payload is a count only, aes128gcm with a fresh ECDH key per message; VAPID private key a Worker secret, never in
+  git (tools/hub-vapid.mjs prints it); one sub per paired phone-kind device, dropped on 404/410, on unpair and on
+  revoke; ≤ 1 push per 30 s per device. sw.js opens only same-origin paths (`//host` refused), caches nothing.
+  Commands `agent-label` and `assign`: sealed, opened with the sender's paired key, acted on only when the sender is a
+  phone-kind device (the owner's app or hub page); targets parsed against a fixed list; PC answers are the truth.
+  Scan 167's guard holds: a Drive task (`fromDrive`) is still queued only for Antigravity (waits for Run) or Opus; it
+  reaches the local model only by an explicit `assign` from the owner's paired device or the PC app; a running or
+  finished task changes hands only with `confirm`. 31dca4a: Antigravity still starts only from the user's Run (PC or
+  phone answer), within the daily cap; only the busy gate was removed. Source view: `projectPath` (real path), code
+  folders and code extensions only, hidden and engine-cache folders refused, 400 KB, old text kept in KesherAI's
+  folder. uasset.ts: every count capped (names 500k, tables 200k, tags 2000×5000, strings 1 MB), every read bounded
+  by the bytes read (≤ 16 MB, the index ≤ 2 MB), file handle closed in `finally`, never throws. Unity batch sync:
+  commands through a JSON file in the data folder, `spawn` without a shell. Install button: ids from a fixed list,
+  the app's own installers and folders, the chat-continue text is fixed by the page (not the model), at most 300
+  characters, to an existing chat. Tool switches: `toolsOff` validated (≤ 64 short ids) and tools removed from the
+  chat's list, not only from routing. Privacy: no email, Windows user name or user folder in the new commits
+  (test paths use `C:\Users\u` and `/home/someone`); tools/design/out is gitignored and has no tracked files.
+- **Open (left for the lead):**
+  - Low (privacy wording): docs/WORK_LIST.md line 112 names a folder on Roee's PC (`E:\LMStudio\models`). No user name
+    or email, but "the heavy-data drive" would say the same; the lead edits the work list.
+  - Low (TOCTOU): the real-path checks run just before the write; a link swapped in between by a local process could
+    still redirect one write. Same as the Unreal/Unity source routes; opening with `O_NOFOLLOW` is not portable to
+    Windows.
+  - Low: game-source backups (`game-backups/<engine>`) are never pruned (one copy per save).
+  - Low (perf): the hub page is ~300 KB of unminified ES modules in ~30 files (a module import waterfall on a phone);
+    a bundle/minify step in the hub build would cut it to well under 100 KB gzipped.
+  - Low (perf): `withUnrealKinds` stats every .uasset on each index rebuild (every 15 s while searching); fine to
+    ~50k packages, a folder-time cache would avoid it.
+  - Carried from 167: the hub keeps no total cap on agent-event rows (per run and 7 days only).
+- Performance otherwise: checkpoint copies stream (hash while copying, no buffering), ≤ 2 GB a file, store pruned
+  after every capture; uasset reads 16 KB first and the rest only to the header's end.
