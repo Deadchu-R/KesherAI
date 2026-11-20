@@ -171,8 +171,8 @@ function SheetEditor({ id }: { id: string }) {
         <span className="muted small">{saving === "saving" ? L("שומר…", "Saving…") : saving === "saved" ? L("נשמר", "Saved") : ""}</span>
         {!!sheet.versions?.length && (
           <select aria-label={L("גרסאות", "Versions")} value="" onChange={(e) => e.target.value && void api<Sheet>(`/api/sheets/${id}/restore`, { method: "POST", body: { rev: Number(e.target.value) } }).then(setSheet, (er: Error) => toast(er.message))}>
-            <option value="">{L(`גרסה ${sheet.rev}`, `Version ${sheet.rev}`)} ▾</option>
-            {[...sheet.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} {v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
+            <option value="">{`v${sheet.ver ?? sheet.versions.length + 1}`} ▾</option>
+            {[...sheet.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} v{v.ver ?? v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
           </select>
         )}
         <span className="grow" />

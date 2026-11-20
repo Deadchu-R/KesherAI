@@ -9,7 +9,7 @@ import { RichText } from "../RichText";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-interface Doc { id: string; title: string; body: string; convId?: string; rev: number; updatedAt: string; versions?: Array<{ rev: number; at: string }> }
+interface Doc { id: string; title: string; body: string; convId?: string; rev: number; updatedAt: string; ver?: number; versions?: Array<{ rev: number; at: string; ver?: number }> }
 
 /** Markdown split into blocks: blank-line separated, a code fence kept whole. */
 export function toBlocks(body: string): string[] {
@@ -38,7 +38,7 @@ const NEW_BLOCKS: Array<[string, string, string]> = [
 ];
 
 /** Zips Office files and saves them (Word or Excel, optional: KesherAI keeps its own format). */
-function saveOffice(files: Record<string, string>, name: string, mime: string) {
+export function saveOffice(files: Record<string, string>, name: string, mime: string) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])))], { type: mime }));
   a.download = name;
@@ -57,7 +57,7 @@ const WRITE_ACTIONS: Array<[string, string, string]> = [
 ];
 
 /** The document as a PDF through the system's "Save as PDF" (no Word needed): the page as it is drawn. */
-function printDoc(title: string, html: string) {
+export function printDoc(title: string, html: string) {
   const he = /[֐-׿]/.test(title);
   const frame = document.createElement("iframe");
   // No scripts run in the print copy (the document's text is hers or the model's).
@@ -235,8 +235,8 @@ function DocEditor({ id }: { id: string }) {
         <span className="muted small">{saving === "saving" ? L("שומר…", "Saving…") : saving === "saved" ? L("נשמר", "Saved") : ""}</span>
         {!!doc.versions?.length && (
           <select aria-label={L("גרסאות", "Versions")} value="" onChange={(e) => e.target.value && void api<Doc>(`/api/docs/${id}/restore`, { method: "POST", body: { rev: Number(e.target.value) } }).then(setDoc, (er: Error) => toast(er.message))}>
-            <option value="">{L(`גרסה ${doc.rev}`, `Version ${doc.rev}`)} ▾</option>
-            {[...doc.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} {v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
+            <option value="">{`v${doc.ver ?? doc.versions.length + 1}`} ▾</option>
+            {[...doc.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} v{v.ver ?? v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
           </select>
         )}
         <span className="grow" />

@@ -42,6 +42,8 @@ import { BlueprintChatPanel, blueprintContext, chatBlueprint } from "../Blueprin
 import { useChatAttach } from "../ChatAttach";
 import { ComposerBar } from "../ComposerBar";
 import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
+import { ItemCard } from "../DocPanel";
+import { itemFromResult } from "../doc-items";
 import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
 import { ShareDialog } from "../chat/ShareDialog";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
@@ -861,7 +863,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
                   liveOutput={liveOut}
                   // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
-                  after={b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />)}
+                  after={[
+                    ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
+                    // A document, sheet or deck a tool wrote: one card per item (its last edit in the group), Open beside the chat.
+                    ...[...new Map(b.steps.flatMap((st) => {
+                      const it = st.result ? itemFromResult(st.call.name, st.result.ok, st.result.output) : undefined;
+                      return it ? [[`${it.kind}:${it.id}`, { ...it, title: typeof st.call.input.title === "string" ? st.call.input.title : undefined }] as const] : [];
+                    })).values()].map((it) => <ItemCard key={`${it.kind}:${it.id}:${it.ver ?? 0}`} item={{ kind: it.kind, id: it.id, convId: id, ...(it.title ? { title: it.title } : {}) }} {...(it.ver ? { ver: it.ver } : {})} live={busy} />),
+                  ]}
                 />
               );
             }

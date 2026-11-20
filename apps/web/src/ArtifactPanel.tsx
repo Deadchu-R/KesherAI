@@ -1,8 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CodeView } from "./ide/CodeView";
+import type { PanelItem } from "./doc-items";
 import { getLocale, he$ } from "./i18n";
 
 const DesignBoard = lazy(() => import("./DesignBoard").then((m) => ({ default: m.DesignBoard })));
+// Documents, sheets and decks (DocPanel.tsx imports this file for openItem, so it is loaded when first needed).
+const ItemPanel = lazy(() => import("./DocPanel").then((m) => ({ default: m.ItemPanel })));
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -12,12 +15,18 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  *
  * It runs in a sandboxed frame with no same-origin access (it cannot reach KesherAI, its files or the app key) and a
  * content policy that blocks the network: scripts and styles inside the page only, pictures from data: and blob:.
+ *
+ * The same panel shows a document, sheet or slide deck a tool wrote (DocPanel.tsx, design DocPanel). On a wide
+ * screen it sits beside the chat and its edge drags to resize it; under 1100 px it is a full-screen sheet with
+ * "Back to chat".
  */
 
 /** Every page block seen, by a short key (the blocks on screen carry it as data-artifact). */
 const known = new Map<string, string>();
 let versions: string[] = [];
 let current = -1;
+/** The document, sheet or deck open in the panel (instead of a page block), if any. */
+let item: PanelItem | null = null;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((f) => f());
 
@@ -36,7 +45,70 @@ export function openArtifact(code: string): void {
   versions = keys.map((k) => known.get(k)).filter((c): c is string => !!c);
   if (!versions.includes(code)) versions.push(code);
   current = versions.indexOf(code);
+  item = null;
   changed();
+}
+
+/**
+ * Opens the panel on a document, sheet or slide deck (a chat card's Open, or a tool's edit while the model works).
+ *
+ * @param p - The item: its kind, id, the chat it was opened from and its title.
+ */
+export function openItem(p: PanelItem): void {
+  item = p;
+  versions = [];
+  current = -1;
+  changed();
+}
+
+/** Closes the panel (✕, or "Back to chat" on the phone). */
+export function closePanel(): void {
+  item = null;
+  current = -1;
+  changed();
+}
+
+const WIDTH_KEY = "kesher.artifactWidth";
+
+/** Sets the panel's width (a wide screen only), kept for next time; the chat beside it moves over with it. */
+function setWidth(px: number | null): void {
+  const root = document.documentElement.style;
+  if (px === null) root.removeProperty("--artifact-w");
+  else root.setProperty("--artifact-w", `${Math.round(px)}px`);
+}
+
+/** The panel's edge: dragging it resizes the panel (between 320 px and 85% of the window); a double click resets. */
+function ResizeEdge() {
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(WIDTH_KEY));
+    if (saved > 0) setWidth(Math.min(saved, innerWidth * 0.85));
+  }, []);
+  const start = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const edge = e.currentTarget;
+    edge.setPointerCapture(e.pointerId);
+    // The panel sits at the inline end: on the right in English, on the left in Hebrew.
+    const rtl = getComputedStyle(edge).direction === "rtl";
+    let w = 0;
+    const move = (ev: PointerEvent) => {
+      w = Math.max(320, Math.min(innerWidth * 0.85, (rtl ? ev.clientX : innerWidth - ev.clientX) - 8));
+      setWidth(w);
+    };
+    const end = () => {
+      edge.removeEventListener("pointermove", move);
+      edge.removeEventListener("pointerup", end);
+      edge.removeEventListener("pointercancel", end);
+      if (w) localStorage.setItem(WIDTH_KEY, String(Math.round(w)));
+    };
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("pointerup", end);
+    edge.addEventListener("pointercancel", end);
+  };
+  const reset = () => {
+    localStorage.removeItem(WIDTH_KEY);
+    setWidth(null);
+  };
+  return <div className="artifact-resize" role="separator" aria-orientation="vertical" aria-label={L("גרירה לשינוי הרוחב", "Drag to resize")} onPointerDown={start} onDoubleClick={reset} />;
 }
 
 /** Whether a code block is a page worth opening live: a whole document, or a snippet with markup and some length. */
@@ -72,6 +144,7 @@ export function ArtifactPanel() {
     const away = () => {
       versions = [];
       current = -1;
+      item = null;
       changed();
     };
     addEventListener("hashchange", away);
@@ -81,15 +154,22 @@ export function ArtifactPanel() {
     };
   }, []);
   useEffect(() => {
-    document.body.classList.toggle("artifact-open", current >= 0);
+    document.body.classList.toggle("artifact-open", current >= 0 || !!item);
   });
+  if (item) {
+    return (
+      <aside className={`artifact-panel doc-panel${full ? " full" : ""}`} aria-label={item.title || L("פריט מהצ'אט", "An item from the chat")}>
+        <ResizeEdge />
+        <Suspense fallback={<p className="muted small">…</p>}><ItemPanel key={`${item.kind}:${item.id}`} item={item} full={full} onFull={() => setFull((f) => !f)} /></Suspense>
+      </aside>
+    );
+  }
   if (current < 0 || !versions[current]) return null;
   const code = versions[current]!;
   const title = /<title>([^<]{1,80})<\/title>/i.exec(code)?.[1]?.trim() || L("דף מהצ'אט", "A page from the chat");
   const close = () => {
-    current = -1;
     setFull(false);
-    changed();
+    closePanel();
   };
   const download = () => {
     const a = document.createElement("a");
@@ -100,7 +180,9 @@ export function ArtifactPanel() {
   };
   return (
     <aside className={`artifact-panel${full ? " full" : ""}`} aria-label={title}>
+      <ResizeEdge />
       <div className="artifact-bar">
+        <button type="button" className="ghost artifact-back" onClick={close}>‹ {L("חזרה לצ'אט", "Back to chat")}</button>
         <strong className="grow" dir="auto">{title}</strong>
         {versions.length > 1 && (
           <select value={current} onChange={(e) => { current = Number(e.target.value); changed(); }} aria-label={L("גרסה", "Version")}>
@@ -115,7 +197,7 @@ export function ArtifactPanel() {
         <button type="button" className="ghost" title={L("טען מחדש", "Reload")} aria-label={L("טען מחדש", "Reload")} onClick={() => setReload((n) => n + 1)}>↻</button>
         <button type="button" className="ghost" title={L("מסך מלא", "Full screen")} aria-label={L("מסך מלא", "Full screen")} onClick={() => setFull((f) => !f)}>⛶</button>
         <button type="button" className="ghost" title={L("הורד HTML", "Download HTML")} aria-label={L("הורד HTML", "Download HTML")} onClick={download}>⬇</button>
-        <button type="button" className="ghost" title={L("סגור", "Close")} aria-label={L("סגור", "Close")} onClick={close}>✕</button>
+        <button type="button" className="ghost artifact-close" title={L("סגור", "Close")} aria-label={L("סגור", "Close")} onClick={close}>✕</button>
       </div>
       {tab === "canvas" ? (
         <Suspense fallback={<p className="muted small">…</p>}><DesignBoard screens={versions} onPick={(i) => { current = i; changed(); }} /></Suspense>

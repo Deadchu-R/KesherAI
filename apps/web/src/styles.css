@@ -3073,7 +3073,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .md-mermaid { margin: 8px 0; padding: 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); overflow-x: auto; text-align: center; }
 .md-mermaid svg { max-width: 100%; height: auto; }
 /* Artifacts (ArtifactPanel.tsx): a page from the chat, live beside it */
-.artifact-panel { position: fixed; z-index: 45; inset-block: calc(var(--bar-h, 48px) + 8px) 8px; inset-inline-end: 8px; width: min(48vw, 760px); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(14px * var(--r-scale, 1)); box-shadow: var(--shadow-2, 0 16px 40px rgb(0 0 0 / .45)); overflow: hidden; }
+.artifact-panel { position: fixed; z-index: 45; inset-block: calc(var(--bar-h, 48px) + 8px) 8px; inset-inline-end: 8px; width: var(--artifact-w, min(48vw, 760px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(14px * var(--r-scale, 1)); box-shadow: var(--shadow-2, 0 16px 40px rgb(0 0 0 / .45)); overflow: hidden; }
 .artifact-panel.full { inset: 8px; width: auto; z-index: 70; }
 .artifact-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .artifact-bar strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3084,8 +3084,45 @@ html.handheld .palette-list button { min-height: 44px; }
 .artifact-frame { flex: 1; width: 100%; border: none; background: #fff; }
 .artifact-code { flex: 1; overflow: auto; }
 .artifact-note { margin: 0; padding: 6px 10px; border-top: 1px solid var(--border); }
-@media (min-width: 1100px) { body.artifact-open .chat { margin-inline-end: calc(min(48vw, 760px) + 16px); margin-inline-start: 0; } }
+@media (min-width: 1100px) { body.artifact-open .chat { margin-inline-end: calc(var(--artifact-w, min(48vw, 760px)) + 16px); margin-inline-start: 0; } }
 @media (max-width: 1099px) { .artifact-panel { inset: 0; width: auto; border-radius: 0; z-index: 70; } }
+/* The panel's edge drags to resize it (wide screens); on the phone it is a full sheet with "Back to chat" instead of ✕. */
+.artifact-resize { position: absolute; inset-block: 0; inset-inline-start: 0; width: 6px; cursor: col-resize; z-index: 1; touch-action: none; }
+.artifact-resize:hover, .artifact-resize:active { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.artifact-back { display: none; }
+@media (max-width: 1099px) {
+  .artifact-resize, .artifact-close, .artifact-wide-only { display: none; }
+  .artifact-back { display: inline-flex; }
+  .artifact-bar strong { flex-basis: 100%; order: 1; }
+}
+.artifact-panel.full .artifact-resize { display: none; }
+/* Documents, sheets and decks in the panel (design DocPanel). */
+.doc-panel-view, .doc-panel-edit { flex: 1; overflow: auto; min-height: 0; }
+.doc-panel-view { padding: 12px; }
+.doc-panel-doc { min-height: 0; }
+.doc-panel-edit > .page { padding: 8px; max-width: none; }
+.doc-panel-empty { padding: 16px; }
+.doc-panel-old { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px; background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border-bottom: 1px solid var(--border); }
+.doc-panel-sheet { overflow: auto; }
+.doc-panel-sheet table { border-collapse: collapse; font-size: 13px; }
+.doc-panel-sheet td { border: 1px solid var(--border); padding: 3px 8px; min-width: 56px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-panel-deck { display: grid; gap: 14px; }
+.doc-panel-deck figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.doc-panel-menu { position: relative; }
+.doc-panel-menu > summary { list-style: none; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.doc-panel-menu > summary::-webkit-details-marker { display: none; }
+.doc-panel-menu-list { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 5; display: grid; min-width: 140px; padding: 4px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow-2, 0 8px 24px rgb(0 0 0 / .35)); }
+.doc-panel-menu-list button { justify-content: flex-start; text-align: start; }
+.doc-panel-ask { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel); }
+.doc-panel-ask q { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.doc-panel-ask .row { gap: 6px; align-items: center; flex-wrap: wrap; }
+/* A tool's edit of a document, sheet or deck in the chat: a compact card that opens the panel. */
+.item-card { display: flex; align-items: center; gap: 10px; width: min(100%, 420px); margin: 6px 0; padding: 8px 12px; text-align: start; background: var(--panel); border: 1px solid var(--border-strong); border-radius: calc(12px * var(--r-scale, 1)); color: inherit; }
+.item-card:hover { border-color: var(--accent); }
+.item-card-icon { font-size: 22px; }
+.item-card-text { display: grid; min-width: 0; flex: 1; }
+.item-card-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-card-open { color: var(--accent); font-weight: 600; white-space: nowrap; }
 .md-img-ask { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0; padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); font-size: 13.5px; }
 /* The design canvas (DesignBoard.tsx): the chat's screens as frames on a board */
 .design-board { flex: 1; display: flex; flex-direction: column; min-height: 0; }

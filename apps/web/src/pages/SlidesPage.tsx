@@ -94,7 +94,7 @@ export function printDeckPdf(d: Pick<Deck, "title" | "theme" | "slides">) {
 }
 
 /** The deck as an editable .pptx (optional: for whoever needs PowerPoint). */
-function downloadPptx(d: Deck) {
+export function downloadPptx(d: Deck) {
   const files = pptxFiles(d.title, d.slides.map((s) => ({ title: s.title, bullets: s.layout === "two" ? [...s.bullets, ...(s.more ?? [])] : s.layout === "quote" ? s.more ?? [] : s.bullets, notes: s.notes ?? "" })));
   const zip = zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])));
   const a = document.createElement("a");
@@ -257,8 +257,8 @@ function DeckEditor({ id }: { id: string }) {
         <span className="muted small">{saving === "saving" ? L("שומר…", "Saving…") : saving === "saved" ? L("נשמר", "Saved") : ""}</span>
         {!!deck.versions?.length && (
           <select aria-label={L("גרסאות", "Versions")} value="" onChange={(e) => e.target.value && void api<Deck>(`/api/decks/${id}/restore`, { method: "POST", body: { rev: Number(e.target.value) } }).then(setDeck, (er: Error) => toast(er.message))}>
-            <option value="">{L(`גרסה ${deck.rev}`, `Version ${deck.rev}`)} ▾</option>
-            {[...deck.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} {v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
+            <option value="">{`v${deck.ver ?? deck.versions.length + 1}`} ▾</option>
+            {[...deck.versions].reverse().map((v) => <option key={v.rev} value={v.rev}>{L("לחזור לגרסה", "Back to version")} v{v.ver ?? v.rev} · {new Date(v.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</option>)}
           </select>
         )}
         <span className="grow" />
