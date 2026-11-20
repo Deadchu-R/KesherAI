@@ -57,3 +57,20 @@ test("browser bridge: KesherAI's own pane comes first; the extension when asked 
   assert.ok(seen.every((x) => !x.includes("browser")), "the choice is not passed on to the pane");
   await assert.rejects(new BrowserBridge().paneCall("pane-state"), /desktop app/);
 });
+
+test("browser bridge: a screenshot is kept as an asset for the chat's thumbnail (and still goes to the model)", async () => {
+  const b = new BrowserBridge();
+  const sock = fakeSocket(() => ({ dataUrl: `data:image/png;base64,${Buffer.from("png").toString("base64")}` }));
+  b.attach(sock, { browser: "Chrome" });
+  const kept: Array<{ data: string; mimeType: string }> = [];
+  const shot = browserTools(b, async (data, mimeType) => (kept.push({ data: data.toString(), mimeType }), "a1")).find((t) => t.spec.name === "browser_screenshot")!;
+  const ctx = { signal: new AbortController().signal } as never;
+  const r = await shot.run({}, ctx);
+  assert.deepEqual(r.assetIds, ["a1"]);
+  assert.equal(r.images?.[0]?.mimeType, "image/png");
+  assert.deepEqual(kept, [{ data: "png", mimeType: "image/png" }]);
+  // Without a store (or when keeping fails) the step still works, with no thumbnail.
+  const plain = browserTools(b, async () => { throw new Error("disk full"); }).find((t) => t.spec.name === "browser_screenshot")!;
+  assert.equal((await plain.run({}, ctx)).assetIds, undefined);
+  sock.close();
+});

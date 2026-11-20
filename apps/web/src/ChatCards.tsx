@@ -92,9 +92,17 @@ export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<
         <span className="tool-label" dir="auto">{stepLabel({ call, ...(result ? { result } : {}) })}</span>
       </summary>
       {result?.diff && <Diff diff={result.diff} />}
-      {result?.assetIds?.map((id) => (
-        <img key={id} src={withToken(`/api/assets/${id}`)} alt={summary(call.name, call.input)} className="asset" />
-      ))}
+      {/* Pictures the step made (a browser or screen shot, a render) as small thumbnails: the full-size ones and the
+          players show under the whole group (Activity.tsx), so the open step stays short. Tap opens the picture. */}
+      {!!result?.assetIds?.length && (
+        <div className="step-thumbs">
+          {result.assetIds.map((id) => (
+            <a key={id} href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer">
+              <img src={withToken(`/api/assets/${id}`)} alt={summary(call.name, call.input)} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
       {result && !result.diff && <pre className="code" dir="ltr">{result.output}</pre>}
     </details>
   );

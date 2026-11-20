@@ -147,9 +147,10 @@ export class BrowserBridge {
  * never types into password fields.
  *
  * @param b - The bridge.
+ * @param saveShot - Keeps a screenshot as an asset (its id), so the chat shows it as a small picture in the step.
  * @returns The tools, or none when no browser is connected.
  */
-export function browserTools(b: BrowserBridge): AgentTool[] {
+export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeType: string) => Promise<string>): AgentTool[] {
   if (!b.status().connected) return [];
   const both = b.status().pane && b.status().extension;
   const tabArg = {
@@ -215,7 +216,9 @@ export function browserTools(b: BrowserBridge): AgentTool[] {
       async run(input, ctx) {
         const r = await b.call<{ dataUrl: string }>("screenshot", { tabId: input.tabId, browser: input.browser }, ctx.signal);
         const [, mimeType = "image/png", data = ""] = /^data:([^;]+);base64,(.*)$/.exec(r.dataUrl) ?? [];
-        return { output: "(the screenshot)", images: [{ mimeType, data }] };
+        // The chat's thumbnail is a nicety: the model still gets the picture when keeping it fails.
+        const id = saveShot && data ? await saveShot(Buffer.from(data, "base64"), mimeType).catch(() => undefined) : undefined;
+        return { output: "(the screenshot)", images: [{ mimeType, data }], ...(id ? { assetIds: [id] } : {}) };
       },
     },
     {
