@@ -15,6 +15,9 @@ test("Steam: libraries and games from its own files", () => {
   assert.equal(g?.name, "Dota 2");
   assert.equal(g?.bytes, 45_000_000_000);
   assert.equal(g?.uninstallUrl, "steam://uninstall/570");
+  // A game in a library on another drive shows that drive, not C:.
+  assert.equal(g?.drive, "D:");
+  assert.equal(steamGame(acf, "e:/SteamLibrary")?.drive, "E:");
   assert.match(g?.lastPlayed ?? "", /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(steamGame(`"AppState" { "appid" "228980" "name" "Steamworks Common Redistributables" }`, "x"), undefined);
   assert.deepEqual(parseVdf(`"a" { "b" "c" }`), { a: { b: "c" } });
@@ -22,6 +25,7 @@ test("Steam: libraries and games from its own files", () => {
 
 test("Epic: games from the launcher's manifests", () => {
   assert.equal(epicGame(JSON.stringify({ DisplayName: "Fortnite", InstallSize: 30_000_000_000, InstallLocation: "C:\\Games\\Fortnite" }))?.bytes, 30_000_000_000);
+  assert.equal(epicGame(JSON.stringify({ DisplayName: "Fortnite", InstallLocation: "F:\\Epic\\Fortnite" }))?.drive, "F:");
   assert.equal(epicGame("not json"), undefined);
 });
 

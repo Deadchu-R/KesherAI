@@ -14,8 +14,8 @@ type Kind = "video" | "image" | "audio" | "document" | "archive" | "other";
 interface SFile { id: string; name: string; folder: string; bytes: number; kind: Kind; mtime: number; inProject?: boolean }
 interface Card { id: "large" | "old-downloads" | "installers" | "duplicates" | "screenshots" | "compress-videos"; files: SFile[]; bytes: number }
 interface Scan { at: string; kinds: Record<Kind, number>; folders: Array<{ name: string; bytes: number }>; top: Record<Kind, SFile[]>; cards: Card[]; partial: boolean }
-interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string }
-interface Game { name: string; source: "steam" | "epic" | "store" | "xbox"; bytes?: number; folder?: string; uninstallUrl?: string; lastPlayed?: string }
+interface App { id: string; name: string; publisher?: string; bytes?: number; installed?: string; canUninstall: boolean; source: string; uninstallUrl?: string; lastPlayed?: string; drive?: string }
+interface Game { name: string; source: "steam" | "epic" | "store" | "xbox"; bytes?: number; folder?: string; drive?: string; uninstallUrl?: string; lastPlayed?: string }
 const SOURCE_NAME: Record<string, string> = { steam: "Steam", epic: "Epic", store: "Microsoft Store", xbox: "Xbox" };
 interface Compress { running?: { id: string; name: string; percent: number }; queue: string[]; done: Array<{ original: SFile; result: SFile; saved: number }>; failed: Array<{ name: string; error: string }> }
 
@@ -261,10 +261,12 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
   const [games, setGames] = useState<App[] | null>(null);
   const [q, setQ] = useState("");
   const [only, setOnly] = useState<"all" | "games" | "programs" | "store">("all");
+  /** "all", or one drive ("E:") to show only what is installed there. */
+  const [drive, setDrive] = useState("all");
   useEffect(() => {
     void api<App[]>("/api/storage/apps").then(setApps, (e: Error) => toast(e.message));
     // Games (Steam, Epic) and Store/Xbox apps: Windows' own program list leaves them out.
-    void api<Game[]>("/api/storage/games").then((g) => setGames(g.map((x, i) => ({ id: `g${i}`, name: x.name, ...(x.bytes ? { bytes: x.bytes } : {}), canUninstall: !!x.uninstallUrl, source: x.source, ...(x.uninstallUrl ? { uninstallUrl: x.uninstallUrl } : {}), ...(x.lastPlayed ? { lastPlayed: x.lastPlayed } : {}) }))), () => setGames([]));
+    void api<Game[]>("/api/storage/games").then((g) => setGames(g.map((x, i) => ({ id: `g${i}`, name: x.name, ...(x.bytes ? { bytes: x.bytes } : {}), canUninstall: !!x.uninstallUrl, source: x.source, ...(x.uninstallUrl ? { uninstallUrl: x.uninstallUrl } : {}), ...(x.lastPlayed ? { lastPlayed: x.lastPlayed } : {}), ...(x.drive ? { drive: x.drive } : {}) }))), () => setGames([]));
   }, []);
   const all = useMemo(() => {
     // A game Steam or Epic knows may also be in Windows' list: shown once, with the store's size.
@@ -272,7 +274,13 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
     return [...(games ?? []), ...(apps ?? []).filter((a) => !names.has(a.name.toLowerCase()))].sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
   }, [apps, games]);
   const kindOf = (a: App) => (a.source === "steam" || a.source === "epic" || a.source === "xbox" ? "games" : a.source === "store" ? "store" : "programs");
-  const shown = useMemo(() => all.filter((a) => (only === "all" || kindOf(a) === only) && (!q || a.name.toLowerCase().includes(q.toLowerCase()) || a.publisher?.toLowerCase().includes(q.toLowerCase()))), [all, q, only]);
+  // The drives programs are on, with how much each holds (biggest first), for the drive filter.
+  const drives = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of all) if (a.drive) m.set(a.drive, (m.get(a.drive) ?? 0) + (a.bytes ?? 0));
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [all]);
+  const shown = useMemo(() => all.filter((a) => (only === "all" || kindOf(a) === only) && (drive === "all" || a.drive === drive) && (!q || a.name.toLowerCase().includes(q.toLowerCase()) || a.publisher?.toLowerCase().includes(q.toLowerCase()))), [all, q, only, drive]);
   const remove = async (a: App) => {
     if (a.uninstallUrl) {
       if (!window.confirm(L(`לפתוח את ההסרה של ${a.name} ב־${SOURCE_NAME[a.source] ?? a.source}? שם תאשרו בעצמכם.`, `Open ${a.name}'s removal in ${SOURCE_NAME[a.source] ?? a.source}? You confirm it there.`))) return;
@@ -306,6 +314,16 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
+        {drives.length > 1 && (
+          <div className="seg-pills" role="tablist" aria-label={L("כונן", "Drive")}>
+            <button type="button" role="tab" aria-selected={drive === "all"} className={drive === "all" ? "on" : ""} onClick={() => setDrive("all")}>{L("כל הכוננים", "All drives")}</button>
+            {drives.map(([d, bytes]) => (
+              <button key={d} type="button" role="tab" aria-selected={drive === d} className={drive === d ? "on" : ""} onClick={() => setDrive(d)} title={L(`רק מה שמותקן ב־${d}`, `Only what is installed on ${d}`)}>
+                <span dir="ltr">{d}</span>{bytes ? <span className="muted small" dir="ltr">{size(bytes)}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
         {games === null && <p className="muted small">{L("מחפש משחקים ב־Steam, ‏Epic ו־Xbox…", "Looking for games in Steam, Epic and Xbox…")}</p>}
         {!apps ? (
           <p className="muted">{L("קורא את רשימת התוכנות…", "Reading the programs…")}</p>
@@ -314,7 +332,7 @@ function AppsDialog({ onClose }: { onClose: () => void }) {
             {shown.slice(0, 400).map((a) => (
               <li key={a.id} className="row">
                 <span className="stack grow storage-file">
-                  <span dir="auto" className="storage-name">{a.name}</span>
+                  <span dir="auto" className="storage-name">{a.name}{a.drive ? <> <span className="storage-tag" dir="ltr" title={L(`מותקן בכונן ${a.drive}`, `Installed on drive ${a.drive}`)}>{a.drive}</span></> : null}</span>
                   <span className="muted small">{a.bytes ? <span dir="ltr">{size(a.bytes)}</span> : L("גודל לא ידוע", "size unknown")}{SOURCE_NAME[a.source] ? ` · ${SOURCE_NAME[a.source]}` : ""}{a.publisher ? ` · ${a.publisher}` : ""}{a.installed ? ` · ${a.installed}` : ""}{a.lastPlayed ? L(` · שוחק ${a.lastPlayed}`, ` · played ${a.lastPlayed}`) : ""}</span>
                 </span>
                 {a.canUninstall ? <button type="button" onClick={() => void remove(a)}>{L("הסר", "Uninstall")}</button> : a.source === "dpkg" ? <span className="muted small" dir="ltr">sudo apt remove</span> : null}

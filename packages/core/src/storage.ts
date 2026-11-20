@@ -46,6 +46,19 @@ export interface InstalledApp {
   canUninstall: boolean;
   /** Where it comes from (Windows, Flatpak, Debian package). */
   source: "windows" | "flatpak" | "dpkg";
+  /** The Windows drive it is installed on ("C:", "E:"), when known. */
+  drive?: string;
+}
+
+/**
+ * The Windows drive letter a path is on ("C:"), or undefined for network paths, relative paths and other systems.
+ * Quotes and arguments around a command line are ignored (`"E:\Games\uninst.exe" /S` is on E:).
+ *
+ * @param path - A folder, file or command line.
+ */
+export function driveOf(path: string | undefined): string | undefined {
+  const m = /^\s*"?([A-Za-z]):[\\/]/.exec(path ?? "");
+  return m ? `${m[1]!.toUpperCase()}:` : undefined;
 }
 
 /** A cleaning card. */
@@ -362,9 +375,9 @@ export class Storage {
       this.apps.set(id, { app: full, uninstall: uninstall ?? { file: "", args: [] } });
     };
     if (platform() === "win32") {
-      const ps = "$k='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'; Get-ItemProperty $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -and $_.SystemComponent -ne 1 -and -not $_.ParentKeyName } | Select-Object DisplayName,Publisher,EstimatedSize,InstallDate,UninstallString | ConvertTo-Json -Compress";
+      const ps = "$k='HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'; Get-ItemProperty $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -and $_.SystemComponent -ne 1 -and -not $_.ParentKeyName } | Select-Object DisplayName,Publisher,EstimatedSize,InstallDate,UninstallString,InstallLocation,DisplayIcon | ConvertTo-Json -Compress";
       const r = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ps], 30_000);
-      let rows: Array<{ DisplayName: string; Publisher?: string; EstimatedSize?: number; InstallDate?: string; UninstallString?: string }> = [];
+      let rows: Array<{ DisplayName: string; Publisher?: string; EstimatedSize?: number; InstallDate?: string; UninstallString?: string; InstallLocation?: string; DisplayIcon?: string }> = [];
       try {
         const j = JSON.parse(r.out || "[]") as unknown;
         rows = (Array.isArray(j) ? j : [j]) as typeof rows;
@@ -374,8 +387,10 @@ export class Storage {
       for (const a of rows) {
         const u = String(a.UninstallString ?? "").trim();
         const date = /^(\d{4})(\d{2})(\d{2})$/.exec(String(a.InstallDate ?? ""));
+        // The install folder when the program gives one, else where its icon or uninstaller is (MsiExec has none).
+        const drive = driveOf(String(a.InstallLocation ?? "")) ?? driveOf(String(a.DisplayIcon ?? "")) ?? driveOf(u);
         add(
-          { name: String(a.DisplayName).slice(0, 200), ...(a.Publisher ? { publisher: String(a.Publisher).slice(0, 120) } : {}), ...(a.EstimatedSize ? { bytes: Number(a.EstimatedSize) * 1024 } : {}), ...(date ? { installed: `${date[1]}-${date[2]}-${date[3]}` } : {}), canUninstall: false, source: "windows" },
+          { name: String(a.DisplayName).slice(0, 200), ...(a.Publisher ? { publisher: String(a.Publisher).slice(0, 120) } : {}), ...(a.EstimatedSize ? { bytes: Number(a.EstimatedSize) * 1024 } : {}), ...(date ? { installed: `${date[1]}-${date[2]}-${date[3]}` } : {}), ...(drive ? { drive } : {}), canUninstall: false, source: "windows" },
           u ? { file: "cmd.exe", args: ["/d", "/s", "/c", `start "" ${u}`] } : undefined,
         );
       }

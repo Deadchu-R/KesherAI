@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, existsSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { fileKind, isProjectRoot, parseSize, Storage } from "./storage.js";
+import { driveOf, fileKind, isProjectRoot, parseSize, Storage } from "./storage.js";
 
 test("storage: kinds, cards (large, old downloads, installers, duplicates, screenshots) and trash by id only", async (t) => {
   const home = mkdtempSync(join(tmpdir(), "st-"));
@@ -70,6 +70,16 @@ test("storage: files inside projects are never offered as duplicates and are mar
   const big = card("large").find((f) => f.name === "big.mp4");
   assert.equal(big?.inProject, true);
   assert.equal(r.top.other.find((f) => f.folder === `~${sep}Downloads`)?.inProject, undefined);
+});
+
+test("storage helpers: the drive of an install folder or command line", () => {
+  assert.equal(driveOf("E:\\SteamLibrary"), "E:");
+  assert.equal(driveOf("c:/Games"), "C:");
+  assert.equal(driveOf('"D:\\Tools\\uninst.exe" /S'), "D:");
+  assert.equal(driveOf("MsiExec.exe /X{1234}"), undefined);
+  assert.equal(driveOf("\\\\server\\share\\app"), undefined);
+  assert.equal(driveOf("/usr/bin"), undefined);
+  assert.equal(driveOf(undefined), undefined);
 });
 
 test("storage helpers: project roots", () => {

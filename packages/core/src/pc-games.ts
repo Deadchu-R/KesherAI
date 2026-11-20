@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { driveOf } from "./storage.js";
 
 /** A game or Store app. */
 export interface FoundApp {
@@ -15,6 +16,8 @@ export interface FoundApp {
   bytes?: number;
   /** Where it is installed. */
   folder?: string;
+  /** The drive it is installed on ("C:", "E:"), from its folder or its library. */
+  drive?: string;
   /** A link that starts the store's own uninstall (Steam), or opens the store. */
   uninstallUrl?: string;
   lastPlayed?: string;
@@ -79,6 +82,7 @@ export function steamGame(acf: string, library: string): FoundApp | undefined {
     source: "steam",
     ...(Number(s.SizeOnDisk) > 0 ? { bytes: Number(s.SizeOnDisk) } : {}),
     ...(s.installdir ? { folder: join(library, "steamapps", "common", s.installdir) } : {}),
+    ...(driveOf(library) ? { drive: driveOf(library)! } : {}),
     uninstallUrl: `steam://uninstall/${encodeURIComponent(s.appid)}`,
     ...(last > 0 ? { lastPlayed: new Date(last * 1000).toISOString().slice(0, 10) } : {}),
   };
@@ -93,7 +97,7 @@ export function epicGame(json: string): FoundApp | undefined {
   try {
     const j = JSON.parse(json) as { DisplayName?: string; InstallSize?: number; InstallLocation?: string; bIsApplication?: boolean; AppCategories?: string[] };
     if (!j.DisplayName || j.bIsApplication === false) return undefined;
-    return { name: j.DisplayName.slice(0, 200), source: "epic", ...(j.InstallSize ? { bytes: Number(j.InstallSize) } : {}), ...(j.InstallLocation ? { folder: j.InstallLocation } : {}), uninstallUrl: "com.epicgames.launcher://store" };
+    return { name: j.DisplayName.slice(0, 200), source: "epic", ...(j.InstallSize ? { bytes: Number(j.InstallSize) } : {}), ...(j.InstallLocation ? { folder: j.InstallLocation } : {}), ...(driveOf(j.InstallLocation) ? { drive: driveOf(j.InstallLocation)! } : {}), uninstallUrl: "com.epicgames.launcher://store" };
   } catch {
     return undefined;
   }
@@ -158,7 +162,7 @@ export async function findGamesAndStoreApps(): Promise<FoundApp[]> {
     // Xbox PC games live in X:\XboxGames\<name>\Content, which can be measured; WindowsApps cannot be read.
     const xbox = !!r.InstallLocation && /\\XboxGames\\/i.test(r.InstallLocation);
     const bytes = xbox && existsSync(r.InstallLocation!) ? await folderBytes(r.InstallLocation!) : undefined;
-    out.push({ name: r.Name.replace(/^Microsoft\./, "").slice(0, 200), source: xbox ? "xbox" : "store", ...(bytes ? { bytes } : {}), ...(r.InstallLocation ? { folder: r.InstallLocation } : {}), uninstallUrl: "ms-settings:appsfeatures" });
+    out.push({ name: r.Name.replace(/^Microsoft\./, "").slice(0, 200), source: xbox ? "xbox" : "store", ...(bytes ? { bytes } : {}), ...(r.InstallLocation ? { folder: r.InstallLocation } : {}), ...(driveOf(r.InstallLocation) ? { drive: driveOf(r.InstallLocation)! } : {}), uninstallUrl: "ms-settings:appsfeatures" });
   }
   return out.sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
 }
