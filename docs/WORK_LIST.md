@@ -72,20 +72,20 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 ## Next focus (Roee, 2026-11-20): finish the agents work, then focused usability (Gemini research in RESEARCH_LOG)
 - ✅ Hub: why the PC showed Off (link never started at launch / after pairing; dead links) fixed; Claude's inbox tasks
   in the hub ("from Claude"); this chat's agents in the hub (tools/hub-report, group "Claude chat"). In 0.6.402.
-- 👤 Roee: update the PC to 0.6.402, check it shows Online, turn on tasks + agent activity for it; approve the two inbox
+- ✅ Roee: update the PC to 0.6.402, check it shows Online, turn on tasks + agent activity for it; approve the two inbox
   tasks (c-20261119-01 local, -02 Antigravity). Next chat: pair it with tools/hub-report (he approves the code).
 - 👤 Chat 2 (2026-11-20): hub-report cannot reach hub.roeetal.com from this cloud session (proxy 403, host not on the
   session's network allowlist). Roee: add hub.roeetal.com to the Claude Code environment's allowed hosts, then pair.
   Inbox check 14:15: both tasks still without results/ and no agy/* branch (waiting on the PC at 0.6.402 + Run).
-- 👤 Chat 3 (14:15): still 403 from the cloud (hub and Google's Gemini hosts); inbox unchanged since 2026-11-19 19:50.
+- 👤 Chat 3 (14:15): still 403 (hosts added to the environment 17:1x; works from the next chat) from the cloud (hub and Google's Gemini hosts); inbox unchanged since 2026-11-19 19:50.
 - ✅ Gemini second-opinion guide (Roee's PDF): via the inbox until the hosts are allowed (GEMINI_RESEARCH.md).
 - ✅ Usability gap list against the code (RESEARCH_LOG 2026-11-20; written by a parallel chat 2, which Roee closed: chat 3 continues).
-- 🔨 Batch 1 server: cache_prompt + id_slot for llama.cpp, cached tokens in the usage event, stable tool order (Opus agent).
+- ✅ Batch 1 server: cache_prompt + id_slot for llama.cpp, cached tokens in the usage event, stable tool order (Opus agent).
 - ✅ Batch 1 server (cache_prompt, id_slot, cached tokens, stable tool order) and screens (token line under answers, cache in Context); fixed: Store apps counted as games paused the inbox.
 - ✅ Design doc boards for the token line; 0.6.403 available.
 - ✅ PC Health duplicates: never offer files inside projects (Unreal Content, git repos, node_modules); it offered Unreal StarterContent .uasset copies (Roee's cleanup 15:35: only 2 safe copies removed).
 - ✅ PC Health: show the drive of each program/game; a 'move to another drive' for LM Studio / Ollama models (Roee's C: filled up).
-- ⬜ Roee (14:33): the hub must show ALL his tasks and what every agent works on, from any device he signs in with (today: "Kept on this device, the hub keeps no tasks"). Research how others sync (sealed per-account store vs devices publishing sealed snapshots), keep end-to-end sealing; then design doc, then build. Include kesher-inbox tasks and live agents.
+- ✅ Roee (14:33): the hub must show ALL his tasks and what every agent works on, from any device he signs in with (today: "Kept on this device, the hub keeps no tasks"). Research how others sync (sealed per-account store vs devices publishing sealed snapshots), keep end-to-end sealing; then design doc, then build. Include kesher-inbox tasks and live agents.
   ✅ Research (RESEARCH_LOG 2026-11-20, account key K, sealed records). Roee: inbox tasks show in full on every device; done tasks kept 90 days; recovery code: default at first setup (he asked what happens if everything resets: explained). ✅ Step 1 (shared seal module, 4396266). Roee (15:34): store the tasks in HIS Google Drive, fetched through the Google account on his devices and the hub; ✅ research (c1f9947: appDataFolder, create-only record files, K file in Drive). ✅ Steps 1-2 (record names + Drive store, d01aece). ✅ Steps 3-5 (PC side + Settings, hub page + phone, agent snapshots + sync ping). In 0.6.405 (3-4); 5 on main. 👤 Google Cloud: Drive API ✅, drive.appdata ✅, privacy page live (roeetal.com/KesherAI/privacy/), branding links filled; Roee saves Branding and publishes (Audience). 👤 Later (Roee 15:45, resting): Google Cloud setup (Drive API, drive.appdata scope, publish to In production), reconnect Google on PC and phone., then the design doc, then batch builds.
 - ✅ 0.6.406 on the PC (Roee 18:xx); tasks sync connected (Drive OK, 0 tasks at 19:22, being checked). PC cleanup: LM Studio models → E:\LMStudio\models, C: copy deleted; 20 compressed videos' originals binned and bin emptied (C: ~160 GB free).
 - 👤 Run inbox tasks c-20261119-01, -02 and c-20261120-01 (Antigravity research: browser + computer control).
@@ -99,11 +99,11 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 0.6.397 and 0.6.398 are available in the app.
 - ✅ 0.6.399 is available too.
 - ✅ 0.6.400 is available (Roee, 11:16: "add the 2 things, then a build and stop"). Stopped after it.
-- 🔨 0.6.404 building (PC Health project-safe cleanup + drive per program; Drive sync groundwork). Build 3 of 5 since scan 166.
+- ✅ 0.6.404, 0.6.405, 0.6.406 available (PC Health project-safe cleanup + drive per program; Drive sync groundwork). Build 3 of 5 since scan 166.
 - ✅ 0.6.403 is available (token/cache line, prompt cache).
 - ✅ 0.6.402 is available (2026-11-20 ~13:55): the PC stays connected to the hub, inbox tasks and live agents in the hub.
 - ✅ 0.6.401 is available (19:5x): chat sub-agents, Kesher Cloud (PC pairing), task inbox, Phone/Computer/Cloud, scene guests, AI in video and sound. Two tasks on kesher-inbox (c-20261119-01 local, -02 Antigravity).
-- 🔨 Live agent tracking in the hub (Opus agent; on Roee's last usage credits, commits per step).
+- ✅ Live agent tracking in the hub (Opus agent; on Roee's last usage credits, commits per step).
 
 ## Roee (2026-11-20 17:12): add to KesherAI
 - ⬜ Browser control + debugging like Claude in Chrome, for the user's own Chrome (extension) AND KesherAI's built-in browser: open tabs, read the page as text/accessibility tree, click/type, console messages, network requests, run JS, screenshots/GIF; site permissions and the same safety rules (no passwords, ask before submitting). Research first (Claude in Chrome, Playwright MCP, Chrome DevTools MCP, browser-use).
@@ -115,7 +115,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - 👤 When convenient: try the 3D editor's "A model from words" (ComfyUI; asks before downloading Hunyuan3D 2, ~4.9 GB).
 - 👤 When convenient: try "continue this shot" (needs the Wan 2.2 5B flow in ComfyUI; it asks before downloading).
 - 👤 When convenient: try sound effects (needs ComfyUI 0.22+; it asks before downloading 3.5 GB).
-- 👤 Install 0.6.400 from the app and check (what to check is in the chat's "available" messages).
+- ✅ Install 0.6.400 from the app and check (what to check is in the chat's "available" messages).
 - 👤 The guest test from the phone (shared projects).
 - 👤 A stronger model for writing chat reports.
 - 👤 Unreal AutoShooter has no levels: noted only, not fixed (Roee's call).
