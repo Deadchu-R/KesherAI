@@ -73,6 +73,8 @@ public class KesherGooglePlugin extends Plugin {
         if (t.has("refresh_token")) r.put("refreshToken", t.optString("refresh_token"));
         r.put("expiresIn", t.optInt("expires_in", 3600));
         r.put("idToken", t.optString("id_token", ""));
+        // The scopes Google granted (space-separated), so the app knows whether Drive's app folder is allowed.
+        r.put("scope", t.optString("scope", ""));
         return r;
     }
 

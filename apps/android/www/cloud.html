@@ -68,8 +68,30 @@
       return x.origin + x.pathname.replace(/\/+$/, "");
     } catch { return ""; }
   }
+  /**
+   * A Google access token for the hub page's tasks list (Drive's hidden app folder), from the app's own Google sign-in,
+   * so the page needs no hourly "Reconnect Drive" tap. Only when that sign-in granted `drive.appdata` (signed in before
+   * it was asked: sign out and in again once). Never stored by the page; it goes in the address fragment, which is not
+   * sent to any server.
+   */
+  async function driveToken() {
+    const Google = window.Capacitor?.Plugins?.KesherGoogle;
+    let g = null;
+    try { g = JSON.parse(localStorage.getItem("kesherai-google") || "null"); } catch { /* none */ }
+    if (!Google || !g?.refreshToken || !String(g.scope || "").split(" ").includes("https://www.googleapis.com/auth/drive.appdata")) return null;
+    if (g.accessToken && g.expires > Date.now() + 5 * 60_000) return { token: g.accessToken, secs: Math.floor((g.expires - Date.now()) / 1000) };
+    const c = await fetch("google-client.json").then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (!c?.clientId) return null;
+    const r = await Google.refresh({ clientId: c.clientId, clientSecret: c.clientSecret, refreshToken: g.refreshToken });
+    localStorage.setItem("kesherai-google", JSON.stringify({ ...g, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, ...(r.scope ? { scope: r.scope } : {}) }));
+    return { token: r.accessToken, secs: r.expiresIn };
+  }
   /** Opens the hub page, which shows the Phone / Computer / ☁ Cloud switch when it knows it runs in the app. */
-  const open = (hub) => location.replace(`${hub}/?app=${encodeURIComponent(location.origin)}`);
+  const open = async (hub) => {
+    const t = await Promise.race([driveToken().catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
+    const frag = t ? `#kdt=${encodeURIComponent(t.token)}&kde=${Math.max(60, Math.min(3600, Math.floor(t.secs)))}` : "";
+    location.replace(`${hub}/?app=${encodeURIComponent(location.origin)}${frag}`);
+  };
 
   const params = new URLSearchParams(location.search);
   const given = clean(params.get("hub") || "");
@@ -78,7 +100,7 @@
   if (hub && !params.has("change")) {
     $("opening").hidden = false;
     $("change").hidden = false;
-    open(hub);
+    void open(hub);
   } else {
     $("empty").hidden = false;
     $("url").value = hub;
@@ -88,7 +110,7 @@
     const h = clean($("url").value);
     if (!h) { $("status").textContent = lang === "he" ? "הכתובת צריכה להתחיל ב-https://" : "The address must start with https://"; $("status").className = "small error"; return; }
     localStorage.setItem(KEY, h);
-    open(h);
+    void open(h);
   };
   $("save").onclick = save;
   $("form").onsubmit = (e) => { e.preventDefault(); save(); };

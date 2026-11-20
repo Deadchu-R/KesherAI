@@ -359,7 +359,7 @@
     if (!g?.refreshToken || !c?.clientId) return null;
     if (g.accessToken && g.expires > Date.now() + 60_000) return g.accessToken;
     const r = await Google.refresh({ clientId: c.clientId, clientSecret: c.clientSecret, refreshToken: g.refreshToken });
-    localStorage.setItem(GKEY, JSON.stringify({ ...g, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000 }));
+    localStorage.setItem(GKEY, JSON.stringify({ ...g, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, ...(r.scope ? { scope: r.scope } : {}) }));
     return r.accessToken;
   }
   async function driveJson(token, q) {
@@ -459,13 +459,13 @@
         await Bg?.start({ title: "KesherAI", text: lang === "he" ? "מתחבר עם Google…" : "Signing in with Google…" }).catch(() => undefined);
         let r;
         try {
-          r = await Google.signIn({ clientId: c.clientId, clientSecret: c.clientSecret, scope: "openid email profile https://www.googleapis.com/auth/drive.file" });
+          r = await Google.signIn({ clientId: c.clientId, clientSecret: c.clientSecret, scope: "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata" });
         } finally {
           await Bg?.stop().catch(() => undefined);
         }
         if (!r.refreshToken) throw new Error("Google did not return a refresh token.");
         const who = claimsOf(r.idToken);
-        localStorage.setItem(GKEY, JSON.stringify({ refreshToken: r.refreshToken, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, email: who.email || "", name: who.name || "", picture: /^https:\/\/[\w.-]+\.googleusercontent\.com\//.test(who.picture || "") ? who.picture : "" }));
+        localStorage.setItem(GKEY, JSON.stringify({ refreshToken: r.refreshToken, accessToken: r.accessToken, expires: Date.now() + r.expiresIn * 1000, scope: r.scope || "", email: who.email || "", name: who.name || "", picture: /^https:\/\/[\w.-]+\.googleusercontent\.com\//.test(who.picture || "") ? who.picture : "" }));
         await showGoogle();
       }
       $("status").className = "";
