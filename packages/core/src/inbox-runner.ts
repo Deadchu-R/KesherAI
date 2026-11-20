@@ -630,7 +630,7 @@ export class TaskInbox {
 
   /**
    * Runs an Antigravity task, only from the user's own action: a press of Run on this computer, or a "Run" answer to
-   * the PC's ask (see {@link answerRun}); one at a time, within the daily cap and the quota, when the PC is not busy.
+   * the PC's ask (see {@link answerRun}); one at a time, within the daily cap and the quota (a game or a busy PC doesn't hold it back: it runs in the cloud).
    * Returns at once; the run goes on in the background.
    *
    * @param id - The task.
@@ -646,8 +646,9 @@ export class TaskInbox {
     delete t.runAsk;
     const now = this.now();
     const today = this.today();
-    const busy = await this.d.busy();
-    if (!busy.free) throw fail(`The PC is busy: ${busy.reasons.join(", ")}.`, 409);
+    // No "PC is busy" gate here: Antigravity works in Google's cloud, and the PC only fetches and writes a git
+    // worktree, so a game, an open editor or a busy card doesn't hold it back (Roee, 2026-11-20). The busy rules
+    // still hold back work that runs on this PC itself (the local model, self-work).
     const repo = this.repo();
     // Start from the newest base on GitHub (fetch only reads).
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);

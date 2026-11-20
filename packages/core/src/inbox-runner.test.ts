@@ -114,7 +114,8 @@ async function inboxFor(repo: string, root: string, write: Record<string, string
     startAgent: (_cwd, h) => AcpAgent.connect(fakeAgy(write, seen), h),
     board,
     notify: (t, b) => void notes.push(`${t} ${b}`),
-    busy: async () => ({ free: true, reasons: [] }),
+    // A game is running: Antigravity runs in the cloud, so Run still goes ahead.
+    busy: async () => ({ free: false, reasons: ["game: Elden Ring"] }),
     me: { username: "someone", home: join(root, "home", "someone") },
     now,
     approvalMs: 300,

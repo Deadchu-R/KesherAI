@@ -132,7 +132,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
       </div>
 
       <div className="row wrap small tinbox-status">
-        <span className={`tinbox-chip ${s.busy.free ? "good" : "warn"}`}>● {s.busy.free ? L("המחשב פנוי", "The PC is free") : L("המחשב עסוק", "The PC is busy")}{s.busy.reasons.length ? `: ${s.busy.reasons.join(", ")}` : s.busy.gpu !== undefined ? `: GPU ${s.busy.gpu}%` : ""}</span>
+        <span className={`tinbox-chip ${s.busy.free ? "good" : "warn"}`}>● {s.busy.free ? L("המחשב פנוי", "The PC is free") : L("המחשב עסוק", "The PC is busy")}{s.busy.reasons.length ? `: ${s.busy.reasons.join(", ")}` : s.busy.gpu !== undefined ? `: GPU ${s.busy.gpu}%` : ""}{!s.busy.free && L(" · Antigravity רץ בכל זאת (בענן)", " · Antigravity still runs (in the cloud)")}</span>
         <span className="tinbox-chip" dir="ltr">⟳ {s.settings.branch}{s.lastFetch ? ` · ${ago(Date.now() - s.lastFetch)}` : ""}</span>
         <button type="button" className="chip-text" disabled={busy || !s.settings.enabled} onClick={() => void act("/api/task-inbox/sync")}>{L("בדוק עכשיו", "Check now")}</button>
       </div>
