@@ -5,6 +5,7 @@ import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
 import { clampInt, hierarchyCs, unityEditTools, type UnityEditDeps } from "./unity-edit-tools.js";
+import { UNITY_EDIT_TOOLS, type UnityTurnHandle } from "./unity-turns.js";
 
 /**
  * Unity in the chat, through Unity's own CLI (`unity`), the way Unity
@@ -112,8 +113,9 @@ function compileReport(code: number, out: string, err: string): string {
  * @param saveAsset - Keeps a picture in the library; returns its id.
  * @param targetPhones - The phones the user builds for (Android frame rate).
  * @param readAsset - Reads a library picture by id (for unity_import_sprite and materials).
+ * @param turn - The chat's turn in Unity (unity-turns.ts): its changes open one Undo group per turn.
  */
-export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => [], readAsset?: UnityEditDeps["readAsset"]): AgentTool[] {
+export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => [], readAsset?: UnityEditDeps["readAsset"], turn?: UnityTurnHandle): AgentTool[] {
   const project = () => unity.activeProject;
   const at = (): string[] => (project() ? ["--project-path", project()!] : []);
   const need = () => {
@@ -132,7 +134,7 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
     }
     return typeof v === "string" ? v : JSON.stringify(v ?? "Done.");
   };
-  return [
+  const tools: AgentTool[] = [
     {
       risk: "read",
       spec: {
@@ -572,6 +574,9 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
       },
     },
   ];
+  if (!turn) return tools;
+  // One Undo step per chat turn: a tool that changes the Editor opens the turn's group first.
+  return tools.map((t) => (UNITY_EDIT_TOOLS.has(t.spec.name) ? { ...t, run: async (input, ctx) => (await turn.beforeEdit(), t.run(input, ctx)) } : t));
 }
 
 /** Checks component type names. @returns The names, or a plain-words refusal. */

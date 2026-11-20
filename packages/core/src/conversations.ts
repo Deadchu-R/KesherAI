@@ -22,6 +22,7 @@ import { projectAgents, type AgentDef } from "./agents.js";
 import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { gameTools } from "./chat-tools-games.js";
+import { unityTurns } from "./unity-turns.js";
 import { computerGroup, forTelegram } from "./chat-tool-groups.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
@@ -723,6 +724,16 @@ export class ConversationManager {
     session.on("event", (e: { type: string; status?: string; message?: string }) => {
       if (e.type === "status" && e.status === "error") this.deps.faults?.add({ kind: "chat", where: `chat (${session.modelId})`, message: e.message ?? "failed", chatId: id });
     });
+    // Unity: one Undo step per turn (unity-turns.ts). The turn's first Unity change opens a named group; its end folds
+    // every step since into it, so one Ctrl+Z in Unity takes back the whole turn.
+    if (this.deps.unity) {
+      const turns = unityTurns(this.deps.unity);
+      session.on("event", (e: AgentEvent) => {
+        if (e.type !== "status") return;
+        if (e.status === "running") turns.begin(id, [...session.events].reverse().find((x): x is Extract<AgentEvent, { type: "user" }> => x.type === "user")?.text ?? "");
+        else if (e.status === "idle" || e.status === "error") void turns.end(id).catch(() => undefined);
+      });
+    }
     // When the agent is free again, the next queued message goes; with a goal, it is checked first.
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status" || (e.status !== "idle" && e.status !== "error")) return;

@@ -12,6 +12,7 @@ import type { JobStore } from "./jobs.js";
 import { BUILD_RESEARCH_NOTE } from "./known-issues.js";
 import { chosenPhones, phoneNote, type Phone } from "./phones.js";
 import { UNITY_NOTE, unityTools } from "./unity-tools.js";
+import { unityTurns } from "./unity-turns.js";
 import { UNREAL_NOTE, unrealTools } from "./unreal-tools.js";
 import { GODOT_IDLE_NOTE, GODOT_NOTE, godotTools } from "./godot-tools.js";
 import { MOD_NOTE, modTools } from "./game-mods.js";
@@ -38,7 +39,7 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     ? unityTools(deps.unity, join(deps.outputsDir, id ?? "unity"), async (data, mimeType) => (await deps.assets.save(data, mimeType, { meta: { use: "unity-screenshot" } })).id, phones, async (assetId) => {
         const got = await deps.assets.get(assetId);
         return got && got.asset.mimeType.startsWith("image/") ? { data: got.data, mimeType: got.asset.mimeType } : undefined;
-      })
+      }, id ? unityTurns(deps.unity).handle(id) : undefined)
     : [];
   // Fewer tokens: the long Unity guide and every Unity tool only while a Unity project is in use.
   if (unity.length && p.unityInChat) notes.push(UNITY_NOTE);
