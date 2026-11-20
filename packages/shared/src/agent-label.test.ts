@@ -56,3 +56,16 @@ test("a viewer keeps the newest label even when the newest state is older, and c
   assert.equal(c.state.note, undefined);
   assert.deepEqual(agentName(c.state), { name: "Look into the login bug" });
 });
+
+test("the assign command and its answer cross the protocol; an unknown target is refused", async () => {
+  const { helperHandoff, parseAssignTo } = await import("./task-assign.js");
+  const c = parseSealedBody({ type: "command", commandId: "c1", action: "assign", taskId: "r-1", to: "helper:build", confirm: true }, "command");
+  assert.ok(c && c.type === "command");
+  assert.equal(c.to, "helper:build");
+  assert.equal(c.confirm, true);
+  assert.equal(parseSealedBody({ type: "command", commandId: "c1", action: "assign", taskId: "r-1", to: "root" }, "command"), null);
+  const r = parseSealedBody({ type: "command_result", commandId: "c1", taskId: "r-1", ok: false, text: "x", ask: "running" }, "command_result");
+  assert.ok(r && r.type === "command_result" && r.ask === "running");
+  assert.equal(parseAssignTo("helper:operate"), undefined);
+  assert.ok(!helperHandoff("build", "t", "a ``` b").includes("a ``` b"), "the task's text cannot close the quote");
+});

@@ -18,7 +18,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { beaconSecret, branding, features } from "@kesher/shared";
+import { beaconSecret, branding, features, helperHandoff, parseWorkList } from "@kesher/shared";
 import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
@@ -67,6 +67,7 @@ import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxRunId, inboxSnapshot, type RunSnapshot } from "./agent-activity.js";
 import { AgentLabels } from "./agent-labels.js";
+import { assignTask, type AssignDeps } from "./task-assign.js";
 
 /** The hub approval list's name for the task inbox's run asks. */
 const INBOX_ASKS = "task-inbox";
@@ -603,6 +604,29 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       services.tasksSync?.observeAgent(labelled(snap), t.summary, true);
     }, () => undefined);
   });
+  // "Who does it": the same steps from the app's routes and from the hub (task-assign.ts).
+  const assignDeps: AssignDeps = {
+    task: (id) => taskInbox.task(id).catch(() => undefined),
+    fromDrive: async (id) => services.tasksSync?.inboxIdOf(id),
+    workItem: async (id) => {
+      const text = await taskInbox.workList().catch(() => undefined);
+      const item = text === undefined ? undefined : parseWorkList(text).find((i) => i.id === id);
+      return item && { title: item.title, text: item.text };
+    },
+    stop: (id) => taskInbox.stop(id),
+    reassign: (id, to, again) => taskInbox.reassign(id, to, { again }),
+    add: (input) => taskInbox.add(input),
+    toChat: async (role, title, text) => {
+      const repo = config.taskInbox.repo;
+      if (!repo) throw new Error("Pick the git project for the task inbox in Settings > Task inbox first.");
+      const chatTitle = `${role === "build" ? "🛠️" : role === "research" ? "📚" : "🔎"} ${title}`.slice(0, 120);
+      const chat = await services.conversations.create({ kind: "code", workspace: repo, title: chatTitle });
+      void services.conversations.send(chat.id, helperHandoff(role, title, text)).catch(() => undefined);
+      return chatTitle;
+    },
+    movedOut: (id, where) => taskInbox.movedOut(id, where),
+  };
+  services.assignTask = (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm);
   // A chat's helper that ended in the background or waits for an answer: on this computer and the phone (notify.ts).
   const chatTitle = (id: string) => library.summary(id)?.title ?? "KesherAI";
   helperRuns.on("end", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperEnd(r, chatTitle(r.chatId)));
@@ -652,6 +676,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         taskId,
         from,
       ),
+    // "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts).
+    assign: (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm),
     // A name and note for an agent, from the owner's phone or hub page (hub-commands.ts).
     agentLabel: (runId, label) =>
       agentLabelCommand(

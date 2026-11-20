@@ -257,6 +257,23 @@ test("inbox: a declined task file, the daily cap, and the quota", async () => {
   }
 });
 
+test("inbox: Who does it — a task goes back in the queue for the new executor, or moves out to a chat", async () => {
+  const { root, repo } = await setup({ "c-20261120-01": TASK("c-20261120-01") });
+  const { inbox } = await inboxFor(repo, root, {}, { prompts: 0 });
+  try {
+    await inbox.fromHub({ taskId: "T-88", title: "From the phone", spec: "Fix the gap" }, "t9");
+    let t = await inbox.reassign("h-t-88", "local");
+    assert.deepEqual([t.runBy, t.status, !!t.runAsk], ["local", "queued", false]);
+    t = await inbox.reassign("h-t-88", "antigravity");
+    assert.deepEqual([t.runBy, t.status, !!t.runAsk], ["antigravity", "waiting", true], "Antigravity asks for Run again");
+    t = await inbox.movedOut("h-t-88", "to a build agent in the chat \"Fix\"");
+    assert.equal(t.status, "skipped");
+    assert.match(t.note ?? "", /^Moved: to a build agent/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("inbox: a chat agent's message ask — one answer, one message, counted against the same daily limit", async () => {
   const root = mkdtempSync(join(tmpdir(), "kesher-inbox-"));
   let clock = Date.now();

@@ -238,3 +238,10 @@ button.chip { cursor: pointer; min-height: 30px; }
 .trow .c-act:has(.wrapl) { width: auto; flex-basis: 100%; }
 /* The Tasks list's groups: Agents · Antigravity · PC · Claude (taskGroups in page/app.ts). */
 .trow.ghead { gap: 8px; padding-block: 7px; background: #18181b; cursor: default; font-size: 13px; }
+/* Who does it (assign.ts; boards HubAssign, PhoneHubAssign): the list wraps, each choice on its own row. */
+.assign { gap: 6px; }
+.assign-list { display: flex; flex-direction: column; border: 1px solid #2f2f35; border-radius: 10px; overflow: hidden; }
+.assign-opt { text-align: start; width: 100%; background: none; border: 0; border-top: 1px solid #222226; color: inherit; gap: 8px; align-items: flex-start; }
+.assign-opt:first-child { border-top: 0; }
+.assign-opt.sel { background: #a5b4ff1a; }
+.wl-assign { padding: 4px 12px 10px; }

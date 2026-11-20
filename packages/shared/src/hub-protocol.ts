@@ -8,6 +8,7 @@
  * the phone page share one copy.
  */
 import { cleanAgentLabel, type AgentLabel } from "./agent-label.js";
+import { parseAssignTo, type AssignTo } from "./task-assign.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -214,10 +215,12 @@ export type SealedBody =
   /**
    * The owner's press on the hub page or the phone, for a task of a PC's task inbox (see {@link HubCommandAction}).
    * `agent-label`: `taskId` is an agent run's id and `label` its new name and note (empty fields clear them).
+   * `assign`: `taskId` is an inbox task (or its Drive record) or a work-list item, `to` who does it now, `confirm` the
+   * user's yes to stopping a running task or running a finished one again (task-assign.ts).
    */
-  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel }
-  /** The PC's answer to a command: done, or why not (a short line). */
-  | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string }
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean }
+  /** The PC's answer to a command: done, or why not (a short line); `ask`: an `assign` that needs the user's yes. */
+  | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string; ask?: "running" | "finished" }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
   /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
   | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
@@ -228,9 +231,10 @@ export type SealedBody =
  * What the owner can press for a task of a PC's task inbox from another device: `inbox-run` runs a task that waits for
  * Run (as the PC's own Run button, one press one run, within the daily limit), `inbox-cancel` skips a waiting task or
  * stops a running one. The task is named by its inbox id or by its Google Drive record id. `agent-label` renames an
- * agent run and sets its note (agent-label.ts); the PC keeps the label and sends the run's state again.
+ * agent run and sets its note (agent-label.ts); the PC keeps the label and sends the run's state again. `assign` gives
+ * a task or a work-list item to another executor ("Who does it", task-assign.ts).
  */
-export type HubCommandAction = "inbox-run" | "inbox-cancel" | "agent-label";
+export type HubCommandAction = "inbox-run" | "inbox-cancel" | "agent-label" | "assign";
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -605,12 +609,16 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
     case "command":
-      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label")) return null;
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label" && b.action !== "assign")) return null;
+      if (b.action === "assign") {
+        const to = parseAssignTo(b.to);
+        return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
+      }
       if (b.action === "agent-label") return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
       return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
     case "command_result":
       if (!isHubId(b.commandId) || !isHubId(b.taskId)) return null;
-      return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300) };
+      return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300), ...(b.ask === "running" || b.ask === "finished" ? { ask: b.ask } : {}) };
     case "approvals":
       if (!Array.isArray(b.items)) return null;
       return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a): a is HubApproval => !!a), at: num(b.at) };

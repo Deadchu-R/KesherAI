@@ -22,6 +22,7 @@ import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSourc
 import { deviceIcon, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
 import { SNAPSHOT_SOURCE, type SyncedAgent } from "./drive-view.js";
+import { assignBox } from "./assign.js";
 
 /** What the agents view needs from the page. */
 export interface AgentsView {
@@ -370,6 +371,8 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
     ),
     doing ? doingLine(doing) : null,
     labelSection(v, c, pc),
+    // An inbox run is a task of its PC's inbox: it can be given to another executor ("Who does it").
+    c.runId.startsWith("in-") ? h("section", { class: "card pad" }, assignBox({ device: v.device, render: v.render, taskId: c.runId.slice(3), pcs: pc?.online ? [pc] : [], current: c.state.source === "antigravity" ? "antigravity" : undefined })) : null,
     s.summary && !isGoing(c) ? h("section", { class: "card pad sm lines" }, s.summary) : null,
     s.fileNames.length ? h("section", { class: "sec" }, h("h3", { class: "sm" }, L(`קבצים שנגעו בהם (${s.files})`, `Files touched (${s.files})`)), h("ul", { class: "files" }, s.fileNames.map((f) => h("li", { class: "mono xs ell", dir: "ltr" }, f)))) : s.files ? h("div", { class: "mut sm" }, L(`נגע ב-${s.files} קבצים (השמות לא משותפים; במחשב: הגדרות › ענן Kesher).`, `Touched ${s.files} files (names are not shared; on the PC: Settings › Kesher Cloud).`)) : null,
     s.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono", dir: "ltr" }, s.branch)) : null,

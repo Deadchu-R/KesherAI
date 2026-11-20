@@ -877,23 +877,49 @@ export class TaskInbox {
   }
 
   /**
-   * Hands a quota-stopped Antigravity task to another executor (the quota card: "move to the local model", "give back
-   * to Claude").
+   * Hands a task to another executor ("Who does it", and the quota card's "move to the local model" / "give back to
+   * Claude"): it goes back in the queue for the new one, and its board item is opened again for it. A running task is
+   * refused (the caller asks the user, then stops it first); a finished one only with `again` (the user said yes).
    *
    * @param id - The task.
-   * @param to - The local model (self-work, through the board) or Claude's Opus agent.
+   * @param to - The local model (self-work, through the board), Claude's Opus agent, or Antigravity (waits for Run).
+   * @param o.again - Run a finished task again with the new executor (the user confirmed).
    */
-  async reassign(id: string, to: "local" | "opus"): Promise<InboxTaskView> {
+  async reassign(id: string, to: "local" | "opus" | "antigravity", o: { again?: boolean } = {}): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
-    if (t.status === "done") throw fail("It is done.", 409);
+    if ((t.status === "done" || t.status === "partial") && !o.again) throw fail("It is done.", 409);
     t.runBy = to;
     t.executor = to;
-    t.status = "queued";
+    t.status = to === "antigravity" ? "waiting" : "queued";
     t.branch = branchFor(t, to);
-    t.note = to === "local" ? "Self-work takes it from the task board." : "Claude runs it with its own Opus agent.";
+    delete t.endedAt;
+    delete t.runAsk;
+    t.resultWritten = false;
+    t.note = to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
+    await this.save();
+    // Antigravity asks "Run this?" on the PC and the phone, as for a new task.
+    if (to === "antigravity") this.makeAsk(t);
+    return t;
+  }
+
+  /**
+   * Marks a task as moved out of the inbox (to a chat's sub-agent): it ends here as skipped, with where it went.
+   *
+   * @param id - The task.
+   * @param where - Where it went, in a few words.
+   */
+  async movedOut(id: string, where: string): Promise<InboxTaskView> {
+    await this.load();
+    const t = this.find(id);
+    if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
+    t.status = "skipped";
+    t.endedAt = this.now();
+    t.note = `Moved: ${where}`.slice(0, 300);
+    delete t.runAsk;
+    if (t.boardId) await this.d.board?.change("roee", [{ op: "block", id: t.boardId, result: t.note }]).catch(() => undefined);
     await this.save();
     return t;
   }

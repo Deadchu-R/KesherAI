@@ -25,6 +25,8 @@ import {
   syncPinger,
   type HubAgent,
   type AgentLabel,
+  type AssignResult,
+  type AssignTo,
   type HubCommandAction,
   type HubApproval,
   type HubCryptoKey,
@@ -116,6 +118,8 @@ export interface HubClientDeps {
    * device). Returns whether it was done, or why not in a short line.
    */
   inboxCommand?: (action: HubCommandAction, taskId: string, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
+  /** "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts). */
+  assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
   /** Renames an agent run and sets its note, from the owner's phone or hub page (agent-labels.ts). */
   agentLabel?: (runId: string, label: AgentLabel, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
@@ -768,9 +772,13 @@ export class HubClient {
         // Run / Cancel from the owner's paired phone or hub page only (the same check as an approval answer).
         const kind = this.presence.find((d) => d.id === env.from)?.kind;
         const failed = (e: Error) => ({ ok: false, text: e.message || "It did not work." });
-        const r =
+        const r: AssignResult =
           kind !== "phone"
             ? { ok: false, text: "Only your phone or the hub page can do this." }
+            : body.action === "assign"
+              ? !this.deps.assign || !body.to
+                ? { ok: false, text: "This PC cannot give tasks to others yet." }
+                : await this.deps.assign(body.taskId, body.to, body.confirm === true).catch(failed)
             : body.action === "agent-label"
               ? !this.deps.agentLabel
                 ? { ok: false, text: "This PC cannot name agents yet." }
@@ -778,7 +786,7 @@ export class HubClient {
               : !this.deps.inboxCommand
                 ? { ok: false, text: "This PC has no task inbox." }
                 : await this.deps.inboxCommand(body.action, body.taskId, { id: env.from, kind }).catch(failed);
-        if (kind === "phone") await this.sendSealed(env.from, "command_result", { type: "command_result", commandId: body.commandId, taskId: body.taskId, ok: r.ok, text: r.text.slice(0, 300) }, HUB_LIMITS.approvalTtl);
+        if (kind === "phone") await this.sendSealed(env.from, "command_result", { type: "command_result", commandId: body.commandId, taskId: body.taskId, ok: r.ok, text: r.text.slice(0, 300), ...(r.ask ? { ask: r.ask } : {}) }, HUB_LIMITS.approvalTtl);
         return ack();
       }
       default:

@@ -11,6 +11,7 @@ import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubComma
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
+import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
 import type { DriveMark } from "./drive-view.js";
 
 /** This browser's identity at the hub. */
@@ -172,6 +173,11 @@ export class HubDevice {
    * state comes, at most 15 seconds), or the PC's "no" in its words.
    */
   agentLabels = new Map<string, { commandId: string; label: AgentLabel; savedAt?: number; error?: string }>();
+  /**
+   * "Who does it" sent from here (by task or work-list item id): waiting for the PCs, then the answer; `ask` is the
+   * PC's question before it stops a running task or runs a finished one again (in memory only).
+   */
+  assignActions = new Map<string, { commandId: string; to: AssignTo; pcs: string[]; left: number; result?: { ok: boolean; text: string; ask?: "running" | "finished" } }>();
   /**
    * What waits for the owner on each PC (its newest sealed snapshot; in memory, the PC sends it again when the page
    * connects), and the answers sent from here that the PC has not taken yet, by `<pc id>/<request id>`.
@@ -578,7 +584,7 @@ export class HubDevice {
     if (body.type === "approval_request") return;
     if (!this.replay.first(env.id, env.ttl)) return;
     if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
-    if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text);
+    if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
     const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
     if (!task) return;
@@ -628,6 +634,45 @@ export class HubDevice {
     return waits && this.connected && this.commandTargets(t).length > 0;
   }
 
+  /** The PCs that are on (a work-list item is sent to one of them). */
+  onlinePcs(): HubPresence[] {
+    return this.presence.filter((d) => d.kind === "pc" && d.online);
+  }
+
+  /**
+   * The PCs a task's "Who does it" goes to: its inbox's PC, or (a Drive task) every PC that is on.
+   *
+   * @param t - The task.
+   * @returns The PCs.
+   */
+  assignTargets(t: PageTask): HubPresence[] {
+    return this.commandTargets(t);
+  }
+
+  /**
+   * "Who does it": a sealed `assign` command to the PCs (each checks it came from the owner's paired phone or hub
+   * page). Only the PC that has the task acts; the others answer no.
+   *
+   * @param taskId - The inbox task id, its Drive record id, or a work-list item's record id.
+   * @param pcs - The PCs to send it to.
+   * @param to - Who does it now.
+   * @param confirm - The user's yes to the PC's question (stop a running task, run a finished one again).
+   * @returns Whether it was sent.
+   */
+  async assign(taskId: string, pcs: HubPresence[], to: AssignTo, confirm = false): Promise<boolean> {
+    const id = this.ident;
+    if (!id || !this.connected || !pcs.length) return false;
+    const commandId = randomB64url(12);
+    let sent = 0;
+    for (const pc of pcs) {
+      const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "assign", taskId, to, ...(confirm ? { confirm: true } : {}) }, id.privateKey, pc.publicKey);
+      if (this.sendFrame({ t: "send", env })) sent++;
+    }
+    if (sent) this.assignActions.set(taskId, { commandId, to, pcs: pcs.map((p) => p.id), left: sent });
+    this.changed();
+    return sent > 0;
+  }
+
   /** The PCs a command for a task goes to: its inbox's PC, or (a Drive task) every PC that is on. */
   private commandTargets(t: PageTask): HubPresence[] {
     return this.presence.filter((d) => d.kind === "pc" && d.online && (!t.inbox || d.id === t.inbox.deviceId));
@@ -661,7 +706,15 @@ export class HubDevice {
    * A PC's answer to Run / Cancel, shown on the task. A Drive task's command went to every PC that is on: the one that
    * acted answers yes; a "no" is shown only when every PC said no (the last one's words).
    */
-  private onCommandResult(commandId: string, taskId: string, ok: boolean, text: string): void {
+  private onCommandResult(commandId: string, taskId: string, ok: boolean, text: string, ask?: "running" | "finished"): void {
+    const as = this.assignActions.get(taskId);
+    if (as && as.commandId === commandId && !as.result?.ok && !as.result?.ask) {
+      as.left--;
+      // Sent to several PCs: a "no" shows only when every PC said no; the one that has it answers yes or asks.
+      if (!ok && !ask && as.left > 0) return;
+      as.result = { ok, text, ...(ask ? { ask } : {}) };
+      return this.changed();
+    }
     for (const sent of this.agentLabels.values()) {
       if (sent.commandId !== commandId) continue;
       if (ok) sent.savedAt = Date.now();

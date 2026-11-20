@@ -6,7 +6,7 @@ import { inboxRunId } from "../agent-activity.js";
 import type { TaskInbox } from "../inbox-runner.js";
 import type { KesherServices } from "../services.js";
 import { validBranchName } from "../task-inbox.js";
-import type { InboxTaskView } from "@kesher/shared";
+import { parseAssignTo, parseWorkList, type InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox (inbox-runner.ts): the queue, a task's page, Run / Stop / Skip, answers to the PC's "Run this task
@@ -87,6 +87,23 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : undefined;
     if (!to) return reply.code(400).send({ error: "to is local or opus." });
     return inbox.reassign(req.params.id, to).catch((e) => failed(reply, e));
+  });
+
+  /** Claude's work list (docs/WORK_LIST.md on the inbox branch's project), its open items, for "Send to an agent". */
+  app.get("/api/task-inbox/work-list", async () => {
+    const text = await inbox.workList().catch(() => undefined);
+    return { items: text === undefined ? [] : parseWorkList(text).filter((i) => i.status !== "done").slice(0, 200) };
+  });
+
+  /**
+   * "Who does it": gives an inbox task (`:id`) or a work-list item (`w-…`) to another executor (task-assign.ts). A
+   * running or finished task answers with a question (`ask`) until the user's yes comes back as `confirm`.
+   */
+  app.post<{ Params: { id: string }; Body: { to?: unknown; confirm?: unknown } }>("/api/task-inbox/assign/:id", async (req, reply) => {
+    const to = parseAssignTo(req.body?.to);
+    if (!to || !s.assignTask) return reply.code(400).send({ error: "Pick who does it." });
+    if (!/^[\w-]{1,64}$/.test(req.params.id)) return reply.code(400).send({ error: "Bad task id." });
+    return s.assignTask(req.params.id, to, req.body?.confirm === true);
   });
 
   /** Allow once or deny an agent's step that the policy asked about. */

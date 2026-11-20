@@ -7,11 +7,12 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { agentDoing, INBOX_GIT_MISSING, type AgentLabel, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { agentDoing, assignOfExecutor, INBOX_GIT_MISSING, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
+import { AssignPicker } from "../AssignPicker";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -175,8 +176,10 @@ export function TaskInboxPage({ id }: { id?: string }) {
           <span>#</span><span>{L("משימה", "Task")}</span><span>{L("מבצע", "Executor")}</span><span>{L("מצב", "State")}</span><span>{L("ענף", "Branch")}</span><span />
         </div>
         {!shown.length && <p className="muted tinbox-empty">{s.tasks.length ? L("אין משימות כאן.", "No tasks here.") : L("עוד אין משימות. Claude כותב אותן לענף kesher-inbox, או הוסיפו אחת כאן.", "No tasks yet. Claude writes them to the kesher-inbox branch, or add one here.")}</p>}
-        {shown.map((t) => <QueueRow key={t.id} t={t} state={s} act={act} busy={busy} />)}
+        {shown.map((t) => <QueueRow key={t.id} t={t} state={s} act={act} busy={busy} onAssigned={load} />)}
       </div>
+
+      <WorkListSend onSent={load} />
 
       <div className="row wrap small tinbox-legend">
         <span><span className="tinbox-ex agy">✦ Antigravity</span> {L("3–15 קבצים, משימה מוגדרת עם בדיקה", "3–15 files, a defined task with a check")}</span>
@@ -185,6 +188,40 @@ export function TaskInboxPage({ id }: { id?: string }) {
       </div>
       <p className="small muted">↩ {L("כל משימה חוזרת כענף ב-GitHub. Claude בודק את השינויים ואת תוצאות הבדיקות, וממזג או מחזיר עם תיקון. KesherAI דוחף רק ענפי agy/* ואת kesher-inbox, אף פעם לא את main.", "Every task comes back as a branch on GitHub. Claude reviews the changes and the check results, and merges or sends it back with a fix. KesherAI pushes only agy/* branches and kesher-inbox, never main.")}</p>
     </div>
+  );
+}
+
+/**
+ * Claude's work list (docs/WORK_LIST.md), its open items, each with "Send to an agent" (board InboxWorkList): the
+ * item becomes an inbox task for the chosen executor, or goes to a chat agent. Folded until opened.
+ */
+function WorkListSend({ onSent }: { onSent: () => void }) {
+  const [items, setItems] = useState<WorkListItem[] | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (open && !items) void api<{ items: WorkListItem[] }>("/api/task-inbox/work-list").then((r) => setItems(r.items), () => setItems([]));
+  }, [open, items]);
+  const order = (i: WorkListItem) => WORK_LIST_STATUSES.indexOf(i.status);
+  return (
+    <section className="card stack tinbox-wl">
+      <button type="button" className="link row" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <b className="grow">📋 {L("רשימת העבודה של Claude: לשלוח לסוכן", "Claude's work list: send to an agent")}</b>
+        <span aria-hidden>{open ? "▴" : "▾"}</span>
+      </button>
+      {open && !items && <p className="small muted">{L("טוען…", "Loading…")}</p>}
+      {open && items && !items.length && <p className="small muted">{L("אין פריטים פתוחים (או שאין פרויקט לתיבה).", "No open items (or no project for the inbox).")}</p>}
+      {open &&
+        items &&
+        [...items].sort((a, b) => order(a) - order(b) || a.order - b.order).map((i) => (
+          <div key={i.id} className="tinbox-wl-item">
+            <div className="grow tinbox-wl-t" dir="auto">
+              <span className="small muted">{i.section} · </span>
+              {i.title}
+            </div>
+            <AssignPicker id={i.id} label={L("שלח לסוכן", "Send to an agent")} onDone={onSent} />
+          </div>
+        ))}
+    </section>
   );
 }
 
@@ -227,7 +264,7 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
 }
 
 /** One task in the queue: a table row on the computer, a card on the phone. */
-function QueueRow({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean }) {
+function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean; onAssigned: () => void }) {
   const st = statusChip(t);
   const ex = executorChip(t.runBy);
   const open = () => (location.hash = `#/task-inbox/${t.id}`);
@@ -254,6 +291,7 @@ function QueueRow({ t, state, act, busy }: { t: InboxTaskView; state: InboxState
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}
         {["running", "needs-approval", "partial", "failed", "deferred-quota", "declined"].includes(t.status) && <button type="button" onClick={open}>{L("פתח", "Open")}</button>}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} onDone={onAssigned} />}
       </span>
     </div>
   );
@@ -334,6 +372,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         <span className={`tinbox-st ${st.cls}`}>{st.text}{minutes !== undefined ? ` · ${minutes} ${L("דק׳", "min")}` : ""}</span>
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} />}
       </div>
       <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
       {editing && (

@@ -171,6 +171,8 @@ export interface KesherServices {
   hub?: HubClient;
   /** Tasks on all your devices: the inbox in the user's Google Drive (tasks-sync.ts; off until turned on). */
   tasksSync?: import("./tasks-sync.js").TasksSync;
+  /** "Who does it": gives a task or a work-list item to another executor (task-assign.ts). */
+  assignTask?: (taskId: string, to: import("@kesher/shared").AssignTo, confirm: boolean) => Promise<import("@kesher/shared").AssignResult>;
   /** The owner's names and notes for agent runs (agent-labels.ts). */
   agentLabels?: import("./agent-labels.js").AgentLabels;
   /** The task inbox (Claude's tasks on the kesher-inbox branch; Antigravity on the user's Run). */
