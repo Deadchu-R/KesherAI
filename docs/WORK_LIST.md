@@ -284,3 +284,4 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - Night tests of browser control: only KesherAI's built-in browser on the PC, test sites, no sign-ins, no purchases or forms; never his Chrome.
 - A decision that comes up at night: take the recommended option if it can be undone and mark it in the 10:00 report; anything that can't be undone waits for him.
 - No design-doc publishes overnight; boards ready under tools/design/out/, one publish with him at 10:00.
+- ⏳ Roee: extension 0.3.0 (Chrome control over the debugger, optional `debugger` permission) is built (295839f) but its store release is held: manifest stays 0.2.6 until he says yes, because pushing main uploads a changed version to the Chrome Web Store. To release: set apps/browser-extension/manifest.json to 0.3.0 and push.
