@@ -3809,3 +3809,99 @@ CHORD PBR, LM Studio / Open WebUI.
   Unreal / Godot bridges and scene editors, ComfyUI flows with "✦ With AI" in the editors, approvals synced to the phone,
   the token-usage tracker (docs/usage). Next step: a gap list per category, then the design doc, then builds.
 Stopped at: summary written; gap analysis against the current code not done yet.
+
+## Usability gap list against the code (2026-11-20)
+Method: grep and line ranges only, no new web research. Compared the four areas of the entry above ("Focused usability: one
+unified chat...") with the code. Sizes: S = under half a day, M = 1-2 days, L = a release by itself. Owner: **Opus** = Claude
+Opus build; **Inbox** = small and clear, fit for the task inbox (local model or Antigravity).
+Key finding for area 3: KesherAI's Unity bridge is **Unity's own CLI** (`unity command ...`, `recompile`, `script eval`; see
+packages/core/src/unity-cli.ts and unity-tools.ts), plus a small package (`integrations/unity/com.kesherai.bridge`, Editor-only,
+graph and move commands). It is not a custom socket server, so port, reconnect after domain reload and the main-thread queue
+belong to Unity's Pipeline package, not to KesherAI. The gaps there are about what KesherAI does around it.
+
+### Area 1: model routing, KV cache, token footer
+| Item | Status | Where | What is missing | Size | Owner |
+|---|---|---|---|---|---|
+| Sub-agents with a model each (hub and spoke) | ✅ | packages/core/src/delegate.ts, helper-model.ts:84 (`pickHelperModel`), agents.ts | Helpers return a report, but no fixed 200-400 token "findings pack" limit is enforced (check HELPER_STEPS caps) | S | Inbox |
+| Router that picks tool groups and model size per turn (small model or rules, GBNF JSON) | 🟡 | agent/src/session.ts:835 `loadToolsFor` (word match, rules only), chat-tool-groups.ts | Tool loading is by keyword; there is no router that picks the model size per turn, and no grammar-constrained call | M | Opus |
+| Deferred tool loading, 4-6 tools per turn | ✅ | agent/src/session.ts:854 `specs()` (core tools full, rest by name, `find_tools`), UNITY_TOOL_NAMES in unity-tools.ts:27 | Tools are not sorted alphabetically (order can shift the prompt prefix); no per-turn cap of 4-6 | S | Inbox |
+| Stable prefix + `cache_prompt` | 🟡 | agent/src/context.ts:25 (the shorten line moves in steps so the engine keeps its cache; found on the PC); engine.ts:307 benchmark sends `cache_prompt` | The chat request itself (providers/src/openai-compatible.ts) never sets `cache_prompt`; no check that the system prompt has nothing changing at the top (prompt.ts) | S | Inbox |
+| Fixed `id_slot` per agent kind | ⬜ | llamacpp.ts:716 only sets `-np` for parallel chats; no `id_slot` anywhere | Pin main chat, helper and router to their own slots; needs `-np` sized to the kinds in use | M | Opus |
+| Slot save/restore around ComfyUI (VRAM coordinator) | ⬜ | no `slot-save-path` in llamacpp.ts | Start with `--slot-save-path`, save before freeing VRAM for ComfyUI, restore after | M | Opus |
+| Two-stage scene reading (tree first, details on demand) | 🟡 | unity-tools.ts:273 `unity_scene hierarchy` returns the whole tree with components (cut at 8000 chars) | Needs a compact tree plus `unity_inspect_object` for one object | S-M | Opus |
+| Tool-output pruning after 2 turns, full output on disk | 🟡 | agent/src/context.ts:25 `shortenOldToolOutputs` (cuts to 700+500 chars, keeps the full one in the conversation) | Keeps 1500+ chars rule only; no "summary line" and no pointer to a file; compaction trigger at ~70% not checked (session.ts compact is manual/auto: verify the threshold) | S | Inbox |
+| SEARCH/REPLACE diffs | ✅ | agent edit_file tool, makeDiff in tools.ts | none | - | - |
+| Visible token footer (router/main model, cache %, tokens saved) | 🟡 | `usage` event in shared/src/agent.ts:228 and session.ts:625 (input, output, model, role, waitMs); footer in pages/Conversation.tsx:916 shows tok/s and "reading" seconds; CoachPanel.tsx, Usage page | The event carries no cached-token count (llama.cpp `timings.cache_n` / `prompt_n` are not read), so no cache % or "tokens saved"; footer shows speed, not tokens in/out or the model | M | Opus (server) + Inbox (footer text) |
+
+### Area 2: typed chat blocks
+| Item | Status | Where | What is missing | Size | Owner |
+|---|---|---|---|---|---|
+| Step accordion / tool pill with live status | ✅ | apps/web/src/ChatCards.tsx:70 `ToolCard` (`<details>`, pending/ok/fail mark), StepsPanel.tsx | Consecutive calls are not folded into one line "7 steps" (each call is its own card) | S | Inbox |
+| Live media / progress card | 🟡 | ToolCard shows the finished image (`assetIds`, ChatCards.tsx:93); comfyui.ts:157 queues `/prompt` and waits on `/history` (polling, `waitForOutputs`) | No ComfyUI WebSocket (`/ws`), so no progress bar or live preview in the bubble; tools return only at the end (no `tool_progress` event type in shared/src/agent.ts) | L | Opus |
+| Inline zero-token action bar under a result | ⬜ | none in ChatCards.tsx or Conversation.tsx (only the Undo-all receipt, RunReceipt.tsx) | A `result.actions` list `[{label, tool, args}]` rendered as buttons that POST to a tool route with no model turn; first use: Import to Unity, Apply to selected, 4 variations | M-L | Opus |
+| Approval card, synced to the phone | ✅ | ChatCards.tsx:126 `ApprovalCard`; conversations.ts:1323 `pendingApprovals()`; routes/inbox.ts:46 `/api/approvals` ("watch and approve" view); allow once / for a while / always | Approval card does not show a diff or object list for Unity scene changes (diff exists for scripts via `preview`, unity-tools.ts:201); verify push notification on a new approval | S | Inbox (check), Opus (Unity preview) |
+| Side canvas for heavy results | 🟡 | ArtifactPanel.tsx (html pages open beside the chat), canvas.ts + CanvasPage.tsx, McpAppView.tsx (MCP Apps views under a step, ChatCards.tsx:108) | Not used for PBR maps or a C# diff; no "open in side canvas" for image/diff results | M | Opus |
+| MCP Apps (ui:// in a sandboxed frame) | ✅ | McpAppView.tsx, mcp-app-doc.ts, `result.app` | Host methods `callServerTool` / `updateModelContext` coverage not verified (only `onMessage` is wired at ChatCards.tsx:109) | S | Inbox (verify) |
+| "Unity: MyGame • connected" chip in the composer | 🟡 | apps/web/src/UnityChip.tsx (project, green dot, "Editor open/closed"), shown in Conversation.tsx:1131 | Shown only when `conv.kind === "code"`, not in a normal chat; polls only on load (load() at mount and one event), so a closed Editor is not noticed live; no ComfyUI chip | S | Inbox |
+
+### Area 3: Unity core toolset
+| Item | Status | Where | What is missing | Size | Owner |
+|---|---|---|---|---|---|
+| Bridge on a deterministic port | ✅ (n/a) | Unity's CLI finds the Editor itself (`unity status`, unity-cli.ts:295 `ready`, cached 4 s) | Nothing to build; custom bridge not needed | - | - |
+| Reconnect after domain reload / editor_ready | 🟡 | CLI handles the connection; unity-cli.ts:295 polls status; unity-tools.ts:241-248 `recompile` waits (240 s timeout) | No retry/wait when a command lands during a reload (returns an error); no "waiting for Unity to finish reloading" state in the chip | S-M | Opus |
+| All API calls on the main thread | ✅ (n/a) | Unity CLI runs commands in the Editor; the package polls with `EditorApplication.update` (KesherMoves.cs:32) | none | - | - |
+| One Undo group per chat turn | 🟡 | Single steps have Undo: unity-tools.ts:319-322, 586 (`Undo.RegisterCreatedObjectUndo`, `AddComponent`); package KesherMoves.cs:74-106 collapses its moves; KesherGraph.cs:387 | No group opened at the start of an agent turn and collapsed at the end (`Undo.IncrementCurrentGroup` / `CollapseUndoOperations` around all of a turn's calls); `unity_command` and `script_eval` are not grouped | M | Opus |
+| Compile-fix loop | 🟡 | unity-tools.ts:189-236 `unity_write_script` writes then runs `recompile` and returns errors (compileReport, :96) "fix them, then write again"; code-intel.ts:339 `check_code` | The loop is left to the model: no cap of 2 automatic fixes, no return of only file/line/message in a fixed format, no AssetDatabase.Refresh/compilationFinished wait on non-CLI paths | S-M | Opus |
+| `unity_get_hierarchy` | ✅ | unity_scene action hierarchy (unity-tools.ts:273) | Size limit, no depth/filter (see two-stage reading) | S | Inbox |
+| `unity_inspect_object` | ⬜ | none (only `unity_script_eval`, :503) | One object's components and serialized fields | M | Opus |
+| `unity_modify_scene` | 🟡 | `unity_create_gameobject` (:294), `unity_add_component` (:334), `unity_command` (:472) | No move/rename/delete/set-property tool with one schema; approval preview for it | M | Opus |
+| `unity_read_console` | ✅ | `unity_console` (:254, level and count) | none | - | - |
+| `unity_import_sprite` | ⬜ | none | Copy file to Assets/Generated, set TextureImporter (sprite mode, pixels per unit), refresh | M | Opus |
+| `unity_create_pbr_material` | ⬜ | none (grep for TextureImporter, pbr in unity*.ts and the package: no hits) | Create material for the project's pipeline (URP/HDRP/Built-in), assign albedo/normal/roughness/AO, apply to selection with Undo | M-L | Opus |
+| Unreal later (`inspect_level`, `apply_material`) | 🟡 | unreal-bridge.ts, integrations/unreal/KesherAIBridge (Blueprint graph tools) | Level/material tools missing; leave for after Unity | L | Opus (later) |
+
+### Area 4: ComfyUI to Unity end to end
+| Item | Status | Where | What is missing | Size | Owner |
+|---|---|---|---|---|---|
+| Fixed workflow templates, only prompt/seed/size change | ✅ | comfy-flows.ts (music, sfx, 3D Hunyuan/TRELLIS, paint-views, video, styled-frame); providers/src/comfyui.ts:20 fills a workflow | No image to PBR template (albedo + normal/roughness/AO) and no UI-sprite template (generate then remove background) | M | Opus |
+| Router picks the template from the request | 🟡 | chat tools `generate_image` etc. in chat-tools-media.ts:20; tool search by words | No intent routing "make a tileable wall texture" to the PBR template | S-M | Opus |
+| `POST /prompt` + WebSocket progress and live preview | 🟡 | comfyui.ts:157 `/prompt` then `waitForOutputs` on `/history` | Polling only; no `/ws`, no `progress` / `executing` / preview frames forwarded to the chat | L (with the media card) | Opus |
+| Background removal for UI sprites | ✅ | bg-remove.ts (rembg + BiRefNet), routes/bg-remove.ts, image editor | Not reachable from the chat or as a step after generation | S-M | Inbox |
+| Seamless albedo + Normal/Roughness/AO | ⬜ | no PBR code in core or plugins | Needs a ComfyUI flow (tiling, CHORD-like or normal/height nodes) and a model download | L | Opus (+ research on nodes: Gemini/Antigravity) |
+| Result card with zero-token buttons | ⬜ | see Area 2 action bar | Depends on the action bar | M-L | Opus |
+| Unity side: import to Assets/Generated, TextureImporter, matching material, apply with Undo | ⬜ | model-editor plugin has "save to Unity" for scene moves only (plugins/model-editor/ui/editor.js:679, `unity.saveScene`, applied by KesherMoves.cs on open) | The three Unity tools from Area 3 (`import_sprite`, `create_pbr_material`, apply) | M-L | Opus |
+| End-to-end demo (one request to material on an object, 45 s) | ⬜ | pieces exist separately (chat image tools, ComfyUI flows, Unity tools, approvals) | Nothing connects them; this is the acceptance test for batches 3 and 4 | M | Opus |
+
+### Top gaps (short)
+1. No cached-token numbers: `cache_prompt` and `id_slot` are not set on chat requests, and `usage` has no `cached` field, so the footer cannot show cache % or tokens saved.
+2. No zero-token action bar under results, and no typed "action" data on tool results.
+3. No ComfyUI WebSocket progress or live preview; generation shows nothing until the end.
+4. Unity has no import_sprite, create_pbr_material or inspect_object; no Undo group per turn; no automatic 2-step compile-fix cap.
+5. UnityChip is only in code chats and does not refresh live.
+6. No PBR / sprite flows and no router-by-intent to them.
+
+### Proposed build order (each batch = one release)
+**Batch 1: token telemetry and cache (server first, small UI).** Set `cache_prompt` and `id_slot` per agent kind in the
+OpenAI-compatible request for llama.cpp; read `timings` (cache_n, prompt_n) into the `usage` event; sort tools and check
+the prompt prefix is stable; footer text under each answer (model, tokens in/out, cache %, saved). Screens: chat answer
+footer (Conversation), Usage page (add cache %), ContextPanel (cached part). Also S Inbox items: alphabetical tools,
+prune summary line.
+**Batch 2: Unity core at 100%.** `unity_inspect_object`, compact hierarchy, `unity_modify_scene`, `unity_import_sprite`,
+`unity_create_pbr_material`; one Undo group per turn; compile-fix cap of 2 with file/line/message only; wait-for-reload
+state. Chip shown in every chat and refreshing live. Screens: UnityChip (all chats, "reloading" state), approval card
+(object list/diff for scene changes), Unity page (UnityCliPanel) tool list.
+**Batch 3: typed blocks.** `actions` on tool results and the zero-token action bar; "tool_progress" event and the live
+media/progress card (ComfyUI WebSocket in comfyui.ts); folded step line ("7 steps"); side-canvas button for images and
+diffs. Screens: chat tool card, new media card, action bar, side canvas panel; remote/phone layout at 390 px for all.
+**Batch 4: ComfyUI to Unity demo.** PBR and UI-sprite flows (research the node set first via Gemini), router by intent,
+result card buttons [Import to Unity] [Apply to selected] [4 variations], the 45 s end-to-end test through KesherAI itself on
+the PC and from the phone. Screens: Images page (new flows), chat result card, design doc boards for the demo.
+**Batch 5 (optional, later):** router model for model-size choice, slot save/restore around ComfyUI (VRAM coordinator),
+Unreal `inspect_level` / `apply_material`.
+
+Open questions: (1) Does Roee want a router model (new local model) or only the rules router (cheaper, no VRAM)? (2) PBR:
+which ComfyUI nodes or model to depend on (needs a licence check, Gemini research)? (3) Should the Undo group also cover
+`unity_command` and `unity_script_eval`, or only KesherAI's own tools?
+Stopped at: gap list written from grep/line checks; not verified by running the app (e.g. whether llama-server's default
+`cache_prompt` already applies, whether phone push fires on new approvals, the compaction threshold). Next: Batch 1 design-doc
+boards (footer, usage page) after Roee's pick on the open questions.
