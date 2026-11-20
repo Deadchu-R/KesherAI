@@ -18,6 +18,7 @@ import type {
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
+import { OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, openToolOutput, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
@@ -199,6 +200,13 @@ export function lineDelta(before: string, after: string): { added: number; remov
   return { added, removed };
 }
 
+/** Opens an older tool output that is sent as a summary line (budget.ts). */
+const toolOutputSpec: ToolSpec = {
+  name: TOOL_OUTPUT_TOOL,
+  description: `Opens the full output of an earlier tool call that is shown to you as a "${PRUNED_MARK} <id>]" line. Use it only when you need that output's details again; at most ${OPEN_CHARS} characters at a time.`,
+  inputSchema: { type: "object", properties: { id: { type: "string", description: "The id from the line." }, from: { type: "number", description: "The first character, for the rest of a long output (default 0)." } }, required: ["id"] },
+};
+
 /** The tool that loads the others when tool search is on. */
 export const FIND_TOOLS_TOOL = "find_tools";
 
@@ -209,7 +217,7 @@ export interface ContextView {
   windowTokens: number;
   system: { tokens: number; text: string };
   tools: Array<{ name: string; tokens: number }>;
-  messages: Array<{ role: AgentMessage["role"]; tokens: number; text: string; toolCalls?: string[]; toolName?: string; images?: number; shortened?: boolean; summarized?: boolean }>;
+  messages: Array<{ role: AgentMessage["role"]; tokens: number; text: string; toolCalls?: string[]; toolName?: string; images?: number; shortened?: boolean; summarized?: boolean; /** Sent as a summary line (budget.ts). */ pruned?: boolean }>;
   /** The summary that stands in for the oldest messages, when the conversation is too long. */
   summary?: string;
   /** About how much the next turn sends. */
@@ -804,7 +812,30 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
     const cached = result.usage?.cachedTokens;
-    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}) });
+    // What the token budget left out of this call (main model only; teammates get their own short prompts).
+    const pruned = role === "main" ? Math.round(this.lastPrunedChars / this.charsPerToken) : 0;
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
+  }
+
+  /** Characters the last fitted prompt left out (pruned tool outputs), for the usage event. */
+  private lastPrunedChars = 0;
+
+  /** The conversation as the model gets it: older tool results as summary lines, except the ones the user pinned. */
+  private pruned(): ReturnType<typeof pruneToolOutputs> {
+    return pruneToolOutputs(this.messages, { pinned: pinnedOutputs(this.events) });
+  }
+
+  /**
+   * Pins one tool result so it is always sent to the model in full (or unpins it). Kept as a `tool_pin` event, so it
+   * survives a restart and every device sees it.
+   *
+   * @param callId - The tool call's id.
+   * @param pinned - True to pin, false to unpin.
+   * @throws Error when the conversation has no result with that id.
+   */
+  pinOutput(callId: string, pinned: boolean): void {
+    if (!this.messages.some((m) => m.role === "tool" && m.toolCallId === callId)) throw new Error("No such tool result in this chat.");
+    this.push({ type: "tool_pin", callId, pinned });
   }
 
   /** Characters per token for this model, learned from what it reports (see {@link recordUsage}). */
@@ -897,7 +928,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const system = this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt;
     const tools = this.specs().map((t) => ({ name: t.name, tokens: tok(JSON.stringify(t).length) }));
     const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
-    const msgs = shortenOldToolOutputs(this.messages);
+    const msgs = shortenOldToolOutputs(this.pruned().messages);
     let cut = 0;
     let summary: string | undefined;
     if (sizeOf(msgs) > budget) {
@@ -913,6 +944,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       ...(m.toolName ? { toolName: m.toolName } : {}),
       ...(m.images?.length ? { images: m.images.length } : {}),
       ...(m.content.length !== (this.messages[i]?.content.length ?? 0) ? { shortened: true } : {}),
+      ...(m.role === "tool" && m.content.startsWith(PRUNED_MARK) ? { pruned: true } : {}),
       ...(i < cut ? { summarized: true } : {}),
     }));
     const sent = messages.filter((m) => !m.summarized).reduce((n, m) => n + m.tokens, 0);
@@ -947,8 +979,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const cap = Math.max(4000, Math.floor(budget * 0.25));
     // Shortening older outputs saves room but makes a local engine read the conversation again from there: only
     // when the conversation takes more than half the window, and then in steps of 8 messages (see shortenOldToolOutputs).
-    const roomy = sizeOf(this.messages) <= budget * 0.5;
-    const msgs = (roomy ? this.messages : shortenOldToolOutputs(this.messages, 8, 8)).map((m) =>
+    // Tool results from before the last two turns go as one summary line each (budget.ts); the line moves per turn.
+    const pruned = this.pruned();
+    this.lastPrunedChars = pruned.prunedChars;
+    const roomy = sizeOf(pruned.messages) <= budget * 0.5;
+    const msgs = (roomy ? pruned.messages : shortenOldToolOutputs(pruned.messages, 8, 8)).map((m) =>
       m.role === "tool" && m.content.length > cap
         ? { ...m, content: `${m.content.slice(0, Math.floor(cap * 0.65))}\n… [${m.content.length - Math.floor(cap * 0.95)} characters left out: too long for this model's context. Read the part you need (read_file with offset and limit, or search for it).] …\n${m.content.slice(-Math.floor(cap * 0.3))}` }
         : m,
@@ -1051,7 +1086,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // list, which sits at the top of the prompt, stays the same from turn to turn and the engine keeps its cache.
     const all = sortSpecs([...this.tools.values()].map((t) => t.spec));
     const core = this.toolSearch?.();
-    const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : [])];
+    const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
     if (!core?.length) return [...base, ...all];
     // Tool search: the core tools and the ones loaded so far in full; the rest by name only. Loaded tools come after
     // the core ones, so loading one changes only the end of the list.
@@ -1401,6 +1436,15 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     };
     if (typeof call.arguments._invalidJson === "string") return fail("Your tool arguments were not valid JSON. Send them again as a JSON object.");
 
+    if (call.name === TOOL_OUTPUT_TOOL) {
+      try {
+        const output = openToolOutput(this.messages, String(call.arguments.id ?? "").trim(), Number(call.arguments.from ?? 0));
+        this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output: truncate(output) });
+        return output;
+      } catch (err) {
+        return fail((err as Error).message);
+      }
+    }
     if (call.name === FIND_TOOLS_TOOL) {
       const names = (Array.isArray(call.arguments.names) ? call.arguments.names : [call.arguments.names]).map(String).filter((n) => this.tools.has(n));
       for (const n of names) this.loadedTools.add(n);

@@ -13,6 +13,7 @@ interface UsageLike {
   output: number;
   estimated: boolean;
   cached?: number;
+  pruned?: number;
 }
 
 /** One answer's tokens, summed over every model call between the question (or the answer before) and it. */
@@ -25,6 +26,8 @@ export interface AnswerTokens {
   cached?: number;
   /** The input of the calls that reported `cached` (the base for the cache share). */
   cacheBase?: number;
+  /** Tokens the token budget did not send (pruned tool results, tools over the cap); only when any. */
+  pruned?: number;
   /** True when any count was estimated from the text instead of reported by the provider. */
   estimated: boolean;
 }
@@ -54,6 +57,7 @@ export function answerTokens(events: ReadonlyArray<{ type: string; seq: number }
       cur.estimated ||= u.estimated;
       if (u.role === "main" || !mainSeen) cur.modelId = u.modelId;
       if (u.role === "main") mainSeen = true;
+      if (typeof u.pruned === "number" && u.pruned > 0) cur.pruned = (cur.pruned ?? 0) + u.pruned;
       if (typeof u.cached === "number") {
         cur.cached = (cur.cached ?? 0) + Math.min(u.cached, u.input);
         cur.cacheBase = (cur.cacheBase ?? 0) + u.input;
@@ -78,3 +82,20 @@ export function cachePercent(cached: number | undefined, input: number | undefin
   return Math.round((Math.min(Math.max(cached, 0), input) / input) * 100);
 }
 
+
+/**
+ * The tool results the user pinned (the last `tool_pin` event per call decides).
+ *
+ * @param events - The conversation's events.
+ * @returns The pinned call ids.
+ */
+export function pinnedCalls(events: ReadonlyArray<{ type: string }>): Set<string> {
+  const out = new Set<string>();
+  for (const e of events) {
+    if (e.type !== "tool_pin") continue;
+    const p = e as unknown as { callId: string; pinned: boolean };
+    if (p.pinned) out.add(p.callId);
+    else out.delete(p.callId);
+  }
+  return out;
+}

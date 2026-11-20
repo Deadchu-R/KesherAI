@@ -873,3 +873,35 @@ test("a tool's gate decides: its card carries card v2, Always counts as once, an
   assert.equal(runs, 1);
   assert.deepEqual(decided, ["allow/user", "expired/timeout"]);
 });
+
+test("token budget: tool results from before the last two turns go as a summary line, tool_output opens them, usage counts it", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-pr-"));
+  await writeFile(join(workspace, "big.txt"), `big file first line\n${"z".repeat(3000)}`);
+  const { model, seen } = scripted([
+    { calls: [{ name: "read_file", arguments: { path: "big.txt" } }] },
+    { text: "read it" },
+    { calls: [{ name: "read_file", arguments: { path: "big.txt" } }] },
+    { text: "second" },
+    { calls: [{ name: "tool_output", arguments: { id: "c1_0" } }] },
+    { text: "third" },
+  ]);
+  const session = new AgentSession({ id: "p", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+  for (const text of ["read big.txt", "thanks", "and again"]) {
+    const idle = new Promise<void>((resolve) => {
+      const on = (e: AgentEvent) => { if (e.type === "status" && e.status === "idle") { session.off("event", on); resolve(); } };
+      session.on("event", on);
+    });
+    session.send(text);
+    await idle;
+  }
+  const third = seen[4]!;
+  const toolMsg = third.messages.find((m) => m.role === "tool")!;
+  assert.match(toolMsg.content, /^\[pruned output c1_0\] read_file: /);
+  assert.ok(third.tools.some((t) => t.name === "tool_output"));
+  assert.match(seen[5]!.messages.at(-1)!.content, /z{100}/, "tool_output gave the full text back");
+  assert.ok(session.events.some((e) => e.type === "usage" && (e.pruned ?? 0) > 500));
+  // Pinned: sent in full again.
+  session.pinOutput("c1_0", true);
+  assert.equal(session.contextView().messages.find((m) => m.toolName === "read_file")!.pruned, undefined);
+  assert.throws(() => session.pinOutput("nope", true));
+});

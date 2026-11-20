@@ -4,7 +4,7 @@ import { explainCommand } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { stepLabel } from "./Activity";
 import { getLocale, t, he$ } from "./i18n";
-import { desktop } from "./library";
+import { desktop, toast } from "./library";
 import { RichText } from "./RichText";
 import { Select } from "./ui/Select";
 import { durations } from "./settings/PermissionsSection";
@@ -68,7 +68,7 @@ export function summary(name: string, input: Record<string, unknown>): string {
 }
 
 /** One tool call in the chat, with its result once it comes (a group member's part shows as that member's answer). */
-export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_result"> }) {
+export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call">; result?: Ev<"tool_result">; /** With it, the result can be pinned. */ convId?: string; pinned?: boolean }) {
   if (call.name === "ask_user") return null;
   // Agent group: a member's part, shown as that member's answer.
   if (call.name === "ask_member") {
@@ -91,7 +91,9 @@ export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<
       <summary>
         <span className="tool-state" aria-hidden>{state === "pending" ? "…" : state === "ok" ? "✓" : "✕"}</span>
         <span className="tool-label" dir="auto">{stepLabel({ call, ...(result ? { result } : {}) })}</span>
+        {pinned && <span className="tool-pinned" title={L("נעוץ: המודל מקבל את התוצאה במלואה", "Pinned: the model gets this result in full")}>📌</span>}
       </summary>
+      {result && convId && <PinResult convId={convId} callId={call.callId} pinned={!!pinned} />}
       {result?.diff && <Diff diff={result.diff} />}
       {/* Pictures the step made (a browser or screen shot, a render) as small thumbnails: the full-size ones and the
           players show under the whole group (Activity.tsx), so the open step stays short. Tap opens the picture. */}
@@ -114,6 +116,26 @@ export function ToolCard({ call, result }: { call: Ev<"tool_call">; result?: Ev<
       {card}
       <McpAppView app={result.app} onMessage={composeText} />
     </>
+  );
+}
+
+/**
+ * Pins a tool result: the token budget sends results from before the last two turns as one summary line; a pinned
+ * one always goes to the model in full. Works the same from the phone (it is a server call).
+ */
+function PinResult({ convId, callId, pinned }: { convId: string; callId: string; pinned: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const toggle = () => {
+    setBusy(true);
+    void api(`/api/conversations/${encodeURIComponent(convId)}/pin-output`, { method: "POST", body: { callId, pinned: !pinned } })
+      .catch((e: Error) => toast(e.message))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <button type="button" className={`ghost small tool-pin${pinned ? " on" : ""}`} disabled={busy} onClick={toggle} aria-pressed={pinned}
+      title={L("תוצאות ישנות נשלחות למודל כשורת סיכום כדי לחסוך טוקנים. תוצאה נעוצה נשלחת תמיד במלואה.", "Older results go to the model as a summary line to save tokens. A pinned result is always sent in full.")}>
+      📌 {pinned ? L("נעוץ למודל", "Pinned for the model") : L("נעיצה למודל", "Pin for the model")}
+    </button>
   );
 }
 

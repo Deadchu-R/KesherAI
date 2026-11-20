@@ -341,6 +341,11 @@ export type AgentEvent = EventBase &
     | { type: "undo_run"; run: string; files: string[] }
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
+    /**
+     * The user pinned (or unpinned) one tool result: a pinned result is always sent to the model in full, never
+     * pruned to its summary line (packages/agent/src/budget.ts).
+     */
+    | { type: "tool_pin"; callId: string; pinned: boolean }
     /** A saved state of the project folder, taken before the next message (coding sessions). */
     | { type: "checkpoint"; id: string; files: number }
     | {
@@ -361,6 +366,11 @@ export type AgentEvent = EventBase &
          * `cached_tokens`). Only when the provider reported it; older servers and clients leave it out.
          */
         cached?: number;
+        /**
+         * Tokens this call did not send because of the token budget (main model only): older tool results sent as
+         * one summary line, and tool instructions over the per-turn cap. Estimated from the text.
+         */
+        pruned?: number;
       }
     | {
         /** A teammate model's contribution: a plan before the work, or a review after it. */

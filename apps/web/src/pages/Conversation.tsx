@@ -32,7 +32,7 @@ import { BrowserPanel } from "../BrowserPanel";
 import { SourcesPanel } from "../SourcesPanel";
 import { WebPrefsChip } from "../WebPrefsChip";
 import { answerSources } from "../answerSources";
-import { answerTokens, cachePercent } from "../answer-tokens";
+import { answerTokens, cachePercent, pinnedCalls } from "../answer-tokens";
 import { SessionEnvBar } from "../CodeEnvironment";
 import { StepsPanel, currentSteps } from "../StepsPanel";
 // The editor and terminal are big; load them only when the IDE panel opens.
@@ -376,6 +376,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   }, [events]);
   /** Tokens per answer (model, in/out, prompt cache) for the token line under each answer. */
   const tokensByAnswer = useMemo(() => answerTokens(events), [events]);
+  /** Tool results the user pinned (always sent to the model in full). */
+  const pinnedResults = useMemo(() => pinnedCalls(events), [events]);
   const sources = useMemo(() => answerSources(events), [events]);
 
   const byCall = useMemo(() => {
@@ -874,7 +876,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   // after the group, so "the last block" missed a build that was running after its approval).
                   live={busy && (bi === blocks.length - 1 || b.steps.some((st) => !st.result))}
                   convId={id}
-                  renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} />}
+                  renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} convId={id} pinned={pinnedResults.has(s.call.callId)} />}
                   liveOutput={liveOut}
                   // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
                   after={[
@@ -975,12 +977,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                             const he = getLocale() === "he";
                             const pct = cachePercent(tk.cached, tk.cacheBase);
                             const est = tk.estimated ? "~" : "";
+                            const saved = (tk.cached ?? 0) + (tk.pruned ?? 0);
                             return (
-                              <span className={`answer-tokens small${pct === undefined && !tk.cached ? " no-cache" : ""}`} dir="ltr" title={he ? `${tk.input} טוקנים נקראו, ${tk.output} נכתבו${tk.cached !== undefined ? `, ${tk.cached} מהם מהמטמון` : ""}` : `${tk.input} tokens read, ${tk.output} written${tk.cached !== undefined ? `, ${tk.cached} of them from the cache` : ""}`}>
+                              <span className={`answer-tokens small${pct === undefined && !tk.cached && !tk.pruned ? " no-cache" : ""}`} dir="ltr" title={he ? `${tk.input} טוקנים נקראו, ${tk.output} נכתבו${tk.cached !== undefined ? `, ${tk.cached} מהם מהמטמון` : ""}${tk.pruned ? `, ${tk.pruned} לא נשלחו (תוצאות כלים ישנות כשורת סיכום, כלים מעבר לתקרה)` : ""}` : `${tk.input} tokens read, ${tk.output} written${tk.cached !== undefined ? `, ${tk.cached} of them from the cache` : ""}${tk.pruned ? `, ${tk.pruned} not sent (older tool results as a summary line, tools over the cap)` : ""}`}>
                                 <span className="tk-chip tk-model">{shortModelName(tk.modelId)}</span>
                                 <span className="tk-chip tk-io">↑{est}{kTokens(tk.input)} ↓{est}{kTokens(tk.output)}</span>
                                 {pct !== undefined && <span className={`tk-chip tk-cache${pct >= 50 ? " good" : ""}`} dir={he ? "rtl" : "ltr"}>{he ? "מטמון" : "cache"} {pct}%</span>}
-                                {!!tk.cached && <span className="tk-chip tk-saved" dir={he ? "rtl" : "ltr"}>{he ? "נחסכו" : "saved"} {kTokens(tk.cached)}</span>}
+                                {!!tk.pruned && <span className="tk-chip tk-pruned" dir={he ? "rtl" : "ltr"}>{he ? "קוצצו" : "pruned"} {kTokens(tk.pruned)}</span>}
+                                {saved > 0 && <span className="tk-chip tk-saved" dir={he ? "rtl" : "ltr"}>{he ? "נחסכו" : "saved"} {kTokens(saved)}</span>}
                               </span>
                             );
                           })()}

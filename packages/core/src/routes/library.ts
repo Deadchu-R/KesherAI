@@ -729,6 +729,21 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  /** Pins a tool result so the model always gets it in full (the token budget never prunes it), or unpins it. */
+  app.post<{ Params: { id: string }; Body: { callId?: string; pinned?: boolean } }>("/api/conversations/:id/pin-output", async (req, reply) => {
+    const callId = typeof req.body?.callId === "string" ? req.body.callId.slice(0, 200) : "";
+    if (!callId) return reply.code(400).send({ error: "Which result?" });
+    const opened = await s.conversations.open(req.params.id);
+    if (!opened) return reply.code(404).send({ error: "Conversation not found" });
+    try {
+      opened.session.pinOutput(callId, req.body?.pinned !== false);
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+    await s.conversations.saveNow(req.params.id);
+    return { ok: true };
+  });
+
   /** What the model reads on its next turn: system prompt, tools, messages, with sizes. */
   app.get<{ Params: { id: string } }>("/api/conversations/:id/context", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);

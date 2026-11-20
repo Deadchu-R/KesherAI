@@ -2167,7 +2167,12 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 .tk-model { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; }
 .tk-cache { color: var(--text-2); }
 .tk-cache.good, .tk-saved { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
-@media (max-width: 480px) { .answer-tokens .tk-model, .answer-tokens .tk-io { display: none; } .answer-tokens.no-cache { display: none; } }
+.tk-pruned { color: var(--text-2); }
+@media (max-width: 480px) { .answer-tokens .tk-model, .answer-tokens .tk-io, .answer-tokens .tk-pruned { display: none; } .answer-tokens.no-cache { display: none; } }
+/* A tool result's pin (always sent to the model in full): a small toggle above its output, a mark in its line. */
+.tool-pin { margin: 4px 0; min-height: 32px; }
+.tool-pin.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.tool-pinned { margin-inline-start: 6px; font-size: .85em; }
 .conv-row { display: flex; align-items: center; position: relative; }
 .conv-row > .conv-link { flex: 1; min-width: 0; }
 .conv-row .conv-more { opacity: 0; flex: none; }
