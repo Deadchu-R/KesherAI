@@ -122,6 +122,9 @@ rows=[
  (118100, ['TextureHandoff.dc.html']),
  (119100, ['SceneStandIn.dc.html','SceneStandIn2D.dc.html','SceneStandInPhone.dc.html']),
  (97800, ['PhoneProgress.dc.html']),
+ (167700, ['GamesProjects.dc.html','GamesProjectsPhone.dc.html']),
+ (169100, ['GamesSyncSheet.dc.html','GamesSyncSheetPhone.dc.html']),
+ (170500, ['HubNotify.dc.html','HubNotifyPhone.dc.html','HubNotifyAppPhone.dc.html']),
 ]
 SIDE=300
 for y,names in rows:
@@ -134,20 +137,21 @@ for k in [k for k in c['notes'] if k.startswith('mk-')]:
     del c['notes'][k]
 c['noteOrder']=[k for k in c['noteOrder'] if not k.startswith('mk-')]
 newest=marks[-1][1]
-# Only the newest page gets a marker (asked 2026-11-16 22:46): it moves to each new change.
-marks=marks[-1:]
+# Only the newest change gets a marker (asked 2026-11-16 22:46): it moves to each new change. A change that adds
+# several boards in one go (same stamp) marks each of them.
+marks=[m for m in marks if m[1]==newest]
 # The newest page glows orange behind it (asked 2026-11-16 22:59): no zoom, no sticky; only the newest one.
 G='NewestGlow.dc.html'
 c['launch']={'view':'canvas'}
 c.setdefault('order',[])
-for n,_,_ in marks:
+for i,(n,_,t) in enumerate(marks):
     b=B[n]; pad=28
     # No glow behind the newest page any more (asked 2026-11-17 12:58: it hid screens); only the note above it.
     B.pop(G, None)
     # The glow board only draws when zoomed in; a wide orange note above it shows at every zoom (asked 23:03).
-    c['notes']['mk-newest']={'x':b['x']-pad,'y':b['y']-pad-340,'w':b['w']+2*pad,'text':f'🆕 הכי חדש · {marks[0][2]}','fill':'orange','size':'xl','bold':True}
-    c['noteOrder'].append('mk-newest')
+    c['notes'][f'mk-newest{i}']={'x':b['x']-pad,'y':b['y']-pad-340,'w':b['w']+2*pad,'text':f'🆕 הכי חדש · {t}','fill':'orange','size':'xl','bold':True}
+    c['noteOrder'].append(f'mk-newest{i}')
     c['order']=[o for o in c['order'] if o != G]
     if n not in c['order']: c['order'].append(n)
 json.dump(c,open(P+'/canvas.json','w'),ensure_ascii=False,indent=1)
-print('newest note above',marks[0][0])
+print('newest notes above',[m[0] for m in marks])
