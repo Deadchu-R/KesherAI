@@ -17,6 +17,7 @@
  * WebCrypto only: the same code runs in Node, the Cloudflare Worker and the phone's WebView.
  */
 import { fromB64url, randomB64url, toB64url, type HubCryptoKey } from "./hub-crypto.js";
+import { WORK_LIST_STATUSES, type WorkListStatus } from "./work-list.js";
 
 /** The record format version (part of the authenticated data). */
 export const SYNC_VERSION = 1;
@@ -60,9 +61,9 @@ const RUN_STATES: readonly SyncRunState[] = ["outbox", "waiting", "waiting-run",
 /** States a run stays in for good. */
 export const TERMINAL_RUN_STATES: ReadonlySet<SyncRunState> = new Set(["done", "partial", "failed", "blocked", "cancelled"]);
 
-/** Where a task came from. */
-export type SyncOrigin = "phone" | "pc" | "page" | "inbox-claude" | "inbox-roee" | "self-work";
-const ORIGINS: readonly SyncOrigin[] = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work"];
+/** Where a task came from (`work-list`: an item of Claude's work list, written only by a PC; work-list.ts). */
+export type SyncOrigin = "phone" | "pc" | "page" | "inbox-claude" | "inbox-roee" | "self-work" | "work-list";
+const ORIGINS: readonly SyncOrigin[] = ["phone", "pc", "page", "inbox-claude", "inbox-roee", "self-work", "work-list"];
 
 /** What an agent snapshot came from. */
 export type SyncAgentSource = "chat-helper" | "inbox" | "antigravity" | "claude-cloud" | "claude-chat";
@@ -80,6 +81,15 @@ export interface SyncTaskBody {
   target?: string;
   createdAt: string;
   risk?: string;
+  /** Only on a work-list item (origin `work-list`): its section, status and place in the list. */
+  workList?: SyncWorkListInfo;
+}
+
+/** Where a work-list item stands (its title is the task's title, its text the task's spec). */
+export interface SyncWorkListInfo {
+  section: string;
+  status: WorkListStatus;
+  order: number;
 }
 
 /** One line of a run's timeline. */
@@ -235,7 +245,7 @@ export function cleanSyncBody<K extends SyncKind>(x: unknown, kind: K): BodyOf<K
       case "task": {
         const origin = oneOf(b.origin, ORIGINS);
         if (!origin || typeof b.title !== "string") return undefined;
-        return { type: "task", title: str(b.title, 200), spec: str(b.spec, 8000), origin, executor: str(b.executor, 40), createdAt: str(b.createdAt, 40), ...opt("target", optStr(b.target, 64)), ...opt("risk", optStr(b.risk, 20)) };
+        return { type: "task", title: str(b.title, 200), spec: str(b.spec, 8000), origin, executor: str(b.executor, 40), createdAt: str(b.createdAt, 40), ...opt("target", optStr(b.target, 64)), ...opt("risk", optStr(b.risk, 20)), ...opt("workList", origin === "work-list" ? workListInfo(b.workList) : undefined) };
       }
       case "run": {
         const state = oneOf(b.state, RUN_STATES);
@@ -280,6 +290,15 @@ export function cleanSyncBody<K extends SyncKind>(x: unknown, kind: K): BodyOf<K
     }
   })();
   return out as BodyOf<K> | undefined;
+}
+
+/** A work-list item's info, checked (undefined when it does not fit). */
+function workListInfo(x: unknown): SyncWorkListInfo | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const w = x as Record<string, unknown>;
+  const status = oneOf(w.status, WORK_LIST_STATUSES);
+  if (!status || typeof w.section !== "string" || !Number.isSafeInteger(w.order) || (w.order as number) < 0) return undefined;
+  return { section: str(w.section, 200), status, order: w.order as number };
 }
 
 /** `{ [k]: v }` when v is set, else `{}` (keeps optional fields absent rather than undefined). */
