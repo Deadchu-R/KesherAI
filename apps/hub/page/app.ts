@@ -20,7 +20,7 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
-import { isGoing } from "../../../packages/shared/src/hub-agents.js";
+import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
 import { WORK_LIST_STATUSES, type WorkListStatus } from "../../../packages/shared/src/work-list.js";
@@ -622,7 +622,8 @@ function tasksTab(): HTMLElement {
       "section",
       { class: "card clip" },
       h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })),
-      list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
+      ...taskGroups(list, q),
+      list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
     ),
     open ? taskDetail(open) : null,
     workListGroup(q),
@@ -696,6 +697,65 @@ function runButtons(t: PageTask): HTMLElement | null {
     void device.inboxCommand(t, action);
   };
   return h("span", { class: "row runacts" }, h("button", { type: "button", class: "btn sm-btn pri", onclick: press("inbox-run") }, L("▶ הרץ", "▶ Run")), h("button", { type: "button", class: "btn sm-btn", onclick: press("inbox-cancel") }, L("בטל", "Cancel")), note);
+}
+
+/** The task list's groups, in this order. */
+type TaskGroup = "agents" | "agy" | "pc" | "claude";
+const GROUPS: Array<[TaskGroup, string, string, string]> = [
+  ["agents", "🤖", "סוכנים", "Agents"],
+  ["agy", "✦", "Antigravity", "Antigravity"],
+  ["pc", "🖥", "מחשב", "PC"],
+  ["claude", "✷", "Claude", "Claude"],
+];
+
+/** Which group a task is in: who runs it (Antigravity, the PC's local model or any PC, Claude in the cloud). */
+function groupOf(t: PageTask): Exclude<TaskGroup, "agents"> {
+  const ex = t.inbox?.executor;
+  if (ex === "antigravity" || (!ex && t.executor === "pc-antigravity")) return "agy";
+  if (ex === "claude" || (!ex && t.route === "claude-cloud")) return "claude";
+  return "pc";
+}
+
+/** The agent runs of the PCs that fit the filter and the search (the Agents group), newest state first. */
+function agentRows(q: string): AgentCard[] {
+  const now = Date.now();
+  const fits = (c: AgentCard) => (app.filter === "open" ? isGoing(c) : app.filter === "done" ? c.state.state === "done" : app.filter === "failed" ? c.state.state === "failed" : app.filter !== "expired");
+  return sortedCards(device.agents.values(), now).filter((c) => fits(c) && (!q || c.state.title.toLowerCase().includes(q))).slice(0, 10);
+}
+
+/** One agent run in the Tasks list: its state, title and PC; it opens the run's card on the Agents tab. */
+function agentRow(c: AgentCard): HTMLElement {
+  const st = shownState(c, Date.now());
+  const pc = devices().find((d) => d.id === c.deviceId);
+  const tag = st === "waiting" ? h("span", { class: "tag t-ask" }, L("מחכה לך", "Waiting for you")) : st === "running" ? h("span", { class: "tag t-run" }, h("span", { class: "spin", "aria-hidden": "true" }), L(" רץ", " Running")) : st === "done" ? h("span", { class: "tag t-ok" }, L("✓ הסתיים", "✓ Done")) : st === "failed" ? h("span", { class: "tag t-bad" }, L("✕ נכשל", "✕ Failed")) : h("span", { class: "tag t-off" }, st === "stale" ? L("לא עונה", "Not answering") : st === "queued" ? L("בתור", "Queued") : L("נעצר", "Stopped"));
+  const key = `${c.deviceId}/${c.runId}`;
+  return h(
+    "div",
+    { class: "trow", role: "button", tabindex: 0, onclick: () => agentsView.setOpen(key), onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") agentsView.setOpen(key); } },
+    h("span", { class: "c-st" }, tag),
+    h("div", { class: "grow min0" }, h("b", { class: "w5 ell1", dir: "auto" }, c.state.title), c.state.label && isGoing(c) ? h("div", { class: "sm sub ell" }, L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`)) : c.state.summary ? h("div", { class: "sm sub ell" }, c.state.summary) : null),
+    h("span", { class: "c-rt" }, h("span", { class: "ex ex-loc" }, `🖥 ${pc?.name ?? "PC"}`)),
+    h("span", { class: "c-when mut sm" }, when(c.state.startedAt || c.at)),
+    h("span", { class: "c-act" }, h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›"))),
+  );
+}
+
+/**
+ * The task list in groups: Agents (the PCs' agent runs), Antigravity, PC and Claude, each with a head and a count;
+ * an empty group is left out.
+ *
+ * @param list - The tasks that fit the filter and the search.
+ * @param q - The search text (lower case).
+ */
+function taskGroups(list: PageTask[], q: string): HTMLElement[] {
+  const agents = agentRows(q);
+  const out: HTMLElement[] = [];
+  for (const [g, icon, he, en] of GROUPS) {
+    const rows = g === "agents" ? agents.map(agentRow) : list.filter((t) => groupOf(t) === g).map(taskRow);
+    if (!rows.length) continue;
+    out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs" }, String(rows.length))), ...rows);
+  }
+  return out;
 }
 
 /** One row of the task list. */

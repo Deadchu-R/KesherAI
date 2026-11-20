@@ -223,3 +223,5 @@ button.chip { cursor: pointer; min-height: 30px; }
 .wfor { gap: 4px; flex-wrap: nowrap; }
 .inp.wsel { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; }
 .runacts { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* The Tasks list's groups: Agents · Antigravity · PC · Claude (taskGroups in page/app.ts). */
+.trow.ghead { gap: 8px; padding-block: 7px; background: #18181b; cursor: default; font-size: 13px; }
