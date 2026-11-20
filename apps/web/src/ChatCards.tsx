@@ -119,6 +119,13 @@ export function reasonText(reason: string): string {
   if (reason === "The agent wants to run a command on your computer.") return t("reasonExec");
   const danger = /^This command (.+), so it always needs your approval\.$/.exec(reason);
   if (danger) return t("reasonDanger", { what: danger[1]! });
+  // Unity scene changes that are always asked (unity-edit-tools.ts sceneAskReason).
+  const unity = /^Changes (\d+) objects? in the Unity scene(?:, deleting (\d+))?\.$/.exec(reason);
+  if (unity) {
+    const n = Number(unity[1]);
+    const del = unity[2] ? Number(unity[2]) : 0;
+    return L(`שינוי ${n === 1 ? "אובייקט אחד" : `${n} אובייקטים`} בסצנה של Unity${del ? `, כולל מחיקה של ${del === 1 ? "אחד" : del}` : ""}`, reason);
+  }
   return reason;
 }
 

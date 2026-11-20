@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnityCli, type CliRunner } from "./unity-cli.js";
 import { UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
-import { clampInt } from "./unity-edit-tools.js";
+import { clampInt, describeSceneChange, modifyCs, parseSceneChanges } from "./unity-edit-tools.js";
 
 /** A Unity project and a fake `unity` CLI that records every call and answers `script eval` with `answer`. */
 async function setup(answer = "ok") {
@@ -63,4 +63,54 @@ test("unity_inspect_object reads one object's fields, capped, and checks the com
   assert.match((await tools.unity_inspect_object!.run({ object: "Door", component: "x; y" }, ctx)).output, /not a component type name/);
   assert.match((await tools.unity_inspect_object!.run({ object: " " }, ctx)).output, /#id/);
   assert.equal(calls.length, n, "nothing reaches Unity when the input is refused");
+});
+
+test("unity_modify_scene: one schema, checked input, one Undo group, approval for delete or several objects", async () => {
+  const { tools, ctx, calls, lastCs } = await setup("moved Door");
+  const tool = tools.unity_modify_scene!;
+  assert.equal(tool.risk, "write");
+  // One object, no delete: no extra question; several objects or a delete: asked, with the count.
+  assert.equal(tool.askFirst!({ changes: [{ object: "#-5", action: "move", value: [0, 1, 0] }, { object: "#-5", action: "rename", value: "Gate" }] }), undefined);
+  assert.equal(tool.askFirst!({ changes: [{ object: "#-5", action: "delete" }] }), "Changes 1 object in the Unity scene, deleting 1.");
+  assert.equal(tool.askFirst!({ changes: [{ object: "A", action: "set_active", value: false }, { object: "B", action: "scale", value: [2, 2, 2] }] }), "Changes 2 objects in the Unity scene.");
+  assert.equal(parseSceneChanges([{ object: "A", action: "explode" }]), "Change 1: action is one of move, rotate, scale, rename, reparent, delete, set_active, set_property.");
+
+  const n = calls.length;
+  for (const bad of [
+    [{ object: "A", action: "move", value: [1, 2] }],
+    [{ object: "A", action: "move", value: [1, 2, Infinity] }],
+    [{ object: "A", action: "set_active", value: "yes" }],
+    [{ object: "A", action: "set_property", component: "Rigid body", property: "m_Mass", value: 2 }],
+    [{ object: "A", action: "set_property", component: "Rigidbody", property: "m_Mass; x", value: 2 }],
+    [{ object: "A", action: "set_property", component: "Rigidbody", property: "m_Mass", value: { a: 1 } }],
+    [{ object: "", action: "delete" }],
+    [],
+  ]) assert.match((await tool.run({ changes: bad }, ctx)).output, /value|component|property|#id|changes is/, JSON.stringify(bad));
+  assert.equal(calls.length, n, "refused input never reaches Unity");
+
+  const out = await tool.run({ changes: [
+    { object: "#-5", action: "move", value: [0, 1.5, 0], space: "world" },
+    { object: "#-5", action: "reparent", value: "Level" },
+    { object: "Old", action: "delete" },
+    { object: "#-5", action: "set_property", component: "Rigidbody", property: "m_Mass", value: 2 },
+    { object: "#-5", action: "rename", value: 'Ga"te' },
+  ] }, ctx);
+  assert.equal(out.output, "moved Door");
+  const cs = lastCs();
+  assert.ok(cs.includes('var keys = new string[] { "#-5", "Level", "Old" };'));
+  assert.match(cs, /if \(missing.Count > 0\) return "Nothing changed/);
+  assert.match(cs, /Undo.IncrementCurrentGroup\(\)[\s\S]*Undo.CollapseUndoOperations\(group\)/);
+  assert.match(cs, /go.transform.position = new UnityEngine.Vector3\(0f, 1.5f, 0f\)/);
+  assert.match(cs, /var np = objs\[1\]\.transform/);
+  assert.match(cs, /Undo.DestroyObjectImmediate\(go\)/);
+  assert.match(cs, /SetNum\(p, 2\)/);
+  assert.ok(cs.includes('go.name = "Ga\\"te";'));
+  assert.ok(!/SetNum = /.test(modifyCs([{ object: "A", action: "delete" }])), "setters only when a property is set");
+
+  // The approval card lists every change, with the objects' real names when Unity answers.
+  const preview = await tool.preview!({ changes: [{ object: "#-5", action: "delete" }, { object: "B", action: "set_active", value: false }] }, ctx);
+  assert.match(preview, /2 objects, 1 deleted/);
+  assert.match(preview, /1\. #-5: DELETE/);
+  assert.match(preview, /2\. B: turn off/);
+  assert.equal(describeSceneChange({ object: "A", action: "set_property", component: "Light", property: "m_Color", value: [1, 0, 0] }), "Light.m_Color = (1, 0, 0)");
 });
