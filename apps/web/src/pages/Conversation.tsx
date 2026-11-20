@@ -936,7 +936,7 @@ export function ConversationPage({ id }: { id: string }) {
                             const pct = cachePercent(tk.cached, tk.cacheBase);
                             const est = tk.estimated ? "~" : "";
                             return (
-                              <span className="answer-tokens small" dir="ltr" title={he ? `${tk.input} טוקנים נקראו, ${tk.output} נכתבו${tk.cached !== undefined ? `, ${tk.cached} מהם מהמטמון` : ""}` : `${tk.input} tokens read, ${tk.output} written${tk.cached !== undefined ? `, ${tk.cached} of them from the cache` : ""}`}>
+                              <span className={`answer-tokens small${pct === undefined && !tk.cached ? " no-cache" : ""}`} dir="ltr" title={he ? `${tk.input} טוקנים נקראו, ${tk.output} נכתבו${tk.cached !== undefined ? `, ${tk.cached} מהם מהמטמון` : ""}` : `${tk.input} tokens read, ${tk.output} written${tk.cached !== undefined ? `, ${tk.cached} of them from the cache` : ""}`}>
                                 <span className="tk-chip tk-model">{shortModelName(tk.modelId)}</span>
                                 <span className="tk-chip tk-io">↑{est}{kTokens(tk.input)} ↓{est}{kTokens(tk.output)}</span>
                                 {pct !== undefined && <span className={`tk-chip tk-cache${pct >= 50 ? " good" : ""}`}>{he ? "מטמון" : "cache"} {pct}%</span>}
