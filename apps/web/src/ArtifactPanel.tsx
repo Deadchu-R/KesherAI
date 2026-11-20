@@ -1,11 +1,14 @@
 import { lazy, Suspense, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CodeView } from "./ide/CodeView";
 import type { PanelItem } from "./doc-items";
+import type { CanvasItem } from "./chat/canvas-items";
 import { getLocale, he$ } from "./i18n";
 
 const DesignBoard = lazy(() => import("./DesignBoard").then((m) => ({ default: m.DesignBoard })));
 // Documents, sheets and decks (DocPanel.tsx imports this file for openItem, so it is loaded when first needed).
 const ItemPanel = lazy(() => import("./DocPanel").then((m) => ({ default: m.ItemPanel })));
+// Pictures, PBR map sets and code diffs (CanvasPanel.tsx, design ChatCanvas), loaded when first opened.
+const CanvasPanel = lazy(() => import("./CanvasPanel").then((m) => ({ default: m.CanvasPanel })));
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -27,6 +30,8 @@ let versions: string[] = [];
 let current = -1;
 /** The document, sheet or deck open in the panel (instead of a page block), if any. */
 let item: PanelItem | null = null;
+/** The picture, PBR set or diff open in the panel (the side canvas), if any. */
+let media: CanvasItem | null = null;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((f) => f());
 
@@ -43,6 +48,7 @@ export function artifactKey(code: string): string {
 export function openArtifact(code: string): void {
   const keys = [...new Set([...document.querySelectorAll<HTMLElement>("[data-artifact]")].map((e) => e.dataset.artifact!))];
   versions = keys.map((k) => known.get(k)).filter((c): c is string => !!c);
+  media = null;
   if (!versions.includes(code)) versions.push(code);
   current = versions.indexOf(code);
   item = null;
@@ -56,6 +62,21 @@ export function openArtifact(code: string): void {
  */
 export function openItem(p: PanelItem): void {
   item = p;
+  media = null;
+  versions = [];
+  current = -1;
+  changed();
+}
+
+/**
+ * Opens the side canvas on a picture (zoom, compare, history), a PBR map set (the maps and a lit sphere) or a code
+ * diff (its versions in this chat).
+ *
+ * @param m - What to show, with its versions.
+ */
+export function openCanvas(m: CanvasItem): void {
+  media = m;
+  item = null;
   versions = [];
   current = -1;
   changed();
@@ -64,6 +85,7 @@ export function openItem(p: PanelItem): void {
 /** Closes the panel (✕, or "Back to chat" on the phone). */
 export function closePanel(): void {
   item = null;
+  media = null;
   current = -1;
   changed();
 }
@@ -145,6 +167,7 @@ export function ArtifactPanel() {
       versions = [];
       current = -1;
       item = null;
+      media = null;
       changed();
     };
     addEventListener("hashchange", away);
@@ -154,8 +177,16 @@ export function ArtifactPanel() {
     };
   }, []);
   useEffect(() => {
-    document.body.classList.toggle("artifact-open", current >= 0 || !!item);
+    document.body.classList.toggle("artifact-open", current >= 0 || !!item || !!media);
   });
+  if (media) {
+    return (
+      <aside className={`artifact-panel canvas-panel${full ? " full" : ""}`} aria-label={L("קנבס צד", "Side canvas")}>
+        <ResizeEdge />
+        <Suspense fallback={<p className="muted small">…</p>}><CanvasPanel item={media} full={full} onFull={() => setFull((f) => !f)} onClose={() => { setFull(false); closePanel(); }} /></Suspense>
+      </aside>
+    );
+  }
   if (item) {
     return (
       <aside className={`artifact-panel doc-panel${full ? " full" : ""}`} aria-label={item.title || L("פריט מהצ'אט", "An item from the chat")}>
