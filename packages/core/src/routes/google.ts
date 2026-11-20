@@ -68,9 +68,10 @@ export async function googleRoutes(app: FastifyInstance, s: KesherServices): Pro
     try {
       const email = await s.google.finish(req.query.code, req.query.state);
       void s.driveSync.syncNow().catch(() => undefined);
+      void s.tasksSync?.syncNow().catch(() => undefined);
       // The desktop app comes back to the front, so there is nothing to do in the browser.
       s.focusApp?.();
-      const extra = (s.config.google.services ?? []).map((x) => (x === "gmail" ? "Gmail" : x === "drive" ? "your Google Drive files" : "Google Calendar"));
+      const extra = (s.config.google.services ?? []).filter((x) => x !== "sync").map((x) => (x === "gmail" ? "Gmail" : x === "drive" ? "your Google Drive files" : "Google Calendar"));
       return page(`${branding.productName} is connected to Google`, `${email ? `${email}. ` : ""}Projects and conversations are saved in the KesherAI folder in your Drive.${extra.length ? ` ${extra.join(" and ")} can now be used in your chats.` : ""} You can go back to ${branding.productName}.`);
     } catch (err) {
       return page("Google Drive was not connected", (err as Error).message);

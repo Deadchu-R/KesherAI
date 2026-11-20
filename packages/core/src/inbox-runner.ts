@@ -375,6 +375,26 @@ export class TaskInbox {
   }
 
   /**
+   * A task another of the user's devices wrote to Google Drive (tasks-sync.ts): checked like a task file and queued
+   * once (an id already in the queue is left alone). An Antigravity task waits for Run on the PC as always.
+   *
+   * @param t - The queue id (made by tasks sync), title, goal and the executor the device asked for (data only).
+   * @returns Whether it was added.
+   */
+  async fromDrive(t: { id: string; title: string; goal: string; executor: string }): Promise<boolean> {
+    await this.load();
+    if (!validTaskId(t.id) || this.saved.tasks.some((x) => x.id === t.id)) return false;
+    const s = this.s;
+    const executor: InboxTaskSpec["executor"] = t.executor === "claude" ? "opus" : ["auto", "antigravity", "local", "opus"].includes(t.executor) ? (t.executor as InboxTaskSpec["executor"]) : "auto";
+    const spec: InboxTaskSpec = { id: t.id, title: t.title.trim().slice(0, 200) || "Task", executor, risk: "medium", from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths], forbiddenPaths: [...s.forbiddenPaths], check: "", maxMinutes: s.maxMinutes, maxFiles: 15, goal: t.goal.trim().slice(0, 6000) || t.title.trim().slice(0, 200) };
+    const parsed = parseTaskFile(taskFileText(spec), spec.id, s);
+    if ("error" in parsed) return false;
+    await this.enqueue(parsed.spec);
+    await this.save();
+    return true;
+  }
+
+  /**
    * A task the user writes in the app ("+ Task", also from the phone): added to the queue and written to the inbox
    * branch so Claude sees it too.
    *

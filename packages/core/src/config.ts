@@ -153,7 +153,7 @@ export const KesherConfigSchema = z.object({
       folderId: z.string().optional(),
       lastSync: z.string().optional(),
       lastError: z.string().optional(),
-      services: z.array(z.enum(["gmail", "calendar", "drive"])).optional(),
+      services: z.array(z.enum(["gmail", "calendar", "drive", "sync"])).optional(),
     })
     .prefault({}),
   /** Unity projects the user added (worked on through Unity's CLI). */
@@ -230,6 +230,11 @@ export const KesherConfigSchema = z.object({
       gpuBusyPercent: z.number().int().min(0).max(100).default(40),
     })
     .prefault({}),
+  /**
+   * Tasks on all your devices (tasks-sync.ts): the task inbox's tasks and runs kept as sealed records in the hidden
+   * KesherAI folder of the user's own Google Drive. Off until turned on (on this PC only).
+   */
+  tasksSync: z.object({ enabled: z.boolean().default(false) }).prefault({}),
   /** CivitAI: the user's own key, for LoRAs that need one to download (Images → Find LoRAs); never sent to a page. */
   civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */

@@ -60,6 +60,7 @@ import { ProjectFacts } from "./project-facts.js";
 import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
+import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxSnapshot } from "./agent-activity.js";
 
@@ -620,6 +621,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   services.hub = hub;
   hubRef.client = hub;
+  // Tasks on all your devices: the inbox's tasks as sealed records in the user's Google Drive (off until turned on).
+  services.tasksSync = new TasksSync({
+    settings: () => config.tasksSync,
+    setEnabled: async (on) => {
+      config.tasksSync.enabled = on;
+      await persist();
+    },
+    google,
+    inbox: taskInbox,
+    file: join(paths.root, "tasks-sync.json"),
+    log: (m) => console.warn(`[tasks-sync] ${m}`),
+  });
 
   // 25 MB for a request (model APIs with pictures); the few routes that take more say so themselves.
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 25 * 1024 * 1024 });
@@ -773,6 +786,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       // Kesher Cloud: a paired PC that was on connects again when the app starts (before 0.6.402 it waited for the
       // On switch, so the hub page showed it Off). The main app only, never a worker.
       if (!options.worker) hub.start();
+      if (!options.worker) services.tasksSync?.start();
       if (config.remote.anywhere) {
         services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
       }

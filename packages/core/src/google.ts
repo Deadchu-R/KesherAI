@@ -32,8 +32,11 @@ export interface GoogleConfig {
   services?: GoogleService[];
 }
 
-/** Google services besides Drive that KesherAI can connect. */
-export type GoogleService = "gmail" | "calendar" | "drive";
+/**
+ * Google services besides Drive that KesherAI can connect. `sync` is the hidden app folder in the user's Drive where
+ * "Tasks on all your devices" keeps its sealed records (tasks-sync.ts).
+ */
+export type GoogleService = "gmail" | "calendar" | "drive" | "sync";
 
 /**
  * The permissions each service asks for. Gmail can read and write drafts,
@@ -44,6 +47,8 @@ export const SERVICE_SCOPES: Record<GoogleService, string[]> = {
   calendar: ["https://www.googleapis.com/auth/calendar.events"],
   // Read every file in the user's Drive (search and read); new documents are created with drive.file.
   drive: ["https://www.googleapis.com/auth/drive.readonly"],
+  // Only KesherAI's own hidden folder (appDataFolder); a non-sensitive scope, asked for when tasks sync is turned on.
+  sync: ["https://www.googleapis.com/auth/drive.appdata"],
 };
 
 /** Endpoints, overridable for tests. */
@@ -311,6 +316,18 @@ export class GoogleDrive {
     }
   }
 
+  /**
+   * An access token for the signed-in user (for code that calls Google itself, such as tasks sync). Never log it.
+   *
+   * @param opts - `refresh: true` when Google refused the last one: get a fresh token.
+   * @returns The token.
+   * @throws Error when not connected or the refresh token stopped working.
+   */
+  async accessToken(opts: { refresh: boolean } = { refresh: false }): Promise<string> {
+    if (opts.refresh) this.access = undefined;
+    return this.token();
+  }
+
   /** @returns Whether a service (Gmail, Calendar) is connected. */
   has(service: GoogleService): boolean {
     return this.connected && !!this.config.services?.includes(service);
@@ -335,7 +352,7 @@ export class GoogleDrive {
 
   /** @returns The API base for a service. */
   base(service: GoogleService): string {
-    if (service === "drive") return this.endpoints.api;
+    if (service === "drive" || service === "sync") return this.endpoints.api;
     return (service === "gmail" ? this.endpoints.gmail : this.endpoints.calendar) ?? GOOGLE_ENDPOINTS[service]!;
   }
 

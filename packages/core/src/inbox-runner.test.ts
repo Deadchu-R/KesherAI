@@ -234,6 +234,12 @@ test("inbox: a declined task file, the daily cap, and the quota", async () => {
     await inbox.fromHub({ taskId: "T-77", title: "From the phone", spec: "Fix the gap" }, "t9");
     const hub = await inbox.task("h-t-77");
     assert.deepEqual([hub.status, hub.runBy, hub.from, hub.boardId, !!hub.runAsk], ["waiting", "antigravity", "hub", "t9", true]);
+    // A task another device wrote to Google Drive (tasks-sync.ts): queued once, "claude" runs as Opus.
+    assert.equal(await inbox.fromDrive({ id: "g-0123456789abcdef", title: "From Drive", goal: "Add a test", executor: "claude" }), true);
+    assert.equal(await inbox.fromDrive({ id: "g-0123456789abcdef", title: "Again", goal: "x", executor: "local" }), false);
+    assert.equal(await inbox.fromDrive({ id: "Bad id", title: "x", goal: "x", executor: "local" }), false);
+    const drive = await inbox.task("g-0123456789abcdef");
+    assert.deepEqual([drive.runBy, drive.from, drive.title], ["opus", "roee", "From Drive"]);
     settings.dailyCap = 0;
     await assert.rejects(inbox.run("c-20261119-06", { here: true }), /limit of 0/);
     assert.ok(isQuotaError("RESOURCE_EXHAUSTED: quota exceeded, retry in 1h35m"));
