@@ -31,7 +31,13 @@ export interface AddMenuProps {
   onMode?: (mode: PermissionMode) => void;
 }
 
-type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | "board" | null;
+type Sub = "pages" | "chats" | "knowledge" | "skills" | "approvals" | "projects" | "scripts" | "board" | "tools" | null;
+
+/** The chat's tool switches (GET /api/conversations/:id/tool-switches). */
+interface ToolSwitches {
+  groups: Array<{ id: string; he: string; en: string; tools: number; on: boolean }>;
+  connectors: Array<{ id: string; name: string; tools: number; on: boolean }>;
+}
 interface Named { id: string; name?: string; title?: string; description?: string }
 
 type BoardCat = "normal" | "cooldown" | "fable";
@@ -80,6 +86,7 @@ export function AddMenu(p: AddMenuProps) {
   const [games, setGames] = useState<Array<{ kind: string; name: string; path: string; engine?: string }> | null>(null);
   const [scriptQ, setScriptQ] = useState("");
   const [scripts, setScripts] = useState<{ roots: string[]; scripts: Array<{ path: string; rel: string }> } | null>(null);
+  const [switches, setSwitches] = useState<ToolSwitches | null>(null);
   // Scripts: searched as you type (a short pause first).
   useEffect(() => {
     if (sub !== "scripts" || !p.convId) return;
@@ -110,6 +117,19 @@ export function AddMenu(p: AddMenuProps) {
       setScripts(null);
       setScriptQ("");
     }
+    if (s === "tools" && p.convId) {
+      setSwitches(null);
+      void api<ToolSwitches>(`/api/conversations/${encodeURIComponent(p.convId)}/tool-switches`).then(setSwitches, () => setSwitches({ groups: [], connectors: [] }));
+    }
+  };
+  // A tool group or connector on/off for this chat only (kept with the chat; the server routes only to what is on).
+  const toggleTool = (key: string) => {
+    if (!switches || !p.convId) return;
+    const flip = <T extends { id: string; on: boolean }>(x: T): T => (x.id === key ? { ...x, on: !x.on } : x);
+    const next = { groups: switches.groups.map(flip), connectors: switches.connectors.map(flip) };
+    setSwitches(next);
+    const toolsOff = [...next.groups, ...next.connectors].filter((x) => !x.on).map((x) => x.id);
+    void api(`/api/conversations/${encodeURIComponent(p.convId)}`, { method: "PATCH", body: { toolsOff } }).catch(() => setSwitches(switches));
   };
   // The board's tasks are work on the project. In a plain chat there is no project folder (found on the phone:
   // the model asked where the code is), so the board's project is granted to this chat first; the model then
@@ -197,6 +217,23 @@ export function AddMenu(p: AddMenuProps) {
       <MenuSeparator />
       {/* The lead plans sub-questions and runs research sub-agents at once; the report opens beside the chat (deep-research.ts). The tool's name in the text loads it. */}
       <MenuItem icon="🔬" title={L("כמה סוכני מחקר במקביל, ודוח עם מקורות שנפתח ליד הצ׳אט", "Several research agents at once, and a report with sources that opens beside the chat")} onSelect={() => p.onInsert(L("מחקר מעמיק (deep_research): ", "Research deeply (deep_research): "))}>{L("מחקר מעמיק", "Research deeply")}</MenuItem>
+      {/* The chat's tools by group, and its connectors (MCP servers), each on/off for this chat (RESEARCH_LOG gap list C1, C13). */}
+      {p.convId && (
+        <MenuSub icon="🛠" label={L("כלים בצ'אט הזה", "Tools in this chat")} {...subProps("tools")}>
+          {switches === null ? <MenuNote>…</MenuNote> : (
+            <>
+              {switches.groups.map((g) => (
+                <MenuItem key={g.id} keepOpen checked={g.on} onSelect={() => toggleTool(g.id)}>{getLocale() === "he" ? g.he : g.en}</MenuItem>
+              ))}
+              {switches.connectors.length > 0 && <MenuNote>{L("קונקטורים", "Connectors")}</MenuNote>}
+              {switches.connectors.map((c) => (
+                <MenuItem key={c.id} keepOpen checked={c.on} dir="auto" onSelect={() => toggleTool(c.id)}>{c.name}</MenuItem>
+              ))}
+              <MenuNote>{L("כבוי = הצ'אט לא ישתמש בהם.", "Off = this chat won't use them.")}</MenuNote>
+            </>
+          )}
+        </MenuSub>
+      )}
       <MenuSub icon="🧰" label={L("עוד כלים", "More tools")}>
         <MenuSub icon="📋" label={L("משימות מהלוח", "Tasks from the board")} {...subProps("board")}>
           {([["normal", "🧠 Normal"], ["cooldown", "🧊 CoolDown"], ["fable", "✨ Fable"], ["all", L("הכל", "All")]] as const).map(([c, label]) => (
