@@ -9,6 +9,7 @@ import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
+import { keepVersion, versionNumber } from "./versions.js";
 import { DECK_THEMES, cleanSlide, describeDeck, type Deck, type DeckTheme } from "@kesher/shared";
 
 const ID = /^[\w-]{1,80}$/;
@@ -85,7 +86,8 @@ export class DeckStore extends EventEmitter {
       const before = { rev: d.rev, at: d.updatedAt, slides: d.slides, theme: d.theme, title: d.title };
       fn(d);
       if (d.slides.length > MAX_SLIDES) throw Object.assign(new Error(`A deck holds at most ${MAX_SLIDES} slides.`), { statusCode: 413 });
-      d.versions = [...(d.versions ?? []), before].slice(-20);
+      // Every save of a deck is its own version (the open page saves a whole slide at a time).
+      keepVersion(d, before, true);
       d.rev++;
       d.updatedAt = new Date().toISOString();
       if (Buffer.byteLength(JSON.stringify(d)) > MAX_BYTES) throw Object.assign(new Error("This deck is too big (20 MB): use smaller pictures."), { statusCode: 413 });
@@ -206,7 +208,7 @@ export function deckTools(store: DeckStore, convId: string, title: () => string)
             x.slides = x.slides.filter((y) => !ids.has(y.id));
           } else throw new Error(`Unknown action "${action}".`);
         });
-        return { output: `Saved: ${saved.slides.length} slides. The user sees it at #/slides/${saved.id}.\n${describeDeck(saved)}` };
+        return { output: `Saved v${versionNumber(saved)}: ${saved.slides.length} slides. The user sees it at #/slides/${saved.id}.\n${describeDeck(saved)}` };
       },
     },
   ];

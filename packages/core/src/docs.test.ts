@@ -60,3 +60,24 @@ test("document tool: edits another document by its id, refuses an unknown one", 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("each tool edit is its own version (v1, v2, v3); typing merges; a restore is a version too", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "docs-"));
+  try {
+    const store = new DocStore(dir);
+    const [tool] = docTools(store, "c2", () => "Notes");
+    const run = (input: Record<string, unknown>) => tool!.run(input, {} as never) as Promise<{ output: string }>;
+    assert.match((await run({ action: "write", body: "one" })).output, /^Saved v2 /);
+    assert.match((await run({ action: "append", body: "two" })).output, /^Saved v3 /);
+    let d = (await store.get("chat-c2"))!;
+    assert.deepEqual(d.versions?.map((v) => v.ver), [1, 2]);
+    d = await store.save(d.id, { body: "one\n\ntwo!", rev: d.rev });
+    d = await store.save(d.id, { body: "one\n\ntwo!!", rev: d.rev });
+    assert.equal(d.ver, 4, "the typing after the model's edit keeps the model's v3, then merges");
+    d = await store.restore(d.id, d.versions!.find((v) => v.ver === 2)!.rev);
+    assert.equal(d.body, "one");
+    assert.equal(d.ver, 5);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

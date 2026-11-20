@@ -5,6 +5,7 @@
 import { EventEmitter } from "node:events";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
+import { keepVersion, versionNumber } from "./versions.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
@@ -21,7 +22,9 @@ export interface Doc {
   convId?: string;
   rev: number;
   updatedAt: string;
-  versions?: Array<{ rev: number; at: string; title: string; body: string }>;
+  /** The current version's number ("v3"; older files have none). */
+  ver?: number;
+  versions?: Array<{ rev: number; at: string; ver?: number; title: string; body: string }>;
 }
 
 /** The documents. */
@@ -65,8 +68,14 @@ export class DocStore extends EventEmitter {
     return d;
   }
 
-  /** Changes a document under its lock (keeping the version before), saves it and tells the open pages. */
-  async update(id: string, fn: (d: Doc) => void): Promise<Doc> {
+  /**
+   * Changes a document under its lock (keeping the version before), saves it and tells the open pages.
+   *
+   * @param id - The document.
+   * @param fn - Changes it in place; may throw to refuse.
+   * @param force - A tool's edit or a restore: always its own version (typing makes one a minute).
+   */
+  async update(id: string, fn: (d: Doc) => void, force = false): Promise<Doc> {
     let out!: Doc;
     const run = this.writes.then(async () => {
       const d = await this.get(id);
@@ -74,9 +83,7 @@ export class DocStore extends EventEmitter {
       const before = { rev: d.rev, at: d.updatedAt, title: d.title, body: d.body };
       fn(d);
       if (d.body.length > MAX) throw Object.assign(new Error("This document is too long (2 MB)."), { statusCode: 413 });
-      // Small edits while typing make one version a minute, not one per keystroke.
-      const last = d.versions?.at(-1);
-      if (!last || Date.parse(before.at) - Date.parse(last.at) > 60_000) d.versions = [...(d.versions ?? []), before].slice(-20);
+      keepVersion(d, before, force);
       d.rev++;
       d.updatedAt = new Date().toISOString();
       await this.write(d);
@@ -106,7 +113,7 @@ export class DocStore extends EventEmitter {
       if (!v) throw Object.assign(new Error("No such version."), { statusCode: 404 });
       d.title = v.title;
       d.body = v.body;
-    });
+    }, true);
   }
 
   /**
@@ -236,8 +243,8 @@ export function docTools(store: DocStore, convId: string, title: () => string): 
             const at = findSection(x.body, String(input.heading ?? ""));
             x.body = at ? `${x.body.slice(0, at.start)}${body.trimEnd()}\n\n${x.body.slice(at.end)}`.replace(/\n{3,}/g, "\n\n").trimEnd() : `${x.body.trimEnd()}\n\n${body}`;
           } else throw new Error(`Unknown action "${action}".`);
-        });
-        return { output: `Saved (${saved.body.split(/\s+/).filter(Boolean).length} words). The user sees it at #/docs/${saved.id}.` };
+        }, true);
+        return { output: `Saved v${versionNumber(saved)} (${saved.body.split(/\s+/).filter(Boolean).length} words). The user sees it at #/docs/${saved.id}.` };
       },
     },
   ];

@@ -15,7 +15,9 @@ export interface Sheet {
   convId?: string;
   rev: number;
   updatedAt: string;
-  versions?: Array<{ rev: number; at: string; title: string; cells: Record<string, string>; cols: number; rows: number }>;
+  /** The current version's number ("v3"; older files have none). */
+  ver?: number;
+  versions?: Array<{ rev: number; at: string; ver?: number; title: string; cells: Record<string, string>; cols: number; rows: number }>;
 }
 
 export const MAX_COLS = 52;

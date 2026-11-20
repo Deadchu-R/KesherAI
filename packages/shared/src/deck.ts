@@ -43,7 +43,9 @@ export interface Deck {
   rev: number;
   updatedAt: string;
   /** Earlier versions (the last 20), newest last. */
-  versions?: Array<{ rev: number; at: string; slides: Slide[]; theme: DeckTheme; title: string }>;
+  /** The current version's number ("v3"; older files have none). */
+  ver?: number;
+  versions?: Array<{ rev: number; at: string; ver?: number; slides: Slide[]; theme: DeckTheme; title: string }>;
 }
 
 const s = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\r/g, "").trim().slice(0, n) : "");

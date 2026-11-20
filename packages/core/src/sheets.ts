@@ -9,6 +9,7 @@ import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
+import { keepVersion, versionNumber } from "./versions.js";
 import { MAX_COLS, MAX_ROWS, addr, cleanCells, describeSheet, parseRef, type Sheet } from "@kesher/shared";
 
 const ID = /^[\w-]{1,80}$/;
@@ -66,8 +67,14 @@ export class SheetStore extends EventEmitter {
     return s;
   }
 
-  /** Changes a sheet under its lock (keeping the version before), saves it and tells the open pages. */
-  async update(id: string, fn: (s: Sheet) => void): Promise<Sheet> {
+  /**
+   * Changes a sheet under its lock (keeping the version before), saves it and tells the open pages.
+   *
+   * @param id - The sheet.
+   * @param fn - Changes it in place; may throw to refuse.
+   * @param force - A tool's edit or a restore: always its own version (typing makes one a minute).
+   */
+  async update(id: string, fn: (s: Sheet) => void, force = false): Promise<Sheet> {
     let out!: Sheet;
     const run = this.writes.then(async () => {
       const s = await this.get(id);
@@ -78,9 +85,7 @@ export class SheetStore extends EventEmitter {
       grow(s);
       s.cols = Math.min(MAX_COLS, s.cols);
       s.rows = Math.min(MAX_ROWS, s.rows);
-      // Typing makes one version a minute, not one per cell.
-      const last = s.versions?.at(-1);
-      if (!last || Date.parse(before.at) - Date.parse(last.at) > 60_000) s.versions = [...(s.versions ?? []), before].slice(-20);
+      keepVersion(s, before, force);
       s.rev++;
       s.updatedAt = new Date().toISOString();
       await this.write(s);
@@ -110,7 +115,7 @@ export class SheetStore extends EventEmitter {
       const v = s.versions?.find((x) => x.rev === rev);
       if (!v) throw Object.assign(new Error("No such version."), { statusCode: 404 });
       Object.assign(s, { title: v.title, cells: v.cells, cols: v.cols, rows: v.rows });
-    });
+    }, true);
   }
 
   /** Deletes a sheet. */
@@ -195,8 +200,8 @@ export function sheetTools(store: SheetStore, convId: string, title: () => strin
             if (typeof input.title === "string" && input.title.trim()) x.title = input.title.trim().slice(0, 160);
           } else if (action === "set") setCells(x, cells);
           else throw new Error(`Unknown action "${action}".`);
-        });
-        return { output: `Saved. The user sees it at #/sheets/${saved.id}.\n${describeSheet(saved).slice(0, 6000)}` };
+        }, true);
+        return { output: `Saved v${versionNumber(saved)}. The user sees it at #/sheets/${saved.id}.\n${describeSheet(saved).slice(0, 6000)}` };
       },
     },
   ];
