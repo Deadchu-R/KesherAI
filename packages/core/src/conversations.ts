@@ -1306,6 +1306,8 @@ export class ConversationManager {
     const c = await this.deps.library.getConversation(id);
     this.sessions.get(id)?.stop();
     this.sessions.delete(id);
+    this.helpers.runs.stopAll(id);
+    this.delegateOptions.delete(id);
     this.outside.get(id)?.close();
     this.outside.delete(id);
     clearTimeout(this.saveTimers.get(id));
@@ -1461,6 +1463,8 @@ export class ConversationManager {
     // Outside agents' CLIs (Antigravity) end with KesherAI; their session ids are saved above.
     for (const a of this.outside.values()) a.close();
     this.outside.clear();
+    // Helpers still running are saved as they are, so they continue after the start.
+    await this.helpers.store?.flush();
   }
 }
 

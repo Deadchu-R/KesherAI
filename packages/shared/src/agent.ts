@@ -147,6 +147,11 @@ export interface HelperRunInfo {
   runAsk?: { requestId: string; until: number; left: number; text: string };
   /** Tokens it used so far (absent until its first model call; an outside agent reports none). */
   usage?: HelperUsage;
+  /**
+   * A restart (an update, the PC restarting) stopped it while it ran: `paused` until the app is ready again, then
+   * `resumed` once it continues from its saved steps (helper-store.ts).
+   */
+  restart?: "paused" | "resumed";
 }
 
 /**

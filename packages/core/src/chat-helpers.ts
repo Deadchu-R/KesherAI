@@ -1,10 +1,12 @@
+import { join } from "node:path";
 import type { AgentSession } from "@kesher/agent";
 import type { HelperKind, HelperRunInfo } from "@kesher/shared";
 import type { AgentDef } from "./agents.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { reportFor, type HelperModel } from "./delegate.js";
 import { engineIdOf, helperLimit, maySwap, pickHelperModel, shortModelName, type HelperModelPick, type LocalModel } from "./helper-model.js";
-import { HelperRuns, type HelperControl } from "./helper-runs.js";
+import { HelperRuns, type HelperControl, type SavedHelperRun } from "./helper-runs.js";
+import { HelperStore } from "./helper-store.js";
 import type { LoadReason } from "./llamacpp.js";
 import { outsideAgent } from "./acp-chat.js";
 
@@ -44,6 +46,14 @@ export interface ChatHelpersHost {
   worktree(id: string): WorktreeMaker | undefined;
   /** The chat's model now. */
   leadModel(id: string): string | undefined;
+  /** Opens a chat that is not loaded (after a restart), for its helpers' reports and to continue them. */
+  open?(id: string): Promise<AgentSession | undefined>;
+  /**
+   * Builds a run paused by a restart again and queues it (conversations.ts, with the chat's delegate options).
+   *
+   * @returns Whether it could continue.
+   */
+  resumeRun?(id: string, saved: SavedHelperRun): Promise<boolean>;
 }
 
 /** One lock: the work runs after the ones before it (swaps and loads beside, one at a time). */
@@ -59,6 +69,8 @@ function lock(): <T>(work: () => Promise<T>) => Promise<T> {
 /** The chats' helpers. */
 export class ChatHelpers {
   readonly runs: HelperRuns;
+  /** The runs on disk (absent without a data folder: tests). */
+  readonly store?: HelperStore;
   private vram = 0;
   private vramAt = 0;
   private readonly swapLock = lock();
@@ -73,13 +85,55 @@ export class ChatHelpers {
     this.runs.on("end", (info: HelperRunInfo & { chatId: string }) => {
       // What it used is saved in the chat, so the Usage page counts helpers apart from the chat's own model.
       if (info.usage) this.host.session(info.chatId)?.helperUsage({ runId: info.id, kind: info.kind, ...(info.agent ? { agent: info.agent } : {}), model: info.model, state: info.state, ...info.usage });
-      setImmediate(() => {
-        if (!this.runs.pending(info.id)) return;
-        this.runs.delivered(info.id);
-        this.host.session(info.chatId)?.deliver(`A background helper ended. Its report:\n${reportFor(this.runs.get(info.id) ?? info)}`);
-      });
+      setImmediate(() => void this.handOver(info));
     });
+    if (host.deps.outputsDir) {
+      this.store = new HelperStore(join(host.deps.outputsDir, "..", "helper-runs"), this.runs);
+      this.store.watch();
+    }
     void this.cardMemory();
+  }
+
+  /**
+   * Hands an ended background helper's report to its chat's model: when the chat is idle, the model is woken to go on
+   * with it once (a grey "helper finished" line); when it works, the report goes into its next step.
+   *
+   * @param info - The run that ended.
+   */
+  private async handOver(info: HelperRunInfo & { chatId: string }): Promise<void> {
+    if (!this.runs.pending(info.id)) return;
+    this.runs.delivered(info.id);
+    this.store?.soon(info.chatId);
+    const r = this.runs.get(info.id) ?? info;
+    const text = `A background helper you started ended. Its report:\n${reportFor(r)}\n\nGo on with the task using it. If nothing is left to do, tell the user the result in a few lines.`;
+    const s = this.host.session(info.chatId) ?? (await this.host.open?.(info.chatId).catch(() => undefined));
+    if (!s) return;
+    const what = r.state === "done" ? ["סיים", "finished"] : r.state === "failed" ? ["נכשל", "failed"] : ["נעצר", "stopped"];
+    s.wake(text, `סוכן עזר ${what[0]}: ${r.title} · Helper ${what[1]}: ${r.title}`);
+  }
+
+  /**
+   * After a start: puts the runs saved before the restart back (ended ones show again, "finished while you were
+   * away"), and continues the ones that were going (paused by restart until each is built again; its model is made
+   * ready by its own run, as at a first start).
+   *
+   * @returns How many continue.
+   */
+  async resumeSaved(): Promise<number> {
+    if (!this.store) return 0;
+    const saved = await this.store.load();
+    const paused = new Set(this.runs.restore(saved));
+    // A background report that ended just before the restart and never reached the chat's model goes there now.
+    for (const s of saved) if (!paused.has(s.info.id) && this.runs.pending(s.info.id)) void this.handOver({ ...(this.runs.get(s.info.id) ?? s.info), chatId: s.chatId });
+    let n = 0;
+    for (const s of saved) {
+      if (!paused.has(s.info.id)) continue;
+      const ok = await (this.host.resumeRun?.(s.chatId, s) ?? Promise.resolve(false)).catch(() => false);
+      if (ok) n++;
+      // Its chat or project is gone, or a builder's chat lost its git project: it ends with the reason.
+      else this.runs.resume(s.info.id, async () => Promise.reject(new Error("Could not continue after the restart (its chat or project is no longer here).")));
+    }
+    return n;
   }
 
   /** @returns The card's memory, read again every 10 minutes (the limit uses the last value). */

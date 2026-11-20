@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
-import type { HelperKind, HelperRunInfo } from "@kesher/shared";
+import type { AgentMessage, HelperKind, HelperRunInfo } from "@kesher/shared";
 import { builtinHelpers, HELPER_STEPS, type AgentDef } from "./agents.js";
-import { HelperRuns, type HelperControl } from "./helper-runs.js";
+import { HelperRuns, type HelperControl, type HelperJob, type SavedHelperRun } from "./helper-runs.js";
 
 /**
  * Helpers: the chat's model hands independent parts of a job to other
@@ -111,6 +111,7 @@ interface HelperSpec {
  * Runs one helper to the end and returns its final answer.
  *
  * @param onUsage - Each model call's tokens (the session's `usage` events), for the run's total.
+ * @param saved - Its conversation from before a restart (it continues from there), and where to keep it as it grows.
  */
 async function runHelper(
   p: HelperSpec,
@@ -118,6 +119,7 @@ async function runHelper(
   signal: AbortSignal,
   onStep: (text: string) => void,
   onUsage?: (u: { input: number; output: number; cached?: number; estimated: boolean }) => void,
+  saved?: { resumed?: AgentMessage[]; transcript?: (messages: AgentMessage[]) => void },
 ): Promise<string> {
   const { agent, copy } = p;
   const worker = !!copy;
@@ -139,6 +141,9 @@ async function runHelper(
     maxSteps: p.maxSteps,
     finalStepReport: true,
     contextTokens: o.contextTokens?.(p.modelId) ?? 12_000,
+    ...(saved?.resumed?.length ? { messages: saved.resumed } : {}),
+    // Kept after each step, so a restart continues from here (helper-store.ts).
+    ...(saved?.transcript ? { onChange: (x: AgentSession) => saved.transcript!(x.messages.slice()) } : {}),
   });
   let last = "";
   const done = new Promise<void>((resolve) => {
@@ -164,13 +169,116 @@ async function runHelper(
   if (signal.aborted) throw new Error("Stopped.");
   signal.addEventListener("abort", stop, { once: true });
   try {
-    s.send(p.task);
+    s.send(saved?.resumed?.length ? RESUME_NOTE : p.task);
     await done;
   } finally {
     signal.removeEventListener("abort", stop);
   }
   if (signal.aborted) throw new Error("Stopped.");
   return last.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+}
+
+/** What a helper reads when it continues after a restart (like the chat's own "resume" in conversations.ts). */
+export const RESUME_NOTE =
+  "KesherAI restarted (an update or a restart) while you were working on this. Continue the same task from where you stopped. First look at the last tool results above to see what was already done, and do not repeat finished steps.";
+
+/** What a helper run needs to be built again after a restart (saved with it, JSON only). */
+type HelperResume = {
+  task: string;
+  kind: Exclude<HelperKind, "external">;
+  /** A named agent (a built-in type's, a persona, a project's agent file). */
+  agent?: string;
+  /** A model the part asked for (otherwise the type's model is chosen again). */
+  model?: string;
+  maxSteps: number;
+  write: boolean;
+};
+
+/**
+ * A helper run's work: the once-per-project cloud ask, its model made ready, its own copy for a builder, the helper
+ * itself, and the model released after.
+ *
+ * @param o - The conversation's side.
+ * @param job - The part: its task and title, type, agent, model, steps, and whether it changes files.
+ * @param progress - Each step, for the `delegate` call's live output (absent after a restart).
+ * @returns The run's work, for `HelperRuns`.
+ */
+function helperWork(
+  o: DelegateOptions,
+  job: { task: string; title: string; kind: Exclude<HelperKind, "external">; agent?: AgentDef; model: HelperModel | (() => Promise<HelperModel>); maxSteps: number; write: boolean },
+  progress?: (text: string) => void,
+): HelperJob["run"] {
+  const { task, title, kind, agent, maxSteps, write } = job;
+  return async (ctl) => {
+    // After a restart the model is chosen again (what was loaded is gone), and the card shows it.
+    const m = typeof job.model === "function" ? await job.model() : job.model;
+    if (typeof job.model === "function") ctl.update({ model: m.label, modelNote: m.note, modelNoteHe: m.noteHe, cloud: m.cloud || undefined });
+    // A cloud helper asks once per project before it reads the project's files.
+    let webOnly = false;
+    if (m.cloud && o.workspace?.()) {
+      let yes = o.cloudFiles?.get();
+      if (yes === undefined) {
+        yes = await ctl.ask("cloud-files");
+        o.cloudFiles?.set(yes);
+      }
+      webOnly = !yes;
+      ctl.update({ cloudFiles: yes });
+      if (webOnly && write) throw new Error("A cloud helper may not read this project's files, so it cannot build here (Settings > Helpers).");
+    }
+    let copy: { path: string; finish(): Promise<string> } | undefined;
+    let modelId = m.modelId;
+    try {
+      if (m.prepare) modelId = await m.prepare(ctl, title);
+      ctl.signal.throwIfAborted();
+      if (write) copy = await o.worktree!()!.make(`helper-${(agent?.name ?? kind).toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) || "worker"}-${randomUUID().slice(0, 6)}`);
+      // A builder's copy is new after a restart: its earlier edits are in its conversation, not in the new copy.
+      const resumed = ctl.resumed && write ? [...ctl.resumed, { role: "user" as const, content: "(Your earlier file changes were lost with the restart: you are in a fresh copy of the project, so make them again.)" }] : ctl.resumed;
+      const report = await runHelper({ task, modelId, ...(agent ? { agent } : {}), ...(copy ? { copy: copy.path } : {}), maxSteps, webOnly }, o, ctl.signal, (step) => {
+        ctl.step(step);
+        progress?.(`${agent && agent.source !== "builtin" ? agent.name : kind} (${m.label}): ${step}\n`);
+      }, (u) => ctl.usage(u), { ...(resumed ? { resumed } : {}), transcript: (msgs) => ctl.transcript(msgs) });
+      const diff = copy ? await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`) : undefined;
+      copy = undefined;
+      return { report, ...(diff !== undefined ? { diff } : {}) };
+    } finally {
+      await copy?.finish().catch(() => "");
+      await m.release?.(ctl, title).catch(() => undefined);
+    }
+  };
+}
+
+/**
+ * Continues a helper run that a restart paused (helper-store.ts): its work is built again from what was saved with it,
+ * and it goes on from its saved conversation.
+ *
+ * @param o - The chat's side (with its runs).
+ * @param saved - The run as it was saved.
+ * @returns Whether it was queued again (false when it was not paused or cannot be built again).
+ */
+export function resumeHelperRun(o: DelegateOptions, saved: SavedHelperRun): boolean {
+  const runs = o.runs;
+  const r = saved.resume as Partial<HelperResume> | undefined;
+  if (!runs || !r || typeof r.task !== "string" || !r.kind || !["lookup", "research", "build"].includes(r.kind)) return false;
+  const write = !!r.write;
+  if (write && !o.worktree?.()) return false;
+  const agent = r.agent ? [...(o.agents?.() ?? []), ...builtinHelpers(o.limits?.().steps)].find((a) => a.name === r.agent) : undefined;
+  const kind = r.kind;
+  const asked = r.model;
+  const model = async (): Promise<HelperModel> => {
+    if (asked) {
+      try {
+        o.turnFor(asked);
+        return { modelId: asked, label: asked.split("/").pop() ?? asked, local: saved.local };
+      } catch {
+        // Gone since (a cloud key removed, a model deleted): the type's model below.
+      }
+    }
+    if (o.modelFor) return o.modelFor({ kind, ...(agent ? { agent } : {}) });
+    const fallback = o.currentModel();
+    if (!fallback) throw new Error("No model to run it.");
+    return { modelId: fallback, label: fallback.split("/").pop() ?? fallback, local: false };
+  };
+  return runs.resume(saved.info.id, helperWork(o, { task: r.task, title: saved.info.title, kind, ...(agent ? { agent } : {}), model, maxSteps: r.maxSteps ?? saved.info.maxSteps, write }));
 }
 
 /** A step for the card: the tool and what it got (a path, a query, a page). */
@@ -334,13 +442,14 @@ export function delegateTool(o: DelegateOptions): AgentTool {
         const title = (typeof p.title === "string" && p.title.trim() ? p.title : String(p.task)).split("\n")[0]!.slice(0, 120);
         const m = model;
         const maxSteps = agent?.maxTurns ?? limits.steps?.[kind] ?? HELPER_STEPS[kind];
+        const bg = background && (p.background === true || agent?.background === true);
         const info = runs.start({
           chatId,
           kind,
           title,
           ...(agent && agent.source !== "builtin" ? { agent: agent.name } : {}),
           ...(ctx.callId ? { callId: ctx.callId } : {}),
-          background: background && (p.background === true || agent?.background === true),
+          background: bg,
           maxSteps,
           timeMs: (agent?.maxMinutes ?? limits.minutes ?? 10) * 60_000,
           local: m.local,
@@ -348,37 +457,9 @@ export function delegateTool(o: DelegateOptions): AgentTool {
           ...(m.note ? { modelNote: m.note } : {}),
           ...(m.noteHe ? { modelNoteHe: m.noteHe } : {}),
           ...(m.cloud ? { cloud: true } : {}),
-          run: async (ctl) => {
-            // A cloud helper asks once per project before it reads the project's files.
-            let webOnly = false;
-            if (m.cloud && o.workspace?.()) {
-              let yes = o.cloudFiles?.get();
-              if (yes === undefined) {
-                yes = await ctl.ask("cloud-files");
-                o.cloudFiles?.set(yes);
-              }
-              webOnly = !yes;
-              ctl.update({ cloudFiles: yes });
-              if (webOnly && write) throw new Error("A cloud helper may not read this project's files, so it cannot build here (Settings > Helpers).");
-            }
-            let copy: { path: string; finish(): Promise<string> } | undefined;
-            let modelId = m.modelId;
-            try {
-              if (m.prepare) modelId = await m.prepare(ctl, title);
-              ctl.signal.throwIfAborted();
-              if (write) copy = await o.worktree!()!.make(`helper-${(agent?.name ?? kind).toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 30) || "worker"}-${randomUUID().slice(0, 6)}`);
-              const report = await runHelper({ task: String(p.task), modelId, ...(agent ? { agent } : {}), ...(copy ? { copy: copy.path } : {}), maxSteps, webOnly }, o, ctl.signal, (step) => {
-                ctl.step(step);
-                ctx.progress?.(`${agent && agent.source !== "builtin" ? agent.name : kind} (${m.label}): ${step}\n`);
-              }, (u) => ctl.usage(u));
-              const diff = copy ? await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`) : undefined;
-              copy = undefined;
-              return { report, ...(diff !== undefined ? { diff } : {}) };
-            } finally {
-              await copy?.finish().catch(() => "");
-              await m.release?.(ctl, title).catch(() => undefined);
-            }
-          },
+          // A background part continues after a restart; a part the chat waits for ends with the chat's turn.
+          ...(bg ? { resume: { task: String(p.task), kind, ...(agent ? { agent: agent.name } : {}), ...(asked && !m.note ? { model: m.modelId } : {}), maxSteps, write } satisfies HelperResume } : {}),
+          run: helperWork(o, { task: String(p.task), title, kind, ...(agent ? { agent } : {}), model: m, maxSteps, write }, (text) => ctx.progress?.(text)),
         });
         results.push({ id: info.id, n: i + 1, background: info.background });
       }

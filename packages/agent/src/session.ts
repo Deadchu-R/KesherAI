@@ -511,6 +511,23 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * Wakes the idle model with a note (a background helper ended while the chat was idle, as Claude's lead does): a
+   * grey line for the user, and one run of the model with the note, so it goes on with the report. Busy, or an
+   * outside agent (which only the user messages), it waits for the next turn instead, as `deliver`.
+   *
+   * @param text - What the model should read, already short.
+   * @param note - The grey line in the thread (both languages).
+   * @returns Whether the model was woken.
+   */
+  wake(text: string, note: string): boolean {
+    this.inbox.push(text);
+    if (this.busy || this.external) return false;
+    this.push({ type: "note", text: note });
+    void this.run();
+    return true;
+  }
+
+  /**
    * Tells the clients the chat's helper runs changed (a `helpers` event, not saved).
    *
    * @param runs - All of the chat's runs now.

@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import type { HelperKind, HelperRunInfo, HelperUsage } from "@kesher/shared";
+import type { AgentMessage, HelperKind, HelperRunInfo, HelperUsage } from "@kesher/shared";
 
 /**
  * The helper runs of every chat (docs/RESEARCH_LOG.md, "Helper agents in the chat", plan steps 3, 5 and 6): a queue
@@ -9,7 +9,8 @@ import type { HelperKind, HelperRunInfo, HelperUsage } from "@kesher/shared";
  * cloud and outside helpers do not use the card and are capped at 4 apart.
  *
  * Events: `change` (chatId) whenever a run of that chat changed, `end` (the run's info) when one ended, `ask` (the
- * run's info) when one starts waiting for the user, `answered` (the run's info) when that wait ends.
+ * run's info) when one starts waiting for the user, `answered` (the run's info) when that wait ends, `save` (chatId)
+ * when a run's transcript grew (helper-store.ts writes `change` and `save` to disk, so runs survive a restart).
  */
 
 /** What a running helper may do with its own run. */
@@ -25,7 +26,7 @@ export interface HelperControl {
    */
   usage(u: { input: number; output: number; cached?: number; estimated?: boolean }): void;
   /** Changes what the card shows (the model after a swap, the swap's phase…). */
-  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "swap" | "cloudFiles" | "cloud" | "runAsk">>): void;
+  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "modelNoteHe" | "swap" | "cloudFiles" | "cloud" | "runAsk">>): void;
   /**
    * Waits for something the user answers elsewhere (the Antigravity ask): the card says why, and the time cap waits.
    *
@@ -40,6 +41,14 @@ export interface HelperControl {
    * @returns The answer; false when the run is stopped first.
    */
   ask(question: string): Promise<boolean>;
+  /**
+   * Keeps the helper's conversation so far (after each of its steps), so it can continue after a restart.
+   *
+   * @param messages - Its session's messages.
+   */
+  transcript(messages: AgentMessage[]): void;
+  /** Its conversation from before a restart (it continues from there), absent on a fresh run. */
+  resumed?: AgentMessage[];
 }
 
 /** One job to run. */
@@ -59,6 +68,11 @@ export interface HelperJob {
   modelNote?: string;
   modelNoteHe?: string;
   cloud?: boolean;
+  /**
+   * What its owner needs to build `run` again after a restart (JSON only: the task, a named agent, an asked model);
+   * absent = it cannot continue after a restart and ends as failed.
+   */
+  resume?: Record<string, unknown>;
   /**
    * The work itself.
    *
@@ -88,6 +102,21 @@ interface Run {
   end: (i: HelperRunInfo) => void;
   /** The chat's model has its report (by helper_result or helper_wait, or at its next turn). */
   delivered?: boolean;
+  /** Its conversation so far (for a restart). */
+  transcript?: AgentMessage[];
+  /** Paused by a restart: the queue skips it until `resume` gives it its work again. */
+  held?: boolean;
+}
+
+/** One run as it is saved on disk (helper-store.ts). */
+export interface SavedHelperRun {
+  chatId: string;
+  info: HelperRunInfo;
+  local: boolean;
+  timeMs: number;
+  delivered?: boolean;
+  resume?: Record<string, unknown>;
+  transcript?: AgentMessage[];
 }
 
 /** The queue and the runs. */
@@ -127,6 +156,87 @@ export class HelperRuns extends EventEmitter {
     this.pump();
     if (run.info.state === "waiting") this.changed(run);
     return { ...run.info };
+  }
+
+  /**
+   * The chat's runs as they are saved, so they survive a restart (the whole report, not the card's cut).
+   *
+   * @param chatId - The chat.
+   */
+  saved(chatId: string): SavedHelperRun[] {
+    return [...this.runs.values()]
+      .filter((r) => r.chatId === chatId)
+      .map((r) => ({
+        chatId: r.chatId,
+        info: { ...r.info, ...(r.full ? { report: r.full, cut: false } : {}) },
+        local: r.job.local,
+        timeMs: r.job.timeMs,
+        ...(r.delivered ? { delivered: true } : {}),
+        ...(r.job.resume ? { resume: r.job.resume } : {}),
+        ...(r.transcript && this.going(r) ? { transcript: r.transcript } : {}),
+      }));
+  }
+
+  /**
+   * Puts runs saved before a restart back. Ended ones come back as they were; ones that were going come back paused
+   * ("paused by restart") when they can continue, until `resume` gives them their work, and failed otherwise.
+   *
+   * @param list - The saved runs (any chat's).
+   * @returns The ids of the paused ones.
+   */
+  restore(list: SavedHelperRun[]): string[] {
+    const paused: string[] = [];
+    for (const s of list) {
+      if (this.runs.has(s.info.id)) continue;
+      let end!: (i: HelperRunInfo) => void;
+      const ended = new Promise<HelperRunInfo>((r) => (end = r));
+      const info: HelperRunInfo = { ...s.info, steps: [...(s.info.steps ?? [])] };
+      delete info.runAsk;
+      delete info.waitReason;
+      const job: HelperJob = { chatId: s.chatId, kind: info.kind, title: info.title, background: info.background, maxSteps: info.maxSteps, timeMs: s.timeMs, local: s.local, model: info.model, ...(s.resume ? { resume: s.resume } : {}), run: async () => Promise.reject(new Error("Not resumed yet.")) };
+      const run: Run = { info, job, chatId: s.chatId, abort: new AbortController(), ended, end, ...(s.delivered ? { delivered: true } : {}), ...(s.transcript ? { transcript: s.transcript } : {}) };
+      this.setReport(run, info.report ?? "");
+      if (!info.report) delete info.report;
+      this.runs.set(info.id, run);
+      if (!this.going(run)) {
+        end({ ...info });
+        continue;
+      }
+      // Its model's state (a swap, a model beside the chat's) is gone with the restart.
+      delete info.swap;
+      if (s.resume) {
+        info.state = "waiting";
+        info.restart = "paused";
+        run.held = true;
+        paused.push(info.id);
+      } else {
+        info.error = "Stopped by a restart of KesherAI (this kind of helper cannot continue by itself).";
+        info.state = "failed";
+        info.endedAt = this.now();
+        end({ ...info });
+      }
+    }
+    for (const chatId of new Set(list.map((s) => s.chatId))) {
+      this.prune(chatId);
+      this.emit("change", chatId);
+    }
+    return paused;
+  }
+
+  /**
+   * Gives a run paused by a restart its work again, and queues it.
+   *
+   * @param id - The run.
+   * @param run - Its work, built again from its saved `resume`; it gets its saved conversation in `ctl.resumed`.
+   * @returns Whether it was paused.
+   */
+  resume(id: string, run: HelperJob["run"]): boolean {
+    const r = this.runs.get(id);
+    if (!r?.held || r.info.state !== "waiting") return false;
+    r.job = { ...r.job, run };
+    r.held = false;
+    this.pump();
+    return true;
   }
 
   /** @returns The chat's runs, oldest first. */
@@ -220,7 +330,7 @@ export class HelperRuns extends EventEmitter {
     let local = active(true);
     let other = active(false);
     for (const r of all) {
-      if (r.info.state !== "waiting") continue;
+      if (r.info.state !== "waiting" || r.held) continue;
       const limit = r.job.local ? this.o.limit() : OTHER_LIMIT;
       const used = r.job.local ? local : other;
       if (used >= limit) {
@@ -251,11 +361,18 @@ export class HelperRuns extends EventEmitter {
     delete r.info.waitReason;
     delete r.info.waitLimit;
     r.info.state = "running";
-    r.info.startedAt = this.now();
+    if (r.info.restart === "paused") r.info.restart = "resumed";
+    // After a restart it keeps its first start (the card's time counts on from there).
+    r.info.startedAt ??= this.now();
     this.armTimer(r);
     this.changed(r);
     const ctl: HelperControl = {
       signal: r.abort.signal,
+      ...(r.transcript?.length ? { resumed: r.transcript } : {}),
+      transcript: (messages) => {
+        r.transcript = messages;
+        this.emit("save", r.chatId);
+      },
       step: (text) => {
         r.info.step++;
         r.info.steps = [...r.info.steps, text.replace(/\s+/g, " ").trim().slice(0, 160)].slice(-30);
@@ -339,6 +456,7 @@ export class HelperRuns extends EventEmitter {
     // Stopped while it asked: the question is gone too (its notification is cleared).
     if (r.answer || r.info.state === "asking") this.emit("answered", { ...r.info, chatId: r.chatId });
     r.answer = undefined;
+    r.transcript = undefined;
     r.info.state = state;
     r.info.endedAt = this.now();
     delete r.info.waitReason;

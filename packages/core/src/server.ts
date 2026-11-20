@@ -808,6 +808,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       // On switch, so the hub page showed it Off). The main app only, never a worker.
       if (!options.worker) hub.start();
       if (!options.worker) services.tasksSync?.start();
+      // Helpers a restart stopped continue (and the ended ones show again); the main app only, never a worker.
+      if (!options.worker) void services.conversations.helpers.resumeSaved().catch((err: Error) => console.warn(`[helpers] ${err.message}`));
       if (config.remote.anywhere) {
         services.tunnel.start(config.port).catch((err: Error) => console.warn(`[tunnel] ${err.message}`));
       }
