@@ -417,6 +417,11 @@ export class LlamaEngine {
     return m ? Math.round(Number(m[1]) * 10) / 10 : undefined;
   }
 
+  /** @returns How many chats the setting lets the engine answer at once (1 to 8). */
+  parallelChats(): number {
+    return this.opts.parallel ?? 1;
+  }
+
   /**
    * Sets how many chats are answered at once; applies the next time a model loads.
    *

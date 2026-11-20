@@ -22,9 +22,10 @@ import { fetchOk, readSSE } from "./sse.js";
  *
  * Options (`ProviderConfig.options`):
  * - `headers` (`Record<string, string>`): extra headers sent with every request.
- * - `llamaCpp` (`{ slots?: () => number }`): the server is llama.cpp's `llama-server` (KesherAI's own engine). Requests
- *   then ask it to keep the prompt cache (`cache_prompt`) and, when it has enough slots, pin each agent kind to its
- *   own slot (`id_slot`). Never set for other servers: they may reject unknown fields.
+ * - `llamaCpp` (`{ slots?: () => number; parallelChats?: () => number }`): the server is llama.cpp's `llama-server`
+ *   (KesherAI's own engine). Requests then ask it to keep the prompt cache (`cache_prompt`) and, when it has enough
+ *   slots, pin each agent kind to its own slot (`id_slot`; see {@link llamaCppFields}). Never set for other servers:
+ *   they may reject unknown fields.
  *
  * Models whose id contains `embed` are listed in the `embedding` category;
  * everything else in `chat`.
@@ -42,7 +43,7 @@ export class OpenAICompatibleProvider implements Provider {
   /** How long to keep trying while the server cannot be reached (the main KesherAI restarting for an update). */
   private readonly waitMs: number;
   /** Set for llama.cpp's server: how many slots it has now (see {@link llamaCppFields}). */
-  private readonly llamaCpp?: { slots?: () => number };
+  private readonly llamaCpp?: { slots?: () => number; parallelChats?: () => number };
 
   /**
    * @param config - Needs `baseUrl` ending in `/v1` (or the API's equivalent).
@@ -56,7 +57,7 @@ export class OpenAICompatibleProvider implements Provider {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.waitMs = Number(config.options?.waitForServerMs ?? 0) || 0;
     const llama = config.options?.llamaCpp;
-    if (llama) this.llamaCpp = typeof llama === "object" ? (llama as { slots?: () => number }) : {};
+    if (llama) this.llamaCpp = typeof llama === "object" ? (llama as { slots?: () => number; parallelChats?: () => number }) : {};
     this.headers = {
       "content-type": "application/json",
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
@@ -120,7 +121,7 @@ export class OpenAICompatibleProvider implements Provider {
         max_tokens: request.maxTokens,
         stream: true,
         stream_options: { include_usage: true },
-        ...(this.llamaCpp ? llamaCppFields(undefined, this.llamaCpp.slots?.() ?? 0) : {}),
+        ...(this.llamaCpp ? llamaCppFields(undefined, this.llamaCpp.slots?.() ?? 0, this.llamaCpp.parallelChats?.() ?? 1) : {}),
       }),
     });
     if (!res.body) throw new Error("Empty response body");
@@ -199,7 +200,7 @@ export class OpenAICompatibleProvider implements Provider {
         max_tokens: request.maxTokens,
         stream: true,
         stream_options: { include_usage: true },
-        ...(this.llamaCpp ? llamaCppFields(request.slotKind, this.llamaCpp.slots?.() ?? 0) : {}),
+        ...(this.llamaCpp ? llamaCppFields(request.slotKind, this.llamaCpp.slots?.() ?? 0, this.llamaCpp.parallelChats?.() ?? 1) : {}),
       }),
     }), signal);
     if (!res.body) throw new Error("Empty response body");
@@ -283,15 +284,19 @@ const SLOT_OF: Record<SlotKind, number> = { main: 0, helper: 1, other: 2 };
 /**
  * The extra request fields for llama.cpp's server: always `cache_prompt` (reuse the cached part of the prompt),
  * and `id_slot` (the kind's own slot) only when the server has a slot for every kind; with fewer slots llama.cpp
- * picks the slot itself (pinning there would make chats wait for each other or name a slot that does not exist).
+ * picks the slot itself (pinning there would name a slot that does not exist). The main chat is pinned only while
+ * one chat at a time is allowed: with several chats at once, pinning them all to one slot would make them wait for
+ * each other, so llama.cpp picks (it prefers the idle slot whose cached prompt matches best).
  *
  * @param kind - Who asks (unset: `other`).
  * @param slots - How many slots the running server has (0 when unknown).
+ * @param parallelChats - How many chats the setting lets the engine answer at once (default 1).
  * @returns The fields to add to the request body.
  */
-export function llamaCppFields(kind: SlotKind | undefined, slots: number): { cache_prompt: true; id_slot?: number } {
-  const enough = slots >= Object.keys(SLOT_OF).length;
-  return { cache_prompt: true, ...(enough ? { id_slot: SLOT_OF[kind ?? "other"] } : {}) };
+export function llamaCppFields(kind: SlotKind | undefined, slots: number, parallelChats = 1): { cache_prompt: true; id_slot?: number } {
+  const k = kind ?? "other";
+  const pin = slots >= Object.keys(SLOT_OF).length && (k !== "main" || parallelChats <= 1);
+  return { cache_prompt: true, ...(pin ? { id_slot: SLOT_OF[k] } : {}) };
 }
 
 /** The usage parts of an OpenAI-style answer or stream chunk, with llama.cpp's own `timings`. */

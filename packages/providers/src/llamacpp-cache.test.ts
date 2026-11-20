@@ -31,6 +31,13 @@ test("llamaCppFields: cache always, a slot per kind only with a slot for every k
   assert.deepEqual(llamaCppFields(undefined, 3), { cache_prompt: true, id_slot: 2 });
 });
 
+test("llamaCppFields: with several chats at once the main chat is not pinned, helpers and others still are", () => {
+  assert.deepEqual(llamaCppFields("main", 4, 1), { cache_prompt: true, id_slot: 0 });
+  assert.deepEqual(llamaCppFields("main", 4, 3), { cache_prompt: true });
+  assert.deepEqual(llamaCppFields("helper", 4, 3), { cache_prompt: true, id_slot: 1 });
+  assert.deepEqual(llamaCppFields("other", 4, 3), { cache_prompt: true, id_slot: 2 });
+});
+
 test("llama.cpp provider sends cache_prompt and id_slot; other providers send neither", async () => {
   const srv = await sseServer(done);
   try {
@@ -39,6 +46,9 @@ test("llama.cpp provider sends cache_prompt and id_slot; other providers send ne
     await llama.chatWithTools!({ providerModelId: "m", messages: [{ role: "user", content: "x" }], tools: [], slotKind: "helper" });
     assert.equal(srv.body().cache_prompt, true);
     assert.equal(srv.body().id_slot, 1);
+    const several = new OpenAICompatibleProvider({ id: "llamacpp", type: "openai-compatible", baseUrl: srv.url, options: { llamaCpp: { slots: () => 4, parallelChats: () => 4 } } });
+    await several.chatWithTools!({ providerModelId: "m", messages: [{ role: "user", content: "x" }], tools: [], slotKind: "main" });
+    assert.equal("id_slot" in srv.body(), false);
     slots = 1;
     await llama.chatWithTools!({ providerModelId: "m", messages: [{ role: "user", content: "x" }], tools: [], slotKind: "main" });
     assert.equal(srv.body().cache_prompt, true);
