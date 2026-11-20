@@ -27,3 +27,14 @@ Answer format (keep it short and structured):
 4. Open questions.
 5. Sources (title, link, date).
 ```
+
+## Gemini as a second opinion for Claude (Roee's PDF, 2026-11-20)
+Gemini's guide suggests Claude call the Gemini CLI (`git diff | gemini -p "review…"`) before big architecture changes,
+after 2 failed bug fixes, and before finishing a large feature; or a Node script with an AI Studio key.
+- Claude's cloud session cannot reach Google's endpoints (generativelanguage / cloudcode: proxy 403, like the hub), so the
+  CLI cannot run there today. The API-key path is out: Roee enters keys himself, wants Gemini only through his AI Pro plan,
+  and the free tier may use the data for training.
+- Until the hosts are allowed: a second opinion goes through the task inbox as an Antigravity "review" task (the diff or
+  the design question in the task file; Roee's Run; the answer comes back on agy/*). Only for the cases above, not every task.
+- If Roee adds the hosts to the environment's allowlist: try `gemini` with NO_BROWSER sign-in (he signs in himself);
+  the sign-in lives only in that cloud session and must be repeated in each new chat.
