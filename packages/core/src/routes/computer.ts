@@ -23,7 +23,7 @@ export async function computerRoutes(app: FastifyInstance, s: KesherServices): P
     }
   });
 
-  /** Stops every conversation that is controlling the computer. */
+  /** Stops every conversation that is controlling the computer, and the browser tools too (one Stop). */
   app.post("/api/computer/stop", async () => {
     s.computer.stop();
     return { ok: true };
@@ -34,7 +34,8 @@ export async function computerRoutes(app: FastifyInstance, s: KesherServices): P
     if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "Send { enabled: true | false }" });
     s.config.computer.enabled = req.body.enabled;
     await s.saveConfig();
-    if (!req.body.enabled) s.computer.stop();
+    // Turning it off stops computer control only, not the browser.
+    if (!req.body.enabled) s.computer.stop(false);
     return s.computer.status();
   });
 }

@@ -144,8 +144,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const memory = new MemoryStore(join(paths.root, "memory.json"));
   // Stops conversations through a late-bound reference: the manager is created below.
   let stopConversation: (id: string) => void = () => undefined;
-  const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)));
   const browser = new BrowserBridge();
+  // One Stop for the browser and the computer: either button (or Ctrl+Alt+Esc) ends both.
+  const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)), undefined, {
+    peer: { stoppedAt: () => browser.activity(1).stoppedAt, stop: () => browser.stop() },
+  });
   const speakers = new Speakers(join(paths.engines, "speakers"), downloads);
   const sd = buildSdEngine(paths, downloads, config);
   registry.registerFactory({ type: "sdcpp", displayName: "KesherAI image engine (stable-diffusion.cpp)", categories: ["image"], create: () => sdProvider(sd) });

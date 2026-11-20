@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
+import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-worker.js";
+import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
+import { deletesFiles, isSecureWindow, isSystemSettings } from "./computer-safety.js";
 
 /**
  * Computer control: lets a model with vision look at the screen and click,
@@ -19,8 +22,14 @@ import type { AgentTool } from "@kesher/agent";
  *   file managers are click-only (no typing), so commands go through
  *   run_command, which shows the exact command for approval.
  * - No typing in windows about passwords, sign-in, payment or banking.
- * - A Stop button and Ctrl+Alt+Esc (desktop app) stop every session at once.
+ * - A Stop button and Ctrl+Alt+Esc (desktop app) stop every session at once,
+ *   and the browser's Stop stops computer control too (one Stop for both).
  * - Every action is logged (`/api/computer/status`).
+ * - Windows: a persistent UI Automation worker (uia-worker.ts) reads apps'
+ *   controls and acts on them by ref; computer-safety.ts has its never and
+ *   always-ask lists (UAC and system settings never; passwords, payments,
+ *   deleting files and the clipboard asked every time). The worker is
+ *   killed on Stop and when KesherAI exits, and never runs elevated.
  */
 
 /** What kind of app is in front, which decides what the model may do there. */
@@ -582,17 +591,34 @@ export class ComputerControl {
   private stoppedAt = 0;
   private lastActionAt = 0;
   private lastApp = "";
+  /** Windows UI Automation (undefined elsewhere): started on the first UIA call. */
+  private readonly uia: UiaClient | undefined;
+  /** The browser's Stop, shared: either Stop stops both. */
+  private readonly peer: { stoppedAt(): number; stop(): void } | undefined;
+  /** Per conversation: UI Automation refs from its last computer_tree. */
+  private readonly uiaRefs = new Map<string, Map<string, UiaRef>>();
+  /** Per conversation: the app in front as last seen (for rules that must answer at once). */
+  private readonly front = new Map<string, Foreground>();
 
   /**
    * @param enabled - Whether the user turned computer control on.
    * @param onStop - Stops the conversations that used it.
    * @param be - Platform backend (tests pass a fake).
+   * @param opts.uia - The UI Automation worker (default: PowerShell on Windows, none elsewhere; tests pass a fake).
+   * @param opts.peer - The browser's Stop (its time, and how to press it), so one Stop ends both.
    */
   constructor(
     private readonly enabled: () => boolean,
     private readonly onStop: (conversationIds: string[]) => void,
     private readonly be: Backend = backend(),
-  ) {}
+    opts: { uia?: UiaClient | null; peer?: { stoppedAt(): number; stop(): void } } = {},
+  ) {
+    this.uia =
+      opts.uia === null
+        ? undefined
+        : (opts.uia ?? (process.platform === "win32" ? new UiaWorker(powershellWorker, { release: releaseHeld }) : undefined));
+    this.peer = opts.peer;
+  }
 
   /** @returns Whether it is on, whether it acted in the last 15 s, the app, and the last 30 actions. */
   status(): {
@@ -600,12 +626,14 @@ export class ComputerControl {
     active: boolean;
     app: string;
     log: ComputerAction[];
+    uia: "none" | "idle" | "running";
   } {
     return {
       enabled: this.enabled(),
       active: Date.now() - this.lastActionAt < 15_000,
       app: this.lastApp,
       log: this.log.slice(-30),
+      uia: !this.uia ? "none" : this.uia.running() ? "running" : "idle",
     };
   }
 
@@ -630,9 +658,16 @@ export class ComputerControl {
   private lastWatch = 0;
   private lastShot?: Buffer;
 
-  /** Stops every conversation that controls the computer, and refuses actions for 10 seconds. */
-  stop(): void {
+  /**
+   * Stops every conversation that controls the computer, ends the UI Automation worker, and refuses actions for 10
+   * seconds.
+   *
+   * @param shared - Also press the browser's Stop (the default: one Stop for both). Turning the switch off does not.
+   */
+  stop(shared = true): void {
     this.stoppedAt = Date.now();
+    this.uia?.kill("The user pressed Stop.");
+    if (shared) this.peer?.stop();
     const ids = [
       ...new Set(
         this.log
@@ -674,10 +709,14 @@ export class ComputerControl {
       throw new Error(
         "Computer control is off. The user can turn it on in Settings → Computer control.",
       );
-    if (Date.now() - this.stoppedAt < 10_000)
+    const peerAt = this.peer?.stoppedAt() ?? 0;
+    if (Date.now() - Math.max(this.stoppedAt, peerAt) < 10_000) {
+      // The browser's Stop counts too: end the worker as well.
+      if (peerAt > this.stoppedAt) this.uia?.kill("The user pressed Stop.");
       throw new Error(
         "The user pressed Stop. Do not continue controlling the computer; tell the user what you were doing.",
       );
+    }
     if (!this.allowed.get(conversationId)?.size)
       throw new Error(
         "First ask the user which app you may use: call computer_use_app with its name.",
@@ -696,8 +735,17 @@ export class ComputerControl {
   ): Promise<Foreground> {
     this.gate(conversationId);
     const fg = await this.be.foreground();
+    this.front.set(conversationId, fg);
     const key = fg.app.replace(/\.exe$/i, "").toLowerCase();
     const kind = appKind(fg.app);
+    if (isSecureWindow(fg.app, fg.title))
+      throw new Error(
+        `"${fg.title || fg.app}" is a Windows security or sign-in window. KesherAI never touches it: ask the user to answer it.`,
+      );
+    if (isSystemSettings(fg.app, fg.title))
+      throw new Error(
+        `${fg.app} ("${fg.title}") holds system or security settings. KesherAI never changes them: tell the user what to change.`,
+      );
     if (kind === "view-only")
       throw new Error(
         `${fg.app} is a web browser: KesherAI only looks at browsers, it does not click or type in them. Use the web tools (web_fetch, web_search), or ask the user.`,
@@ -764,6 +812,7 @@ export class ComputerControl {
       const fg = await this.be
         .foreground()
         .catch(() => ({ app: "", title: "" }));
+      if (fg.app) this.front.set(conversationId, fg);
       return { shot, fg };
     };
     const act = async (
@@ -808,7 +857,7 @@ export class ComputerControl {
         description: "From the top, in screenshot pixels.",
       },
     };
-    return [
+    const list: AgentTool[] = [
       {
         risk: "exec",
         spec: {
@@ -940,6 +989,14 @@ export class ComputerControl {
             required: ["keys"],
           },
         },
+        // Deleting files (Shift+Delete, Delete in a file manager) is asked every time.
+        askFirst: (input) =>
+          deletesFiles(
+            String(input.keys ?? ""),
+            this.front.get(conversationId)?.app ?? "",
+          )
+            ? "These keys delete files, so they are asked every time."
+            : undefined,
         run: async (input) => {
           const keys = String(input.keys ?? "");
           // Shortcuts are typing as far as safety goes (they can paste, save, run).
@@ -1187,5 +1244,29 @@ export class ComputerControl {
         },
       },
     ];
+    const uia = this.uia;
+    if (uia) {
+      const refs = this.uiaRefs.get(conversationId) ?? new Map<string, UiaRef>();
+      this.uiaRefs.set(conversationId, refs);
+      list.push(
+        ...uiaTools({
+          conversationId,
+          uia,
+          gate: () => this.gate(conversationId),
+          check: (need) => this.check(conversationId, need),
+          allows: (app) => !!this.allowed.get(conversationId)?.has(app.replace(/\.exe$/i, "").toLowerCase()),
+          record: (action, app, ok, note) => this.record({ conversationId, action, app, ok, ...(note ? { note } : {}) }),
+          toScreen,
+          toShot: (x, y) => {
+            const v = view();
+            return v.width ? { x: (x - v.left) * v.scale, y: (y - v.top) * v.scale } : undefined;
+          },
+          refs,
+          lastFront: () => this.front.get(conversationId),
+          ...(this.be.zoom ? { zoom: this.be.zoom.bind(this.be) } : {}),
+        }),
+      );
+    }
+    return list;
   }
 }

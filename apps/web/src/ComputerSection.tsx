@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { getLocale, t } from "./i18n";
+import { getLocale, he$, t } from "./i18n";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Status {
   enabled: boolean;
   active: boolean;
   app: string;
   log: Array<{ at: string; action: string; app: string; ok: boolean; note?: string }>;
+  /** Windows UI Automation worker: none (not Windows), idle (starts on demand) or running. */
+  uia?: "none" | "idle" | "running";
 }
 
 /** Settings → Computer control: the switch, the rules, and the action log. */
@@ -33,9 +37,22 @@ export function ComputerSection() {
         <li>{t("ccRuleBrowsers")}</li>
         <li>{t("ccRuleTerminals")}</li>
         <li>{t("ccRulePasswords")}</li>
+        {s.uia && s.uia !== "none" && (
+          <>
+            <li>{L("ב־Windows המודל קורא את הכפתורים והשדות של החלון לפי שם ופועל עליהם בלי להזיז את העכבר.", "On Windows the model reads a window's buttons and fields by name and acts on them without moving the mouse.")}</li>
+            <li>{L("שואל בכל פעם: שדות סיסמה, אפליקציות תשלום ובנק, מחיקת קבצים, לוח ההעתקה.", "Always asks: password fields, payment and bank apps, deleting files, the clipboard.")}</li>
+            <li>{L("אף פעם: חלונות בקרת חשבון משתמש וכניסה, הגדרות המערכת והאבטחה.", "Never: User Account Control and sign-in windows, system and security settings.")}</li>
+          </>
+        )}
         <li>{t("ccRuleStop", { keys: mac ? "⌘⇧Esc" : "Ctrl+Alt+Esc" })}</li>
       </ul>
       {mac && <p className="muted small">{t("ccMac")}</p>}
+      {s.uia && s.uia !== "none" && (
+        <p className="muted small cc-uia" dir="auto">
+          {L("קורא הפקדים של Windows (UI Automation): ", "Windows controls reader (UI Automation): ")}
+          {s.uia === "running" ? L("פועל", "running") : L("כבוי, יופעל כשצריך", "off, starts when needed")}
+        </p>
+      )}
       {s.log.length > 0 && (
         <details>
           <summary className="small">{t("ccLog", { n: s.log.length })}</summary>

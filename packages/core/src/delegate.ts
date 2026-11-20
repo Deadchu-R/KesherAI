@@ -74,6 +74,18 @@ const HELPER_RISK: Record<string, AgentTool["risk"]> = {
   computer_scroll: "exec",
   computer_open_app: "exec",
   computer_batch: "exec",
+  computer_windows: "read",
+  computer_tree: "read",
+  computer_cursor_position: "read",
+  computer_wait: "read",
+  computer_invoke: "exec",
+  computer_set_value: "exec",
+  computer_focus_window: "exec",
+  computer_move_window: "exec",
+  computer_hold_key: "exec",
+  computer_mouse: "exec",
+  computer_clipboard_read: "exec",
+  computer_clipboard_write: "exec",
 };
 
 /** The tools a cloud helper keeps when it may not read the project (the question only, and the web). */
