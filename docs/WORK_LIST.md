@@ -12,6 +12,19 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 3. Game-engine work features that work well WITHOUT the engines open: good views, offline work, sync later, work remotely from the phone.
 4. Everything else.
 
+## Agents and chat-first (Roee 19:3x; gap list RESEARCH_LOG 2026-11-20)
+- 👤✅ Decisions: a background helper continues where it stopped after a PC restart; helpers may use the browser and computer with Roee's approval per action (the approval card names the helper); documents open in a side panel in the chat.
+- 🔨 Agents step 1: helper notifications, tokens and cost per helper, Usage line.
+- ⬜ Agents step 2: persist helper runs, resume after restart, wake the lead when a background helper ends.
+- ⬜ Agents step 3: steer and continue a helper.
+- ⬜ Agents step 4: approval card naming the helper; helpers may use browser/computer/code with approvals; a test builder in the worktree.
+- ⬜ Agents step 5: plan card for multi-helper jobs; deep-research report as a document with sources.
+- ⬜ Chat step 6: one MediaView (audio/video/image) in tool cards, Download/Save chips, remembered chip with undo, browser thumbnail in steps.
+- ⬜ Chat step 7: documents as a side panel in the chat; artifact versions.
+- ⬜ Chat step 8: routing by meaning (Hebrew too), tool and connector toggles in the + menu.
+- ⬜ Chat step 8b (Roee 19:38): when the chat wants a tool that is not installed, it says so and shows an "Install" button in the chat; the button opens a floating window with what it is, its size and where to save it (default the heavy-data drive), then installs and continues.
+- ⬜ Chat step 9: file reading in the + menu (audio, video, code), per-hunk accept/reject on helper diffs.
+
 ## Now (2026-11-19): research and code only, no new builds (Roee, 10:13)
 - ✅ **Mark it and let the model work** (FUTURE_FEATURES), in all four editors:
   - ✅ Pictures: repaint the selection (earlier).
