@@ -170,6 +170,8 @@ export interface SavedHelperRun {
   transcript?: AgentMessage[];
   /** Notes sent to it that it had not read yet. */
   notes?: string[];
+  /** A build run's whole diff, read back from its own file by the store (never part of the chat's JSON file). */
+  fullDiff?: string;
 }
 
 /** The queue and the runs. */
@@ -225,6 +227,18 @@ export class HelperRuns extends EventEmitter {
       .map((r) => this.toSaved(r));
   }
 
+  /**
+   * The whole diffs of the chat's build runs that are longer than their card copy (the store keeps them in files).
+   *
+   * @param chatId - The chat.
+   * @returns Run id to whole diff.
+   */
+  fullDiffs(chatId: string): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const r of this.runs.values()) if (r.chatId === chatId && r.fullDiff) out.set(r.info.id, r.fullDiff);
+    return out;
+  }
+
   /** One run as it is saved (and as a continue builds its work again from). */
   private toSaved(r: Run): SavedHelperRun {
     const info: HelperRunInfo = { ...r.info, ...(r.full ? { report: r.full, cut: false } : {}) };
@@ -260,7 +274,7 @@ export class HelperRuns extends EventEmitter {
       delete info.waitReason;
       delete info.canContinue;
       const job: HelperJob = { chatId: s.chatId, kind: info.kind, title: info.title, background: info.background, maxSteps: info.maxSteps, timeMs: s.timeMs, local: s.local, model: info.model, ...(s.resume ? { resume: s.resume } : {}), run: async () => Promise.reject(new Error("Not resumed yet.")) };
-      const run: Run = { info, job, chatId: s.chatId, abort: new AbortController(), ended, end, notes: [...(s.notes ?? [])], ...(s.delivered ? { delivered: true } : {}), ...(s.transcript ? { transcript: s.transcript } : {}) };
+      const run: Run = { info, job, chatId: s.chatId, abort: new AbortController(), ended, end, notes: [...(s.notes ?? [])], ...(s.delivered ? { delivered: true } : {}), ...(s.transcript ? { transcript: s.transcript } : {}), ...(s.fullDiff ? { fullDiff: s.fullDiff } : {}) };
       this.setReport(run, info.report ?? "");
       if (!info.report) delete info.report;
       this.runs.set(info.id, run);

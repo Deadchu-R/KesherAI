@@ -129,3 +129,27 @@ test("AgentSession.wake runs the idle model once with the note; busy, the note w
   await until(() => !s.busy);
   assert.equal(s.events.filter((e) => e.type === "note").length, 1, "no second line while it was busy");
 });
+
+test("a build run's whole diff survives a restart in its own file and is removed when the run is gone", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-hstore-"));
+  try {
+    const diff = "x".repeat(40_000);
+    const runs = new HelperRuns({ limit: () => 2 });
+    const store = new HelperStore(dir, runs);
+    store.watch();
+    const r = runs.start({ chatId: "c", kind: "build", title: "b", background: true, maxSteps: 4, timeMs: 60_000, local: true, model: "m", run: async () => ({ report: "ok", diff }) });
+    await until(() => runs.get(r.id)?.state === "done");
+    await store.flush();
+    assert.deepEqual(await readdir(join(dir, "diffs")), [`c.${r.id}.diff`]);
+    // After a restart the card has the 30k copy and the review gets the whole diff.
+    const again = new HelperRuns({ limit: () => 2 });
+    again.restore(await new HelperStore(dir, again).load());
+    assert.equal(again.get(r.id)!.diff!.length, 30_000);
+    assert.equal(again.diffOf(r.id), diff);
+    // A write for a chat without that run (pruned) removes its file.
+    await new HelperStore(dir, new HelperRuns({ limit: () => 2 })).write("c");
+    assert.deepEqual(await readdir(join(dir, "diffs")), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

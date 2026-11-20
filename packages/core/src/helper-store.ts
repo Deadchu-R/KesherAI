@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { HelperRuns, SavedHelperRun } from "./helper-runs.js";
 
@@ -13,6 +13,10 @@ import type { HelperRuns, SavedHelperRun } from "./helper-runs.js";
 const WRITE_DELAY_MS = 400;
 /** A chat's file bigger than this keeps its runs but drops the conversations (they start again from the task). */
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
+/** A build run's whole diff is kept in its own file (`diffs/<chat id>.<run id>.diff`), up to this size. */
+const MAX_DIFF_BYTES = 5 * 1024 * 1024;
+/** A run id that is safe as a file name. */
+const SAFE_RUN = /^[\w-]{1,40}$/;
 /** A chat id that is safe as a file name. */
 const SAFE_ID = /^[\w-]{1,100}$/;
 
@@ -51,7 +55,15 @@ export class HelperStore {
       try {
         const list = JSON.parse(await readFile(join(this.dir, name), "utf8")) as unknown;
         if (!Array.isArray(list)) continue;
-        for (const s of list) if (isSaved(s, chatId)) out.push(s);
+        for (const s of list) {
+          if (!isSaved(s, chatId)) continue;
+          // A cut card diff means the whole one is in its file (a missing file leaves the card's copy).
+          if (s.info.diff && s.info.diff.length >= 30_000 && SAFE_RUN.test(s.info.id)) {
+            const full = await readFile(this.diffFile(chatId, s.info.id), "utf8").catch(() => "");
+            if (full) s.fullDiff = full;
+          }
+          out.push(s);
+        }
       } catch {
         // A broken file (a write cut by a crash) is left out; the next write replaces it.
       }
@@ -85,12 +97,36 @@ export class HelperStore {
     await this.writes;
   }
 
+  /** The file of a run's whole diff. */
+  private diffFile(chatId: string, runId: string): string {
+    return join(this.dir, "diffs", `${chatId}.${runId}.diff`);
+  }
+
+  /** Writes the chat's whole diffs that are not on disk yet, and removes the files of runs that are gone (pruned with the run). */
+  private async syncDiffs(chatId: string): Promise<void> {
+    const diffs = this.runs.fullDiffs(chatId);
+    const folder = join(this.dir, "diffs");
+    for (const name of await readdir(folder).catch(() => [] as string[])) {
+      const m = /^([\w-]{1,100})\.([\w-]{1,40})\.diff$/.exec(name);
+      if (m && m[1] === chatId && !diffs.has(m[2]!)) await rm(join(folder, name), { force: true });
+    }
+    for (const [id, diff] of diffs) {
+      if (!SAFE_RUN.test(id)) continue;
+      const file = this.diffFile(chatId, id);
+      if (await stat(file).then(() => true, () => false)) continue;
+      await mkdir(folder, { recursive: true });
+      await writeFile(`${file}.tmp`, diff.slice(0, MAX_DIFF_BYTES), "utf8");
+      await rename(`${file}.tmp`, file);
+    }
+  }
+
   /** Writes one chat's file (one write at a time; a new file is renamed over the old one, so a crash never leaves half). */
-  private write(chatId: string): Promise<void> {
+  write(chatId: string): Promise<void> {
     this.writes = this.writes.then(async () => {
       const file = join(this.dir, `${chatId}.json`);
       const list = this.runs.saved(chatId);
       try {
+        await this.syncDiffs(chatId);
         if (!list.length) {
           await rm(file, { force: true });
           return;
