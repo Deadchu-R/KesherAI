@@ -841,6 +841,57 @@ export class LlamaEngine {
       }
       throw failure;
     });
+    await this.restoreParked(modelPath);
+  }
+
+  /** A slot saved to disk before the server was stopped for a VRAM-heavy job (see {@link parkSlot}). */
+  private parked?: { modelPath: string; slot: number; file: string };
+
+  /**
+   * The folder llama-server saves slots to (`--slot-save-path`), added unless the user's arguments set one.
+   *
+   * @param args - The arguments so far.
+   * @param dir - The engines folder.
+   * @returns The arguments with the slot folder.
+   */
+  static slotSaveArgs(args: string[], dir: string): string[] {
+    return args.includes("--slot-save-path") ? args : [...args, "--slot-save-path", join(dir, "slots")];
+  }
+
+  /** One slot call on the running server: save or restore a slot's cached prompt (its KV cache) to or from a file. */
+  private async slotAction(slot: number, action: "save" | "restore", file: string): Promise<boolean> {
+    const res = await fetch(`http://127.0.0.1:${this.opts.port}/slots/${slot}?action=${action}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ filename: file }),
+      signal: AbortSignal.timeout(60_000),
+    }).catch(() => undefined);
+    return !!res?.ok;
+  }
+
+  /**
+   * Saves a slot's cached prompt to disk before the server is stopped for a VRAM-heavy job (a big ComfyUI flow), so
+   * the next load of the same model restores it and the chat does not read its whole conversation again.
+   *
+   * @param slot - The slot (0: the main chat's).
+   * @returns Whether it was saved.
+   */
+  async parkSlot(slot = 0): Promise<boolean> {
+    const modelPath = this.modelPath;
+    if (!modelPath || !this.proc || this.proc.exitCode !== null || slot >= Math.max(1, this.startedSlots)) return false;
+    const file = `kesher-slot-${slot}.bin`;
+    const ok = await this.slotAction(slot, "save", file);
+    this.parked = ok ? { modelPath, slot, file } : undefined;
+    if (ok) this.log.push(`KesherAI: saved slot ${slot}'s cache to disk before freeing the graphics card.`);
+    return ok;
+  }
+
+  /** After a load: puts a parked slot back when the same model was loaded again (a different model drops it). */
+  private async restoreParked(modelPath: string): Promise<void> {
+    const p = this.parked;
+    this.parked = undefined;
+    if (!p || p.modelPath !== modelPath || p.slot >= Math.max(1, this.startedSlots)) return;
+    if (await this.slotAction(p.slot, "restore", p.file)) this.log.push(`KesherAI: restored slot ${p.slot}'s cache (the chat goes on without reading it again).`);
   }
 
   /** How the cards are used for the loaded model, e.g. "Split across … ; … leads". */
@@ -860,6 +911,9 @@ export class LlamaEngine {
       this.log.push(`KesherAI: port ${before} is used by another app, so the engine uses port ${this.opts.port}.`);
     }
     const alias = basename(modelPath).replace(/\.gguf$/i, "");
+    // Slots can be saved to disk and restored (parkSlot): the chat's cache survives a stop for a heavy ComfyUI job.
+    args = LlamaEngine.slotSaveArgs(args, this.opts.dir);
+    await mkdir(join(this.opts.dir, "slots"), { recursive: true }).catch(() => undefined);
     // A vision file beside the model (mmproj-*.gguf, as the model's repository ships it): the model sees pictures.
     if (!args.includes("--mmproj") && !args.includes("--no-mmproj")) {
       const mmproj = await findMmproj(modelPath);

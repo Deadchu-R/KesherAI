@@ -31,7 +31,7 @@ import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
 import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
-import { missingNote, ToolRouter } from "./tool-router.js";
+import { isSimpleTurn, missingNote, ToolRouter } from "./tool-router.js";
 import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
@@ -866,7 +866,11 @@ export class ConversationManager {
       route: async (text, signal) => {
         const r = await this.router.route(text, this.sessions.get(id)?.toolNames() ?? [], this.deps.library.summary(id)?.toolsOff ?? [], !!toolSearch()?.length, signal);
         const note = missingNote(r.missing);
-        return { tools: note ? [...r.tools, OFFER_INSTALL_TOOL] : r.tools, ...(note ? { note } : {}) };
+        // Model size per turn: a simple message on a local chat goes to the small model loaded beside the main one.
+        const kind = this.deps.library.summary(id)?.kind ?? conversation.kind;
+        const small = this.deps.config.smallTurns !== false && kind !== "code" && toolSearch() && isSimpleTurn(text, r.groups) ? this.deps.smallModel?.() : undefined;
+        const main = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
+        return { tools: note ? [...r.tools, OFFER_INSTALL_TOOL] : r.tools, ...(note ? { note } : {}), ...(small && small !== main ? { small: { modelId: small, model: modelTurnFor(this.deps.registry, small, undefined, "other") } } : {}) };
       },
       // The model team's translator: a final answer written in another language than the user's is put into theirs.
       polishAnswer: async (answer, userText, signal) => {

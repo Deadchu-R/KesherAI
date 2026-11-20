@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { missingNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
+import { engineAsk, isSimpleTurn, missingNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
 
 const available = ["browser_open", "document", "generate_image", "read_file", "unity_scene", "web_search"];
 
@@ -47,4 +47,29 @@ test("the model's answer is read strictly", () => {
   assert.deepEqual(parseGroups('{"groups":["images","video","web","docs"]}'), ["images", "video", "web"]);
   assert.deepEqual(parseGroups("not json"), []);
   assert.deepEqual(parseGroups('Sure: {"groups":["unity","unity"]}'), ["unity"]);
+});
+
+test("simple turns: short, no tool group, no code, files, links or careful work", () => {
+  for (const t of ["hi", "תודה רבה!", "what's the capital of France?", "מה השעה בטוקיו?"]) assert.equal(isSimpleTurn(t, []), true, t);
+  assert.equal(isSimpleTurn("hi", ["image"]), false, "a tool group means tools");
+  for (const t of ["fix the bug in app.ts", "explain closures", "תכתוב לי שיר", "read https://x.com", "`ls`", "x".repeat(200), "a\nb", ""]) assert.equal(isSimpleTurn(t, []), false, t);
+});
+
+test("the router's engine call is pinned to the other slot when the engine has one per kind", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+    bodies.push(JSON.parse(init.body) as Record<string, unknown>);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "{}" } }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+  try {
+    const ask = (slots: number) => engineAsk({ baseUrl: () => "http://127.0.0.1:1/v1", apiKey: "k", ready: () => true, slots: () => slots })!;
+    await ask(3)("s", "u", {}, new AbortController().signal);
+    await ask(1)("s", "u", {}, new AbortController().signal);
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.equal(bodies[0]!.id_slot, 2);
+  assert.equal(bodies[1]!.id_slot, undefined, "one slot: llama.cpp picks");
+  assert.equal(bodies[1]!.cache_prompt, true);
 });

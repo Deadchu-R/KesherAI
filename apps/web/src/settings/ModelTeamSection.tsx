@@ -15,13 +15,15 @@ interface Model { id: string; name: string; category?: string }
 export function ModelTeamSection() {
   const [translator, setTranslator] = useState<string | null>(null);
   const [toolCap, setToolCap] = useState(24);
+  const [smallTurns, setSmallTurns] = useState(true);
   const [models, setModels] = useState<Model[]>([]);
   // Downloaded translation models (TranslateGemma…): chosen by file, loaded beside the main model when needed.
   const [files, setFiles] = useState<Array<{ path: string; name: string }>>([]);
   useEffect(() => {
-    void api<{ translator: string; toolCap?: number }>("/api/model-team").then((r) => {
+    void api<{ translator: string; toolCap?: number; smallTurns?: boolean }>("/api/model-team").then((r) => {
       setTranslator(r.translator);
       if (r.toolCap) setToolCap(r.toolCap);
+      setSmallTurns(r.smallTurns !== false);
     }, () => undefined);
     void api<{ models: Model[] }>("/api/models").then((r) => setModels(r.models.filter((m) => (m.category ?? "chat") === "chat")), () => undefined);
     void api<Array<{ path: string; name: string; gguf?: boolean; source?: string }>>("/api/models/local").then((r) => setFiles(r.filter((m) => m.gguf && m.source === "KesherAI" && /translat/i.test(m.name)).map((m) => ({ path: m.path, name: m.name.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") }))), () => undefined);
@@ -30,6 +32,10 @@ export function ModelTeamSection() {
   const save = (v: string) => {
     setTranslator(v);
     void api("/api/model-team", { method: "PUT", body: { translator: v } }).catch((e: Error) => toast(e.message));
+  };
+  const saveSmall = (on: boolean) => {
+    setSmallTurns(on);
+    void api("/api/model-team", { method: "PUT", body: { smallTurns: on } }).catch((e: Error) => toast(e.message));
   };
   const saveCap = (n: number) => {
     setToolCap(n);
@@ -56,6 +62,11 @@ export function ModelTeamSection() {
         </select>
       </label>
       <p className="muted small">{L("במודל מקומי נשלחים במלואם רק הכלים שהסבב צריך, עד המספר הזה; השאר זמינים לפי שם (more_tools). פחות כלים = פחות טוקנים ותשובה מהירה יותר.", "On a local model only the tools a turn needs are sent in full, up to this number; the rest stay available by name (more_tools). Fewer tools = fewer tokens and a faster answer.")}</p>
+      <label className="row">
+        <input type="checkbox" checked={smallTurns} onChange={(e) => saveSmall(e.target.checked)} />
+        <span className="grow">⚡ {L("הודעות פשוטות למודל הקטן", "Simple messages to the small model")}</span>
+      </label>
+      <p className="muted small">{L("כשמודל קטן טעון ליד הראשי (מודלים > צ'אט), הודעה קצרה ופשוטה (שלום, תודה, שאלה קצרה) נענית בו, מהר יותר. קוד, קבצים וכלים נשארים אצל המודל הראשי.", "When a small model is loaded beside the main one (Models > Chat), a short, simple message (hello, thanks, a short question) is answered by it, faster. Code, files and tools stay with the main model.")}</p>
     </section>
   );
 }

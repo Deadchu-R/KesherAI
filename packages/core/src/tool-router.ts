@@ -12,6 +12,7 @@
  * It also tells the model when a group the message needs has no tools because something is not installed (an image
  * model, a video model), so it offers the Install button (offer_install) instead of a workaround.
  */
+import { llamaCppFields } from "@kesher/providers";
 import { CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
 
 /**
@@ -126,14 +127,36 @@ export function missingNote(missing: Route["missing"]): string | undefined {
   return `[KesherAI] If this request needs something made with a tool that is not installed yet (${ids}), say so in one short sentence and call offer_install with that id, so the user gets an Install button; do not look for a workaround (no other libraries, no drawing with code). After it is installed the chat continues by itself. If the request does not need it (e.g. only reading a picture), ignore this.`;
 }
 
+/** Words of a request that needs real work even when it is short (code, files, a long or careful answer). */
+const NOT_SIMPLE = /```|`|https?:\/\/|[\w-]+\.[a-z]{1,5}\b|[\\/]\w|\b(code|bug|fix|build|write|debug|explain|analy[sz]e|compare|plan|translate|summar|step by step|in detail|calculate|prove|essay|story|poem)\b|קוד|באג|תקן|תבנה|בנה|כתוב|תכתוב|הסבר|תסביר|נתח|השווה|תכנן|תרגם|סכם|תסכם|בפירוט|חשב|הוכח|חיבור|סיפור|שיר/i;
+
+/** The longest message that can still be a simple turn (characters). */
+const SIMPLE_CHARS = 160;
+
+/**
+ * Whether a message is a simple turn a smaller model answers as well as the big one: short, needs no tool group, and
+ * asks for no code, files, links or a long or careful answer (a greeting, thanks, a yes/no, a short fact).
+ *
+ * @param text - The user's message.
+ * @param groups - The groups the router picked for it.
+ * @returns True for a simple turn.
+ */
+export function isSimpleTurn(text: string, groups: readonly string[]): boolean {
+  const t = text.trim();
+  return t.length > 0 && t.length <= SIMPLE_CHARS && groups.length === 0 && !t.includes("\n") && !NOT_SIMPLE.test(t);
+}
+
 /**
  * The built-in engine (llama.cpp) as an {@link AskJson}: its OpenAI-style endpoint with a JSON schema, thinking off,
  * temperature 0 and a few tokens. The instructions stay the same for every message, so the engine keeps them cached.
  *
- * @param e - Where the engine listens, its key, and whether a model is loaded now.
+ * The call is pinned to the engine's "other" slot when it has one per agent kind (llamaCppFields), so the router's
+ * tiny prompt never pushes the chat's long prompt out of the main slot's cache.
+ *
+ * @param e - Where the engine listens, its key, whether a model is loaded now, and its slots (for the pin).
  * @returns The call, or undefined while no model is loaded.
  */
-export function engineAsk(e: { baseUrl: () => string; apiKey: string; ready: () => boolean }): AskJson | undefined {
+export function engineAsk(e: { baseUrl: () => string; apiKey: string; ready: () => boolean; slots?: () => number; parallelChats?: () => number }): AskJson | undefined {
   if (!e.ready()) return undefined;
   return async (system, user, schema, signal) => {
     const res = await fetch(`${e.baseUrl()}/chat/completions`, {
@@ -143,7 +166,7 @@ export function engineAsk(e: { baseUrl: () => string; apiKey: string; ready: () 
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
         temperature: 0,
         max_tokens: 40,
-        cache_prompt: true,
+        ...llamaCppFields("other", e.slots?.() ?? 0, e.parallelChats?.() ?? 1),
         chat_template_kwargs: { enable_thinking: false },
         response_format: { type: "json_schema", json_schema: { name: "route", schema } },
       }),

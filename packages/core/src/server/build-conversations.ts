@@ -26,11 +26,12 @@ import { memoryTools } from "../memory-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
 import { readMedia, speechTools } from "../speech-tools.js";
-import { SideEngine, sideEngineOf, translatorModelId } from "../side-engine.js";
+import { SideEngine, sideEngineOf, smallerBeside, translatorModelId } from "../side-engine.js";
+import { parkChatFor, vramShort } from "../slot-park.js";
 import { type AgentTool } from "@kesher/agent";
 import { ComfyUIProvider } from "@kesher/providers";
 import { cleanAppearance, type JobProgress } from "@kesher/shared";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { readFile as readFileFs } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssetStore } from "../assets.js";
@@ -65,6 +66,15 @@ import type { Updater } from "../updates.js";
 import type { WhisperEngine } from "../whisper.js";
 import type { DownloadManager } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
+
+/** A file's size in bytes, or undefined when it cannot be read (model size per turn compares model files). */
+const fileSize = (path: string): number | undefined => {
+  try {
+    return statSync(path).size;
+  } catch {
+    return undefined;
+  }
+};
 
 /** The services the conversation manager is built from (all made earlier in createKesherServer). */
 export interface ConversationParts {
@@ -134,7 +144,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // A self-work worker uses the main app's engine (main/llamacpp/…): its share comes from there.
     engineSlotTokens: () => (worker ? mainSlot() : engine.slotContext()),
     // Routing by meaning: a tiny call to the model the engine has loaded (never in a self-work worker: not its engine).
-    routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath })),
+    routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath, slots: () => engine.slots(), parallelChats: () => engine.parallelChats() })),
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
     browserPane: () => browser.status().pane,
@@ -142,6 +152,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     saveImage: async (data: Buffer, mimeType: string) => (await assets.save(data, mimeType)).id,
     // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
     ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),
+    // Model size per turn: a small model the user loaded beside the main one answers simple messages.
+    smallModel: () => smallerBeside(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })).status(), engine.status().modelPath, fileSize),
     // The translator, when it is a GGUF file (Settings → Chats → Model team): loaded beside the main model.
     translatorModel: (pick: string) => translatorModelId(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })), pick),
     tor,
@@ -232,6 +244,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         const graph = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
         const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
         await edit(graph, (data, name, subfolder) => provider.uploadImage(data, name, subfolder));
+        // A VRAM-heavy job: the chat model steps aside with its cache saved to disk (slot-park.ts).
+        await parkChatFor({ running: () => engine.status().running, busy: () => guard.status().running > 0, short: () => vramShort(guard.status().cards), park: () => engine.parkSlot(0), stop: (why) => engine.stop(why) });
         await guard.before("comfyui", signal);
         try {
           return await provider.runFlow(graph, signal, undefined, onProgress);

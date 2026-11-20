@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { LlamaEngine, pickLlamaAssets } from "./llamacpp.js";
 
 // Real asset names from llama.cpp build b12110 (November 2026).
@@ -156,4 +157,9 @@ test("slotsIn reads the slot count the server was started with", () => {
   assert.equal(LlamaEngine.slotsIn(["--parallel", "4"]), 4);
   assert.equal(LlamaEngine.slotsIn(["-np", "x"]), 1);
   assert.equal(new LlamaEngine({ dir: "", port: 1, args: [] }).slots(), 0);
+});
+
+test("slots can be saved to disk unless the user set their own folder", () => {
+  assert.deepEqual(LlamaEngine.slotSaveArgs(["--jinja"], "/e"), ["--jinja", "--slot-save-path", join("/e", "slots")]);
+  assert.deepEqual(LlamaEngine.slotSaveArgs(["--slot-save-path", "/mine"], "/e"), ["--slot-save-path", "/mine"]);
 });

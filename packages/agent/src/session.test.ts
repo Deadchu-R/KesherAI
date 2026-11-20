@@ -919,3 +919,31 @@ test("per-turn tool cap: past it, the lowest-ranked loaded tools go back to the 
   assert.match(seen[1]!.tools.find((t) => t.name === "more_tools")!.description, /list_files \(/);
   assert.ok(session.events.some((e) => e.type === "usage" && (e.pruned ?? 0) > 0), "the left-out instructions count as pruned");
 });
+
+test("model size per turn: a simple message goes to the small model with no tools; an empty answer falls back to the main one", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-small-"));
+  const { model, seen } = scripted([{ text: "main answer" }, { text: "main again" }]);
+  const smallSeen: number[] = [];
+  let reply = "hi there";
+  const small: ModelTurn = async (req, _s, onText) => {
+    smallSeen.push(req.tools.length);
+    if (reply) onText(reply);
+    return { text: reply, toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "sm", modelId: "big", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys", route: async () => ({ tools: [], small: { modelId: "small", model: small } }) });
+  const ask = async (text: string) => {
+    const idle = new Promise<void>((resolve) => {
+      const on = (e: AgentEvent) => { if (e.type === "status" && e.status === "idle") { session.off("event", on); resolve(); } };
+      session.on("event", on);
+    });
+    session.send(text);
+    await idle;
+  };
+  await ask("hi");
+  assert.deepEqual(smallSeen, [0], "no tools for the small model");
+  assert.equal(seen.length, 0, "the main model was not asked");
+  assert.ok(session.events.some((e) => e.type === "usage" && e.modelId === "small"));
+  reply = "";
+  await ask("hello");
+  assert.equal(seen.length, 1, "an empty small answer goes to the main model");
+});

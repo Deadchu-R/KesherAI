@@ -827,10 +827,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { on };
   });
   // The model team (design ModelTeam): which model translates an answer written in another language than the user's.
-  // Also the token budget's per-turn tool cap (budget.ts in the agent package).
-  const team = () => ({ translator: s.config.translator ?? "main", toolCap: s.config.toolCap ?? DEFAULT_TOOL_CAP });
+  // Also the token budget's per-turn tool cap (budget.ts in the agent package) and model size per turn.
+  const team = () => ({ translator: s.config.translator ?? "main", toolCap: s.config.toolCap ?? DEFAULT_TOOL_CAP, smallTurns: s.config.smallTurns !== false });
   app.get("/api/model-team", async () => team());
-  app.put<{ Body: { translator?: string; toolCap?: number } }>("/api/model-team", async (req, reply) => {
+  app.put<{ Body: { translator?: string; toolCap?: number; smallTurns?: boolean } }>("/api/model-team", async (req, reply) => {
     if (req.body?.translator !== undefined) {
       const t = String(req.body.translator).trim();
       if (!t || t.length > 300) return reply.code(400).send({ error: "Choose a translator." });
@@ -841,6 +841,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       if (!Number.isInteger(n) || n < 8 || n > 80) return reply.code(400).send({ error: "The tool cap is a whole number from 8 to 80." });
       s.config.toolCap = n;
     }
+    if (typeof req.body?.smallTurns === "boolean") s.config.smallTurns = req.body.smallTurns;
     await s.saveConfig();
     return team();
   });

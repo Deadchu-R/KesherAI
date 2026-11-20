@@ -160,7 +160,7 @@ export interface AgentSessionOptions {
    * tiny model call) are loaded, and `note` (e.g. "an image model is not installed") goes to the model with it.
    * Read once per message; a failure or no answer leaves the message as it was.
    */
-  route?: (text: string, signal: AbortSignal) => Promise<{ tools: readonly string[]; note?: string } | undefined>;
+  route?: (text: string, signal: AbortSignal) => Promise<{ tools: readonly string[]; note?: string; /** A smaller model for a simple turn (see SMALL_TURN_CHARS). */ small?: { modelId: string; model: ModelTurn } } | undefined>;
   /**
    * Keeps each run's files from before it (for "Undo all" on its receipt, after a restart too). Without it they are
    * kept in memory only.
@@ -211,6 +211,12 @@ const toolOutputSpec: ToolSpec = {
   description: `Opens the full output of an earlier tool call that is shown to you as a "${PRUNED_MARK} <id>]" line. Use it only when you need that output's details again; at most ${OPEN_CHARS} characters at a time.`,
   inputSchema: { type: "object", properties: { id: { type: "string", description: "The id from the line." }, from: { type: "number", description: "The first character, for the rest of a long output (default 0)." } }, required: ["id"] },
 };
+
+/**
+ * Model size per turn: a simple message (the router's pick) is answered by a smaller loaded model, with no tools, only
+ * while the conversation is this short (characters), since the small model reads it all without a warm cache.
+ */
+const SMALL_TURN_CHARS = 16_000;
 
 /** The tool that loads the others when tool search is on (the per-turn cap's overflow is listed in it too). */
 export const FIND_TOOLS_TOOL = "more_tools";
@@ -300,6 +306,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly toolRank = new Map<string, number>();
   private rankTick = 0;
   private rankSince = 0;
+  /** The smaller model for this message's first step, when the router found it simple. */
+  private smallTurn?: { modelId: string; model: ModelTurn };
   /** Characters of tool instructions the per-turn cap left out of the last request. */
   private lastCappedChars = 0;
 
@@ -829,7 +837,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private recordUsage(modelId: string, role: "main" | TeamRole, sent: AgentMessage[], result: Awaited<ReturnType<ModelTurn>>, timing?: { waitMs: number; writeMs: number }): void {
     // What the model really counted: code and Hebrew have fewer characters per token than English prose, so the
     // window is measured with this model's own ratio from now on.
-    if (role === "main" && (result.usage?.inputTokens ?? 0) > 500) this.learnRatio(sizeOf(sent) + JSON.stringify(this.specs()).length, result.usage!.inputTokens!);
+    if (role === "main" && modelId === this.modelId && (result.usage?.inputTokens ?? 0) > 500) this.learnRatio(sizeOf(sent) + JSON.stringify(this.specs()).length, result.usage!.inputTokens!);
     const reported = result.usage?.inputTokens !== undefined && result.usage?.outputTokens !== undefined;
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
@@ -1100,6 +1108,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (!r) return;
     // The router's first pick ranks highest (loaded last).
     for (const name of [...r.tools].reverse()) if (this.tools.has(name)) this.loadTool(name);
+    if (r.small && sizeOf(this.messages) <= SMALL_TURN_CHARS && !this.messages.at(-1)?.images?.length) this.smallTurn = r.small;
     const last = this.messages.at(-1);
     if (r.note && last?.role === "user") last.content += `\n\n${r.note}`;
   }
@@ -1222,8 +1231,12 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           if (!firstAt) firstAt = Date.now();
           this.push({ type: "assistant_delta", turn, text }, false);
         };
+        // A simple turn: the smaller model answers first, with no tools; when it fails or says nothing, the main one does.
+        const small = step === 0 && !lastStep ? this.smallTurn : undefined;
+        this.smallTurn = undefined;
+        const quick = small ? await small.model({ messages: conversation, tools: [] }, abort.signal, onText).then((r) => (r.text.trim() && !r.toolCalls.length ? r : undefined), () => undefined) : undefined;
         try {
-          result = await this.model({ messages: conversation, tools: lastStep ? [] : this.specs() }, abort.signal, onText);
+          result = quick ?? (await this.model({ messages: conversation, tools: lastStep ? [] : this.specs() }, abort.signal, onText));
         } catch (err) {
           // Too long for the model after all (the estimate is in characters; a local server may share its context between
           // chats): take the server's own numbers, make the window smaller and send a shorter conversation once.
@@ -1260,7 +1273,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
             result = await this.model({ messages: conversation, tools: [] }, abort.signal, onText);
           } else throw err;
         }
-        this.recordUsage(this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
+        this.recordUsage(quick && small ? small.modelId : this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
         let shown = result.text;
         // The final answer (no more tool calls) in the user's language, when the model wrote it in another one.
         if (result.toolCalls.length === 0 && shown.trim() && this.polishAnswer && !abort.signal.aborted) {

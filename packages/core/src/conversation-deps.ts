@@ -114,6 +114,11 @@ export interface ConversationDeps {
   helperEngine?: HelperEngine;
   /** The translator's model id: a GGUF translator (TranslateGemma) is loaded beside the main model when needed. */
   translatorModel?(pick: string): Promise<string>;
+  /**
+   * Model size per turn: the small model loaded beside the main one (side-engine.ts), when one is running and is
+   * smaller than the main model; never loads one by itself.
+   */
+  smallModel?(): string | undefined;
   /** An attached recording or video, read for the model: its transcript and a few frames (speech-tools.ts readMedia). */
   readMedia?(path: string): Promise<{ transcript: string; engine?: string; frames: Buffer[] }>;
   /** Tor, for pages that do not open directly (when installed). */

@@ -260,6 +260,8 @@ export const KesherConfigSchema = z.object({
   toolSearch: z.boolean().optional(),
   /** With tool search: the most tools sent in full per turn (the rest are listed in more_tools). Unset: 24. */
   toolCap: z.number().int().min(8).max(80).optional(),
+  /** Model size per turn: simple messages go to a smaller model loaded beside the main one. On unless false. */
+  smallTurns: z.boolean().optional(),
   /**
    * The user's own sidebar shortcuts (any page of the app, or a web address), the same on every device. Checked in
    * routes/shortcuts.ts: a page `#/…` or an http(s) address, never a script.

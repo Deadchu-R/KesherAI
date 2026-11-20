@@ -91,3 +91,19 @@ export async function translatorModelId(side: SideEngine, pick: string): Promise
   return side.load(pick);
 }
 
+
+/**
+ * Model size per turn: the model beside the main one, when it runs and is clearly smaller (its file at most 60% of
+ * the main model's), so a simple message is answered faster. Never loads a model.
+ *
+ * @param side - The beside engine's state.
+ * @param mainPath - The main engine's model file, if one is loaded.
+ * @param sizeOf - A file's size in bytes (undefined when it cannot be read).
+ * @returns The small model's id, or undefined.
+ */
+export function smallerBeside(side: { running: boolean; modelPath?: string; modelId?: string }, mainPath: string | undefined, sizeOf: (path: string) => number | undefined): string | undefined {
+  if (!side.running || !side.modelPath || !side.modelId || !mainPath) return undefined;
+  const small = sizeOf(side.modelPath);
+  const big = sizeOf(mainPath);
+  return small && big && small <= big * 0.6 ? side.modelId : undefined;
+}
