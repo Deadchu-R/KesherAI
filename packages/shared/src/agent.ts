@@ -237,6 +237,11 @@ export type AgentEvent = EventBase &
         /** Main model: milliseconds until its first word (reading the prompt), and spent writing after it. */
         waitMs?: number;
         writeMs?: number;
+        /**
+         * Of `input`, the tokens the server read from its prompt cache (llama.cpp `timings.cache_n`, OpenAI
+         * `cached_tokens`). Only when the provider reported it; older servers and clients leave it out.
+         */
+        cached?: number;
       }
     | {
         /** A teammate model's contribution: a plan before the work, or a review after it. */

@@ -750,3 +750,18 @@ test("a server refusing a malformed tool call: asked again, then answered withou
     assert.ok(!session.events.some((e) => e.type === "status" && e.status === "error"));
   }
 });
+
+test("the usage event carries the cached tokens only when the provider reported them", async () => {
+  const usages: Array<{ inputTokens: number; outputTokens: number; cachedTokens?: number }> = [{ inputTokens: 1200, outputTokens: 30, cachedTokens: 1000 }, { inputTokens: 900, outputTokens: 5 }];
+  let i = 0;
+  const model: ModelTurn = async () => ({ text: "ok", toolCalls: [], usage: usages[i++] });
+  const s = new AgentSession({ id: "u", modelId: "m", model, mode: "ask", tools: [], systemPrompt: "sys" });
+  s.send("one");
+  const first = await waitFor(s, (e) => e.type === "usage");
+  assert.equal(first.type === "usage" && first.cached, 1000);
+  await waitFor(s, (e) => e.type === "assistant");
+  s.send("two");
+  await waitFor(s, (e) => e.type === "usage" && e.input === 900);
+  const second = s.events.filter((e) => e.type === "usage").at(-1);
+  assert.equal(second && "cached" in second, false);
+});

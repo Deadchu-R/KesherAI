@@ -31,7 +31,7 @@ export type ModelTurn = (
   request: { messages: AgentMessage[]; tools: ToolSpec[] },
   signal: AbortSignal,
   onText: (delta: string) => void,
-) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number } }>;
+) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }>;
 
 /**
  * A local server (llama.cpp) refusing the model's whole answer because a tool call in it was not in the model's own
@@ -622,7 +622,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const reported = result.usage?.inputTokens !== undefined && result.usage?.outputTokens !== undefined;
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
-    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}) });
+    const cached = result.usage?.cachedTokens;
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}) });
   }
 
   /** Characters per token for this model, learned from what it reports (see {@link recordUsage}). */
