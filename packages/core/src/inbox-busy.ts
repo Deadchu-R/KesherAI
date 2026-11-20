@@ -86,3 +86,14 @@ export function busyPrograms(programs: RunningProgram[], gameFolders: Array<{ na
   }
   return { games: [...games], editors };
 }
+
+/**
+ * The install folders that count as games for the busy check: Steam, Epic and Xbox PC games only. Plain Microsoft
+ * Store apps (Phone Link's "CrossDevice", Photos, …) are not games, and counting them kept the inbox paused.
+ *
+ * @param found - What pc-games.ts `findGamesAndStoreApps` returned.
+ * @returns Name and folder of each game that has a folder.
+ */
+export function gameFoldersForBusy(found: Array<{ name: string; source: string; folder?: string }>): Array<{ name: string; folder: string }> {
+  return found.flatMap((g) => (g.folder && g.source !== "store" ? [{ name: g.name, folder: g.folder }] : []));
+}

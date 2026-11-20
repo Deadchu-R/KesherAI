@@ -8,7 +8,7 @@ import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
 import type { KesherConfig } from "../config.js";
 import type { GpuGuard } from "../gpu-guard.js";
-import { busyPrograms, inboxBusy, runningPrograms } from "../inbox-busy.js";
+import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
 import { TaskInbox, type RunCmd } from "../inbox-runner.js";
 import type { Notifier } from "../notify.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
@@ -68,7 +68,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
   const busy = async (): Promise<InboxBusy> => {
     const now = Date.now();
     const s = p.config.taskInbox;
-    if (s.notWhileGame && now - games.at > 10 * 60_000) games = { at: now, list: (await findGamesAndStoreApps().catch(() => [])).flatMap((g) => (g.folder ? [{ name: g.name, folder: g.folder }] : [])) };
+    if (s.notWhileGame && now - games.at > 10 * 60_000) games = { at: now, list: gameFoldersForBusy(await findGamesAndStoreApps().catch(() => [])) };
     if ((s.notWhileGame || s.notWhileEditor) && now - programs.at > 30_000) programs = { at: now, list: await runningPrograms().catch(() => []) };
     const found = busyPrograms(programs.list, games.list);
     const cards = p.guard.status().cards;
