@@ -14,6 +14,7 @@
 import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
 import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, h, L, when } from "./dom.js";
+import { SNAPSHOT_SOURCE } from "./drive-view.js";
 const STATE = {
     queued: { dot: "off", tag: "t-off", he: "בתור", en: "Queued" },
     running: { dot: "on", tag: "t-run", he: "רץ", en: "Running" },
@@ -106,6 +107,14 @@ function cloudCard(v, t) {
     const st = t.status === "done" ? "done" : t.status === "failed" || t.status === "blocked" ? "failed" : t.status === "cancelled" ? "cancelled" : undefined;
     return h("div", { class: "acard", role: "button", tabindex: 0, "aria-label": t.title, onclick: () => v.setOpen(`cloud:${t.taskId}`), onkeydown: (e) => e.key === "Enter" && v.setOpen(`cloud:${t.taskId}`) }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "busy"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, t.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("מצב לא ידוע", "Status unknown"))), h("div", { class: "row wrap mut sm" }, h("span", null, `✷ ${L("Claude בענן", "Claude cloud")}`), h("span", { class: "grow" }), h("span", { class: "xs" }, L("התחיל ", "Started ") + when(t.createdAt))), h("div", { class: "row wrap" }, h("span", { class: "sm mut grow" }, L("רץ ב-Claude. פתחו כדי לצפות.", "Runs in Claude. Open it to watch.")), t.link && isSafeLink(t.link) ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח ב-Claude ↗", "Open in Claude ↗")) : null));
 }
+/** A finished run's snapshot from Google Drive ("last seen" while the PC is off): read-only. */
+function snapshotCard(a) {
+    const b = a.body;
+    const st = ["done", "failed", "cancelled"].find((x) => x === b.state);
+    const src = SNAPSHOT_SOURCE[b.source];
+    const span = b.startedAt && b.endedAt ? Date.parse(b.endedAt) - Date.parse(b.startedAt) : NaN;
+    return h("div", { class: "acard snap" }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, b.state)), h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : ""].filter(Boolean).join(" · "))), b.summary ? h("div", { class: "sm ell" }, b.summary) : null);
+}
 /** A device's group header: name, on/off, last seen (the Claude chat, which only connects to report: its last report). */
 function groupHead(name, icon, pc, count) {
     const on = pc?.online;
@@ -146,12 +155,13 @@ export function agentsTab(v) {
     const chatRuns = rest.filter(isChat);
     const ids = [...new Set([...pcs.map((d) => d.id), ...rest.filter((c) => !isChat(c)).map((c) => c.deviceId)])];
     const cloud = cloudTasks(v, now);
-    const empty = !cards.length && !cloud.length;
+    const snaps = v.snapshots?.() ?? [];
+    const empty = !cards.length && !cloud.length && !snaps.length;
     return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("סוכנים", "Agents")), h("span", { class: "mut" }, L(`· ${going} פעילים${waiting.length ? ` · ${waiting.length} מחכים לך` : ""}`, `· ${going} active${waiting.length ? ` · ${waiting.length} waiting for you` : ""}`)), h("span", { class: "grow" }), v.device.connected ? h("span", { class: "chip" }, h("span", { class: "dot on", "aria-hidden": "true" }), L(" חי", " Live")) : h("span", { class: "chip" }, h("span", { class: "dot off", "aria-hidden": "true" }), L(" לא מחובר", " Not connected"))), h("div", { class: "relay" }, "🔐 ", h("span", null, L("נעול במחשב: כותרות, צעדים ושמות כלים בלבד. בלי הנחיות, בלי תוכן קבצים ובלי תשובות. המרכז שומר 50 אירועים אחרונים לכל סוכן, 7 ימים.", "Sealed on the PC: titles, steps and tool names only. No prompts, file contents or answers. The hub keeps the last 50 events per agent, 7 days."))), waiting.length ? h("section", { class: "card clip pin" }, h("div", { class: "row head" }, h("b", null, L("⏳ מחכים לך", "⏳ Waiting for you")), h("span", { class: "grow" }), h("span", { class: "tag t-ask" }, String(waiting.length))), h("div", { class: "alist" }, waiting.map((c) => card(v, c, now, pcOf(c.deviceId))))) : null, ...ids.map((id) => {
         const pc = pcOf(id);
         const list = rest.filter((c) => c.deviceId === id);
         return h("section", { class: "card clip" }, groupHead(pc?.name ?? L("מחשב", "PC"), "🖥", pc, list.length), list.length ? h("div", { class: "alist" }, list.map((c) => card(v, c, now, pc))) : h("div", { class: "trow mut sm" }, pc && !pc.optIn.reportActivity ? L("המחשב הזה לא משתף פעילות סוכנים. במחשב: הגדרות › ענן Kesher › לשתף מה הסוכנים עושים.", "This PC does not share agent activity. On the PC: Settings › Kesher Cloud › Share what the agents do.") : L("אין סוכנים פעילים עכשיו.", "No agents running now.")));
-    }), chats.length || chatRuns.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null, cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null, empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null);
+    }), chats.length || chatRuns.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null, cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null, snaps.length ? h("section", { class: "card clip drive-agents" }, h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "📁"), h("b", null, L("נראו לאחרונה", "Last seen")), h("span", { class: "sm mut" }, L("מ-Google Drive, כשהמחשב כבוי", "From Google Drive, while the PC is off")), h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(snaps.length))), h("div", { class: "alist" }, snaps.map(snapshotCard))) : null, empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null);
 }
 /** One timeline row. */
 function eventRow(e) {

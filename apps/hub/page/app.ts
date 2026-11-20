@@ -20,6 +20,8 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
+import { PageDrive, type GisOauth2 } from "./drive.js";
+import { agentSnapshots, mergeTasks, parseAppToken } from "./drive-view.js";
 
 /** What the signed-in owner sees (`GET /api/state`). */
 interface OwnerState {
@@ -38,7 +40,7 @@ const TABS: Tab[] = ["dash", "agents", "devices", "tasks", "pair", "settings"];
 
 /** Minimal Google Identity Services types (the script is loaded from accounts.google.com, allowed by the CSP). */
 interface Gis {
-  accounts: { id: { initialize(o: Record<string, unknown>): void; renderButton(el: HTMLElement, o: Record<string, unknown>): void } };
+  accounts: { id: { initialize(o: Record<string, unknown>): void; renderButton(el: HTMLElement, o: Record<string, unknown>): void }; oauth2: GisOauth2 };
 }
 
 const device = new HubDevice();
@@ -69,6 +71,24 @@ const app = {
 };
 const fingerprints = new Map<string, string>();
 
+/** Every device's tasks and agent snapshots from the owner's Google Drive (drive.ts). */
+const drive = new PageDrive({
+  get clientId() {
+    return app.googleClientId;
+  },
+  gis: () => loadGis().then((g) => g?.accounts.oauth2),
+  get appOrigin() {
+    return app.appOrigin;
+  },
+  tasks: () => device.tasks,
+  onChange: () => renderSoon(),
+});
+
+/** The task list: this device's tasks and every task in Drive (drive-view.ts). */
+function allTasks(): PageTask[] {
+  return mergeTasks(device.tasks, drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name), deviceName: (id) => devices().find((d) => d.id === id)?.name });
+}
+
 /** The agents view's link to the page (agents.ts). */
 const agentsView: AgentsView = {
   device,
@@ -83,6 +103,7 @@ const agentsView: AgentsView = {
     scrollTo(0, 0);
   },
   render: () => render(),
+  snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
 
 // ---- helpers ----
@@ -203,6 +224,12 @@ function sourceChip(t: PageTask): HTMLElement | null {
   return h("span", { class: "chip src" }, L(he, en));
 }
 
+/** Which device wrote a task that came from Google Drive (none for this device's own). */
+function deviceChip(t: PageTask): HTMLElement | null {
+  if (!t.drive || t.drive.writer === drive.writer || t.inbox) return null;
+  return h("span", { class: "chip src dev" }, `${t.drive.writer.startsWith("pc-") ? "🖥" : "📱"} ${L(t.drive.device.he, t.drive.device.en)}`);
+}
+
 /** The live agent card of an inbox task, while its run is on the Agents tab. */
 function liveCard(t: PageTask): string | undefined {
   const key = t.inbox?.runId ? `${t.inbox.deviceId}/${t.inbox.runId}` : undefined;
@@ -287,7 +314,34 @@ function noteLine(): HTMLElement | null {
 }
 
 const relay = (short = false) =>
-  h("div", { class: "relay" }, "🔐 ", h("span", null, short ? L("ההיסטוריה שמורה במכשיר הזה. המרכז רק מעביר.", "The history is kept on this device. The hub only relays.") : L("המרכז רק מעביר הודעות נעולות ומוחק כל אחת ברגע שהתקבלה. המשימות וההיסטוריה שמורות במכשיר הזה, קבצי הפרויקט נשארים במחשב.", "The hub only relays sealed messages and deletes each one once it arrives. Tasks and history are kept on this device; project files stay on the PC.")));
+  h("div", { class: "relay" }, "🔐 ", h("span", null, short ? L("ההיסטוריה שמורה במכשיר הזה וב-Google Drive שלך. המרכז רק מעביר.", "The history is kept on this device and in your Google Drive. The hub only relays.") : L("המרכז רק מעביר הודעות נעולות ומוחק כל אחת ברגע שהתקבלה. המשימות וההיסטוריה שמורות במכשיר הזה, קבצי הפרויקט נשארים במחשב.", "The hub only relays sealed messages and deletes each one once it arrives. Tasks and history are kept on this device; project files stay on the PC.")));
+
+/**
+ * The Google Drive line of the Tasks tab (HubTasks): connect, reconnect when the token ended (about hourly in a
+ * browser), syncing, when it last synced and how many writes wait. `data-drive` holds the state (for checks).
+ */
+function driveLine(): HTMLElement | null {
+  const st = drive.status;
+  if (!app.googleClientId && !app.inApp) return null;
+  const button = (he: string, en: string) => h("button", { type: "button", class: "btn sm-btn", onclick: () => void drive.connect() }, L(he, en));
+  const pending = drive.pending ? h("span", { class: "tag t-wait" }, L(`⇡ ${drive.pending} ממתינים לשליחה`, `⇡ ${drive.pending} waiting to send`)) : null;
+  const line = (cls: string, icon: string, text: string, ...rest: Array<HTMLElement | null>) => h("div", { class: `${cls} drive-line`, "data-drive": st, role: "status" }, h("span", { "aria-hidden": "true" }, icon), h("span", { class: "grow sm" }, text), ...rest);
+  switch (st) {
+    case "off":
+      return line("kill soft", "📁", L("המשימות של כל המכשירים שלך נשמרות ב-Google Drive שלך (בתיקייה נסתרת, נעולות). חבר כדי לראות אותן כאן.", "The tasks of all your devices are kept in your Google Drive (a hidden folder, sealed). Connect to see them here."), button("חבר את Drive", "Connect Drive"));
+    case "reconnect":
+      return line("kill amber", "📁", app.inApp ? L("החיבור ל-Google Drive הסתיים. מתחבר מחדש דרך האפליקציה.", "The Google Drive connection ended. Reconnect through the app.") : L("החיבור ל-Google Drive הסתיים (אחרי כשעה). מוצגות המשימות שנשמרו כאן.", "The Google Drive connection ended (after about an hour). Showing the tasks kept here."), pending, button("חבר מחדש", "Reconnect Drive"));
+    case "connecting":
+    case "syncing":
+      return line("relay", "📁", st === "connecting" ? L("מתחבר ל-Google Drive…", "Connecting to Google Drive…") : L("מסנכרן עם Google Drive…", "Syncing with Google Drive…"), h("span", { class: "spin", "aria-hidden": "true" }));
+    case "offline":
+      return line("kill soft", "📁", L("אין חיבור ל-Google Drive. מוצגות המשימות שנשמרו כאן; ינסה שוב.", "No connection to Google Drive. Showing the tasks kept here; it tries again."), pending);
+    case "error":
+      return line("kill amber", "📁", drive.error ? L(drive.error.he, drive.error.en) : L("הסנכרון נכשל", "The sync failed"), pending, h("button", { type: "button", class: "btn sm-btn", onclick: () => void drive.syncNow() }, L("נסה שוב", "Try again")));
+    default:
+      return line("relay", "📁", L(`מ-Google Drive · עודכן ${when(drive.lastSync)}`, `From Google Drive · updated ${when(drive.lastSync)}`), pending);
+  }
+}
 
 /** "Sign in to manage" for the owner-only parts, when this is a paired device that is not signed in. */
 function signInCard(what: string): HTMLElement {
@@ -451,6 +505,7 @@ async function sendDraft(): Promise<void> {
   } else {
     app.draft = "";
     app.note = { he: "המשימה נשלחה", en: "The task was sent" };
+    void drive.taskSent();
     app.openTask = r.taskId;
     location.hash = "#tasks";
   }
@@ -465,7 +520,7 @@ const draftBox = (rows: number) =>
 function dashboard(): HTMLElement {
   const on = devices().filter((d) => d.online).length;
   const off = devices().length - on;
-  const open = device.tasks.filter(isOpen);
+  const open = allTasks().filter(isOpen);
   return h(
     "main",
     { class: "page" },
@@ -521,7 +576,7 @@ function newTask(): HTMLElement {
         { class: "stack" },
         routeBox(false),
         cloudWarning(),
-        h("section", { class: "sec" }, h("h3", { class: "sm" }, L("מה נשמר איפה", "What is kept where")), h("div", { class: "sm lines" }, L("📱 המשימה והתשובה: במכשיר הזה", "📱 The task and the answer: on this device"), h("br"), L("☁ המרכז: רק מזהה, יעד ושעה, עד שהמשימה נמסרה", "☁ The hub: only an id, a recipient and a time, until delivered"), h("br"), L("🔀 הקוד: בענף ב-GitHub, כמו תמיד", "🔀 The code: in a branch on GitHub, as always"))),
+        h("section", { class: "sec" }, h("h3", { class: "sm" }, L("מה נשמר איפה", "What is kept where")), h("div", { class: "sm lines" }, L("📱 המשימה והתשובה: במכשיר הזה וב-Google Drive שלך (נעולות)", "📱 The task and the answer: on this device and in your Google Drive (sealed)"), h("br"), L("☁ המרכז: רק מזהה, יעד ושעה, עד שהמשימה נמסרה", "☁ The hub: only an id, a recipient and a time, until delivered"), h("br"), L("🔀 הקוד: בענף ב-GitHub, כמו תמיד", "🔀 The code: in a branch on GitHub, as always"))),
         h("div", { class: "row end" }, h("span", { class: "grow" }), h("a", { class: "btn", href: "#tasks" }, L("ביטול", "Cancel")), h("button", { type: "button", class: "btn pri big", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח משימה", "Send the task"))),
       ),
     ),
@@ -530,7 +585,8 @@ function newTask(): HTMLElement {
 
 /** The tasks tab (HubTasks / PhoneHubTasks). */
 function tasksTab(): HTMLElement {
-  const all = device.tasks;
+  const all = allTasks();
+  drive.preload();
   const pick = (t: PageTask) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : app.filter === "expired" ? HubDevice.expired(t) : true);
   const q = app.search.trim().toLowerCase();
   const list = all.filter(pick).filter((t) => !q || `${t.title}\n${t.spec}`.toLowerCase().includes(q));
@@ -540,14 +596,15 @@ function tasksTab(): HTMLElement {
   return h(
     "main",
     { class: "page" },
-    h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("נשמר במכשיר הזה (המרכז לא שומר משימות)", "Kept on this device (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
+    h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
+    driveLine(),
     !device.paired ? pairThisCard() : null,
     h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),
     h(
       "section",
       { class: "card clip" },
       h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })),
-      list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד לא נשלחו משימות מהמכשיר הזה.", "No tasks were sent from this device yet.")),
+      list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
     ),
     open ? taskDetail(open) : null,
   );
@@ -557,7 +614,11 @@ function tasksTab(): HTMLElement {
 function taskRow(t: PageTask): HTMLElement {
   const expired = !t.inbox && HubDevice.expired(t);
   const live = liveCard(t);
-  const action = t.inbox
+  const action = t.drive?.only
+    ? t.link && isSafeLink(t.link)
+      ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, L("פתח", "Open"))
+      : null
+    : t.inbox
     ? live
       ? h("button", { type: "button", class: "btn sm-btn", onclick: (e) => { e.stopPropagation(); agentsView.setOpen(live); } }, L("● חי ›", "● Live ›"))
       : null
@@ -574,7 +635,7 @@ function taskRow(t: PageTask): HTMLElement {
     "div",
     { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") { app.openTask = t.taskId; render(); } } },
     h("span", { class: "c-st" }, statusTag(t)),
-    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" && !t.inbox ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
+    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
     h("span", { class: "c-rt" }, routeChip(t)),
     h("span", { class: "c-when mut sm" }, when(t.createdAt)),
     h("span", { class: "c-act" }, action),
@@ -586,7 +647,7 @@ function taskDetail(t: PageTask): HTMLElement {
   return h(
     "section",
     { class: `card pad stack${t.status === "done" ? " done-card" : ""}` },
-    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
+    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
     t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""),
     t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null,
     h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")),
@@ -729,7 +790,7 @@ function settingsTab(): HTMLElement {
           { class: "sec" },
           h("h3", null, L("המכשיר הזה", "This device")),
           device.paired ? h("div", { class: "row" }, h("span", { class: "grow" }, L(`מחובר בשם "${device.name ?? ""}" · המשימות נשמרות כאן`, `Paired as "${device.name ?? ""}" · tasks are kept here`)), h("span", { class: `tag ${device.connected ? "t-ok" : "t-off"}` }, device.connected ? L("מחובר", "Connected") : L("לא מחובר", "Not connected"))) : h("span", { class: "mut sm" }, L("לא מחובר כמכשיר (אפשר לחבר בלשונית חיבור).", "Not paired as a device (pair it in the Pair tab).")),
-          device.paired ? h("div", null, h("button", { type: "button", class: "btn bad", onclick: () => confirm(L("לשכוח את המכשיר הזה? המפתח והמשימות שנשמרו כאן יימחקו.", "Forget this device? Its key and the tasks kept here are deleted.")) && void device.forget() }, L("שכח את המכשיר הזה", "Forget this device"))) : null,
+          device.paired ? h("div", null, h("button", { type: "button", class: "btn bad", onclick: () => confirm(L("לשכוח את המכשיר הזה? המפתח והמשימות שנשמרו כאן יימחקו.", "Forget this device? Its key and the tasks kept here are deleted.")) && void device.forget().then(() => drive.forget()) }, L("שכח את המכשיר הזה", "Forget this device"))) : null,
           h("div", { class: "row" }, h("span", { class: "grow" }, L("שפה", "Language")), h("button", { type: "button", class: "btn", onclick: () => { setLocale(getLocale() === "he" ? "en" : "he"); render(); } }, getLocale() === "he" ? "English" : "עברית")),
         ),
         o
@@ -782,10 +843,9 @@ function render(): void {
 }
 
 let gisLoading: Promise<Gis | undefined> | undefined;
-/** Loads Google's sign-in script once and draws its button wherever the page has a `.gis` box. */
-function mountGis(): void {
-  const boxes = [...document.querySelectorAll<HTMLElement>(".gis")];
-  if (!boxes.length || !app.googleClientId || app.inApp) return;
+/** Loads Google's script once (sign-in button and the Drive token client); undefined when it cannot load. */
+function loadGis(): Promise<Gis | undefined> {
+  if (!app.googleClientId || app.inApp) return Promise.resolve(undefined);
   gisLoading ??= new Promise((resolve) => {
     const s = document.createElement("script");
     s.src = "https://accounts.google.com/gsi/client";
@@ -798,7 +858,14 @@ function mountGis(): void {
     s.onerror = () => resolve(undefined);
     document.head.append(s);
   });
-  void gisLoading.then((g) => {
+  return gisLoading;
+}
+
+/** Draws Google's sign-in button wherever the page has a `.gis` box. */
+function mountGis(): void {
+  const boxes = [...document.querySelectorAll<HTMLElement>(".gis")];
+  if (!boxes.length || !app.googleClientId || app.inApp) return;
+  void loadGis().then((g) => {
     for (const b of boxes) if (g && b.isConnected && !b.childElementCount) g.accounts.id.renderButton(b, { theme: "filled_black", size: "large", shape: "pill", text: "signin_with", width: Math.min(340, b.clientWidth || 320), locale: getLocale() });
   });
 }
@@ -858,6 +925,9 @@ function inWebView(appOrigin: string | undefined, ua: string): boolean {
 async function main(): Promise<void> {
   initLocale();
   dropExternalMarker();
+  // A Drive token the KesherAI app handed over in the fragment: taken into memory and wiped from the address at once.
+  const handed = parseAppToken(location.hash, Date.now());
+  if (location.hash.startsWith("#kdt=")) history.replaceState(null, "", location.pathname + location.search + "#tasks");
   app.appOrigin = appOriginFrom();
   app.inApp = inWebView(app.appOrigin, navigator.userAgent);
   device.onChange(() => {
@@ -879,6 +949,8 @@ async function main(): Promise<void> {
   const cfg = await fetch("/api/config").then((r) => r.json() as Promise<{ googleClientId?: string }>).catch(() => ({}) as { googleClientId?: string });
   app.googleClientId = typeof cfg.googleClientId === "string" ? cfg.googleClientId : "";
   await device.load();
+  // The app's token is taken only inside an Android WebView opened from the app (a link elsewhere cannot plant one).
+  await drive.load(handed && app.appOrigin && /; wv\)/.test(navigator.userAgent) ? handed : undefined);
   await loadOwner();
   // The signed-in state (who is on, the log) every 20 seconds while the page is visible.
   setInterval(() => {

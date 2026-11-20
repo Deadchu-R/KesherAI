@@ -15,6 +15,7 @@ import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packa
 import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSource, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
+import { SNAPSHOT_SOURCE, type SyncedAgent } from "./drive-view.js";
 
 /** What the agents view needs from the page. */
 export interface AgentsView {
@@ -24,6 +25,8 @@ export interface AgentsView {
   open: string | undefined;
   setOpen: (key: string | undefined) => void;
   render: () => void;
+  /** The last agent snapshots from Google Drive, while every PC is off (empty otherwise). */
+  snapshots?: () => SyncedAgent[];
 }
 
 const STATE: Record<AgentRunStateName, { dot: string; tag: string; he: string; en: string }> = {
@@ -139,6 +142,21 @@ function cloudCard(v: AgentsView, t: PageTask): HTMLElement {
   );
 }
 
+/** A finished run's snapshot from Google Drive ("last seen" while the PC is off): read-only. */
+function snapshotCard(a: SyncedAgent): HTMLElement {
+  const b = a.body;
+  const st = (["done", "failed", "cancelled"] as const).find((x) => x === b.state);
+  const src = SNAPSHOT_SOURCE[b.source];
+  const span = b.startedAt && b.endedAt ? Date.parse(b.endedAt) - Date.parse(b.startedAt) : NaN;
+  return h(
+    "div",
+    { class: "acard snap" },
+    h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, b.state)),
+    h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : ""].filter(Boolean).join(" · "))),
+    b.summary ? h("div", { class: "sm ell" }, b.summary) : null,
+  );
+}
+
 /** A device's group header: name, on/off, last seen (the Claude chat, which only connects to report: its last report). */
 function groupHead(name: string, icon: string, pc: HubPresence | undefined, count: number): HTMLElement {
   const on = pc?.online;
@@ -186,7 +204,8 @@ export function agentsTab(v: AgentsView): HTMLElement {
   const chatRuns = rest.filter(isChat);
   const ids = [...new Set([...pcs.map((d) => d.id), ...rest.filter((c) => !isChat(c)).map((c) => c.deviceId)])];
   const cloud = cloudTasks(v, now);
-  const empty = !cards.length && !cloud.length;
+  const snaps = v.snapshots?.() ?? [];
+  const empty = !cards.length && !cloud.length && !snaps.length;
   return h(
     "main",
     { class: "page" },
@@ -205,6 +224,7 @@ export function agentsTab(v: AgentsView): HTMLElement {
     }),
     chats.length || chatRuns.length ? h("section", { class: "card clip" }, groupHead(L("צ׳אט Claude", "Claude chat"), deviceIcon("claude-chat"), chats[0], chatRuns.length), chatRuns.length ? h("div", { class: "alist" }, chatRuns.map((c) => card(v, c, now, pcOf(c.deviceId)))) : h("div", { class: "trow mut sm" }, L("הצ׳אט לא מריץ סוכנים עכשיו.", "The chat runs no agents now."))) : null,
     cloud.length ? h("section", { class: "card clip" }, groupHead(L("Claude בענן", "Claude cloud"), "✷", undefined, cloud.length), h("div", { class: "alist" }, cloud.map((t) => cloudCard(v, t)))) : null,
+    snaps.length ? h("section", { class: "card clip drive-agents" }, h("div", { class: "row head wrap" }, h("span", { "aria-hidden": "true" }, "📁"), h("b", null, L("נראו לאחרונה", "Last seen")), h("span", { class: "sm mut" }, L("מ-Google Drive, כשהמחשב כבוי", "From Google Drive, while the PC is off")), h("span", { class: "grow" }), h("span", { class: "tag t-off" }, String(snaps.length))), h("div", { class: "alist" }, snaps.map(snapshotCard))) : null,
     empty && !pcs.length ? h("p", { class: "mut sm" }, L("עוד אין מחשבים מחוברים. לשונית חיבור ›", "No PCs are paired yet. Pair tab ›")) : null,
   );
 }

@@ -9,6 +9,7 @@ import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuar
 import { DEFAULT_OPT_IN, HUB_LIMITS, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
+import type { DriveMark } from "./drive-view.js";
 
 /** This browser's identity at the hub. */
 interface Identity {
@@ -55,6 +56,8 @@ export interface PageTask {
    * the PC, and its live agent run while it has one. Not sent from here, so it cannot be resent or cancelled here.
    */
   inbox?: { from: HubInboxTask["from"]; executor: HubInboxTask["executor"]; deviceId: string; runId?: string; at: number };
+  /** Where Google Drive has this task (drive-view.ts sets it on the rows it shows; never saved here). */
+  drive?: DriveMark;
 }
 
 /** The timeline words for an inbox task's states. */
@@ -83,8 +86,13 @@ function db(): Promise<IDBDatabase> {
   return dbp;
 }
 
-/** Reads one value. */
-async function get<T>(key: string): Promise<T | undefined> {
+/**
+ * Reads one value of the page's database.
+ *
+ * @param key - The key.
+ * @returns The value, or undefined.
+ */
+export async function get<T>(key: string): Promise<T | undefined> {
   const d = await db();
   return new Promise((resolve, reject) => {
     const r = d.transaction("kv").objectStore("kv").get(key);
@@ -93,8 +101,13 @@ async function get<T>(key: string): Promise<T | undefined> {
   });
 }
 
-/** Writes (or, with undefined, deletes) one value. */
-async function put(key: string, value: unknown): Promise<void> {
+/**
+ * Writes (or, with undefined, deletes) one value of the page's database.
+ *
+ * @param key - The key.
+ * @param value - The value (structured clone), or undefined to delete it.
+ */
+export async function put(key: string, value: unknown): Promise<void> {
   const d = await db();
   return new Promise((resolve, reject) => {
     const tx = d.transaction("kv", "readwrite");
@@ -614,6 +627,6 @@ export class HubDevice {
    * @returns True when expired.
    */
   static expired(t: PageTask): boolean {
-    return !t.inbox && (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
+    return !t.inbox && !t.drive?.only && (t.status === "waiting" || t.status === "outbox") && Date.now() - t.createdAt > HUB_LIMITS.defaultTtl * 1000;
   }
 }

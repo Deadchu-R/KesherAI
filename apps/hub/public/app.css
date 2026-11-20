@@ -186,3 +186,8 @@ button.chip { cursor: pointer; min-height: 30px; }
   .acard { padding: 10px 12px; }
   .bottom-tabs .nt { font-size: 10.5px; }
 }
+/* Google Drive line of the Tasks tab, a task's device chip and the "last seen" agent snapshots (drive.ts). */
+.drive-line { flex-wrap: wrap; gap: 8px 10px; }
+.drive-line .grow { min-width: 180px; }
+.chip.src.dev { border-color: var(--line); color: #c9c9ce; }
+.acard.snap { cursor: default; opacity: .9; }
