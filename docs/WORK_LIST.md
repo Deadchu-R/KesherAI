@@ -14,17 +14,17 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Agents and chat-first (Roee 19:3x; gap list RESEARCH_LOG 2026-11-20)
 - 👤✅ Decisions: a background helper continues where it stopped after a PC restart; helpers may use the browser and computer with Roee's approval per action (the approval card names the helper); documents open in a side panel in the chat.
-- 🔨 Agents step 1: helper notifications, tokens and cost per helper, Usage line.
-- ⬜ Agents step 2: persist helper runs, resume after restart, wake the lead when a background helper ends.
-- ⬜ Agents step 3: steer and continue a helper.
-- ⬜ Agents step 4: approval card naming the helper; helpers may use browser/computer/code with approvals; a test builder in the worktree.
-- ⬜ Agents step 5: plan card for multi-helper jobs; deep-research report as a document with sources.
-- ⬜ Chat step 6: one MediaView (audio/video/image) in tool cards, Download/Save chips, remembered chip with undo, browser thumbnail in steps.
-- ⬜ Chat step 7: documents as a side panel in the chat; artifact versions.
-- ⬜ Chat step 8: routing by meaning (Hebrew too), tool and connector toggles in the + menu.
-- ⬜ Design doc made by KesherAI (Roee 20:12): (1) shot scenarios as files in the repo (tools/design/scenarios/*.json: screen, size, mocked routes) + one script that renders every board with Playwright, no model needed; (2) a Design page in KesherAI (also phone/hub) that shows the boards from the repo, with the newest-change marker and comments; (3) sync: git is the single source; Claude's artifact is published from the same files by a script; KesherAI's self-work can run the script when the PC is on.
-- ⬜ Chat step 8b (Roee 19:38): when the chat wants a tool that is not installed, it says so and shows an "Install" button in the chat; the button opens a floating window with what it is, its size and where to save it (default the heavy-data drive), then installs and continues.
-- ⬜ Chat step 9: file reading in the + menu (audio, video, code), per-hunk accept/reject on helper diffs.
+- ✅ Agents step 1: helper notifications, tokens and cost per helper, Usage line.
+- ✅ Agents step 2: persist helper runs, resume after restart, wake the lead when a background helper ends.
+- ✅ Agents step 3: steer and continue a helper.
+- ✅ Agents step 4: approval card naming the helper; helpers may use browser/computer/code with approvals; a test builder in the worktree.
+- ✅ Agents step 5: plan card for multi-helper jobs; deep-research report as a document with sources.
+- ✅ Chat step 6: one MediaView (audio/video/image) in tool cards, Download/Save chips, remembered chip with undo, browser thumbnail in steps.
+- ✅ Chat step 7: documents as a side panel in the chat; artifact versions.
+- ✅ Chat step 8: routing by meaning (Hebrew too), tool and connector toggles in the + menu.
+- ✅ Design doc made by KesherAI (Roee 20:12): (1) shot scenarios as files in the repo (tools/design/scenarios/*.json: screen, size, mocked routes) + one script that renders every board with Playwright, no model needed; (2) a Design page in KesherAI (also phone/hub) that shows the boards from the repo, with the newest-change marker and comments; (3) sync: git is the single source; Claude's artifact is published from the same files by a script; KesherAI's self-work can run the script when the PC is on.
+- ✅ Chat step 8b (Roee 19:38): when the chat wants a tool that is not installed, it says so and shows an "Install" button in the chat; the button opens a floating window with what it is, its size and where to save it (default the heavy-data drive), then installs and continues.
+- ✅ Chat step 9: file reading in the + menu (audio, video, code), per-hunk accept/reject on helper diffs.
 
 ## Now (2026-11-19): research and code only, no new builds (Roee, 10:13)
 - ✅ **Mark it and let the model work** (FUTURE_FEATURES), in all four editors:
@@ -69,20 +69,20 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   reviews). Roee (12:5x): Antigravity runs only when he presses Run, one at a time, for now; KesherAI may push
   only agy/* and the inbox branch. Defaults until he says otherwise: 10 Antigravity tasks a day, Gemini's default model.
 - ✅ Naming (Roee, 13:20): in Hebrew they are "סוכנים" (lead: "סוכן ראשי"; "סוכן מחקר/בנייה/חיפוש"), not "עוזרים". Design doc boards renamed.
-- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76); ✅ screens: the hub page, Settings > Kesher Cloud, Phone/Computer/Cloud (6254d9bc). ✅ Live at hub.roeetal.com (2026-11-19 18:40): Worker kesher-hub from main (root apps/hub, auto-deploys on push), secrets ALLOWED_EMAIL + GOOGLE_CLIENT_ID, Google sign-in works. ⬜ Pair the PC (needs a build with Settings > Kesher Cloud); ✅ Claude path set (scheduled task "Kesher hub (cloud)": API trigger only, KesherAI repo, no connectors; secrets CLAUDE_TRIGGER_ID + CLAUDE_FIRE_TOKEN). ⬜ In the app, Google sign-in in the embedded view shows a white page: hide it there and offer pairing by code / open the system browser.: a small KesherAI web app that is always on, open only to Roee's Google
+- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76); ✅ screens: the hub page, Settings > Kesher Cloud, Phone/Computer/Cloud (6254d9bc). ✅ Live at hub.roeetal.com (2026-11-19 18:40): Worker kesher-hub from main (root apps/hub, auto-deploys on push), secrets ALLOWED_EMAIL + GOOGLE_CLIENT_ID, Google sign-in works. ✅ Pair the PC (0.6.401); ✅ Claude path set (scheduled task "Kesher hub (cloud)": API trigger only, KesherAI repo, no connectors; secrets CLAUDE_TRIGGER_ID + CLAUDE_FIRE_TOKEN). ⬜ In the app, Google sign-in in the embedded view shows a white page: hide it there and offer pairing by code / open the system browser.: a small KesherAI web app that is always on, open only to Roee's Google
   account. It knows which devices (PCs with KesherAI, the phone) and agents (Claude, Gemini/Antigravity, …) are
   on, connects them, and routes a task to a cloud tool when no device is on, so the PC need not stay on.
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
-  Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security.
-- ⬜ Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
+  Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security. missing: Google sign-in white page in the embedded view
+- 🔨 Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
   own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building. Roee (2026-11-20):
-  a hub builder tool, quick and easy (FUTURE_FEATURES, "Hub builder").
-- ⬜ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
-  hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens.
+  a hub builder tool, quick and easy (FUTURE_FEATURES, "Hub builder"). hub live (0.6.401); missing: the hub builder for self-hosting
+- ✅ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
+  hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens. (0.6.401)
 - ⬜ Roee (13:16): the hub as a Claude custom connector (remote MCP on the same Worker, OAuth for his account):
   Claude stays the lead, the hub is its hands (devices, send a task to Antigravity / local model, results,
-  approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1.
-- ⬜ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth").
+  approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1. not built
+- ✅ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth"). (research done, see below)
 - ✅ Design doc: boards from the real screens (agents, hub).
 - ✅ Task inbox (77169e22): Antigravity only on Roee's own Run, from the PC or the phone (one ask = one task, 30 min); push only agy/* and kesher-inbox. Needs a live test on the PC.
 - ✅ Research: Google's terms for Antigravity (Run per task OK; unattended not on AI Pro; Jules/AI Studio key for that).
@@ -111,11 +111,11 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   ✅ Research (RESEARCH_LOG 2026-11-20, account key K, sealed records). Roee: inbox tasks show in full on every device; done tasks kept 90 days; recovery code: default at first setup (he asked what happens if everything resets: explained). ✅ Step 1 (shared seal module, 4396266). Roee (15:34): store the tasks in HIS Google Drive, fetched through the Google account on his devices and the hub; ✅ research (c1f9947: appDataFolder, create-only record files, K file in Drive). ✅ Steps 1-2 (record names + Drive store, d01aece). ✅ Steps 3-5 (PC side + Settings, hub page + phone, agent snapshots + sync ping). In 0.6.405 (3-4); 5 on main. 👤 Google Cloud: Drive API ✅, drive.appdata ✅, privacy page live (roeetal.com/KesherAI/privacy/), branding links filled; Roee saves Branding and publishes (Audience). 👤 Later (Roee 15:45, resting): Google Cloud setup (Drive API, drive.appdata scope, publish to In production), reconnect Google on PC and phone., then the design doc, then batch builds.
 - ✅ 0.6.406 on the PC (Roee 18:xx); tasks sync connected (Drive OK, 0 tasks at 19:22, being checked). PC cleanup: LM Studio models moved to the E: drive, C: copy deleted; 20 compressed videos' originals binned and bin emptied (C: ~160 GB free).
 - 👤 Run inbox tasks c-20261119-01, -02 and c-20261120-01 (Antigravity research: browser + computer control).
-- 🔨 Batch 2A: Unity core tools (compact hierarchy + inspect_object, modify_scene, import_sprite, create_pbr_material).
-- ⬜ Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
+- ✅ Batch 2A: Unity core tools (compact hierarchy + inspect_object, modify_scene, import_sprite, create_pbr_material). (8ceab6c 94aa3af 25c1298 5392e12)
+- 🔨 Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
-  end-to-end demo. First a gap list against what exists, then the design doc, then builds.
+  end-to-end demo. First a gap list against what exists, then the design doc, then builds. (fc714f2 498e496 fb4b88d f13881b; 0.6.403) missing: inline actions, side canvas, ComfyUI-Unity demo
 
 ## Builds
 - ✅ 0.6.397 and 0.6.398 are available in the app.
@@ -128,8 +128,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Live agent tracking in the hub (Opus agent; on Roee's last usage credits, commits per step).
 
 ## Roee (2026-11-20 17:12): add to KesherAI
-- ⬜ Browser control + debugging like Claude in Chrome, for the user's own Chrome (extension) AND KesherAI's built-in browser: open tabs, read the page as text/accessibility tree, click/type, console messages, network requests, run JS, screenshots/GIF; site permissions and the same safety rules (no passwords, ask before submitting). Research first (Claude in Chrome, Playwright MCP, Chrome DevTools MCP, browser-use).
-- ⬜ Computer control like Claude's computer use (screenshots, click/type, per-app access, tiers for browsers/terminals) and control of the computer's features (settings, files, apps) — through KesherAI, with approvals. Research first.
+- ✅ Browser control + debugging like Claude in Chrome, for the user's own Chrome (extension) AND KesherAI's built-in browser: open tabs, read the page as text/accessibility tree, click/type, console messages, network requests, run JS, screenshots/GIF; site permissions and the same safety rules (no passwords, ask before submitting). Research first (Claude in Chrome, Playwright MCP, Chrome DevTools MCP, browser-use). (480affc 201c542 295839f 2e6c0fa; extension store release held)
+- 🔨 Computer control like Claude's computer use (screenshots, click/type, per-app access, tiers for browsers/terminals) and control of the computer's features (settings, files, apps) — through KesherAI, with approvals. Research first. missing: safety tiers and UIA tools not committed yet
 
 ## Waiting on Roee 👤
 - 👤 When convenient: 🖌 paint a model (ComfyUI 0.46+; asks before downloading SD 1.5 + ControlNet depth, ~2.8 GB).
@@ -157,127 +157,127 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 Every area below is its own `## Backlog:` section (one line per feature; ✅ = already in the code, with where).
 
 ## Backlog: Chat and UI
-- ⬜ Typed chat blocks: fold consecutive tool calls into one line ("7 steps"), like Claude's step list
-- ⬜ Live progress and preview of a media job inside the chat bubble (ComfyUI WebSocket)
-- ⬜ Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations)
-- ⬜ Side canvas for heavy results: images, PBR maps, code diffs
-- ⬜ Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes
-- ⬜ Approval card shows the diff or object list for Unity scene changes
-- ⬜ Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots
-- ⬜ One shared chat component everywhere; the new-chat box on the main screen gets the same + menu
+- ✅ Typed chat blocks: fold consecutive tool calls into one line ("7 steps"), like Claude's step list (in code: Activity.tsx ActivityGroup)
+- 🔨 Live progress and preview of a media job inside the chat bubble (ComfyUI WebSocket) missing: ComfyUI WebSocket progress; images only, polled
+- 🔨 Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations) (c7ae62b file chips) missing: Import to Unity, Apply, 4 variations
+- 🔨 Side canvas for heavy results: images, PBR maps, code diffs (02094ed documents) missing: images, PBR maps, code diffs
+- 🔨 Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes (f13881b Unity chip) missing: ComfyUI chip in every chat
+- 🔨 Approval card shows the diff or object list for Unity scene changes (e72dc60 helper hunks) missing: Unity scene diff or object list on approval
+- 🔨 Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots (fc714f2 tool groups) missing: model size per turn, agent-kind engine slots
+- 🔨 One shared chat component everywhere; the new-chat box on the main screen gets the same + menu (ef0aa01 + menu toggles) missing: one shared component, new-chat box menu
 - ✅ Rich + menu: files, camera, projects, devices, skills, memory and more (apps/web/src/AddMenu.tsx)
 - ✅ Built-in slash commands /compact /fork /model /new /status /goal /side (FUTURE_FEATURES, built 2026-11-18)
 - ✅ Reading aloud off by default, stop once started (Settings > Accessibility)
-- ⬜ Full design refresh, desktop and phone: colour-coded, light, one unified menu on a shared base
-- ⬜ First-run welcome with tappable roles (developer, artist, student, ...) that pick the tools; tools in categories
-- ⬜ Apple-style menus (act on finger lift); long-press drag to reorder sidebar buttons; user shortcuts
+- ⬜ Full design refresh, desktop and phone: colour-coded, light, one unified menu on a shared base not built (docs/REDESIGN_PLAN.md)
+- ✅ First-run welcome with tappable roles (developer, artist, student, ...) that pick the tools; tools in categories (in code: Welcome.tsx, roles.ts)
+- 🔨 Apple-style menus (act on finger lift); long-press drag to reorder sidebar buttons; user shortcuts (SidebarEdit.tsx) missing: finger-lift menus, long-press drag
 - ✅ Look changes: styles from words, web pictures, presets, full dark for HDR, synced look, reset (FUTURE_FEATURES)
-- ⬜ Look: backgrounds, fonts, icons from the web, SteamOS-like ordering; AI restyle that never touches functions
+- 🔨 Look: backgrounds, fonts, icons from the web, SteamOS-like ordering; AI restyle that never touches functions (appearance.ts, change_look) missing: icons from the web, SteamOS-like ordering
 - ✅ Gamepad support with controller hints and on-screen keyboard (apps/web/src/gamepad.ts)
-- ⬜ Console mode with big buttons for the ROG Xbox Ally X, and a gaming AI helper in it
-- ⬜ "Open mind": record a brain dump, sort it into prompts, research each idea
-- ⬜ Hugging Face search filtered by what runs well on this computer, each result marked
-- ⬜ Train models from the UI: pick the kind, show what is supported, plug the result into a category
-- ⬜ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini
-- ⬜ Setup guides for each part, kept as files in the repo
+- 🔨 Console mode with big buttons for the ROG Xbox Ally X, and a gaming AI helper in it (PadHints.tsx gamepad) missing: big-button console mode, gaming helper
+- ✅ "Open mind": record a brain dump, sort it into prompts, research each idea (in code: ideas.ts)
+- 🔨 Hugging Face search filtered by what runs well on this computer, each result marked (huggingface.ts search) missing: runs-well mark per result
+- 🔨 Train models from the UI: pick the kind, show what is supported, plug the result into a category (TRAINING.md) missing: kinds beyond picture LoRA and chat model
+- ✅ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini (in code: chat-import.ts, persona-import.ts, claude-code-import.ts)
+- 🔨 Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) missing: a guide for every part
 
 ## Backlog: Game engines
-- ⬜ Unity: Test button that enters Play mode and reports result and console
-- ⬜ Unity: checkpoint and rollback before every agent edit
-- ⬜ Unity: reconnect after a domain reload; show "waiting for Unity" and retry the command
-- ⬜ Unity: one Undo group per chat turn (also for unity_command and script_eval)
-- ⬜ Unity: compile-fix loop with at most 2 automatic fixes, errors returned as file, line, message
+- ✅ Unity: Test button that enters Play mode and reports result and console (in code: unity-test.ts)
+- ✅ Unity: checkpoint and rollback before every agent edit (4c3f6da)
+- ✅ Unity: reconnect after a domain reload; show "waiting for Unity" and retry the command (f13881b)
+- ✅ Unity: one Undo group per chat turn (also for unity_command and script_eval) (498e496)
+- ✅ Unity: compile-fix loop with at most 2 automatic fixes, errors returned as file, line, message (fb4b88d)
 - ✅ Unity: create a new project through Unity's CLI without an existing one (packages/core/src/unity-cli.ts)
 - ✅ Unity: embedded graphs and state graphs read and edited (integrations/unity/com.kesherai.bridge KesherGraph.cs)
-- ⬜ Unity Visual Scripting node editor that supports everything the engine does and syncs on open
-- ⬜ Unity C# shown as visual nodes and translated back to code
-- ⬜ ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s)
-- ⬜ Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background)
-- ⬜ Intent routing: "make a tileable wall texture" picks the PBR flow by itself
-- ⬜ Unreal: Blueprint node editor that supports everything the engine does; the page works with Unreal closed
-- ⬜ Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets)
-- ⬜ Unreal: inspect_level and apply_material tools; profiling against the chosen target phones
-- ⬜ Unreal: code views for C++ and Verse; Blueprint to Verse; prepare for UE6
-- ⬜ Specialised engine agents: materials, Niagara and VFX, level design
-- ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting
-- ⬜ Draw on a screenshot from the phone and send it as a change request to the engine
-- ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64)
+- ⬜ Unity Visual Scripting node editor that supports everything the engine does and syncs on open not built
+- ✅ Unity C# shown as visual nodes and translated back to code (in code: csharp-graph.ts, ScriptNodes.tsx)
+- 🔨 ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s) (5392e12 PBR material) missing: one-request flow with 45 s check
+- 🔨 Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background) (comfy-flows.ts, bg-remove.ts) missing: seamless albedo, normal, roughness, AO set
+- ⬜ Intent routing: "make a tileable wall texture" picks the PBR flow by itself not built
+- 🔨 Unreal: Blueprint node editor that supports everything the engine does; the page works with Unreal closed (BlueprintCanvas.tsx, 5c302ab) missing: full node coverage, editing with Unreal closed
+- 🔨 Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets) (blueprint-test.ts) missing: gameplay input tests via 5.9 toolsets
+- ⬜ Unreal: inspect_level and apply_material tools; profiling against the chosen target phones not built
+- 🔨 Unreal: code views for C++ and Verse; Blueprint to Verse; prepare for UE6 (cf6bace Source view, blueprint-code.ts) missing: UE6 preparation
+- ⬜ Specialised engine agents: materials, Niagara and VFX, level design not built
+- ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting not built
+- 🔨 Draw on a screenshot from the phone and send it as a change request to the engine (Annotator.tsx) missing: send the drawing to the engine as a change request
+- ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64) not built
 - ✅ Godot support: bridge addon, scenes, nodes, scripts, run and log (FUTURE_FEATURES)
 - ✅ Minecraft and Roblox modding (mod_new, mod_build) and UEFN / Verse files (FUTURE_FEATURES)
 - ✅ Fab search, installed Unreal plugins list and rebuild for another engine version (FUTURE_FEATURES)
 - ✅ Phone build targets chosen by phone model, known engine bugs checked before builds (FUTURE_FEATURES)
 
 ## Backlog: Models and agents
-- ⬜ Cache: fixed engine slot per agent kind, slot save and restore around ComfyUI VRAM use
-- ⬜ Findings-pack limit (200-400 tokens) for helper agent reports; per-turn cap of 4-6 loaded tools
-- ⬜ Tool outputs pruned after 2 turns with a summary line and a pointer to the full output on disk
-- ⬜ Calibrate the local engine to the computer (speed against accuracy); chats-at-once setting
-- ⬜ Download the right engine and models for the hardware (NVIDIA, Intel, AMD) automatically, no button
-- ⬜ Smart split of one task across connected computers by hardware; per-chat device choice; laptop gets no heavy work
-- ⬜ Local model carries tasks during Claude's weekly cooldown, one after another without crashing
-- ⬜ Ideal local model: Hebrew and English, strong at code, many tools; code sessions answer in Hebrew
-- ⬜ Test DeepSeek V4-Flash and tune Qwen 3.6-27B for the PC; goal is Claude-like quality locally
-- ⬜ Microsoft Copilot connection for businesses, with an option to use only Copilot
-- ⬜ Models talking to each other: multilingual model plus strong code model as a team
-- ⬜ Claude uses KesherAI more and more itself; a KesherAI connector so Claude can send it commands
-- ⬜ Long-term approvals in chats (for good or for a set time) in every flow, not only commands
+- ⬜ Cache: fixed engine slot per agent kind, slot save and restore around ComfyUI VRAM use not built
+- ⬜ Findings-pack limit (200-400 tokens) for helper agent reports; per-turn cap of 4-6 loaded tools not built
+- ⬜ Tool outputs pruned after 2 turns with a summary line and a pointer to the full output on disk not built
+- ✅ Calibrate the local engine to the computer (speed against accuracy); chats-at-once setting (in code: calibrate, ChatsAtOnce.tsx)
+- 🔨 Download the right engine and models for the hardware (NVIDIA, Intel, AMD) automatically, no button (downloads/hardware.ts) missing: fully automatic, no button
+- ⬜ Smart split of one task across connected computers by hardware; per-chat device choice; laptop gets no heavy work not built
+- 🔨 Local model carries tasks during Claude's weekly cooldown, one after another without crashing (SelfWorkPanel.tsx) missing: automatic hand-over at Claude cooldown
+- ⬜ Ideal local model: Hebrew and English, strong at code, many tools; code sessions answer in Hebrew not built
+- ⬜ Test DeepSeek V4-Flash and tune Qwen 3.6-27B for the PC; goal is Claude-like quality locally not built
+- 🔨 Microsoft Copilot connection for businesses, with an option to use only Copilot (copilot.ts, docs/COPILOT.md) missing: Copilot-only mode
+- ⬜ Models talking to each other: multilingual model plus strong code model as a team not built
+- 🔨 Claude uses KesherAI more and more itself; a KesherAI connector so Claude can send it commands (McpServerSection.tsx) missing: Claude-initiated commands flow
+- 🔨 Long-term approvals in chats (for good or for a set time) in every flow, not only commands (agent/permissions.ts) missing: set-time grants in every flow
 - ✅ Gemini through the user's Google subscription, Telegram approvals, named agents, heartbeat routines (FUTURE_FEATURES)
 - ✅ Translation model in the team, reply-language settings (FUTURE_FEATURES, chat at Claude/Gemini level)
 
 ## Backlog: Devices, hub and phone
-- ⬜ Backup update source without GitHub (updates from the user's own computers); keep GitHub too
-- ⬜ The phone app does not get the PC's update or notes when only the PC updated
-- ⬜ Phone app redesign in the same design line; phone health screen; settings button while connected
-- ⬜ Notifications like any app, no ntfy and no cost, opening the right page
-- ⬜ A computer about to sleep tells the others; faster device discovery with status
-- ⬜ Found computers shared by every chat; disconnect and switch computer from the menu
-- ⬜ Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds
+- ✅ Backup update source without GitHub (updates from the user's own computers); keep GitHub too (in code: updates-peer.test.ts)
+- ⬜ The phone app does not get the PC's update or notes when only the PC updated not built
+- ⬜ Phone app redesign in the same design line; phone health screen; settings button while connected not built
+- 🔨 Notifications like any app, no ntfy and no cost, opening the right page (37a0a1b 6f91127 hub Web Push) missing: ntfy still used on the PC
+- ⬜ A computer about to sleep tells the others; faster device discovery with status not built
+- ⬜ Found computers shared by every chat; disconnect and switch computer from the menu not built
+- 🔨 Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds (2e9a75f agents) missing: commands and other task kinds
 - ✅ Telegram bot with approval buttons (packages/core/src/telegram.ts)
 - ✅ Remote desktop with a PIN, computer load view with Terminate, computer tabs (FUTURE_FEATURES)
 - ✅ Fixed outside address by Cloudflare domain or Tailscale Funnel (FUTURE_FEATURES)
 
 ## Backlog: Editors and media
-- ⬜ Picture editor to Photoshop and Affinity level: layers, masks, AI tools (research first)
-- ⬜ 3D editor to Blender, Max and Maya level: all modifiers, rigging, animation (research first)
-- ⬜ Sound editor with instruments, hum or whistle to instrument, mixing and effects at DAW level
-- ⬜ Video editor to a pro level: keyframes, colour, titles, audio ducking
-- ⬜ Editors call each other and offer to install a missing one
-- ⬜ Figma integration with careful security; share and collaborate like Figma (stages 2-3)
+- ⬜ Picture editor to Photoshop and Affinity level: layers, masks, AI tools (research first) not built
+- ⬜ 3D editor to Blender, Max and Maya level: all modifiers, rigging, animation (research first) not built
+- ⬜ Sound editor with instruments, hum or whistle to instrument, mixing and effects at DAW level not built
+- ⬜ Video editor to a pro level: keyframes, colour, titles, audio ducking not built
+- ⬜ Editors call each other and offer to install a missing one not built
+- 🔨 Figma integration with careful security; share and collaborate like Figma (stages 2-3) (figma-umg.ts) missing: share and collaborate, stages 2-3
 - ✅ Picture, video, sound and 3D editors opened from chat results as tabs, with Send to the chat (plugins/*-editor)
 - ✅ Camera avatar page and lip-sync (apps/web/src/pages/AvatarCamera.tsx, packages/core/src/lipsync.ts)
 - ✅ Asset bank of everything made, with Edit in... under each chat result (#/bank)
 
 ## Backlog: Study and personal tools
-- ⬜ Study works fully on a phone alone and on weak laptops, including summaries and quizzes without a PC
-- ⬜ A "Student" option in the welcome and a complete package to send to a student
+- ⬜ Study works fully on a phone alone and on weak laptops, including summaries and quizzes without a PC not built
+- 🔨 A "Student" option in the welcome and a complete package to send to a student (roles.ts Student) missing: the package to send to a student
 - ✅ Lecture recording, also from the phone (apps/web/src/StudyRecorder.tsx), summaries, quizzes, mock exams
 - ✅ Moodle, My week, slides, writing coach, sources, mind maps, oral exam practice (FUTURE_FEATURES)
-- ⬜ Study: visuals and practical help per lesson (keep refining with a real student's feedback)
+- ⬜ Study: visuals and practical help per lesson (keep refining with a real student's feedback) not built
 - ✅ Relationship analysis with imports and an analyst persona; WhatsApp and Instagram import (FUTURE_FEATURES)
 - ✅ Films for you: Stremio, Letterboxd and MyAnimeList taste (#/stremio)
-- ⬜ Persona from AskBrandon-style analysis kept as a reusable persona
+- 🔨 Persona from AskBrandon-style analysis kept as a reusable persona (persona-research.ts) missing: reusable AskBrandon-style persona
 - ✅ AI-based PC Health, screen lens (Ctrl+Alt+L), personal knowledge tools (FUTURE_FEATURES)
 
 ## Backlog: Platform, security and tests
-- ⬜ Publish @kesher/plugin-sdk to npm with a template repository (needs an npm account)
-- ⬜ Plugin store with install from the app; clear plugin and fork docs for developers
-- ⬜ Fully modular parts; no single provider needed; less dependence on Ollama and LM Studio over time
-- ⬜ Automated test system per version: it works and has no security holes
-- ⬜ Full security review and performance pass after every 5 builds (running rule)
-- ⬜ Hardware limits in the UI: RAM and CPU caps, CPU temperature
-- ⬜ Reset to defaults and a reinstall option checked on every platform
-- ⬜ Project index: faster search over assets, scripts and Blueprints for big projects
-- ⬜ Browser extension in the Edge and Firefox stores, self-updating
-- ⬜ Landing page roeetal.com/KesherAI in the app's design, with API docs under it
+- ⬜ Publish @kesher/plugin-sdk to npm with a template repository (needs an npm account) waits on an npm account
+- ⬜ Plugin store with install from the app; clear plugin and fork docs for developers not built
+- ⬜ Fully modular parts; no single provider needed; less dependence on Ollama and LM Studio over time not built
+- ⬜ Automated test system per version: it works and has no security holes not built
+- 🔨 Full security review and performance pass after every 5 builds (running rule) (460279e scan 168) missing: next scan after 5 builds
+- 🔨 Hardware limits in the UI: RAM and CPU caps, CPU temperature (gpu-guard.ts) missing: RAM and CPU caps, CPU temperature
+- 🔨 Reset to defaults and a reinstall option checked on every platform (ResetSection.tsx) missing: reinstall check on every platform
+- ✅ Project index: faster search over assets, scripts and Blueprints for big projects (bcbe818 5c302ab e7c3278)
+- ⬜ Browser extension in the Edge and Firefox stores, self-updating not built
+- ⬜ Landing page roeetal.com/KesherAI in the app's design, with API docs under it not built
 - ✅ Plugin dev mode, pnpm plugin:check, CONTRIBUTING walk-through (FUTURE_FEATURES)
 - ✅ Project index: code_map, find_symbol, find_assets cached by file time (FUTURE_FEATURES)
 
 ## Backlog: Far future
-- ⬜ Remote control of the computer with several monitors, as a plugin (like Google Remote Desktop)
-- ⬜ Anyone can host their own hub from KesherAI's hub builder, after the builder exists
-- ⬜ Live avatar instead of the camera in video calls, with a warning to the user
-- ⬜ Approvals from a Wear OS watch
-- ⬜ Paid models fully supported for other users (not needed for himself)
+- ⬜ Remote control of the computer with several monitors, as a plugin (like Google Remote Desktop) not built
+- ⬜ Anyone can host their own hub from KesherAI's hub builder, after the builder exists not built
+- ⬜ Live avatar instead of the camera in video calls, with a warning to the user not built
+- ⬜ Approvals from a Wear OS watch not built
+- ⬜ Paid models fully supported for other users (not needed for himself) not built
 
 ### Roee's answers for the night of 2026-11-20 (22:46)
 - Downloads for browser/computer control (local vision model, Playwright browser etc.): allowed to drive E, no size limit, official sources only, through KesherAI; list them in the morning report.
