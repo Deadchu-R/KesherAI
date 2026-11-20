@@ -750,6 +750,21 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
+  // Inline action buttons under a result (chat-quick-actions.ts): which ones work in this chat, and running one
+  // directly (no model turn). It answers once the run started; the steps and their results come as the chat's events.
+  app.get<{ Params: { id: string } }>("/api/conversations/:id/quick-actions", async (req, reply) => {
+    const names = await s.conversations.quickActions(req.params.id);
+    return names ? { names } : reply.code(404).send({ error: "Conversation not found" });
+  });
+  app.post<{ Params: { id: string }; Body: { name?: string; input?: Record<string, unknown>; times?: number } }>("/api/conversations/:id/quick-actions", async (req, reply) => {
+    try {
+      await s.conversations.runQuickAction(req.params.id, String(req.body?.name ?? ""), req.body?.input ?? {}, Number(req.body?.times ?? 1) || 1);
+      return reply.code(202).send({ ok: true });
+    } catch (err) {
+      return reply.code((err as { statusCode?: number }).statusCode ?? 409).send({ error: (err as Error).message });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/conversations/:id/undo", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });

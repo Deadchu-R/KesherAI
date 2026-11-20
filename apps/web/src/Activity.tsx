@@ -3,6 +3,9 @@ import { FileChips, MadeMedia, MediaView, fileUrl } from "./MediaView";
 import { MemoryChip } from "./chat/MemoryChip";
 import { InstallOffer } from "./chat/InstallOffer";
 import { mediaKindOf } from "./chat/chat-inline";
+import { JobProgressView, MEDIA_JOB, useChatLive } from "./chat/ChatLive";
+import { ResultActions, useQuickNames } from "./chat/ResultActions";
+import { imageActions, playerActions, stepActions } from "./chat/result-actions";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { desktop } from "./library";
@@ -128,6 +131,21 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
     return s.call.name === "offer_install" && s.result?.ok && /Install button/.test(s.result.output) && typeof input.id === "string" ? [{ key: s.call.callId, id: input.id, why: typeof input.why === "string" ? input.why : undefined }] : [];
   });
   // Older builds only said "Built dist/x.exe." in their output.
+  // Inline action buttons (design ChatQuickActions): what this chat's buttons can run, which step made each picture,
+  // and the run's receipt (for Undo on an engine step).
+  const can = useQuickNames(convId);
+  const events = useChatLive()?.events;
+  const madeBy = new Map(steps.flatMap((s) => (s.result?.assetIds ?? []).map((id) => [id, s] as const)));
+  const lastSeq = Math.max(0, ...steps.map((s) => s.result?.seq ?? 0));
+  const next = lastSeq && events ? events.find((e) => e.seq > lastSeq && (e.type === "receipt" || e.type === "user")) : undefined;
+  const run = next?.type === "receipt" ? next.run : undefined;
+  const lastEngine = [...steps].reverse().find((s) => s.result?.ok && /^(unity|unreal|godot)_/.test(s.call.name));
+  const stepButtons = live ? [] : steps.flatMap((s) => {
+    const all = stepActions(s, run);
+    // Engine buttons once per group (on its last engine step), not under every read.
+    const list = s === lastEngine ? all : all.filter((a) => a.id !== "engine" && a.id !== "undo");
+    return list.length ? [{ key: s.call.callId, list }] : [];
+  });
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
     <div className="activity">
@@ -182,7 +200,10 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       )}
       {current && !current.result && liveOutput?.[current.call.callId] && <LiveOutput text={liveOutput[current.call.callId]!} />}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
+      {/* A picture, video, song or 3D job: ComfyUI's steps and preview frames, and Cancel (design ChatJobProgress). */}
+      {live && steps.filter((s) => !s.result && MEDIA_JOB.test(s.call.name)).map((s) => <JobProgressView key={s.call.callId} callId={s.call.callId} />)}
       {after && after.length > 0 && <div className="hcards">{after}</div>}
+      {stepButtons.map((b) => <ResultActions key={b.key} actions={b.list} label={t("actionsStep")} />)}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {offers.length > 0 && <div className="memory-chips">{offers.map((o) => <InstallOffer key={o.key} id={o.id} {...(o.why ? { why: o.why } : {})} {...(convId ? { convId } : {})} />)}</div>}
       {kept.length > 0 && <div className="memory-chips">{kept.map((k) => <MemoryChip key={k.key} note={k.note} {...(k.topic ? { topic: k.topic } : {})} />)}</div>}
@@ -198,6 +219,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
                 {...(cover ? { poster: withToken(`/api/assets/${cover}`) } : {})}
                 {...(convId ? { convId } : {})}
               />
+              <ResultActions actions={playerActions(id, "audio", can)} label={t("actionsSound")} />
               {lyrics && (
                 <details className="audio-lyrics">
                   <summary>{t("songLyrics")}</summary>
@@ -210,12 +232,22 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       )}
       {videos.length > 0 && (
         <div className="activity-images">
-          {videos.map((id) => <MadeMedia key={id} file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />)}
+          {videos.map((id) => (
+            <div key={id} className="made-with-actions">
+              <MadeMedia file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />
+              <ResultActions actions={playerActions(id, "video", can)} label={t("actionsVideo")} />
+            </div>
+          ))}
         </div>
       )}
       {images.length > 0 && (
         <div className="activity-images">
-          {images.map((id) => <MadeMedia key={id} file={{ assetId: id }} kind="image" name={`kesher-image-${id.slice(0, 8)}.png`} {...(convId ? { convId } : {})} />)}
+          {images.map((id) => (
+            <div key={id} className="made-with-actions">
+              <MadeMedia file={{ assetId: id }} kind="image" name={`kesher-image-${id.slice(0, 8)}.png`} {...(convId ? { convId } : {})} />
+              <ResultActions actions={imageActions(id, madeBy.get(id), can)} label={t("actionsPicture")} />
+            </div>
+          ))}
         </div>
       )}
     </div>

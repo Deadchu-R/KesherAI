@@ -40,6 +40,7 @@ import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
 import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import { lookTools, mediaTools } from "./chat-tools-media.js";
+import { isButtonTool, quickActionNames, quickActionProblem, quickTool, type QuickServices } from "./chat-quick-actions.js";
 import { settingsTool } from "./chat-tools-settings.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
 
@@ -129,6 +130,8 @@ export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
   /** Routing by meaning (tool-router.ts): words, and a tiny call to the built-in engine when it runs. */
   private readonly router = new ToolRouter({ ask: () => this.deps.routeAsk?.() });
+  /** The services the inline action buttons' own tools use (upscaler, background remover); set by the server. */
+  quickServices: QuickServices = {};
   /** Whether an installable (installables.ts) is installed; set by its routes (routes/installables.ts). */
   installReady?: (id: string) => Promise<boolean>;
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
@@ -956,6 +959,57 @@ export class ConversationManager {
     } finally {
       g.checking = false;
     }
+  }
+
+  /**
+   * What a chat's inline action buttons can run now (its own tools from the button list, and Upscale or Remove
+   * background when those services are there), so the page shows only buttons that work.
+   *
+   * @param id - The chat.
+   * @returns The tool names, or undefined for an unknown chat.
+   */
+  async quickActions(id: string): Promise<string[] | undefined> {
+    const opened = await this.open(id);
+    return opened ? quickActionNames(opened.session.toolNames(), this.quickServices) : undefined;
+  }
+
+  /**
+   * Runs one inline action button under a result: a tool with inputs the page already knows, with no model turn
+   * (AgentSession.runDirect). A sound or video from the library is copied into the chat's `shared/` folder first for
+   * Transcribe, because transcribe_audio reads the chat's files.
+   *
+   * @param id - The chat.
+   * @param name - The tool (see chat-quick-actions.ts).
+   * @param input - Its arguments.
+   * @param times - How many runs (4 variations), 1–4.
+   * @returns Once it has started: `done`, each run's result (the steps show in the chat as they come).
+   * @throws Error for an unknown chat, a busy one, or a call the buttons may not make.
+   */
+  async runQuickAction(id: string, name: string, input: Record<string, unknown>, times = 1): Promise<{ done: Promise<Array<{ ok: boolean; output: string }>> }> {
+    const problem = name === "transcribe_audio" && typeof input.asset === "string" ? undefined : quickActionProblem(name, input);
+    if (problem) throw Object.assign(new Error(problem), { statusCode: 400 });
+    const opened = await this.open(id);
+    if (!opened) throw Object.assign(new Error("No such chat."), { statusCode: 404 });
+    const { session, conversation } = opened;
+    let args = input;
+    if (name === "transcribe_audio" && typeof input.asset === "string") {
+      const got = await this.deps.assets.get(input.asset);
+      if (!got || !/^(audio|video)\//.test(got.asset.mimeType)) throw Object.assign(new Error("That recording is not in KesherAI's library any more."), { statusCode: 404 });
+      const folder = this.workspaceOf(conversation) ?? session.workspace;
+      if (!folder) throw Object.assign(new Error("This chat has no folder to put the recording in."), { statusCode: 409 });
+      const ext = got.asset.mimeType.split("/")[1]!.replace("mpeg", "mp3").replace(/[^a-z0-9]/g, "").slice(0, 5) || "bin";
+      const rel = `shared/kesher-${got.asset.id.slice(0, 8)}.${ext}`;
+      await mkdir(join(folder, "shared"), { recursive: true });
+      await writeFile(join(folder, rel), got.data);
+      args = { path: rel };
+    }
+    const extra = isButtonTool(name) ? quickTool(name, this.deps.assets, this.quickServices) : undefined;
+    if (isButtonTool(name) && !extra) throw Object.assign(new Error(`${name} is not available on this computer.`), { statusCode: 409 });
+    if (session.busy) throw Object.assign(new Error("The chat is busy. Wait for it, or press Stop."), { statusCode: 409 });
+    // runDirect marks the chat busy before its first wait, so a second press is refused at once.
+    const done = session.runDirect(name, args, { ...(extra ? { extra } : {}), times: name === "generate_image" ? times : 1 });
+    done.catch(() => undefined);
+    return { done };
   }
 
   /**

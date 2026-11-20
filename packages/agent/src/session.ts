@@ -651,6 +651,63 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       this.push({ type: "tool_progress", callId, progress: { ...rest, ...(frame ? { preview: frame } : {}) } }, false);
     };
   }
+
+  /**
+   * Runs one tool now, without a model turn: the chat's inline action buttons under a result ("Upscale",
+   * "4 variations", "Import to Unity"). The call goes through the same checks as the model's own (mode, always-ask
+   * rules, the approval card), shows as a step in the thread, and the model reads about it on its next turn (through
+   * the inbox), so pressing a button spends no tokens.
+   *
+   * @param name - The tool's name: one of the session's tools, or `opts.extra`'s.
+   * @param input - Its arguments.
+   * @param opts - `extra`: a tool only the buttons offer (not in the model's list); `times`: how many runs, 1–4
+   *   (variations), each a new step.
+   * @returns Each run's result.
+   * @throws Error while the agent is busy, or for a tool the session does not have.
+   */
+  async runDirect(name: string, input: Record<string, unknown>, opts: { extra?: AgentTool; times?: number } = {}): Promise<Array<{ ok: boolean; output: string }>> {
+    if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
+    if (opts.extra && opts.extra.spec.name !== name) throw new Error("The extra tool's name does not match.");
+    if (!opts.extra && !this.tools.has(name)) throw new Error(`There is no tool called "${name}" in this chat.`);
+    const had = opts.extra ? this.tools.get(name) : undefined;
+    if (opts.extra) this.tools.set(name, opts.extra);
+    const changedFrom = this.changes.length;
+    const abort = new AbortController();
+    this.abort = abort;
+    this.repeats.clear();
+    this.setStatus("running");
+    const results: Array<{ ok: boolean; output: string }> = [];
+    try {
+      const times = Math.min(4, Math.max(1, Math.round(opts.times ?? 1)));
+      for (let i = 0; i < times && !abort.signal.aborted; i++) {
+        const id = `direct-${randomUUID()}`;
+        const output = await this.execute({ id, name, arguments: { ...input } }, abort.signal);
+        const done = this.events.findLast((e) => e.type === "tool_result" && e.callId === id);
+        results.push({ ok: done?.type === "tool_result" ? done.ok : false, output });
+      }
+      if (abort.signal.aborted) this.push({ type: "note", text: "Stopped." });
+      this.setStatus("idle");
+    } catch (err) {
+      if (abort.signal.aborted) {
+        this.push({ type: "note", text: "Stopped." });
+        this.setStatus("idle");
+      } else {
+        this.setStatus("error", err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (opts.extra) {
+        if (had) this.tools.set(name, had);
+        else this.tools.delete(name);
+      }
+      if (this.abort === abort) this.abort = undefined;
+      const said = results.map((r) => `${r.ok ? "ok" : "failed"}: ${r.output.slice(0, 300)}`).join("\n");
+      this.inbox.push(`The user pressed a button under a result that ran ${name} ${JSON.stringify(input).slice(0, 300)} without you. ${said || "It was stopped."}`);
+      await this.receipt(changedFrom).catch(() => undefined);
+      this.onChange?.(this);
+    }
+    return results;
+  }
+
   private push(e: NewEvent, persist = true): AgentEvent {
     const event = { ...e, seq: persist ? this.events.length + 1 : 0, at: new Date().toISOString() } as AgentEvent;
     if (persist) this.events.push(event);

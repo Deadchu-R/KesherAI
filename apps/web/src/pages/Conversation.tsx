@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { ReportDialog } from "../ReportDialog";
 import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
-import type { AgentEvent, AgentSessionInfo, ConversationSummary, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
+import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
 import { chatStatus, kTokens } from "../chat-status";
@@ -17,6 +17,7 @@ import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash, type SlashCommand } from "../SlashMenu";
 import { SideChat } from "../chat/SideChat";
+import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
 import { useWebSearch } from "../WebToggle";
@@ -95,6 +96,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const [streaming, setStreaming] = useState<Record<number, string>>({});
   /** Live output of running tools (builds, commands), by call id. */
   const [liveOut, setLiveOut] = useState<Record<string, string>>({});
+  // Running media jobs' progress (tool_progress: steps and preview frames), only while the page is open.
+  const [jobProgress, setJobProgress] = useState<Record<string, JobProgress>>({});
   const [input, setInput] = useState("");
   // A tool's own view (MCP Apps) can put text in the message box; the person sends it.
   useEffect(() => {
@@ -198,6 +201,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     }
     setStreaming({});
     setLiveOut({});
+    setJobProgress({});
     setError("");
     api<Loaded>(`/api/conversations/${id}`)
       .then((c) => {
@@ -220,6 +224,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
           }
           if (e.type === "helpers") {
             setHelperRuns(e.runs);
+            return;
+          }
+          if (e.type === "tool_progress") {
+            setJobProgress((o) => ({ ...o, [e.callId]: mergeProgress(o[e.callId], e.progress) }));
             return;
           }
           if (e.type === "tool_output") {
@@ -853,6 +861,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
               {getLocale() === "he" ? `הצג הודעות קודמות (${blocks.length - shownBlocks})` : `Show earlier messages (${blocks.length - shownBlocks})`}
             </button>
           )}
+          <ChatLiveContext.Provider value={{ convId: id, events, progress: jobProgress, busy }}>
           {blocks.slice(-shownBlocks).map((b, i) => {
             const bi = Math.max(0, blocks.length - shownBlocks) + i;
             if (b.kind === "group") {
@@ -1061,6 +1070,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                 return null;
             }
           })}
+          </ChatLiveContext.Provider>
           {Object.entries(streaming).map(([turn, text]) => (
             <div key={`s${turn}`} className="msg streaming"><RichText text={text} /></div>
           ))}

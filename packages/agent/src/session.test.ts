@@ -818,3 +818,28 @@ test("relayApproval shows a sub-agent's request in the chat and returns the user
   assert.ok(session.events.some((e) => e.type === "approval_result" && e.decision === "expired"));
   assert.deepEqual(session.info().pendingApprovals, []);
 });
+
+test("runDirect: a button runs a tool without a model turn, the model hears of it next turn, progress is live", async () => {
+  const { session, seen } = await makeSession([{ text: "ok" }], "auto");
+  const events: AgentEvent[] = [];
+  session.on("event", (e: AgentEvent) => events.push(e));
+  const extra = {
+    risk: "safe" as const,
+    spec: { name: "upscale_image", description: "x", inputSchema: { type: "object", properties: {} } },
+    run: async (_input: Record<string, unknown>, ctx: import("./tools.js").ToolContext) => {
+      ctx.jobProgress?.({ phase: "sampling", step: 1, steps: 4 });
+      ctx.jobProgress?.({ phase: "sampling", step: 1, steps: 4 }); // the same again: not sent twice
+      return { output: "Upscaled.", assetIds: ["a"] };
+    },
+  };
+  const results = await session.runDirect("upscale_image", { asset: "x" }, { extra, times: 2 });
+  assert.deepEqual(results, [{ ok: true, output: "Upscaled." }, { ok: true, output: "Upscaled." }], "each run is its own step");
+  assert.equal(seen.length, 0, "no model turn");
+  assert.equal(events.filter((e) => e.type === "tool_progress").length, 2, "one per run: the same progress again is not sent");
+  assert.ok(!session.toolNames().includes("upscale_image"), "the button-only tool is not left in the model's list");
+  assert.equal(session.info().status, "idle");
+  session.send("next");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle" && session.events.some((x) => x.type === "assistant"));
+  assert.match(JSON.stringify(seen[0]!.messages), /pressed a button under a result that ran upscale_image/);
+  await assert.rejects(session.runDirect("nope", {}), /no tool called/);
+});

@@ -4352,3 +4352,47 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 }
 .browser-area img.picking { cursor: crosshair; outline: 2px dashed var(--accent, #9aa4ff); outline-offset: -2px; }
 .browser-bar .icon-btn.on { background: var(--raised); color: var(--text); }
+
+/* Inline action buttons under a result (design ChatQuickActions): a row of chips that wraps on the phone, and what a
+   press made right under it. */
+.made-with-actions { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.result-actions { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-actions .chip-text { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; min-height: 32px; }
+.pressed-result { display: flex; flex-direction: column; gap: 6px; padding-inline-start: 8px; border-inline-start: 2px solid var(--border-strong); }
+.pressed-result p { margin: 0; overflow-wrap: anywhere; }
+.pressed-pictures { display: flex; flex-wrap: wrap; gap: 6px; }
+.pressed-text pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 13px; margin: 4px 0 0; }
+
+/* A media job in the chat bubble (design ChatJobProgress): the newest preview frame, step x of y, a bar and Cancel. */
+.job-progress { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); padding: 2px 0; max-width: 360px; }
+.job-preview { width: 100%; max-width: 256px; aspect-ratio: 1; object-fit: contain; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); }
+.job-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.job-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.job-progress .bar { height: 4px; border-radius: calc(2px * var(--r-scale, 1)); background: var(--raised); overflow: hidden; }
+.job-progress .bar > span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+
+/* The side canvas (design ChatCanvas): pictures (zoom, compare, history), PBR sets and diffs in the side panel. */
+.canvas-image, .canvas-pbr, .canvas-diff { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; min-height: 0; flex: 1 1 auto; overflow: auto; }
+.canvas-tools { gap: 6px; align-items: center; }
+.canvas-tools .chip-text { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.canvas-tools .chip-text.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.canvas-zoom { min-width: 44px; text-align: center; }
+.canvas-stage { position: relative; flex: 1 1 260px; min-height: 260px; overflow: hidden; display: grid; place-items: center; background: var(--raised); border-radius: calc(10px * var(--r-scale, 1)); touch-action: none; cursor: grab; }
+.canvas-stage img { grid-area: 1 / 1; max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; user-select: none; -webkit-user-drag: none; }
+.canvas-split { display: flex; flex-direction: column; gap: 2px; }
+.canvas-history { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.canvas-thumb { flex: 0 0 auto; width: 64px; height: 64px; padding: 0; border-radius: calc(8px * var(--r-scale, 1)); overflow: hidden; border: 2px solid transparent; background: var(--raised); }
+.canvas-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.canvas-thumb.on { border-color: var(--accent); }
+.canvas-thumb.other { border-color: var(--text-2); border-style: dashed; }
+.canvas-hint { margin: 0; }
+.pbr-sphere-canvas { width: 100%; height: min(320px, 45vh); border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); overflow: hidden; }
+.pbr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.pbr-grid figure { margin: 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pbr-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: calc(8px * var(--r-scale, 1)); display: block; }
+.pbr-grid figcaption { overflow-wrap: anywhere; }
+.canvas-diff-body { min-height: 0; overflow: auto; }
+.canvas-diff .diff-add { color: var(--good, #3fb950); }
+.canvas-diff .diff-del { color: var(--bad, #f85149); }
+@media (max-width: 480px) { .pbr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .canvas-thumb { width: 56px; height: 56px; } }

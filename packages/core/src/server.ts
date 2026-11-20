@@ -861,7 +861,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Splitting a 3D model into parts by meaning: P3-SAM in its own Python (part-seg.ts), set up when she asks for it.
   await partSegRoutes(app, new PartSegmenter(join(paths.engines, "p3sam"), uvPath, freeGpu));
   // Removing a picture's background (the image editor): rembg + BiRefNet in its own Python (bg-remove.ts).
-  await bgRemoveRoutes(app, new BgRemover(join(paths.engines, "rembg"), uvPath, freeGpu));
+  const bgRemover = new BgRemover(join(paths.engines, "rembg"), uvPath, freeGpu);
+  await bgRemoveRoutes(app, bgRemover);
+  // The chat's inline buttons Upscale and Remove background (chat-quick-actions.ts) use the same engines as the editor.
+  services.conversations.quickServices = {
+    upscale: (png, signal) => sd.upscale(png, signal),
+    upscaleReady: async () => (await sd.upscaleStatus()).ready,
+    removeBackground: (picture) => bgRemover.remove(picture),
+    removeBackgroundReady: () => bgRemover.status().installed,
+  };
   // Reset: settings back to default, or start over (both keep a backup), or install the latest version again.
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });

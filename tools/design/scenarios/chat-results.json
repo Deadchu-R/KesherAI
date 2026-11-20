@@ -1,0 +1,506 @@
+{
+ "group": "צ'אט",
+ "now": "2026-11-21T10:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c2/helpers",
+   "json": {
+    "runs": [],
+    "agents": []
+   }
+  },
+  {
+   "url": "**/api/conversations/c2/quick-actions",
+   "json": {
+    "names": [
+     "generate_image",
+     "remove_background",
+     "transcribe_audio",
+     "unity_create_pbr_material",
+     "unity_import_sprite",
+     "upscale_image"
+    ]
+   }
+  },
+  {
+   "url": "**/api/engines/image/progress",
+   "json": {}
+  },
+  {
+   "url": "**/api/assets/0f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#ff7a59\"/><stop offset=\"1\" stop-color=\"#7a3cff\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">fox v1</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/1f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2bb3a3\"/><stop offset=\"1\" stop-color=\"#1d3b8f\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">fox v2</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/2f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#8080ff\"/><stop offset=\"1\" stop-color=\"#8080ff\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">normal</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/3f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#777\"/><stop offset=\"1\" stop-color=\"#bbb\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">roughness</text></svg>",
+   "contentType": "image/svg+xml"
+  }
+ ],
+ "boards": [
+  {
+   "id": "ChatQuickActions",
+   "title": "צ'אט: כפתורי פעולה מתחת לתוצאה (הגדלה, 4 וריאציות, הסרת רקע, ייבוא ל-Unity) בלי סבב של המודל",
+   "titleEn": "Chat: inline action buttons under a result",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "שועל לפוסטר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 6,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תצייר שועל אדום בסגנון פוסטר"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "tool_call",
+        "callId": "g1",
+        "name": "generate_image",
+        "input": {
+         "prompt": "a red fox, poster style, bold shapes",
+         "width": 1024,
+         "height": 1024
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_result",
+        "callId": "g1",
+        "name": "generate_image",
+        "ok": true,
+        "output": "Generated 1 image(s).",
+        "assetIds": [
+         "0f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_call",
+        "callId": "direct-u1",
+        "name": "upscale_image",
+        "input": {
+         "asset": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "tool_result",
+        "callId": "direct-u1",
+        "name": "upscale_image",
+        "ok": true,
+        "output": "Upscaled the picture 4x.",
+        "assetIds": [
+         "1f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הנה השועל. אפשר להגדיל, לבקש וריאציות או לייבא ל-Unity בכפתורים שמתחת לתמונה."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".quick-actions"
+    }
+   ]
+  },
+  {
+   "id": "ChatCanvasImage",
+   "title": "צ'אט: קנבס צד לתמונה (זום, השוואה, היסטוריה)",
+   "titleEn": "Chat: side canvas for a picture (zoom, compare, history)",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 844
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "שועל לפוסטר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 6,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תצייר שועל אדום בסגנון פוסטר"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "tool_call",
+        "callId": "g1",
+        "name": "generate_image",
+        "input": {
+         "prompt": "a red fox, poster style, bold shapes",
+         "width": 1024,
+         "height": 1024
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_result",
+        "callId": "g1",
+        "name": "generate_image",
+        "ok": true,
+        "output": "Generated 1 image(s).",
+        "assetIds": [
+         "0f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_call",
+        "callId": "direct-u1",
+        "name": "upscale_image",
+        "input": {
+         "asset": "0f8fad5b-d9cb-469f-a165-70867728950e"
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "tool_result",
+        "callId": "direct-u1",
+        "name": "upscale_image",
+        "ok": true,
+        "output": "Upscaled the picture 4x.",
+        "assetIds": [
+         "1f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "17m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הנה השועל. אפשר להגדיל, לבקש וריאציות או לייבא ל-Unity בכפתורים שמתחת לתמונה."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".quick-actions"
+    },
+    {
+     "click": ".made-with-actions .quick-actions button >> nth=0"
+    },
+    {
+     "wait": ".canvas-stage"
+    },
+    {
+     "click": ".canvas-tools .chip-text >> nth=0"
+    },
+    {
+     "wait": ".canvas-over"
+    }
+   ]
+  },
+  {
+   "id": "ChatCanvasPbr",
+   "title": "צ'אט: קנבס צד למפות PBR (רשת מפות וכדור מואר)",
+   "titleEn": "Chat: side canvas for a PBR map set",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1200
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "שועל לפוסטר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 5,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תעשה חומר חלודה ותשים על הדלת"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "tool_call",
+        "callId": "m1",
+        "name": "unity_create_pbr_material",
+        "input": {
+         "name": "Rusty Metal",
+         "maps": {
+          "albedo": "0f8fad5b-d9cb-469f-a165-70867728950e",
+          "normal": "2f8fad5b-d9cb-469f-a165-70867728950e",
+          "roughness": "3f8fad5b-d9cb-469f-a165-70867728950e",
+          "ao": "1f8fad5b-d9cb-469f-a165-70867728950e"
+         }
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "tool_result",
+        "callId": "m1",
+        "name": "unity_create_pbr_material",
+        "ok": true,
+        "output": "Made Assets/KesherAI/Rusty Metal/Rusty Metal.mat (URP Lit)."
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "receipt",
+        "run": "r1",
+        "files": [
+         {
+          "path": "Assets/KesherAI/Rusty Metal/Rusty Metal.mat",
+          "kind": "new",
+          "added": 40,
+          "removed": 0
+         }
+        ]
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "18m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "החומר מוכן ועל הדלת."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".quick-actions"
+    },
+    {
+     "click": "text=מפות PBR בקנבס"
+    },
+    {
+     "wait": ".pbr-grid"
+    },
+    {
+     "waitMs": 800
+    }
+   ]
+  },
+  {
+   "id": "ChatJobProgress",
+   "title": "צ'אט: התקדמות עבודת מדיה בתוך הבועה (צעד, תצוגה מקדימה, ביטול)",
+   "titleEn": "Chat: live media job progress in the bubble",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "שועל לפוסטר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c2",
+       "status": "running",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "user",
+        "text": "תעשה שיר רגוע על הים"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "tool_call",
+        "callId": "j1",
+        "name": "generate_image",
+        "input": {
+         "prompt": "calm sea at dusk, album cover"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "body": "data: {\"type\": \"tool_progress\", \"callId\": \"j1\", \"progress\": {\"phase\": \"sampling\", \"step\": 12, \"steps\": 20, \"preview\": \"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjNTUyMjQ0Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjYWE2NjQ0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyMzAiIHI9IjEyMCIgZmlsbD0iI2ZmZmZmZjIyIi8+PHRleHQgeD0iMjU2IiB5PSI0NDAiIGZvbnQtc2l6ZT0iNDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmYiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIj5zdGVwIDEyPC90ZXh0Pjwvc3ZnPg==\"}}\n\n",
+     "contentType": "text/event-stream"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".job-preview"
+    }
+   ]
+  }
+ ]
+}
