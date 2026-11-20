@@ -27,6 +27,7 @@ import { unityTurns } from "./unity-turns.js";
 import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
 import { missingNote, ToolRouter } from "./tool-router.js";
+import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
@@ -126,6 +127,8 @@ export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
   /** Routing by meaning (tool-router.ts): words, and a tiny call to the built-in engine when it runs. */
   private readonly router = new ToolRouter({ ask: () => this.deps.routeAsk?.() });
+  /** Whether an installable (installables.ts) is installed; set by its routes (routes/installables.ts). */
+  installReady?: (id: string) => Promise<boolean>;
   /** "Keep going until done": a conversation's goal, and how many times it was sent back to work. */
   private readonly goals = new Map<string, { goal: string; rounds: number; checking?: boolean }>();
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
@@ -275,7 +278,9 @@ export class ConversationManager {
         notes: [`This chat is with a guest the owner invited to one shared project. ${reading ? "You can list, read and search the project's files (read only); you cannot change files, run anything, or use the web." : "Answer from the conversation only; you have no tools here."}`],
       };
     }
-    const result = { tools: all, notes: [...media.notes, ...group.notes] };
+    // The Install button for an engine or model the request needs (installables.ts): outside `all`, which the helpers
+    // read (delegateFor), so a helper never shows it.
+    const result = { tools: [...all, offerInstallTool((what) => this.installReady?.(what) ?? Promise.resolve(false))], notes: [...media.notes, ...group.notes] };
     // A chat written from Telegram never controls the screen or the browser, whatever else is on (chat-tool-groups.ts).
     return id && this.deps.library.summary(id)?.source === "telegram" ? forTelegram(result) : result;
   }
@@ -764,7 +769,7 @@ export class ConversationManager {
       route: async (text, signal) => {
         const r = await this.router.route(text, this.sessions.get(id)?.toolNames() ?? [], this.deps.library.summary(id)?.toolsOff ?? [], !!toolSearch()?.length, signal);
         const note = missingNote(r.missing);
-        return { tools: r.tools, ...(note ? { note } : {}) };
+        return { tools: note ? [...r.tools, OFFER_INSTALL_TOOL] : r.tools, ...(note ? { note } : {}) };
       },
       // The model team's translator: a final answer written in another language than the user's is put into theirs.
       polishAnswer: async (answer, userText, signal) => {

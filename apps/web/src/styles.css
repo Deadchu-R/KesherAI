@@ -779,6 +779,13 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .memory-chip { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); font-size: 13px; max-width: min(560px, 100%); }
 .memory-chip-text { min-width: 0; overflow-wrap: anywhere; }
 .memory-chip.undone { opacity: .7; }
+/* The Install button's window (chat/InstallOffer.tsx): label and value side by side, stacked on a phone. */
+.install-dialog { max-width: min(460px, calc(100vw - 24px)); }
+.install-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; }
+.install-facts dt { color: var(--muted); }
+.install-facts dd { margin: 0; min-width: 0; }
+.install-where { overflow-wrap: anywhere; word-break: break-all; }
+@media (max-width: 480px) { .install-facts { grid-template-columns: 1fr; } .install-facts dd { margin-bottom: 4px; } }
 
 /* MCP servers (Connections) */
 .mcp-list { display: flex; flex-direction: column; gap: 10px; }

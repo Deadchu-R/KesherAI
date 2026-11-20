@@ -701,6 +701,18 @@ export function sdProvider(engine: SdEngine): Provider {
 let pendingImageDownload: string | undefined;
 
 /**
+ * The image model that fits this computer: Qwen-Image with 12 GB of graphics memory or more, else Flux.
+ *
+ * @returns One of {@link RECOMMENDED_IMAGE_MODELS}.
+ */
+export async function imageModelPick(): Promise<(typeof RECOMMENDED_IMAGE_MODELS)[number]> {
+  const { detectHardwareCached } = await import("@kesher/downloads");
+  const hw = await detectHardwareCached();
+  const vramGb = Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
+  return RECOMMENDED_IMAGE_MODELS.find((m) => m.id === (vramGb >= 12 ? "qwen-image-2512" : "flux-schnell"))!;
+}
+
+/**
  * Finds an image model that runs on this computer, or starts downloading one
  * that fits (Qwen-Image with 12 GB of graphics memory or more, else Flux).
  *
@@ -722,10 +734,7 @@ export async function ensureImageModel(d: {
       return { modelId: idOf(m) };
     }
   }
-  const { detectHardwareCached } = await import("@kesher/downloads");
-  const hw = await detectHardwareCached();
-  const vramGb = Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
-  const pick = RECOMMENDED_IMAGE_MODELS.find((m) => m.id === (vramGb >= 12 ? "qwen-image-2512" : "flux-schnell"))!;
+  const pick = await imageModelPick();
   if (pendingImageDownload === pick.id) {
     return { message: `${pick.name} is still downloading for images. Follow it in the downloads circle; ask again when it is done.` };
   }

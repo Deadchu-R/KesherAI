@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileChips, MadeMedia, MediaView, fileUrl } from "./MediaView";
 import { MemoryChip } from "./chat/MemoryChip";
+import { InstallOffer } from "./chat/InstallOffer";
 import { mediaKindOf } from "./chat/chat-inline";
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
@@ -121,6 +122,11 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
     const input = (s.call.input ?? {}) as { note?: unknown; topic?: unknown };
     return s.call.name === "remember" && s.result?.ok && /^Remembered\b/.test(s.result.output) && typeof input.note === "string" ? [{ key: s.call.callId, note: input.note, topic: typeof input.topic === "string" ? input.topic : undefined }] : [];
   });
+  // Something the request needs is not installed (offer_install): an Install button, never folded.
+  const offers = steps.flatMap((s) => {
+    const input = (s.call.input ?? {}) as { id?: unknown; why?: unknown };
+    return s.call.name === "offer_install" && s.result?.ok && /Install button/.test(s.result.output) && typeof input.id === "string" ? [{ key: s.call.callId, id: input.id, why: typeof input.why === "string" ? input.why : undefined }] : [];
+  });
   // Older builds only said "Built dist/x.exe." in their output.
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
@@ -178,6 +184,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
       {after && after.length > 0 && <div className="hcards">{after}</div>}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
+      {offers.length > 0 && <div className="memory-chips">{offers.map((o) => <InstallOffer key={o.key} id={o.id} {...(o.why ? { why: o.why } : {})} {...(convId ? { convId } : {})} />)}</div>}
       {kept.length > 0 && <div className="memory-chips">{kept.map((k) => <MemoryChip key={k.key} note={k.note} {...(k.topic ? { topic: k.topic } : {})} />)}</div>}
       {sounds.length > 0 && (
         <div className="activity-audio">

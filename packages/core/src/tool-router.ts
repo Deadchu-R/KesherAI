@@ -80,8 +80,11 @@ export class ToolRouter {
     if (!ask) return byWords;
     let byModel = this.cache.get(key);
     if (!byModel) {
-      const stop = AbortSignal.any([AbortSignal.timeout(this.opts.timeoutMs ?? 2500), ...(signal ? [signal] : [])]);
-      byModel = await ask(SYSTEM, key, SCHEMA, stop).then(parseGroups, () => undefined);
+      // A plain timer (AbortSignal.timeout's does not keep the process waiting, so a hung call could end it early).
+      const timer = new AbortController();
+      const t = setTimeout(() => timer.abort(), this.opts.timeoutMs ?? 2500);
+      const stop = AbortSignal.any([timer.signal, ...(signal ? [signal] : [])]);
+      byModel = await ask(SYSTEM, key, SCHEMA, stop).then(parseGroups, () => undefined).finally(() => clearTimeout(t));
       if (byModel) {
         this.cache.set(key, byModel);
         if (this.cache.size > (this.opts.cacheSize ?? 200)) this.cache.delete(this.cache.keys().next().value!);

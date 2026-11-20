@@ -41,6 +41,17 @@ async function findExe(dir: string, name: string): Promise<string | undefined> {
 }
 
 /**
+ * Whether FFmpeg is here already (on the PATH, or KesherAI's own copy), without installing it.
+ *
+ * @param dir - KesherAI's engines folder.
+ */
+export async function ffmpegInstalled(dir: string): Promise<boolean> {
+  if (await works("ffmpeg")) return true;
+  const home = join(dir, "ffmpeg");
+  return existsSync(home) && !!(await findExe(home, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg"));
+}
+
+/**
  * @param o.dir - KesherAI's engines folder.
  * @param o.downloads - The download queue (the download shows there).
  * @returns The FFmpeg program to run.

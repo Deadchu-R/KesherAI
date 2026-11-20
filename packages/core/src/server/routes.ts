@@ -24,6 +24,7 @@ import { apiKeyRoutes } from "../routes/api-keys.js";
 import { skillRoutes } from "../routes/skills.js";
 import { libraryStoreRoutes } from "../routes/library-store.js";
 import { comfyRoutes } from "../routes/comfy.js";
+import { installableRoutes } from "../routes/installables.js";
 import { pipelineRoutes } from "../routes/pipelines.js";
 import { notificationRoutes } from "../routes/notifications.js";
 import { inboxRoutes } from "../routes/inbox.js";
@@ -177,6 +178,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await libraryStoreRoutes(app, services);
   await pipelineRoutes(app, services);
   await comfyRoutes(app, services);
+  await installableRoutes(app, services);
   await notificationRoutes(app, services);
   await inboxRoutes(app, services);
   await mcpServerRoutes(app, services);
