@@ -206,7 +206,9 @@ function errorText(e: unknown): string {
 /** Whether an error means the Google permission is missing or no longer works (the user must reconnect). */
 function needsReconnect(e: unknown): boolean {
   if (e instanceof DriveError) return e.status === 401 || (e.status === 403 && /insufficient|scope|permission|forbidden/i.test(e.reason));
-  return /invalid_grant|Not connected|unauthorized_client/i.test(e instanceof Error ? e.message : "");
+  // A refresh token minted for another OAuth client (e.g. after moving to a new Google project) fails as
+  // "unauthorized_client", whose description is just "Unauthorized"; "invalid_client" is the same case.
+  return /invalid_grant|invalid_client|Not connected|unauthorized_client|sign-in failed: Unauthorized/i.test(e instanceof Error ? e.message : "");
 }
 
 /**

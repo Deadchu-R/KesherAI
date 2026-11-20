@@ -171,6 +171,10 @@ test("tasks sync: a missing permission or a refused token asks to reconnect", as
   s = await t.sync.syncNow();
   assert.equal(s.needsReconnect, true);
   assert.match(s.lastError ?? "", /401/);
+  // A refresh token from another OAuth client (moved Google project) is refused the same way.
+  t.drive.failWith = new Error("Google sign-in failed: Unauthorized");
+  s = await t.sync.syncNow();
+  assert.equal(s.needsReconnect, true);
   t.drive.failWith = undefined;
   s = await t.sync.syncNow();
   assert.equal(s.needsReconnect, false);
