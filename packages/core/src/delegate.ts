@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
-import type { AgentEvent, AgentMessage, ApprovalDecision, HelperAsker, HelperKind, HelperRunInfo } from "@kesher/shared";
+import type { AgentEvent, AgentMessage, ApprovalDecision, HelperAsker, HelperKind, HelperPlanRef, HelperRunInfo } from "@kesher/shared";
 import { builtinHelpers, HELPER_STEPS, type AgentDef } from "./agents.js";
 import { runTestsTool } from "./helper-tests.js";
 import { HelperRuns, NOTE_CHARS, type HelperControl, type HelperJob, type NoteFrom, type SavedHelperRun } from "./helper-runs.js";
@@ -137,7 +137,16 @@ export interface DelegateOptions {
   isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
   /** "Always on this site" from a helper's card (the same list as the chat's). */
   onAlwaysScope?: (scope: string) => void;
+  /**
+   * Saves a deep research's report as a new document of the chat (deep-research.ts).
+   *
+   * @returns Its id and version; undefined when the chat keeps no documents (incognito: the report goes in the answer).
+   */
+  report?: (title: string, body: string) => Promise<{ id: string; ver: number } | undefined>;
 }
+
+/** A new plan's id. */
+export const newPlanId = (): string => `p-${randomUUID().slice(0, 8)}`;
 
 /** A helper's approval request, as its chat shows it. */
 export type HelperApproval = Omit<Extract<AgentEvent, { type: "approval_request" }>, "type" | "seq" | "at"> & { helper: HelperAsker };
@@ -305,7 +314,7 @@ export const RESUME_NOTE =
 export const LATE_NOTE = "A note reached you while you wrote your report. Read it below, do what it asks, and write your report again.";
 
 /** What a helper run needs to be built again after a restart or for a follow-up (saved with it, JSON only). */
-type HelperResume = {
+export type HelperResume = {
   task: string;
   kind: Exclude<HelperKind, "external">;
   /** A named agent (a built-in type's, a persona, a project's agent file). */
@@ -325,7 +334,7 @@ type HelperResume = {
  * @param progress - Each step, for the `delegate` call's live output (absent after a restart).
  * @returns The run's work, for `HelperRuns`.
  */
-function helperWork(
+export function helperWork(
   o: DelegateOptions,
   job: { task: string; title: string; kind: Exclude<HelperKind, "external">; agent?: AgentDef; model: HelperModel | (() => Promise<HelperModel>); maxSteps: number; write: boolean },
   progress?: (text: string) => void,
@@ -564,6 +573,36 @@ export function helperToolsFor(o: DelegateOptions): AgentTool[] {
         return { output: `Continued ${info.id} in the background${info.state === "waiting" ? " (waiting in the queue)" : ""}. Its new report reaches you at your next turn, or ask with helper_result / helper_wait.` };
       },
     },
+    {
+      risk: "safe",
+      spec: {
+        name: "plan_revise",
+        description: "Revises a plan of helpers (the user's Plan card updates): change its goal, or take helpers off it (a running one stops). To add helpers to it, call delegate with \"plan\": its id.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            plan: { type: "string", description: "The plan's id (from delegate's answer)." },
+            goal: { type: "string", description: "The new goal, in a few words." },
+            remove: { ...ids, description: "Helper ids to take off the plan." },
+          },
+          required: ["plan"],
+        },
+      },
+      run: async (input) => {
+        const planId = typeof input.plan === "string" ? input.plan.trim() : "";
+        if (!runs.plan(chatId, planId)) throw new Error(`No plan ${planId} in this chat. Its id is in delegate's answer.`);
+        const goal = typeof input.goal === "string" ? input.goal.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+        const removed: string[] = [];
+        for (const id of (Array.isArray(input.remove) ? input.remove : []).slice(0, 8)) {
+          const r = mine(id);
+          if (r.plan?.id !== planId) throw new Error(`${r.id} is not part of plan ${planId}.`);
+          if (runs.removeFromPlan(r.id)) removed.push(r.id);
+        }
+        if (!goal && !removed.length) throw new Error("Give a new goal, or helpers to remove.");
+        runs.revisePlan(chatId, planId, goal ? { goal } : {}, true);
+        return { output: `Plan ${planId} revised${goal ? `: goal "${goal}"` : ""}${removed.length ? `; removed ${removed.join(", ")}` : ""}.` };
+      },
+    },
   ];
 }
 
@@ -601,6 +640,12 @@ export function delegateTool(o: DelegateOptions): AgentTool {
               required: ["task"],
             },
           },
+          ...(background
+            ? {
+                goal: { type: "string", description: "With 2 or more parts: what the whole job is for, in a few words (the user's Plan card shows it above the parts)." },
+                plan: { type: "string", description: "A plan's id (from an earlier delegate answer): add these parts to that plan instead of starting a new one." },
+              }
+            : {}),
         },
         required: ["parts"],
       },
@@ -619,6 +664,18 @@ export function delegateTool(o: DelegateOptions): AgentTool {
       const limits = o.limits?.() ?? {};
       const builtin = builtinHelpers(limits.steps);
       const results: Array<string | { id: string; n: number; background: boolean }> = [];
+      // Two or more parts for one job make a plan (one Plan card in the chat); `plan` adds parts to an earlier one.
+      const goal = typeof input.goal === "string" ? input.goal.replace(/\s+/g, " ").trim().slice(0, 200) : "";
+      let plan: HelperPlanRef | undefined;
+      if (background && typeof input.plan === "string" && input.plan.trim()) {
+        plan = runs.plan(chatId, input.plan.trim());
+        if (!plan) throw new Error(`No plan ${input.plan.trim()} in this chat. Its id is in delegate's answer.`);
+        runs.revisePlan(chatId, plan.id, goal ? { goal } : {}, true);
+        plan = runs.plan(chatId, plan.id);
+      } else if (background && parts.length >= 2) {
+        const first = parts[0]!;
+        plan = { id: newPlanId(), kind: "plan", goal: goal || String(typeof first.title === "string" && first.title.trim() ? first.title : first.task).split("\n")[0]!.slice(0, 200) };
+      }
       for (const [i, p] of parts.entries()) {
         const named = typeof p.agent === "string" ? [...(o.agents?.() ?? []), ...builtin].find((a) => a.name.toLowerCase() === String(p.agent).trim().toLowerCase()) : undefined;
         const kind = kindOf(p, named);
@@ -668,6 +725,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
           ...(m.note ? { modelNote: m.note } : {}),
           ...(m.noteHe ? { modelNoteHe: m.noteHe } : {}),
           ...(m.cloud ? { cloud: true } : {}),
+          ...(plan ? { plan } : {}),
           // What builds its work again: a background part after a restart (a part the chat waits for ends with the
           // chat's turn), and any part for a follow-up after it ended.
           resume: { task: String(p.task), kind, ...(agent ? { agent: agent.name } : {}), ...(asked && !m.note ? { model: m.modelId } : {}), maxSteps, write } satisfies HelperResume,
@@ -693,8 +751,9 @@ export function delegateTool(o: DelegateOptions): AgentTool {
         return reportFor(info, r.n);
       });
       const ran = results.filter((r) => typeof r === "object").length;
+      const planLine = plan && ran ? `\n\nPlan ${plan.id} ("${plan.goal}"): the user sees it as one Plan card. Revise it with plan_revise (remove parts, change the goal), or add parts with delegate and "plan": "${plan.id}".` : "";
       return {
-        output: `${lines.join("\n\n")}\n\n(${ran} helper${ran === 1 ? "" : "s"}, ${Math.round((Date.now() - started) / 1000)} s)`,
+        output: `${lines.join("\n\n")}\n\n(${ran} helper${ran === 1 ? "" : "s"}, ${Math.round((Date.now() - started) / 1000)} s)${planLine}`,
       };
     },
   };

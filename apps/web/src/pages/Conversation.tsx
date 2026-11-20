@@ -45,6 +45,8 @@ import { ApprovalCard, QuestionCard, ToolCard } from "../ChatCards";
 import { ItemCard } from "../DocPanel";
 import { itemFromResult } from "../doc-items";
 import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns } from "../Helpers";
+import { PlanCard, PlanSheet } from "../PlanCard";
+import { plansOf } from "../plan-view";
 import { ShareDialog } from "../chat/ShareDialog";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
@@ -71,6 +73,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const [events, setEvents] = useState<AgentEvent[]>([]);
   // Sub-agents: their runs come with the chat's events (`helpers`), so the phone in remote sees the same.
   const helpers = useHelperRuns(id);
+  // The chat's plans (2+ sub-agents for one job, or a deep research): one Plan card each (PlanCard.tsx).
+  const plans = useMemo(() => plansOf(helpers.runs), [helpers.runs]);
   const setHelperRuns = helpers.set;
   const [helperSheet, setHelperSheet] = useState<string | null>(null);
   // Opened from a helper's notification: show that helper once its run arrives (the card if the thread has it).
@@ -864,7 +868,9 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   liveOutput={liveOut}
                   // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
                   after={[
-                    ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
+                    // A plan (2+ sub-agents for one job, or a deep research) is one Plan card after the call that began it.
+                    ...b.steps.flatMap((st) => (st.call.name === "delegate" || st.call.name === "deep_research" ? plans.filter((v) => v.callId === st.call.callId) : [])).map((v) => <PlanCard key={v.plan.id} view={v} convId={id} busy={busy} />),
+                    ...b.steps.flatMap((st) => (st.call.name === "delegate" ? helpers.runs.filter((r) => r.callId === st.call.callId && !r.plan) : [])).map((r) => <HelperCard key={r.id} run={r} convId={id} />),
                     // A document, sheet or deck a tool wrote: one card per item (its last edit in the group), Open beside the chat.
                     ...[...new Map(b.steps.flatMap((st) => {
                       const it = st.result ? itemFromResult(st.call.name, st.result.ok, st.result.output) : undefined;
@@ -1106,11 +1112,13 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
             convId={id}
             onOpen={(r) => {
               // A computer shows the card in the thread; the phone (or a run with no card) opens it as a sheet.
-              const card = document.getElementById(`helper-${r.id}`);
+              // A plan's sub-agent opens its plan (its card, or the plan's sheet on the phone).
+              const card = document.getElementById(r.plan ? `plan-${r.plan.id}` : `helper-${r.id}`);
               if (card && !matchMedia("(max-width: 760px)").matches) card.scrollIntoView({ block: "center", behavior: "smooth" });
-              else setHelperSheet(r.id);
+              else setHelperSheet(r.plan ? `plan:${r.plan.id}` : r.id);
             }}
           />
+          {helperSheet?.startsWith("plan:") && plans.find((v) => `plan:${v.plan.id}` === helperSheet) && <PlanSheet view={plans.find((v) => `plan:${v.plan.id}` === helperSheet)!} convId={id} onOpen={(r) => setHelperSheet(r.id)} onClose={() => setHelperSheet(null)} />}
           {helperSheet && helpers.runs.find((r) => r.id === helperSheet) && <HelperSheet run={helpers.runs.find((r) => r.id === helperSheet)!} convId={id} onClose={() => setHelperSheet(null)} />}
           <div className="box">
             <PromptTextarea

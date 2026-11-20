@@ -174,6 +174,29 @@ export interface HelperRunInfo {
   continued?: number;
   /** It ended and kept its conversation, so it can be continued with a follow-up (same model, role and token totals). */
   canContinue?: boolean;
+  /** One of a plan's sub-agents (the chat shows the plan's card instead of a card per sub-agent). */
+  plan?: HelperPlanRef;
+  /** The lead took it off its plan (stopped, shown struck through on the plan's card). */
+  removed?: boolean;
+}
+
+/**
+ * A job the lead split among two or more sub-agents (docs/RESEARCH_LOG.md, "Gap list: agents and chat-first", A15 and
+ * A16): the chat's Plan card shows its goal and each sub-agent's task, role, model and state, live. Kept on each of
+ * its runs (so it is saved and restored with them); a revision changes it on all of them.
+ */
+export interface HelperPlanRef {
+  id: string;
+  /** What the whole job is for, in the lead's words. */
+  goal: string;
+  /** `research`: a deep research, whose findings become a report document. */
+  kind: "plan" | "research";
+  /** A deep research's stage: sub-agents researching, the lead writing the report, done, or failed. */
+  phase?: "researching" | "writing" | "done" | "failed";
+  /** The report document (a deep research), opened in the side panel beside the chat. */
+  doc?: { id: string; title: string; ver?: number };
+  /** How many times the lead revised the plan (added or removed sub-agents, changed the goal). */
+  rev?: number;
 }
 
 /**

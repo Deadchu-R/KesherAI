@@ -4158,3 +4158,23 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 }
 .hask-agy { background: var(--accent-soft); border: 1px solid rgb(152 163 255 / 0.4); }
 .hask-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5em; overflow: auto; }
+
+/* Plan card (PlanCard.tsx; design boards PlanCard and PhonePlanSheet): a lead's job split among sub-agents, or a deep research. */
+.plan-card .plan-stage, .hsheet .plan-stage { margin-top: -2px; }
+.plan-card .plan-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.plan-rows > li { display: flex; flex-direction: column; gap: 6px; }
+.plan-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 4px 8px; text-align: start; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; color: inherit; font-size: 13px; cursor: pointer; }
+.plan-row .plan-role { white-space: nowrap; }
+.plan-row .plan-task { flex: 1 1 60px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.plan-row .plan-state { white-space: nowrap; }
+.plan-row .good { color: #7fd6a4; }
+.plan-row .bad { color: #ff8a8a; }
+.plan-rows > li.removed .plan-task { text-decoration: line-through; color: var(--muted); }
+.plan-rows > li.removed .plan-row { opacity: 0.7; }
+.hchip-plan .hchip-open { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+@media (max-width: 760px) {
+  /* A 390 px phone: the model chip leaves the row (the sub-agent's own sheet shows it). */
+  .plan-row .hmodel { display: none; }
+  .plan-row { min-height: 40px; }
+}

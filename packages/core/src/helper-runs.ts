@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import type { AgentMessage, HelperKind, HelperRunInfo, HelperUsage } from "@kesher/shared";
+import type { AgentMessage, HelperKind, HelperPlanRef, HelperRunInfo, HelperUsage } from "@kesher/shared";
 
 /**
  * The helper runs of every chat (docs/RESEARCH_LOG.md, "Helper agents in the chat", plan steps 3, 5 and 6): a queue
@@ -82,6 +82,8 @@ export interface HelperJob {
   modelNote?: string;
   modelNoteHe?: string;
   cloud?: boolean;
+  /** The plan it belongs to (two or more sub-agents for one job, or a deep research). */
+  plan?: HelperPlanRef;
   /**
    * What its owner needs to build `run` again after a restart (JSON only: the task, a named agent, an asked model);
    * absent = it cannot continue after a restart and ends as failed.
@@ -193,7 +195,7 @@ export class HelperRuns extends EventEmitter {
     let end!: (i: HelperRunInfo) => void;
     const ended = new Promise<HelperRunInfo>((r) => (end = r));
     const run: Run = {
-      info: { id, kind: job.kind, title: job.title.replace(/\s+/g, " ").trim().slice(0, 120), model: job.model, state: "waiting", queuedAt: this.now(), step: 0, maxSteps: job.maxSteps, steps: [], background: job.background, ...(job.agent ? { agent: job.agent } : {}), ...(job.callId ? { callId: job.callId } : {}), ...(job.modelNote ? { modelNote: job.modelNote } : {}), ...(job.modelNoteHe ? { modelNoteHe: job.modelNoteHe } : {}), ...(job.cloud ? { cloud: true } : {}) },
+      info: { id, kind: job.kind, title: job.title.replace(/\s+/g, " ").trim().slice(0, 120), model: job.model, state: "waiting", queuedAt: this.now(), step: 0, maxSteps: job.maxSteps, steps: [], background: job.background, ...(job.agent ? { agent: job.agent } : {}), ...(job.callId ? { callId: job.callId } : {}), ...(job.modelNote ? { modelNote: job.modelNote } : {}), ...(job.modelNoteHe ? { modelNoteHe: job.modelNoteHe } : {}), ...(job.cloud ? { cloud: true } : {}), ...(job.plan ? { plan: { ...job.plan } } : {}) },
       job,
       chatId: job.chatId,
       abort: new AbortController(),
@@ -409,6 +411,48 @@ export class HelperRuns extends EventEmitter {
     r.why ??= "stop";
     r.answer?.(false);
     r.abort.abort();
+    return true;
+  }
+
+  /**
+   * Revises a plan: changes its goal, stage or report on every run of it (the Plan card shows the new one).
+   *
+   * @param chatId - The plan's chat.
+   * @param planId - The plan.
+   * @param patch - What changes.
+   * @param revised - The lead revised it (the goal changed, or a sub-agent was added or removed): `rev` counts up.
+   * @returns How many runs belong to the plan (0: no such plan in this chat).
+   */
+  revisePlan(chatId: string, planId: string, patch: Partial<Omit<HelperPlanRef, "id" | "kind">>, revised = false): number {
+    const mine = [...this.runs.values()].filter((r) => r.chatId === chatId && r.info.plan?.id === planId);
+    if (!mine.length) return 0;
+    const rev = (mine[0]!.info.plan!.rev ?? 0) + (revised ? 1 : 0);
+    for (const r of mine) r.info.plan = { ...r.info.plan!, ...patch, ...(rev ? { rev } : {}) };
+    this.emit("change", chatId);
+    return mine.length;
+  }
+
+  /**
+   * The plan a chat's runs belong to, as its newest run has it.
+   *
+   * @returns The plan, or undefined when no run of the chat belongs to it.
+   */
+  plan(chatId: string, planId: string): HelperPlanRef | undefined {
+    for (const r of this.runs.values()) if (r.chatId === chatId && r.info.plan?.id === planId) return { ...r.info.plan };
+    return undefined;
+  }
+
+  /**
+   * Takes a sub-agent off its plan (the lead revised the plan): it stops if it is still going, and the card shows it
+   * struck through.
+   *
+   * @returns Whether it belonged to a plan.
+   */
+  removeFromPlan(id: string): boolean {
+    const r = this.runs.get(id);
+    if (!r?.info.plan) return false;
+    r.info.removed = true;
+    if (!this.stop(id)) this.changed(r);
     return true;
   }
 

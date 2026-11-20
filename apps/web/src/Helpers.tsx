@@ -5,6 +5,7 @@ import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
 import { toast } from "./library";
 import { kTokens } from "./chat-status";
+import { plansOf } from "./plan-view";
 
 /**
  * Sub-agents in the chat (docs/RESEARCH_LOG.md, "Helper agents in the chat"; design boards HelpersStrip,
@@ -31,6 +32,9 @@ const KINDS: Record<HelperRunInfo["kind"], { icon: string; he: string; en: strin
   operate: { icon: "🖱️", he: "הפעלה", en: "Operator" },
   external: { icon: "🛰️", he: "חיצוני", en: "Outside" },
 };
+
+/** @returns The type's icon ("📚"). */
+export const helperKindIcon = (kind: HelperRunInfo["kind"]): string => (KINDS[kind] ?? KINDS.research).icon;
 
 /** @returns The type's short name ("מחקר"), or the named agent's. */
 export function helperKindName(r: Pick<HelperRunInfo, "kind" | "agent">): string {
@@ -70,7 +74,7 @@ function elapsed(r: HelperRunInfo, now: number): number | undefined {
 }
 
 /** Re-renders every second while something runs (the clocks). */
-function useNow(active: boolean): number {
+export function useNow(active: boolean): number {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!active) return;
@@ -107,7 +111,7 @@ export function useHelperRuns(convId: string): { runs: HelperRunInfo[]; set: (ru
   return { runs, set, agents };
 }
 
-const stop = (convId: string, id: string) => void api(`/api/conversations/${convId}/helpers/${id}/stop`, { method: "POST" }).catch(() => undefined);
+export const stop = (convId: string, id: string) => void api(`/api/conversations/${convId}/helpers/${id}/stop`, { method: "POST" }).catch(() => undefined);
 
 /** The state's tag ("רץ · 2:10"). */
 function StateTag({ r, now }: { r: HelperRunInfo; now: number }) {
@@ -207,7 +211,7 @@ function HelperTalk({ r, convId }: { r: HelperRunInfo; convId: string }) {
 }
 
 /** The state's mark at the start of a row. */
-function StateMark({ r }: { r: HelperRunInfo }) {
+export function StateMark({ r }: { r: HelperRunInfo }) {
   if (r.state === "running") return <span className="hspin" aria-hidden />;
   if (r.state === "waiting") return <span className="warn" aria-hidden>⏳</span>;
   if (r.state === "asking") return <span className="ask" aria-hidden>?</span>;
@@ -217,7 +221,7 @@ function StateMark({ r }: { r: HelperRunInfo }) {
 }
 
 /** The model chip, with why this model as its tooltip. */
-function ModelChip({ r }: { r: HelperRunInfo }) {
+export function ModelChip({ r }: { r: HelperRunInfo }) {
   const note = getLocale() === "he" ? r.modelNoteHe ?? r.modelNote : r.modelNote;
   return <span className="hmodel" title={note}>{r.model}</span>;
 }
@@ -390,12 +394,24 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
   const running = live.filter((r) => r.state !== "waiting").length;
   const waiting = live.length - running;
   const done = runs.filter((r) => r.state === "done").length;
+  // A plan's sub-agents show as one chip (its card or sheet lists them).
+  const plans = plansOf(runs).filter((v) => v.going > 0);
   return (
     <div className="hstrip" role="region" aria-label={L("סוכני משנה", "Sub-agents")}>
       <b className="small hstrip-title">{L("סוכני משנה", "Sub-agents")}</b>
       <span className="muted small hstrip-count">{L(`${running} רצים`, `${running} running`)}{waiting ? L(` · ${waiting} בתור`, ` · ${waiting} queued`) : ""}</span>
       <div className="hchips">
-        {live.map((r) => {
+        {plans.map((v) => (
+          <div key={v.plan.id} className="hchip hchip-plan">
+            <button type="button" className="hchip-open" onClick={() => onOpen(v.runs.find(going) ?? v.runs[0]!)} title={v.plan.goal}>
+              <span className="hspin" aria-hidden />
+              <span aria-hidden>{v.plan.kind === "research" ? "🔬" : "🗺️"}</span>
+              <span className="hchip-name">{v.plan.kind === "research" ? L("מחקר מעמיק", "Deep research") : L("תוכנית", "Plan")}<span className="hchip-task">: {v.plan.goal}</span></span>
+              <span className="mono muted">{v.done}/{v.runs.filter((r) => !r.removed).length}</span>
+            </button>
+          </div>
+        ))}
+        {live.filter((r) => !r.plan).map((r) => {
           const t = elapsed(r, now);
           return (
             <div key={r.id} className={`hchip ${r.state === "waiting" ? "waiting" : ""}`}>
