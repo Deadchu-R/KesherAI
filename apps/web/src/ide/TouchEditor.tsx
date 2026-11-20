@@ -274,6 +274,13 @@ const TouchEditor = forwardRef<EditorHandle, EditorProps>(function TouchEditor(p
     },
     focus: () => view.current?.focus(),
     line: () => (view.current ? view.current.state.doc.lineAt(view.current.state.selection.main.head).number : 1),
+    goTo: (line: number) => {
+      const v = view.current;
+      if (!v) return;
+      const pos = v.state.doc.line(Math.max(1, Math.min(line, v.state.doc.lines))).from;
+      v.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+      v.focus();
+    },
   }));
 
   return <div className={`code-editor touch-editor ${p.className ?? ""}`} ref={box} dir="ltr" />;

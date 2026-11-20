@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 import { findGameProjects, type GameProject } from "../game-projects.js";
+import { gameSourceRoutes } from "./game-source.js";
 import { HIT_KINDS, searchGameProject, type GameHit, type HitKind } from "../game-index.js";
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
@@ -108,6 +109,8 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
     return list;
   };
   const findOne = async (engine: unknown, path: unknown) => (await found()).find((p) => p.kind === engine && typeof path === "string" && sameFolder(p.path, path));
+  // The Source view of every engine (step 4), on the same list of found projects.
+  gameSourceRoutes(app, s, findOne);
 
   app.get("/api/games", async () => {
     const [list, uq, unityQ, unrealProject] = await Promise.all([found(), s.unreal.queue(), s.unity.queue(), s.unreal.project()]);

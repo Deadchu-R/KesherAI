@@ -3,6 +3,7 @@ import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch";
+import { GameSource } from "../engine/GameSource";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -59,6 +60,8 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   const [list, setList] = useState<{ projects: Project[]; clashes: number } | null>(null);
   const [sheet, setSheet] = useState<{ project?: Project } | null>(sync ? {} : null);
   const [search, setSearch] = useState<{ project?: Project; q: string } | null>(null);
+  // The Source view of one project, over the list (a card's Code button, or a search result's file at its line).
+  const [code, setCode] = useState<{ engine: Project["engine"]; path: string; name: string; open?: { path: string; line?: number } } | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
   const busy = !!list?.projects.some((p) => p.running);
   useEffect(() => {
@@ -75,13 +78,25 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   // A tapped search result: code opens in the Source view at its line; a scene, prefab or asset on its engine's page.
   const openHit = (r: ProjectHits, h: GameHit) => {
     if (h.kind === "code" || h.kind === "script") {
-      void navigator.clipboard?.writeText(`${h.path}${h.line ? `:${h.line}` : ""}`).catch(() => undefined);
-      toast(L(`הנתיב הועתק: ${h.path}`, `Path copied: ${h.path}`));
+      setSearch(null);
+      setCode({ engine: r.engine, path: r.path, name: r.name, open: { path: h.path, ...(h.line ? { line: h.line } : {}) } });
       return;
     }
     location.hash = r.engine === "unity" ? "#/unity" : r.engine === "unreal" ? "#/unreal" : "#/godot";
   };
 
+  if (code) {
+    return (
+      <div className="page games-page">
+        <div className="row games-code-head">
+          <button type="button" className="ghost" onClick={() => setCode(null)} aria-label={L("חזרה לפרויקטים", "Back to the projects")}>{getLocale() === "he" ? "→" : "←"}</button>
+          <h1 className="grow" dir="auto">{L(`קוד · ${code.name}`, `Code · ${code.name}`)}</h1>
+          <span className="games-chip">{ENGINE[code.engine].label}</span>
+        </div>
+        <GameSource key={`${code.path}:${code.open?.path ?? ""}:${code.open?.line ?? 0}`} engine={code.engine} project={code.path} {...(code.open ? { open: code.open } : {})} />
+      </div>
+    );
+  }
   return (
     <div className="page games-page">
       <h1>{L("פרויקטי משחק", "Game projects")}</h1>
@@ -128,6 +143,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
               <div className="row wrap games-actions">
                 {p.canSync && <button type="button" className="primary" disabled={p.running} onClick={() => syncNow(p)}>{L("סנכרן עכשיו", "Sync now")}</button>}
                 {(p.pending > 0 || p.clashes > 0) && <button type="button" onClick={() => setSheet({ project: p })}>{L("הצג ממתינים", "View pending")}</button>}
+                <button type="button" onClick={() => setCode({ engine: p.engine, path: p.path, name: p.name })}>{"</>"} {L("קוד", "Code")}</button>
                 <button type="button" onClick={() => setSearch({ project: p, q: "" })} aria-label={L(`חיפוש ב-${p.name}`, `Search ${p.name}`)}>🔍 {L("חיפוש", "Search")}</button>
                 <a className="button" href={p.page}>{L("לעמוד הפרויקט", "Project page")}</a>
               </div>

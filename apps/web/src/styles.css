@@ -4215,6 +4215,13 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-hit:hover, .games-hit:focus-visible { background: var(--bg); }
 .games-hit-icon { width: 20px; text-align: center; flex: none; }
 .games-hit-text { display: flex; flex-direction: column; min-width: 0; }
+.games-code-head { gap: 8px; align-items: center; }
+.games-code-head h1 { margin: 0; overflow-wrap: anywhere; }
+.game-source-lang { flex: none; min-width: 3.2em; font-size: 11px; opacity: .7; }
+.game-source-path { overflow-wrap: anywhere; min-width: 0; flex: 1 1 100%; }
+.game-source-outline summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+.game-source-outline ul { list-style: none; margin: 4px 0 0; padding: 0; max-height: 30vh; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.game-source-outline li button { min-height: 32px; text-align: start; overflow-wrap: anywhere; }
 .games-hit-name, .games-hit-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 @media (max-width: 520px) {
   .games-list { grid-template-columns: 1fr; }

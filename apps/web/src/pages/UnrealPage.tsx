@@ -18,7 +18,7 @@ import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
 import { CloseEditor } from "../engine/CloseEditor";
-import { UnrealSource } from "../engine/UnrealSource";
+import { GameSource } from "../engine/GameSource";
 import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -84,7 +84,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [bubble, setBubble] = useState(false);
   // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
   // Unity: Visual Scripting graphs, or C# scripts shown as nodes.
-  const [source, setSource] = useState<"graphs" | "scripts" | "cpp">("graphs");
+  const [source, setSource] = useState<"graphs" | "scripts" | "code">("graphs");
   const [view, setView] = useState<"graph" | "code" | "both" | "design">(() => {
     try {
       const v = localStorage.getItem("kesher.bpView");
@@ -363,6 +363,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
             <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
             <button type="button" role="tab" aria-selected={source === "scripts"} className={source === "scripts" ? "on" : ""} onClick={() => setSource("scripts")} title={L("סקריפטי C# כנודים, לעבודה בלי קוד", "C# scripts as nodes, to work without code")}>{L("סקריפטים C#", "C# scripts")}</button>
+            <button type="button" role="tab" aria-selected={source === "code"} className={source === "code" ? "on" : ""} onClick={() => setSource("code")} title={L("קוד ה-C# של הפרויקט, גם כש-Unity סגור", "The project's C# code, also with Unity closed")}>{L("קוד", "Code")}</button>
           </span>
           {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
         </div>
@@ -376,14 +377,14 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       {!unity && (
         <div className="row ue-projects">
           <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
-            <button type="button" role="tab" aria-selected={source !== "cpp"} className={source !== "cpp" ? "on" : ""} onClick={() => setSource("graphs")}>Blueprints</button>
-            <button type="button" role="tab" aria-selected={source === "cpp"} className={source === "cpp" ? "on" : ""} onClick={() => setSource("cpp")} title={L("קוד ה-C++ של הפרויקט", "The project's C++ code")}><bdi dir="ltr">C++</bdi></button>
+            <button type="button" role="tab" aria-selected={source !== "code"} className={source !== "code" ? "on" : ""} onClick={() => setSource("graphs")}>Blueprints</button>
+            <button type="button" role="tab" aria-selected={source === "code"} className={source === "code" ? "on" : ""} onClick={() => setSource("code")} title={L("קוד ה-C++ וה-Verse של הפרויקט, גם כש-Unreal סגור", "The project's C++ and Verse code, also with Unreal closed")}>{L("קוד", "Code")}</button>
           </span>
         </div>
       )}
-      {!unity && source === "cpp" && <UnrealSource />}
+      {source === "code" && (unity ? st.active && <GameSource key={st.active} engine="unity" project={st.active} /> : <GameSource engine="unreal" />)}
       {unity && source === "scripts" && st.active && <ScriptNodes key={st.active} />}
-      {!neverConnected && !(unity && source === "scripts") && !(!unity && source === "cpp") && (
+      {!neverConnected && !(unity && source === "scripts") && source !== "code" && (
         <div className={`ue-body${view === "both" || view === "design" ? " wide" : ""}`}>
           <aside className="ue-list card">
             <input dir="auto" placeholder={unity ? L("חיפוש גרף…", "Find a graph…") : L("חיפוש Blueprint…", "Find a Blueprint…")} value={filter} onChange={(e) => setFilter(e.target.value)} />

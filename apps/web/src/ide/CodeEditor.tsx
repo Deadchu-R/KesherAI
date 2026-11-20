@@ -42,6 +42,22 @@ export default function CodeEditor(p: EditorProps) {
       toast((e as Error).message);
     }
   };
+  // Outline and go-to-definition: move to the line once the engine (loaded lazily) and the file are there.
+  useEffect(() => {
+    if (!p.jump) return;
+    let tries = 0;
+    const go = () => {
+      if (ref.current) ref.current.goTo(p.jump!.line);
+      else if (tries++ < 20) t = setTimeout(go, 100);
+    };
+    let t = setTimeout(go, 0);
+    return () => clearTimeout(t);
+  }, [p.jump?.n, p.jump?.line, p.path]);
+  /** The word at the cursor (letters, digits, _ and ::), for go-to-definition. */
+  const wordAtCursor = () => {
+    const { prefix, suffix } = ref.current?.around() ?? { prefix: "", suffix: "" };
+    return `${/[\w:]*$/.exec(prefix)?.[0] ?? ""}${/^\w*/.exec(suffix)?.[0] ?? ""}`.replace(/^:+|:+$/g, "");
+  };
   const target = editors.find((x) => x.id === lookOf) ?? editors[0];
   const complete = async () => {
     const h = ref.current;
@@ -68,6 +84,9 @@ export default function CodeEditor(p: EditorProps) {
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.insert("    ")} title="Tab">⇥</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.undo()} title={L("בטל (Ctrl+Z)", "Undo (Ctrl+Z)")} aria-label={L("בטל", "Undo")}>↶</button>
           <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => ref.current?.redo()} title={L("חזור (Ctrl+Y)", "Redo (Ctrl+Y)")} aria-label={L("חזור", "Redo")}>↷</button>
+          {p.onDefinition && (
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => p.onDefinition!(wordAtCursor())} title={L("עבור להגדרה של המילה שבסמן", "Go to the definition of the word at the cursor")}>↪ {L("הגדרה", "Definition")}</button>
+          )}
           {editors.length > 0 && !onTouch && (
             <select className="code-look" value={lookOf} onChange={(e) => { setLookOf(e.target.value); void chooseIde(e.target.value); }} title={L("המראה של הקוד: כמו בעורך שלך", "How the code looks: like your editor")} aria-label={L("מראה הקוד", "Code look")}>
               <option value="">{L("מראה KesherAI", "KesherAI look")}</option>

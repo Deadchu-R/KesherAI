@@ -174,6 +174,13 @@ const MonacoEditor = forwardRef<EditorHandle, EditorProps>(function MonacoEditor
     },
     focus: () => ed.current?.focus(),
     line: () => ed.current?.getPosition()?.lineNumber ?? 1,
+    goTo: (line: number) => {
+      const e = ed.current;
+      if (!e) return;
+      e.setPosition({ lineNumber: line, column: 1 });
+      e.revealLineInCenter(line);
+      e.focus();
+    },
   }));
 
   return <div className={`code-editor ${p.className ?? ""}`} ref={box} dir="ltr" />;

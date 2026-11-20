@@ -16,6 +16,10 @@ export interface EditorProps {
   className?: string;
   /** The file's full path on the computer: shows "open in your editor" at the cursor's line. */
   fullPath?: string;
+  /** Move the cursor to this line and show it (a new `n` moves again to the same line): outline and go-to-definition. */
+  jump?: { line: number; n: number };
+  /** Shows "Go to definition" in the toolbar; called with the word at the cursor. */
+  onDefinition?: (word: string) => void;
   /** A language server for this file (Rider-like help): its WebSocket, the project folder and the file's full path. */
   lsp?: { url: string; root: string; file: string; onStatus?: (s: string) => void };
 }
@@ -33,4 +37,6 @@ export interface EditorHandle {
   focus: () => void;
   /** The cursor's line (1-based), for opening the file there in another editor. */
   line: () => number;
+  /** Moves the cursor to a line (1-based) and scrolls it into the middle. */
+  goTo: (line: number) => void;
 }

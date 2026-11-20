@@ -3,6 +3,7 @@ import { api, isRemote, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { desktop, toast } from "../library";
 import { StandInScenes } from "../StandInScenes";
+import { GameSource } from "../engine/GameSource";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -70,6 +71,8 @@ export function GodotPage() {
         </section>
       )}
       <StandInScenes engine="godot" connectedProject={e?.projectFile?.replace(/[\\/]project\.godot$/i, "")} />
+      <h2>{L("קוד", "Code")}</h2>
+      <GameSource engine="godot" />
       <section className="card">
         <strong>{L("לחבר פרויקט", "Connect a project")}</strong>
         <p className="small">{L("KesherAI מוסיף לפרויקט את התוסף addons/kesher_bridge ומפעיל אותו. אפשר להסיר אותו מתי שרוצים, והפרויקט עובד גם בלעדיו.", "KesherAI adds the addon addons/kesher_bridge to the project and turns it on. Remove it any time; the project works without it.")}</p>
