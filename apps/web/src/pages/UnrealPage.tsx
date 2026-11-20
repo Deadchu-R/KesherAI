@@ -129,8 +129,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   }, [chat, busy]);
   const [queue, setQueue] = useState<Queued[]>([]);
   // Unreal closed: changes wait and sync in the background (a headless editor), no open editor needed.
-  const [sync, setSync] = useState<{ waiting: number; running: boolean; lastAt?: string; lastError?: string } | null>(null);
-  const loadSync = () => void (unity ? Promise.resolve() : api<NonNullable<typeof sync>>(`${base}/sync`).then((n) => setSync((was) => {
+  const [sync, setSync] = useState<{ waiting: number; clashes?: number; running: boolean; lastAt?: string; lastError?: string } | null>(null);
+  const loadSync = () => void (api<NonNullable<typeof sync>>(`${base}/sync`).then((n) => setSync((was) => {
     if (was && (was.waiting > 0 || was.running) && n.waiting === 0 && !n.running && path) { loadBp(path); loadQueue(); }
     return n;
   }), () => undefined));
@@ -412,7 +412,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
               <>
                 <div className="row ue-tools">
                   <strong className="grow">{bp.graph.name}{bp.graph.parent ? <span className="muted small"> · {bp.graph.parent}</span> : null}</strong>
-                  {bp.offline && bp.savedAt && <span className="muted small">{L("עותק מ-", "Copy from ")}{new Date(bp.savedAt).toLocaleString()}</span>}
+                  {bp.offline && bp.savedAt && <span className="muted small ue-offline-copy" title={L(`${app} סגור: עריכות ממתינות ומסונכרנות יחד`, `${app} is closed: edits wait and sync together`)}>{L("עותק לא מקוון, נשמר ", "Offline copy, saved ")}{new Date(bp.savedAt).toLocaleString()}</span>}
                   <button type="button" disabled={!st.connected} onClick={() => void call("open")}>{L(`פתח ב-${app}`, `Open in ${app}`)}</button>
                   <button type="button" disabled={!ready} onClick={() => void call("compile")}>{unity ? L("בדוק", "Check") : L("קמפל", "Compile")}</button>
                   <button type="button" disabled={!ready} onClick={() => void call("save")}>{L("שמור", "Save")}</button>
@@ -451,11 +451,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
                 <div className="ue-graph-row">
                 <div className="ue-stage">
-                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={(st.connected && !bp.offline) || (!unity && !st.connected && !!st.offline)} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => { loadBp(path); loadSync(); }} flash={flash} onSelect={setPicked} />}</div>
-                  {!unity && !st.connected && sync && (sync.waiting > 0 || sync.running || sync.lastError) && (
+                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={(st.connected && !bp.offline) || (!st.connected && !!st.offline)} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => { loadBp(path); loadSync(); }} flash={flash} onSelect={setPicked} />}</div>
+                  {!st.connected && sync && (sync.waiting > 0 || sync.running || sync.lastError) && (
                     <div className="row small ue-sync" role="status">
-                      <span className="grow">{sync.running ? L(`מסנכרן ${sync.waiting} שינויים… (Unreal ברקע, כדקה)`, `Syncing ${sync.waiting} changes… (Unreal in the background, about a minute)`) : sync.waiting > 0 ? L(`${sync.waiting} שינויים מחכים לסנכרון. הם יסונכרנו לבד בעוד רגע, או כשתפתח את הפרויקט ב-Unreal.`, `${sync.waiting} changes waiting to sync. They sync by themselves in a moment, or when you open the project in Unreal.`) : sync.lastError}</span>
+                      <span className="grow">{sync.running ? L(`מסנכרן ${sync.waiting} שינויים… (${app} ברקע, כדקה)`, `Syncing ${sync.waiting} changes… (${app} in the background, about a minute)`) : sync.waiting > 0 ? L(`${sync.waiting} שינויים מחכים לסנכרון. הם יסונכרנו לבד בעוד רגע, או כשתפתח את הפרויקט ב-${app}.`, `${sync.waiting} changes waiting to sync. They sync by themselves in a moment, or when you open the project in ${app}.`) : sync.lastError}</span>
                       {!sync.running && sync.waiting > 0 && <button type="button" className="ghost small" onClick={() => void api(`${base}/sync`, { method: "POST" }).then(loadSync, (e: Error) => toast(e.message))}>{L("סנכרן עכשיו", "Sync now")}</button>}
+                      {!!sync.clashes && <a className="button ghost small" href="#/games?sync=1">{L(`${sync.clashes} התנגשויות: בחר`, `${sync.clashes} clash(es): choose`)}</a>}
                     </div>
                   )}
                   {st.connected && readAt > 0 && (

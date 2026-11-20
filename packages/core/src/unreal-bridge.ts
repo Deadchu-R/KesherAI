@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type WebSocket from "ws";
+import { nodeSig, sortForSync, unrealAssetFile, type ClashChoice, type SyncReport } from "./game-sync.js";
 
 /**
  * The link to the Unreal Editor (the KesherAI Bridge plugin,
@@ -44,6 +45,14 @@ export interface QueuedEdit {
   /** For "create": the parent class (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, UserWidget…). */
   parent?: string;
   at: string;
+  /** When the saved copy this change was made on was read from the engine (for the clash check; game-sync.ts). */
+  baseAt?: string;
+  /** That copy's nodes (id → title), to show what the engine changed when they clash. */
+  baseSig?: Record<string, string>;
+  /** Set when the engine saved the graph after that copy: the change waits for Roee's choice. */
+  clash?: { engineAt: string };
+  /** The choice made for a clash: "mine" applies it anyway, "skip" keeps it waiting without syncing it. */
+  decision?: "mine" | "skip";
 }
 
 /** What the Unreal page shows about the connection. */
@@ -307,24 +316,73 @@ export class UnrealBridge {
   /** Saves the list of Blueprints, then applies changes that waited for the editor. */
   private async afterConnect(): Promise<void> {
     await this.list();
-    for (const q of await this.queue()) {
-      if (q.project !== this.info?.project) continue;
+    const project = this.info?.project;
+    if (!project) return;
+    const { apply, newClashes } = await this.sortMine(project);
+    let applied = 0;
+    let failed = 0;
+    for (const q of apply) {
       try {
         // A Blueprint made in KesherAI while Unreal was closed: made now, before the changes that follow it in the queue.
         if (q.kind === "create") {
           await this.request("create", { path: q.path, parent: q.parent ?? "Actor" }, 60_000);
           await this.unqueue(q.id);
           await this.list().catch(() => undefined);
+          applied++;
           continue;
         }
         await this.request("apply", { path: q.path, graph: q.graph, ops: q.ops });
         await this.request("compile", { path: q.path }).catch(() => undefined);
         await this.unqueue(q.id);
         await this.graph(q.path).catch(() => undefined);
+        applied++;
       } catch {
         // stays queued; the page shows it
+        failed++;
       }
     }
+    if (apply.length || newClashes.length) this.onSync?.({ engine: "unreal", project, applied, failed, clashes: newClashes.length, ...(failed ? { error: `${failed} change(s) could not be applied; they stay waiting.` } : {}) });
+  }
+
+  /** Called when a sync ends (the Game projects page sends a notification on a failure or a clash). */
+  onSync?: (r: SyncReport) => void;
+
+  /**
+   * A project's queued changes, split by the clash check (game-sync.ts): new clashes are marked in the queue.
+   *
+   * @param project - The project's name.
+   * @returns The changes to apply now, and the ones newly found clashing.
+   */
+  private async sortMine(project: string): Promise<{ apply: QueuedEdit[]; newClashes: QueuedEdit[] }> {
+    const all = await this.queue();
+    const file = this.lastProjectFile ?? this.info?.projectFile;
+    const dir = file ? dirname(file) : undefined;
+    const r = await sortForSync(all.filter((q) => q.project === project), (q) => (dir ? unrealAssetFile(dir, q.path) : undefined));
+    if (r.newClashes.length) await this.writeJson(join(this.dir, "queue.json"), all);
+    return r;
+  }
+
+  /**
+   * Roee's choice for a queued change that clashes with an edit made in Unreal: "mine" applies it anyway (at the next
+   * sync, started now), "engine" drops it (Unreal's version stays), "skip" leaves it waiting without syncing it.
+   *
+   * @param id - The queued change.
+   * @param choice - The choice.
+   * @returns Whether the change was there.
+   */
+  async decide(id: string, choice: ClashChoice): Promise<boolean> {
+    const all = await this.queue();
+    const q = all.find((x) => x.id === id);
+    if (!q) return false;
+    if (choice === "engine") {
+      await this.unqueue(id);
+      if (this.connected) await this.graph(q.path).catch(() => undefined);
+      return true;
+    }
+    q.decision = choice;
+    await this.writeJson(join(this.dir, "queue.json"), all);
+    if (choice === "mine") this.scheduleSync(500);
+    return true;
   }
 
   /**
@@ -549,10 +607,15 @@ export class UnrealBridge {
       await this.afterConnect();
       return { applied: 0, failed: 0 };
     }
+    let clashes = 0;
+    let project: string | undefined;
     this.syncing ??= (async () => {
       this.syncState = { running: true };
-      const project = await this.project();
-      const mine = (await this.queue()).filter((q) => q.project === project);
+      project = await this.project();
+      if (!project) return { applied: 0, failed: 0 };
+      // Changes that clash with an edit saved in Unreal wait for Roee's choice (the Sync and conflicts sheet).
+      const { apply: mine, newClashes } = await this.sortMine(project);
+      clashes = newClashes.length;
       if (!mine.length) return { applied: 0, failed: 0 };
       const commands: Array<Record<string, unknown>> = [];
       for (const q of mine) {
@@ -580,10 +643,13 @@ export class UnrealBridge {
       return { applied, failed };
     })()
       .then((r) => {
-        this.syncState = { running: false, lastAt: new Date().toISOString(), ...(r.failed ? { lastError: `${r.failed} change(s) could not be applied; they stay waiting.` } : {}) };
+        const lastError = r.failed ? `${r.failed} change(s) could not be applied; they stay waiting.` : undefined;
+        this.syncState = { running: false, lastAt: new Date().toISOString(), ...(lastError ? { lastError } : {}) };
+        if (project && (r.applied || r.failed || clashes)) this.onSync?.({ engine: "unreal", project, ...r, clashes, ...(lastError ? { error: lastError } : {}) });
         return r;
       }, (e: Error) => {
         this.syncState = { running: false, lastAt: new Date().toISOString(), lastError: e.message };
+        if (project) this.onSync?.({ engine: "unreal", project, applied: 0, failed: 0, clashes, error: e.message });
         throw e;
       })
       .finally(() => { this.syncing = undefined; });
@@ -597,8 +663,11 @@ export class UnrealBridge {
    * @returns It, with its id.
    */
   async enqueue(edit: Omit<QueuedEdit, "id" | "at">): Promise<QueuedEdit> {
+    // The saved copy the change was made on: for the clash check when it syncs (game-sync.ts).
+    const saved = edit.kind === "create" || edit.baseAt ? undefined : await this.readJson<{ graph: BlueprintJson; savedAt: string }>(join(this.projectDir(edit.project), "graphs", fileFor(edit.path)));
+    const base = saved ? { baseAt: saved.savedAt, baseSig: nodeSig(saved.graph) } : {};
     const q = await this.queue();
-    const item = { ...edit, id: randomUUID(), at: new Date().toISOString() };
+    const item = { ...base, ...edit, id: randomUUID(), at: new Date().toISOString() };
     q.push(item);
     await this.writeJson(join(this.dir, "queue.json"), q);
     return item;

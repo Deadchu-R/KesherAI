@@ -4185,3 +4185,26 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
   .plan-row .hmodel { display: none; }
   .plan-row { min-height: 40px; }
 }
+
+/* Game projects home and its Sync and conflicts sheet (GamesPage.tsx) */
+.games-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.games-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.games-head strong { overflow-wrap: anywhere; }
+.games-state { gap: 8px; flex-wrap: wrap; }
+.games-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); font-size: 12px; white-space: nowrap; }
+.games-chip.warn { color: var(--warn); border-color: #5a4a1f; }
+.games-chip.bad { color: var(--bad); border-color: var(--bad); }
+.games-sub, .games-problem { margin: 0; }
+.games-problem { color: var(--bad); }
+.games-actions button, .games-actions .button, .games-choices button { min-height: 40px; }
+.games-clash-banner { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 12px; padding: 10px 14px; border-radius: 12px; border: 1px solid rgb(240 179 126 / .5); background: rgb(240 179 126 / .1); color: inherit; text-align: start; cursor: pointer; }
+.games-clash { border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.games-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.games-side { min-width: 0; background: var(--bg); border-radius: 8px; padding: 8px; }
+.games-side ul { margin: 4px 0 0; padding-inline-start: 16px; overflow-wrap: anywhere; }
+.games-side p { margin: 4px 0 0; }
+.games-waiting { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
+@media (max-width: 520px) {
+  .games-list { grid-template-columns: 1fr; }
+  .games-sides { grid-template-columns: 1fr; }
+}

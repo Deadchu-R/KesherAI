@@ -16,7 +16,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.9";
+        const string Version = "0.2.10";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
@@ -37,6 +37,44 @@ namespace KesherAI.Bridge
         {
             var list = Json.Parse(ops) as List<object>;
             return list == null ? Out(new Dictionary<string, object> { ["error"] = "ops must be a JSON list" }) : Out(KesherGraph.Apply(path, graph, list));
+        }
+
+        /// <summary>
+        /// Changes queued in KesherAI while Unity was closed, all in one editor run (a batch Unity boots once, not
+        /// once per change). The file is a JSON list of { cmd: "apply" | "save" | "graph", path, graph, ops }; the
+        /// answer lists { ok, result | error } in the same order.
+        /// </summary>
+        [CliCommand("kesher_batch", "KesherAI Bridge: run a list of graph commands (a JSON file) in one editor run")]
+        static string Batch([CliArg("file", "The JSON file with the commands")] string file)
+        {
+            List<object> list;
+            try { list = Json.Parse(System.IO.File.ReadAllText(file)) as List<object>; }
+            catch (System.Exception e) { return Out(new Dictionary<string, object> { ["error"] = "The batch file could not be read: " + e.Message }); }
+            if (list == null) return Out(new Dictionary<string, object> { ["error"] = "The batch file must be a JSON list" });
+            var answers = new List<object>();
+            foreach (var item in list)
+            {
+                var c = item as Dictionary<string, object> ?? new Dictionary<string, object>();
+                string Arg(string k) => c.TryGetValue(k, out var v) && v != null ? v.ToString() : "";
+                try
+                {
+                    Dictionary<string, object> r;
+                    switch (Arg("cmd"))
+                    {
+                        case "apply": r = KesherGraph.Apply(Arg("path"), Arg("graph"), c.TryGetValue("ops", out var ops) ? ops as List<object> ?? new List<object>() : new List<object>()); break;
+                        case "save": r = KesherGraph.Save(Arg("path")); break;
+                        case "graph": r = KesherGraph.Read(Arg("path")); break;
+                        default: r = new Dictionary<string, object> { ["error"] = "Unknown batch command: " + Arg("cmd") }; break;
+                    }
+                    var ok = !r.ContainsKey("error");
+                    answers.Add(ok ? new Dictionary<string, object> { ["ok"] = true, ["result"] = r } : new Dictionary<string, object> { ["ok"] = false, ["error"] = r["error"] });
+                }
+                catch (System.Exception e)
+                {
+                    answers.Add(new Dictionary<string, object> { ["ok"] = false, ["error"] = e.Message });
+                }
+            }
+            return Out(new Dictionary<string, object> { ["answers"] = answers });
         }
 
         [CliCommand("kesher_vars", "KesherAI Bridge: add, change or remove the graph's own variables (JSON list), as one undo step")]

@@ -114,7 +114,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
 export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist: () => Promise<void>): { unityCli: UnityCli; unrealBridge: UnrealBridge } {
   // Unity's CLI: the Unity page and the chat's Unity tools share it.
   UnityCli.setLogFile(join(paths.root, "logs", "unity-cli.log"));
-  const unityCli = new UnityCli(config.unity, persist);
+  const unityCli = new UnityCli(config.unity, persist, undefined, join(paths.root, "unity"));
   // Look for the CLI now, so the first chat already has the Unity tools.
   unityCli.cliKnown();
   const unrealBridge = new UnrealBridge(join(paths.root, "unreal"));

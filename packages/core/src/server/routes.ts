@@ -38,6 +38,7 @@ import { unityRoutes, unrealRoutes } from "../routes/unreal.js";
 import { godotRoutes } from "../routes/godot.js";
 import { godotSceneRoutes } from "../routes/godot-scene.js";
 import { unitySceneRoutes } from "../routes/unity-scene.js";
+import { gamesRoutes } from "../routes/games.js";
 import { unrealLevelRoutes } from "../routes/unreal-level.js";
 import { stremioRoutes } from "../routes/stremio.js";
 import { sshRoutes } from "../routes/ssh.js";
@@ -223,6 +224,8 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await godotSceneRoutes(app, services.godot);
   await unitySceneRoutes(app);
   await unrealLevelRoutes(app, services.unreal);
+  // The Game projects home: every engine project, its waiting changes, sync and clashes.
+  await gamesRoutes(app, services);
   await stremioRoutes(app, services, apiKeys);
   await sshRoutes(app, services);
   await chatReportRoutes(app, services);

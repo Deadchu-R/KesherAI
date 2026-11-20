@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { createKesherServer } from "./server.js";
-import { blueprintPrompt, parseOps, type BlueprintJson } from "./unreal-bridge.js";
+import { blueprintPrompt, parseOps, UnrealBridge, type BlueprintJson } from "./unreal-bridge.js";
 
 const BP: BlueprintJson = {
   path: "/Game/BP_Door.BP_Door",
@@ -253,4 +253,35 @@ test("with Unreal closed, queued changes sync in one headless start: applied, co
   assert.deepEqual(sent.map((c) => c.cmd), ["apply", "apply", "compile", "save", "graph"]);
   assert.equal((await b.queue()).length, 0);
   assert.equal(b.syncState.running, false);
+});
+
+test("Unreal closed: a queued change that clashes with an edit saved in Unreal waits for a choice", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-ue-"));
+  const proj = join(root, "Shooter");
+  await mkdir(join(proj, "Content", "Doors"), { recursive: true });
+  await writeFile(join(proj, "Shooter.uproject"), "{}");
+  await writeFile(join(proj, "Content", "Doors", "BP_Door.uasset"), "x");
+  const old = Date.now() / 1000 - 120;
+  await utimes(join(proj, "Content", "Doors", "BP_Door.uasset"), old, old);
+  const data = join(root, "data");
+  await mkdir(data, { recursive: true });
+  await writeFile(join(data, "last.json"), JSON.stringify({ last: "Shooter", projectFile: join(proj, "Shooter.uproject") }));
+  const b = new UnrealBridge(data);
+  const runs: unknown[][] = [];
+  b.setHeadless(async (_f, cmds) => { runs.push(cmds); return cmds.map(() => ({ ok: true })); });
+  const path = "/Game/Doors/BP_Door.BP_Door";
+  await b.remember(path, { path, name: "BP_Door", variables: [], graphs: [{ name: "EventGraph", kind: "event", nodes: [{ id: "n1", title: "BeginPlay", class: "K2Node_Event", x: 0, y: 0, pins: [] }] }] });
+  const q = await b.enqueue({ project: "Shooter", path, graph: "", ops: [{ op: "delete", node: "n1" }] });
+  assert.equal(q.baseSig?.n1, "BeginPlay");
+  const now = Date.now() / 1000 + 10;
+  await utimes(join(proj, "Content", "Doors", "BP_Door.uasset"), now, now);
+  const reports: Array<{ clashes: number }> = [];
+  b.onSync = (r) => reports.push(r);
+  assert.deepEqual(await b.syncNow(), { applied: 0, failed: 0 });
+  assert.equal(runs.length, 0, "no headless editor for a clash");
+  assert.equal(reports[0]!.clashes, 1);
+  // Keep mine: applied at the next sync.
+  await b.decide(q.id, "mine");
+  assert.deepEqual(await b.syncNow(), { applied: 1, failed: 0 });
+  assert.equal(runs.length, 1);
 });

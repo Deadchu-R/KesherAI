@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import type WebSocket from "ws";
 import type { KesherServices } from "../services.js";
-import type { UnityCli } from "../unity-cli.js";
+import { sameFolder, type UnityCli } from "../unity-cli.js";
 import type { UnrealBridge } from "../unreal-bridge.js";
 import { isLocalRequest } from "../auth.js";
 import { editGraph } from "../graph-edit.js";
@@ -44,7 +44,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.9";
+export const UNITY_PACKAGE_VERSION = "0.2.10";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -91,7 +91,8 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
 
   app.get(base, async () => ({ ...(await b.status()), latestBridge: kind === "unreal" ? BRIDGE_VERSION : UNITY_PACKAGE_VERSION, download: kind === "unreal" ? BRIDGE_DOWNLOAD : UNITY_PACKAGE_URL }));
 
-  app.get(`${base}/blueprints`, async () => b.list());
+  // Unity closed: the saved list opens at once; ?fresh=1 reads it from Unity again.
+  app.get<{ Querystring: { fresh?: string } }>(`${base}/blueprints`, async (req) => (kind === "unity" ? s.unity.list(req.query.fresh === "1") : b.list()));
 
   app.get<{ Querystring: { path?: string } }>(`${base}/graph`, async (req, reply) => {
     if (!req.query.path) return reply.code(400).send({ error: "Which Blueprint?" });
@@ -221,24 +222,29 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     return { changedAt: await (b as UnityCli).changedAt() };
   });
 
-  if (kind === "unreal") {
-    /** Changes waiting for Unreal, and the background sync. POST applies them now (in a headless editor when closed). */
-    app.get(`${base}/sync`, async () => {
-      const ub = b as UnrealBridge;
-      const project = await ub.project();
-      const waiting = (await ub.queue()).filter((q) => q.project === project).length;
-      // An old error means nothing once every change went in (e.g. through the editor when it opened).
-      const { lastError, ...rest } = ub.syncState;
-      return { waiting, ...rest, ...(waiting && lastError ? { lastError } : {}) };
-    });
-    app.post(`${base}/sync`, async (_req, reply) => {
-      try {
-        return await (b as UnrealBridge).syncNow();
-      } catch (err) {
-        return reply.code(502).send({ error: (err as Error).message });
-      }
-    });
-  }
+  /**
+   * Changes waiting for the editor, and the background sync. POST applies them now (Unreal: in a headless editor when
+   * closed; Unity: all in one Unity run). Changes that clash with an edit made in the editor are counted apart: they
+   * wait for a choice on the Game projects page.
+   */
+  app.get(`${base}/sync`, async () => {
+    const folder = kind === "unity" ? s.unity.activeProject : undefined;
+    const project = kind === "unreal" ? await (b as UnrealBridge).project() : folder;
+    const mine = project ? (await b.queue()).filter((q) => (kind === "unity" ? sameFolder(q.project, project) : q.project === project)) : [];
+    const clashes = mine.filter((q) => q.clash && !q.decision).length;
+    const waiting = mine.length;
+    const state = kind === "unreal" ? (b as UnrealBridge).syncState : (folder && s.unity.syncState.get(folder)) || { running: false };
+    // An old error means nothing once every change went in (e.g. through the editor when it opened).
+    const { lastError, ...rest } = state;
+    return { waiting, clashes, ...rest, ...(waiting && lastError ? { lastError } : {}) };
+  });
+  app.post(`${base}/sync`, async (_req, reply) => {
+    try {
+      return await (kind === "unreal" ? (b as UnrealBridge).syncNow() : s.unity.syncNow());
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
 
   /** Applies operations as given (for "Apply again" and plugins). */
   app.post<{ Body: { path?: string; graph?: string; ops?: unknown[] } }>(`${base}/apply`, async (req, reply) => {
@@ -252,6 +258,12 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       if (!project) return reply.code(409).send({ error: "Open the project in Unreal once (with the KesherAI Bridge plugin) so KesherAI knows it; after that it works with Unreal closed." });
       await ub.enqueue({ project, path, graph, ops, request: "Changed on the Blueprint page" });
       ub.scheduleSync();
+      return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
+    }
+    // Unity closed: the same, synced in one batch Unity run (not one boot per change).
+    if (kind === "unity" && s.unity.canQueue && !(await s.unity.editorReady())) {
+      await s.unity.enqueue({ project: s.unity.activeProject!, path, graph, ops, request: "Changed on the Visual Scripting page" });
+      s.unity.scheduleSync();
       return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
     }
     try {

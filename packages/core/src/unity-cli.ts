@@ -1,8 +1,37 @@
 import { execFileSync, spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { appendFile, writeFile as writeText } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { engineChangedAt, nodeSig, sortForSync, unityAssetFile, type ClashChoice, type SyncReport } from "./game-sync.js";
+import type { BlueprintJson, QueuedEdit } from "./unreal-bridge.js";
+
+/** The file a graph's saved copy is kept in. */
+const graphFile = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
+
+/**
+ * Whether two folders are the same project folder (case-insensitive on Windows).
+ *
+ * @param a - One folder.
+ * @param b - The other.
+ */
+export const sameFolder = (a: string, b: string): boolean => (process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
+
+/** Reads a JSON file, or undefined when it is missing or broken. */
+function readJsonFile<T>(file: string): T | undefined {
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Writes a JSON file, making its folder first. */
+function writeJsonFile(file: string, value: unknown): void {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(value));
+}
 
 /**
  * Unity through its own CLI (`unity`, from unity.com) and the project's
@@ -233,6 +262,7 @@ export class UnityCli {
     private readonly config: UnityConfig,
     private readonly save: () => Promise<void>,
     private readonly run: CliRunner = realRunner,
+    private readonly dataDir?: string,
   ) {}
 
   /** The project folder the page shows (for the chat's Unity tools). */
@@ -349,8 +379,8 @@ export class UnityCli {
   }
 
   /** Whether an editor has the project open and ready (checked at most every 4 seconds). */
-  async editorReady(): Promise<boolean> {
-    const path = this.path;
+  async editorReady(folder?: string): Promise<boolean> {
+    const path = folder ?? this.path;
     if (!path) return false;
     if (this.statusCache && this.statusCache.project === path && Date.now() - this.statusCache.at < 4000) return this.statusCache.ready;
     const r = await this.run(["status", "--project-path", path, "--format", "json"], 15_000);
@@ -379,11 +409,15 @@ export class UnityCli {
    * @throws Error when no project was added, the CLI is missing, or the command fails.
    */
   async request<T = unknown>(cmd: string, args: Record<string, unknown> = {}, timeoutMs = 60_000): Promise<T> {
-    const path = this.path;
+    return this.requestIn(this.path, cmd, args, timeoutMs);
+  }
+
+  /** {@link request} in a given project folder (a sync of a project that is not the one shown). */
+  private async requestIn<T = unknown>(path: string | undefined, cmd: string, args: Record<string, unknown> = {}, timeoutMs = 60_000): Promise<T> {
     if (!path) throw new Error("Add a Unity project first.");
     const name = `kesher_${cmd === "compile" ? "check" : cmd}`;
     const flags = Object.entries(args).flatMap(([k, v]) => (v === undefined || v === "" ? [] : [`--${k}`, typeof v === "string" ? v : JSON.stringify(v)]));
-    const warm = await this.editorReady();
+    const warm = await this.editorReady(path);
     const run = warm
       ? await this.run(["command", name, ...flags, "--project-path", path, "--result-only", "--timeout", String(Math.ceil(timeoutMs / 1000))], timeoutMs + 5000)
       : await this.run(["run", path, "--command", name, "--format", "ndjson", "--", ...flags], Math.max(timeoutMs, 600_000));
@@ -411,20 +445,57 @@ export class UnityCli {
     }
   }
 
-  /** @returns The project's graphs. */
-  async list(): Promise<{ blueprints: Array<{ path: string; name: string; parent?: string }>; offline: boolean; project?: string }> {
+  /**
+   * The project's graphs. With Unity closed, the list saved the last time it was read opens at once (no batch Unity
+   * boot); `fresh` reads it again anyway.
+   *
+   * @param fresh - Read from Unity even when a saved list exists.
+   */
+  async list(fresh = false): Promise<{ blueprints: Array<{ path: string; name: string; parent?: string }>; offline: boolean; project?: string; savedAt?: string }> {
     const project = await this.project();
-    if (!project) return { blueprints: [], offline: true };
+    const folder = this.path;
+    if (!project || !folder) return { blueprints: [], offline: true };
+    const file = this.cacheDir(folder) && join(this.cacheDir(folder)!, "list.json");
+    const warm = await this.editorReady();
+    if (!warm && !fresh && file) {
+      const saved = readJsonFile<{ blueprints: Array<{ path: string; name: string; parent?: string }>; savedAt: string }>(file);
+      if (saved) return { blueprints: saved.blueprints, offline: true, project, savedAt: saved.savedAt };
+    }
     const r = await this.request<{ blueprints: Array<{ path: string; name: string; parent?: string }> }>("list");
-    return { blueprints: [...r.blueprints].sort((a, b) => a.name.localeCompare(b.name)), offline: !this.connected, project };
+    const blueprints = [...r.blueprints].sort((a, b) => a.name.localeCompare(b.name));
+    const savedAt = new Date().toISOString();
+    if (file) writeJsonFile(file, { blueprints, savedAt });
+    return { blueprints, offline: !this.connected, project, savedAt };
   }
 
   /**
+   * One graph. Every graph read is saved here (like Unreal's saved Blueprints), so with Unity closed the Visual
+   * Scripting page opens it at once as an offline copy, unless Unity saved its file after the copy was made (then it
+   * is read again in a batch Unity).
+   *
    * @param path - Where the graph lives.
-   * @returns The graph.
+   * @returns The graph, whether it came without the open editor, and when the copy was read from Unity.
    */
-  async graph(path: string): Promise<{ graph: import("./unreal-bridge.js").BlueprintJson; offline: boolean }> {
-    return { graph: await this.request("graph", { path }), offline: !this.connected };
+  async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string; cached?: boolean }> {
+    const folder = this.path;
+    const file = folder && this.cacheDir(folder) ? join(this.cacheDir(folder)!, "graphs", graphFile(path)) : undefined;
+    const warm = await this.editorReady();
+    if (!warm && file && folder) {
+      const saved = readJsonFile<{ graph: BlueprintJson; savedAt: string }>(file);
+      const changed = saved ? await engineChangedAt({ baseAt: saved.savedAt } as QueuedEdit, unityAssetFile(folder, path)) : undefined;
+      if (saved && !changed) return { graph: saved.graph, offline: true, savedAt: saved.savedAt, cached: true };
+    }
+    const graph = await this.request<BlueprintJson>("graph", { path });
+    const savedAt = new Date().toISOString();
+    if (file) writeJsonFile(file, { graph, savedAt });
+    return { graph, offline: !warm, savedAt };
+  }
+
+  /** Where saved graphs of a project are kept (undefined without a data folder: tests, nothing saved). */
+  private cacheDir(folder: string): string | undefined {
+    if (!this.dataDir) return undefined;
+    const id = createHash("sha256").update(process.platform === "win32" ? resolve(folder).toLowerCase() : resolve(folder)).digest("hex").slice(0, 12);
+    return join(this.dataDir, `${basename(folder).replace(/[^\w.-]+/g, "_").slice(0, 60)}-${id}`);
   }
 
   /** Which of the packages the chat needs the project has: Unity's Pipeline (the CLI talks to the Editor through it) and KesherAI's bridge (graphs). */
@@ -438,36 +509,195 @@ export class UnityCli {
   }
 
   /** The page's status. */
-  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; reloading?: boolean; active?: string; packages?: { pipeline: boolean; bridge: boolean } }> {
+  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; offline?: boolean; cli: boolean; reloading?: boolean; active?: string; packages?: { pipeline: boolean; bridge: boolean } }> {
     if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) this.cliCache = { at: Date.now(), found: (await this.run(["--version"], 10_000)).code === 0 };
     const found = this.cliCache.found;
     const ready = found ? await this.editorReady() : false;
     const path = this.path;
+    const waiting = path ? (await this.queue()).filter((q) => sameFolder(q.project, path)) : [];
+    const queuedHere = waiting.length;
+    // Unity just opened with changes waiting: they go in now (like Unreal applying its queue when the editor connects).
+    if (ready && path && waiting.some((q) => !q.clash && q.decision !== "skip") && !this.syncing.has(path)) this.scheduleSync(path, 1000);
     return {
       connected: ready,
       ...(ready && path ? { editor: { project: basename(path), engine: "", bridge: "" } } : {}),
       projects: this.config.projects,
-      queued: 0,
+      queued: path ? queuedHere : 0,
+      // Changes made with Unity closed wait in KesherAI's queue and sync in one batch run (offline editing).
+      ...(this.dataDir ? { offline: true } : {}),
       cli: found,
       ...(this.reloading ? { reloading: true } : {}),
       ...(path ? { active: path, packages: this.packagesOf(path) } : {}),
     };
   }
 
-  // Unity changes run at once (in the open editor or a batch one): nothing waits.
-  /** @returns Nothing (no queue with the CLI). */
-  async queue(): Promise<[]> {
-    return [];
+  // With Unity open, changes run at once in it. With Unity closed they wait here and sync together in one batch
+  // Unity run, a few seconds after the last one (RESEARCH_LOG "Gap list: engine work without the engine open", step 2).
+
+  /** @returns Changes waiting for Unity (all projects; `project` is the project folder). */
+  async queue(): Promise<QueuedEdit[]> {
+    return (this.dataDir && readJsonFile<QueuedEdit[]>(join(this.dataDir, "queue.json"))) || [];
   }
 
-  /** @returns false (no queue with the CLI). */
-  async unqueue(): Promise<boolean> {
-    return false;
+  private writeQueue(q: QueuedEdit[]): void {
+    if (this.dataDir) writeJsonFile(join(this.dataDir, "queue.json"), q);
   }
 
-  /** @returns Never: the CLI runs changes at once. */
-  async enqueue(): Promise<never> {
-    throw new Error("Unity changes run at once through the CLI.");
+  /**
+   * Removes a waiting change.
+   *
+   * @param id - Its id.
+   * @returns Whether it was there.
+   */
+  async unqueue(id: string): Promise<boolean> {
+    const q = await this.queue();
+    const left = q.filter((x) => x.id !== id);
+    this.writeQueue(left);
+    return left.length !== q.length;
+  }
+
+  /** Whether changes can wait for Unity here (a data folder and a project). */
+  get canQueue(): boolean {
+    return !!this.dataDir && !!this.path;
+  }
+
+  /**
+   * Keeps a change made with Unity closed, with the saved copy it was made on (for the clash check).
+   *
+   * @param edit - The change; `project` is the project folder.
+   * @returns It, with its id.
+   */
+  async enqueue(edit: Omit<QueuedEdit, "id" | "at">): Promise<QueuedEdit> {
+    if (!this.dataDir) throw new Error("Unity changes run at once through the CLI.");
+    const dir = this.cacheDir(edit.project);
+    const saved = dir ? readJsonFile<{ graph: BlueprintJson; savedAt: string }>(join(dir, "graphs", graphFile(edit.path))) : undefined;
+    const item: QueuedEdit = { ...(saved ? { baseAt: saved.savedAt, baseSig: nodeSig(saved.graph) } : {}), ...edit, id: randomUUID(), at: new Date().toISOString() };
+    const q = await this.queue();
+    q.push(item);
+    this.writeQueue(q);
+    return item;
+  }
+
+  /** Where each project's sync stands (by folder), for the pages. */
+  readonly syncState = new Map<string, { running: boolean; lastAt?: string; lastError?: string }>();
+  private readonly syncing = new Map<string, Promise<{ applied: number; failed: number }>>();
+  private readonly syncTimers = new Map<string, NodeJS.Timeout>();
+  /** Called when a sync ends (the Game projects page notifies on a failure or a clash). */
+  onSync?: (r: SyncReport) => void;
+
+  /**
+   * Syncs a project's waiting changes a moment after the last one.
+   *
+   * @param folder - The project folder (default: the one shown).
+   * @param delayMs - Quiet time first.
+   */
+  scheduleSync(folder = this.path, delayMs = 8000): void {
+    if (!folder) return;
+    clearTimeout(this.syncTimers.get(folder));
+    const t = setTimeout(() => {
+      this.syncTimers.delete(folder);
+      void this.syncNow(folder).catch(() => undefined);
+    }, delayMs);
+    t.unref?.();
+    this.syncTimers.set(folder, t);
+  }
+
+  /**
+   * Applies a project's waiting changes now, all in one Unity run (`kesher_batch`, package 0.2.10+; an older package
+   * gets one run per change). Changes that clash with an edit saved in Unity are held for Roee's choice.
+   *
+   * @param folder - The project folder (default: the one shown).
+   * @returns How many went in and how many failed (those stay waiting).
+   */
+  async syncNow(folder = this.path): Promise<{ applied: number; failed: number }> {
+    if (!folder) throw new Error("Add a Unity project first.");
+    const running = this.syncing.get(folder);
+    if (running) return running;
+    let clashes = 0;
+    const job = (async () => {
+      this.syncState.set(folder, { running: true, ...(this.syncState.get(folder)?.lastAt ? { lastAt: this.syncState.get(folder)!.lastAt } : {}) });
+      const all = await this.queue();
+      const { apply, newClashes } = await sortForSync(all.filter((q) => sameFolder(q.project, folder)), (q) => unityAssetFile(folder, q.path));
+      clashes = newClashes.length;
+      if (clashes) this.writeQueue(all);
+      if (!apply.length) return { applied: 0, failed: 0 };
+      const paths = [...new Set(apply.map((q) => q.path))];
+      const commands = [
+        ...apply.map((q) => ({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops })),
+        ...paths.map((path) => ({ cmd: "save", path })),
+        ...paths.map((path) => ({ cmd: "graph", path })),
+      ];
+      const answers = await this.batch(folder, commands);
+      let applied = 0;
+      let failed = 0;
+      for (let i = 0; i < apply.length; i++) {
+        if (answers[i]?.ok) {
+          applied++;
+          await this.unqueue(apply[i]!.id);
+        } else failed++;
+      }
+      // The graphs read at the end are the new saved copies.
+      const dir = this.cacheDir(folder);
+      for (let i = 0; i < paths.length; i++) {
+        const a = answers[commands.length - paths.length + i];
+        if (dir && a?.ok && a.result) writeJsonFile(join(dir, "graphs", graphFile(paths[i]!)), { graph: a.result, savedAt: new Date().toISOString() });
+      }
+      return { applied, failed };
+    })().then((r) => {
+      const lastError = r.failed ? `${r.failed} change(s) could not be applied; they stay waiting.` : undefined;
+      this.syncState.set(folder, { running: false, lastAt: new Date().toISOString(), ...(lastError ? { lastError } : {}) });
+      if (r.applied || r.failed || clashes) this.onSync?.({ engine: "unity", project: folder, ...r, clashes, ...(lastError ? { error: lastError } : {}) });
+      return r;
+    }, (e: Error) => {
+      this.syncState.set(folder, { running: false, lastAt: new Date().toISOString(), lastError: e.message });
+      this.onSync?.({ engine: "unity", project: folder, applied: 0, failed: 0, clashes, error: e.message });
+      throw e;
+    }).finally(() => this.syncing.delete(folder));
+    this.syncing.set(folder, job);
+    return job;
+  }
+
+  /**
+   * Runs graph commands in one Unity run (the open editor, or one batch Unity) through a file, so a long list of
+   * changes never meets the command line's length limit. An older package without kesher_batch: one run each.
+   */
+  private async batch(folder: string, commands: Array<Record<string, unknown>>): Promise<Array<{ ok: boolean; result?: unknown; error?: string }>> {
+    const file = join(this.dataDir!, `batch-${randomUUID()}.json`);
+    writeJsonFile(file, commands);
+    try {
+      const r = await this.requestIn<{ answers: Array<{ ok: boolean; result?: unknown; error?: string }> }>(folder, "batch", { file }, 20 * 60_000);
+      return Array.isArray(r.answers) ? r.answers : [];
+    } catch (err) {
+      if (!/kesher_batch|Unknown command|not found/i.test((err as Error).message)) throw err;
+      const out: Array<{ ok: boolean; result?: unknown; error?: string }> = [];
+      for (const c of commands) {
+        const { cmd, ...args } = c;
+        const a = cmd === "apply" ? { ...args, ops: JSON.stringify(args.ops) } : args;
+        out.push(await this.requestIn(folder, String(cmd), a, 10 * 60_000).then((result) => ({ ok: true, result }), (e: Error) => ({ ok: false, error: e.message })));
+      }
+      return out;
+    } finally {
+      rmSync(file, { force: true });
+    }
+  }
+
+  /**
+   * Roee's choice for a waiting change that clashes with an edit saved in Unity: "mine" applies it anyway (synced now),
+   * "engine" drops it (Unity's version stays), "skip" leaves it waiting without syncing it.
+   *
+   * @param id - The waiting change.
+   * @param choice - The choice.
+   * @returns Whether the change was there.
+   */
+  async decide(id: string, choice: ClashChoice): Promise<boolean> {
+    const all = await this.queue();
+    const q = all.find((x) => x.id === id);
+    if (!q) return false;
+    if (choice === "engine") return this.unqueue(id);
+    q.decision = choice;
+    this.writeQueue(all);
+    if (choice === "mine") this.scheduleSync(q.project, 500);
+    return true;
   }
 
   private createJob?: { name: string; path: string; state: "running" | "done" | "failed"; message?: string; startedAt: number };

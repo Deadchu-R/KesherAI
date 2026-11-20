@@ -84,6 +84,7 @@ const IdeasPage = lazy(() => import("./pages/IdeasPage").then((m) => ({ default:
 const BankPage = lazy(() => import("./pages/BankPage").then((m) => ({ default: m.BankPage })));
 const ChatReportsPage = lazy(() => import("./pages/ChatReportsPage").then((m) => ({ default: m.ChatReportsPage })));
 const GodotPage = lazy(() => import("./pages/GodotPage").then((m) => ({ default: m.GodotPage })));
+const GamesPage = lazy(() => import("./pages/GamesPage").then((m) => ({ default: m.GamesPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
@@ -322,6 +323,7 @@ export function App() {
   else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
   else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/godot") page = <GodotPage />;
+  else if (hash.split("?")[0] === "#/games") page = <GamesPage key="games" sync={/[?&]sync=1/.test(hash)} />;
   else if (hash === "#/stremio") page = <StremioPage />;
   else if (hash === "#/chat-reports") page = <ChatReportsPage />;
   else if (hash === "#/bank") page = <BankPage />;
