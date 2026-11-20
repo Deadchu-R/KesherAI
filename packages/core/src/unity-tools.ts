@@ -127,7 +127,7 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
   };
   // C# in the open Editor through the Pipeline's script eval; its returned text comes back.
   const evalCs = async (code: string): Promise<string> => {
-    const r = await unity.cliRaw(["command", "script", "eval", ...at(), "--result-only", "--timeout", "60", "--", code], 90_000);
+    const r = await unity.cliRawReady(["command", "script", "eval", ...at(), "--result-only", "--timeout", "60", "--", code], 90_000);
     if (r.code !== 0) return `Unity did not run it: ${unity.explain(r)} (is the Editor open and ready? unity_status)`;
     const v = readResult(r.stdout);
     // script eval answers {output, diagnostics, success, result}: the model needs the result (or the errors).
@@ -528,7 +528,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         }
         const secs = Math.min(600, Math.max(5, Number(input.timeoutSeconds ?? 60) || 60));
         // Unity's own flags first; the command's flags after "--", so a parameter named like a CLI flag is not swallowed.
-        const out = await unity.cli(["command", ...command.split(" "), ...at(), "--result-only", "--timeout", String(secs), ...(flags.length ? ["--", ...flags] : [])], (secs + 10) * 1000);
+        const out = await unity.cliReady(["command", ...command.split(" "), ...at(), "--result-only", "--timeout", String(secs), ...(flags.length ? ["--", ...flags] : [])], (secs + 10) * 1000);
         return { output: cut(out || "Done.") };
       },
     },
@@ -544,7 +544,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         need();
         const code = String(input.code ?? "");
         if (!code.trim() || code.length > 20_000) return { output: "Give C# code (under 20,000 characters)." };
-        return { output: cut((await unity.cli(["command", "script", "eval", ...at(), "--result-only", "--", code], 90_000)) || "Done.") };
+        return { output: cut((await unity.cliReady(["command", "script", "eval", ...at(), "--result-only", "--", code], 90_000)) || "Done.") };
       },
     },
     {
@@ -573,7 +573,7 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
         const view = input.view === "scene" ? "scene" : "game";
         const file = join(outputsDir, `unity-${view}-${Date.now()}.png`);
         // Pipeline 0.10+: `capture screenshot --view game|scene --output-path <file>`; older: --output (game) / scene_view --save_path.
-        const r = await unity.cliRaw(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--view", view, "--output-path", file], 60_000);
+        const r = await unity.cliRawReady(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--view", view, "--output-path", file], 60_000);
         if (r.code !== 0 || !existsSync(file)) {
           if (view === "game") await unity.cli(["command", "capture", "screenshot", ...at(), "--result-only", "--", "--output", file], 60_000);
           else {

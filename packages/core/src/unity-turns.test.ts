@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UnityCli, type CliRunner } from "./unity-cli.js";
+import { UnityCli, isReloading, type CliRunner } from "./unity-cli.js";
 import { unityTools } from "./unity-tools.js";
 import { compileErrors, turnTitle, unityTurns } from "./unity-turns.js";
 
@@ -127,4 +127,46 @@ test("Unity compile-fix loop: two automatic fixes per script per turn, then stop
   assert.match(await go(), /Compiled with no errors/);
   compiles = false;
   assert.match(await go(), /fix 1 of 2/);
+});
+
+test("Unity domain reload: a command that lands while the Editor reloads waits for it and runs once more", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-unity-reload-"));
+  const project = join(root, "Game");
+  await mkdir(join(project, "Assets"), { recursive: true });
+  const calls: string[] = [];
+  let busy = 2; // the next two commands land during a reload
+  const waits: number[] = [];
+  const run: CliRunner = async (args) => {
+    calls.push(args.slice(0, 2).join(" "));
+    if (args[0] === "--version") return { code: 0, stdout: "1.0", stderr: "" };
+    if (args[0] === "status") return waits.length < 3 ? { code: 17, stdout: '{"success":false,"errors":[{"code":"UNAVAILABLE"}]}', stderr: "" } : { code: 0, stdout: '{"success":true}', stderr: "" };
+    if (busy-- > 0) return { code: 17, stdout: '{"success":false,"errors":[{"code":"UNAVAILABLE","message":"The Editor is compiling"}]}', stderr: "" };
+    return { code: 0, stdout: '"Done"', stderr: "" };
+  };
+  const unity = new UnityCli({ projects: [project], active: project }, async () => undefined, run);
+  let seenReloading = false;
+  unity.sleep = async (ms) => {
+    waits.push(ms);
+    seenReloading ||= unity.reloading && (await unity.status()).reloading === true;
+  };
+  const tools = Object.fromEntries(unityTools(unity, join(root, "out"), async () => "a").map((t) => [t.spec.name, t]));
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+
+  // The first try is refused (busy), status is checked until ready, then one more try (refused again: reported).
+  await assert.rejects(tools.unity_command!.run({ command: "editor.selection set" }, ctx), /compiling/);
+  assert.ok(seenReloading, "the chip's status says reloading meanwhile");
+  assert.equal(unity.reloading, false);
+  assert.deepEqual(waits, [1000, 2000, 4000]);
+  // The next command works at once.
+  assert.match((await tools.unity_script_eval!.run({ code: "return 1;" }, ctx)).output, /Done/);
+  // A closed Editor is not a reload: no waiting.
+  waits.length = 0;
+  const closed = new UnityCli({ projects: [project], active: project }, async () => undefined, async () => ({ code: 12, stdout: "", stderr: "No running Editor" }));
+  closed.sleep = async (ms) => void waits.push(ms);
+  assert.equal((await closed.cliRawReady(["command", "x"], 1000)).code, 12);
+  assert.deepEqual(waits, []);
+  assert.equal(isReloading({ code: 102, stdout: "", stderr: "" }), true);
+  assert.equal(isReloading({ code: 6, stdout: "EDITOR_NOT_READY", stderr: "" }), true);
+  assert.equal(isReloading({ code: 6, stdout: "error CS1002", stderr: "" }), false);
+  assert.equal(calls.filter((c) => c === "command editor.selection").length, 2);
 });

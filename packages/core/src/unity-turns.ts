@@ -77,7 +77,7 @@ export class UnityTurns {
 
   /** Runs C# in the open Editor; undefined when it did not answer (closed, reloading). */
   private async eval(project: string, code: string): Promise<string | undefined> {
-    const r = await this.unity.cliRaw(["command", "script", "eval", "--project-path", project, "--result-only", "--timeout", "30", "--", code], 45_000).catch(() => undefined);
+    const r = await this.unity.cliRawReady(["command", "script", "eval", "--project-path", project, "--result-only", "--timeout", "30", "--", code], 45_000).catch(() => undefined);
     if (!r || r.code !== 0) return undefined;
     return r.stdout.trim().replace(/^"|"$/g, "");
   }

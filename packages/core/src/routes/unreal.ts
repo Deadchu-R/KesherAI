@@ -471,6 +471,8 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(400).send({ error: (err as Error).message });
       }
     });
+    /** Whether a chat's Unity command waits for the Editor to finish reloading (memory only: the chip asks often). */
+    app.get(`${base}/reloading`, async () => ({ reloading: unity.reloading }));
     /** Unity's CLI with no project needed: its version, the editors installed, and a project being made. */
     app.get(`${base}/cli`, async () => unity.cliInfo());
     /** Makes a new project with Unity's CLI (in the background). Only on this computer. */

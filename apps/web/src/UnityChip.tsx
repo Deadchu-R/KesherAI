@@ -27,6 +27,20 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
   useEffect(() => {
     if (open) load();
   }, [open]);
+  // "Unity is reloading…" while a chat's command waits for the Editor (a cheap in-memory check, every 3 s while shown).
+  const [reloading, setReloading] = useState(false);
+  useEffect(() => {
+    if (!st?.cli) return;
+    const check = () => {
+      if (document.hidden) return;
+      void api<{ reloading: boolean }>("/api/unity/reloading").then((r) => setReloading((was) => {
+        if (was && !r.reloading) load();
+        return r.reloading;
+      }), () => undefined);
+    };
+    const t = setInterval(check, 3000);
+    return () => clearInterval(t);
+  }, [st?.cli]);
   if (!st?.cli) return null;
   const choose = (project: string) =>
     void api("/api/unity/project", { method: "PUT", body: { project } }).then(() => {
@@ -46,9 +60,9 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
       title={L("פרויקט ה-Unity של הצ'אט", "The chat's Unity project")}
       open={open}
       onOpenChange={setOpen}
-      trigger={<><span className={`where-dot ${st.connected ? "local" : ""}`} aria-hidden="true" />🕹 {active ? base(active) : L("Unity: בחר פרויקט", "Unity: choose a project")}{st.packages && !st.packages.pipeline ? " ⚠" : ""}</>}
+      trigger={<><span className={`where-dot ${st.connected ? "local" : ""}`} aria-hidden="true" />🕹 {reloading ? L("Unity טוען מחדש…", "Unity is reloading…") : active ? base(active) : L("Unity: בחר פרויקט", "Unity: choose a project")}{st.packages && !st.packages.pipeline ? " ⚠" : ""}</>}
     >
-      <MenuLabel end={<span className="muted small">{st.connected ? L("🟢 העורך פתוח", "🟢 Editor open") : L("העורך סגור", "Editor closed")}</span>}>{L("פרויקט Unity לצ'אט", "Unity project for the chat")}</MenuLabel>
+      <MenuLabel end={<span className="muted small" aria-live="polite">{reloading ? L("⏳ Unity טוען מחדש…", "⏳ Unity is reloading…") : st.connected ? L("🟢 העורך פתוח", "🟢 Editor open") : L("העורך סגור", "Editor closed")}</span>}>{L("פרויקט Unity לצ'אט", "Unity project for the chat")}</MenuLabel>
       {st.projects.map((p) => (
         <MenuItem key={p} kind="radio" checked={p === active} dir="ltr" title={p} keepOpen onSelect={() => choose(p)}>{base(p)}</MenuItem>
       ))}

@@ -150,6 +150,21 @@ export function readResult(stdout: string): unknown {
   return unwrap(data.result ?? data.value ?? data);
 }
 
+/** The waits between `unity status` checks while the Editor reloads (about a minute in all). */
+const RELOAD_WAITS = [1000, 2000, 4000, 8000, 15_000, 15_000, 15_000];
+
+/**
+ * Whether a failed Editor command means "busy, try again": the Editor was reloading its scripts, compiling or
+ * starting (the CLI's exit 17 UNAVAILABLE, a streamed command's 102, or EDITOR_NOT_READY).
+ *
+ * @param r - The run.
+ */
+export function isReloading(r: CliRun): boolean {
+  if (r.code === 0) return false;
+  if (r.code === 17 || r.code === 102) return true;
+  return /EDITOR_NOT_READY|"UNAVAILABLE"|domain reload|is (re)?loading|is compiling|reloading (its )?(scripts|assemblies|the domain)/i.test(`${r.stdout}\n${r.stderr}`);
+}
+
 /** An error from the CLI's JSON envelope, in plain words. */
 function failure(run: CliRun): Error {
   if (run.stderr === "ENOENT") return new Error("Unity's CLI is not installed. Install it once (Windows PowerShell: irm https://unity.com/install.ps1 | iex), then try again.");
@@ -262,6 +277,47 @@ export class UnityCli {
     if (r.stderr === "ENOENT") throw failure(r);
     this.statusCache = undefined;
     return r;
+  }
+
+  /** Whether a command is waiting for the Editor to finish a reload or compile (the chip says so). */
+  reloading = false;
+  /** Waits between checks while the Editor reloads (replaced in tests). */
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * Runs an Editor command; when it lands while the Editor reloads its scripts or compiles (exit 17 or 102,
+   * EDITOR_NOT_READY), waits for `unity status` to say it is ready (checks after 1, 2, 4, 8, 15, 15, 15 s: about a
+   * minute) and runs it once more, instead of failing.
+   *
+   * @param args - The CLI's arguments (never a shell).
+   * @param timeoutMs - For each run.
+   */
+  async cliRawReady(args: string[], timeoutMs: number): Promise<CliRun> {
+    const first = await this.cliRaw(args, timeoutMs);
+    const path = this.path;
+    if (!isReloading(first) || !path) return first;
+    this.reloading = true;
+    try {
+      for (const wait of RELOAD_WAITS) {
+        await this.sleep(wait);
+        const st = await this.run(["status", "--project-path", path, "--format", "json"], 15_000).catch(() => undefined);
+        if (st?.code === 0 && /"success"\s*:\s*true/.test(st.stdout)) break;
+      }
+    } finally {
+      this.reloading = false;
+    }
+    return this.cliRaw(args, timeoutMs);
+  }
+
+  /**
+   * {@link cliRawReady} that returns the output, like {@link cli}.
+   *
+   * @throws Error in plain words when it fails.
+   */
+  async cliReady(args: string[], timeoutMs: number): Promise<string> {
+    const r = await this.cliRawReady(args, timeoutMs);
+    if (r.code !== 0) throw failure(r);
+    return r.stdout;
   }
 
   /** The CLI's plain-words error for a failed run. */
@@ -382,7 +438,7 @@ export class UnityCli {
   }
 
   /** The page's status. */
-  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; active?: string; packages?: { pipeline: boolean; bridge: boolean } }> {
+  async status(): Promise<{ connected: boolean; editor?: { project: string; engine: string; bridge: string }; projects: string[]; queued: number; cli: boolean; reloading?: boolean; active?: string; packages?: { pipeline: boolean; bridge: boolean } }> {
     if (!this.cliCache || Date.now() - this.cliCache.at > 60_000) this.cliCache = { at: Date.now(), found: (await this.run(["--version"], 10_000)).code === 0 };
     const found = this.cliCache.found;
     const ready = found ? await this.editorReady() : false;
@@ -393,6 +449,7 @@ export class UnityCli {
       projects: this.config.projects,
       queued: 0,
       cli: found,
+      ...(this.reloading ? { reloading: true } : {}),
       ...(path ? { active: path, packages: this.packagesOf(path) } : {}),
     };
   }
