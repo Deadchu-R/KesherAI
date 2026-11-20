@@ -47,7 +47,7 @@ export interface AgentDef {
 }
 
 /** Steps per built-in type (the research plan, step 1). */
-export const HELPER_STEPS: Record<Exclude<HelperKind, "external">, number> = { lookup: 8, research: 20, build: 30 };
+export const HELPER_STEPS: Record<Exclude<HelperKind, "external">, number> = { lookup: 8, research: 20, build: 30, operate: 25 };
 
 /**
  * The built-in helpers. Their models come from Settings > Helpers (`pickHelperModel`), not from here.
@@ -58,7 +58,8 @@ export function builtinHelpers(steps: Partial<Record<Exclude<HelperKind, "extern
   return [
     { name: "lookup", kind: "lookup", source: "builtin", tier: "auto", maxTurns: steps.lookup ?? HELPER_STEPS.lookup, description: "Find where something is in the project, read files and quote them, list matches. Read only. Fast and small.", instructions: "You look things up. Search and read only what the task needs, then report exact paths, line numbers, names and short quotes." },
     { name: "research", kind: "research", source: "builtin", tier: "auto", maxTurns: steps.research ?? HELPER_STEPS.research, description: "Read code and the web on one question and summarise it with sources. Read only.", instructions: "You research one question. Read the code and the web as needed. Report what you found with its sources (paths or links), what it means for the task, and what stays unclear." },
-    { name: "build", kind: "build", source: "builtin", tier: "auto", write: true, maxTurns: steps.build ?? HELPER_STEPS.build, description: "Make one change in its own copy of the project (a git worktree); the change comes back as a diff to review. Only in a code chat on a git project.", instructions: "You build one change. Read what you need, make the change with write_file and edit_file, keep it small and in the style of the code around it, then report what you changed and why." },
+    { name: "build", kind: "build", source: "builtin", tier: "auto", write: true, maxTurns: steps.build ?? HELPER_STEPS.build, description: "Make one change in its own copy of the project (a git worktree) and run the project's tests there; the change comes back as a diff to review, with the test result. Only in a code chat on a git project.", instructions: "You build one change. Read what you need, make the change with write_file and edit_file, keep it small and in the style of the code around it, run the project's checks with run_tests, then report what you changed, why, and whether the checks passed." },
+    { name: "operate", kind: "operate", source: "builtin", tier: "auto", maxTurns: steps.operate ?? HELPER_STEPS.operate, description: "Do one task in the user's browser or on the computer: open pages, click, type, control an app. Every action that changes something waits for the user's approval on a card that names it.", instructions: "You operate the browser and the computer for one task. Look first (read the page or take a screenshot), then act one step at a time; each click, typing or opened page waits for the user's approval. Never type passwords, keys or payment details: ask the assistant to have the user do that. Report what you did, what you saw, and anything left for the user." },
   ];
 }
 

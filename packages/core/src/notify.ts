@@ -223,7 +223,8 @@ export class Notifier {
         const what = approval ? (s.includeText && e.preview ? `${e.name}: ${e.preview.replace(/\s+/g, " ").slice(0, 160)}` : e.name) : "";
         void this.send({
           title: `Waiting for you: ${title()}`,
-          body: approval ? `The agent needs your approval to go on (${what}).` : "The agent asked you a question.",
+          // A sub-agent's step names it (its own "waits for you" note is not sent for an approval: onHelperAsk).
+          body: approval ? `${e.helper ? `The sub-agent "${e.helper.title}"` : "The agent"} needs your approval to go on (${what}).` : "The agent asked you a question.",
           // The chat itself: its card shows the whole step, in context (as Remote Control and Happy do).
           path: `#/c/${convId}`,
           ref: convId,
@@ -284,7 +285,8 @@ export class Notifier {
    */
   onHelperAsk(run: HelperRunInfo & { chatId: string }, chatTitle: string): void {
     const s = this.settings();
-    if (s.agents === false || !s.waiting || this.helperAsks.has(run.id)) return;
+    // An approval of one of its steps is in its chat, and that chat's own note (with Approve / Deny) is sent for it.
+    if (s.agents === false || !s.waiting || this.helperAsks.has(run.id) || run.approval) return;
     const t = setTimeout(() => {
       this.helperAsks.set(run.id, true);
       const he = isHebrew(`${chatTitle} ${run.title}`);

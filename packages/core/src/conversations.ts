@@ -335,6 +335,25 @@ export class ConversationManager {
       modelFor: ({ kind, agent }) => this.helpers.modelFor(id, kind, agent),
       limits: () => this.helpers.limits(),
       cloudFiles: this.helpers.cloudFiles(id),
+      // A helper's step that changes something: the chat's own approval card (naming the helper), phone and notifications.
+      approve: async (req, signal) => {
+        const session = this.sessions.get(id) ?? (await this.open(id))?.session;
+        if (!session) return { decision: "deny", feedback: "The chat is closed." };
+        return session.relayApproval(req, signal);
+      },
+      // Rules made on helper cards are named `helper:<tool>` (route), so the chat's own rules never cover a helper and back.
+      isAlwaysAllowed: (tool, modelId, command, scope) =>
+        scope?.startsWith("site:")
+          ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
+          : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      onAlwaysScope: (scope) => {
+        if (!scope.startsWith("site:")) return;
+        const list = (this.deps.config.browserSites ??= []);
+        if (!list.includes(scope.slice(5))) {
+          list.push(scope.slice(5));
+          void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
+        }
+      },
     };
     this.delegateOptions.set(id, o);
     return helperToolsFor(o);
@@ -1367,15 +1386,15 @@ export class ConversationManager {
    *
    * @returns Oldest first.
    */
-  pendingApprovals(): Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }> {
-    const out: Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; at: string }> = [];
+  pendingApprovals(): Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; helper?: string; at: string }> {
+    const out: Array<{ conversationId: string; title: string; requestId: string; tool: string; preview: string; reason: string; purpose?: string; helper?: string; at: string }> = [];
     const titles = new Map(this.deps.library.listConversations().map((c) => [c.id, c.title]));
     for (const [id, s] of this.sessions) {
       const pending = new Set(s.info().pendingApprovals);
       if (!pending.size) continue;
       for (const e of s.events) {
         if (e.type !== "approval_request" || !pending.has(e.requestId)) continue;
-        out.push({ conversationId: id, title: titles.get(id) ?? "", requestId: e.requestId, tool: e.name, preview: e.preview.slice(0, 4000), reason: e.reason, ...(e.purpose ? { purpose: e.purpose } : {}), at: e.at });
+        out.push({ conversationId: id, title: titles.get(id) ?? "", requestId: e.requestId, tool: e.name, preview: e.preview.slice(0, 4000), reason: e.reason, ...(e.purpose ? { purpose: e.purpose } : {}), ...(e.helper ? { helper: e.helper.title } : {}), at: e.at });
       }
     }
     return out.sort((a, b) => a.at.localeCompare(b.at));

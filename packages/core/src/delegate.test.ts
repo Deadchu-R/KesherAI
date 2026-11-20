@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentTool, ModelTurn } from "@kesher/agent";
-import { delegateTool, helperTools } from "./delegate.js";
+import { delegateTool, helperTools, roleTools, type HelperApproval } from "./delegate.js";
 
 const tool = (
   name: string,
@@ -270,4 +270,81 @@ test("steer and continue through the lead's tools: a note reaches the helper's n
   assert.ok(last.some((c) => c === "find x"), "it keeps its first task");
   assert.ok(last.some((c) => /continues your task[\s\S]*now look at c\.ts/.test(c)), "and gets the follow-up");
   await assert.rejects(byName("helper_continue").run({ id: "h-nope", text: "x" }, ctx), /No helper/);
+});
+
+test("each role gets its own browser, computer and command tools, with a helper's risk", () => {
+  const all = [
+    tool("read_file", "read"),
+    tool("browser_tabs", "read"),
+    tool("browser_read", "write"),
+    tool("browser_screenshot", "write"),
+    tool("browser_open", "exec"),
+    tool("browser_click", "exec"),
+    tool("computer_use_app", "exec"),
+    tool("computer_screenshot", "read"),
+    tool("computer_click", "read"),
+    tool("run_command", "exec"),
+    tool("generate_image", "exec"),
+    tool("delegate", "safe"),
+  ];
+  const of = (kind: Parameters<typeof roleTools>[0]) => Object.fromEntries(roleTools(kind, all).map((t) => [t.spec.name, t.risk]));
+  assert.deepEqual(of("lookup"), { read_file: "read" });
+  // Research reads pages without asking; opening one asks.
+  assert.deepEqual(of("research"), { read_file: "read", browser_tabs: "read", browser_read: "read", browser_screenshot: "read", browser_open: "exec" });
+  assert.deepEqual(of("build"), { read_file: "read", browser_tabs: "read", browser_read: "read", browser_screenshot: "read", browser_open: "exec", browser_click: "exec", run_command: "exec" });
+  // The operator: looking runs, every computer action asks (the chat's own computer_click is "read" after its app ask).
+  const op = of("operate");
+  assert.equal(op.computer_screenshot, "read");
+  assert.equal(op.computer_click, "exec");
+  assert.equal(op.computer_use_app, "exec");
+  assert.equal(op.run_command, undefined);
+  assert.equal(op.generate_image, undefined);
+  assert.equal(op.delegate, undefined);
+  // The chat's own tools are not changed.
+  assert.equal(all.find((t) => t.spec.name === "computer_click")!.risk, "read");
+});
+
+/** A model that opens a page once, then reports what the tool said. */
+const opener: ModelTurn = async (req) => {
+  const last = req.messages.at(-1);
+  if (last?.role === "user") return { text: "", toolCalls: [{ id: "1", name: "browser_open", arguments: { url: "https://example.com" } }] };
+  return { text: `report: ${typeof last?.content === "string" ? last.content.slice(0, 40) : ""}`, toolCalls: [] };
+};
+
+test("a helper's action waits for the user's approval on a card that names it", async () => {
+  const asked: HelperApproval[] = [];
+  let opened = 0;
+  const open: AgentTool = { ...tool("browser_open", "exec"), run: async () => ((opened++), { output: "page text" }) };
+  const opts = (decision: "allow" | "deny") => ({
+    tools: () => [tool("read_file", "read"), open],
+    currentModel: () => "m",
+    turnFor: () => opener,
+    models: () => ["m"],
+    approve: async (req: HelperApproval) => {
+      asked.push(req);
+      return { decision };
+    },
+  });
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  const r = await delegateTool(opts("allow")).run({ parts: [{ task: "open it", title: "Find prices", type: "operate" }] }, ctx);
+  assert.equal(opened, 1);
+  assert.match(r.output, /report: page text/);
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0]!.name, "browser_open");
+  assert.equal(asked[0]!.helper.title, "Find prices");
+  assert.equal(asked[0]!.helper.kind, "operate");
+  assert.ok(asked[0]!.requestId);
+  // Denied: the tool does not run.
+  await delegateTool(opts("deny")).run({ parts: [{ task: "open it", type: "research" }] }, ctx);
+  assert.equal(opened, 1);
+  assert.equal(asked.length, 2);
+});
+
+test("without a chat to ask, a helper's action is refused", async () => {
+  let opened = 0;
+  const open: AgentTool = { ...tool("browser_open", "exec"), run: async () => ((opened++), { output: "page" }) };
+  const d = delegateTool({ tools: () => [open], currentModel: () => "m", turnFor: () => opener, models: () => ["m"] });
+  const r = await d.run({ parts: [{ task: "open it", type: "operate" }] }, { signal: new AbortController().signal, recordChange: () => undefined });
+  assert.equal(opened, 0);
+  assert.match(r.output, /report: The user denied/);
 });

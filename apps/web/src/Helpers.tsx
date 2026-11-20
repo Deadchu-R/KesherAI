@@ -28,12 +28,31 @@ const KINDS: Record<HelperRunInfo["kind"], { icon: string; he: string; en: strin
   lookup: { icon: "🔎", he: "חיפוש", en: "Lookup" },
   research: { icon: "📚", he: "מחקר", en: "Research" },
   build: { icon: "🛠️", he: "בנייה", en: "Build" },
+  operate: { icon: "🖱️", he: "הפעלה", en: "Operator" },
   external: { icon: "🛰️", he: "חיצוני", en: "Outside" },
 };
 
 /** @returns The type's short name ("מחקר"), or the named agent's. */
 export function helperKindName(r: Pick<HelperRunInfo, "kind" | "agent">): string {
   return r.agent ? `@${r.agent}` : L(KINDS[r.kind].he, KINDS[r.kind].en);
+}
+
+/** The role as a sub-agent's name on an approval card: "סוכן מחקר", "research agent" (a named agent: "@name"). */
+const AGENT_WORD: Record<HelperRunInfo["kind"], [string, string]> = {
+  lookup: ["סוכן חיפוש", "lookup agent"],
+  research: ["סוכן מחקר", "research agent"],
+  build: ["סוכן בנייה", "build agent"],
+  operate: ["סוכן הפעלה", "operator agent"],
+  external: ["סוכן חיצוני", "outside agent"],
+};
+
+/**
+ * @returns The icon and the role of a sub-agent that asks for approval ("סוכן מחקר", "research agent", or "@name").
+ * @param h - Who asks.
+ */
+export function helperAskerName(h: Pick<HelperRunInfo, "kind" | "agent">): { icon: string; role: string } {
+  const w = AGENT_WORD[h.kind] ?? AGENT_WORD.research;
+  return { icon: (KINDS[h.kind] ?? KINDS.research).icon, role: h.agent ? `@${h.agent}` : L(w[0], w[1]) };
 }
 
 /** @returns Whether the run is still going (waiting, asking or running). */

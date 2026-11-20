@@ -189,7 +189,7 @@ export function UsageHeatmap({ byDay }: { byDay: Record<string, number> }) {
  * @param p.h - The totals from `GET /api/usage`.
  */
 function HelperUsageCard({ h }: { h: NonNullable<UsageReport["helpers"]> }) {
-  const roleName: Record<string, [string, string]> = { lookup: ["חיפוש", "lookup"], research: ["מחקר", "research"], build: ["בנייה", "build"], external: ["סוכן חיצוני", "outside agent"] };
+  const roleName: Record<string, [string, string]> = { lookup: ["חיפוש", "lookup"], research: ["מחקר", "research"], build: ["בנייה", "build"], operate: ["הפעלה", "operator"], external: ["סוכן חיצוני", "outside agent"] };
   const roles = Object.entries(h.byRole).sort((a, b) => b[1].tokens - a[1].tokens);
   const models = Object.entries(h.byModel).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...roles.map(([, r]) => r.tokens), ...models.map(([, n]) => n));

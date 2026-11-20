@@ -777,3 +777,24 @@ test("tools go to the model sorted by name, whatever order they were registered 
   assert.ok(sent.length > 3);
   assert.deepEqual(sent, [...sent].sort());
 });
+
+test("relayApproval shows a sub-agent's request in the chat and returns the user's answer", async () => {
+  const { session } = await makeSession([]);
+  const helper = { id: "h-1", title: "Find prices", kind: "operate" as const };
+  const answer = session.relayApproval({ callId: "c", name: "browser_open", input: { url: "https://a.example" }, preview: "Open it", reason: "acts", helper, requestId: "r-1" });
+  const ev = session.events.find((e) => e.type === "approval_request");
+  assert.ok(ev && ev.type === "approval_request" && ev.requestId === "r-1" && ev.helper?.title === "Find prices");
+  assert.deepEqual(session.info().pendingApprovals, ["r-1"]);
+  assert.equal(session.info().status, "waiting");
+  assert.ok(session.approve("r-1", "allow"));
+  assert.deepEqual(await answer, { decision: "allow" });
+  assert.equal(session.info().status, "idle");
+  assert.deepEqual(session.info().pendingApprovals, []);
+  // The sub-agent stopped first: the card closes as expired.
+  const ac = new AbortController();
+  const late = session.relayApproval({ callId: "c2", name: "computer_click", input: {}, preview: "", reason: "acts", helper }, ac.signal);
+  ac.abort();
+  assert.deepEqual(await late, { decision: "expired" });
+  assert.ok(session.events.some((e) => e.type === "approval_result" && e.decision === "expired"));
+  assert.deepEqual(session.info().pendingApprovals, []);
+});

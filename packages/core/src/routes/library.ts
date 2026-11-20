@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
+import { HELPER_RULE } from "../delegate.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { createReadStream, existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -498,8 +499,11 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
         const ev = opened.session.events.find((e) => e.type === "approval_request" && e.requestId === req.params.requestId);
         // A site-scoped request (the browser): "Always" is for that site only, kept by the session in browserSites,
         // never a rule for the whole tool.
-        const tool = ev && ev.type === "approval_request" && !ev.scope ? ev.name : undefined;
-        const scope = req.body.scope ?? "conversation";
+        // A sub-agent's step: its rule is `helper:<tool>` (delegate.ts HELPER_RULE), so allowing a helper's command in
+        // its copy never lets the chat run commands in the user's folder; "for this model" means this chat (its own model).
+        const helper = ev && ev.type === "approval_request" ? ev.helper : undefined;
+        const tool = ev && ev.type === "approval_request" && !ev.scope ? `${helper ? HELPER_RULE : ""}${ev.name}` : undefined;
+        const scope = helper && req.body.scope === "model" ? "conversation" : (req.body.scope ?? "conversation");
         if (tool) {
           const rule = {
             tool,

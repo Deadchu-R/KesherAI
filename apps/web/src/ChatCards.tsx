@@ -9,6 +9,7 @@ import { RichText } from "./RichText";
 import { Select } from "./ui/Select";
 import { durations } from "./settings/PermissionsSection";
 import { McpAppView } from "./McpAppView";
+import { helperAskerName } from "./Helpers";
 
 /*
  * The cards a chat shows between messages: a tool the model ran (with its
@@ -138,6 +139,33 @@ export function reasonText(reason: string): string {
   return reason;
 }
 
+/**
+ * What a sub-agent asks to do, as the end of its card's header ("…asks to open example.com").
+ *
+ * @param name - The tool.
+ * @param input - Its input.
+ */
+export function helperAction(name: string, input: Record<string, unknown>): string {
+  const str = (k: string) => (typeof input[k] === "string" ? String(input[k]).slice(0, 80) : "");
+  switch (name) {
+    case "run_command": return L("להריץ פקודה", "run a command");
+    case "run_tests": return L("להריץ את הבדיקות של הפרויקט בעותק שלו", "run the project's tests in its copy");
+    case "browser_open": return L(`לפתוח את ${str("url")}`, `open ${str("url")}`);
+    case "browser_click": return L("ללחוץ על משהו בדף", "click on a page");
+    case "browser_type": return L("להקליד בדף", "type on a page");
+    case "computer_use_app": return L(`לראות את המסך ולשלוט ב-${str("app")}`, `see the screen and control ${str("app")}`);
+    case "computer_click": return L("ללחוץ על המסך", "click on the screen");
+    case "computer_type": return L("להקליד במחשב", "type on the computer");
+    case "computer_key": return L("ללחוץ על מקשים", "press keys");
+    case "computer_scroll": return L("לגלול במסך", "scroll the screen");
+    case "computer_open_app": return L(`לפתוח את ${str("app") || "האפליקציה"}`, `open ${str("app") || "an app"}`);
+    case "computer_batch": return L("לבצע כמה פעולות במסך", "do several actions on the screen");
+    case "write_file":
+    case "edit_file": return L(`לשנות את ${str("path")}`, `change ${str("path")}`);
+    default: return L(`להשתמש ב-${name}`, `use ${name}`);
+  }
+}
+
 /** The agent asks to run a tool: allow once, deny with a note, or always (in this chat, for this model, everywhere). */
 export function ApprovalCard({ convId, ev, pending, result }: { convId: string; ev: Ev<"approval_request">; pending: boolean; result?: Ev<"approval_result"> }) {
   const [note, setNote] = useState("");
@@ -178,8 +206,16 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
     : ev.name === "write_file" || ev.name === "edit_file" ? t("apWrite", { what: path })
     : reasonText(ev.reason);
   const danger = /^This command .+, so it always needs your approval\.$/.test(ev.reason);
+  // A sub-agent's step: the header names it and its role ("Find prices (research agent) asks to open …").
+  const asker = ev.helper ? helperAskerName(ev.helper) : undefined;
+  const helperLine = ev.helper && asker ? `${ev.helper.title} (${asker.role}) ${L("מבקש", "asks to")} ${helperAction(ev.name, ev.input)}` : "";
   return (
-    <div className="card approval" role="group" aria-label={headline} data-guard="">
+    <div className={`card approval${ev.helper ? " ap-helper" : ""}`} role="group" aria-label={helperLine || headline} data-guard="">
+      {ev.helper && asker && (
+        <p className="ap-asker" dir="auto">
+          <span aria-hidden="true">{asker.icon}</span> <b>{ev.helper.title}</b> <span className="muted">({asker.role})</span> {L("מבקש", "asks to")} {helperAction(ev.name, ev.input)}
+        </p>
+      )}
       <strong dir="auto">{headline}</strong>
       {danger && <p className="ap-danger">⚠ {reasonText(ev.reason)}</p>}
       {ev.purpose && (
@@ -248,7 +284,8 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
             </label>
           )}
           {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "conversation")}>{t("alwaysChat", { tool: ev.name })}</button>}
-          {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>}
+          {/* A sub-agent runs on its own model: "for this model" would not mean the chat's, so it is not offered. */}
+          {!ev.scope && !ev.helper && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "model")}>{t("alwaysModel", { tool: ev.name })}</button>}
           {!ev.scope && <button type="button" role="menuitem" disabled={busy} onClick={() => void decide("always", "everywhere")}>{t("alwaysEverywhere", { tool: ev.name })}</button>}
           <span className="muted small">{t("alwaysNote")}</span>
         </div>

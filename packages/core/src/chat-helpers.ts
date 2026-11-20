@@ -218,7 +218,7 @@ export class ChatHelpers {
     const lead = this.host.leadModel(id) ?? "";
     const i = await this.inputs(lead);
     const settings = this.host.deps.config.helpers.models;
-    const choice = agent && agent.source !== "builtin" ? (agent.tier ?? "inherit") : kind === "external" ? "inherit" : settings[kind];
+    const choice = agent && agent.source !== "builtin" ? (agent.tier ?? "inherit") : kind === "external" ? "inherit" : settings[kind === "operate" ? "research" : kind];
     const pick = pickHelperModel({ kind, choice, vramGiB: i.vramGiB, lead: i.lead, local: i.local, cloud: i.cloud(choice) ? [choice] : [] });
     const note = pick.why.en;
     const noteHe = pick.why.he;

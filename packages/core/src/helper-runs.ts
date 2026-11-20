@@ -20,6 +20,8 @@ import type { AgentMessage, HelperKind, HelperRunInfo, HelperUsage } from "@kesh
 
 /** What a running helper may do with its own run. */
 export interface HelperControl {
+  /** The run's id (an approval card in the chat names it). */
+  id: string;
   /** Aborts on Stop, on the chat's Stop and at the time cap. */
   signal: AbortSignal;
   /** One step done (a tool it used): counted, and the last ones are shown. */
@@ -31,7 +33,7 @@ export interface HelperControl {
    */
   usage(u: { input: number; output: number; cached?: number; estimated?: boolean }): void;
   /** Changes what the card shows (the model after a swap, the swap's phase…). */
-  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "modelNoteHe" | "swap" | "cloudFiles" | "cloud" | "runAsk">>): void;
+  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "modelNoteHe" | "swap" | "cloudFiles" | "cloud" | "runAsk" | "approval" | "tests">>): void;
   /**
    * Waits for something the user answers elsewhere (the Antigravity ask): the card says why, and the time cap waits.
    *
@@ -368,7 +370,7 @@ export class HelperRuns extends EventEmitter {
     r.followUp = followUpText(t, from);
     r.job = { ...r.job, run: work, background: true };
     const i = r.info;
-    for (const k of ["endedAt", "startedAt", "error", "report", "cut", "diff", "waitReason", "waitLimit", "restart", "swap", "runAsk"] as const) delete i[k];
+    for (const k of ["endedAt", "startedAt", "error", "report", "cut", "diff", "waitReason", "waitLimit", "restart", "swap", "runAsk", "approval", "tests"] as const) delete i[k];
     i.state = "waiting";
     i.background = true;
     i.queuedAt = this.now();
@@ -505,6 +507,7 @@ export class HelperRuns extends EventEmitter {
     const followUp = r.followUp;
     r.followUp = undefined;
     const ctl: HelperControl = {
+      id: r.info.id,
       signal: r.abort.signal,
       ...(r.transcript?.length ? { resumed: r.transcript } : {}),
       ...(followUp ? { followUp } : {}),
@@ -606,6 +609,7 @@ export class HelperRuns extends EventEmitter {
     r.info.state = state;
     r.info.endedAt = this.now();
     delete r.info.waitReason;
+    delete r.info.approval;
     this.prune(r.chatId);
     this.changed(r);
     this.emit("end", { ...this.view(r), chatId: r.chatId });

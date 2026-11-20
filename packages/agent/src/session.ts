@@ -461,6 +461,38 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   /**
+   * Shows another session's approval request in this chat (a sub-agent's step), so the user answers it on the chat's
+   * own card, the phone and the notifications, with the same buttons. The answer comes back through `approve`.
+   *
+   * @param req - The sub-agent's request (its `helper` names who asks), with its own request id when it has one.
+   * @param signal - Aborts when the sub-agent stops: the card is closed as expired.
+   * @returns The user's decision ("expired" when the sub-agent stopped first).
+   */
+  relayApproval(req: Omit<Extract<AgentEvent, { type: "approval_request" }>, "type" | "requestId" | "seq" | "at"> & { requestId?: string }, signal?: AbortSignal): Promise<{ decision: ApprovalDecision; feedback?: string }> {
+    const requestId = req.requestId && !this.approvals.has(req.requestId) ? req.requestId : randomUUID();
+    return new Promise((resolve) => {
+      let answered = false;
+      const done = (d: { decision: ApprovalDecision; feedback?: string }) => {
+        if (answered) return;
+        answered = true;
+        // `approve` already took it off the list; an expiry takes it off here.
+        this.approvals.delete(requestId);
+        signal?.removeEventListener("abort", expire);
+        this.push({ type: "approval_result", requestId, decision: d.decision, ...(d.feedback ? { feedback: d.feedback } : {}) });
+        // Back to working (the chat waits for the sub-agent) or idle, unless something else still waits for the user.
+        if (this.statusValue === "waiting" && !this.approvals.size && !this.questions.size) this.setStatus(this.abort ? "running" : "idle");
+        resolve(d);
+      };
+      const expire = () => done({ decision: "expired" });
+      this.approvals.set(requestId, done);
+      if (signal?.aborted) return expire();
+      signal?.addEventListener("abort", expire, { once: true });
+      this.push({ type: "approval_request", ...req, requestId });
+      this.setStatus("waiting");
+    });
+  }
+
+  /**
    * Answers a question the agent asked.
    *
    * @param questionId - From the `question` event.

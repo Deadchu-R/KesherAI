@@ -9,15 +9,15 @@ export interface LoadReason {
   /** "helper": its task in a few words. */
   helper?: string;
   /** "helper": its job type. */
-  helperKind?: "lookup" | "research" | "build" | "external";
+  helperKind?: "lookup" | "research" | "build" | "operate" | "external";
   /** "helper": the chat's model back after the helper. */
   back?: boolean;
   at?: number;
 }
 
 /** The sub-agent types' names (Hebrew comes after the word "סוכן"; Roee, 2026-11-19: agents, not helpers). */
-const HELPER_KIND_HE: Record<string, string> = { lookup: "חיפוש", research: "מחקר", build: "בנייה", external: "חיצוני" };
-const HELPER_KIND_EN: Record<string, string> = { lookup: "lookup", research: "research", build: "build", external: "outside" };
+const HELPER_KIND_HE: Record<string, string> = { lookup: "חיפוש", research: "מחקר", build: "בנייה", operate: "הפעלה", external: "חיצוני" };
+const HELPER_KIND_EN: Record<string, string> = { lookup: "lookup", research: "research", build: "build", operate: "operator", external: "outside" };
 
 /**
  * Says why the loaded model was loaded and how long ago, in the interface's language: shown beside it (the Models page,

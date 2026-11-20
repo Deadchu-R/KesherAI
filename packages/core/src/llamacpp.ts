@@ -276,7 +276,7 @@ export interface LoadReason {
   /** "helper": the helper's task in a few words, e.g. "fix remote-auth.test.ts". */
   helper?: string;
   /** "helper": its job type. */
-  helperKind?: "lookup" | "research" | "build" | "external";
+  helperKind?: "lookup" | "research" | "build" | "operate" | "external";
   /** "helper": the chat's model coming back after the helper ended. */
   back?: boolean;
   /** When it was loaded (ms since 1970). */

@@ -319,7 +319,8 @@ export function helperSnapshot(r: HelperRunInfo, inboxAsks: string): RunSnapshot
     if (op && i > 0) files.push({ path: s.slice(i + 1).trim(), op });
   }
   const state = ({ waiting: "queued", asking: "waiting", running: "running", done: "done", failed: "failed", stopped: "cancelled" } as const)[r.state];
-  const waiting: AgentWaiting | undefined = r.state !== "asking" ? undefined : r.runAsk ? { reason: "run-press", requestId: r.runAsk.requestId, conversationId: inboxAsks, summary: "Run this message in Antigravity?" } : { reason: "ask", requestId: r.id, conversationId: HELPER_ASKS, summary: (r.waitReason ?? "").slice(0, 200) };
+  // An approval of one of its steps is answered in its chat (like a chat's own approval).
+  const waiting: AgentWaiting | undefined = r.state !== "asking" ? undefined : r.approval ? { reason: "approval", requestId: r.approval.requestId, conversationId: r.approval.chatId, summary: `Approve ${r.approval.tool}?` } : r.runAsk ? { reason: "run-press", requestId: r.runAsk.requestId, conversationId: inboxAsks, summary: "Run this message in Antigravity?" } : { reason: "ask", requestId: r.id, conversationId: HELPER_ASKS, summary: (r.waitReason ?? "").slice(0, 200) };
   const last = r.steps.at(-1);
   return {
     runId: r.id,

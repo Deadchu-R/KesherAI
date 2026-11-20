@@ -42,5 +42,5 @@ test("frontmatter: model tiers, background and steps; a saved file reads back th
   assert.match(text, /^---\nname: design-check\ndescription: checks screens\ntools: Read, Grep\nmodel: auto\nbackground: true\nmaxTurns: 12\n---\nCheck it.\n$/);
   const back = parseAgentFile(text, "x");
   assert.deepEqual([back?.tier, back?.background, back?.tools], ["auto", true, ["read_file", "view_image", "read_document", "search", "find_symbol"]]);
-  assert.deepEqual(builtinHelpers({ build: 12 }).map((b) => [b.kind, b.maxTurns, !!b.write]), [["lookup", 8, false], ["research", 20, false], ["build", 12, true]]);
+  assert.deepEqual(builtinHelpers({ build: 12 }).map((b) => [b.kind, b.maxTurns, !!b.write]), [["lookup", 8, false], ["research", 20, false], ["build", 12, true], ["operate", 25, false]]);
 });

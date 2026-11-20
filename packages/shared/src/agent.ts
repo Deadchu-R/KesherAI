@@ -82,8 +82,22 @@ export interface AskItem {
   multiSelect?: boolean;
 }
 
-/** A helper's job type (docs/RESEARCH_LOG.md, "Helper agents in the chat"): looks, researches, builds, or an outside agent. */
-export type HelperKind = "lookup" | "research" | "build" | "external";
+/**
+ * A helper's job type (docs/RESEARCH_LOG.md, "Helper agents in the chat"): looks, researches, builds, uses the browser
+ * and the computer for the user (`operate`, every changing action approved), or an outside agent.
+ */
+export type HelperKind = "lookup" | "research" | "build" | "operate" | "external";
+
+/** The sub-agent behind an approval request shown in its chat (the card and the notification name it). */
+export interface HelperAsker {
+  /** The helper run's id. */
+  id: string;
+  /** Its task in a few words. */
+  title: string;
+  kind: HelperKind;
+  /** A named agent (a persona or an agent file), when one was used. */
+  agent?: string;
+}
 
 /** Where a helper run is: queued, asking the user once (a cloud model and the project's files), working, or ended. */
 export type HelperState = "waiting" | "asking" | "running" | "done" | "failed" | "stopped";
@@ -137,6 +151,10 @@ export interface HelperRunInfo {
   cut?: boolean;
   /** The changes a build helper made in its own copy, as a diff (shortened). */
   diff?: string;
+  /** It waits for the user's approval of one of its steps: the request in its chat (hub snapshots answer it there). */
+  approval?: { requestId: string; chatId: string; tool: string };
+  /** A build helper's last test run in its copy (the `run_tests` tool): passed or not, and the command. */
+  tests?: { ok: boolean; command: string };
   error?: string;
   /** The chat goes on while it runs; its report reaches the chat's model at its next turn. */
   background: boolean;
@@ -189,6 +207,8 @@ export type AgentEvent = EventBase &
         folder?: string;
         /** What "Always" covers for this tool: a web site (browser tools), so Always means "on this site". */
         scope?: string;
+        /** A sub-agent of this chat asks (its own step, shown in the chat): its rules are kept apart from the chat's. */
+        helper?: HelperAsker;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */
