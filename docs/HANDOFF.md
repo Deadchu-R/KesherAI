@@ -15,6 +15,9 @@ so a new chat starts from a few small files.
 5. Update WORK_LIST ("Now" section) and this file's "State" below.
 
 ## First steps in the new chat (the new chat's Claude)
+0. Helper agents: launch them as general-purpose agents with the `model` named in .claude/agents/kesher-research.md
+   (sonnet), kesher-build.md (opus) and kesher-lookup.md (haiku), telling each to read that file and docs/AGENT_BRIEF.md
+   first (LEAD_GUIDE "How the work runs").
 1. Read this file, LEAD_GUIDE.md, WORK_LIST.md. Read AGENT_BRIEF.md only before launching an agent.
 2. Clone if needed: the repo is Deadchu-R/KesherAI, worked on in /home/claude/kesher.
 3. Design doc tools: `export DESIGN_DIR=<the new scratchpad>`, copy tools/design/design_marks.json there, and read the
