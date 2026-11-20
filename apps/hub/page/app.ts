@@ -19,6 +19,7 @@ import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } fro
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
+import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive, type GisOauth2 } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
@@ -112,6 +113,9 @@ const agentsView: AgentsView = {
   render: () => render(),
   snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
+
+/** "Waiting for you" (waiting.ts): answers go sealed to the PC; an agent card opens on the Agents tab. */
+const waitingView: WaitingView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key) };
 
 // ---- helpers ----
 
@@ -258,10 +262,15 @@ const TAB_LABEL: Record<Tab, [string, string, string]> = {
 /** The tab links (top on a computer, bottom on a phone). */
 function tabs(cls: string): HTMLElement {
   const cur = tab() === "new" ? "tasks" : tab();
+  const waiting = device.paired ? waitingEntries(device).filter((e) => !e.sent).length : 0;
   return h(
     "nav",
     { class: cls, "aria-label": L("לשוניות המרכז", "Hub tabs") },
-    TABS.map((t) => h("a", { href: `#${t}`, class: `nt${cur === t ? " on" : ""}`, "aria-current": cur === t ? "page" : undefined }, h("span", { class: "ni", "aria-hidden": "true" }, TAB_LABEL[t][2]), h("span", null, L(TAB_LABEL[t][0], TAB_LABEL[t][1])))),
+    TABS.map((t) => {
+      // What waits for the owner is counted on the dashboard and the Tasks tab (both show it on top).
+      const n = t === "dash" || t === "tasks" ? waiting : 0;
+      return h("a", { href: `#${t}`, class: `nt${cur === t ? " on" : ""}`, "aria-current": cur === t ? "page" : undefined }, h("span", { class: "ni", "aria-hidden": "true" }, TAB_LABEL[t][2]), h("span", null, L(TAB_LABEL[t][0], TAB_LABEL[t][1])), n ? h("span", { class: "nbadge", "aria-label": L(`${n} מחכים לך`, `${n} waiting for you`) }, String(n)) : null);
+    }),
   );
 }
 
@@ -533,6 +542,7 @@ function dashboard(): HTMLElement {
     { class: "page" },
     h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))),
     relay(),
+    waitingSection(waitingView),
     h(
       "div",
       { class: "grid2" },
@@ -606,6 +616,7 @@ function tasksTab(): HTMLElement {
     h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))),
     driveLine(),
     !device.paired ? pairThisCard() : null,
+    waitingSection(waitingView),
     h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),
     h(
       "section",
@@ -796,6 +807,7 @@ const AUDIT: Record<string, [string, string]> = {
   connect: ["מכשיר התחבר", "Device connected"],
   "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
   "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
+  "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
 };
 
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */

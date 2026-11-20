@@ -637,14 +637,19 @@ export class Hub {
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
     if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
-    // A task-inbox report goes from a PC to the owner's phones (and the hub page) only.
-    if (env.kind === "inbox_task" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    // A task-inbox report and the approvals waiting on a PC go from a PC to the owner's phones (and the hub page) only.
+    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    // An approval answer goes from a paired phone (or the hub page) to a PC only, at a human pace.
+    if (env.kind === "approval_answer") {
+      if (from.kind !== "phone" || to.kind !== "pc") return refuse("not-allowed", env.id);
+      if (!this.limits.take(`command:${from.id}`, LIMITS.command)) return refuse("rate-limited", env.id);
+    }
     const t = this.now();
     const added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(env), createdAt: t });
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
     const online = this.sockets.send(to.id, { t: "deliver", env });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
-    if (env.kind !== "progress" && env.kind !== "inbox_task") this.audit(`relay-${env.kind}`, { deviceId: from.id });
+    if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals") this.audit(`relay-${env.kind}`, { deviceId: from.id });
   }
 
   /** The Claude path: open the one message sealed to the hub, fire the scheduled task, answer sealed to the sender. */

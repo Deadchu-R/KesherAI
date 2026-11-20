@@ -23,6 +23,8 @@ export const LIMITS = {
   message: { burst: 120, perMs: 60_000 },
   /** `sync` pings per device: one per 5 seconds on average (a burst of 2 allows for network jitter). */
   syncPing: { burst: 2, perMs: 10_000 },
+  /** Answers and commands from the owner's phones and the hub page to a PC (approve, Run, Cancel): 30 a minute. */
+  command: { burst: 30, perMs: 60_000 },
 } as const satisfies Record<string, Limit>;
 
 /** Buckets by key ("signIn:<ip hash>", "task:<device id>"). */

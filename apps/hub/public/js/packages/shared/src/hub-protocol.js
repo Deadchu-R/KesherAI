@@ -48,6 +48,11 @@ export const HUB_LIMITS = {
      * Devices hold back pings sent sooner ({@link syncPinger}); the hub drops what still comes faster.
      */
     syncPingMs: 5000,
+    /** The approvals a PC lists for the hub page at once, and the plain text one snapshot may hold (to fit {@link ctChars}). */
+    approvalItems: 8,
+    approvalsChars: 10_000,
+    /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
+    approvalForMaxMin: 24 * 60,
 };
 /**
  * The device kind a pairing request asks for (anything unknown is a PC, as before the kind existed).
@@ -58,10 +63,52 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
+/**
+ * Fits a PC's approvals into one sealed snapshot: the newest {@link HUB_LIMITS.approvalItems}, fields capped, and
+ * previews shortened until the whole is at most {@link HUB_LIMITS.approvalsChars} characters.
+ *
+ * @param items - Oldest first, as the PC lists them.
+ * @returns The items to send, oldest first.
+ */
+export function fitApprovals(items) {
+    const out = items.slice(-HUB_LIMITS.approvalItems).map((a) => cleanApproval(a)).filter((a) => !!a);
+    for (const max of [600, 300, 120, 0]) {
+        const cut = out.map((a) => ({ ...a, preview: a.preview.slice(0, max) }));
+        if (JSON.stringify(cut).length <= HUB_LIMITS.approvalsChars || max === 0)
+            return cut;
+    }
+    return out;
+}
+/**
+ * Checks one approval of a snapshot (after opening it, or before sealing it).
+ *
+ * @param x - Untrusted input.
+ * @returns The approval, or null.
+ */
+export function cleanApproval(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const a = x;
+    if (!isHubId(a.requestId) || !isHubId(a.conversationId))
+        return null;
+    const kind = a.kind === "run" ? "run" : "tool";
+    return {
+        requestId: a.requestId,
+        conversationId: a.conversationId,
+        title: str(a.title, 120).trim(),
+        tool: str(a.tool, 80),
+        ...optStr("who", a.who, 80),
+        reason: str(a.reason, 300),
+        preview: str(a.preview, 600),
+        kind,
+        forWhile: kind === "tool" && a.forWhile === true,
+        at: num(a.at),
+    };
+}
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
 export const BODY_FOR_KIND = {
     task: "task",
@@ -74,6 +121,7 @@ export const BODY_FOR_KIND = {
     cloud_started: "cloud_started",
     agent_event: "agent_event",
     inbox_task: "inbox_task",
+    approvals: "approvals",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -151,7 +199,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -272,10 +320,17 @@ export function parseSealedBody(x, kind) {
             if (!isHubId(b.requestId) || !isHubId(b.conversationId))
                 return null;
             return { type: "approval_request", requestId: b.requestId, conversationId: b.conversationId, title: str(b.title, HUB_LIMITS.titleChars), tool: str(b.tool, 80), preview: str(b.preview, 2000), reason: str(b.reason, 500) };
-        case "approval_answer":
+        case "approval_answer": {
             if (!isHubId(b.requestId) || !isHubId(b.conversationId))
                 return null;
-            return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision: b.decision === "allow" ? "allow" : "deny" };
+            const decision = b.decision === "allow" ? "allow" : "deny";
+            const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
+            return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
+        }
+        case "approvals":
+            if (!Array.isArray(b.items))
+                return null;
+            return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a) => !!a), at: num(b.at) };
         case "cloud_started": {
             if (!isHubId(b.taskId))
                 return null;

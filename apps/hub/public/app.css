@@ -213,3 +213,12 @@ button.chip { cursor: pointer; min-height: 30px; }
   .wl-row { flex-wrap: nowrap; }
   .wl-text { padding-inline: 12px; }
 }
+
+/* "Waiting for you" (page/waiting.ts): on top of the dashboard and the Tasks tab, with a count on both tabs. */
+.nt { position: relative; }
+.nbadge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #ffc96b; color: #1a1408; font-size: 11px; font-weight: 700; line-height: 17px; text-align: center; }
+.bottom-tabs .nbadge { position: absolute; top: 0; inset-inline-start: calc(50% + 6px); }
+.waiting .wentry { cursor: default; }
+.wprev { margin: 0; max-height: 7.5em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; background: #141416; border: 1px solid #2a2a2f; border-radius: 8px; padding: 6px 8px; color: #c9c9ce; }
+.wfor { gap: 4px; flex-wrap: nowrap; }
+.inp.wsel { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; }

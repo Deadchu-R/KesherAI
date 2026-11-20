@@ -63,6 +63,7 @@ import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxSnapshot } from "./agent-activity.js";
 
 /** The hub approval list's name for the task inbox's run asks. */
@@ -612,11 +613,15 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     onSync: () => services.tasksSync?.onPing(),
     approvals: {
       pending: () => [
-        ...services.conversations.pendingApprovals().map(({ conversationId, requestId, title, tool, preview, reason }) => ({ conversationId, requestId, title, tool, preview, reason })),
+        // A chat's own steps and its sub-agents' steps (`helper` names who asks; the hub page shows it as "who").
+        ...services.conversations.pendingApprovals().map((a) => {
+          const helper = a.helper;
+          return { conversationId: a.conversationId, requestId: a.requestId, title: helper ? `${helper} (sub-agent) · ${a.title}`.slice(0, 200) : a.title, tool: a.tool, preview: a.preview, reason: a.purpose ? `${a.reason} ${a.purpose}`.trim() : a.reason, ...(helper ? { who: helper } : {}), forWhile: !isDangerousReason(a.reason), at: a.at };
+        }),
         // The PC's "Run this task in Antigravity?" asks, so the phone can answer away from home.
-        ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: `Run in Antigravity? ${title}`.slice(0, 200), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes." })),
+        ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: `Run in Antigravity? ${title}`.slice(0, 200), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes.", who: "Antigravity", kind: "run" as const, at: new Date(ask.at).toISOString() })),
       ],
-      answer: async (conversationId, requestId, decision, from) => {
+      answer: async (conversationId, requestId, decision, from, forMinutes) => {
         // An agent card's yes/no (a helper's ask) or an Antigravity step's approval: only from a paired phone.
         if (conversationId === HELPER_ASKS) return from?.kind === "phone" && helperRuns.answer(requestId, decision === "allow");
         if (conversationId === INBOX_APPROVALS) {
@@ -630,7 +635,23 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           if (await taskInbox.answerMessage(requestId, decision, `hub:${from.id}`)) return true;
           return !!(await taskInbox.answerRun(requestId, decision, `hub:${from.id}`).catch(() => undefined));
         }
-        return !!(await services.conversations.open(conversationId))?.session.approve(requestId, decision);
+        // A chat's step: as its own card answers it ("Allow for a while" keeps a timed rule for the chat's tool).
+        return answerFromHub(
+          {
+            find: async (convId, reqId) => {
+              const session = (await services.conversations.open(convId))?.session;
+              const ev = session?.events.find((e) => e.type === "approval_request" && e.requestId === reqId);
+              if (!session || !ev || ev.type !== "approval_request") return undefined;
+              return { request: { name: ev.name, reason: ev.reason, ...(ev.scope ? { scope: ev.scope } : {}), ...(ev.helper ? { helper: ev.helper } : {}) }, approve: (d) => session.approve(reqId, d) };
+            },
+            config: () => config,
+            saveConfig: persist,
+          },
+          conversationId,
+          requestId,
+          decision,
+          forMinutes,
+        );
       },
     },
   });

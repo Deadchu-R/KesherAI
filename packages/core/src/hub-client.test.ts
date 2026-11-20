@@ -245,3 +245,50 @@ test("inbox reports go sealed to each phone, only when a task changed", async (t
   assert.equal(sends().length, 2);
   assert.equal(((await openEnvelope(sends()[1]!, phone.privateKey, pcPub)) as { branch?: string }).branch, "agy/c-1120-01-fix");
 });
+
+test("approvals: one sealed snapshot to online phones when the set changes; answers only from a phone, with Allow for a while", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  let pending = [{ conversationId: "c1", requestId: "r1", title: "Fix the build", tool: "run_command", preview: "pnpm test", reason: "Runs a command", forWhile: true, at: "2026-11-20T12:00:00Z" }];
+  const answers: Array<{ requestId: string; decision: string; from?: { id: string; kind?: string }; forMinutes?: number }> = [];
+  (r.client as unknown as { deps: { approvals: unknown } }).deps.approvals = {
+    pending: () => pending,
+    answer: async (_c: string, requestId: string, decision: string, from?: { id: string; kind?: string }, forMinutes?: number) => (answers.push({ requestId, decision, ...(from ? { from } : {}), ...(forMinutes ? { forMinutes } : {}) }), true),
+  };
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const other = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const presence = [
+    { id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} },
+    { id: "dpc2", name: "Other PC", kind: "pc", publicKey: other.publicKey, online: true, busy: false, agents: [], optIn: {} },
+  ];
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence }));
+  await r.client.sendApprovals();
+  const snaps = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "approvals").map((f) => f.env as SealedEnvelope);
+  assert.equal(snaps().length, 1, "to the phone only, not the other PC");
+  assert.equal(snaps()[0]!.to, "dphone");
+  const body = (await openEnvelope(snaps()[0]!, phone.privateKey, pcPub)) as Extract<SealedBody, { type: "approvals" }>;
+  assert.equal(body.items[0]!.title, "Fix the build");
+  assert.equal(body.items[0]!.forWhile, true);
+  assert.equal(body.items[0]!.at, Date.parse("2026-11-20T12:00:00Z"));
+  await r.client.sendApprovals();
+  assert.equal(snaps().length, 1, "nothing changed, nothing sent");
+  // Answers: the other PC's is ignored; the phone's goes through with its minutes.
+  const answer: SealedBody = { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "allow", forMinutes: 60 };
+  const fromPc = await sealMessage({ from: "dpc2", to: "dpc", kind: "approval_answer" }, answer, other.privateKey, pcPub);
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: fromPc }));
+  assert.equal(answers.length, 0, "a PC cannot answer approvals");
+  const fromPhone = await sealMessage({ from: "dphone", to: "dpc", kind: "approval_answer" }, answer, phone.privateKey, pcPub);
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: fromPhone }));
+  assert.deepEqual(answers, [{ requestId: "r1", decision: "allow", from: { id: "dphone", kind: "phone" }, forMinutes: 60 }]);
+  // The answered request leaves the list: a new (empty) snapshot goes at once.
+  pending = [];
+  await r.client.sendApprovals();
+  assert.equal(snaps().length, 2);
+  assert.deepEqual(((await openEnvelope(snaps()[1]!, phone.privateKey, pcPub)) as { items: unknown[] }).items, []);
+});

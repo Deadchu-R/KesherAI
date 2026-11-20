@@ -50,6 +50,11 @@ export const HUB_LIMITS = {
    * Devices hold back pings sent sooner ({@link syncPinger}); the hub drops what still comes faster.
    */
   syncPingMs: 5000,
+  /** The approvals a PC lists for the hub page at once, and the plain text one snapshot may hold (to fit {@link ctChars}). */
+  approvalItems: 8,
+  approvalsChars: 10_000,
+  /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
+  approvalForMaxMin: 24 * 60,
 } as const;
 
 /**
@@ -69,9 +74,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -193,12 +198,84 @@ export type SealedBody =
   | { type: "result"; taskId: string; status: "done" | "failed" | "blocked" | "cancelled"; text: string; branch?: string; link?: string }
   | { type: "cancel"; taskId: string }
   | { type: "approval_request"; requestId: string; conversationId: string; title: string; tool: string; preview: string; reason: string }
-  | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny" }
+  /**
+   * The answer to an approval. `forMinutes` (allow only): "Allow for a while", a rule for that chat's tool that ends by
+   * itself, as the PC's own card makes it; a PC that does not know it allows once.
+   */
+  | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny"; forMinutes?: number }
+  /** Everything waiting for the user's approval on a PC, whole (the newest snapshot replaces the last). */
+  | { type: "approvals"; items: HubApproval[]; at: number }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
   /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
   | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
   /** A task of the PC's task inbox (Claude's `kesher-inbox` branch) as the hub page lists it: metadata, never its text. */
   | ({ type: "inbox_task" } & HubInboxTask);
+
+/**
+ * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
+ * short preview), who asks, and why. Sealed from the PC to the owner's phones and the hub page only.
+ */
+export interface HubApproval {
+  requestId: string;
+  conversationId: string;
+  /** What: the chat's or the task's title. */
+  title: string;
+  /** The tool or the action ("run_command", "antigravity"). */
+  tool: string;
+  /** Who asks: a helper (sub-agent) by its task, or "Antigravity"; none for the chat's own agent. */
+  who?: string;
+  /** Why it needs approval (the guard's reason, or the agent's own words). */
+  reason: string;
+  /** What will happen, shortened (the command, the start of a diff). */
+  preview: string;
+  /** `tool`: a step of an agent; `run`: run a task in Antigravity (one press is one run). */
+  kind: "tool" | "run";
+  /** Whether "Allow for a while" applies (a chat's own tool step that is not dangerous or limited to one site). */
+  forWhile: boolean;
+  /** When it was asked (ms since epoch). */
+  at: number;
+}
+
+/**
+ * Fits a PC's approvals into one sealed snapshot: the newest {@link HUB_LIMITS.approvalItems}, fields capped, and
+ * previews shortened until the whole is at most {@link HUB_LIMITS.approvalsChars} characters.
+ *
+ * @param items - Oldest first, as the PC lists them.
+ * @returns The items to send, oldest first.
+ */
+export function fitApprovals(items: readonly HubApproval[]): HubApproval[] {
+  const out = items.slice(-HUB_LIMITS.approvalItems).map((a) => cleanApproval(a)).filter((a): a is HubApproval => !!a);
+  for (const max of [600, 300, 120, 0]) {
+    const cut = out.map((a) => ({ ...a, preview: a.preview.slice(0, max) }));
+    if (JSON.stringify(cut).length <= HUB_LIMITS.approvalsChars || max === 0) return cut;
+  }
+  return out;
+}
+
+/**
+ * Checks one approval of a snapshot (after opening it, or before sealing it).
+ *
+ * @param x - Untrusted input.
+ * @returns The approval, or null.
+ */
+export function cleanApproval(x: unknown): HubApproval | null {
+  if (!x || typeof x !== "object") return null;
+  const a = x as Record<string, unknown>;
+  if (!isHubId(a.requestId) || !isHubId(a.conversationId)) return null;
+  const kind = a.kind === "run" ? "run" : "tool";
+  return {
+    requestId: a.requestId,
+    conversationId: a.conversationId,
+    title: str(a.title, 120).trim(),
+    tool: str(a.tool, 80),
+    ...optStr("who", a.who, 80),
+    reason: str(a.reason, 300),
+    preview: str(a.preview, 600),
+    kind,
+    forWhile: kind === "tool" && a.forWhile === true,
+    at: num(a.at),
+  };
+}
 
 /** Where a task-inbox task stands, as the hub page shows it. */
 export type HubInboxState = "waiting" | "waiting-run" | "running" | "done" | "failed" | "partial";
@@ -304,6 +381,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   cloud_started: "cloud_started",
   agent_event: "agent_event",
   inbox_task: "inbox_task",
+  approvals: "approvals",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -383,7 +461,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -490,9 +568,15 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     case "approval_request":
       if (!isHubId(b.requestId) || !isHubId(b.conversationId)) return null;
       return { type: "approval_request", requestId: b.requestId, conversationId: b.conversationId, title: str(b.title, HUB_LIMITS.titleChars), tool: str(b.tool, 80), preview: str(b.preview, 2000), reason: str(b.reason, 500) };
-    case "approval_answer":
+    case "approval_answer": {
       if (!isHubId(b.requestId) || !isHubId(b.conversationId)) return null;
-      return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision: b.decision === "allow" ? "allow" : "deny" };
+      const decision = b.decision === "allow" ? "allow" : "deny";
+      const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
+      return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
+    }
+    case "approvals":
+      if (!Array.isArray(b.items)) return null;
+      return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a): a is HubApproval => !!a), at: num(b.at) };
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;
       const error = str(b.error, 300);

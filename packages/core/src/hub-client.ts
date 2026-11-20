@@ -14,6 +14,7 @@ import WebSocket from "ws";
 import {
   cleanOptIn,
   exportPrivateJwk,
+  fitApprovals,
   HUB_LIMITS,
   generateHubKeys,
   importPrivateJwk,
@@ -23,6 +24,7 @@ import {
   sealMessage,
   syncPinger,
   type HubAgent,
+  type HubApproval,
   type HubCryptoKey,
   type HubFrame,
   type HubInboxState,
@@ -65,6 +67,14 @@ export interface PendingApproval {
   tool: string;
   preview: string;
   reason: string;
+  /** Who asks: a helper (sub-agent) by its task, or "Antigravity"; none for the chat's own agent. */
+  who?: string;
+  /** `run`: an "Run this task in Antigravity?" ask (one press, one run); otherwise an agent's step. */
+  kind?: "tool" | "run";
+  /** Whether the hub page may offer "Allow for a while" (the PC checks again when the answer comes). */
+  forWhile?: boolean;
+  /** When it was asked (ISO time). */
+  at?: string;
 }
 
 /** What the client needs from the app. */
@@ -85,8 +95,11 @@ export interface HubClientDeps {
   /** Approvals waiting in chats, and how to answer one. */
   approvals?: {
     pending(): PendingApproval[];
-    /** `from`: the device whose signed, sealed message carried the answer, and its kind as the hub lists it. */
-    answer(conversationId: string, requestId: string, decision: "allow" | "deny", from?: { id: string; kind?: string }): Promise<boolean>;
+    /**
+     * `from`: the device whose signed, sealed message carried the answer, and its kind as the hub lists it.
+     * `forMinutes`: "Allow for a while" from the hub page (the app decides whether it applies; otherwise once).
+     */
+    answer(conversationId: string, requestId: string, decision: "allow" | "deny", from?: { id: string; kind?: string }, forMinutes?: number): Promise<boolean>;
   };
   fetch?: typeof fetch;
   openSocket?: (url: string, on: HubSocketEvents) => HubSocket;
@@ -135,6 +148,8 @@ const BEAT_MS = 45_000;
 /** A ping every 30 s (the hub answers it without waking up); a link that heard nothing for 100 s is dead. */
 const PING_MS = 30_000;
 const DEAD_MS = 100_000;
+/** How often the approvals waiting on this PC are compared with the last snapshot sent (in memory; sent only on change). */
+const APPROVALS_MS = 3000;
 const MARK = /hub-task:([\w-]{1,64}):([\w-]{1,64})/;
 
 /** How many of the newest inbox tasks are reported (older ones were reported when they changed). */
@@ -222,6 +237,7 @@ export class HubClient {
   private beatTimer?: NodeJS.Timeout;
   private pingTimer?: NodeJS.Timeout;
   private pollTimer?: NodeJS.Timeout;
+  private approvalsTimer?: NodeJS.Timeout;
   /** When the hub was last heard from on the open link, when it last opened, and when the next try is. */
   private heardAt = 0;
   private connectedAt?: number;
@@ -234,7 +250,9 @@ export class HubClient {
   private hubKey = "";
   private key?: Promise<{ privateKey: HubCryptoKey; publicKey: string }>;
   private readonly replay = new ReplayGuard();
-  private readonly sentApprovals = new Set<string>();
+  /** The last approvals snapshot sent (its request ids), and the online phones it went to. */
+  private approvalsKey = "";
+  private approvalsTo = new Set<string>();
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
@@ -445,6 +463,7 @@ export class HubClient {
     clearTimeout(this.retryTimer);
     clearInterval(this.beatTimer);
     clearInterval(this.pingTimer);
+    clearInterval(this.approvalsTimer);
     clearTimeout(this.pollTimer);
     this.syncPings.cancel();
     this.socket?.close();
@@ -534,6 +553,12 @@ export class HubClient {
         clearInterval(this.pingTimer);
         this.pingTimer = setInterval(() => this.ping(), PING_MS);
         this.pingTimer.unref?.();
+        // New approvals reach the hub page within seconds (compared in memory; a snapshot goes only when they change).
+        this.approvalsKey = "";
+        this.approvalsTo.clear();
+        clearInterval(this.approvalsTimer);
+        this.approvalsTimer = setInterval(() => void this.sendApprovals().catch(() => undefined), APPROVALS_MS);
+        this.approvalsTimer.unref?.();
       },
       message: (text) => {
         this.heardAt = Date.now();
@@ -549,6 +574,7 @@ export class HubClient {
         this.connected = false;
         clearInterval(this.beatTimer);
         clearInterval(this.pingTimer);
+        clearInterval(this.approvalsTimer);
         this.socket = undefined;
         this.later();
       },
@@ -625,8 +651,9 @@ export class HubClient {
         return;
       case "presence":
         this.presence = Array.isArray(f.presence) ? f.presence : [];
-        // A phone that just paired gets the inbox's tasks too.
+        // A phone that just paired gets the inbox's tasks too, and a phone that came on the approvals waiting now.
         void this.reportInbox().catch(() => undefined);
+        void this.sendApprovals().catch(() => undefined);
         return;
       case "pause":
         this.paused = f.paused === true;
@@ -717,10 +744,15 @@ export class HubClient {
         if (this.deps.activity?.has(body.taskId)) await this.deps.activity.cancel(body.taskId);
         else await this.cancelTask(env.from, body.taskId);
         return ack();
-      case "approval_answer":
-        // The envelope opened with the sender's own key, so `from` is that paired device.
-        await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, ...(this.presence.find((d) => d.id === env.from)?.kind ? { kind: this.presence.find((d) => d.id === env.from)!.kind } : {}) }).catch(() => false);
+      case "approval_answer": {
+        // The envelope opened with the sender's own key, so `from` is that paired device. Only the owner's phones (the
+        // phone app and the hub page, both paired by a code the signed-in owner approved) answer approvals.
+        const kind = this.presence.find((d) => d.id === env.from)?.kind;
+        if (kind === "phone") await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, kind }, body.forMinutes).catch(() => false);
+        // The answered approval leaves the snapshot at once (not at the next check).
+        void this.sendApprovals().catch(() => undefined);
         return ack();
+      }
       default:
         return ack();
     }
@@ -834,16 +866,33 @@ export class HubClient {
     }
   }
 
-  /** Sends new approvals waiting in chats to the phones, so they can be answered through the relay. */
+  /**
+   * Sends everything waiting for approval on this PC (chats, their sub-agents, Antigravity's Run asks) to the owner's
+   * online phones and hub pages, as one sealed snapshot that replaces the last: when the set changes, and to a phone
+   * that just came on. The hub only relays it (it cannot read it).
+   */
   async sendApprovals(): Promise<void> {
-    if (!this.deps.approvals || !this.connected) return;
-    const phones = this.presence.filter((d) => d.kind === "phone");
-    if (!phones.length) return;
-    for (const a of this.deps.approvals.pending()) {
-      if (this.sentApprovals.has(a.requestId)) continue;
-      this.sentApprovals.add(a.requestId);
-      for (const p of phones) await this.sendSealed(p.id, "approval_request", { type: "approval_request", ...a });
-    }
-    if (this.sentApprovals.size > 500) this.sentApprovals.clear();
+    if (!this.deps.approvals || !this.connected || !this.s.deviceId) return;
+    const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
+    const items = fitApprovals(this.deps.approvals.pending().map(toHubApproval));
+    const key = items.map((a) => a.requestId).join(",");
+    const changed = key !== this.approvalsKey;
+    const to = phones.filter((p) => changed || !this.approvalsTo.has(p.id));
+    this.approvalsKey = key;
+    this.approvalsTo = new Set(phones.map((p) => p.id));
+    if (!to.length || (!items.length && !changed)) return;
+    const at = Date.now();
+    for (const p of to) await this.sendSealed(p.id, "approvals", { type: "approvals", items, at }, HUB_LIMITS.approvalTtl);
   }
+}
+
+/**
+ * One approval as the hub page lists it (the PC's words, capped by {@link fitApprovals}).
+ *
+ * @param a - The approval as the app lists it.
+ * @returns The hub's shape.
+ */
+export function toHubApproval(a: PendingApproval): HubApproval {
+  const at = a.at ? Date.parse(a.at) : NaN;
+  return { requestId: a.requestId, conversationId: a.conversationId, title: a.title, tool: a.tool, ...(a.who ? { who: a.who } : {}), reason: a.reason, preview: a.preview, kind: a.kind ?? "tool", forWhile: a.forWhile === true, at: Number.isFinite(at) ? at : 0 };
 }

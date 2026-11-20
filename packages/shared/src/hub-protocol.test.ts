@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chooseRoute } from "./hub-route.js";
-import { cleanAgents, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, syncPinger, ttlFor, type HubPresence } from "./hub-protocol.js";
+import { cleanAgents, cleanApproval, fitApprovals, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, syncPinger, ttlFor, type HubPresence } from "./hub-protocol.js";
 
 const env = { v: 1, id: "m1", from: "pc1", to: "phone1", kind: "result", ttl: 3600, iv: "AAAAAAAAAAAAAAAA", ct: "abc_-" };
 
@@ -82,4 +82,18 @@ test("sync pinger: the first ping at once, pings within 5 seconds become one at 
   p.cancel();
   assert.equal(timers.length, 0);
   assert.deepEqual(parseDeviceFrame(JSON.stringify({ t: "sync", extra: "x" })), { t: "sync" });
+});
+
+test("approvals: a snapshot fits one sealed message; an answer's minutes are for allow only, at most a day", () => {
+  const big = Array.from({ length: 12 }, (_, i) => ({ requestId: `r${i}`, conversationId: "c1", title: "T".repeat(300), tool: "run_command", reason: "R".repeat(400), preview: "P".repeat(5000), kind: "tool" as const, forWhile: true, at: i }));
+  const fit = fitApprovals(big);
+  assert.equal(fit.length, HUB_LIMITS.approvalItems);
+  assert.equal(fit[0]!.requestId, "r4", "the newest ones");
+  assert.ok(JSON.stringify(fit).length <= HUB_LIMITS.approvalsChars);
+  assert.equal(cleanApproval({ ...big[0], kind: "run", forWhile: true })!.forWhile, false, "no 'for a while' for a run");
+  assert.equal(cleanApproval({ ...big[0], requestId: "../x" }), null);
+  const ans = (x: Record<string, unknown>) => parseSealedBody({ type: "approval_answer", requestId: "r1", conversationId: "c1", ...x }, "approval_answer");
+  assert.deepEqual(ans({ decision: "allow", forMinutes: 99_999 }), { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "allow", forMinutes: 24 * 60 });
+  assert.deepEqual(ans({ decision: "deny", forMinutes: 60 }), { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "deny" });
+  assert.equal(ttlFor("approvals", 7 * 24 * 3600), HUB_LIMITS.approvalTtl);
 });

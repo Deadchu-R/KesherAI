@@ -6,7 +6,7 @@
  * as the PC and the phone app (`packages/shared/src/hub-*.ts`, compiled with this page).
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
-import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
+import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import type { DriveMark } from "./drive-view.js";
@@ -165,6 +165,12 @@ export class HubDevice {
   agents = new Map<string, AgentCard>();
   /** Actions sent from an agent card and not yet answered by a new state ("stop", "allow", "deny"), by card key. */
   agentActions = new Map<string, string>();
+  /**
+   * What waits for the owner on each PC (its newest sealed snapshot; in memory, the PC sends it again when the page
+   * connects), and the answers sent from here that the PC has not taken yet, by `<pc id>/<request id>`.
+   */
+  approvals = new Map<string, { items: HubApproval[]; at: number }>();
+  approvalActions = new Map<string, string>();
   private agentSeq = 0;
   private catchingUp = false;
   /** Called when another device wrote to Google Drive (its bare `sync` ping). */
@@ -508,10 +514,11 @@ export class HubDevice {
     } catch {
       return void this.sendFrame({ t: "ack", id: env.id }); // Tampered or not for us: drop it.
     }
-    // Approvals are answered in the KesherAI app; left queued for it (they expire in 30 minutes).
-    if (body.type === "approval_request") return;
     this.sendFrame({ t: "ack", id: env.id });
+    // A PC before the approvals snapshot sent single requests: the snapshot replaced them, so they are dropped.
+    if (body.type === "approval_request") return;
     if (!this.replay.first(env.id, env.ttl)) return;
+    if (body.type === "approvals") return this.onApprovals(env.from, body.items, body.at);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
     const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
     if (!task) return;
@@ -537,6 +544,56 @@ export class HubDevice {
       }
     }
     await this.saveTasks();
+  }
+
+  /** A PC's approvals snapshot: replaces the last one (an older one that arrives late is ignored). */
+  private onApprovals(from: string, items: HubApproval[], at: number): void {
+    const last = this.approvals.get(from);
+    if (last && last.at > at) return;
+    this.approvals.set(from, { items, at });
+    // An answer sent from here is settled once its request has left the PC's list.
+    for (const key of [...this.approvalActions.keys()]) if (key.startsWith(`${from}/`) && !items.some((a) => `${from}/${a.requestId}` === key)) this.approvalActions.delete(key);
+    this.changed();
+  }
+
+  /**
+   * Everything waiting for the owner now, on the PCs that are on: their approvals (newest first), with the PC.
+   *
+   * @returns The approvals and their PCs.
+   */
+  waiting(): Array<{ pc: HubPresence; item: HubApproval; sent?: string }> {
+    const out: Array<{ pc: HubPresence; item: HubApproval; sent?: string }> = [];
+    for (const [id, snap] of this.approvals) {
+      const pc = this.presence.find((d) => d.id === id && d.kind === "pc" && d.online);
+      if (!pc) continue;
+      for (const item of snap.items) {
+        const sent = this.approvalActions.get(`${id}/${item.requestId}`);
+        out.push({ pc, item, ...(sent ? { sent } : {}) });
+      }
+    }
+    return out.sort((a, b) => b.item.at - a.item.at);
+  }
+
+  /**
+   * Answers an approval waiting on a PC: a sealed `approval_answer` to that PC, which applies it as its own card does
+   * (the PC takes answers only from the owner's paired phones and hub pages).
+   *
+   * @param pcId - The PC.
+   * @param a - The approval.
+   * @param decision - Allow or deny.
+   * @param forMinutes - "Allow for a while", in minutes (allow only).
+   * @returns Whether it was sent.
+   */
+  async answerApproval(pcId: string, a: HubApproval, decision: "allow" | "deny", forMinutes?: number): Promise<boolean> {
+    const id = this.ident;
+    const pc = this.presence.find((d) => d.id === pcId && d.kind === "pc");
+    if (!id || !pc?.online || !this.connected) return false;
+    const mins = decision === "allow" && a.forWhile && forMinutes ? Math.min(forMinutes, HUB_LIMITS.approvalForMaxMin) : 0;
+    const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "approval_answer" }, { type: "approval_answer", requestId: a.requestId, conversationId: a.conversationId, decision, ...(mins ? { forMinutes: mins } : {}) }, id.privateKey, pc.publicKey);
+    if (!this.sendFrame({ t: "send", env })) return false;
+    this.approvalActions.set(`${pc.id}/${a.requestId}`, mins ? "while" : decision);
+    this.changed();
+    return true;
   }
 
   /**

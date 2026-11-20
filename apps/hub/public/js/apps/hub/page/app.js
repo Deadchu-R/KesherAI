@@ -19,6 +19,7 @@ import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when } from "./dom.js";
 import { HubDevice, post } from "./device.js";
 import { agentsSummary, agentsTab } from "./agents.js";
+import { waitingEntries, waitingSection } from "./waiting.js";
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
 import { PageDrive } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
@@ -90,6 +91,8 @@ const agentsView = {
     render: () => render(),
     snapshots: () => (pcOff() ? agentSnapshots(drive.records(), { me: drive.writer, pcNames: pcs().map((d) => d.name) }) : []),
 };
+/** "Waiting for you" (waiting.ts): answers go sealed to the PC; an agent card opens on the Agents tab. */
+const waitingView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key) };
 // ---- helpers ----
 /** The current tab, from the address (#devices…). */
 function tab() {
@@ -224,7 +227,12 @@ const TAB_LABEL = {
 /** The tab links (top on a computer, bottom on a phone). */
 function tabs(cls) {
     const cur = tab() === "new" ? "tasks" : tab();
-    return h("nav", { class: cls, "aria-label": L("לשוניות המרכז", "Hub tabs") }, TABS.map((t) => h("a", { href: `#${t}`, class: `nt${cur === t ? " on" : ""}`, "aria-current": cur === t ? "page" : undefined }, h("span", { class: "ni", "aria-hidden": "true" }, TAB_LABEL[t][2]), h("span", null, L(TAB_LABEL[t][0], TAB_LABEL[t][1])))));
+    const waiting = device.paired ? waitingEntries(device).filter((e) => !e.sent).length : 0;
+    return h("nav", { class: cls, "aria-label": L("לשוניות המרכז", "Hub tabs") }, TABS.map((t) => {
+        // What waits for the owner is counted on the dashboard and the Tasks tab (both show it on top).
+        const n = t === "dash" || t === "tasks" ? waiting : 0;
+        return h("a", { href: `#${t}`, class: `nt${cur === t ? " on" : ""}`, "aria-current": cur === t ? "page" : undefined }, h("span", { class: "ni", "aria-hidden": "true" }, TAB_LABEL[t][2]), h("span", null, L(TAB_LABEL[t][0], TAB_LABEL[t][1])), n ? h("span", { class: "nbadge", "aria-label": L(`${n} מחכים לך`, `${n} waiting for you`) }, String(n)) : null);
+    }));
 }
 /** The phone app's Phone / Computer / ☁ Cloud switch (only when opened from the app). */
 function whereBar() {
@@ -399,7 +407,7 @@ function dashboard() {
     const on = devices().filter((d) => d.online).length;
     const off = devices().length - on;
     const open = allTasks().filter(isOpen);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), waitingSection(waitingView), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
 }
 /** The devices tab (HubDevices). */
 function devicesTab() {
@@ -420,7 +428,7 @@ function tasksTab() {
     const count = (f) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : HubDevice.expired(t))).length;
     const chip = (f, he, en) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
     const open = all.find((t) => t.taskId === app.openTask);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, workListGroup(q));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), list.length ? list.map(taskRow) : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, workListGroup(q));
 }
 /**
  * Claude's work list (HubWorkList / PhoneHubWorkList): the items the PC copies from docs/WORK_LIST.md to Drive,
@@ -543,6 +551,7 @@ const AUDIT = {
     connect: ["מכשיר התחבר", "Device connected"],
     "cloud-fired": ["משימה נשלחה ל-Claude בענן", "Task sent to Claude cloud"],
     "cloud-failed": ["Claude בענן לא התחיל משימה", "Claude cloud failed to start"],
+    "relay-approval_answer": ["תשובה לאישור נשלחה למחשב", "Approval answer sent to a PC"],
 };
 /** The settings tab (HubSettings): kill switches, what the hub holds, this device, the activity log. */
 function settingsTab() {
