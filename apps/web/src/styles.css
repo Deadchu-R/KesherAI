@@ -4204,6 +4204,18 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-side ul { margin: 4px 0 0; padding-inline-start: 16px; overflow-wrap: anywhere; }
 .games-side p { margin: 4px 0 0; }
 .games-waiting { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 4px; }
+.games-search-box { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; margin: 0 0 12px; padding: 8px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: inherit; text-align: start; cursor: text; }
+.games-search input[type="search"] { width: 100%; min-height: 44px; box-sizing: border-box; }
+.games-kinds { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.games-kinds .games-chip { background: none; color: inherit; cursor: pointer; min-height: 32px; }
+.games-kinds .games-chip.on { border-color: var(--accent); color: var(--accent); }
+.games-search-note { margin: 0; }
+.games-results ul { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.games-hit { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px; border: none; border-radius: 8px; background: none; color: inherit; text-align: start; cursor: pointer; }
+.games-hit:hover, .games-hit:focus-visible { background: var(--bg); }
+.games-hit-icon { width: 20px; text-align: center; flex: none; }
+.games-hit-text { display: flex; flex-direction: column; min-width: 0; }
+.games-hit-name, .games-hit-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 @media (max-width: 520px) {
   .games-list { grid-template-columns: 1fr; }
   .games-sides { grid-template-columns: 1fr; }

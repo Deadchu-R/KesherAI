@@ -50,6 +50,10 @@ test("Game projects: a Unity project with a clash, both sides on the sheet, and 
     assert.equal((await app.inject({ method: "POST", url: `/api/games/conflicts/${q.id}`, payload: { choice: "engine" } })).json().ok, true);
     assert.equal((await unity.queue()).length, 0);
     assert.equal((await app.inject({ method: "POST", url: `/api/games/conflicts/${q.id}`, payload: { choice: "engine" } })).statusCode, 404);
+    // Search with Unity closed: the project's assets, and only projects found on this computer.
+    const found = (await app.inject({ url: `/api/games/search?engine=unity&project=${encodeURIComponent(project)}&q=door` })).json() as { results: Array<{ hits: Array<{ kind: string; path: string }> }> };
+    assert.deepEqual(found.results[0]!.hits.map((h) => [h.kind, h.path]), [["asset", "Assets/Door.asset"]]);
+    assert.equal((await app.inject({ url: "/api/games/search?engine=unity&project=%2Fetc&q=passwd" })).statusCode, 400);
     // Only projects found on this computer can be synced.
     assert.equal((await app.inject({ method: "POST", url: "/api/games/sync", payload: { engine: "unity", project: "/etc" } })).statusCode, 400);
   } finally {

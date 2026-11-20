@@ -29,8 +29,11 @@ const PATTERNS: Record<string, RegExp[]> = {
   rs: [/^\s*(?:pub\s+)?(fn|struct|enum|trait|impl|mod)\s+(\w+)/],
   java: [/^\s*(?:public|private|protected|static|final|abstract|\s)*\s*(class|interface|enum|record)\s+(\w+)/, /^\s*(?:public|private|protected)\s+(?:static\s+)?[\w<>[\],\s]+?\s+(\w+)\s*\(/],
   gd: [/^\s*(class_name|func|signal)\s+(\w+)/],
+  // Verse (UEFN): `name<public> := class(creative_device):` and `Jump<public>(Height:float):void =`; the lookahead
+  // captures the kind first, so the order is the same as the other languages (kind, then name).
+  verse: [/^\s*(?=\w+(?:<\w+>)*\s*:=\s*(class|struct|interface|enum|module)\b)(\w+)/, /^\s*(\w+)(?:<\w+>)*\s*\([^)]*\)\s*(?:<\w+>)*\s*:\s*[\w[\]?]+\s*=/],
 };
-const LANG: Record<string, keyof typeof PATTERNS> = { ".cs": "cs", ".ts": "ts", ".tsx": "ts", ".js": "ts", ".jsx": "ts", ".mjs": "ts", ".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".h": "cpp", ".hpp": "cpp", ".py": "py", ".go": "go", ".rs": "rs", ".java": "java", ".kt": "java", ".gd": "gd" };
+const LANG: Record<string, keyof typeof PATTERNS> = { ".cs": "cs", ".ts": "ts", ".tsx": "ts", ".js": "ts", ".jsx": "ts", ".mjs": "ts", ".c": "cpp", ".cc": "cpp", ".cpp": "cpp", ".h": "cpp", ".hpp": "cpp", ".py": "py", ".go": "go", ".rs": "rs", ".java": "java", ".kt": "java", ".gd": "gd", ".verse": "verse" };
 const NOT_NAMES = new Set(["if", "for", "while", "switch", "catch", "return", "new", "else", "using", "lock", "foreach", "sizeof", "typeof", "nameof", "base", "this", "super", "function"]);
 
 /**
@@ -74,7 +77,7 @@ async function* sources(root: string, dir: string, depth = 0): AsyncGenerator<st
 }
 
 /** One source file in the index. */
-interface Indexed {
+export interface Indexed {
   path: string;
   symbols: string[];
   /** Line of each symbol's definition (same order as symbols). */
@@ -86,8 +89,14 @@ interface Indexed {
 /** Files read before, by path: reused while their size and time are the same. */
 const cache = new Map<string, { size: number; mtime: number; item: Indexed }>();
 
-/** Symbol lines with their line numbers. */
-function symbolsWithLines(text: string, ext: string): { symbols: string[]; lines: number[] } {
+/**
+ * The names a source file defines, with the line of each (for an outline and go-to-definition).
+ *
+ * @param text - The file.
+ * @param ext - Its extension, e.g. `.gd`.
+ * @returns Up to 40 symbol lines (`class Player`, `Jump()`) and their 1-based lines, in the same order.
+ */
+export function symbolsWithLines(text: string, ext: string): { symbols: string[]; lines: number[] } {
   const lang = LANG[ext.toLowerCase()];
   const symbols: string[] = [];
   const lines: number[] = [];
@@ -114,7 +123,7 @@ function symbolsWithLines(text: string, ext: string): { symbols: string[]; lines
 }
 
 /** The bare name of a symbol line: `class Player` → Player, `Jump()` → Jump, `A::B()` → B. */
-const bare = (sym: string) => sym.replace(/\(\)$/, "").split(/\s+/).pop()!.split("::").pop()!;
+export const bare = (sym: string) => sym.replace(/\(\)$/, "").split(/\s+/).pop()!.split("::").pop()!;
 
 /**
  * Reads the project's source files (up to 5,000), reusing files that did not change.
@@ -216,6 +225,60 @@ const ASSET_KINDS: Record<string, string> = { ".prefab": "prefab", ".unity": "sc
 /** Unreal asset name prefixes, to say what a .uasset is without opening it. */
 const UE_PREFIX: Array<[RegExp, string]> = [[/^BP_/, "Blueprint"], [/^WBP_|^W_/, "widget"], [/^ABP_/, "anim Blueprint"], [/^MI_/, "material instance"], [/^M_/, "material"], [/^T_/, "texture"], [/^SM_/, "static mesh"], [/^SK_/, "skeletal mesh"], [/^NS_|^FX_/, "Niagara"], [/^A_|^AM_/, "animation"], [/^S_|^SC_|^SW_/, "sound"], [/^DT_/, "data table"], [/^E_/, "enum"], [/^F_|^ST_/, "struct"], [/^IA_|^IMC_/, "input"], [/^L_|^LV_/, "level"]];
 
+/** One asset of a game project: its path (relative, with /) and kind ("prefab", "Blueprint", "scene"…). */
+export interface AssetEntry {
+  path: string;
+  kind: string;
+}
+
+/** Folders listed before, by path: their asset files and subfolders, reused while the folder's time is the same. */
+const dirCache = new Map<string, { mtime: number; files: AssetEntry[]; dirs: string[] }>();
+
+/**
+ * The project's assets (Unity Assets/, Unreal Content/, else the whole folder for Godot), at most 60,000 entries
+ * looked at. A folder whose time did not change since the last call is not read again (adding, removing or renaming
+ * a file changes its folder's time), so a second call costs one stat per folder.
+ *
+ * @param root - The project folder.
+ * @returns The assets with their kinds.
+ */
+export async function listAssets(root: string): Promise<AssetEntry[]> {
+  const found: AssetEntry[] = [];
+  const start = ["Assets", "Content"].map((d) => join(root, d)).filter((d) => existsSync(d));
+  const stack = start.length ? start : [root];
+  let seen = 0;
+  while (stack.length && seen < 60_000) {
+    const dir = stack.pop()!;
+    const st = await stat(dir).catch(() => undefined);
+    if (!st) continue;
+    let hit = dirCache.get(dir);
+    if (!hit || hit.mtime !== st.mtimeMs) {
+      const files: AssetEntry[] = [];
+      const dirs: string[] = [];
+      for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+        if (e.name.startsWith(".")) continue;
+        const full = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (!IGNORED_DIRS.has(e.name) && !EXTRA_IGNORED.has(e.name) && e.name !== "__ExternalActors__" && e.name !== "__ExternalObjects__") dirs.push(full);
+          continue;
+        }
+        const ext = extname(e.name).toLowerCase();
+        let kind = ASSET_KINDS[ext];
+        if (!kind) continue;
+        if (ext === ".uasset") kind = UE_PREFIX.find(([re]) => re.test(e.name))?.[1] ?? "asset";
+        files.push({ path: displayPath(root, full), kind });
+      }
+      hit = { mtime: st.mtimeMs, files, dirs };
+      dirCache.set(dir, hit);
+    }
+    seen += hit.files.length + hit.dirs.length;
+    found.push(...hit.files);
+    stack.push(...hit.dirs);
+  }
+  if (dirCache.size > 50_000) dirCache.clear();
+  return found;
+}
+
 /**
  * The project's assets by name and kind (Unity Assets/, Unreal Content/,
  * Godot), matching a query, so the model finds the right prefab, Blueprint or
@@ -225,27 +288,7 @@ const UE_PREFIX: Array<[RegExp, string]> = [[/^BP_/, "Blueprint"], [/^WBP_|^W_/,
  * @param query - Words to match in the path (empty: a summary by kind).
  */
 export async function findAssets(root: string, query = ""): Promise<string> {
-  const found: Array<{ path: string; kind: string }> = [];
-  const start = ["Assets", "Content"].map((d) => join(root, d)).filter((d) => existsSync(d));
-  const stack = start.length ? start : [root];
-  let seen = 0;
-  while (stack.length && seen < 60_000) {
-    const dir = stack.pop()!;
-    for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      seen++;
-      if (e.name.startsWith(".")) continue;
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        if (!IGNORED_DIRS.has(e.name) && !EXTRA_IGNORED.has(e.name) && e.name !== "__ExternalActors__" && e.name !== "__ExternalObjects__") stack.push(full);
-        continue;
-      }
-      const ext = extname(e.name).toLowerCase();
-      let kind = ASSET_KINDS[ext];
-      if (!kind) continue;
-      if (ext === ".uasset") kind = UE_PREFIX.find(([re]) => re.test(e.name))?.[1] ?? "asset";
-      found.push({ path: displayPath(root, full), kind });
-    }
-  }
+  const found = await listAssets(root);
   if (!found.length) return "No Unity, Unreal or Godot assets found here.";
   const words = query.toLowerCase().split(/[^\w]+/).filter((w) => w.length > 1);
   if (!words.length) {

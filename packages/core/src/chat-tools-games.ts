@@ -3,7 +3,7 @@
  * and its Blueprints in words through the KesherAI Bridge), the Visual Scripting graphs, and running a game's Android
  * build on the user's phone. Few tokens until a project is in use: then the full set and its guide come.
  */
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
 import { androidPhoneTools } from "./android-phone.js";
 import type { ConversationDeps } from "./conversation-deps.js";
@@ -18,6 +18,8 @@ import { GODOT_IDLE_NOTE, GODOT_NOTE, godotTools } from "./godot-tools.js";
 import { MOD_NOTE, modTools } from "./game-mods.js";
 import { VERSE_NOTE, uefnTools } from "./uefn-tools.js";
 import { existsSync } from "node:fs";
+import { gameFindTool } from "./game-index.js";
+import { findGameProjects } from "./game-projects.js";
 import { homedir } from "node:os";
 
 /**
@@ -73,6 +75,11 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     tools.push(...uefnTools());
     notes.push(VERSE_NOTE);
   }
+  // Search the user's game projects with the engine closed (classes, scripts, scenes, prefabs, Blueprints, assets).
+  tools.push(gameFindTool(
+    () => findGameProjects({ unity: deps.config.unity.projects, ...(deps.unreal?.projectFile ? { unrealFile: deps.unreal.projectFile } : {}) }),
+    () => deps.unity?.activeProject ?? (p.unreal.project && deps.unreal?.projectFile ? dirname(deps.unreal.projectFile) : p.unreal.project),
+  ));
   // Minecraft and Roblox projects (two small tools, one line).
   tools.push(...modTools(join(deps.outputsDir, "..", "engines")));
   notes.push(MOD_NOTE);

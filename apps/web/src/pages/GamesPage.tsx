@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -57,6 +58,7 @@ const same = (a: string, b: string) => a.replace(/[\\/]+$/, "").toLowerCase() ==
 export function GamesPage({ sync = false }: { sync?: boolean }) {
   const [list, setList] = useState<{ projects: Project[]; clashes: number } | null>(null);
   const [sheet, setSheet] = useState<{ project?: Project } | null>(sync ? {} : null);
+  const [search, setSearch] = useState<{ project?: Project; q: string } | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
   const busy = !!list?.projects.some((p) => p.running);
   useEffect(() => {
@@ -70,11 +72,24 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
       toast(L(`מסנכרן את ${p.name}…`, `Syncing ${p.name}…`));
       setTimeout(load, 800);
     }, (e: Error) => toast(e.message));
+  // A tapped search result: code opens in the Source view at its line; a scene, prefab or asset on its engine's page.
+  const openHit = (r: ProjectHits, h: GameHit) => {
+    if (h.kind === "code" || h.kind === "script") {
+      void navigator.clipboard?.writeText(`${h.path}${h.line ? `:${h.line}` : ""}`).catch(() => undefined);
+      toast(L(`הנתיב הועתק: ${h.path}`, `Path copied: ${h.path}`));
+      return;
+    }
+    location.hash = r.engine === "unity" ? "#/unity" : r.engine === "unreal" ? "#/unreal" : "#/godot";
+  };
 
   return (
     <div className="page games-page">
       <h1>{L("פרויקטי משחק", "Game projects")}</h1>
       <p className="muted small">{L("כל הפרויקטים של Unity, Unreal ו-Godot במחשב. שינויים שנעשים כשהמנוע סגור מחכים כאן ומסונכרנים אחר כך.", "Every Unity, Unreal and Godot project on this computer. Changes made with the engine closed wait here and sync later.")}</p>
+      <button type="button" className="games-search-box" onClick={() => setSearch({ q: "" })}>
+        <span aria-hidden>🔍</span>
+        <span className="muted grow">{L("חיפוש בכל הפרויקטים: מחלקה, סקריפט, סצנה, Blueprint…", "Search all projects: class, script, scene, Blueprint…")}</span>
+      </button>
       {!!list?.clashes && (
         <button type="button" className="games-clash-banner" onClick={() => setSheet({})}>
           <span aria-hidden>⚠</span>
@@ -113,12 +128,14 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
               <div className="row wrap games-actions">
                 {p.canSync && <button type="button" className="primary" disabled={p.running} onClick={() => syncNow(p)}>{L("סנכרן עכשיו", "Sync now")}</button>}
                 {(p.pending > 0 || p.clashes > 0) && <button type="button" onClick={() => setSheet({ project: p })}>{L("הצג ממתינים", "View pending")}</button>}
+                <button type="button" onClick={() => setSearch({ project: p, q: "" })} aria-label={L(`חיפוש ב-${p.name}`, `Search ${p.name}`)}>🔍 {L("חיפוש", "Search")}</button>
                 <a className="button" href={p.page}>{L("לעמוד הפרויקט", "Project page")}</a>
               </div>
             </section>
           ))}
         </div>
       )}
+      {search && <GameSearch key={search.project?.path ?? "all"} {...(search.project ? { project: search.project } : {})} initial={search.q} onOpen={openHit} onClose={() => setSearch(null)} />}
       {sheet && <SyncSheet {...(sheet.project ? { project: sheet.project } : {})} onClose={() => setSheet(null)} onChange={load} />}
     </div>
   );

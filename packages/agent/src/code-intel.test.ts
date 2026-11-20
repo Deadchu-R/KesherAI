@@ -82,3 +82,20 @@ test("check_code holds only the changed C++ files to Unreal's rules in a project
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("Verse symbols: classes and functions with their specifiers", () => {
+  const verse = "using { /Fortnite.com/Devices }\nplayer_manager<public> := class(creative_device):\n    OnBegin<override>()<suspends>:void =\n        Print(\"hi\")\n    GiveScore<public>(Amount:int):void =\n";
+  assert.deepEqual(symbolsOf(verse, ".verse"), ["class player_manager", "OnBegin()", "GiveScore()"]);
+});
+
+test("listAssets reuses a folder that did not change and sees a new file", async () => {
+  const { listAssets } = await import("./code-intel.js");
+  const root = await mkdtemp(join(tmpdir(), "kesher-assets-"));
+  await mkdir(join(root, "Content", "Doors"), { recursive: true });
+  await writeFile(join(root, "Content", "Doors", "BP_Door.uasset"), "x");
+  const first = await listAssets(root);
+  assert.deepEqual(first.map((a) => a.kind), ["Blueprint"]);
+  await writeFile(join(root, "Content", "M_Wood.uasset"), "x");
+  const second = await listAssets(root);
+  assert.deepEqual(second.map((a) => a.kind).sort(), ["Blueprint", "material"]);
+});

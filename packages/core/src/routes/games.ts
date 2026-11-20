@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
 import { findGameProjects, type GameProject } from "../game-projects.js";
+import { HIT_KINDS, searchGameProject, type GameHit, type HitKind } from "../game-index.js";
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
 import type { BlueprintJson, QueuedEdit } from "../unreal-bridge.js";
@@ -174,6 +175,27 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
       return { started: true };
     }
     return reply.code(400).send({ error: "Godot projects have nothing waiting: the stand-in saves the scene at once." });
+  });
+
+  /**
+   * Search with the engine closed (step 3): classes and functions, scripts, scenes, prefabs and Blueprints, assets.
+   * One project (engine + path, as listed) or, without one, every project found (at most 8, 20 results each).
+   */
+  app.get<{ Querystring: { engine?: string; project?: string; q?: string; kind?: string } }>("/api/games/search", async (req, reply) => {
+    const q = String(req.query.q ?? "").slice(0, 200);
+    const kind = (HIT_KINDS as readonly string[]).includes(String(req.query.kind)) ? (req.query.kind as HitKind) : undefined;
+    let list: GameProject[];
+    if (req.query.project) {
+      const p = await findOne(req.query.engine, req.query.project);
+      if (!p) return reply.code(400).send({ error: "Choose one of the projects found on this computer." });
+      list = [p];
+    } else list = (await found()).slice(0, 8);
+    const results: Array<{ engine: GameProject["kind"]; name: string; path: string; hits: GameHit[]; counts: Record<HitKind, number> }> = [];
+    for (const p of list) {
+      const r = await searchGameProject(p.path, q, { ...(kind ? { kind } : {}), limit: list.length > 1 ? 20 : 80 });
+      if (list.length === 1 || r.hits.length) results.push({ engine: p.kind, name: p.name, path: p.path, hits: r.hits, counts: r.counts });
+    }
+    return { results };
   });
 
   /** The clashes: both sides of each, and the choice made so far ("skip" ones stay listed). */
