@@ -5,7 +5,7 @@ import { makeDiff, type AgentTool } from "@kesher/agent";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
 import { clampInt, hierarchyCs, unityEditTools, type UnityEditDeps } from "./unity-edit-tools.js";
-import { UNITY_EDIT_TOOLS, type UnityTurnHandle } from "./unity-turns.js";
+import { MAX_COMPILE_FIXES, UNITY_EDIT_TOOLS, compileErrors, type UnityTurnHandle } from "./unity-turns.js";
 
 /**
  * Unity in the chat, through Unity's own CLI (`unity`), the way Unity
@@ -104,7 +104,8 @@ function compileReport(code: number, out: string, err: string): string {
   if (code === 0) return `Compiled with no errors.${/warning/i.test(text) ? `\n${cut(text)}` : ""}`;
   if (code === 7 || /EDITOR_NOT_RUNNING|no (running|open) editor|could not connect|not connected/i.test(text))
     return "No open Unity Editor answered, so the code was NOT compiled yet. Ask the user to open the project in Unity (or check unity_status: Safe Mode lists compile errors), then run unity_recompile.";
-  return `Compile errors (fix them, then write the script again):\n${cut(text)}`;
+  const errors = compileErrors(out, err);
+  return `Compile errors:\n${errors.length ? errors.join("\n") : cut(text)}`;
 }
 
 /**
@@ -118,6 +119,9 @@ function compileReport(code: number, out: string, err: string): string {
 export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data: Uint8Array, mimeType: string) => Promise<string>, targetPhones: () => Phone[] = () => [], readAsset?: UnityEditDeps["readAsset"], turn?: UnityTurnHandle): AgentTool[] {
   const project = () => unity.activeProject;
   const at = (): string[] => (project() ? ["--project-path", project()!] : []);
+  // Failed compiles per script in this turn (outside a chat, for these tools' lifetime).
+  const failures = () => turn?.compileFailures() ?? (localFailures ??= new Map());
+  let localFailures: Map<string, number> | undefined;
   const need = () => {
     if (!project()) throw new Error("No Unity project is chosen yet. Tell the user to press + → Project in the message box and pick the Unity project folder (or Create → Unity → Add a project), or make a new one there (New project).");
   };
@@ -233,6 +237,7 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
         if (!CODE_EXT.test(rel)) return { output: "Only code files can be written here (.cs, .shader, .hlsl, .cginc, .compute, .uss, .uxml, .tss, .asmdef, .asmref)." };
         if (!content.trim()) return { output: "The content is empty: give the whole file." };
         if (content.length > MAX_TEXT) return { output: "That file is too big (over 300,000 characters): split it." };
+        if ((failures().get(rel) ?? 0) > MAX_COMPILE_FIXES) return { output: `Not written: ${rel} already failed to compile after ${MAX_COMPILE_FIXES} automatic fixes in this turn. Stop and tell the user, in their language (Hebrew or English), which errors are still there and ask how to go on.` };
         const before = await readFile(abs, "utf8").catch(() => null);
         await mkdir(dirname(abs), { recursive: true });
         ctx.recordChange(abs, before);
@@ -241,7 +246,16 @@ export function unityTools(unity: UnityCli, outputsDir: string, saveAsset: (data
         const head = `${before === null ? "Created" : "Updated"} ${rel} (${written} bytes, on disk now).`;
         if (!/\.(cs|asmdef|asmref)$/i.test(rel)) return { output: `${head} Unity imports it when the Editor has focus or on the next refresh.` };
         const r = await unity.cliRaw(["recompile", "--project-path", project()!, "--format", "json"], 240_000).catch((e: Error) => ({ code: -1, stdout: "", stderr: e.message }));
-        return { output: `${head}\n${compileReport(r.code, r.stdout, r.stderr)}` };
+        const report = compileReport(r.code, r.stdout, r.stderr);
+        if (r.code === 0) failures().delete(rel);
+        if (!report.startsWith("Compile errors")) return { output: `${head}\n${report}` };
+        // The compile-fix loop: at most 2 automatic fixes of a script in a turn, then the user decides.
+        const failed = (failures().get(rel) ?? 0) + 1;
+        failures().set(rel, failed);
+        const next = failed <= MAX_COMPILE_FIXES
+          ? `Fix them and write the whole script again (automatic fix ${failed} of ${MAX_COMPILE_FIXES} for this script in this turn).`
+          : `That was the last automatic fix: STOP changing ${rel} now. Tell the user, in their language (Hebrew or English), which errors are still there (file, line, what is wrong) and ask how to go on.`;
+        return { output: `${head}\n${report}\n${next}` };
       },
     },
     {

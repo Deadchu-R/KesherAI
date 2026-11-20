@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnityCli, type CliRunner } from "./unity-cli.js";
 import { unityTools } from "./unity-tools.js";
-import { turnTitle, unityTurns } from "./unity-turns.js";
+import { compileErrors, turnTitle, unityTurns } from "./unity-turns.js";
 
 /** A fake Unity CLI whose Editor keeps an Undo group counter, like Unity's. */
 async function fakeUnity() {
@@ -86,4 +86,45 @@ test("Unity turns: the Undo name is short and the Editor not answering opens not
   turns.begin("c2", "make a cube");
   await turns.handle("c2").beforeEdit();
   assert.equal(await turns.end("c2"), false);
+});
+
+test("Unity compile errors: file:line: message only, at most 10", () => {
+  const json = JSON.stringify({ success: false, errors: [{ code: "COMPILE_FAILED", message: "Compilation failed" }], data: { errors: [{ file: "Assets\\Door.cs", line: 12, column: 5, code: "CS1002", message: "; expected" }, { file: "Assets/Door.cs", line: 12, code: "CS1002", message: "; expected" }], warnings: [{ file: "Assets/A.cs", line: 1, message: "unused" }] } });
+  assert.deepEqual(compileErrors(json), ["Assets/Door.cs:12: CS1002: ; expected"]);
+  assert.deepEqual(compileErrors("", "Assets/Scripts/Player.cs(7,3): error CS0103: The name 'speed' does not exist\n"), ["Assets/Scripts/Player.cs:7: CS0103: The name 'speed' does not exist"]);
+  const many = JSON.stringify({ errors: Array.from({ length: 14 }, (_, i) => ({ file: "Assets/A.cs", line: i + 1, message: `bad ${i}` })) });
+  const list = compileErrors(many);
+  assert.equal(list.length, 11);
+  assert.equal(list.at(-1), "… and 4 more");
+});
+
+test("Unity compile-fix loop: two automatic fixes per script per turn, then stop and tell the user", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-unity-fix-"));
+  const project = join(root, "Game");
+  await mkdir(join(project, "Assets"), { recursive: true });
+  let compiles = false;
+  const run: CliRunner = async (args) => args[0] === "recompile"
+    ? { code: compiles ? 0 : 6, stdout: compiles ? "{}" : JSON.stringify({ errors: [{ file: "Assets/Door.cs", line: 3, message: "; expected" }] }), stderr: "" }
+    : { code: 0, stdout: "1", stderr: "" };
+  const unity = new UnityCli({ projects: [project], active: project }, async () => undefined, run);
+  const turns = unityTurns(unity);
+  const write = Object.fromEntries(unityTools(unity, join(root, "out"), async () => "a", () => [], undefined, turns.handle("c3")).map((t) => [t.spec.name, t])).unity_write_script!;
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  const go = async () => (await write.run({ path: "Assets/Door.cs", content: "class Door {" }, ctx)).output;
+
+  turns.begin("c3", "make a door script");
+  assert.match(await go(), /Compile errors:\nAssets\/Door.cs:3: ; expected\nFix them .*automatic fix 1 of 2/);
+  assert.match(await go(), /automatic fix 2 of 2/);
+  assert.match(await go(), /STOP changing Assets\/Door.cs.*Hebrew or English/);
+  assert.match(await go(), /^Not written: .*after 2 automatic fixes/);
+  // Another script has its own count; a new turn starts again.
+  assert.match((await write.run({ path: "Assets/Gate.cs", content: "class Gate {" }, ctx)).output, /fix 1 of 2/);
+  await turns.end("c3");
+  turns.begin("c3", "try once more");
+  assert.match(await go(), /fix 1 of 2/);
+  // A clean compile clears the count.
+  compiles = true;
+  assert.match(await go(), /Compiled with no errors/);
+  compiles = false;
+  assert.match(await go(), /fix 1 of 2/);
 });

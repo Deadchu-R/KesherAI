@@ -12,10 +12,12 @@
 import type { UnityCli } from "./unity-cli.js";
 import { csString } from "./unity-tools.js";
 
-/** What a chat's Unity tools use of the turn: open the group before a change. */
+/** What a chat's Unity tools use of the turn: open the group before a change, count compile fixes. */
 export interface UnityTurnHandle {
   /** Opens the turn's Undo group in Unity before its first change (once per turn; nothing outside a turn). */
   beforeEdit(): Promise<void>;
+  /** Failed compiles per script path in this turn (unity_write_script stops after 2 automatic fixes). */
+  compileFailures(): Map<string, number>;
 }
 
 interface ChatTurn {
@@ -29,6 +31,8 @@ interface ChatTurn {
   project?: string;
   /** The open call in flight, so two changes at once open one group. */
   opening?: Promise<void>;
+  /** Failed compiles per script in this turn. */
+  failures: Map<string, number>;
 }
 
 /** The longest title in Unity's Undo menu. */
@@ -67,7 +71,7 @@ export class UnityTurns {
 
   private chat(id: string): ChatTurn {
     let c = this.chats.get(id);
-    if (!c) this.chats.set(id, (c = { active: false, title: "" }));
+    if (!c) this.chats.set(id, (c = { active: false, title: "", failures: new Map() }));
     return c;
   }
 
@@ -88,6 +92,7 @@ export class UnityTurns {
     const c = this.chat(id);
     if (c.active) return; // "running" again after an approval: the same turn
     Object.assign(c, { active: true, title: turnTitle(request), group: undefined, project: undefined, opening: undefined });
+    c.failures.clear();
   }
 
   /**
@@ -126,6 +131,7 @@ export class UnityTurns {
         })().finally(() => (c.opening = undefined));
         return c.opening;
       },
+      compileFailures: () => this.chat(id).failures,
     };
   }
 }
@@ -153,3 +159,57 @@ export const UNITY_EDIT_TOOLS: ReadonlySet<string> = new Set([
   "unity_import_sprite",
   "unity_create_pbr_material",
 ]);
+
+/** Automatic fixes of one script per turn before KesherAI stops and asks the user. */
+export const MAX_COMPILE_FIXES = 2;
+/** Errors listed after a compile. */
+const MAX_ERRORS = 10;
+
+/**
+ * The compile errors of `unity recompile --format json`, one line each as "file:line: message" (at most 10, then a
+ * count of the rest), so a fix costs few tokens. Reads the JSON diagnostics, else Unity's own console format
+ * ("Assets/A.cs(12,5): error CS1002: ; expected").
+ *
+ * @param stdout - The CLI's output.
+ * @param stderr - Its error output.
+ * @returns The lines; empty when none could be read.
+ */
+export function compileErrors(stdout: string, stderr = ""): string[] {
+  const found: string[] = [];
+  const add = (file: unknown, line: unknown, code: unknown, message: unknown) => {
+    const msg = String(message ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+    if (!msg) return;
+    const where = typeof file === "string" && file ? `${file.replace(/\\/g, "/")}${line ? `:${Number(line)}` : ""}: ` : "";
+    const id = typeof code === "string" && code && !msg.includes(code) ? `${code}: ` : "";
+    const text = `${where}${id}${msg}`;
+    if (!found.includes(text)) found.push(text);
+  };
+  const visit = (v: unknown, depth: number): void => {
+    if (!v || typeof v !== "object" || depth > 4) return;
+    const o = v as Record<string, unknown>;
+    for (const key of ["errors", "diagnostics"]) {
+      const list = o[key];
+      if (!Array.isArray(list)) continue;
+      for (const d of list as Array<Record<string, unknown>>) {
+        if (!d || typeof d !== "object") continue;
+        // A diagnostic, not the CLI's own "the compile failed" envelope error (that one has no place in a file).
+        if (key === "errors" && !("file" in d || "path" in d || "filePath" in d || "line" in d) && /^[A-Z_]+$/.test(String(d.code ?? "")) && /compil/i.test(String(d.message ?? ""))) continue;
+        if (String(d.severity ?? d.type ?? "error").toLowerCase().startsWith("warn")) continue;
+        add(d.file ?? d.path ?? d.filePath ?? d.sourceFile, d.line ?? d.lineNumber, d.code ?? d.id, d.message ?? d.text);
+      }
+    }
+    visit(o.data, depth + 1);
+  };
+  for (const line of [stdout.trim(), ...stdout.split(/\r?\n/)]) {
+    try {
+      visit(JSON.parse(line) as unknown, 0);
+    } catch {
+      // not JSON
+    }
+    if (found.length) break;
+  }
+  if (!found.length) {
+    for (const m of `${stdout}\n${stderr}`.matchAll(/([\w./\\ -]+\.\w+)\((\d+),\d+\): error (\w+): ([^\r\n]+)/g)) add(m[1]!.trim(), m[2], m[3], m[4]);
+  }
+  return found.length > MAX_ERRORS ? [...found.slice(0, MAX_ERRORS), `… and ${found.length - MAX_ERRORS} more`] : found;
+}
