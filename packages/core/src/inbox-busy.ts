@@ -88,12 +88,43 @@ export function busyPrograms(programs: RunningProgram[], gameFolders: Array<{ na
 }
 
 /**
+ * Steam apps that are tools, not games (Steam marks them "Tool" or "Application" in its binary appinfo.vdf, which
+ * the scanner does not read; the appmanifest has no type). Wallpaper Engine runs all day, so counting it kept the
+ * task inbox paused.
+ */
+const STEAM_NOT_GAMES = new Set([
+  "431960", // Wallpaper Engine
+  "250820", // SteamVR
+  "228980", // Steamworks Common Redistributables
+  "1070560", "1391110", "1628350", // Steam Linux Runtime (scout, soldier, sniper)
+  "629520", // Soundpad
+  "1905180", // OBS Studio
+  "993090", // Lossless Scaling
+  "431730", // Aseprite
+  "365670", // Blender (counted as an editor instead)
+  "404790", // Godot Engine (counted as an editor instead)
+]);
+
+/** Names of Steam tools, for ones not in {@link STEAM_NOT_GAMES} (other Proton versions, dedicated servers, SDKs). */
+const STEAM_TOOL_NAME = /^(Wallpaper Engine|SteamVR|Proton\b|Steam Linux Runtime|Steamworks\b|Soundpad|OBS Studio|Lossless Scaling)|Dedicated Server$|\bSDK$|Redistributables?$/i;
+
+/**
+ * Whether a found app is a Steam tool rather than a game.
+ *
+ * @param g - One entry from pc-games.ts `findGamesAndStoreApps`.
+ */
+export function isSteamTool(g: { name: string; source: string; steamAppId?: string }): boolean {
+  return g.source === "steam" && ((!!g.steamAppId && STEAM_NOT_GAMES.has(g.steamAppId)) || STEAM_TOOL_NAME.test(g.name.trim()));
+}
+
+/**
  * The install folders that count as games for the busy check: Steam, Epic and Xbox PC games only. Plain Microsoft
- * Store apps (Phone Link's "CrossDevice", Photos, …) are not games, and counting them kept the inbox paused.
+ * Store apps (Phone Link's "CrossDevice", Photos, …) and Steam tools ({@link isSteamTool}: Wallpaper Engine,
+ * SteamVR, …) are not games, and counting them kept the inbox paused.
  *
  * @param found - What pc-games.ts `findGamesAndStoreApps` returned.
  * @returns Name and folder of each game that has a folder.
  */
-export function gameFoldersForBusy(found: Array<{ name: string; source: string; folder?: string }>): Array<{ name: string; folder: string }> {
-  return found.flatMap((g) => (g.folder && g.source !== "store" ? [{ name: g.name, folder: g.folder }] : []));
+export function gameFoldersForBusy(found: Array<{ name: string; source: string; folder?: string; steamAppId?: string }>): Array<{ name: string; folder: string }> {
+  return found.flatMap((g) => (g.folder && g.source !== "store" && !isSteamTool(g) ? [{ name: g.name, folder: g.folder }] : []));
 }

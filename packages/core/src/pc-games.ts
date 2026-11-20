@@ -21,6 +21,8 @@ export interface FoundApp {
   /** A link that starts the store's own uninstall (Steam), or opens the store. */
   uninstallUrl?: string;
   lastPlayed?: string;
+  /** Steam's app id (Steam only), e.g. "431960" for Wallpaper Engine. */
+  steamAppId?: string;
 }
 
 /**
@@ -84,6 +86,7 @@ export function steamGame(acf: string, library: string): FoundApp | undefined {
     ...(s.installdir ? { folder: join(library, "steamapps", "common", s.installdir) } : {}),
     ...(driveOf(library) ? { drive: driveOf(library)! } : {}),
     uninstallUrl: `steam://uninstall/${encodeURIComponent(s.appid)}`,
+    steamAppId: s.appid,
     ...(last > 0 ? { lastPlayed: new Date(last * 1000).toISOString().slice(0, 10) } : {}),
   };
 }

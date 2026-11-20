@@ -97,7 +97,7 @@ function card(v, c, now, pc) {
     const src = SOURCE[c.state.source];
     const key = `${c.deviceId}/${c.runId}`;
     const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : (!isGoing(c) && c.state.summary) || "";
-    return h("div", { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e) => e.key === "Enter" && v.setOpen(key) }, h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, c.state.title), stateTag(st)), h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))), line ? h("div", { class: `sm ell${st === "waiting" ? " warn" : ""}` }, line) : null, st === "waiting" ? actions(v, c, pc) : null);
+    return h("div", { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e) => e.key === "Enter" && v.setOpen(key) }, h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, c.state.title), stateTag(st)), h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))), line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null, st === "waiting" ? actions(v, c, pc) : null);
 }
 /** Claude cloud runs this device started (from its own task list): the hub fired them, so only "started" is known. */
 function cloudTasks(v, now) {
@@ -116,7 +116,7 @@ function snapshotCard(a) {
     const st = ["done", "failed", "cancelled"].find((x) => x === b.state);
     const src = SNAPSHOT_SOURCE[b.source];
     const span = b.startedAt && b.endedAt ? Date.parse(b.endedAt) - Date.parse(b.startedAt) : NaN;
-    return h("div", { class: "acard snap" }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))), h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), b.model ? h("span", { class: "xs ell1" }, `· ${b.model}`) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · "))), b.summary ? h("div", { class: "sm ell" }, b.summary) : null);
+    return h("div", { class: "acard snap" }, h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))), h("div", { class: "row wrap mut sm" }, h("span", null, `${src.icon} ${L(src.he, src.en)}`), h("span", { class: "xs" }, `· ${L(a.device.he, a.device.en)}`), b.model ? h("span", { class: "xs ell1" }, `· ${b.model}`) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · "))), b.summary ? h("div", { class: "sm wrapl", dir: "auto" }, b.summary) : null);
 }
 /** A device's group header: name, on/off, last seen (the Claude chat, which only connects to report: its last report). */
 function groupHead(name, icon, pc, count) {
@@ -190,7 +190,7 @@ function eventRow(e) {
                 return ["■", L("נעצר", "Stopped")];
         }
     })();
-    return h("li", { class: `tl-${e.type}` }, h("span", { class: "tl-ic", "aria-hidden": "true" }, icon), h("span", { class: "grow min0 ell" }, text), h("span", { class: "mut xs mono" }, new Date(e.t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
+    return h("li", { class: `tl-${e.type}` }, h("span", { class: "tl-ic", "aria-hidden": "true" }, icon), h("span", { class: "grow min0 wrapl" }, text), h("span", { class: "mut xs mono" }, new Date(e.t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
 }
 const back = (v) => h("button", { type: "button", class: "link back", onclick: () => v.setOpen(undefined) }, L("› כל הסוכנים", "‹ All agents"));
 /** One run's detail (HubAgentDetail / PhoneHubAgentDetail). */

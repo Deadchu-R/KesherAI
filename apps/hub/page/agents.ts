@@ -121,7 +121,7 @@ function card(v: AgentsView, c: AgentCard, now: number, pc: HubPresence | undefi
     { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
     h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, c.state.title), stateTag(st)),
     h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))),
-    line ? h("div", { class: `sm ell${st === "waiting" ? " warn" : ""}` }, line) : null,
+    line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null,
     st === "waiting" ? actions(v, c, pc) : null,
   );
 }
@@ -164,7 +164,7 @@ function snapshotCard(a: SyncedAgent): HTMLElement {
       h("span", { class: "grow" }),
       h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · ")),
     ),
-    b.summary ? h("div", { class: "sm ell" }, b.summary) : null,
+    b.summary ? h("div", { class: "sm wrapl", dir: "auto" }, b.summary) : null,
   );
 }
 
@@ -264,7 +264,7 @@ function eventRow(e: ActivityEvent): HTMLElement {
         return ["■", L("נעצר", "Stopped")];
     }
   })();
-  return h("li", { class: `tl-${e.type}` }, h("span", { class: "tl-ic", "aria-hidden": "true" }, icon), h("span", { class: "grow min0 ell" }, text), h("span", { class: "mut xs mono" }, new Date(e.t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
+  return h("li", { class: `tl-${e.type}` }, h("span", { class: "tl-ic", "aria-hidden": "true" }, icon), h("span", { class: "grow min0 wrapl" }, text), h("span", { class: "mut xs mono" }, new Date(e.t).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })));
 }
 
 const back = (v: AgentsView) => h("button", { type: "button", class: "link back", onclick: () => v.setOpen(undefined) }, L("› כל הסוכנים", "‹ All agents"));

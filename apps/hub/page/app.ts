@@ -695,7 +695,7 @@ function workListGroup(q: string): HTMLElement | null {
 function runButtons(t: PageTask): HTMLElement | null {
   const a = device.taskActions.get(t.taskId);
   if (a && !a.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
-  const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} ell1`, title: a.result.text }, a.result.text) : null;
+  const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, a.result.text) : null;
   if (!device.canRun(t)) return note;
   const press = (action: "inbox-run" | "inbox-cancel") => (e: Event) => {
     e.stopPropagation();
@@ -739,7 +739,7 @@ function agentRow(c: AgentCard): HTMLElement {
     "div",
     { class: "trow", role: "button", tabindex: 0, onclick: () => agentsView.setOpen(key), onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") agentsView.setOpen(key); } },
     h("span", { class: "c-st" }, tag),
-    h("div", { class: "grow min0" }, h("b", { class: "w5 ell1", dir: "auto" }, c.state.title), c.state.label && isGoing(c) ? h("div", { class: "sm sub ell" }, L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`)) : c.state.summary ? h("div", { class: "sm sub ell" }, c.state.summary) : null),
+    h("div", { class: "grow min0" }, h("b", { class: "w5 ell1", dir: "auto" }, c.state.title), c.state.label && isGoing(c) ? h("div", { class: "sm sub wrapl", dir: "auto" }, L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`)) : c.state.summary ? h("div", { class: "sm sub wrapl", dir: "auto" }, c.state.summary) : null),
     h("span", { class: "c-rt" }, h("span", { class: "ex ex-loc" }, `🖥 ${pc?.name ?? "PC"}`)),
     h("span", { class: "c-when mut sm" }, when(c.state.startedAt || c.at)),
     h("span", { class: "c-act" }, h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›"))),
@@ -792,7 +792,7 @@ function taskRow(t: PageTask): HTMLElement {
     "div",
     { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") { app.openTask = t.taskId; render(); } } },
     h("span", { class: "c-st" }, statusTag(t)),
-    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub ell" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub ell" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
+    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
     h("span", { class: "c-rt" }, routeChip(t)),
     h("span", { class: "c-when mut sm" }, when(t.createdAt)),
     h("span", { class: "c-act" }, action),

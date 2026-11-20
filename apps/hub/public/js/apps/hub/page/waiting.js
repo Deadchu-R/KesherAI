@@ -69,7 +69,7 @@ function entry(v, e) {
     const icon = a ? (a.kind === "run" ? "✦" : a.who ? "🤖" : "💬") : c.state.waiting?.reason === "run-press" ? "✦" : "🤖";
     const who = a ? (a.kind === "run" ? L("להריץ ב-Antigravity?", "Run in Antigravity?") : a.who ? L(`סוכן משנה: ${a.who}`, `Sub-agent: ${a.who}`) : L("הסוכן של הצ׳אט", "The chat's agent")) : L("סוכן", "Agent");
     const why = a ? a.reason : (c.state.waiting?.summary ?? "");
-    return h("div", { class: "acard wait wentry", role: "group", "aria-label": what }, h("div", { class: "row" }, h("span", { "aria-hidden": "true" }, icon), h("b", { class: "grow ell1", dir: "auto" }, what), a && a.kind === "tool" ? h("span", { class: "chip mono" }, a.tool) : null), h("div", { class: "row wrap mut xs" }, h("span", null, who), h("span", null, `🖥 ${e.pc.name}`), a?.at ? h("span", null, when(a.at)) : null), why ? h("div", { class: "sm warn", dir: "auto" }, why) : null, a?.preview ? h("pre", { class: "xs mono wprev", dir: "ltr" }, a.preview) : null, buttons(v, e));
+    return h("div", { class: "acard wait wentry", role: "group", "aria-label": what }, h("div", { class: "row" }, h("span", { "aria-hidden": "true" }, icon), h("b", { class: "grow ell1", dir: "auto" }, what), a && a.kind === "tool" ? h("span", { class: "chip mono" }, a.tool) : null), h("div", { class: "row wrap mut xs" }, h("span", null, who), h("span", null, `🖥 ${e.pc.name}`), a?.at ? h("span", null, when(a.at)) : null), why ? h("div", { class: "sm warn wrapl", dir: "auto" }, why) : null, a?.preview ? h("pre", { class: "xs mono wprev", dir: "ltr" }, a.preview) : null, buttons(v, e));
 }
 /**
  * The "Waiting for you" section, or nothing when nothing waits.
