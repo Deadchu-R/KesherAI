@@ -1,5 +1,7 @@
 # Work list (Roee and Claude)
 
+Full backlog: see the 'Backlog:' sections at the end.
+
 The running list of what is being worked on, what is next and what waits on Roee. Claude keeps it up to date after
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
@@ -130,3 +132,129 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 ## Later (agreed)
 - ✅ A 3D model from words without the chat (＋ Add → A model from words: a picture, then Hunyuan3D 2 on the computer;
   the first time it asks before downloading the 3D model). Not run in ComfyUI on the PC yet.
+
+## Full backlog (everything Roee asked for, 2026-11-20)
+Every area below is its own `## Backlog:` section (one line per feature; ✅ = already in the code, with where).
+
+## Backlog: Chat and UI
+- ⬜ Typed chat blocks: fold consecutive tool calls into one line ("7 steps"), like Claude's step list
+- ⬜ Live progress and preview of a media job inside the chat bubble (ComfyUI WebSocket)
+- ⬜ Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations)
+- ⬜ Side canvas for heavy results: images, PBR maps, code diffs
+- ⬜ Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes
+- ⬜ Approval card shows the diff or object list for Unity scene changes
+- ⬜ Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots
+- ⬜ One shared chat component everywhere; the new-chat box on the main screen gets the same + menu
+- ✅ Rich + menu: files, camera, projects, devices, skills, memory and more (apps/web/src/AddMenu.tsx)
+- ✅ Built-in slash commands /compact /fork /model /new /status /goal /side (FUTURE_FEATURES, built 2026-11-18)
+- ✅ Reading aloud off by default, stop once started (Settings > Accessibility)
+- ⬜ Full design refresh, desktop and phone: colour-coded, light, one unified menu on a shared base
+- ⬜ First-run welcome with tappable roles (developer, artist, student, ...) that pick the tools; tools in categories
+- ⬜ Apple-style menus (act on finger lift); long-press drag to reorder sidebar buttons; user shortcuts
+- ✅ Look changes: styles from words, web pictures, presets, full dark for HDR, synced look, reset (FUTURE_FEATURES)
+- ⬜ Look: backgrounds, fonts, icons from the web, SteamOS-like ordering; AI restyle that never touches functions
+- ✅ Gamepad support with controller hints and on-screen keyboard (apps/web/src/gamepad.ts)
+- ⬜ Console mode with big buttons for the ROG Xbox Ally X, and a gaming AI helper in it
+- ⬜ "Open mind": record a brain dump, sort it into prompts, research each idea
+- ⬜ Hugging Face search filtered by what runs well on this computer, each result marked
+- ⬜ Train models from the UI: pick the kind, show what is supported, plug the result into a category
+- ⬜ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini
+- ⬜ Setup guides for each part, kept as files in the repo
+
+## Backlog: Game engines
+- ⬜ Unity: Test button that enters Play mode and reports result and console
+- ⬜ Unity: checkpoint and rollback before every agent edit
+- ⬜ Unity: reconnect after a domain reload; show "waiting for Unity" and retry the command
+- ⬜ Unity: one Undo group per chat turn (also for unity_command and script_eval)
+- ⬜ Unity: compile-fix loop with at most 2 automatic fixes, errors returned as file, line, message
+- ✅ Unity: create a new project through Unity's CLI without an existing one (packages/core/src/unity-cli.ts)
+- ✅ Unity: embedded graphs and state graphs read and edited (integrations/unity/com.kesherai.bridge KesherGraph.cs)
+- ⬜ Unity Visual Scripting node editor that supports everything the engine does and syncs on open
+- ⬜ Unity C# shown as visual nodes and translated back to code
+- ⬜ ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s)
+- ⬜ Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background)
+- ⬜ Intent routing: "make a tileable wall texture" picks the PBR flow by itself
+- ⬜ Unreal: Blueprint node editor that supports everything the engine does; the page works with Unreal closed
+- ⬜ Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets)
+- ⬜ Unreal: inspect_level and apply_material tools; profiling against the chosen target phones
+- ⬜ Unreal: code views for C++ and Verse; Blueprint to Verse; prepare for UE6
+- ⬜ Specialised engine agents: materials, Niagara and VFX, level design
+- ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting
+- ⬜ Draw on a screenshot from the phone and send it as a change request to the engine
+- ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64)
+- ✅ Godot support: bridge addon, scenes, nodes, scripts, run and log (FUTURE_FEATURES)
+- ✅ Minecraft and Roblox modding (mod_new, mod_build) and UEFN / Verse files (FUTURE_FEATURES)
+- ✅ Fab search, installed Unreal plugins list and rebuild for another engine version (FUTURE_FEATURES)
+- ✅ Phone build targets chosen by phone model, known engine bugs checked before builds (FUTURE_FEATURES)
+
+## Backlog: Models and agents
+- ⬜ Cache: fixed engine slot per agent kind, slot save and restore around ComfyUI VRAM use
+- ⬜ Findings-pack limit (200-400 tokens) for helper agent reports; per-turn cap of 4-6 loaded tools
+- ⬜ Tool outputs pruned after 2 turns with a summary line and a pointer to the full output on disk
+- ⬜ Calibrate the local engine to the computer (speed against accuracy); chats-at-once setting
+- ⬜ Download the right engine and models for the hardware (NVIDIA, Intel, AMD) automatically, no button
+- ⬜ Smart split of one task across connected computers by hardware; per-chat device choice; laptop gets no heavy work
+- ⬜ Local model carries tasks during Claude's weekly cooldown, one after another without crashing
+- ⬜ Ideal local model: Hebrew and English, strong at code, many tools; code sessions answer in Hebrew
+- ⬜ Test DeepSeek V4-Flash and tune Qwen 3.6-27B for the PC; goal is Claude-like quality locally
+- ⬜ Microsoft Copilot connection for businesses, with an option to use only Copilot
+- ⬜ Models talking to each other: multilingual model plus strong code model as a team
+- ⬜ Claude uses KesherAI more and more itself; a KesherAI connector so Claude can send it commands
+- ⬜ Long-term approvals in chats (for good or for a set time) in every flow, not only commands
+- ✅ Gemini through the user's Google subscription, Telegram approvals, named agents, heartbeat routines (FUTURE_FEATURES)
+- ✅ Translation model in the team, reply-language settings (FUTURE_FEATURES, chat at Claude/Gemini level)
+
+## Backlog: Devices, hub and phone
+- ⬜ Backup update source without GitHub (updates from the user's own computers); keep GitHub too
+- ⬜ The phone app does not get the PC's update or notes when only the PC updated
+- ⬜ Phone app redesign in the same design line; phone health screen; settings button while connected
+- ⬜ Notifications like any app, no ntfy and no cost, opening the right page
+- ⬜ A computer about to sleep tells the others; faster device discovery with status
+- ⬜ Found computers shared by every chat; disconnect and switch computer from the menu
+- ⬜ Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds
+- ✅ Telegram bot with approval buttons (packages/core/src/telegram.ts)
+- ✅ Remote desktop with a PIN, computer load view with Terminate, computer tabs (FUTURE_FEATURES)
+- ✅ Fixed outside address by Cloudflare domain or Tailscale Funnel (FUTURE_FEATURES)
+
+## Backlog: Editors and media
+- ⬜ Picture editor to Photoshop and Affinity level: layers, masks, AI tools (research first)
+- ⬜ 3D editor to Blender, Max and Maya level: all modifiers, rigging, animation (research first)
+- ⬜ Sound editor with instruments, hum or whistle to instrument, mixing and effects at DAW level
+- ⬜ Video editor to a pro level: keyframes, colour, titles, audio ducking
+- ⬜ Editors call each other and offer to install a missing one
+- ⬜ Figma integration with careful security; share and collaborate like Figma (stages 2-3)
+- ✅ Picture, video, sound and 3D editors opened from chat results as tabs, with Send to the chat (plugins/*-editor)
+- ✅ Camera avatar page and lip-sync (apps/web/src/pages/AvatarCamera.tsx, packages/core/src/lipsync.ts)
+- ✅ Asset bank of everything made, with Edit in... under each chat result (#/bank)
+
+## Backlog: Study and personal tools
+- ⬜ Study works fully on a phone alone and on weak laptops, including summaries and quizzes without a PC
+- ⬜ A "Student" option in the welcome and a complete package to send to a student
+- ✅ Lecture recording, also from the phone (apps/web/src/StudyRecorder.tsx), summaries, quizzes, mock exams
+- ✅ Moodle, My week, slides, writing coach, sources, mind maps, oral exam practice (FUTURE_FEATURES)
+- ⬜ Study: visuals and practical help per lesson (keep refining with a real student's feedback)
+- ✅ Relationship analysis with imports and an analyst persona; WhatsApp and Instagram import (FUTURE_FEATURES)
+- ✅ Films for you: Stremio, Letterboxd and MyAnimeList taste (#/stremio)
+- ⬜ Persona from AskBrandon-style analysis kept as a reusable persona
+- ✅ AI-based PC Health, screen lens (Ctrl+Alt+L), personal knowledge tools (FUTURE_FEATURES)
+
+## Backlog: Platform, security and tests
+- ⬜ Publish @kesher/plugin-sdk to npm with a template repository (needs an npm account)
+- ⬜ Plugin store with install from the app; clear plugin and fork docs for developers
+- ⬜ Fully modular parts; no single provider needed; less dependence on Ollama and LM Studio over time
+- ⬜ Automated test system per version: it works and has no security holes
+- ⬜ Full security review and performance pass after every 5 builds (running rule)
+- ⬜ Hardware limits in the UI: RAM and CPU caps, CPU temperature
+- ⬜ Reset to defaults and a reinstall option checked on every platform
+- ⬜ Project index: faster search over assets, scripts and Blueprints for big projects
+- ⬜ Browser extension in the Edge and Firefox stores, self-updating
+- ⬜ Landing page roeetal.com/KesherAI in the app's design, with API docs under it
+- ✅ Plugin dev mode, pnpm plugin:check, CONTRIBUTING walk-through (FUTURE_FEATURES)
+- ✅ Project index: code_map, find_symbol, find_assets cached by file time (FUTURE_FEATURES)
+
+## Backlog: Far future
+- ⬜ Remote control of the computer with several monitors, as a plugin (like Google Remote Desktop)
+- ⬜ Anyone can host their own hub from KesherAI's hub builder, after the builder exists
+- ⬜ Live avatar instead of the camera in video calls, with a warning to the user
+- ⬜ Approvals from a Wear OS watch
+- ⬜ Paid models fully supported for other users (not needed for himself)
