@@ -632,6 +632,8 @@ export class Hub {
       const to = this.store.device(env.to);
       if (!to || to.kind !== "phone") continue;
       const row = this.store.addAgentEvent({ to: to.id, from: from.id, run: env.run, n: env.n ?? 0, env: JSON.stringify(env), createdAt: t }, HUB_LIMITS.agentEventsPerRun);
+      // The whole table is capped too (scan 168), oldest rows first.
+      this.store.capAgentEvents(HUB_LIMITS.agentEventsTotal);
       this.sockets.send(to.id, { t: "deliver", env: { ...env, seq: row.seq, at: t } });
     }
   }

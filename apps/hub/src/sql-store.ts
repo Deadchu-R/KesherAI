@@ -245,6 +245,10 @@ export class SqlStore implements HubStore {
     this.sql.exec("DELETE FROM agent_events");
   }
   /** @inheritdoc */
+  capAgentEvents(max: number): void {
+    this.sql.exec("DELETE FROM agent_events WHERE seq <= (SELECT seq FROM agent_events ORDER BY seq DESC LIMIT 1 OFFSET ?)", Math.max(0, max));
+  }
+  /** @inheritdoc */
   pruneAgentEvents(before: number): number {
     return this.sql.exec("DELETE FROM agent_events WHERE created_at < ?", before).rowsWritten;
   }

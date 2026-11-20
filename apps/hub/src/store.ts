@@ -143,6 +143,8 @@ export interface HubStore {
   /** Deletes the batches to or from a device. */
   dropAgentEventsFor(deviceId: string): void;
   dropAgentEvents(): void;
+  /** Keeps only the newest `max` agent-event rows in all, evicting the oldest first. */
+  capAgentEvents(max: number): void;
   pruneAgentEvents(before: number): number;
   /** How many batches are kept, and how many were written since a time (the free plan's write counter). */
   agentEventCount(since?: number): number;
@@ -323,6 +325,10 @@ export class MemoryStore implements HubStore {
   /** @inheritdoc */
   dropAgentEvents(): void {
     this.agentRows = [];
+  }
+  /** @inheritdoc */
+  capAgentEvents(max: number): void {
+    if (this.agentRows.length > max) this.agentRows = this.agentRows.slice(-max);
   }
   /** @inheritdoc */
   pruneAgentEvents(before: number): number {

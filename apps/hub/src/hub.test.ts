@@ -541,3 +541,17 @@ test("Run / Cancel commands: from a phone to a PC only (audited without content)
   const audit = JSON.stringify(store.auditList(100));
   assert.ok(audit.includes("relay-command") && !audit.includes("relay-command_result") && !audit.includes("agy-secret"));
 });
+
+test("agent-event rows have a total cap: the oldest go first, whatever the run", () => {
+  const store = new MemoryStore();
+  const add = (run: string, n: number) => store.addAgentEvent({ to: "p", from: "pc", run, n, env: "{}", createdAt: 1 }, 50);
+  const first = add("r0", 1);
+  for (let i = 1; i < 10; i++) add(`r${i}`, 1);
+  store.capAgentEvents(4);
+  const left = store.agentEvents("p", 0, 100);
+  assert.equal(left.length, 4);
+  assert.deepEqual(left.map((r) => r.run), ["r6", "r7", "r8", "r9"], "the newest are kept");
+  assert.ok(left.every((r) => r.seq > first.seq));
+  store.capAgentEvents(100);
+  assert.equal(store.agentEventCount(), 4, "under the cap nothing goes");
+});

@@ -38,6 +38,8 @@ export const HUB_LIMITS = {
   agentBatchEvents: 20,
   agentFrameEnvs: 16,
   agentEventsPerRun: 50,
+  /** Agent-event rows the hub keeps in all (oldest evicted first): bounds a misbehaving PC within the free plan's writes. */
+  agentEventsTotal: 2000,
   agentKeepMs: 7 * 24 * 3600 * 1000,
   /** A running agent's heartbeat, and how long without one before a viewer shows it as stale (the Cursor freeze lesson). */
   agentBeatMs: 25_000,

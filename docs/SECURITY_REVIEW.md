@@ -1672,6 +1672,6 @@ batch sync, offer_install and /api/installables, the tool router and per-chat to
     a bundle/minify step in the hub build would cut it to well under 100 KB gzipped.
   - Low (perf): `withUnrealKinds` stats every .uasset on each index rebuild (every 15 s while searching); fine to
     ~50k packages, a folder-time cache would avoid it.
-  - Carried from 167: the hub keeps no total cap on agent-event rows (per run and 7 days only).
+  - Carried from 167: the hub keeps no total cap on agent-event rows (per run and 7 days only). FIXED: `agentEventsTotal` (2000 rows), oldest evicted first (`capAgentEvents`).
 - Performance otherwise: checkpoint copies stream (hash while copying, no buffering), ≤ 2 GB a file, store pruned
   after every capture; uasset reads 16 KB first and the rest only to the header's end.
