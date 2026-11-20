@@ -8,6 +8,7 @@ import { definitionsOf } from "../game-index.js";
 import { projectPath } from "../unity-tools.js";
 import { lintUnrealSource } from "../unreal-lint.js";
 import { sameFolder } from "../unity-cli.js";
+import { pruneGameBackups } from "../game-backups.js";
 
 /**
  * One Source view for every engine (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20, step 4):
@@ -151,6 +152,8 @@ export function gameSourceRoutes(app: FastifyInstance, s: KesherServices, findOn
         const backups = join(s.paths.root, "game-backups", p.kind);
         await mkdir(backups, { recursive: true });
         await writeFile(join(backups, `${p.name}_${rel.replace(/[\\/]/g, "_")}-${Date.now()}`), await readFile(abs));
+        // Old backups go by age and total size (like checkpoints).
+        void pruneGameBackups(join(s.paths.root, "game-backups"));
       }
       await mkdir(dirname(abs), { recursive: true });
       await writeFile(abs, text);
