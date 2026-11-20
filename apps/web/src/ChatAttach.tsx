@@ -4,7 +4,11 @@ import { Annotator, type Annotated } from "./Annotator";
 import type { AddMenuProps } from "./AddMenu";
 import { getLocale, t } from "./i18n";
 import { desktop } from "./library";
-import { uploadToConversation } from "./phone";
+import { uploadFolderFile, uploadToConversation } from "./phone";
+import { folderUploadPlan } from "./attach-lines";
+
+/** Whether this browser can pick a whole folder (desktop browsers and recent Android Chrome). */
+const FOLDER_PICK = typeof document !== "undefined" && "webkitdirectory" in document.createElement("input");
 
 /** What adding a project to a chat answered. */
 export interface ProjectAdded {
@@ -37,10 +41,11 @@ export function useChatAttach(o: {
   insert: (text: string) => void;
   onError: (message: string) => void;
   onProject?: (r: ProjectAdded) => void;
-}): { menu: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onGameProject" | "onScript" | "convId">; elements: ReactNode; takePhoto: () => void; attach: (paths: string[]) => Promise<void> } {
+}): { menu: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onUploadFolder" | "onGameProject" | "onScript" | "convId">; elements: ReactNode; takePhoto: () => void; attach: (paths: string[]) => Promise<void> } {
   const uploadInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const annotInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const [annotSrc, setAnnotSrc] = useState("");
   const line = (path: string) => `[${t("attached")}: ${path}]`;
   const chat = async () => o.convId ?? (await o.ensure?.());
@@ -72,6 +77,37 @@ export function useChatAttach(o: {
       }
     }
     if (lines.length) o.insert(`${lines.join("\n")}\n`);
+  };
+  /**
+   * A folder picked on this device (the phone, or a browser in remote): its files go to the chat's folder on the
+   * computer under shared/<folder>/ (dependencies and builds left out, a size cap), then the folder is attached.
+   */
+  const uploadFolder = async (files: FileList | null) => {
+    const list = Array.from(files ?? []);
+    if (!list.length) return;
+    const id = await chat();
+    if (!id) return;
+    const he = getLocale() === "he";
+    const plan = folderUploadPlan(list.map((f) => ({ path: f.webkitRelativePath || f.name, size: f.size })));
+    const top = (list[0]!.webkitRelativePath || "folder").split("/")[0] || "folder";
+    let folder = "";
+    let failed = 0;
+    // A few at a time: quick on a phone without flooding the computer.
+    const queue = [...plan.take];
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (let i = queue.shift(); i !== undefined; i = queue.shift()) {
+        const f = list[i]!;
+        const rel = (f.webkitRelativePath || f.name).split("/").slice(1).join("/") || f.name;
+        try {
+          folder = await uploadFolderFile(id, top, rel, f);
+        } catch {
+          failed++;
+        }
+      }
+    }));
+    if (plan.overLimit || failed) o.onError(he ? `${plan.overLimit ? `${plan.overLimit} קבצים לא נשלחו (מעבר למגבלת 400 קבצים או 150MB). ` : ""}${failed ? `${failed} קבצים נכשלו בשליחה.` : ""}` : `${plan.overLimit ? `${plan.overLimit} files were not sent (over the 400-file or 150 MB limit). ` : ""}${failed ? `${failed} files failed to send.` : ""}`);
+    if (folder) o.insert(`${line(folder)}\n`);
+    else if (!plan.take.length) o.onError(he ? "אין בתיקייה קבצים לשליחה." : "The folder has no files to send.");
   };
   const startAnnotate = async (from: "screen" | "file") => {
     if (from === "file") return annotInput.current?.click();
@@ -118,7 +154,7 @@ export function useChatAttach(o: {
       onFiles: () => (bridge?.pickFiles ? void bridge.pickFiles().then((f) => attach(f)) : uploadInput.current?.click()),
       onPhoto: () => photoInput.current?.click(),
       onAnnotate: (from) => void startAnnotate(from),
-      ...(bridge?.pickFiles ? { onProject: () => void addProject() } : {}),
+      ...(bridge?.pickFiles ? { onProject: () => void addProject() } : FOLDER_PICK ? { onUploadFolder: () => folderInput.current?.click() } : {}),
       onGameProject: (path) => void addProject(path),
       // Scripts are found in the chat's own folders, so only a chat that exists can list them.
       ...(o.convId ? { convId: o.convId, onScript: (path: string) => o.insert(`${line(path)}\n`) } : {}),
@@ -129,6 +165,7 @@ export function useChatAttach(o: {
       <>
         <input ref={uploadInput} type="file" multiple hidden onChange={(e) => void upload(e.target.files).finally(() => { if (uploadInput.current) uploadInput.current.value = ""; })} />
         <input ref={photoInput} type="file" accept="image/*" capture="environment" hidden onChange={(e) => { void upload(e.target.files); e.target.value = ""; }} />
+        <input ref={folderInput} type="file" hidden {...{ webkitdirectory: "", directory: "" }} onChange={(e) => void uploadFolder(e.target.files).finally(() => { if (folderInput.current) folderInput.current.value = ""; })} />
         <input ref={annotInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) setAnnotSrc(URL.createObjectURL(f)); e.target.value = ""; }} />
         {annotSrc && <Annotator src={annotSrc} onDone={(r) => void finishAnnotate(r)} />}
       </>

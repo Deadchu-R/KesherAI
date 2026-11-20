@@ -14,6 +14,8 @@ export interface AddMenuProps {
   onPhoto: () => void;
   /** A folder chosen in the computer's dialog (the desktop app only). */
   onProject?: () => void;
+  /** A folder from this device (the phone, or a browser in remote), uploaded to the computer and attached. */
+  onUploadFolder?: () => void;
   /** Adds one of the Unity/Unreal projects found on the computer (works from the phone too). */
   onGameProject?: (path: string) => void;
   /** The chat, for finding scripts in its folders. */
@@ -183,7 +185,7 @@ export function AddMenu(p: AddMenuProps) {
       <MenuItem icon="📎" onSelect={p.onFiles} title={L("כל סוג: מסמכים, קוד, תמונות, וידאו, אודיו", "Any kind: documents, code, pictures, video, audio")}>{L("קבצים ותמונות", "Files and photos")}</MenuItem>
       <MenuItem icon="📷" onSelect={p.onPhoto}>{L("מצלמה או תמונה", "Camera or photo")}</MenuItem>
       {p.onAnnotate && <MenuItem icon="✏️" onSelect={() => p.onAnnotate!("screen")}>{L("צילום מסך לסימון", "Mark up the screen")}</MenuItem>}
-      {(p.onGameProject || p.onProject) && (
+      {(p.onGameProject || p.onProject || p.onUploadFolder) && (
         <MenuSub icon="📁" label={L("קוד או פרויקט", "Code or a project")} {...subProps("projects")}>
           {games === null ? <MenuNote>…</MenuNote> : games.length === 0 ? <MenuNote>{L("לא נמצאו פרויקטים במחשב.", "No projects found on the computer.")}</MenuNote> : games.map((g) => (
             <MenuItem key={g.path} dir="auto" title={g.path} onSelect={() => p.onGameProject?.(g.path)} end={g.engine}>
@@ -191,6 +193,7 @@ export function AddMenu(p: AddMenuProps) {
             </MenuItem>
           ))}
           {p.onProject && <MenuItem icon="📁" onSelect={p.onProject}>{L("תיקייה אחרת…", "Another folder…")}</MenuItem>}
+          {p.onUploadFolder && <MenuItem icon="📤" onSelect={p.onUploadFolder} title={L("נשלחת למחשב ומצורפת לצ'אט", "Sent to the computer and attached to the chat")}>{L("תיקייה מהמכשיר הזה…", "A folder from this device…")}</MenuItem>}
         </MenuSub>
       )}
       {p.onScript && p.convId && (

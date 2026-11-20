@@ -72,6 +72,22 @@ export async function uploadToConversation(id: string, name: string, data: Blob)
   return j.path;
 }
 
+/**
+ * Sends one file of a folder from this device to the chat's folder on the computer, keeping its place in the folder.
+ *
+ * @param id - The chat.
+ * @param folder - The folder's name (it becomes `shared/<folder>/`).
+ * @param rel - The file's path inside the folder ("src/main.ts").
+ * @param data - The file.
+ * @returns The folder's path on the computer.
+ */
+export async function uploadFolderFile(id: string, folder: string, rel: string, data: Blob): Promise<string> {
+  const res = await fetch(withToken(`/api/conversations/${id}/files?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(rel)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: data });
+  const j = (await res.json()) as { folder?: string; error?: string };
+  if (!res.ok || !j.folder) throw new Error(j.error ?? String(res.status));
+  return j.folder;
+}
+
 const fromBase64 = (b64: string, type: string) => new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type });
 
 /**

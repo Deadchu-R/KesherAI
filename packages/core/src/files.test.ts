@@ -32,3 +32,22 @@ test("a chat gets its own files folder that can be listed and downloaded", async
     await s.close();
   }
 });
+
+test("a folder sent from the phone keeps its layout under shared/, never outside it, and previews as a tree", async () => {
+  const s = await createKesherServer({ dataDir: await mkdtemp(join(tmpdir(), "kesher-files-")), autodetect: false, pluginRoots: [] });
+  try {
+    const c = (await s.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "x/y" } })).json() as { id: string };
+    await s.services.conversations.open(c.id);
+    const send = (folder: string, name: string) => s.app.inject({ method: "POST", url: `/api/conversations/${c.id}/files?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(name)}`, headers: { "content-type": "application/octet-stream" }, payload: Buffer.from("x") });
+    const a = (await send("Game", "src/main.ts")).json() as { path: string; folder: string };
+    assert.ok(a.folder.endsWith(join("shared", "Game")));
+    assert.equal(a.path, join(a.folder, "src", "main.ts"));
+    const evil = (await send("..", "../../../escape.txt")).json() as { path: string };
+    assert.ok(evil.path.includes(join("shared", "folder", "escape.txt")), evil.path);
+    const tree = (await s.app.inject({ method: "GET", url: `/api/conversations/${c.id}/files/preview?path=${encodeURIComponent("shared/Game")}` })).json() as { kind: string; text: string };
+    assert.equal(tree.kind, "text");
+    assert.match(tree.text, /src\/\n {2}main\.ts \(1 B\)/);
+  } finally {
+    await s.close();
+  }
+});

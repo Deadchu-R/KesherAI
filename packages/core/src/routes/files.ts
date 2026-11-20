@@ -11,6 +11,7 @@ import { ensureFfmpeg } from "../ffmpeg.js";
 import { paintModel, pictureTo3d } from "../chat-tools-media.js";
 import { checkSegments, cutVideo, EXPORT_HEIGHTS, TRANSITIONS, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
 import { toWav } from "../speech-tools.js";
+import { folderOutline, zipOutline } from "../attach-outline.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
 const SKIP = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "build", ".next", ".cache"]);
@@ -305,7 +306,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
   /**
    * A file shown in the chat (an attachment chip, as LM Studio Bionic and Claude preview them): a table for Excel,
    * CSV and TSV, the slides' text for PowerPoint, a page for Word and HTML (the page draws them in a frame with no
-   * scripts), text for the rest. Only files in the chat's folder, up to 50 MB.
+   * scripts), a ZIP's or a folder's tree, text for the rest. Only files in the chat's folder, up to 50 MB.
    */
   app.get<{ Params: { id: string }; Querystring: { path?: string } }>("/api/conversations/:id/files/preview", async (req, reply) => {
     const root = await folderOf(req.params.id);
@@ -317,6 +318,11 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       return reply.code(400).send({ error: (err as Error).message });
     }
     const st = await stat(full).catch(() => undefined);
+    // An attached folder: its tree (as the model gets it), build and dependency folders left out.
+    if (st?.isDirectory()) {
+      const o = await folderOutline(full, { max: 400 });
+      return { kind: "text", name: basename(full), text: `${o.lines.join("\n")}${o.more ? `\n… +${o.more}` : ""}` };
+    }
     if (!st?.isFile()) return reply.code(404).send({ error: "File not found" });
     if (st.size > 50 * 1024 ** 2) return reply.code(413).send({ error: "This file is too big to show here (over 50 MB). Download it instead." });
     const name = basename(full);
@@ -335,6 +341,11 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
       if (ext === ".pptx") return { kind: "slides", name, slides: pptxSlides(data) };
       if (ext === ".docx") return { kind: "html", name, html: await docxHtml(data) };
       if (ext === ".html" || ext === ".htm") return { kind: "html", name, html: data.toString("utf8").slice(0, 2_000_000) };
+      if (ext === ".zip") {
+        const o = zipOutline(data, 1000);
+        return { kind: "text", name, text: `${o.lines.join("\n")}${o.more ? `\n… +${o.more}` : ""}` };
+      }
+      if (ext === ".epub" || ext === ".odt" || ext === ".odp") return { kind: "text", name, text: (await documentText(data, name)).pages.join("\n\n").slice(0, 300_000) };
       if (ext === ".pdf") return { kind: "text", name, text: (await documentText(data, name)).pages.map((p, i) => `— ${i + 1} —\n${p}`).join("\n\n").slice(0, 300_000) };
       // Text, or a file with no preview (binary).
       const sample = data.subarray(0, 8000);

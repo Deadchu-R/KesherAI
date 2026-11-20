@@ -9,15 +9,21 @@
  */
 import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname, isAbsolute, relative, resolve } from "node:path";
-import { documentText, formatPages } from "@kesher/agent";
+import { documentText, formatPages, openZip } from "@kesher/agent";
+import { folderOutline, sizeText, zipOutline, type Outline } from "./attach-outline.js";
 
 const LINE = /\[(?:Attached|קובץ מצורף|מצורף)\s*:\s*([^\]\n]+)\]/gi;
 const PICTURES: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif" };
-const DOCUMENTS = new Set([".pdf", ".docx", ".xlsx", ".pptx", ".tsv", ".txt", ".md", ".csv", ".json", ".log", ".xml", ".html", ".htm", ".yaml", ".yml", ".ini", ".cfg", ".toml"]);
+const DOCUMENTS = new Set([".pdf", ".docx", ".xlsx", ".pptx", ".epub", ".odt", ".odp", ".tsv", ".txt", ".md", ".csv", ".json", ".log", ".xml", ".html", ".htm", ".yaml", ".yml", ".ini", ".cfg", ".toml"]);
 /** Code and plain-text files read as they are (the model sees the code, not just the path). */
 const CODE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".cs", ".cpp", ".cc", ".c", ".h", ".hpp", ".java", ".kt", ".go", ".rs", ".rb", ".php", ".swift", ".gd", ".lua", ".sh", ".ps1", ".bat", ".sql", ".css", ".scss", ".vue", ".svelte", ".hlsl", ".glsl", ".shader", ".usf", ".ush", ".verse", ".uproject", ".uplugin", ".csproj", ".gradle", ".r", ".m", ".dart", ".scala", ".zig", ".tf", ".dockerfile", ".env.example"]);
 /** Recordings and videos: their speech as text, and a few frames of a video. */
 const MEDIA = /^\.(wav|mp3|flac|ogg|m4a|aac|opus|wma|webm|mp4|mkv|mov|avi|m4v|3gp|amr)$/;
+/** Archives: a ZIP is listed from its directory; the others are only named (the model can unpack them when asked). */
+const ARCHIVE = /^\.(zip|7z|rar|tar|gz|tgz|bz2|xz)$/;
+const MAX_ZIP_BYTES = 300 * 1024 * 1024;
+/** The most characters of a folder's or archive's README read with its outline. */
+const KEY_CHARS = 4000;
 const MAX_PICTURES = 4;
 const MAX_PICTURE_BYTES = 8 * 1024 * 1024;
 const DOC_BUDGET = 24_000;
@@ -55,9 +61,17 @@ export async function readAttachments(text: string, roots: string[], media?: (pa
     const realRoots = await Promise.all(roots.map((r) => realpath(r).catch(() => r)));
     if (!real || !realRoots.some((r) => inside(r, real))) continue;
     const info = await stat(path).catch(() => undefined);
+    const name = basename(path);
+    if (info?.isDirectory()) {
+      // A folder (a code project, say): its tree and README, not every file (the model reads the rest itself).
+      const o = await folderOutline(path);
+      const key = await keyText(o, (rel) => readFile(resolve(path, rel), "utf8"), budget);
+      budget -= key.length;
+      parts.push(`The attached folder ${name} (${path}), ${o.files} files${o.more ? `; the tree is cut, ${o.more} more entries` : ""}; build and dependency folders are left out:\n${o.lines.join("\n")}${key}\nRead its files with read_file, search them with grep.`);
+      continue;
+    }
     if (!info?.isFile()) continue;
     const ext = extname(path).toLowerCase();
-    const name = basename(path);
     if (PICTURES[ext]) {
       if (out.images.length >= MAX_PICTURES || info.size > MAX_PICTURE_BYTES) {
         parts.push(`(${name}: a picture not shown to you here; look at it with view_image.)`);
@@ -86,6 +100,8 @@ export async function readAttachments(text: string, roots: string[], media?: (pa
       } catch (err) {
         parts.push(`(${name}: could not be listened to here (${(err as Error).message}); transcribe_audio may work.)`);
       }
+    } else if (MEDIA.test(ext)) {
+      parts.push(`(${name}: a recording or video, ${sizeText(info.size)}; listen to it with transcribe_audio.)`);
     } else if (DOCUMENTS.has(ext)) {
       if (info.size > 50 * 1024 * 1024 || budget < 500) {
         parts.push(`(${name}: read it with read_document.)`);
@@ -105,8 +121,43 @@ export async function readAttachments(text: string, roots: string[], media?: (pa
       } catch (err) {
         parts.push(`(${name}: could not be read: ${(err as Error).message}.)`);
       }
+    } else if (ARCHIVE.test(ext)) {
+      if (ext !== ".zip" || info.size > MAX_ZIP_BYTES) {
+        parts.push(`(${name}: a ${ext.slice(1)} archive, ${sizeText(info.size)}, at ${path}. Its contents are not listed here; unpack it with a command if the user wants what is inside.)`);
+        continue;
+      }
+      try {
+        const data = await readFile(path);
+        const o = zipOutline(data);
+        const zip = openZip(data);
+        const key = await keyText(o, async (rel) => zip.read(rel)?.toString("utf8") ?? "", budget);
+        budget -= key.length;
+        parts.push(`The attached archive ${name} (${sizeText(info.size)}, ${o.files} files${o.more ? `, the first ${o.lines.length} listed` : ""}; nothing is unpacked):\n${o.lines.join("\n")}${key}`);
+      } catch (err) {
+        parts.push(`(${name}: the archive could not be listed: ${(err as Error).message}.)`);
+      }
+    } else {
+      // No reader for it: say so plainly, so the model neither guesses its contents nor ignores it.
+      parts.push(`(${name}: a ${ext ? `${ext.slice(1)} ` : ""}file, ${sizeText(info.size)}, at ${path}. There is no reader for this kind here; say what you can from its name, or use a tool that opens it.)`);
     }
   }
   if (parts.length) out.context = parts.join("\n\n");
   return out;
+}
+
+/**
+ * The first key file (a README or the manifest) of an outline, as text for the model, within the budget.
+ *
+ * @param o - The folder's or archive's outline.
+ * @param read - Reads one of its files by its relative path.
+ * @param budget - The characters left for attachments.
+ * @returns "\n\nIts README.md:\n…", or "" when there is none or no room.
+ */
+async function keyText(o: Outline, read: (rel: string) => Promise<string>, budget: number): Promise<string> {
+  const rel = o.key[0];
+  if (!rel || budget < 1000) return "";
+  const body = await read(rel).catch(() => "");
+  if (!body || body.includes("\u0000")) return "";
+  const shown = body.slice(0, Math.min(KEY_CHARS, budget - 500));
+  return `\n\nIts ${rel}:\n${shown}${shown.length < body.length ? "\n(cut; read the rest with read_file)" : ""}`;
 }

@@ -546,16 +546,29 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   /**
    * A file sent from another device (shared from the phone): saved in the
-   * conversation's own folder under `shared/`. Raw bytes, `?name=`.
+   * conversation's own folder under `shared/`. Raw bytes, `?name=`; with `?folder=`, `name` may be a path inside it.
    */
-  app.post<{ Params: { id: string }; Querystring: { name?: string } }>("/api/conversations/:id/files", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
+  app.post<{ Params: { id: string }; Querystring: { name?: string; folder?: string } }>("/api/conversations/:id/files", { bodyLimit: 300 * 1024 * 1024 }, async (req, reply) => {
     const conv = await s.library.getConversation(req.params.id);
     if (!conv) return reply.code(404).send({ error: "Conversation not found" });
     const body = req.body as Buffer;
     if (!Buffer.isBuffer(body) || !body.length) return reply.code(400).send({ error: "Send the file's bytes as application/octet-stream." });
     const folder = s.conversations.workspaceOf(conv);
     if (!folder) return reply.code(409).send({ error: "This conversation has no folder." });
-    const name = (String(req.query.name ?? "file").split(/[\\/]/).pop() ?? "file").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 120) || "file";
+    const clean = (part: string) => (/^\.+$/.test(part) ? "" : part.replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 120));
+    // A folder sent from the phone (the + menu's "Folder"): each file keeps its place under shared/<folder>/, and
+    // sending the same folder again refreshes it. Every part is cleaned, so nothing can lead outside shared/.
+    if (req.query.folder) {
+      const top = clean(String(req.query.folder)) || "folder";
+      const parts = String(req.query.name ?? "").split(/[\\/]/).map(clean).filter(Boolean).slice(-12);
+      if (!parts.length) return reply.code(400).send({ error: "Name the file." });
+      const base = join(folder, "shared", top);
+      const path = join(base, ...parts);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, body);
+      return { path, name: basename(path), folder: base };
+    }
+    const name = clean(String(req.query.name ?? "file").split(/[\\/]/).pop() ?? "file") || "file";
     const dir = join(folder, "shared");
     await mkdir(dir, { recursive: true });
     let path = join(dir, name);
@@ -660,7 +673,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
         const live = s.unreal.connected ? "the editor is connected" : "open it in Unreal with the KesherAI Bridge plugin, or Unreal 5.8's MCP (Create → Unreal Blueprints)";
         return { kind: "unreal", name, path, engine: up.engine, connected: s.unreal.connected, line: `[Unreal project: ${name}, UE ${up.engine || "?"} — ${path}; ${live}]` };
       }
-      return { kind: "folder", name, path, line: `[${name}: ${path}]` };
+      // Any other folder is an attachment: the model gets its tree and README with the message (attachments.ts).
+      return { kind: "folder", name, path, line: `[Attached: ${path}]` };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
