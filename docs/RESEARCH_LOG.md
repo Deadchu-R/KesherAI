@@ -4038,3 +4038,128 @@ title/state) be visible on the phone? (default off). (3) Keep 90 days for done t
 - Sources: bitwarden.com/help/about-trusted-devices; signal.org/blog/a-synchronized-start-for-linked-devices; standardnotes.org/help/79; joplinapp.org/help/dev/spec/e2ee;
   obsidian.md/help/sync/security; docs.triliumnotes.org/developer-guide/concepts/sync; earlier entry "Live agent activity ..." (Claude Code remote control, Copilot, Cursor, Codex, Devin docs);
   code: apps/hub/src/hub.ts, store.ts, page/device.ts, page/app.ts, packages/shared/src/hub-protocol.ts, hub-crypto.ts, packages/core/src/hub-client.ts, tools/hub-report/hub-report.ts.
+
+## Tasks in Roee's Google Drive instead of the hub (2026-11-20)
+Question (Roee changed the plan): task, run and agent records live in HIS Google Drive and every device fetches them through the Google account
+signed in on it; the hub keeps no task database. Builds on the entry "Hub: every task and agent on every device" (sealed records, hub-sync.ts step 1).
+
+### 1. What Google Drive gives us (primary docs read 2026-11-20)
+- **appDataFolder** (Drive guide "Store application-specific data"): scope `drive.appdata` is **non-sensitive** (so no Google review); created on the first
+  write with `parents=['appDataFolder']`; list with `files.list spaces=appDataFolder`; read with `files.get alt=media`. Only the app that made the data reads it;
+  hidden from the Drive UI and other apps; **deleted when the user uninstalls the app from My Drive** (he can also remove it by hand). Files in it cannot be shared,
+  moved or **trashed** (error `notSupportedForAppDataFolderFiles`): `files.delete` is permanent. The page does not say whether "the app" means the OAuth client or the
+  Cloud project, nor give a size limit.
+- **Changes feed**: `changes.getStartPageToken` has **no `spaces` parameter** (only driveId/supportsAllDrives); `changes.list` takes `spaces=appDataFolder`
+  (values `drive`, `appDataFolder`), `pageSize` default 100, **max 1000**, `includeRemoved`, returns `nextPageToken` until the end, then `newStartPageToken`. **Page tokens do
+  not expire.** A removal arrives as `removed:true` with only the file id (no name). This is the cursor that replaces `seq`.
+- **No conditional writes**: `files.update` (v3) lists no If-Match/ETag/expected-revision parameter; the only concurrency tool is "patch semantics". So two devices updating one
+  file = last write wins and one facet is lost. Design around it: never update, only create.
+- **`files.generateIds`** (`space=appDataFolder`, `count`) makes ids to pass to `files.create`, so a retry after a lost response cannot create a second file (the page does not
+  promise idempotency of the call itself; a 409 on a reused id is what we rely on, check in the spike).
+- **Quotas** ("Usage limits"): 325,000 units/min/user/project (1,000,000/min/project); get 5, list 100, create/update/delete 50, download (`alt=media`) 200; errors `403 User rate limit
+  exceeded` / `429`, answer with truncated exponential backoff min(2^n + random<=1 s, 32-64 s). 750 GB/day upload (irrelevant). No stated file-count limit. Our load: ~300 creates/day,
+  one changes.list per poll (100 units): 1% of the per-minute budget. A first full sync of 2,000 records is ~400k units of downloads, so about 1.5 minutes; page it with backoff.
+- **Tokens**:
+  - *Testing status, external user type*: refresh tokens expire in **7 days**, "unless the only scopes are a subset of name, email, profile" (Google "OAuth 2.0 to access Google APIs").
+    Our desktop/phone sign-in asks `drive.file` + `drive.appdata`, so in Testing Roee would have to reconnect weekly. Fix: **Publish app (In production)**. Non-sensitive scopes need no
+    verification; apps under 100 users may run unverified, with an "unverified app" notice (Cloud Console help 13464323). Other expiry causes: unused 6 months, revoked, 100 refresh tokens per
+    account per client (the oldest dies silently).
+  - *Browser (Google Identity Services token model)*: gives a short-lived access token, **no refresh token**; call `requestAccessToken()` again from a user gesture when it expires. Whether a
+    renewal is silent is **not documented** on that page. So the page has a token for about an hour and a "Reconnect Drive" tap after that, unless it runs inside the Android app (below).
+  - *Android*: two ways. The existing `capacitor-kesher-google` plugin (loopback OAuth with the same client as the PC, `signIn({scope})`, `refresh()`) already works and keeps a refresh token on the
+    phone. Google's new `AuthorizationClient` (Play services) returns a ~1 h access token silently when already granted, but offline access needs a **server auth code exchanged on a backend**
+    ("don't store refresh tokens on the device"); we have no backend by design, so leave it out.
+  - *Cross-client sharing of appDataFolder is the one thing I could not confirm from Google's pages* (the appdata guide and Cross-client Identity page are silent; consent is treated "per project").
+    Desktop and Android already use one client id; the hub page uses its own Web-type client. All three clients must be in **one Cloud project**. Step 0 (spike) proves it before anything is built.
+
+### 2. How others do it
+- **Joplin**: no Google Drive target (WebDAV, Dropbox, OneDrive, S3, Nextcloud, Joplin Cloud, file system); forum answer: Google has no WebDAV, so users point File-system sync at the local Drive folder, and reported
+  "disastrous" failures and no Android sync client. Take: file-system-through-a-desktop-client is the weak way; talking to the API directly is ours.
+- **Obsidian, Standard Notes**: own servers (read in the previous entry). **Excalidraw**: not read; **Proton**: not read.
+- **Tasks.org + Google Tasks**: syncs only title, due date (no time) and description; no recurrence/reminders (the API lacks them); OAuth to the Tasks API, revoke in Google settings; the developer is
+  "unverified" so Google's Security Checkup flags it; 2+ accounts need a subscription. Take: Google as the store works for small records; our records are our own format in appDataFolder, so no field loss. Leave: dependence on a vendor schema.
+- **KeePass on Drive (ctrl.blog test of Android apps)**: one file synced through the cloud is overwritten by stale copies (KeePassDroid, KPass, AuthPass), KeePassDX only asks to reload, KeePass2Android merges
+  "pull before push". Lessons: read before write, never overwrite a whole shared file, use version history, do not rely on user prompts. Take: our create-only records never overwrite; merge by `rev`.
+- **Apps that keep hidden app data in the user's Drive** (WhatsApp/Signal-style backups): not researched; the appDataFolder guide describes exactly that use.
+
+### 3. Design
+**Layout.** One **immutable file per record revision**, created and never updated (so no lost updates, no ETag need). Name = the record's head:
+`r1.<kind>.<id>.<rev>.<writer>.<d|l>` (`d` = tombstone). Content = `{kid, salt, iv, ct}` (what `sealRecord` already makes). Because the AAD binds `kid|id|kind|rev|deleted|done|writer`, renaming a file
+cannot change a head without the open failing. One key file per key id: `key.<kid>`.
+- **Why not one file per day/kind or one file per record updated in place**: both are read-modify-write on shared files with no precondition (the KeePass failure); per-day files grow and are re-downloaded by every device.
+- **Winner per facet** = `beats()` (higher rev, equal rev: larger writer), exactly as today. A device downloads only the winning revision of each facet (the name says which) and skips the rest.
+- **Compaction** (any device, best effort, idempotent: a 404 on delete is fine): delete a revision once a higher one has existed for 24 h; delete `done` tasks after `doneKeepMs` (90 d) and tombstones after
+  `tombstoneKeepMs` (30 d). Steady state ~2,000 small files. `removed:true` entries in the feed are **ignored** (they are compaction, not deletion of the task; deletion is a `d` revision).
+- **Sync loop per device**: (1) first run: read `startPageToken` **first**, then `files.list spaces=appDataFolder fields=files(id,name)` pages of 1000, download winners; (2) then every 60 s while the app is
+  open, on focus and on a hub ping: `changes.list pageToken=<saved> spaces=appDataFolder pageSize=1000 fields=nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name))`; save `newStartPageToken`.
+  Merging is idempotent, so a replay or an overlap is harmless. (3) writes: build `SyncRecord`, `files.create` multipart (metadata+media, one call), ids from `generateIds`, local outbox until it succeeds (offline).
+  If the saved token is rejected or lost: rescan with files.list. Drive may lag a few seconds between a write and the feed, so the writer also merges its own record locally at once.
+- **Instant updates**: after a write the device sends a content-free `{t:"sync"}` ping through the hub socket; others pull now. No Drive push (`changes.watch` needs a verified HTTPS endpoint and expiring channels): not worth it.
+- **PC off**: the phone writes `task` + `run{state:waiting}` to Drive; the PC reads it at start. Drive becomes the real queue; the hub relay stays as the wake-up and for sealed commands (cancel, approve).
+
+**Key K.** Options: (a) K as a file in appDataFolder, readable by any client signed in to his Google account with `drive.appdata`; (b) K wrapped per device (the earlier plan; "all devices reset" = lost);
+(c) K in Drive wrapped by a recovery code (random 128-bit, PBKDF2) that he keeps in his password manager.
+**Recommendation: (a) now, built so (c) is a switch.** Reasons: it is the only one where "all my devices reset" works with nothing to remember; every device already holds a Drive token that can read the same
+folder, so the added exposure of (a) over (b) is only "the Google account (or a stolen token of this app) is compromised", and that account already guards his Gmail and Drive; the data is task titles/specs/results (home paths and
+usernames are scrubbed before sealing), not passwords. Be honest in the UI: sealing no longer protects against Google or someone with the Google account; it still keeps the **hub (Cloudflare) blind** (it never sees Drive data or K), keeps
+the files unreadable by a plain file listing/support staff, and keeps merge integrity (tamper-evident heads). Upgrade to (c): Settings "Ask for a recovery code on a new device" re-wraps the single `key.<kid>` file (records
+unchanged); new devices then ask once, cache K in their store (Electron OS store, Android Keystore, page IndexedDB non-extractable CryptoKey). Rotation (device removed/suspect) = new `kid`; records re-seal lazily.
+Revoking an app's access in Google (myaccount.google.com permissions) cuts a lost device off at the Drive level; K rotation covers the rest.
+
+**Who gets a token, and how** (the Worker never sees Drive data or tokens):
+- **PC (Electron + core)**: `packages/core/src/google.ts` already does loopback OAuth + PKCE + refresh token (client from `branding.config`/`google-client.json`; scopes `SCOPES` + `SERVICE_SCOPES`). Add `drive.appdata` as a service
+  (`sync`), consent only when he turns on "Tasks in my Google Drive" (existing incremental consent); the current `drive.file` folder code stays as is. One reconnect needed once.
+- **Android app**: the same client through `KesherGoogle.signIn({scope})` / `refresh()` (apps/android/www/index.html already calls them with `drive.file`); add the scope. If the app shows the hub page, pass the access token
+  from the plugin to the page, so no hourly tap there.
+- **Hub page in a normal browser**: Google Identity Services token client with scope `drive.appdata`, `hint` = the signed-in account, token kept in memory only (never sent to the Worker, never in IndexedDB), a "Reconnect Drive"
+  tap when it ends. Needs the hub's CSP opened: `script-src` already allows `accounts.google.com/gsi/`; add `connect-src https://www.googleapis.com` (and the upload host is the same). The Worker stays the only thing that
+  knows who may sign in (`sub` pin); Drive access is a separate grant the page asks for.
+
+### 4. Changes to `packages/shared/src/hub-sync.ts` (step 1, already committed)
+- `SyncRecord.seq`/`at` and `RevGuard.seq`/`checkSeq` go (no hub counter); the cursor becomes a Drive **`changeToken: string`** kept per device next to its records (not in the record).
+- Add `recordFileName(head)` / `parseRecordFileName(name)` (head <-> file name, validated with `ID_RE`, kind list, integer rev), and a test that a renamed file fails `openRecord`.
+- Add `keyFileName(kid)` and a `wrapKeyForRecovery`/`unwrapKey` pair only when (c) is built.
+- Keep: sealing, AAD, `beats`, `mergeRecord`, sticky terminal states, RevGuard's rev-rollback check (a revision dropping is still worth a warning: an old revision restored from Drive history or a stale device).
+- `SYNC_LIMITS`: `records`/`bytes`/`batch`/`page`/`bodyChars` are hub limits and go; keep `recordChars` (Drive allows more; stay small), pad size, timeline, text limits and the three keep times. Add `pollMs: 60_000`,
+  `compactAfterMs: 24h`, `driveListPage: 1000`.
+- Add a transport-free `DriveStore` interface (`list`, `changes`, `get`, `create`, `delete`) in shared, with the Drive REST implementation in a small `drive-sync.ts` taking an access-token function (Node, Worker-less browser, WebView all use `fetch`), so the sync loop is tested with a fake.
+
+### 5. What the hub Worker still does
+Google sign-in and owner pin, device pairing, presence and "busy", the sealed relay of **commands** (task to PC, cancel, approve) with its queue (7 days) and ack, **live agent steps** (the 50/run ring, sealed per pair as today:
+live steps are too frequent and too short-lived for Drive; the final `agent` snapshot goes to Drive), push/wake-up triggers, the content-free `sync` ping, audit log, rate limits. It **no longer** stores records, needs no `records` table,
+`PUT/GET /api/sync`, retention for records, or the 16 MB budget; the "Delete synced tasks from the hub" button becomes "Delete my tasks from Google Drive" (deletes the appDataFolder files from a signed-in device).
+
+### 6. Plan (S ~ half a build, M ~ one, L ~ two)
+0. **S Spike (before anything)**: one Cloud project, a Web client and the existing Desktop client; consent `drive.appdata`; create a file from the Desktop client and list/read it from a Web client in a browser (GIS token), and run
+   `changes.list spaces=appDataFolder` with a saved token (does a busy Drive return empty pages? how long until a new file shows?). If appDataFolder is per client, fall back to a Web client used by all three, or the phone WebView carries the page's token.
+1. **S** `hub-sync.ts` changes in section 4 + `DriveStore` interface + file-name helpers + tests (swap, rename tamper, replay, tie).
+2. **M** `drive-sync.ts` (REST: generateIds/create multipart/list/changes/get/delete, backoff on 403/429, outbox) + local store; tests with a fake Drive; runs in core.
+3. **M** PC: scope `sync` in `google.ts`, "Tasks in my Google Drive" switch, K creation (key file), writer from `task-inbox.ts`/`inbox-runner.ts`, reader for phone-sent tasks, compaction.
+4. **M** Hub page + Android: GIS token client, CSP, token hand-over from the Android plugin, tasks list from the store, "Reconnect Drive" state, offline outbox; remove the hub-side record plan (nothing built there yet).
+5. **S** Hub `sync` ping frame; polling fallback; agent `agent` snapshots at run end.
+6. **S** Option (c) recovery code and device removal rotation; "Delete my tasks from Google Drive".
+Ship for value: 0, 1, 2, 3, 4 (phone and browser see each other's tasks), then 5, 6.
+
+### 7. Screens for the design doc (390 px, Hebrew + English, remote-checked)
+(a) Settings > Kesher Cloud > **Tasks in your Google Drive**: switch, state (connected account, last sync time, number of tasks), "Allow Google Drive for tasks" consent button, "Delete my tasks from Drive", plain note on what Google can read.
+(b) Hub page: **Reconnect Drive** banner/state when the browser token ended; Tasks and Agents lists show "from Drive, updated 12:03" and a quiet offline/pending-send badge.
+(c) First-run card on a new device: "Found 214 tasks in your Drive" with progress; (c-option) "Enter recovery code" screen. (d) Removed: the "Share with this device" card of the earlier plan unless (c) is on.
+
+### 8. Leave out
+Hub database for records; Drive `changes.watch` push; one big JSON file or per-day files; in-place file updates; Google Tasks / Sheets / Docs as the store (field loss, visible to other apps); full-Drive scopes (`drive`, `drive.readonly`) for sync;
+Android `AuthorizationClient` offline access (needs a backend); keeping Drive tokens in the Worker; wall clocks; Using the visible "KesherAI" folder (`drive.file`) for records (he could delete or edit by hand; also per-app visibility unproven).
+
+### 9. Roee must do in Google Cloud (once)
+1. Use **one** Cloud project for the Desktop client, the hub's Web client and (later) any Android client. 2. Enable the Google Drive API. 3. Google Auth Platform > Data access: add `.../auth/drive.appdata` (non-sensitive) next to the existing
+`drive.file`, `openid`, `email`, `profile`. 4. Hub's **Web** client: Authorized JavaScript origins `https://hub.roeetal.com` (already there for sign-in). 5. **Audience: Publish app (In production)** so refresh tokens do not die after 7 days; no verification
+needed for non-sensitive scopes, expect an "unverified app" notice once (Advanced > continue); keep his own account listed as test user until then. 6. Then reconnect Google once in KesherAI (PC and phone) to grant the new scope.
+
+### 10. Open questions
+(1) Key option (a) now, (c) later: OK? (2) Delete a finished task's files after 90 days (as planned) or keep forever (Drive space is not a concern, but the folder gets long)? (3) Does the Android app show the hub page (so it can take the plugin's token)?
+- Stopped at: Drive docs read (appdata guide via the .cn mirror, changes.list, getStartPageToken, files.update, generateIds, limits, OAuth refresh-token rules, Android authorization); not confirmed from Google's pages: that appDataFolder is shared
+  across OAuth clients of one project, silent token renewal in the GIS token model, files.create idempotency on a reused id, whether changes.list with a limited scope hides unrelated Drive changes; Excalidraw, Proton, Obsidian Sync-over-Drive plugins not read;
+  nothing built, nothing pushed.
+- Sources: developers.google.cn/drive/api/guides/appdata (mirror of developers.google.com/workspace/drive/api/guides/appdata); developers.google.com/workspace/drive/api/reference/rest/v3/changes/list, /changes/getStartPageToken, /files/update, /files/generateIds;
+  developers.google.com/workspace/drive/api/guides/limits; developers.google.com/docs/authentication (refresh token expiry); developers.google.com/identity/oauth2/web/guides/use-token-model; developer.android.com/identity/authorization;
+  developers.google.com/identity/protocols/CrossClientAuth; support.google.com/cloud/answer/13464323; discourse.joplinapp.org/t/if-you-want-to-sync-joplin-via-google-drive/9041; tasks.org/docs/google_tasks_intro; ctrl.blog/entry/keepass-file-conflicts-android;
+  code: apps/hub/src/google.ts, http.ts (CSP), worker.ts; packages/core/src/google.ts, google-tools.ts; apps/android/plugins/google, www/index.html; docs/GOOGLE_DRIVE.md; packages/shared/src/hub-sync.ts.
