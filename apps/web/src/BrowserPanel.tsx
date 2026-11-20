@@ -15,6 +15,45 @@ interface PaneTab {
   canBack: boolean;
   canForward: boolean;
 }
+/** One action of the model's browser tools (browser-safety.ts BrowserAction). */
+interface BrowserAction {
+  at: string;
+  tool: string;
+  site?: string;
+  target?: string;
+  ok: boolean;
+  note?: string;
+}
+
+/** What a browser tool did, in words ("Click", "Open"…). */
+export function actionWord(tool: string): string {
+  const words: Record<string, [string, string]> = {
+    browser_tabs: ["רשימת לשוניות", "List tabs"],
+    browser_read: ["קריאת הדף", "Read the page"],
+    browser_snapshot: ["קריאת הדף", "Read the page"],
+    browser_screenshot: ["צילום הדף", "Picture of the page"],
+    browser_open: ["פתיחה", "Open"],
+    browser_click: ["לחיצה", "Click"],
+    browser_type: ["הקלדה", "Type"],
+    browser_select: ["בחירה ברשימה", "Pick from a list"],
+    browser_hover: ["ריחוף", "Hover"],
+    browser_scroll: ["גלילה", "Scroll"],
+    browser_press_key: ["מקשים", "Keys"],
+    browser_navigate: ["ניווט", "Navigate"],
+    browser_close_tab: ["סגירת לשונית", "Close a tab"],
+    browser_wait: ["המתנה", "Wait"],
+    browser_console: ["קריאת הקונסול", "Read the console"],
+    browser_network: ["קריאת בקשות הרשת", "Read network requests"],
+    browser_network_request: ["פרטי בקשת רשת", "Network request details"],
+    browser_eval: ["הרצת קוד בדף", "Run code in the page"],
+    browser_dialog: ["תשובה לחלון קופץ", "Answer a pop-up"],
+    browser_upload: ["העלאת קובץ", "Upload a file"],
+    stop: ["נעצר", "Stopped"],
+  };
+  const w = words[tool];
+  return w ? L(w[0], w[1]) : tool;
+}
+
 interface PaneState {
   tabs: PaneTab[];
   notice: string;
@@ -52,6 +91,21 @@ export function BrowserPanel() {
   const lastKey = useRef("");
   const ticks = useRef(0);
   const active = st.tabs.find((t) => t.active);
+  // The model's actions here (the "doing now" strip, its log and the one Stop), read every 2 seconds.
+  const [act, setAct] = useState<{ active: boolean; log: BrowserAction[] }>({ active: false, log: [] });
+  const [logOpen, setLogOpen] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    const read = () => void api<{ active: boolean; log: BrowserAction[] }>("/api/browser/activity").then((a) => !stop && setAct(a), () => undefined);
+    read();
+    const tm = setInterval(() => !document.hidden && read(), 2000);
+    return () => {
+      stop = true;
+      clearInterval(tm);
+    };
+  }, []);
+  const lastAct = act.log.at(-1);
+  const stopModel = () => void api("/api/browser/stop", { method: "POST" }).then(() => setAct((a) => ({ ...a, active: false })), (e: Error) => setError(e.message));
 
   // The tabs: pushed by the app on the computer, read every 2 seconds elsewhere.
   useEffect(() => {
@@ -180,6 +234,37 @@ export function BrowserPanel() {
         <p className="muted small browser-notice">
           {st.notice} <button type="button" className="link" onClick={() => void cmd("dismiss")}>{L("הבנתי", "OK")}</button>
         </p>
+      )}
+      {(act.active || logOpen) && lastAct && (
+        <div className={`browser-activity${act.active ? " on" : ""}`} role="status">
+          <span className="grow" dir="auto">
+            {act.active ? "🤖 " : ""}
+            {actionWord(lastAct.tool)}
+            {lastAct.target ? `: ${lastAct.target}` : ""}
+            {lastAct.site ? ` · ${lastAct.site}` : ""}
+          </span>
+          {act.active && (
+            <button type="button" className="danger" onClick={stopModel} title={L("עוצר את כל מה שהמודל וסוכני העזר עושים בדפדפן (גם Ctrl+Alt+Esc)", "Stops everything the model and its helpers do in the browser (also Ctrl+Alt+Esc)")}>
+              ⏹ {L("עצור", "Stop")}
+            </button>
+          )}
+          <button type="button" className="link" aria-expanded={logOpen} onClick={() => setLogOpen(!logOpen)}>{logOpen ? L("סגור יומן", "Hide log") : L("יומן", "Log")}</button>
+        </div>
+      )}
+      {!act.active && !logOpen && act.log.length > 0 && (
+        <button type="button" className="link small browser-log-open" onClick={() => setLogOpen(true)}>{L("יומן הפעולות של המודל", "The model's browser log")}</button>
+      )}
+      {logOpen && (
+        <ol className="browser-log small" aria-label={L("יומן הפעולות של המודל בדפדפן", "The model's browser actions")}>
+          {[...act.log].reverse().slice(0, 30).map((a, i) => (
+            <li key={`${a.at}-${i}`} className={a.ok ? "" : "error"} dir="auto">
+              <time className="muted" dir="ltr">{new Date(a.at).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time> {actionWord(a.tool)}
+              {a.target ? `: ${a.target}` : ""}
+              {a.site ? ` · ${a.site}` : ""}
+              {a.note ? ` — ${a.note}` : ""}
+            </li>
+          ))}
+        </ol>
       )}
       {error && <p className="error small">{error}</p>}
       {clip && <SaveToCourse clip={clip} onClose={() => setClip(null)} />}

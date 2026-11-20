@@ -60,7 +60,15 @@ export function BrowserSection() {
  */
 export function BrowserSitesSection() {
   const [sites, setSites] = useState<string[] | null>(null);
-  const load = () => void api<{ sites: string[] }>("/api/browser/sites").then((r) => setSites(r.sites), () => setSites([]));
+  const [helperAlways, setHelperAlways] = useState(false);
+  const load = () =>
+    void api<{ sites: string[]; helperAlways?: boolean }>("/api/browser/sites").then(
+      (r) => {
+        setSites(r.sites);
+        setHelperAlways(r.helperAlways === true);
+      },
+      () => setSites([]),
+    );
   useEffect(load, []);
   if (!sites) return null;
   return (
@@ -79,6 +87,19 @@ export function BrowserSitesSection() {
       ) : (
         <p className="muted small">{L("עוד אין. כשהמודל מבקש לפעול באתר, \"תמיד ב-…\" מוסיף אותו לכאן.", "None yet. When the model asks to act on a site, \"Always on …\" adds it here.")}</p>
       )}
+      {/* Off by default: helper agents ask before every browser action, even on sites listed above. */}
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={helperAlways}
+          onChange={(e) => {
+            const on = e.target.checked;
+            setHelperAlways(on);
+            void api<{ on: boolean }>("/api/browser/helper-always", { method: "POST", body: { on } }).then((r) => setHelperAlways(r.on), () => setHelperAlways(!on));
+          }}
+        />
+        <span dir="auto">{L("גם סוכני עזר יכולים להשתמש ב\"תמיד באתר הזה\" (כבוי: סוכן עזר שואל לפני כל פעולה בדפדפן)", "Helper agents may use \"Always on this site\" too (off: a helper asks before every browser action)")}</span>
+      </label>
     </section>
   );
 }

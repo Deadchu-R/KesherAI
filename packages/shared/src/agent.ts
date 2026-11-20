@@ -238,6 +238,8 @@ export type AgentEvent = EventBase &
         scope?: string;
         /** A sub-agent of this chat asks (its own step, shown in the chat): its rules are kept apart from the chat's. */
         helper?: HelperAsker;
+        /** The card offers no "Always" (a helper on a web site, while Settings → Browser keeps helpers asking each time). */
+        noAlways?: boolean;
       }
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */

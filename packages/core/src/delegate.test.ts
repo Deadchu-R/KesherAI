@@ -348,3 +348,27 @@ test("without a chat to ask, a helper's action is refused", async () => {
   assert.equal(opened, 0);
   assert.match(r.output, /report: The user denied/);
 });
+
+test("helpers ask on every site action unless Settings lets them use 'Always on this site'", async () => {
+  const asked: HelperApproval[] = [];
+  const saved: string[] = [];
+  const open: AgentTool = { ...tool("browser_open", "exec"), scopeOf: async () => "site:example.com", run: async () => ({ output: "page" }) };
+  const opts = (on: boolean) => ({
+    tools: () => [open],
+    currentModel: () => "m",
+    turnFor: () => opener,
+    models: () => ["m"],
+    // The chat already allowed example.com.
+    isAlwaysAllowed: (_t: string, _m: string, _c?: string, scope?: string) => scope === "site:example.com",
+    onAlwaysScope: (scope: string) => void saved.push(scope),
+    helperSiteAlways: () => on,
+    approve: async (req: HelperApproval) => (asked.push(req), { decision: "always" as const }),
+  });
+  const ctx = { signal: new AbortController().signal, recordChange: () => undefined };
+  await delegateTool(opts(false)).run({ parts: [{ task: "open it", type: "operate" }] }, ctx);
+  assert.equal(asked.length, 1, "asked although the chat allowed the site");
+  assert.equal(asked[0]!.noAlways, true, "the card offers no Always");
+  assert.deepEqual(saved, [], "an 'always' answer counts as once");
+  await delegateTool(opts(true)).run({ parts: [{ task: "open it", type: "operate" }] }, ctx);
+  assert.equal(asked.length, 1, "with the setting on, the chat's site rule covers the helper");
+});

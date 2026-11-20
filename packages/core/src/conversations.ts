@@ -1,3 +1,4 @@
+import { UNTRUSTED_RULE } from "./browser-safety.js";
 import { guestFileTools } from "./guests.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
@@ -265,6 +266,8 @@ export class ConversationManager {
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
     const all = [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])];
+    // Page text is data, never instructions (browser-safety.ts); said once wherever the browser tools are.
+    if (all.some((t) => t.spec.name.startsWith("browser_"))) media.notes.push(UNTRUSTED_RULE);
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.
     if (id) all.push(...this.delegateFor(id, all));
     // Its own problems: the model can look into KesherAI's state and fault log.
@@ -427,6 +430,7 @@ export class ConversationManager {
           void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
         }
       },
+      helperSiteAlways: () => this.deps.config.browserHelperAlways === true,
     };
     // A deep research's report becomes a document of the chat (none in an incognito chat: the answer has it).
     const writeReport = this.deps.writeReport;

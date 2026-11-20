@@ -75,12 +75,26 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   /** Sites where the browser tools act without asking ("Always on this site"), and taking one back. */
-  app.get("/api/browser/sites", async () => ({ sites: s.config.browserSites ?? [] }));
+  app.get("/api/browser/sites", async () => ({ sites: s.config.browserSites ?? [], helperAlways: s.config.browserHelperAlways === true }));
   app.delete<{ Querystring: { site?: string } }>("/api/browser/sites", async (req) => {
     const site = String(req.query.site ?? "");
     s.config.browserSites = (s.config.browserSites ?? []).filter((x) => x !== site);
     await s.saveConfig();
     return { sites: s.config.browserSites };
+  });
+
+  /** What the browser tools did lately (the pane's activity strip, here and on the phone), and the one Stop for them. */
+  app.get("/api/browser/activity", async () => s.browser.activity());
+  app.post("/api/browser/stop", async () => {
+    s.browser.stop();
+    return { ok: true };
+  });
+
+  /** Whether helpers may also use "Always on this site" (off: they ask before every action; Settings → Browser). */
+  app.post<{ Body: { on?: boolean } }>("/api/browser/helper-always", async (req) => {
+    s.config.browserHelperAlways = req.body?.on === true;
+    await s.saveConfig();
+    return { on: s.config.browserHelperAlways };
   });
 
   // KesherAI's own browser pane, for the phone: its tabs, a picture of the tab in front, taps and the address bar.

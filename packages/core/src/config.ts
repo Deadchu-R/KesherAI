@@ -430,6 +430,11 @@ export const KesherConfigSchema = z.object({
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */
   browserSites: z.array(z.string()).default([]),
+  /**
+   * Whether helper agents may use "Always on this site" too. Off (the default): a helper asks before every action
+   * on every site, whatever the chat allowed (decided by Claude overnight, 2026-11-20; reversible here).
+   */
+  browserHelperAlways: z.boolean().default(false),
   /** The user's keyboard shortcuts (Settings → Keyboard): a combination per id, or null for off (see shortcuts.ts). */
   keyboardShortcuts: z.record(z.string(), z.string().nullable()).default({}),
   /** Turn off KesherAI's in-app shortcuts (global ones are turned off one by one). */

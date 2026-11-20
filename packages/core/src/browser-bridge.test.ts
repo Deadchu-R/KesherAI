@@ -74,3 +74,34 @@ test("browser bridge: a screenshot is kept as an asset for the chat's thumbnail 
   assert.equal((await plain.run({}, ctx)).assetIds, undefined);
   sock.close();
 });
+
+test("browser bridge: cards name the element and the site; page text is untrusted; actions are logged", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(async (action) =>
+    action === "tabs" ? [{ id: 1, title: "Mail", url: "https://mail.example.com/inbox", active: true }] : { url: "https://mail.example.com/inbox", title: "Mail", text: "Inbox", elements: ['3: button "Send"', '4: textbox "To"'] },
+  );
+  const tools = Object.fromEntries(browserTools(b).map((t) => [t.spec.name, t]));
+  const ctx = { signal: new AbortController().signal } as never;
+  const read = (await tools.browser_read!.run({}, ctx)).output;
+  assert.match(read, /^<untrusted-page source="mail\.example\.com">/);
+  assert.equal(await tools.browser_click!.preview!({ ref: 3 }, ctx), 'Click button "Send" (ref 3) on mail.example.com');
+  assert.match(await tools.browser_type!.preview!({ ref: 4, text: "dana@x", submit: true }, ctx), /^Type "dana@x" into textbox "To" \(ref 4\) on mail\.example\.com and press Enter$/);
+  assert.equal(await tools.browser_click!.preview!({ ref: 99 }, ctx), "Click element 99 on mail.example.com");
+  await tools.browser_click!.run({ ref: 3 }, ctx);
+  const last = b.activity().log.at(-1)!;
+  assert.deepEqual([last.tool, last.site, last.target, last.ok], ["browser_click", "mail.example.com", 'button "Send" (ref 3)', true]);
+  assert.equal(b.activity().active, true);
+});
+
+test("browser bridge: Stop ends running commands and refuses new ones for a while", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(() => new Promise(() => undefined));
+  const ctx = { signal: new AbortController().signal } as never;
+  const read = browserTools(b).find((t) => t.spec.name === "browser_read")!;
+  const running = read.run({}, ctx);
+  b.stop();
+  await assert.rejects(running, /pressed Stop/);
+  await assert.rejects(b.call("tabs"), /pressed Stop/);
+  assert.equal(b.activity().active, false, "a Stop is not activity");
+  assert.ok(b.activity().log.some((a) => a.tool === "stop"));
+});

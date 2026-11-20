@@ -606,6 +606,7 @@ async function registerGlobalKeys(): Promise<Record<string, "ok" | "taken" | "of
   const actions: Record<string, () => void> = {
     stopComputer: () => {
       void fetch(`${base}/api/computer/stop`, { method: "POST" }).catch(() => undefined);
+      void fetch(`${base}/api/browser/stop`, { method: "POST" }).catch(() => undefined);
       BrowserWindow.getAllWindows()[0]?.show();
     },
     gameHelper: () => void toggleGameHelper(base),

@@ -255,7 +255,7 @@ export function ApprovalCard({ convId, ev, pending, result }: { convId: string; 
         )}
         {/* The browser: Allow once / Always on this site / Deny (like Claude in Chrome); sites are listed in Settings. */}
         {ev.scope?.startsWith("site:") ? (
-          <button type="button" disabled={busy} onClick={() => void decide("always")} title={L("מתי שהוא עובד באתר הזה, בלי לשאול. אפשר לבטל בהגדרות ← דפדפן.", "Whenever it works on this site, without asking. Undo in Settings → Browser.")}>
+          ev.noAlways ? null : <button type="button" disabled={busy} onClick={() => void decide("always")} title={L("מתי שהוא עובד באתר הזה, בלי לשאול. אפשר לבטל בהגדרות ← דפדפן.", "Whenever it works on this site, without asking. Undo in Settings → Browser.")}>
             {L(`תמיד ב-${ev.scope.slice(5)}`, `Always on ${ev.scope.slice(5)}`)}
           </button>
         ) : (

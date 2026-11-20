@@ -131,6 +131,26 @@ Router words to add (`chat-tool-groups.ts`, browser group; a new `debug` group c
 6. Computer: "what the model sees" panel (UIA tree and the last screenshot) and window/monitor picker.
 7. Action log / replay in the steps panel.
 
+## 5b. Decisions taken by Claude overnight (2026-11-20): recommended, reversible
+Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can be changed later.
+1. **Helpers on web sites ask per action.** A helper asks before every browser action on every site, whatever sites
+   the chat allowed. "Always on this site" for helpers exists as a switch in Settings → Browser (`browserHelperAlways`),
+   **off by default**; while it is off the helper's card shows no "Always" button and an "always" answer counts as once.
+   (We cannot yet tell reliably which sites are signed in, so "every site" is the safe reading.)
+2. **The reviewer / auto mode uses only the local model** (Phase 4): page-adjacent decisions never go to a cloud model.
+3. **Windows UI Automation later through a persistent PowerShell worker** (Phase 5), no new software.
+4. **The Chrome extension's `debugger` permission will be optional**, asked the first time a CDP tool needs it.
+   Extension work is Phase 2, not now: the new CDP tools (snapshot refs, console, network, eval…) run in KesherAI's
+   own pane only; with `browser: chrome` they say so and the extension keeps its six old commands.
+
+### Built (2026-11-20 night)
+- **Phase 0:** `browser-safety.ts` (untrusted envelope + pattern hint, action log, upload and header/body redaction
+  rules), `UNTRUSTED_RULE` in the chat's and helpers' prompts, approval previews with the element label and site
+  (`Click button "Send" (ref 3) on mail.example.com`), always-ask for `browser_eval` / `browser_upload` /
+  `browser_download` in every mode, one Stop (`POST /api/browser/stop`, the pane's strip, Ctrl+Alt+Esc) that ends every
+  browser command of the chat and its helpers and refuses new ones for 10 s, the pane's "doing now" strip and log
+  (`GET /api/browser/activity`, desktop and phone). Downloads stay refused in the pane (stricter than asking).
+
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?
 2. Default for helpers on a signed-in site: approve every action (recommended), or allow "Always on this site" after the first approval?
