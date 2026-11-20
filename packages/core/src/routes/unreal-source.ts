@@ -84,6 +84,7 @@ export function unrealSourceRoutes(app: FastifyInstance, s: KesherServices): voi
       if (!EXT.test(rel) || !text.trim() || text.length > MAX) return reply.code(400).send({ error: "Send a code or settings file (.h, .cpp, .cs, .ini) under 400 KB." });
       const st = await stat(abs).catch(() => undefined);
       if (st && req.body?.mtime && Math.abs(st.mtimeMs - Number(req.body.mtime)) > 1) return reply.code(409).send({ error: "The file changed since it was opened (in your editor or a chat). Open it again." });
+      await s.gameCheckpoints?.beforeSave("unreal", p.path, "source", `Save ${rel}`, [abs]);
       if (st) {
         const backups = join(s.paths.root, "unreal-backups");
         await mkdir(backups, { recursive: true });

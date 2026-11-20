@@ -97,6 +97,8 @@ export interface KesherServices {
   godot: import("./godot-bridge.js").GodotBridge;
   /** Unity projects through Unity's CLI (KesherAI Bridge package). */
   unity: UnityCli;
+  /** Checkpoints around engine writes (the touched files, binaries too, on the heavy-data drive). */
+  gameCheckpoints: import("./game-checkpoints.js").GameCheckpoints;
   /** Microsoft 365 Copilot sign-in. */
   copilot: Copilot;
   /** Business mode in force (an administrator's policy.json, else Settings). */

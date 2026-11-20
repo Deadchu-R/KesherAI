@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gamesRoutes, syncNote } from "./games.js";
@@ -9,6 +9,7 @@ import { UnityCli, type CliRunner } from "../unity-cli.js";
 import { UnrealBridge } from "../unreal-bridge.js";
 import type { KesherServices } from "../services.js";
 import type { Note } from "../notify.js";
+import { GameCheckpoints } from "../game-checkpoints.js";
 
 test("a sync note only for a failure or a clash", () => {
   assert.equal(syncNote({ engine: "unity", project: "/p/Game", applied: 3, failed: 0, clashes: 0 }), undefined);
@@ -56,6 +57,41 @@ test("Game projects: a Unity project with a clash, both sides on the sheet, and 
     assert.equal((await app.inject({ url: "/api/games/search?engine=unity&project=%2Fetc&q=passwd" })).statusCode, 400);
     // Only projects found on this computer can be synced.
     assert.equal((await app.inject({ method: "POST", url: "/api/games/sync", payload: { engine: "unity", project: "/etc" } })).statusCode, 400);
+  } finally {
+    process.env.HOME = oldHome;
+    await app.close();
+  }
+});
+
+test("Game projects: checkpoints listed, compared, restored, and the limits saved", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kesher-games-cp-"));
+  const project = join(home, "Game");
+  await mkdir(join(project, "Assets"), { recursive: true });
+  await mkdir(join(project, "ProjectSettings"));
+  await writeFile(join(project, "Assets", "Door.cs"), "class Door {}\n");
+  const config = { unity: { projects: [project] }, gameCheckpoints: { days: 30, maxMB: 4096 } };
+  const store = new GameCheckpoints(() => join(home, "heavy", "game-checkpoints"), () => config.gameCheckpoints);
+  const unreal = new UnrealBridge(join(home, "data", "unreal"));
+  const unity = new UnityCli(config.unity, async () => undefined, async () => ({ code: 1, stdout: "", stderr: "" }), join(home, "data", "unity"));
+  const s = { unity, unreal, config, gameCheckpoints: store, saveConfig: async () => undefined, godot: { status: () => ({ connected: false, latest: "" }) }, notifier: { send: async () => [] } } as unknown as KesherServices;
+  const oldHome = process.env.HOME;
+  process.env.HOME = home;
+  const app = Fastify();
+  try {
+    await gamesRoutes(app, s);
+    const cp = await store.beforeSave("unity", project, "source", "Save Assets/Door.cs", [join(project, "Assets", "Door.cs")]);
+    await writeFile(join(project, "Assets", "Door.cs"), "class Door { void Open() {} }\n");
+    const list = (await app.inject({ url: `/api/games/checkpoints?engine=unity&project=${encodeURIComponent(project)}` })).json() as { checkpoints: Array<{ id: string; files: Array<{ rel: string }> }>; bytes: number };
+    assert.deepEqual([list.checkpoints[0]!.id, list.checkpoints[0]!.files[0]!.rel], [cp!.id, "Assets/Door.cs"]);
+    assert.ok(list.bytes > 0);
+    const d = (await app.inject({ url: `/api/games/checkpoints/${cp!.id}/diff?path=Assets/Door.cs` })).json() as { binary: boolean; diff: string };
+    assert.equal(d.binary, false);
+    assert.match(d.diff, /\+class Door \{ void Open/);
+    assert.equal((await app.inject({ method: "POST", url: `/api/games/checkpoints/${cp!.id}/restore` })).json().restored, 1);
+    assert.equal(await readFile(join(project, "Assets", "Door.cs"), "utf8"), "class Door {}\n");
+    assert.equal((await app.inject({ method: "PUT", url: "/api/games/checkpoints/settings", payload: { days: 0, maxMB: 10 } })).statusCode, 400);
+    assert.deepEqual((await app.inject({ method: "PUT", url: "/api/games/checkpoints/settings", payload: { days: 7, maxMB: 500 } })).json().limits, { days: 7, maxMB: 500 });
+    assert.equal((await app.inject({ url: "/api/games/checkpoints?engine=unity&project=%2Fetc" })).statusCode, 400);
   } finally {
     process.env.HOME = oldHome;
     await app.close();

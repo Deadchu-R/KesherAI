@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { GameCheckpoints } from "../game-checkpoints.js";
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
@@ -194,7 +195,7 @@ export async function unityAssetOf(project: unknown, path: unknown): Promise<Buf
  *
  * @param app - The server.
  */
-export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
+export async function unitySceneRoutes(app: FastifyInstance, checkpoints?: GameCheckpoints): Promise<void> {
   app.get<{ Querystring: { project?: string } }>("/api/unity/scenes", async (req, reply) => {
     try {
       return { scenes: await unityScenes(req.query.project) };
@@ -233,6 +234,8 @@ export async function unitySceneRoutes(app: FastifyInstance): Promise<void> {
       const ok = (Array.isArray(req.body?.moves) ? req.body!.moves.slice(0, 5000) : []).filter((m) => /^-?\d{1,20}(:-?\d{1,20})?$/.test(String(m?.id)) && nums(m.to?.position, 3) && nums(m.to?.rotation, 4) && nums(m.to?.scale, 3) && nums(m.from?.position, 3) && nums(m.from?.rotation, 4));
       const file = join(dir, "KesherAI", "pending-moves.json");
       await mkdir(join(dir, "KesherAI"), { recursive: true });
+      // The scene and the waiting moves as they are now (restoring drops these moves if Unity has not applied them yet).
+      if (ok.length) await checkpoints?.beforeSave("unity", dir, "stand-in", `Stand-in: ${rel}`, [join(dir, rel!), file]);
       const waiting = JSON.parse(await readFile(file, "utf8").catch(() => "{}")) as Record<string, UnityMove[]>;
       const next = mergeMoves(waiting, rel!, ok.map((m) => ({ id: String(m.id), name: String(m.name ?? "").slice(0, 200), from: m.from, to: m.to })));
       await writeFile(file, JSON.stringify(next, null, 1));

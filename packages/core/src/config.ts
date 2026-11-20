@@ -163,6 +163,13 @@ export const KesherConfigSchema = z.object({
       active: z.string().optional(),
     })
     .prefault({}),
+  /** Checkpoints around engine writes (game-checkpoints.ts): how long and how much the store keeps. */
+  gameCheckpoints: z
+    .object({
+      days: z.number().int().min(1).max(3650).default(30),
+      maxMB: z.number().int().min(50).max(1_000_000).default(4096),
+    })
+    .prefault({}),
   /** Talking to KesherAI from Telegram through the user's own bot (telegram.ts). */
   telegram: z
     .object({

@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import type WebSocket from "ws";
-import { nodeSig, sortForSync, unrealAssetFile, type ClashChoice, type SyncReport } from "./game-sync.js";
+import { batchFiles, nodeSig, sortForSync, unrealAssetFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
 
 /**
  * The link to the Unreal Editor (the KesherAI Bridge plugin,
@@ -319,6 +319,7 @@ export class UnrealBridge {
     const project = this.info?.project;
     if (!project) return;
     const { apply, newClashes } = await this.sortMine(project);
+    await this.checkpoint(project, apply);
     let applied = 0;
     let failed = 0;
     for (const q of apply) {
@@ -346,6 +347,17 @@ export class UnrealBridge {
 
   /** Called when a sync ends (the Game projects page sends a notification on a failure or a clash). */
   onSync?: (r: SyncReport) => void;
+  /** Called before a batch of queued changes is applied, to keep their files first (a checkpoint). */
+  beforeSync?: (b: SyncBatch) => Promise<void>;
+
+  /** Keeps the files a batch will write (a failed checkpoint never stops the sync). */
+  private async checkpoint(project: string, edits: QueuedEdit[]): Promise<void> {
+    const file = this.lastProjectFile ?? this.info?.projectFile;
+    if (!edits.length || !file || !this.beforeSync) return;
+    const dir = dirname(file);
+    const files = batchFiles(edits, (q) => unrealAssetFile(dir, q.path));
+    if (files.length) await this.beforeSync({ engine: "unreal", project: dir, name: project, files, count: edits.length }).catch(() => undefined);
+  }
 
   /**
    * A project's queued changes, split by the clash check (game-sync.ts): new clashes are marked in the queue.
@@ -617,6 +629,7 @@ export class UnrealBridge {
       const { apply: mine, newClashes } = await this.sortMine(project);
       clashes = newClashes.length;
       if (!mine.length) return { applied: 0, failed: 0 };
+      await this.checkpoint(project, mine);
       const commands: Array<Record<string, unknown>> = [];
       for (const q of mine) {
         if (q.kind === "create") commands.push({ cmd: "create", path: q.path, parent: q.parent ?? "Actor" });

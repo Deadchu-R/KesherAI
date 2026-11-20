@@ -453,7 +453,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   void chatTimers.start();
   const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine, othersBusy: () => guard.othersBusy() });
   void routines.start();
-  const { unityCli, unrealBridge } = buildGameEngines(paths, config, persist);
+  const { unityCli, unrealBridge, gameCheckpoints } = buildGameEngines(paths, config, persist);
   // The Godot editor's link (KesherAI Bridge addon); Godot editors are looked for once, for the chat's tools.
   const godot = new GodotBridge(paths.engines);
   void godot.findGodot().then((g) => (godot.installed = g.length > 0), () => undefined);
@@ -496,7 +496,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, ...(helperEngine ? { helperEngine } : {}) }),
+    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, ...(helperEngine ? { helperEngine } : {}) }),
     coach,
     memory,
     computer,
@@ -543,6 +543,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     unreal: unrealBridge,
     godot,
     unity: unityCli,
+    gameCheckpoints,
     sd,
     tunnel,
     devices,

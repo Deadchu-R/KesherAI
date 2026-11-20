@@ -134,6 +134,8 @@ export class ConversationManager {
   private readonly saveTimers = new Map<string, NodeJS.Timeout>();
   /** The Unreal project the chats work on (shared, like Unity's active project). */
   private readonly unrealState: { project?: string } = {};
+  /** Each chat's current turn (its message), so a turn's engine writes share one game checkpoint. */
+  private readonly gameTurns = new Map<string, { id: string; label: string }>();
   /** Whether an Unreal Engine is installed here (checked in the background). */
   private unrealEngines = false;
   private unrealCheckedAt = 0;
@@ -251,7 +253,7 @@ export class ConversationManager {
     // Unity, Unreal, their graphs and running a game on the phone (chat-tools-games.ts). Unreal is looked for in
     // the background, at most every 5 minutes.
     this.checkUnreal();
-    const games = gameTools({ deps: this.deps, id, unityInChat: this.unityInChat(id), unreal: this.unrealState, unrealEngines: this.unrealEngines, jobs: () => this.jobs(), refresh: () => void this.refreshTools(id), chatModel: () => this.defaultChatModel() });
+    const games = gameTools({ deps: this.deps, id, unityInChat: this.unityInChat(id), unreal: this.unrealState, unrealEngines: this.unrealEngines, jobs: () => this.jobs(), refresh: () => void this.refreshTools(id), chatModel: () => this.defaultChatModel(), ...(id ? { turn: () => this.gameTurns.get(id), onCheckpoint: (cp: string) => this.sessions.get(id)?.checkpoint(`g:${cp}`, 0) } : {}) });
     split.push(...games.tools);
     media.notes.push(...games.notes);
     // Code sessions (self-work among them) share a task board with Claude on this computer.
@@ -957,9 +959,19 @@ export class ConversationManager {
   async restoreCheckpoint(id: string, checkpoint: string): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
+    if (opened.session.busy) throw new Error("Stop the agent first.");
+    // A game checkpoint ("g:<id>", taken before a turn's first engine write): the touched files go back.
+    if (checkpoint.startsWith("g:")) {
+      if (!this.deps.gameCheckpoints) throw new Error("No such checkpoint.");
+      const cp = await this.deps.gameCheckpoints.get(checkpoint.slice(2));
+      // Only this chat's own checkpoints from its ↺ line (the Game projects page restores any).
+      if (!cp || cp.chatId !== id) throw new Error("No such checkpoint.");
+      const r = await this.deps.gameCheckpoints.restore(cp.id);
+      opened.session.note(`Restored ${r.restored} game project file(s) to this checkpoint.${r.skipped ? ` ${r.skipped} could not be restored.` : ""}`);
+      return;
+    }
     const folders = this.checkpointFolders(opened.conversation, opened.session.grants);
     if (!folders.length || !this.deps.checkpoints) throw new Error("This conversation has no project folder.");
-    if (opened.session.busy) throw new Error("Stop the agent first.");
     // One message may have saved several folders ("a+b"): each is restored in its own store.
     let restored = 0;
     for (const part of checkpoint.split("+")) {
@@ -1128,6 +1140,8 @@ export class ConversationManager {
         note = `The web search failed: ${(err as Error).message}`;
       }
     }
+    // A new turn: the engine files its tools write go into one game checkpoint (chat-tools-games.ts withCheckpoints).
+    this.gameTurns.set(id, { id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`, label: text.slice(0, 200) });
     // Save the folders first (a coding session's folder, and a chat's Unity/Unreal projects), so this point can be restored with one click.
     if (this.deps.checkpoints && !session.busy) {
       let first: { id: string; files: number } | undefined;

@@ -438,7 +438,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
 
   /** Coding sessions: puts the project folder back as it was before a message (the current state is saved first). */
   app.post<{ Params: { id: string; cp: string } }>("/api/conversations/:id/checkpoints/:cp/restore", async (req, reply) => {
-    if (!/^[0-9a-f]{40}$/.test(req.params.cp)) return reply.code(400).send({ error: "Bad checkpoint" });
+    // A folder checkpoint (a git id), or a game checkpoint taken before a turn's engine writes ("g:" and its uuid).
+    if (!/^[0-9a-f]{40}$/.test(req.params.cp) && !/^g:[0-9a-f-]{36}$/.test(req.params.cp)) return reply.code(400).send({ error: "Bad checkpoint" });
     try {
       await s.conversations.restoreCheckpoint(req.params.id, req.params.cp);
       return { ok: true };

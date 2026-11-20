@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { GameCheckpoints } from "../game-checkpoints.js";
 import { existsSync } from "node:fs";
 import { copyFile, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -141,7 +142,7 @@ export async function godotAssetOf(project: unknown, path: unknown): Promise<{ t
  * @param app - The server.
  * @param g - The Godot bridge (to know whether the editor is open).
  */
-export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Promise<void> {
+export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge, checkpoints?: GameCheckpoints): Promise<void> {
   app.get<{ Querystring: { project?: string } }>("/api/godot/scenes", async (req, reply) => {
     try {
       return { scenes: await godotScenes(req.query.project) };
@@ -189,6 +190,7 @@ export async function godotSceneRoutes(app: FastifyInstance, g: GodotBridge): Pr
       const clash = req.body?.keep === "mine" ? [] : clashes(readTscn(text), ok);
       if (clash.length) return reply.code(409).send({ error: "These moved in Godot too.", code: "conflict", conflicts: clash });
       const out = writeTscn(text, ok);
+      await checkpoints?.beforeSave("godot", dir, "stand-in", `Stand-in: ${relative(dir, file!).split(sep).join("/")}`, [file!]);
       await copyFile(file!, `${file}.kesher-bak`);
       await writeFile(file!, out.text);
       return { written: ok.length - out.missing.length, missing: out.missing, backup: `${relative(dirname(file!), file!)}.kesher-bak` };

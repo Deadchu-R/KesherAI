@@ -30,6 +30,8 @@ export interface ConversationDeps {
   outputsDir: string;
   /** Saves the project folder before each message in coding sessions. */
   checkpoints?: Checkpoints;
+  /** Checkpoints of the game-project files a chat's engine tools write (one per turn). */
+  gameCheckpoints?: import("./game-checkpoints.js").GameCheckpoints;
   /** Where each agent run's earlier files are kept, for "Undo all" on its receipt. */
   undoDir?: string;
   /**

@@ -9,6 +9,8 @@ import { HIT_KINDS, searchGameProject, type GameHit, type HitKind } from "../gam
 import { graphDiff, opsSummary, type ClashChoice, type SyncReport } from "../game-sync.js";
 import { sameFolder } from "../unity-cli.js";
 import type { BlueprintJson, QueuedEdit } from "../unreal-bridge.js";
+import { makeDiff } from "@kesher/agent";
+import type { GameCheckpoint } from "../game-checkpoints.js";
 
 /**
  * The Game projects home (RESEARCH_LOG "Gap list: engine work without the engine open", 2026-11-20, step 1): one page
@@ -199,6 +201,55 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (list.length === 1 || r.hits.length) results.push({ engine: p.kind, name: p.name, path: p.path, hits: r.hits, counts: r.counts });
     }
     return { results };
+  });
+
+  // Checkpoints around engine writes (step 5): list, compare, restore, and how much is kept.
+  const cpView = (c: GameCheckpoint) => ({ id: c.id, engine: c.engine, name: c.name, project: c.project, source: c.source, label: c.label, at: c.at, ...(c.chatId ? { chatId: c.chatId } : {}), files: c.files.map((f) => ({ rel: f.rel, size: f.size, ...(f.blob ? {} : { added: true }), ...(f.skipped ? { skipped: true } : {}) })) });
+  app.get<{ Querystring: { engine?: string; project?: string } }>("/api/games/checkpoints", async (req, reply) => {
+    let project: string | undefined;
+    if (req.query.project) {
+      const p = await findOne(req.query.engine, req.query.project);
+      if (!p) return reply.code(400).send({ error: "Choose one of the projects found on this computer." });
+      project = p.path;
+    }
+    const [list, usage] = await Promise.all([s.gameCheckpoints.list(project), s.gameCheckpoints.usage()]);
+    return { checkpoints: list.slice(0, 200).map(cpView), bytes: usage.bytes, count: usage.checkpoints, limits: s.config.gameCheckpoints };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { path?: string } }>("/api/games/checkpoints/:id/diff", async (req, reply) => {
+    try {
+      const c = await s.gameCheckpoints.compare(req.params.id, String(req.query.path ?? ""));
+      if (c.binary) return { rel: c.rel, binary: true, sizeBefore: c.sizeBefore, sizeNow: c.sizeNow };
+      // From the kept file to the file now: what changed since the checkpoint.
+      return { rel: c.rel, binary: false, sizeBefore: c.sizeBefore, sizeNow: c.sizeNow, diff: makeDiff(c.rel, c.before, c.now ?? "").slice(0, 200_000) };
+    } catch (err) {
+      return reply.code(404).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/games/checkpoints/:id/restore", async (req, reply) => {
+    const cp = await s.gameCheckpoints.get(req.params.id);
+    if (!cp) return reply.code(404).send({ error: "No such checkpoint." });
+    // Unreal holds its packages while open and would save its own copy over them.
+    const unrealOpen = s.unreal.connected && !!s.unreal.projectFile && sameFolder(dirname(s.unreal.projectFile), cp.project);
+    if (unrealOpen && cp.files.some((f) => /\.(uasset|umap)$/i.test(f.rel))) return reply.code(409).send({ error: "Close Unreal first: it keeps these assets open and would save over them." });
+    try {
+      const r = await s.gameCheckpoints.restore(cp.id);
+      return { restored: r.restored, skipped: r.skipped, ...(r.before ? { before: r.before.id } : {}) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** How long and how much the store keeps; saving prunes at once. */
+  app.put<{ Body: { days?: number; maxMB?: number } }>("/api/games/checkpoints/settings", async (req, reply) => {
+    const days = Math.round(Number(req.body?.days));
+    const maxMB = Math.round(Number(req.body?.maxMB));
+    if (!(days >= 1 && days <= 3650) || !(maxMB >= 50 && maxMB <= 1_000_000)) return reply.code(400).send({ error: "Days 1-3650, size 50 MB or more." });
+    s.config.gameCheckpoints = { days, maxMB };
+    await s.saveConfig();
+    const r = await s.gameCheckpoints.prune();
+    return { removed: r.removed, bytes: r.bytes, limits: s.config.gameCheckpoints };
   });
 
   /** The clashes: both sides of each, and the choice made so far ("skip" ones stay listed). */

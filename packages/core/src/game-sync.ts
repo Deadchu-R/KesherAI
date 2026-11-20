@@ -30,6 +30,29 @@ export interface SyncReport {
   error?: string;
 }
 
+/** A batch of queued changes about to be applied (a checkpoint of their files is taken first, game-checkpoints.ts). */
+export interface SyncBatch {
+  engine: "unreal" | "unity";
+  /** The project folder. */
+  project: string;
+  /** The project's name. */
+  name: string;
+  /** The asset files the batch will write. */
+  files: string[];
+  /** How many changes it applies. */
+  count: number;
+}
+
+/**
+ * The files a batch of queued changes writes (each graph's asset file, once).
+ *
+ * @param edits - The changes about to be applied.
+ * @param fileOf - The file of each change's graph.
+ */
+export function batchFiles(edits: QueuedEdit[], fileOf: (q: QueuedEdit) => string | undefined): string[] {
+  return [...new Set(edits.map(fileOf).filter((f): f is string => !!f))];
+}
+
 /**
  * The saved graph's node ids and titles (kept with a queued change, so a clash can show what the engine changed).
  *

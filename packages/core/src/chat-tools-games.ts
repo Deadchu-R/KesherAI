@@ -21,16 +21,19 @@ import { existsSync } from "node:fs";
 import { gameFindTool } from "./game-index.js";
 import { findGameProjects } from "./game-projects.js";
 import { homedir } from "node:os";
+import type { GameCheckpoints, GameEngine } from "./game-checkpoints.js";
+import { unityAssetFile, unrealAssetFile } from "./game-sync.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
  *
  * @param p - The chat's dependencies and id; whether Unity came up in this chat; the Unreal project in use (shared,
  *   the Unreal tools set it); whether an Unreal engine is installed; the jobs store; a function that refreshes the
- *   chat's tools (after a project is opened); and the chat model (for graph changes in words).
+ *   chat's tools (after a project is opened); the chat model (for graph changes in words); the current turn (its id and
+ *   message, for one checkpoint per turn); and what to do when a turn's first checkpoint is made (the chat's ↺ line).
  * @returns The tools and the notes, in the order they always had.
  */
-export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat: boolean; unreal: { project?: string }; unrealEngines: boolean; jobs: () => JobStore; refresh: () => void; chatModel: () => string | undefined }): { tools: AgentTool[]; notes: string[] } {
+export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat: boolean; unreal: { project?: string }; unrealEngines: boolean; jobs: () => JobStore; refresh: () => void; chatModel: () => string | undefined; turn?: () => { id: string; label: string } | undefined; onCheckpoint?: (checkpointId: string) => void }): { tools: AgentTool[]; notes: string[] } {
   const { deps, id } = p;
   const tools: AgentTool[] = [];
   const notes: string[] = [];
@@ -102,5 +105,83 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     const chosen = phones();
     if (chosen.length) notes.push(phoneNote(chosen));
   }
-  return { tools, notes };
+  const dirs = (): ProjectDirs => {
+    const godotFile = deps.godot?.status().editor?.projectFile;
+    return {
+      ...(deps.unity?.activeProject ? { unity: deps.unity.activeProject } : {}),
+      ...(deps.unreal?.projectFile ? { unreal: dirname(deps.unreal.projectFile) } : {}),
+      ...(godotFile ? { godot: dirname(godotFile) } : {}),
+    };
+  };
+  const store = deps.gameCheckpoints;
+  return { tools: store && id ? withCheckpoints(tools, { store, chatId: id, dirs, turn: p.turn ?? (() => undefined), ...(p.onCheckpoint ? { onCreated: p.onCheckpoint } : {}) }) : tools, notes };
+}
+
+/** The folders of the projects a chat's engine tools work on. */
+export interface ProjectDirs {
+  unity?: string;
+  unreal?: string;
+  godot?: string;
+}
+
+/** A Godot res:// path (or a plain relative one) as a path in the project. */
+const resPath = (dir: string, v: unknown) => (typeof v === "string" && v.trim() ? join(dir, v.trim().replace(/^res:\/\//, "")) : undefined);
+
+/**
+ * The project files an engine chat tool is about to write (step 5 of the engine-closed gap list): only tools that name
+ * their file. Changes held in the editor's memory (unity_modify_scene, godot_edit) are kept when they are saved with a
+ * named scene.
+ *
+ * @param name - The tool.
+ * @param input - Its input.
+ * @param dirs - The projects in use.
+ * @returns The engine, project folder and files, or undefined for a tool that writes no named file.
+ */
+export function engineWrites(name: string, input: Record<string, unknown>, dirs: ProjectDirs): { engine: GameEngine; project: string; files: string[] } | undefined {
+  const path = typeof input.path === "string" ? input.path : "";
+  const one = (engine: GameEngine, project: string | undefined, file: string | undefined) => (project && file ? { engine, project, files: [file] } : undefined);
+  switch (name) {
+    case "unity_write_script":
+      return one("unity", dirs.unity, path && dirs.unity ? join(dirs.unity, path) : undefined);
+    case "unity_scene":
+      return input.action === "save" && path ? one("unity", dirs.unity, dirs.unity ? join(dirs.unity, path) : undefined) : undefined;
+    case "unity_change_graph":
+      return one("unity", dirs.unity, dirs.unity ? unityAssetFile(dirs.unity, path) : undefined);
+    case "unreal_change_graph":
+      return one("unreal", dirs.unreal, dirs.unreal ? unrealAssetFile(dirs.unreal, path) : undefined);
+    case "unreal_write_source":
+      return one("unreal", dirs.unreal, path && dirs.unreal ? join(dirs.unreal, path) : undefined);
+    case "godot_file":
+      return input.action === "write" ? one("godot", dirs.godot, dirs.godot ? resPath(dirs.godot, input.file) : undefined) : undefined;
+    case "godot_scene":
+      return input.action === "new" || input.action === "save" ? one("godot", dirs.godot, dirs.godot ? resPath(dirs.godot, input.scene) : undefined) : undefined;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Wraps the engine tools that write project files: before each run, the files are kept in the chat turn's checkpoint
+ * (one per turn; binaries too). A checkpoint that fails never stops the tool.
+ *
+ * @param tools - The chat's game tools.
+ * @param o - The store, the chat, the projects in use, the current turn, and a callback for a turn's first checkpoint.
+ * @returns The tools, the writing ones wrapped.
+ */
+export function withCheckpoints(tools: AgentTool[], o: { store: GameCheckpoints; chatId: string; dirs: () => ProjectDirs; turn: () => { id: string; label: string } | undefined; onCreated?: (checkpointId: string) => void }): AgentTool[] {
+  return tools.map((t) => {
+    if (t.risk === "read") return t;
+    return {
+      ...t,
+      run: async (input, ctx) => {
+        const w = engineWrites(t.spec.name, input, o.dirs());
+        if (w) {
+          const turn = o.turn() ?? { id: `call-${Date.now()}`, label: t.spec.name };
+          const got = await o.store.capture({ engine: w.engine, project: w.project, name: basename(w.project), source: "chat", label: turn.label, group: `chat:${o.chatId}:${turn.id}`, chatId: o.chatId }, w.files).catch(() => undefined);
+          if (got?.created) o.onCreated?.(got.checkpoint.id);
+        }
+        return t.run(input, ctx);
+      },
+    };
+  });
 }

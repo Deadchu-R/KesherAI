@@ -4,6 +4,7 @@ import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch";
 import { GameSource } from "../engine/GameSource";
+import { GameCheckpoints } from "../engine/GameCheckpoints";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -60,6 +61,8 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
   const [list, setList] = useState<{ projects: Project[]; clashes: number } | null>(null);
   const [sheet, setSheet] = useState<{ project?: Project } | null>(sync ? {} : null);
   const [search, setSearch] = useState<{ project?: Project; q: string } | null>(null);
+  // The Checkpoints sheet: one project's (its card) or every project's (the link under the title).
+  const [cps, setCps] = useState<{ project?: Project } | null>(null);
   // The Source view of one project, over the list (a card's Code button, or a search result's file at its line).
   const [code, setCode] = useState<{ engine: Project["engine"]; path: string; name: string; open?: { path: string; line?: number } } | null>(null);
   const load = () => void api<{ projects: Project[]; clashes: number }>("/api/games").then(setList, (e: Error) => toast(e.message));
@@ -105,6 +108,9 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
         <span aria-hidden>🔍</span>
         <span className="muted grow">{L("חיפוש בכל הפרויקטים: מחלקה, סקריפט, סצנה, Blueprint…", "Search all projects: class, script, scene, Blueprint…")}</span>
       </button>
+      <div className="row wrap games-top-links">
+        <button type="button" className="ghost small" onClick={() => setCps({})}>↺ {L("נקודות שחזור", "Checkpoints")}</button>
+      </div>
       {!!list?.clashes && (
         <button type="button" className="games-clash-banner" onClick={() => setSheet({})}>
           <span aria-hidden>⚠</span>
@@ -145,6 +151,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
                 {(p.pending > 0 || p.clashes > 0) && <button type="button" onClick={() => setSheet({ project: p })}>{L("הצג ממתינים", "View pending")}</button>}
                 <button type="button" onClick={() => setCode({ engine: p.engine, path: p.path, name: p.name })}>{"</>"} {L("קוד", "Code")}</button>
                 <button type="button" onClick={() => setSearch({ project: p, q: "" })} aria-label={L(`חיפוש ב-${p.name}`, `Search ${p.name}`)}>🔍 {L("חיפוש", "Search")}</button>
+                <button type="button" onClick={() => setCps({ project: p })} aria-label={L(`נקודות שחזור של ${p.name}`, `Checkpoints of ${p.name}`)}>↺ {L("שחזור", "Restore")}</button>
                 <a className="button" href={p.page}>{L("לעמוד הפרויקט", "Project page")}</a>
               </div>
             </section>
@@ -152,6 +159,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
         </div>
       )}
       {search && <GameSearch key={search.project?.path ?? "all"} {...(search.project ? { project: search.project } : {})} initial={search.q} onOpen={openHit} onClose={() => setSearch(null)} />}
+      {cps && <GameCheckpoints key={cps.project?.path ?? "all"} {...(cps.project ? { project: { engine: cps.project.engine, path: cps.project.path, name: cps.project.name } } : {})} onClose={() => setCps(null)} />}
       {sheet && <SyncSheet {...(sheet.project ? { project: sheet.project } : {})} onClose={() => setSheet(null)} onChange={load} />}
     </div>
   );

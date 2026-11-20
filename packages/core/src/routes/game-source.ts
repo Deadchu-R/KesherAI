@@ -142,6 +142,8 @@ export function gameSourceRoutes(app: FastifyInstance, s: KesherServices, findOn
       if (!text.trim() || text.length > MAX) return reply.code(400).send({ error: "Send the file's text, under 400 KB." });
       const st = await stat(abs).catch(() => undefined);
       if (st && req.body?.mtime && Math.abs(st.mtimeMs - Number(req.body.mtime)) > 1) return reply.code(409).send({ error: "The file changed since it was opened (in the engine, your editor or a chat). Open it again." });
+      // A checkpoint of the file first (Game projects → Checkpoints), then the old text as before.
+      await s.gameCheckpoints?.beforeSave(p.kind, p.path, "source", `Save ${rel}`, [abs]);
       if (st) {
         // The old text first, in KesherAI's folder (never in the project).
         const backups = join(s.paths.root, "game-backups", p.kind);

@@ -569,6 +569,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         if (!rel.endsWith(".cs") || !text.trim() || text.length > 400_000) return reply.code(400).send({ error: "Send a C# script (.cs) under 400 KB." });
         const st = await stat(abs);
         if (req.body?.mtime && Math.abs(st.mtimeMs - Number(req.body.mtime)) > 1) return reply.code(409).send({ error: "The script changed since it was opened (in Unity or a chat). Open it again." });
+        await s.gameCheckpoints?.beforeSave("unity", project, "source", `Save ${rel}`, [abs]);
         const before = await readFileFs(abs, "utf8");
         const backups = join(s.paths.root, "unity-backups");
         await mkdir(backups, { recursive: true });

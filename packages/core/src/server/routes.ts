@@ -221,8 +221,8 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
     });
   }
   // A Godot scene without Godot: read it, and write the moves made in KesherAI back into its .tscn.
-  await godotSceneRoutes(app, services.godot);
-  await unitySceneRoutes(app);
+  await godotSceneRoutes(app, services.godot, services.gameCheckpoints);
+  await unitySceneRoutes(app, services.gameCheckpoints);
   await unrealLevelRoutes(app, services.unreal);
   // The Game projects home: every engine project, its waiting changes, sync and clashes.
   await gamesRoutes(app, services);

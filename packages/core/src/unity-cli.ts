@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { appendFile, writeFile as writeText } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { engineChangedAt, nodeSig, sortForSync, unityAssetFile, type ClashChoice, type SyncReport } from "./game-sync.js";
+import { batchFiles, engineChangedAt, nodeSig, sortForSync, unityAssetFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
 import type { BlueprintJson, QueuedEdit } from "./unreal-bridge.js";
 
 /** The file a graph's saved copy is kept in. */
@@ -584,6 +584,8 @@ export class UnityCli {
   private readonly syncTimers = new Map<string, NodeJS.Timeout>();
   /** Called when a sync ends (the Game projects page notifies on a failure or a clash). */
   onSync?: (r: SyncReport) => void;
+  /** Called before a batch of queued changes is applied, to keep their files first (a checkpoint). */
+  beforeSync?: (b: SyncBatch) => Promise<void>;
 
   /**
    * Syncs a project's waiting changes a moment after the last one.
@@ -621,6 +623,9 @@ export class UnityCli {
       clashes = newClashes.length;
       if (clashes) this.writeQueue(all);
       if (!apply.length) return { applied: 0, failed: 0 };
+      // The graphs' files as they are now, first (a failed checkpoint never stops the sync).
+      const files = batchFiles(apply, (q) => unityAssetFile(folder, q.path));
+      if (files.length && this.beforeSync) await this.beforeSync({ engine: "unity", project: folder, name: basename(folder), files, count: apply.length }).catch(() => undefined);
       const paths = [...new Set(apply.map((q) => q.path))];
       const commands = [
         ...apply.map((q) => ({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops })),

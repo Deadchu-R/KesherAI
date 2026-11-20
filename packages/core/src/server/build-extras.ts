@@ -25,6 +25,9 @@ import { SelfWork } from "../self-work.js";
 import type { KesherServerOptions } from "./options.js";
 import type { TelegramBridge } from "../telegram.js";
 import { UnityCli } from "../unity-cli.js";
+import { GameCheckpoints } from "../game-checkpoints.js";
+import type { SyncBatch } from "../game-sync.js";
+import { suggestHeavyDir } from "../heavy-folder.js";
 import { UnrealBridge } from "../unreal-bridge.js";
 import { findEngines, readProject } from "../unreal-install.js";
 import { engineFor, runProgram } from "../unreal-tools.js";
@@ -111,7 +114,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
  * @param persist - Saves the settings.
  * @returns The Unity CLI and the Unreal bridge.
  */
-export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist: () => Promise<void>): { unityCli: UnityCli; unrealBridge: UnrealBridge } {
+export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist: () => Promise<void>): { unityCli: UnityCli; unrealBridge: UnrealBridge; gameCheckpoints: GameCheckpoints } {
   // Unity's CLI: the Unity page and the chat's Unity tools share it.
   UnityCli.setLogFile(join(paths.root, "logs", "unity-cli.log"));
   const unityCli = new UnityCli(config.unity, persist, undefined, join(paths.root, "unity"));
@@ -151,7 +154,18 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     const j = JSON.parse(text) as { answers?: Array<{ ok: boolean; result?: unknown; error?: string }>; ok?: boolean; result?: unknown; error?: string };
     return j.answers ?? [j as { ok: boolean; result?: unknown; error?: string }];
   });
-  return { unityCli, unrealBridge };
+  // Checkpoints around engine writes, on the heavy-data drive (Roee: not on C:), else next to the models, else the data folder.
+  const gameCheckpoints = new GameCheckpoints(
+    () => join(config.heavyDir ?? suggestHeavyDir(paths.models, paths.root) ?? paths.root, "game-checkpoints"),
+    () => config.gameCheckpoints,
+  );
+  // One checkpoint per sync batch: the graphs' asset files (binaries too) before the batch writes them.
+  const beforeSync = async (b: SyncBatch) => {
+    await gameCheckpoints.capture({ engine: b.engine, project: b.project, name: b.name, source: "sync", label: `Sync: ${b.count} change(s)`, group: `sync:${Date.now()}` }, b.files);
+  };
+  unityCli.beforeSync = beforeSync;
+  unrealBridge.beforeSync = beforeSync;
+  return { unityCli, unrealBridge, gameCheckpoints };
 }
 
 /**
