@@ -637,6 +637,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       config.tasksSync.enabled = on;
       await persist();
     },
+    setWorkList: async (on) => {
+      config.tasksSync.workList = on;
+      await persist();
+    },
     google,
     inbox: taskInbox,
     file: join(paths.root, "tasks-sync.json"),

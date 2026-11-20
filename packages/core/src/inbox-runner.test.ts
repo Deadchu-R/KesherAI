@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { agent } from "@agentclientprotocol/sdk";
@@ -278,6 +278,26 @@ test("inbox: a chat agent's message ask — one answer, one message, counted aga
     await inbox.answerMessage(d.ask.requestId, "allow", "pc");
     assert.throws(() => inbox.askMessage({ title: "t", text: "x", where: "p" }), /limit of 2/);
     assert.equal(inbox.openAsks().length, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: Claude's work list is read from origin/main through git, and missing is undefined", async () => {
+  const { root, repo } = await setup({ "c-20261120-09": TASK("c-20261120-09") });
+  const { inbox } = await inboxFor(repo, root, {}, { prompts: 0 });
+  try {
+    assert.equal(await inbox.workList(), undefined, "no docs/WORK_LIST.md on main yet");
+    // Claude pushes the list to main from another clone; the PC's checkout never changes.
+    const claude = join(root, "claude-main");
+    await sh(root, "clone", "--quiet", "-b", "main", join(root, "origin.git"), claude);
+    mkdirSync(join(claude, "docs"), { recursive: true });
+    writeFileSync(join(claude, "docs", "WORK_LIST.md"), "## Now\n- ⬜ Next thing.\n");
+    await sh(claude, "add", "-A");
+    await sh(claude, "commit", "-q", "-m", "work list");
+    await sh(claude, "push", "-q", "origin", "main");
+    assert.equal(await inbox.workList(), "## Now\n- ⬜ Next thing.\n");
+    assert.equal(existsSync(join(repo, "docs", "WORK_LIST.md")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

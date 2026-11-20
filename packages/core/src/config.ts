@@ -234,7 +234,7 @@ export const KesherConfigSchema = z.object({
    * Tasks on all your devices (tasks-sync.ts): the task inbox's tasks and runs kept as sealed records in the hidden
    * KesherAI folder of the user's own Google Drive. Off until turned on (on this PC only).
    */
-  tasksSync: z.object({ enabled: z.boolean().default(false) }).prefault({}),
+  tasksSync: z.object({ enabled: z.boolean().default(false), workList: z.boolean().default(true) }).prefault({}),
   /** CivitAI: the user's own key, for LoRAs that need one to download (Images → Find LoRAs); never sent to a page. */
   civitai: z.object({ token: z.string().max(200).optional() }).prefault({}),
   /** Figma: the user's personal access token (Settings → Appearance → Figma); never sent to a page. */

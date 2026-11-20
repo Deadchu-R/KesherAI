@@ -274,6 +274,31 @@ export class TaskInbox {
     return this.syncing;
   }
 
+  /**
+   * Claude's work list (`docs/WORK_LIST.md` on `main` of the inbox's project), for "Tasks on all your devices"
+   * (work-list-sync.ts). Fetches only `main` into its remote-tracking ref and reads the file through git (nothing is
+   * checked out).
+   *
+   * @returns The file's text, or undefined when there is no project, the fetch failed or the file is missing or over 512 KB.
+   */
+  async workList(): Promise<string | undefined> {
+    await this.load();
+    let repo: string;
+    try {
+      repo = this.repo();
+    } catch {
+      return undefined;
+    }
+    const ref = "refs/remotes/origin/main";
+    const fetched = await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], 60_000);
+    // Offline: the last fetched copy still counts (it is what the PC knew).
+    if (fetched.code !== 0 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", ref])).code !== 0) return undefined;
+    const size = await this.d.git(repo, ["cat-file", "-s", `${ref}:docs/WORK_LIST.md`]);
+    if (size.code !== 0 || Number(size.out.trim()) > 512 * 1024) return undefined;
+    const body = await this.d.git(repo, ["show", `${ref}:docs/WORK_LIST.md`]);
+    return body.code === 0 ? body.out : undefined;
+  }
+
   private async doSync(): Promise<void> {
     await this.load();
     const s = this.s;

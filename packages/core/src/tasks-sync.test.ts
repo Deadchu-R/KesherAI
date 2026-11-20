@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DriveError, DriveSync, ensureAccountKey, type DriveChange, type DriveFileInfo, type DriveStore, type InboxTaskView, type SyncRunBody } from "@kesher/shared";
+import { DriveError, DriveSync, ensureAccountKey, type DriveChange, type DriveFileInfo, type DriveStore, type InboxTaskView, type SyncRunBody, type SyncTaskBody } from "@kesher/shared";
 import type { RunSnapshot } from "./agent-activity.js";
 import { agentBody, agentSyncId, inboxIdFor, scrubText, syncIdFor, TasksSync, type TasksSyncDeps } from "./tasks-sync.js";
 
@@ -73,7 +73,8 @@ async function setup(opts: { enabled?: boolean; scope?: boolean; extra?: Partial
   const drive = new MemDrive();
   const tasks: InboxTaskView[] = [];
   const received: { id: string; title: string; goal: string; executor: string }[] = [];
-  const settings = { enabled: opts.enabled ?? true };
+  const settings: { enabled: boolean; workList?: boolean } = { enabled: opts.enabled ?? true };
+  const workList = { text: undefined as string | undefined, reads: 0 };
   const google = { connected: true, scope: opts.scope ?? true, has: () => google.scope, accessToken: async () => "tok" };
   const inbox = {
     list: async () => tasks.map((t) => ({ ...t })),
@@ -83,6 +84,10 @@ async function setup(opts: { enabled?: boolean; scope?: boolean; extra?: Partial
       return true;
     },
     onChange: () => () => undefined,
+    workList: async () => {
+      workList.reads++;
+      return workList.text;
+    },
   };
   const file = join(dir, "tasks-sync.json");
   const sync = new TasksSync({ settings: () => settings, setEnabled: async (on) => void (settings.enabled = on), google, inbox, file, drive: () => drive, home: "/home/someone", ...opts.extra });
@@ -90,7 +95,7 @@ async function setup(opts: { enabled?: boolean; scope?: boolean; extra?: Partial
     sync.stop();
     return rm(dir, { recursive: true, force: true });
   };
-  return { dir, drive, tasks, received, settings, google, sync, file, done };
+  return { dir, drive, tasks, received, settings, google, sync, file, done, workList };
 }
 
 test("tasks sync: off by default does not touch Drive", async () => {
@@ -226,4 +231,77 @@ test("tasks sync: an agent snapshot body is short, scrubbed and has no prompt or
   assert.equal(b.summary, "Took too long");
   assert.ok(!b.title.includes("someone"));
   assert.equal(agentBody({ runId: "x", source: "chat-helper", title: "t", state: "done", step: 0, startedAt: 0 }, "x".repeat(900)).summary?.length, 500);
+});
+
+const WORK_LIST = "## Now\n- ✅ First item. Done.\n- 🔨 Second item in /home/someone/kesher.\n- plain line\n## Waiting on Roee 👤\n- 👤 Third item.\n";
+
+/** What another device sees in Drive: the live work-list items, by title. */
+async function seen(drive: DriveStore): Promise<Map<string, SyncTaskBody>> {
+  const keys = await ensureAccountKey(drive);
+  const phone = await DriveSync.create({ drive, writer: "phone-1", keys });
+  await phone.pull();
+  const out = new Map<string, SyncTaskBody>();
+  for (const r of phone.records()) {
+    const b = r.body as SyncTaskBody | null;
+    if (r.head.kind === "task" && !r.head.deleted && b?.origin === "work-list") out.set(b.title, b);
+  }
+  return out;
+}
+
+test("tasks sync: Claude's work list is written once, again only when an item changes, and removed items get tombstones", async () => {
+  let now = Date.parse("2026-11-20T12:00:00Z");
+  const t = await setup({ extra: { now: () => now } });
+  t.workList.text = WORK_LIST;
+  let s = await t.sync.syncNow();
+  assert.equal(s.lastError, null);
+  assert.equal(s.counts.workList, 3);
+  assert.equal(s.counts.tasks, 0, "work-list items are not counted as tasks");
+  let items = await seen(t.drive);
+  assert.deepEqual([...items.keys()], ["First item.", "Second item in ~/kesher.", "Third item."]);
+  assert.deepEqual(items.get("Third item.")?.workList, { section: "Waiting on Roee 👤", status: "roee", order: 2 });
+  assert.ok(![...items.values()].some((b) => b.spec.includes("/home/someone")), "the home folder is scrubbed");
+  const files = t.drive.names("task").length;
+  // Within 15 minutes the list is not read again; after, an unchanged list writes nothing.
+  await t.sync.syncNow();
+  assert.equal(t.workList.reads, 1);
+  now += 16 * 60_000;
+  await t.sync.syncNow();
+  assert.equal(t.workList.reads, 2);
+  assert.equal(t.drive.names("task").length, files);
+  // One status changes, one item leaves: one new revision and one tombstone.
+  t.workList.text = WORK_LIST.replace("🔨 Second", "✅ Second").replace("- 👤 Third item.\n", "");
+  now += 16 * 60_000;
+  s = await t.sync.syncNow();
+  assert.equal(t.drive.names("task").length, files + 2);
+  assert.equal(s.counts.workList, 2);
+  items = await seen(t.drive);
+  assert.equal(items.get("Second item in ~/kesher.")?.workList?.status, "done");
+  assert.equal(items.has("Third item."), false);
+  // It comes back under a new record id (a deleted record can never be written again).
+  t.workList.text = WORK_LIST;
+  now += 16 * 60_000;
+  s = await t.sync.syncNow();
+  assert.equal(s.lastError, null);
+  assert.equal(s.counts.workList, 3);
+  assert.ok((await seen(t.drive)).has("Third item."));
+  await t.done();
+});
+
+test("tasks sync: hiding the work list removes its items; a list that cannot be read keeps them", async () => {
+  let now = Date.parse("2026-11-20T12:00:00Z");
+  const t = await setup({ extra: { now: () => now, setWorkList: async (on) => void (t.settings.workList = on) } });
+  t.workList.text = WORK_LIST;
+  await t.sync.syncNow();
+  t.workList.text = undefined;
+  now += 16 * 60_000;
+  let s = await t.sync.syncNow();
+  assert.equal(s.counts.workList, 3, "an unreadable list (offline, no project) changes nothing");
+  s = await t.sync.setWorkList(false);
+  s = await t.sync.syncNow();
+  assert.equal(s.workList, false);
+  assert.equal(s.counts.workList, 0);
+  assert.equal((await seen(t.drive)).size, 0);
+  // Phone and page tasks are still received; work-list items are never queued in the inbox.
+  assert.deepEqual(t.received, []);
+  await t.done();
 });

@@ -18,8 +18,10 @@ import {
   type SyncRunBody,
   type SyncRunState,
   type SyncTaskBody,
+  parseWorkList,
 } from "@kesher/shared";
 import type { RunSnapshot } from "./agent-activity.js";
+import { syncWorkList, WORK_LIST_EVERY_MS, type WorkListSentMap } from "./work-list-sync.js";
 
 /**
  * "Tasks on all your devices" on the PC (docs/RESEARCH_LOG.md, "Tasks in Roee's Google Drive instead of the hub",
@@ -64,14 +66,18 @@ export interface TasksSyncInbox {
   list(): Promise<InboxTaskView[]>;
   fromDrive(t: { id: string; title: string; goal: string; executor: string }): Promise<boolean>;
   onChange(cb: () => void): () => void;
+  /** Claude's work list (`docs/WORK_LIST.md` from git), or undefined when it cannot be read now. */
+  workList?(): Promise<string | undefined>;
 }
 
 /** Options of {@link TasksSync}. */
 export interface TasksSyncDeps {
   /** The `tasksSync` settings (config.json). */
-  settings: () => { enabled: boolean };
+  settings: () => { enabled: boolean; workList?: boolean };
   /** Turns it on or off in the settings and saves them. */
   setEnabled: (on: boolean) => Promise<void>;
+  /** Shows or hides Claude's work list on every device (the `workList` setting), and saves the settings. */
+  setWorkList?: (on: boolean) => Promise<void>;
   google: TasksSyncGoogle;
   inbox: TasksSyncInbox;
   /** The state file, in the data folder (e.g. `tasks-sync.json`). */
@@ -90,6 +96,8 @@ export interface TasksSyncDeps {
 /** The status the Settings section shows (`GET /api/tasks-sync`). */
 export interface TasksSyncStatus {
   enabled: boolean;
+  /** Claude's work list is shown on every device (default on). */
+  workList: boolean;
   /** Signed in to Google on this PC. */
   connected: boolean;
   /** Signed in, but the Drive app-folder permission is missing (or Google refused the token): "Reconnect Google". */
@@ -106,6 +114,8 @@ export interface TasksSyncStatus {
     pending: number;
     /** Tasks brought into the inbox from other devices. */
     received: number;
+    /** Items of Claude's work list in Drive. */
+    workList: number;
   };
 }
 
@@ -122,6 +132,8 @@ interface Saved {
   lastError?: string;
   lastCompact?: number;
   needsReconnect?: boolean;
+  /** Claude's work list: item id -> what was written for it (work-list-sync.ts). */
+  workList?: WorkListSentMap;
 }
 
 const ID_RE = /^[\w-]{8,64}$/;
@@ -214,6 +226,8 @@ export class TasksSync {
   private readonly agents = new Map<string, { snap: RunSnapshot; summary?: string; sentAt?: number; sentFp?: string }>();
   /** Something was written to Drive during the current sync (the others get a ping). */
   private wrote = false;
+  /** When the work list was last read from git (0: at the next sync; the first sync after start reads it). */
+  private workListAt = 0;
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TasksSyncDeps) {}
@@ -224,6 +238,10 @@ export class TasksSync {
 
   private get enabled(): boolean {
     return this.d.settings().enabled;
+  }
+
+  private get showWorkList(): boolean {
+    return this.d.settings().workList !== false;
   }
 
   private get ready(): boolean {
@@ -264,17 +282,21 @@ export class TasksSync {
   async status(): Promise<TasksSyncStatus> {
     await this.load();
     const recs = this.sync?.records() ?? Object.values(this.saved.sync?.records ?? {});
+    const live = recs.filter((r) => r.head.kind === "task" && !r.head.deleted);
+    const isItem = (r: (typeof recs)[number]) => (r.body as SyncTaskBody | null)?.origin === "work-list";
     return {
       enabled: this.enabled,
+      workList: this.showWorkList,
       connected: this.d.google.connected,
       needsReconnect: this.d.google.connected && (!this.d.google.has("sync") || !!this.saved.needsReconnect),
       syncing: !!this.running,
       lastSync: this.saved.lastSync ?? null,
       lastError: this.saved.lastError ?? null,
       counts: {
-        tasks: recs.filter((r) => r.head.kind === "task" && !r.head.deleted).length,
+        tasks: live.filter((r) => !isItem(r)).length,
         pending: (this.sync?.state ?? this.saved.sync)?.outbox.length ?? 0,
         received: Object.keys(this.saved.received).length,
+        workList: live.filter(isItem).length,
       },
     };
   }
@@ -351,6 +373,20 @@ export class TasksSync {
   }
 
   /**
+   * Shows or hides Claude's work list on every device. Hiding removes its items from Drive (they come back, written
+   * again, when it is shown).
+   *
+   * @param on - Show or hide.
+   * @returns The status after the change.
+   */
+  async setWorkList(on: boolean): Promise<TasksSyncStatus> {
+    await this.d.setWorkList?.(on);
+    this.workListAt = 0;
+    void this.syncNow();
+    return this.status();
+  }
+
+  /**
    * Syncs now (once at a time; a call while one runs waits for it).
    *
    * @returns The status after it.
@@ -370,6 +406,7 @@ export class TasksSync {
       await this.receive(sync);
       await this.send(sync);
       await this.sendAgents(sync);
+      await this.sendWorkList(sync);
       const flushed = await sync.flush();
       if (flushed.sent) this.wrote = true;
       if (flushed.error) throw flushed.error;
@@ -475,6 +512,27 @@ export class TasksSync {
       }
       this.saved.sent[t.id] = fp;
     }
+  }
+
+  /**
+   * Claude's work list: read from git at the first sync and then every {@link WORK_LIST_EVERY_MS}, its items written
+   * when they changed (work-list-sync.ts). Hidden: its items are removed once.
+   */
+  private async sendWorkList(sync: DriveSync): Promise<void> {
+    const sent = (this.saved.workList ??= {});
+    let items: Parameters<typeof syncWorkList>[2];
+    if (!this.showWorkList) {
+      if (!Object.keys(sent).length) return;
+      items = "off";
+    } else {
+      if (!this.d.inbox.workList || (this.workListAt && this.now() - this.workListAt < WORK_LIST_EVERY_MS)) return;
+      this.workListAt = this.now();
+      const text = await this.d.inbox.workList().catch(() => undefined);
+      if (text === undefined) return;
+      items = parseWorkList(text);
+    }
+    const r = await syncWorkList(sync, sent, items, { now: this.now(), scrub: (t) => scrubText(t, this.d.home), log: this.d.log });
+    if (r.written || r.removed) this.wrote = true;
   }
 
   /** Writes the snapshots that are due (see {@link TasksSync.observeAgent}); an ended run is then forgotten. */

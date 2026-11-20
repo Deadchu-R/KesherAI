@@ -22,7 +22,9 @@ export async function tasksSyncRoutes(app: FastifyInstance, s: KesherServices, s
    * Turns it on or off. Turning on without the permission also returns `url`: the page opens it, and sync starts
    * once Google sends the user back.
    */
-  app.post<{ Body: { enabled?: unknown } }>("/api/tasks-sync", async (req, reply) => {
+  app.post<{ Body: { enabled?: unknown; workList?: unknown } }>("/api/tasks-sync", async (req, reply) => {
+    // Showing or hiding Claude's work list (harmless from the phone: it only changes what the PC writes to Drive).
+    if (typeof req.body?.workList === "boolean" && req.body.enabled === undefined) return sync.setWorkList(req.body.workList);
     if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "Say on or off." });
     if (!req.body.enabled) return sync.setEnabled(false);
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Turn this on from the computer that runs KesherAI." });
