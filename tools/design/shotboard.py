@@ -1,6 +1,7 @@
 """Adds design-doc boards made from screenshots: python3 shotboard.py NAME.dc.html "title" shot.png [width] [NAME2 "title2" shot2.png [width2] ...]
 Boards go in one new row below everything (computer first, phone after), each gets a design_marks entry
-(the last one becomes "the newest change"), then design_marks.py lays out the marks. Publish afterwards (LEAD_GUIDE.md)."""
+(the last one becomes "the newest change"), then design_marks.py lays out the marks. Publish afterwards (LEAD_GUIDE.md).
+A NAME that is already on the canvas is updated in place (same spot, new picture, marked "עודכן:" instead of "חדש:")."""
 import sys, json, base64, re, time
 from PIL import Image
 import os
@@ -26,6 +27,9 @@ for name,title,png,w in items:
     html=re.sub(r'<title>.*?</title>',f'<title>{t}</title>',head)
     html+=f'<div class="b" style="width:{w}px;height:{h}px;position:relative;overflow:hidden"><img src="data:image/png;base64,{b64}" style="width:{w}px;height:{h}px;display:block" alt="{t}"></div></x-dc><script type="text/x-dc" data-dc-script data-props=\'{{"$preview":{{"width":{w},"height":{h}}}}}\'>class Component extends DCLogic {{ renderVals() {{ return {{}}; }} }}</script></body></html>'
     open(P+name,'w').write(html)
+    old=c['boards'].get(name)
+    if old:
+        old.update({'h':h,'w':w,'title':title}); m.append([name,stamp,'עודכן: '+title]); continue
     c['boards'][name]={'h':h,'title':title,'w':w,'x':x,'y':y}
     if name not in c['order']: c['order'].append(name)
     m.append([name,stamp,'חדש: '+title]); x+=w+400

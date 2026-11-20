@@ -125,6 +125,8 @@ rows=[
  (167700, ['GamesProjects.dc.html','GamesProjectsPhone.dc.html']),
  (169100, ['GamesSyncSheet.dc.html','GamesSyncSheetPhone.dc.html']),
  (170500, ['HubNotify.dc.html','HubNotifyPhone.dc.html','HubNotifyAppPhone.dc.html']),
+ (171700, ['GamesSearch.dc.html','GamesSearchPhone.dc.html']),
+ (173100, ['GamesSource.dc.html','GamesSourcePhone.dc.html']),
 ]
 SIDE=300
 for y,names in rows:
