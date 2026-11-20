@@ -409,9 +409,10 @@ const ALWAYS_ASK: Record<string, string> = {
  *
  * @param b - The bridge.
  * @param saveShot - Keeps a screenshot as an asset (its id), so the chat shows it as a small picture in the step.
+ * @param opts.ffmpeg - FFmpeg's program when it is on the computer (WebM recordings); never downloads it.
  * @returns The tools, or none when no browser is connected.
  */
-export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeType: string) => Promise<string>): AgentTool[] {
+export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeType: string) => Promise<string>, opts: { ffmpeg?: () => Promise<string | undefined> } = {}): AgentTool[] {
   if (!b.status().connected) return [];
   const both = b.status().pane && b.status().extension;
   /** Whether snapshot refs and CDP options exist (KesherAI's pane, or Chrome with extension 0.3.0+). */
@@ -580,6 +581,6 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     },
   ];
   // The CDP tools (snapshot refs, console, network…): KesherAI's own pane, and the user's Chrome with extension 0.3.0+.
-  if (b.status().pane || b.status().extensionCdp) tools.push(...cdpBrowserTools(b, { tabArg, onSite, ...(saveShot ? { saveAsset: saveShot } : {}) }));
+  if (b.status().pane || b.status().extensionCdp) tools.push(...cdpBrowserTools(b, { tabArg, onSite, ...(saveShot ? { saveAsset: saveShot } : {}), ...(opts.ffmpeg ? { ffmpeg: opts.ffmpeg } : {}) }));
   return tools.map((t) => logged(t.spec.name === "browser_tabs" ? t : scoped(t)));
 }

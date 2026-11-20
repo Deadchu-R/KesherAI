@@ -12,7 +12,8 @@
 import { stat } from "node:fs/promises";
 import type { AgentTool, ToolContext } from "@kesher/agent";
 import type { BrowserBridge } from "./browser-bridge.js";
-import type { CdpPage } from "./cdp.js";
+import type { CdpPage, InspectInfo } from "./cdp.js";
+import { encodeRecording } from "./browser-record.js";
 import { hostOf, untrusted, uploadRefusal, redactUrl } from "./browser-safety.js";
 
 /** What the tools need from browserTools: the tab arguments and the card's " on site" words. */
@@ -21,6 +22,26 @@ export interface CdpToolHelpers {
   onSite: (input: Record<string, unknown>, signal?: AbortSignal) => Promise<string>;
   /** Keeps a picture or a recording as an asset (its id), so the chat shows it in the step. */
   saveAsset?: (data: Buffer, mimeType: string) => Promise<string>;
+  /** FFmpeg's program when it is on the computer (a WebM recording); never downloads it. */
+  ffmpeg?: () => Promise<string | undefined>;
+}
+
+/**
+ * One inspected element as text for the model (and the log): tag and attributes, box, styles, whether it is cut, text
+ * and HTML.
+ *
+ * @param i - What `CdpPage.inspect` found.
+ */
+export function inspectText(i: InspectInfo): string {
+  const attrs = Object.entries(i.attributes).map(([k, v]) => ` ${k}="${v}"`).join("");
+  return [
+    `<${i.tag}${attrs}>`,
+    `Box: x ${i.box.x}, y ${i.box.y}, ${i.box.width}×${i.box.height} px (CSS pixels of the visible area)`,
+    `Styles: ${Object.entries(i.styles).map(([k, v]) => `${k}: ${v}`).join("; ") || "(defaults)"}`,
+    i.cut ? "Cut: yes, its content is wider or taller than its box and is hidden (text may be cut off)." : "Cut: no",
+    ...(i.text ? [`Text: ${i.text}`] : []),
+    `HTML: ${i.html}`,
+  ].join("\n");
 }
 
 /** Whether a ref is a snapshot ref ("e12") rather than an older browser_read number. */
@@ -246,6 +267,79 @@ export function cdpBrowserTools(b: BrowserBridge, h: CdpToolHelpers): AgentTool[
           if (why) throw new Error(why);
         }
         return { output: await run(input, ctx, async (p) => (await p.upload(String(input.ref), paths), snapshotText(p, `Put ${paths.length} file(s) in the field.`))) };
+      },
+    },
+    {
+      risk: "write",
+      spec: {
+        name: "browser_inspect",
+        description: "Inspect one element like DevTools' Elements panel: tag, attributes, box (place and size), the styles that decide its layout and look, whether its content is cut off, its text and HTML. Give its ref from browser_snapshot, or x and y of the last browser_screenshot. For checking a page you are building.",
+        inputSchema: { type: "object", properties: { ref: refArg.ref, x: { type: "number" }, y: { type: "number" }, ...tab } },
+      },
+      preview: async (input, ctx) => `Inspect ${input.ref ? await label(input, ctx) : `the element at (${Math.round(Number(input.x))}, ${Math.round(Number(input.y))})`}${await h.onSite(input, ctx.signal)}`,
+      run: async (input, ctx) => {
+        const at = input.ref ? { ref: String(input.ref) } : { x: Number(input.x), y: Number(input.y) };
+        return { output: await run(input, ctx, async (p) => untrusted(await source(p, "element"), inspectText(await p.inspect(at)))) };
+      },
+    },
+    {
+      risk: "write",
+      spec: {
+        name: "browser_emulate",
+        description: "Show the page as a phone (390 px wide, touch), a desktop (1280 px) or at the browser's own size (reset), and in dark or light colors (scheme: dark, light, auto). It stays until changed. To check a design at 390 px and on a desktop at once, use browser_try_change.",
+        inputSchema: { type: "object", properties: { device: { type: "string", enum: ["phone", "desktop", "reset"] }, scheme: { type: "string", enum: ["dark", "light", "auto"] }, ...tab } },
+      },
+      preview: async (input, ctx) => `Show the page as ${[input.device ? ({ phone: "a 390 px phone", desktop: "a desktop", reset: "its own size" } as Record<string, string>)[String(input.device)] : "", input.scheme ? `${String(input.scheme)} colors` : ""].filter(Boolean).join(", ") || "it is"}${await h.onSite(input, ctx.signal)}`,
+      run: async (input, ctx) => {
+        const device = input.device === "reset" ? "none" : input.device === "phone" || input.device === "desktop" ? input.device : undefined;
+        const scheme = input.scheme === "dark" || input.scheme === "light" || input.scheme === "auto" ? input.scheme : undefined;
+        if (!device && !scheme) throw new Error("Give device (phone, desktop, reset) or scheme (dark, light, auto).");
+        return {
+          output: await run(input, ctx, async (p) => {
+            const e = await p.emulate({ ...(device ? { device } : {}), ...(scheme ? { scheme } : {}) });
+            return snapshotText(p, `Now: ${e.device === "none" ? "the browser's own size" : e.device === "phone" ? "a 390 px phone" : "a 1280 px desktop"}, ${e.scheme === "auto" ? "the page's own colors" : `${e.scheme} colors`}.`);
+          }),
+        };
+      },
+    },
+    {
+      risk: "exec",
+      spec: {
+        name: "browser_try_change",
+        description: "\"Try my change\" after editing a web page you are building: reloads the tab, then gives the console errors and warnings and the failed requests since the reload, and pictures of the page at 390 px (phone) and 1280 px (desktop), with whether it is wider than the screen (side scroll or cut text).",
+        inputSchema: { type: "object", properties: tab },
+      },
+      preview: async (input, ctx) => `Reload and check the page at 390 px and on a desktop${await h.onSite(input, ctx.signal)}`,
+      run: async (input, ctx) => {
+        const r = await run(input, ctx, (p) => p.tryChange());
+        const lines = [
+          `Reloaded ${redactUrl(r.url)}.`,
+          r.errors.length ? `Console errors and warnings (${r.errors.length}):\n${r.errors.map((l) => `[${l.level}] ${l.text}${l.where ? ` (${l.where})` : ""}`).join("\n")}` : "Console: no errors or warnings.",
+          r.failed.length ? `Failed requests (${r.failed.length}):\n${r.failed.map((q) => `#${q.n} ${q.method} ${q.failed ? `FAILED (${q.failed})` : q.status} ${redactUrl(q.url)}`).join("\n")}` : "Network: no failed requests.",
+          ...r.views.map((v) => `${v.device === "phone" ? "Phone, 390 px" : "Desktop, 1280 px"}: ${v.overflow ? `${v.overflow} px wider than the screen (side scroll or cut content)` : "fits the width"}.`),
+          "The two pictures follow: the phone first, then the desktop.",
+        ];
+        const images = r.views.map((v) => ({ mimeType: "image/png", data: v.data.toString("base64") }));
+        const ids = h.saveAsset ? (await Promise.all(r.views.map((v) => h.saveAsset!(v.data, "image/png").catch(() => undefined)))).filter((x): x is string => !!x) : [];
+        return { output: untrusted(hostOf(r.url) ?? "the page", lines.join("\n\n")), images, ...(ids.length ? { assetIds: ids } : {}) };
+      },
+    },
+    {
+      risk: "write",
+      spec: {
+        name: "browser_record",
+        description: "Record what happens in a tab as a GIF (or a WebM video when FFmpeg is on the computer): action start, then do the steps (click, type…), then action stop to get the file in the chat. Stops by itself after 60 s.",
+        inputSchema: { type: "object", properties: { action: { type: "string", enum: ["start", "stop"] }, format: { type: "string", enum: ["gif", "webm"] }, ...tab }, required: ["action"] },
+      },
+      preview: async (input, ctx) => `${input.action === "stop" ? "Stop recording" : "Record"} the tab${await h.onSite(input, ctx.signal)}`,
+      run: async (input, ctx) => {
+        if (input.action === "start") return { output: await run(input, ctx, async (p) => (await p.startRecording(), "Recording. Do the steps, then browser_record with action stop.")) };
+        if (input.action !== "stop") throw new Error("action is start or stop.");
+        const frames = await run(input, ctx, (p) => p.stopRecording());
+        const file = await encodeRecording(frames, input.format === "webm" ? "webm" : "gif", h.ffmpeg);
+        const id = h.saveAsset ? await h.saveAsset(file.data, file.mimeType).catch(() => undefined) : undefined;
+        const kind = file.mimeType === "video/webm" ? "WebM video" : "GIF";
+        return { output: `${file.note ? `${file.note} ` : ""}Recorded ${frames.length} frames as a ${kind}${id ? "; it is shown in the chat" : ""}.`, ...(id ? { assetIds: [id] } : {}) };
       },
     },
   ];

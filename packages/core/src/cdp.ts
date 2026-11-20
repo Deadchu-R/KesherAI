@@ -58,6 +58,43 @@ export interface OpenDialog {
   defaultPrompt?: string;
 }
 
+/** One element as `inspect` describes it (the Debug drawer's Elements tab, `browser_inspect`). */
+export interface InspectInfo {
+  tag: string;
+  /** The element's attributes; values of secret-looking ones are hidden. */
+  attributes: Record<string, string>;
+  /** Where it is in the visible area, in CSS pixels. */
+  box: { x: number; y: number; width: number; height: number };
+  /** The computed styles that matter for layout and look (INSPECT_STYLES). */
+  styles: Record<string, string>;
+  /** Its visible text, cut to 300 characters. */
+  text: string;
+  /** Its HTML, cut to 1500 characters (secret values hidden). */
+  html: string;
+  /** Its content is wider or taller than its box and hidden or cut ("no cut text" checks). */
+  cut: boolean;
+}
+
+/** How the page is shown: its size (a 390 px phone, a 1280 px desktop, or the pane's own) and its colors. */
+export interface Emulation {
+  device: "phone" | "desktop" | "none";
+  scheme: "dark" | "light" | "auto";
+}
+
+/** One frame of a recording: a PNG picture and when it came. */
+export interface RecordedFrame {
+  data: Buffer;
+  at: number;
+}
+
+/** What "Try my change" found after a reload: problems, and the page at 390 px and on a desktop. */
+export interface TryResult {
+  url: string;
+  errors: ConsoleEntry[];
+  failed: NetworkEntry[];
+  views: Array<{ device: "phone" | "desktop"; data: Buffer; width: number; height: number; /** CSS pixels wider than the view (0: fits). */ overflow: number }>;
+}
+
 interface AxValue {
   value?: unknown;
 }
@@ -109,6 +146,14 @@ const SNAPSHOT_LINES = 800;
 const SNAPSHOT_CHARS = 24_000;
 /** How many console lines and requests a tab keeps. */
 const BUFFER = 300;
+/** A recording keeps at most this many frames and this long (then it stops by itself). */
+const RECORD_FRAMES = 300;
+const RECORD_MS = 60_000;
+/** The sizes `emulate` gives the page (CSS pixels): a phone like Roee's checks (390 wide), and a laptop. */
+export const PHONE_VIEW = { width: 390, height: 844 };
+export const DESKTOP_VIEW = { width: 1280, height: 800 };
+/** The computed styles `inspect` shows: what decides an element's place, size and look. */
+const INSPECT_STYLES = ["display", "position", "width", "height", "margin", "padding", "box-sizing", "flex", "flex-direction", "gap", "grid-template-columns", "overflow", "white-space", "text-overflow", "font-size", "font-family", "font-weight", "line-height", "color", "background-color", "border", "border-radius", "z-index", "opacity", "visibility", "direction", "text-align"];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const str = (v: unknown) => (v === undefined || v === null ? "" : String(v));
@@ -120,6 +165,8 @@ const str = (v: unknown) => (v === undefined || v === null ? "" : String(v));
 export class CdpPage {
   /** ref ("e12") → backend DOM node id, from the last snapshot. */
   private refs = new Map<string, number>();
+  /** The same for the user's own Elements view (the Debug drawer), apart from the model's. */
+  private userRefs = new Map<string, number>();
   /** ref → what it is (`button "Send"`), for approval cards. */
   readonly labels = new Map<string, string>();
   private console: ConsoleEntry[] = [];
@@ -129,6 +176,13 @@ export class CdpPage {
   private off: () => void;
   /** The pop-up waiting for an answer, if any. */
   dialog: OpenDialog | undefined;
+  /** The element the user picked on the page (Debug drawer → Pick), and whether pick mode is on. */
+  picked: number | undefined;
+  picking = false;
+  /** How the page is shown now (`emulate`). */
+  emulation: Emulation = { device: "none", scheme: "auto" };
+  /** The recording running now (`startRecording`). */
+  private rec: { frames: RecordedFrame[]; started: number; timer: ReturnType<typeof setTimeout> } | undefined;
   /** Scale of the last screenshot (picture pixels per CSS pixel), so `clickAt` can map back. */
   private shotScale = 1;
   private shotOrigin = { x: 0, y: 0 };
@@ -159,6 +213,8 @@ export class CdpPage {
   /** Stops listening (the tab closed or the debugger detached). */
   dispose(): void {
     this.off();
+    if (this.rec) clearTimeout(this.rec.timer);
+    this.rec = undefined;
   }
 
   private event(method: string, p: Record<string, unknown>): void {
@@ -212,6 +268,7 @@ export class CdpPage {
         if (!(p.frame as { parentId?: string } | undefined)?.parentId) {
           this.refs.clear();
           this.labels.clear();
+          this.userRefs.clear();
           this.dialog = undefined;
         }
         break;
@@ -228,6 +285,16 @@ export class CdpPage {
         break;
       case "Page.javascriptDialogClosed":
         this.dialog = undefined;
+        break;
+      case "Overlay.inspectNodeRequested":
+        // The user picked an element on the page (the Debug drawer's "Pick"): keep it, and leave pick mode.
+        this.picked = Number(p.backendNodeId);
+        this.picking = false;
+        void this.t.send("Overlay.setInspectMode", { mode: "none", highlightConfig: {} }).catch(() => undefined);
+        break;
+      case "Page.screencastFrame":
+        void this.t.send("Page.screencastFrameAck", { sessionId: p.sessionId }).catch(() => undefined);
+        if (this.rec && this.rec.frames.length < RECORD_FRAMES) this.rec.frames.push({ data: Buffer.from(str(p.data), "base64"), at: Date.now() });
         break;
     }
   }
@@ -284,13 +351,16 @@ export class CdpPage {
    *
    * @returns The tree, and the number of refs.
    */
-  async snapshot(): Promise<{ tree: string; refs: number }> {
+  async snapshot(o: { forUser?: boolean } = {}): Promise<{ tree: string; refs: number }> {
     this.noDialog();
     const { nodes } = (await this.t.send("Accessibility.getFullAXTree")) as { nodes: AxNode[] };
     const byId = new Map(nodes.map((n) => [n.nodeId, n]));
     const root = nodes.find((n) => !n.parentId || !byId.has(n.parentId));
-    this.refs.clear();
-    this.labels.clear();
+    // The user's Elements view keeps its own refs, so looking there never breaks the model's.
+    const refs = o.forUser ? new Map<string, number>() : this.refs;
+    const labels = o.forUser ? new Map<string, string>() : this.labels;
+    refs.clear();
+    labels.clear();
     const lines: string[] = [];
     let chars = 0;
     let cut = 0;
@@ -308,8 +378,8 @@ export class CdpPage {
           let ref = "";
           if (ACTIONABLE.has(role) && node.backendDOMNodeId !== undefined) {
             ref = `e${++n}`;
-            this.refs.set(ref, node.backendDOMNodeId);
-            this.labels.set(ref, `${role}${name ? ` "${name.slice(0, 80)}"` : ""}`);
+            refs.set(ref, node.backendDOMNodeId);
+            labels.set(ref, `${role}${name ? ` "${name.slice(0, 80)}"` : ""}`);
           }
           line = `- ${role}${name ? ` "${name.slice(0, 200)}"` : ""}${props.length ? ` [${props.join(", ")}]` : ""}${ref ? ` [ref=${ref}]` : ""}${value && value !== name ? `: ${value}` : ""}`;
         }
@@ -329,6 +399,7 @@ export class CdpPage {
       }
     };
     if (root) visit(root, 0);
+    if (o.forUser) this.userRefs = refs;
     if (cut) lines.push(`(${cut} more elements not shown: scroll or use browser_wait / browser_snapshot after narrowing down)`);
     return { tree: lines.join("\n") || "(the page has no readable content)", refs: n };
   }
@@ -639,5 +710,179 @@ export class CdpPage {
       this.shotOrigin = { x: 0, y: 0 };
     }
     return { data: Buffer.from(r.data, "base64"), width: Math.round(clip.width * scale), height: Math.round(clip.height * scale) };
+  }
+
+  /** Turns on what highlighting and picking need (once per tab). */
+  private overlayOn = false;
+  private async overlay(): Promise<void> {
+    if (this.overlayOn) return;
+    await this.t.send("DOM.enable").catch(() => undefined);
+    await this.t.send("Overlay.enable").catch(() => undefined);
+    this.overlayOn = true;
+  }
+
+  /**
+   * Describes one element: tag, attributes, box, the styles that matter, its text and HTML, and whether its content is
+   * cut. Secret-looking attribute values are hidden. With `highlight`, the page shows it (the Debug drawer).
+   *
+   * @param at - A ref (the model's, or the user's Elements view's with `user`), a point of the last screenshot
+   *   (`x`, `y` in its pixels), a point as a fraction of the visible area (`fx`, `fy`: a tap on the phone's picture),
+   *   or the element the user `picked`.
+   * @throws Error when there is no such element.
+   */
+  async inspect(at: { ref?: string; user?: boolean; x?: number; y?: number; fx?: number; fy?: number; picked?: boolean; highlight?: boolean }): Promise<InspectInfo> {
+    this.noDialog();
+    let id: number | undefined;
+    if (at.ref) {
+      id = (at.user ? this.userRefs : this.refs).get(at.ref.trim());
+      if (id === undefined) throw new Error(`There is no ref ${at.ref} on this page now. Take a new browser_snapshot and use its refs.`);
+    } else if (at.picked) {
+      id = this.picked;
+      if (id === undefined) throw new Error("No element was picked on the page.");
+    } else {
+      let x: number;
+      let y: number;
+      if (at.fx !== undefined && at.fy !== undefined) {
+        const { cssVisualViewport: v } = (await this.t.send("Page.getLayoutMetrics")) as { cssVisualViewport: { clientWidth: number; clientHeight: number } };
+        x = Math.round(Math.min(1, Math.max(0, at.fx)) * v.clientWidth);
+        y = Math.round(Math.min(1, Math.max(0, at.fy)) * v.clientHeight);
+      } else {
+        x = Math.round(Number(at.x) / this.shotScale - this.shotOrigin.x);
+        y = Math.round(Number(at.y) / this.shotScale - this.shotOrigin.y);
+      }
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Give a ref, or x and y of the last screenshot.");
+      const r = (await this.t.send("DOM.getNodeForLocation", { x, y, ignorePointerEventsNone: true })) as { backendNodeId?: number };
+      id = r.backendNodeId;
+      if (id === undefined) throw new Error("There is no element at that point.");
+    }
+    const backendNodeId = id;
+    const info = (await this.callOn(
+      backendNodeId,
+      `function (names) {
+        let el = this.nodeType === 1 ? this : this.parentElement;
+        if (!el) return null;
+        const secret = /pass|token|secret|csrf|auth|session|key|otp|card|cvv|cvc/i;
+        const pw = el.tagName === "INPUT" && /password/i.test(el.type || "");
+        const attributes = {};
+        for (const a of el.attributes) attributes[a.name] = (secret.test(a.name) || (pw && a.name === "value")) ? "(hidden)" : a.value.slice(0, 300);
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const styles = {};
+        for (const n of names) { const v = cs.getPropertyValue(n); if (v && v !== "none" && v !== "normal" && v !== "auto" && v !== "0px") styles[n] = v; }
+        const clipsX = cs.overflowX !== "visible" || cs.textOverflow === "ellipsis";
+        const clipsY = cs.overflowY !== "visible";
+        const cut = (clipsX && el.scrollWidth > el.clientWidth + 1) || (clipsY && el.scrollHeight > el.clientHeight + 1 && cs.overflowY !== "auto" && cs.overflowY !== "scroll");
+        let html = el.outerHTML;
+        if (pw) html = html.replace(/\\svalue="[^"]*"/gi, ' value="(hidden)"');
+        html = html.replace(/(\\s(?:[\\w-]*(?:pass|token|secret|csrf|auth|session|key|otp|card|cvv|cvc)[\\w-]*)=")[^"]*"/gi, '$1(hidden)"');
+        return { tag: el.tagName.toLowerCase(), attributes, box: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }, styles, text: pw ? "" : (el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 300), html: html.slice(0, 1500), cut };
+      }`,
+      [INSPECT_STYLES],
+    )) as InspectInfo | null;
+    if (!info) throw new Error("That is not an element.");
+    if (at.highlight) {
+      await this.overlay();
+      await this.t.send("Overlay.highlightNode", { backendNodeId, highlightConfig: { showInfo: true, contentColor: { r: 111, g: 168, b: 220, a: 0.45 }, paddingColor: { r: 147, g: 196, b: 125, a: 0.4 }, marginColor: { r: 246, g: 178, b: 107, a: 0.4 } } }).catch(() => undefined);
+    }
+    return info;
+  }
+
+  /**
+   * Pick mode (the Debug drawer on the computer): the next element the user clicks on the page is kept as `picked`
+   * instead of being clicked.
+   */
+  async pick(on: boolean): Promise<void> {
+    await this.overlay();
+    if (on) this.picked = undefined;
+    await this.t.send("Overlay.setInspectMode", { mode: on ? "searchForNode" : "none", highlightConfig: { showInfo: true, contentColor: { r: 111, g: 168, b: 220, a: 0.45 } } });
+    this.picking = on;
+  }
+
+  /**
+   * Shows the page as a 390 px phone, a 1280 px desktop or at the pane's own size, and in dark or light colors.
+   *
+   * @param o - What to change; the rest stays.
+   * @returns How the page is shown now.
+   */
+  async emulate(o: Partial<Emulation>): Promise<Emulation> {
+    const next: Emulation = { ...this.emulation, ...o };
+    if (o.device !== undefined) {
+      if (next.device === "none") await this.t.send("Emulation.clearDeviceMetricsOverride");
+      else {
+        const v = next.device === "phone" ? PHONE_VIEW : DESKTOP_VIEW;
+        await this.t.send("Emulation.setDeviceMetricsOverride", { ...v, deviceScaleFactor: 1, mobile: next.device === "phone" });
+      }
+      await this.t.send("Emulation.setTouchEmulationEnabled", { enabled: next.device === "phone", ...(next.device === "phone" ? { maxTouchPoints: 5 } : {}) }).catch(() => undefined);
+    }
+    if (o.scheme !== undefined) await this.t.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: next.scheme === "auto" ? "" : next.scheme }] });
+    this.emulation = next;
+    return next;
+  }
+
+  /**
+   * "Try my change": reloads the page, then gathers what went wrong since (console errors and warnings, failed
+   * requests) and pictures of it at 390 px and on a desktop, with how far each is wider than its view. The page's
+   * own view is put back after.
+   */
+  async tryChange(): Promise<TryResult> {
+    const since = Date.now();
+    const before = this.emulation;
+    await this.history("reload");
+    await sleep(700);
+    const errors = this.console.filter((e) => e.at >= since && (e.level === "error" || e.level === "warn" || e.level === "assert"));
+    const failed = [...this.network.values()].filter((e) => e.at >= since && (!!e.failed || (e.status ?? 0) >= 400));
+    const views: TryResult["views"] = [];
+    try {
+      for (const device of ["phone", "desktop"] as const) {
+        await this.emulate({ device });
+        await sleep(400);
+        // Against the screen's width, not innerWidth: a phone's page widens its layout to fit content that is too wide.
+        const width = device === "phone" ? PHONE_VIEW.width : DESKTOP_VIEW.width;
+        const r = (await this.t.send("Runtime.evaluate", { expression: `Math.max(0, document.documentElement.scrollWidth - ${width})`, returnByValue: true }).catch(() => undefined)) as { result?: { value?: unknown } } | undefined;
+        const shot = await this.screenshot();
+        views.push({ device, ...shot, overflow: Number(r?.result?.value ?? 0) || 0 });
+      }
+    } finally {
+      await this.emulate({ device: before.device }).catch(() => undefined);
+    }
+    return { url: (await this.where()).url, errors, failed, views };
+  }
+
+  /** Whether a recording runs now. */
+  get recording(): boolean {
+    return !!this.rec;
+  }
+
+  /**
+   * Starts recording the tab (pictures each time it changes, up to 300 frames or 60 seconds, then it stops by itself).
+   * Stop with `stopRecording`, which gives the frames for a GIF or a WebM (browser-record.ts).
+   */
+  async startRecording(): Promise<void> {
+    if (this.rec) throw new Error("A recording is already running: stop it first.");
+    const timer = setTimeout(() => void this.t.send("Page.stopScreencast").catch(() => undefined), RECORD_MS);
+    this.rec = { frames: [], started: Date.now(), timer };
+    try {
+      await this.t.send("Page.startScreencast", { format: "png", maxWidth: 800, maxHeight: 800, everyNthFrame: 1 });
+    } catch (e) {
+      clearTimeout(timer);
+      this.rec = undefined;
+      throw e;
+    }
+  }
+
+  /**
+   * Stops the recording and gives its frames, with a last picture of the page as it is now.
+   *
+   * @throws Error when no recording runs.
+   */
+  async stopRecording(): Promise<RecordedFrame[]> {
+    const rec = this.rec;
+    if (!rec) throw new Error("No recording is running.");
+    this.rec = undefined;
+    clearTimeout(rec.timer);
+    await this.t.send("Page.stopScreencast").catch(() => undefined);
+    const last = await this.screenshot().catch(() => undefined);
+    if (last) rec.frames.push({ data: last.data, at: Date.now() });
+    return rec.frames;
   }
 }

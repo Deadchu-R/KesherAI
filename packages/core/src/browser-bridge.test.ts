@@ -196,3 +196,32 @@ test("browser bridge: Firefox and older extensions keep the page reader and say 
   old.attach(fakeSocket(() => []), { browser: "Chrome", version: "0.2.6" });
   await assert.rejects(old.withCdp({}, async () => 1), /older than 0\.3\.0/);
 });
+
+test("browser bridge: inspect, emulate, Try my change and record are tools; the try's pictures go to the model and the chat", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(async (action) => (action === "tabs" ? [{ id: 2, title: "App", url: "http://localhost:5173/", active: true }] : null));
+  let width = 0;
+  const listeners: Array<(m: string, p: Record<string, unknown>) => void> = [];
+  b.attachCdpTab(2, {
+    send: async (m, p) => {
+      if (m === "Page.reload") setTimeout(() => listeners.forEach((fn) => fn("Page.loadEventFired", {})), 5);
+      if (m === "Emulation.setDeviceMetricsOverride") width = Number(p?.width);
+      if (m === "Page.getLayoutMetrics") return { cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: width || 800, clientHeight: 600 } };
+      if (m === "Page.captureScreenshot") return { data: Buffer.from("png").toString("base64") };
+      if (m === "Page.getNavigationHistory") return { currentIndex: 0, entries: [{ url: "http://localhost:5173/", title: "App" }] };
+      if (m === "Runtime.evaluate") return { result: { value: 0 } };
+      return {};
+    },
+    onEvent: (fn) => (listeners.push(fn), () => undefined),
+  });
+  const saved: string[] = [];
+  const tools = Object.fromEntries(browserTools(b, async (_d, mime) => (saved.push(mime), `a${saved.length}`)).map((t) => [t.spec.name, t]));
+  for (const name of ["browser_inspect", "browser_emulate", "browser_try_change", "browser_record"]) assert.ok(tools[name], name);
+  const ctx = { signal: new AbortController().signal } as never;
+  assert.match(await tools.browser_emulate!.preview!({ device: "phone", scheme: "dark" }, ctx), /390 px phone, dark colors/);
+  const out = await tools.browser_try_change!.run({}, ctx);
+  assert.match(out.output, /<untrusted-page source="localhost:5173">[\s\S]*Phone, 390 px: fits the width/);
+  assert.equal(out.images?.length, 2);
+  assert.deepEqual(out.assetIds, ["a1", "a2"]);
+  await assert.rejects(tools.browser_emulate!.run({}, ctx), /Give device/);
+});

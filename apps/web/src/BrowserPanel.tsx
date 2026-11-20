@@ -3,6 +3,7 @@ import { api, isRemote, withToken } from "./api";
 import { desktop } from "./library";
 import { getLocale, he$ } from "./i18n";
 import { SaveToCourse, type WebClip } from "./SaveToCourse";
+import { BrowserDebug } from "./BrowserDebug";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -49,6 +50,10 @@ export function actionWord(tool: string): string {
     browser_dialog: ["תשובה לחלון קופץ", "Answer a pop-up"],
     browser_upload: ["העלאת קובץ", "Upload a file"],
     browser_click_at: ["לחיצה בנקודה", "Click a point"],
+    browser_inspect: ["בדיקת רכיב", "Inspect an element"],
+    browser_emulate: ["שינוי תצוגה", "Change the view"],
+    browser_try_change: ["בדיקת השינוי", "Try the change"],
+    browser_record: ["הקלטה", "Record"],
     stop: ["נעצר", "Stopped"],
   };
   const w = words[tool];
@@ -88,6 +93,10 @@ export function BrowserPanel() {
   const [editing, setEditing] = useState(false);
   const area = useRef<HTMLDivElement>(null);
   const [shot, setShot] = useState(0);
+  // The Debug drawer, and its phone pick mode (the next tap on the picture inspects instead of clicking).
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [pickAt, setPickAt] = useState<{ fx: number; fy: number; n: number } | null>(null);
   const [noApp, setNoApp] = useState(false);
   const lastKey = useRef("");
   const ticks = useRef(0);
@@ -189,6 +198,11 @@ export function BrowserPanel() {
 
   const tap = (e: React.MouseEvent<HTMLImageElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
+    if (picking) {
+      setPicking(false);
+      setPickAt({ fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, n: Date.now() });
+      return;
+    }
     void api("/api/browser/pane", { method: "POST", body: { cmd: "tap", x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height } })
       .then(() => setTimeout(() => setShot((n) => n + 1), 700))
       .catch((err: Error) => setError(err.message));
@@ -229,6 +243,7 @@ export function BrowserPanel() {
         <button type="button" className="icon-btn" disabled={!active?.canForward} aria-label={L("קדימה", "Forward")} onClick={() => void cmd("nav", "forward")}>›</button>
         <button type="button" className="icon-btn" disabled={!active} aria-label={active?.loading ? L("עצור", "Stop") : L("רענן", "Reload")} onClick={() => void cmd("nav", active?.loading ? "stop" : "reload")}>{active?.loading ? "✕" : "↻"}</button>
         <input dir="ltr" value={addr} onFocus={() => setEditing(true)} onBlur={() => setEditing(false)} onChange={(e) => setAddr(e.target.value)} placeholder={L("כתובת או חיפוש", "Address or search")} aria-label={L("כתובת", "Address")} />
+        <button type="button" className={`icon-btn${debugOpen ? " on" : ""}`} disabled={!active} aria-pressed={debugOpen} aria-label={L("ניפוי באגים: קונסול, רשת ורכיבים", "Debug: console, network and elements")} title={L("ניפוי באגים: קונסול, רשת ורכיבים", "Debug: console, network and elements")} onClick={() => setDebugOpen(!debugOpen)}>🐞</button>
         <button type="button" className="browser-to-course" disabled={!active} title={L("שמירת הדף, או מה שסימנת בו, לקורס", "Save the page, or what you selected on it, to a course")} onClick={() => void toCourse()}>🎓 {L("לקורס", "To course")}</button>
       </form>
       {st.notice && (
@@ -278,9 +293,10 @@ export function BrowserPanel() {
         <div ref={area} className="browser-area" />
       ) : (
         <div className="browser-area">
-          {active && <img src={withToken(`/api/browser/pane/shot?n=${shot}`)} alt={active.title} onClick={tap} draggable={false} />}
+          {active && <img className={picking ? "picking" : ""} src={withToken(`/api/browser/pane/shot?n=${shot}`)} alt={active.title} onClick={tap} draggable={false} />}
         </div>
       )}
+      {debugOpen && active && <BrowserDebug native={!!native} picking={picking} setPicking={setPicking} pickAt={pickAt} />}
     </section>
   );
 }

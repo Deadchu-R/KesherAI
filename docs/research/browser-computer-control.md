@@ -174,6 +174,23 @@ Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can
   keeps the page reader; its package drops `debugger` and `tabGroups`. Checked with a fake extension socket
   (`browser-bridge.test.ts`, `browser-ext-cdp.test.ts`) and the packed manifests; not checked here: a real Chrome with
   the extension loaded (needs the PC or a store build).
+- **Phase 3 (debugging in the pane):** a 🐞 Debug drawer under the pane (`BrowserDebug.tsx`, routes in
+  `routes/browser-debug.ts`, one poll every 2 s): Console (errors only, clear), Network (sign-in headers and secret
+  fields hidden; tap a request for its detail), Elements (the accessibility tree with the drawer's own refs, so the
+  user's looking never breaks the model's; tap a line, or "Pick on the page" — Overlay inspect mode on the computer,
+  the next tap on the picture on the phone — to inspect: tag, attributes with secret values hidden, box, the styles
+  that matter, "content is cut" warning, HTML; the page highlights it). View: 📱 390 / 🖥 1280 / 🌙 dark
+  (`CdpPage.emulate`). "Try my change" (`tryChange`): reload, new console errors and failed requests, pictures at
+  390 px and 1280 px with how far each is wider than the screen. Recording (`startRecording`/`stopRecording`, the
+  screencast's PNG frames, at most 300 / 60 s) → a looping GIF made in `gif.ts` with no new dependencies (fflate
+  decodes the PNGs; fixed 252-color palette with ordered dithering; frames of another shape are fitted, not
+  stretched), or a WebM through FFmpeg when it is already on the computer (`findFfmpeg`, never downloaded; otherwise
+  a GIF with a note). Model tools: `browser_inspect`, `browser_emulate`, `browser_try_change` (pictures to the model
+  and to the chat), `browser_record`; they work in the user's Chrome too (Phase 2). Checked: fake-CDP tests, a GIF
+  LZW round trip, and headless Chromium (inspect with cut text and a hidden token, 390 + dark, try with a 218 px
+  overflow, an 8-frame GIF read back by Pillow); the drawer rendered with mock data at 390 and 1280 px in Hebrew and
+  English (no page overflow, no cut text). Not checked here: the WebM path (no FFmpeg in this box), Overlay pick mode
+  inside the Electron pane.
 
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?

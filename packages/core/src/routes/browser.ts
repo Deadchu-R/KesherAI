@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { timingSafeEqual } from "node:crypto";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { browserDebugRoutes } from "./browser-debug.js";
 
 /** Where the browser extension's files are: next to the installed app, or in the source tree. */
 export function extensionFolder(): string | undefined {
@@ -134,6 +135,9 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     const args = cmd === "tap" ? { x: Number(b.x), y: Number(b.y) } : cmd === "go" ? { url: String(b.url ?? "").slice(0, 4000) } : cmd === "nav" ? { what: String(b.what ?? "") } : { id: Number(b.id) };
     return pane(reply, async () => ({ ok: true, result: (await s.browser.paneCall(`pane-${cmd}`, args)) ?? null }));
   });
+
+  // The pane's Debug drawer: console, network, elements, view, "Try my change", recordings.
+  await browserDebugRoutes(app, s);
 
   app.get<{ Querystring: { key?: string; browser?: string; version?: string; features?: string } }>("/api/browser/connect", { websocket: true }, (socket, req) => {
     const origin = String(req.headers.origin ?? "");

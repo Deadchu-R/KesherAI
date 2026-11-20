@@ -137,3 +137,91 @@ test("cdp: wait for text polls the page; a screenshot of the visible area maps c
   const press = f.sent.find((s) => s.method === "Input.dispatchMouseEvent" && s.params.type === "mousePressed")!;
   assert.deepEqual([press.params.x, press.params.y], [1600, 500], "picture pixels back to CSS pixels");
 });
+
+test("cdp: the user's Elements view has its own refs and never breaks the model's", async () => {
+  const f = fakeCdp({ "Accessibility.getFullAXTree": () => TREE, "DOM.resolveNode": () => ({ object: { objectId: "o1" } }), "Runtime.callFunctionOn": () => ({ result: { value: { tag: "button", attributes: {}, box: { x: 1, y: 2, width: 3, height: 4 }, styles: {}, text: "Send", html: "<button>Send</button>", cut: false } } }) });
+  const p = new CdpPage(f.t);
+  await p.snapshot();
+  assert.equal(p.labels.get("e1"), 'button "Send"');
+  await p.snapshot({ forUser: true });
+  assert.equal(p.labels.get("e1"), 'button "Send"', "the model's labels stay");
+  const info = await p.inspect({ ref: "e2", user: true, highlight: true });
+  assert.equal(info.tag, "button");
+  // The user's e2 is the To field (backend 40); highlighting turns on DOM and Overlay first.
+  assert.equal(f.sent.find((s) => s.method === "DOM.resolveNode")?.params.backendNodeId, 40);
+  assert.ok(f.sent.some((s) => s.method === "Overlay.highlightNode" && s.params.backendNodeId === 40));
+  await assert.rejects(p.inspect({ ref: "e9" }), /no ref e9/);
+});
+
+test("cdp: inspect by a point of the screenshot or a tap's fraction finds the node there", async () => {
+  const f = fakeCdp({
+    "Page.getLayoutMetrics": () => ({ cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: 400, clientHeight: 800 } }),
+    "DOM.getNodeForLocation": (q) => ({ backendNodeId: 7, at: q }),
+    "DOM.resolveNode": () => ({ object: { objectId: "o" } }),
+    "Runtime.callFunctionOn": () => ({ result: { value: { tag: "p", attributes: { "data-token": "(hidden)" }, box: { x: 0, y: 0, width: 400, height: 20 }, styles: { overflow: "hidden" }, text: "Long", html: "<p>Long</p>", cut: true } } }),
+  });
+  const p = new CdpPage(f.t);
+  const i = await p.inspect({ fx: 0.5, fy: 0.25 });
+  assert.equal(i.cut, true);
+  assert.deepEqual(f.sent.find((s) => s.method === "DOM.getNodeForLocation")?.params, { x: 200, y: 200, ignorePointerEventsNone: true });
+  // The page function is given the style names and hides secret attributes itself.
+  const fn = String(f.sent.find((s) => s.method === "Runtime.callFunctionOn")?.params.functionDeclaration);
+  assert.match(fn, /token\|secret/);
+});
+
+test("cdp: emulate shows the page at 390 px, on a desktop, or as it is, and in dark colors", async () => {
+  const f = fakeCdp();
+  const p = new CdpPage(f.t);
+  assert.deepEqual(await p.emulate({ device: "phone", scheme: "dark" }), { device: "phone", scheme: "dark" });
+  assert.deepEqual(f.sent.find((s) => s.method === "Emulation.setDeviceMetricsOverride")?.params, { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+  assert.deepEqual(f.sent.find((s) => s.method === "Emulation.setEmulatedMedia")?.params, { features: [{ name: "prefers-color-scheme", value: "dark" }] });
+  await p.emulate({ device: "none" });
+  assert.ok(f.sent.some((s) => s.method === "Emulation.clearDeviceMetricsOverride"));
+  assert.deepEqual(p.emulation, { device: "none", scheme: "dark" });
+});
+
+test("cdp: Try my change reloads, gathers new errors and failed requests, and pictures at 390 and 1280", async () => {
+  let width = 0;
+  const f = fakeCdp({
+    "Page.reload": () => (setTimeout(() => f.fire("Page.loadEventFired", {}), 5), {}),
+    "Emulation.setDeviceMetricsOverride": (q) => ((width = Number(q.width)), {}),
+    "Runtime.evaluate": () => ({ result: { value: width === 390 ? 24 : 0 } }),
+    "Page.getLayoutMetrics": () => ({ cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: width || 800, clientHeight: 600 } }),
+    "Page.captureScreenshot": () => ({ data: Buffer.from(`shot${width}`).toString("base64") }),
+    "Page.getNavigationHistory": () => ({ currentIndex: 0, entries: [{ url: "http://localhost:5173/?token=abc", title: "App" }] }),
+  });
+  const p = new CdpPage(f.t);
+  f.fire("Runtime.exceptionThrown", { exceptionDetails: { text: "old error" } });
+  await new Promise((r) => setTimeout(r, 5));
+  const run = p.tryChange();
+  setTimeout(() => {
+    f.fire("Runtime.exceptionThrown", { exceptionDetails: { text: "new error" } });
+    f.fire("Network.requestWillBeSent", { requestId: "1", request: { method: "GET", url: "http://localhost:5173/api/x" } });
+    f.fire("Network.responseReceived", { requestId: "1", response: { status: 500 } });
+  }, 50);
+  const r = await run;
+  assert.deepEqual(r.errors.map((e) => e.text), ["new error"]);
+  assert.equal(r.failed[0]?.status, 500);
+  assert.deepEqual(r.views.map((v) => [v.device, v.width, v.overflow, v.data.toString()]), [["phone", 390, 24, "shot390"], ["desktop", 1280, 0, "shot1280"]]);
+  // The page's own size comes back after.
+  const sizes = f.sent.filter((s) => s.method === "Emulation.setDeviceMetricsOverride" || s.method === "Emulation.clearDeviceMetricsOverride");
+  assert.equal(sizes.at(-1)?.method, "Emulation.clearDeviceMetricsOverride");
+});
+
+test("cdp: a recording keeps the screencast's frames (acknowledged) and a last picture", async () => {
+  const f = fakeCdp({
+    "Page.getLayoutMetrics": () => ({ cssVisualViewport: { pageX: 0, pageY: 0, clientWidth: 400, clientHeight: 300 } }),
+    "Page.captureScreenshot": () => ({ data: Buffer.from("last").toString("base64") }),
+  });
+  const p = new CdpPage(f.t);
+  await p.startRecording();
+  assert.equal(p.recording, true);
+  await assert.rejects(p.startRecording(), /already running/);
+  f.fire("Page.screencastFrame", { data: Buffer.from("f1").toString("base64"), sessionId: 3, metadata: {} });
+  assert.ok(f.sent.some((s) => s.method === "Page.screencastFrameAck" && s.params.sessionId === 3));
+  const frames = await p.stopRecording();
+  assert.deepEqual(frames.map((x) => x.data.toString()), ["f1", "last"]);
+  assert.ok(f.sent.some((s) => s.method === "Page.stopScreencast"));
+  assert.equal(p.recording, false);
+  await assert.rejects(p.stopRecording(), /No recording/);
+});
