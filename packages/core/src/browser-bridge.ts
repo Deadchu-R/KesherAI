@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
-import { BrowserLog, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
+import { BrowserLog, hostOf, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
+import { CdpPage, type CdpTransport } from "./cdp.js";
+import { cdpBrowserTools, isCdpRef, snapshotText } from "./browser-cdp-tools.js";
 
 /** The part of a WebSocket the bridge uses. */
 export interface BridgeSocket {
@@ -99,6 +101,61 @@ export class BrowserBridge {
       ctl.signal.addEventListener("abort", () => end(() => { onEnd?.(); reject(new Error("The user pressed Stop in the browser. Do not continue using the browser; tell the user what you were doing.")); }), { once: true });
       start().then((v) => end(() => resolve(v)), (e: Error) => end(() => reject(e)));
     });
+  }
+
+  /** The pane's tabs that KesherAI can drive over CDP (Phase 1), by tab id. */
+  private cdpTabs = new Map<number, CdpPage>();
+
+  /**
+   * A tab of the pane got its debugger (it opened, or its developer tools closed): its console and network are kept
+   * from now on, and the CDP tools can act on it.
+   *
+   * @param tabId - The pane's tab id.
+   * @param transport - The tab's CDP connection.
+   * @param painted - Runs a capture while the tab is painted (a hidden tab is moved where it paints).
+   */
+  attachCdpTab(tabId: number, transport: CdpTransport, painted?: <T>(fn: () => Promise<T>) => Promise<T>): void {
+    this.cdpTabs.get(tabId)?.dispose();
+    const page = new CdpPage(transport, painted);
+    this.cdpTabs.set(tabId, page);
+    void page.enable();
+  }
+
+  /** A tab closed, or its debugger was taken (the user opened its developer tools). */
+  detachCdpTab(tabId: number): void {
+    this.cdpTabs.get(tabId)?.dispose();
+    this.cdpTabs.delete(tabId);
+  }
+
+  /** The pane's tab a call means: its `tabId`, or the one in front. */
+  async paneTabId(input: Record<string, unknown>, signal?: AbortSignal): Promise<number> {
+    if (typeof input.tabId === "number") return input.tabId;
+    const tabs = await this.call<BrowserTab[]>("tabs", {}, signal);
+    const t = tabs.find((x) => x.active);
+    if (!t) throw new Error("No tab is open in KesherAI's browser: open one with browser_open.");
+    return t.id;
+  }
+
+  /**
+   * Runs CDP steps on a tab of the pane, with the same time limit, abort and Stop as every browser command.
+   *
+   * @param input - The tool's input (`tabId`, `browser`).
+   * @param fn - The steps.
+   * @param signal - The caller's abort.
+   * @throws Error for the user's own Chrome (the extension's CDP is Phase 2) or a tab without a debugger.
+   */
+  async withCdp<T>(input: Record<string, unknown>, fn: (page: CdpPage, tabId: number) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (input.browser === "chrome" && this.socket) throw new Error("This tool works in KesherAI's own browser only (the user's Chrome gets it later). Use browser_read, browser_click and browser_type there.");
+    if (!this.pane) throw new Error("This tool needs KesherAI's own browser, which runs in the desktop app.");
+    const tabId = await this.paneTabId(input, signal);
+    const page = this.cdpTabs.get(tabId);
+    if (!page) throw new Error("KesherAI cannot inspect this tab now (are its developer tools open? close them and try again).");
+    return this.guarded("cdp", () => fn(page, tabId), signal);
+  }
+
+  /** What a CDP ref is (`button "Send"`), from the tab's last snapshot, for approval cards. */
+  cdpLabel(tabId: number, ref: string): string | undefined {
+    return this.cdpTabs.get(tabId)?.labels.get(ref);
   }
 
   /** @returns Whether an extension is connected, and which browser. */
@@ -201,14 +258,7 @@ interface PageRead {
   elements: string[];
 }
 
-/** The host of an address without "www." ("mail.example.com", "localhost:5173"), or undefined. */
-export function hostOf(url: string): string | undefined {
-  try {
-    return new URL(url).host.replace(/^www\./, "") || undefined;
-  } catch {
-    return undefined;
-  }
-}
+export { hostOf };
 
 /** Tools asked about every time, in every mode and whatever "Always" says (plan, Phase 0): their reason on the card. */
 const ALWAYS_ASK: Record<string, string> = {
@@ -251,10 +301,16 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     const body = `${r.title}\n${r.url}\n\n${r.text}\n\nElements you can use (ref: what it is):\n${r.elements?.join("\n") || "(none)"}`;
     return untrusted(hostOf(r.url) ?? r.url, body);
   };
-  /** What a ref is, from the last read of that tab: `button "Send"`, or "element 7" when unknown. */
-  const labelOf = (input: Record<string, unknown>) => {
-    const ref = String(input.ref ?? "");
-    const label = (b.labels.get(labelKey(input, input.tabId)) ?? b.labels.get(labelKey(input)))?.get(ref);
+  /** Whether a call goes over CDP: a snapshot ref ("e12") in KesherAI's own pane. */
+  const viaCdp = (input: Record<string, unknown>) => isCdpRef(input.ref) && target(input) === "pane";
+  /** What a ref is, from the last read or snapshot of that tab: `button "Send"`, or "element 7" when unknown. */
+  const labelOf = async (input: Record<string, unknown>, signal?: AbortSignal) => {
+    const ref = String(input.ref ?? "").trim();
+    let label: string | undefined;
+    if (viaCdp(input)) {
+      const id = await b.paneTabId(input, signal).catch(() => undefined);
+      label = id === undefined ? undefined : b.cdpLabel(id, ref);
+    } else label = (b.labels.get(labelKey(input, input.tabId)) ?? b.labels.get(labelKey(input)))?.get(ref);
     return label ? `${label} (ref ${ref})` : `element ${ref}`;
   };
   // "Always allow" for the browser is per web site (like Claude in Chrome): the site of the address, or of the tab.
@@ -282,7 +338,7 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     ...t,
     ...(ALWAYS_ASK[t.spec.name] ? { askFirst: () => ALWAYS_ASK[t.spec.name] } : {}),
     run: async (input, ctx) => {
-      const what = input.url ? String(input.url) : input.ref !== undefined ? labelOf(input) : undefined;
+      const what = input.url ? String(input.url) : input.ref !== undefined ? await labelOf(input, ctx.signal) : undefined;
       try {
         const out = await t.run(input, ctx);
         const url = /\n(https?:\/\/\S+)\n/.exec(out.output)?.[1];
@@ -325,13 +381,22 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       risk: "write",
       spec: {
         name: "browser_screenshot",
-        description: "See a tab of the user's browser as a picture (brings it to the front).",
-        inputSchema: { type: "object", properties: tabArg },
+        description: b.status().pane
+          ? "See a tab as a picture: the visible area (its pixels are what browser_click_at takes), full: true for the whole page, or ref (from browser_snapshot) for one element. In the user's own browser it brings the tab to the front."
+          : "See a tab of the user's browser as a picture (brings it to the front).",
+        inputSchema: { type: "object", properties: { ...tabArg, ...(b.status().pane ? { full: { type: "boolean" }, ref: { type: "string" } } : {}) } },
       },
-      preview: async (input, ctx) => `Take a picture of tab ${input.tabId ?? "in front"}${await onSite(input, ctx.signal)}`,
+      preview: async (input, ctx) => `Take a picture of ${input.ref ? await labelOf(input, ctx.signal) : input.full ? "the whole page" : `tab ${input.tabId ?? "in front"}`}${await onSite(input, ctx.signal)}`,
       async run(input, ctx) {
-        const r = await b.call<{ dataUrl: string }>("screenshot", { tabId: input.tabId, browser: input.browser }, ctx.signal);
-        const [, mimeType = "image/png", data = ""] = /^data:([^;]+);base64,(.*)$/.exec(r.dataUrl) ?? [];
+        let mimeType = "image/png";
+        let data = "";
+        // KesherAI's pane: over CDP, in CSS pixels (so browser_click_at matches); the old way when the tab has no debugger.
+        const cdp = target(input) === "pane" ? await b.withCdp(input, (p) => p.screenshot({ full: input.full === true, ...(isCdpRef(input.ref) ? { ref: String(input.ref) } : {}) }), ctx.signal).catch((e: Error) => (input.full || input.ref ? Promise.reject(e) : undefined)) : undefined;
+        if (cdp) data = cdp.data.toString("base64");
+        else {
+          const r = await b.call<{ dataUrl: string }>("screenshot", { tabId: input.tabId, browser: input.browser }, ctx.signal);
+          [, mimeType = "image/png", data = ""] = /^data:([^;]+);base64,(.*)$/.exec(r.dataUrl) ?? [];
+        }
         // The chat's thumbnail is a nicety: the model still gets the picture when keeping it fails.
         const id = saveShot && data ? await saveShot(Buffer.from(data, "base64"), mimeType).catch(() => undefined) : undefined;
         return { output: "(the screenshot)", images: [{ mimeType, data }], ...(id ? { assetIds: [id] } : {}) };
@@ -355,26 +420,32 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
       risk: "exec",
       spec: {
         name: "browser_click",
-        description: "Click a button or link on a page, by its ref from browser_read. Returns the page after the click.",
-        inputSchema: { type: "object", properties: { ref: { type: "number" }, ...tabArg }, required: ["ref"] },
+        description: b.status().pane
+          ? "Click a button or link on a page by its ref: from browser_snapshot (e12) in KesherAI's browser, or from browser_read (a number). Returns the page after the click."
+          : "Click a button or link on a page, by its ref from browser_read. Returns the page after the click.",
+        inputSchema: { type: "object", properties: { ref: { type: "string", description: "e12 from browser_snapshot, or a number from browser_read." }, ...(b.status().pane ? { double: { type: "boolean" } } : {}), ...tabArg }, required: ["ref"] },
       },
-      preview: async (input, ctx) => `Click ${labelOf(input)}${await onSite(input, ctx.signal)}`,
+      preview: async (input, ctx) => `${input.double ? "Double-click" : "Click"} ${await labelOf(input, ctx.signal)}${await onSite(input, ctx.signal)}`,
       async run(input, ctx) {
-        return { output: pageText(await b.call("click", { ref: input.ref, tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
+        if (viaCdp(input)) return { output: await b.withCdp(input, async (p) => (await p.click(String(input.ref), { double: input.double === true }), snapshotText(p)), ctx.signal) };
+        return { output: pageText(await b.call("click", { ref: Number(input.ref), tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
       },
     },
     {
       risk: "exec",
       spec: {
         name: "browser_type",
-        description: "Type text into a field on a page, by its ref from browser_read; submit: true presses Enter. Never for passwords or card numbers: ask the user to type those.",
-        inputSchema: { type: "object", properties: { ref: { type: "number" }, text: { type: "string" }, submit: { type: "boolean" }, ...tabArg }, required: ["ref", "text"] },
+        description: "Type text into a field on a page by its ref (from browser_snapshot or browser_read), replacing what is in it; submit: true presses Enter. Never for passwords or card numbers: ask the user to type those.",
+        inputSchema: { type: "object", properties: { ref: { type: "string", description: "e12 from browser_snapshot, or a number from browser_read." }, text: { type: "string" }, submit: { type: "boolean" }, ...tabArg }, required: ["ref", "text"] },
       },
-      preview: async (input, ctx) => `Type "${String(input.text).slice(0, 200)}" into ${labelOf(input)}${await onSite(input, ctx.signal)}${input.submit ? " and press Enter" : ""}`,
+      preview: async (input, ctx) => `Type "${String(input.text).slice(0, 200)}" into ${await labelOf(input, ctx.signal)}${await onSite(input, ctx.signal)}${input.submit ? " and press Enter" : ""}`,
       async run(input, ctx) {
-        return { output: pageText(await b.call("type", { ref: input.ref, text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
+        if (viaCdp(input)) return { output: await b.withCdp(input, async (p) => (await p.type(String(input.ref), String(input.text ?? ""), !!input.submit), snapshotText(p)), ctx.signal) };
+        return { output: pageText(await b.call("type", { ref: Number(input.ref), text: String(input.text ?? ""), submit: !!input.submit, tabId: input.tabId, browser: input.browser }, ctx.signal), input) };
       },
     },
   ];
+  // KesherAI's own pane: the CDP tools (snapshot refs, console, network…); the user's Chrome gets them in Phase 2.
+  if (b.status().pane) tools.push(...cdpBrowserTools(b, { tabArg, onSite }));
   return tools.map((t) => logged(t.spec.name === "browser_tabs" ? t : scoped(t)));
 }

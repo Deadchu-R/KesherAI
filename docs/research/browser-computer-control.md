@@ -150,6 +150,19 @@ Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can
   `browser_download` in every mode, one Stop (`POST /api/browser/stop`, the pane's strip, Ctrl+Alt+Esc) that ends every
   browser command of the chat and its helpers and refuses new ones for 10 s, the pane's "doing now" strip and log
   (`GET /api/browser/activity`, desktop and phone). Downloads stay refused in the pane (stricter than asking).
+- **Phase 1:** `cdp.ts` (`CdpTransport` + `CdpPage`: accessibility snapshot with refs `e1…` that die on the next
+  snapshot or a navigation, click/hover/type/select/scroll/upload by ref, keys, click at a screenshot point, wait for
+  text, back/forward/reload, pop-up answers, JS, console and network ring buffers of 300 with headers, secret body
+  fields and secret address parameters hidden, screenshots of the view / whole page / one element in CSS pixels).
+  The pane gives each tab's `webContents.debugger` to the bridge from the tab's first page (`PaneCdp` in
+  `browser-pane.ts`); a tab whose DevTools the user opens loses it until they close. Tools (`browser-cdp-tools.ts`):
+  `browser_snapshot/hover/select/scroll/press_key/click_at/wait/navigate/close_tab/console/network/network_request/
+  dialog/eval/upload`; `browser_click/type/screenshot` take `e` refs and `full`/`ref`. The six old tools and
+  `browser_read` stay (the Chrome extension keeps them until Phase 2). Checked with a fake CDP (`cdp.test.ts`,
+  `browser-bridge.test.ts`) and against headless Chromium on a local fixture page (snapshot, type, password refusal,
+  select, click, wait, console, network, eval, screenshots, scroll, confirm pop-up, upload). Not checked here: the
+  Electron debugger inside the desktop app (needs the PC), and whether Electron also draws its own pop-up when CDP
+  handles `Page.javascriptDialogOpening`.
 
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?

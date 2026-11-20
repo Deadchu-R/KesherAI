@@ -105,3 +105,36 @@ test("browser bridge: Stop ends running commands and refuses new ones for a whil
   assert.equal(b.activity().active, false, "a Stop is not activity");
   assert.ok(b.activity().log.some((a) => a.tool === "stop"));
 });
+
+test("browser bridge: the pane gets the CDP tools; snapshot refs name elements on cards; eval and upload always ask", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(async (action) => (action === "tabs" ? [{ id: 4, title: "Shop", url: "https://shop.example/cart", active: true }] : null));
+  const sent: string[] = [];
+  const tree = { nodes: [{ nodeId: "1", role: { value: "RootWebArea" }, childIds: ["2"] }, { nodeId: "2", parentId: "1", role: { value: "button" }, name: { value: "Pay" }, backendDOMNodeId: 9 }] };
+  b.attachCdpTab(4, {
+    send: async (m) => {
+      sent.push(m);
+      if (m === "Accessibility.getFullAXTree") return tree;
+      if (m === "Page.getNavigationHistory") return { currentIndex: 0, entries: [{ url: "https://shop.example/cart", title: "Shop" }] };
+      if (m === "DOM.getBoxModel") return { model: { content: [0, 0, 10, 0, 10, 10, 0, 10] } };
+      return {};
+    },
+    onEvent: () => () => undefined,
+  });
+  const tools = Object.fromEntries(browserTools(b).map((t) => [t.spec.name, t]));
+  for (const name of ["browser_snapshot", "browser_hover", "browser_select", "browser_scroll", "browser_press_key", "browser_click_at", "browser_wait", "browser_navigate", "browser_close_tab", "browser_console", "browser_network", "browser_network_request", "browser_dialog", "browser_eval", "browser_upload"]) assert.ok(tools[name], name);
+  const ctx = { signal: new AbortController().signal } as never;
+  const snap = (await tools.browser_snapshot!.run({}, ctx)).output;
+  assert.match(snap, /<untrusted-page source="shop\.example">[\s\S]*button "Pay" \[ref=e1\]/);
+  assert.equal(await tools.browser_click!.preview!({ ref: "e1" }, ctx), 'Click button "Pay" (ref e1) on shop.example');
+  await tools.browser_click!.run({ ref: "e1" }, ctx);
+  assert.ok(sent.includes("Input.dispatchMouseEvent"));
+  assert.equal(b.activity().log.at(-1)!.target, 'button "Pay" (ref e1)');
+  assert.ok(tools.browser_eval!.askFirst?.({}), "eval asks in every mode");
+  assert.ok(tools.browser_upload!.askFirst?.({}), "upload asks in every mode");
+  assert.equal(tools.browser_click!.askFirst, undefined);
+  await assert.rejects(tools.browser_upload!.run({ ref: "e1", paths: ["/home/u/.ssh/id_rsa"] }, ctx), /never uploaded/);
+  // A tab without a debugger (its developer tools are open) says so.
+  b.detachCdpTab(4);
+  await assert.rejects(tools.browser_snapshot!.run({}, ctx), /developer tools/);
+});

@@ -48,6 +48,7 @@ export function actionWord(tool: string): string {
     browser_eval: ["הרצת קוד בדף", "Run code in the page"],
     browser_dialog: ["תשובה לחלון קופץ", "Answer a pop-up"],
     browser_upload: ["העלאת קובץ", "Upload a file"],
+    browser_click_at: ["לחיצה בנקודה", "Click a point"],
     stop: ["נעצר", "Stopped"],
   };
   const w = words[tool];

@@ -14,6 +14,28 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BaseWindow, type BrowserWindow, WebContentsView, session, shell } from "electron";
+import type { CdpTransport } from "@kesher/core";
+
+/**
+ * Where each tab's Chrome DevTools Protocol connection goes (the core's browser bridge, cdp.ts): the model's
+ * snapshot, console and network tools use it. A tab whose developer tools the user opens loses it until they close.
+ */
+export interface PaneCdp {
+  attached(tabId: number, transport: CdpTransport, painted: <T>(fn: () => Promise<T>) => Promise<T>): void;
+  detached(tabId: number): void;
+}
+
+/** A tab's `webContents.debugger` as a CDP transport. */
+function debuggerTransport(wc: Electron.WebContents): CdpTransport {
+  return {
+    send: (method, params) => wc.debugger.sendCommand(method, params) as Promise<unknown>,
+    onEvent: (fn) => {
+      const h = (_e: Electron.Event, method: string, params: Record<string, unknown>) => fn(method, params ?? {});
+      wc.debugger.on("message", h);
+      return () => wc.debugger.off("message", h);
+    },
+  };
+}
 
 export interface PaneTab {
   id: number;
@@ -76,11 +98,13 @@ export class BrowserPane {
    * @param win - The app window the pane is drawn in.
    * @param ownPort - KesherAI's own port (never opened in the pane).
    * @param changed - Called with the tabs whenever something changes (for the web UI).
+   * @param cdp - Gets each tab's CDP connection (the model's snapshot, console and network tools).
    */
   constructor(
     private win: BrowserWindow,
     private ownPort: number,
     private changed: (tabs: PaneTab[]) => void,
+    private cdp?: PaneCdp,
   ) {
     const ses = session.fromPartition(PARTITION);
     ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
@@ -161,11 +185,35 @@ export class BrowserPane {
     wc.on("will-attach-webview", (event) => event.preventDefault());
     for (const ev of ["did-start-loading", "did-stop-loading", "page-title-updated", "did-navigate", "did-navigate-in-page"] as const) wc.on(ev as "did-start-loading", () => this.emit());
     this.tabs.push(tab);
+    this.attachDebugger(tab);
     this.active = tab.id;
     this.layout();
     if (url !== "about:blank") void wc.loadURL(url).catch(() => undefined);
     this.emit();
     return tab;
+  }
+
+  /**
+   * Gives the tab's debugger to the core (from its first page on, so its console and network are kept). Chromium allows
+   * one debugger per tab: when the user opens the tab's developer tools it is taken, and given back when they close.
+   */
+  private attachDebugger(tab: Tab): void {
+    const cdp = this.cdp;
+    if (!cdp) return;
+    const wc = tab.view.webContents;
+    const attach = () => {
+      if (wc.isDestroyed() || wc.debugger.isAttached()) return;
+      try {
+        wc.debugger.attach("1.3");
+      } catch {
+        return; // Taken (developer tools open): the CDP tools say so.
+      }
+      cdp.attached(tab.id, debuggerTransport(wc), (fn) => this.painted(tab, fn));
+    };
+    wc.debugger.on("detach", () => cdp.detached(tab.id));
+    wc.on("devtools-closed", () => setTimeout(attach, 300));
+    wc.on("destroyed", () => cdp.detached(tab.id));
+    attach();
   }
 
   /** Brings a tab to the front. */
@@ -408,6 +456,16 @@ export class BrowserPane {
     const wc = t.view.webContents;
     const shown = !!this.bounds && t.id === this.active && this.win.contentView.children.includes(t.view);
     if (shown) return wc.capturePage();
+    return this.painted(t, () => wc.capturePage(undefined, { stayHidden: true }));
+  }
+
+  /**
+   * Runs a capture (capturePage, or CDP's Page.captureScreenshot) while the tab is painted: as it is when shown, else
+   * in the off-screen window below.
+   */
+  private async painted<T>(t: Tab, fn: () => Promise<T>): Promise<T> {
+    const shown = !!this.bounds && t.id === this.active && this.win.contentView.children.includes(t.view);
+    if (shown) return fn();
     // Tested in Electron 33: a page outside the window or under KesherAI's page is clipped or shows over it, and a
     // hidden window paints nothing. A window placed off the screen (shown, never focused, not in the taskbar or
     // Alt+Tab) paints, so the tab is moved there for the picture and back again.
@@ -420,7 +478,7 @@ export class BrowserPane {
     t.view.setVisible(true);
     try {
       await new Promise((r) => setTimeout(r, 400));
-      return await wc.capturePage(undefined, { stayHidden: true });
+      return await fn();
     } finally {
       if (!helper.isDestroyed()) helper.contentView.removeChildView(t.view);
       this.layout();

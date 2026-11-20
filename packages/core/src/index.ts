@@ -20,6 +20,7 @@ export { OneDrive, ONEDRIVE_ENDPOINTS, type OneDriveConfig, type OneDriveEndpoin
 export { DriveSync, type SyncResult } from "./drive-sync.js";
 export { isLoopback, isLocalRequest } from "./auth.js";
 export type { KesherServices } from "./services.js";
+export type { CdpTransport } from "./cdp.js";
 export { CORE_VERSION } from "./routes/system.js";
 export * from "./model-scan.js";
 export * from "./tunnel.js";

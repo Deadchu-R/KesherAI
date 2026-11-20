@@ -470,7 +470,8 @@ function setupBrowserPane(win: BrowserWindow): void {
   const send = () => {
     if (!win.isDestroyed() && pane) win.webContents.send("kesher:browser-state", { tabs: pane.list(), notice: pane.notice });
   };
-  pane = new BrowserPane(win, port, send);
+  const bridge = server.services.browser;
+  pane = new BrowserPane(win, port, send, { attached: (id, t, painted) => bridge.attachCdpTab(id, t, painted), detached: (id) => bridge.detachCdpTab(id) });
   const p = pane;
   // The model's browser tools and the phone's view of the pane go through the core's browser bridge.
   server.services.browser.attachPane(async (action, a) => {
