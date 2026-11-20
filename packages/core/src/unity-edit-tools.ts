@@ -474,6 +474,10 @@ export async function bringImage(d: UnityEditDeps, given: string, folder: string
   return { rel, copied: true };
 }
 
+/** C# that makes Unity's asset database know every folder above `pathVar` (a file or folder the tool just wrote). */
+const KNOW_FOLDERS = (pathVar: string) => `{ var parts = ${pathVar}.Split('/'); var at = parts[0];
+  for (var fi = 1; fi < parts.Length - (${pathVar}.Contains(".") ? 1 : 0); fi++) { at += "/" + parts[fi]; if (!UnityEditor.AssetDatabase.IsValidFolder(at)) { System.IO.Directory.CreateDirectory(at); UnityEditor.AssetDatabase.ImportAsset(at); } } }`;
+
 const FILTERS = { point: "Point", bilinear: "Bilinear", trilinear: "Trilinear" } as const;
 const COMPRESSIONS = { none: "Uncompressed", low: "CompressedLQ", normal: "Compressed", high: "CompressedHQ" } as const;
 
@@ -487,6 +491,7 @@ export function spriteOptions(input: Record<string, unknown>): { ppu: number; fi
 /** C# that imports a picture of the project as a single sprite with these settings. */
 export function importSpriteCs(rel: string, o: ReturnType<typeof spriteOptions>): string {
   return `var path = ${csString(rel)};
+${KNOW_FOLDERS("path")}
 UnityEditor.AssetDatabase.ImportAsset(path, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
 var ti = UnityEditor.AssetImporter.GetAtPath(path) as UnityEditor.TextureImporter;
 if (ti == null) return "Unity did not import " + path + " as a picture.";
@@ -507,11 +512,140 @@ if (sp == null) return "Imported " + path + ", but Unity made no sprite from it.
 return "Imported " + path + " as a sprite: " + w + "x" + h + " px, ${o.ppu} pixels per unit (" + (w / ${o.ppu}f) + " x " + (h / ${o.ppu}f) + " units), ${o.filter} filter, ${o.compression} compression. Use it with a SpriteRenderer (unity_modify_scene set_property SpriteRenderer m_Sprite = this path).";`;
 }
 
+/** The texture slots of `unity_create_pbr_material`. */
+export const PBR_MAPS = ["albedo", "normal", "metallic", "roughness", "smoothness", "ao"] as const;
+/** Project paths of a material's maps, by slot. */
+export type PbrMaps = Partial<Record<(typeof PBR_MAPS)[number], string>>;
+
+/**
+ * C# that makes a PBR material for the project's render pipeline (URP Lit, HDRP Lit or Built-in Standard), saves it
+ * next to its textures and, if asked, puts it on objects' renderers (children too) as one Undo step.
+ *
+ * Grayscale maps are packed the way each shader reads them: URP and Built-in take metallic in R and smoothness in A
+ * of one "metallic gloss" map, HDRP a "mask map" (R metallic, G occlusion, A smoothness). Roughness becomes
+ * smoothness (1 - roughness). The normal map's import is set to Normal map; grayscale maps are imported as linear.
+ *
+ * @param o.name - The material's name; `o.folder` the project folder for it and the packed map.
+ * @param o.maps - Project paths of the maps (already in the project).
+ * @param o.apply - Objects (#id or path) to put it on; `o.selection` adds the Editor's selected objects.
+ */
+export function pbrCs(o: { name: string; folder: string; maps: PbrMaps; apply: string[]; selection: boolean }): string {
+  const m = (k: keyof PbrMaps) => csString(o.maps[k] ?? "");
+  return `${SCENE_PRELUDE}
+var rp = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
+var rpName = rp == null ? "" : rp.GetType().Name;
+var kind = rp == null ? "builtin" : rpName.Contains("HDRenderPipeline") ? "hdrp" : rpName.Contains("Universal") ? "urp" : "";
+if (kind == "") return "This project uses its own render pipeline (" + rpName + "), so no standard Lit shader fits: make the material with unity_script_eval for its shaders.";
+var shaderName = kind == "urp" ? "Universal Render Pipeline/Lit" : kind == "hdrp" ? "HDRP/Lit" : "Standard";
+var shader = UnityEngine.Shader.Find(shaderName);
+if (shader == null) return "The shader " + shaderName + " is not in this project; nothing was made.";
+var name = ${csString(o.name)}; var folder = ${csString(o.folder)};
+${KNOW_FOLDERS("folder")}
+var log = new System.Text.StringBuilder();
+// Import settings first: a normal map as Normal map, grayscale maps linear, color maps sRGB.
+System.Func<string, int, UnityEngine.Texture2D> Tex = (path, use) => {
+  if (path == "") return null;
+  UnityEditor.AssetDatabase.ImportAsset(path, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+  var ti = UnityEditor.AssetImporter.GetAtPath(path) as UnityEditor.TextureImporter;
+  if (ti != null) {
+    var changed = false;
+    if (use == 1 && ti.textureType != UnityEditor.TextureImporterType.NormalMap) { ti.textureType = UnityEditor.TextureImporterType.NormalMap; changed = true; }
+    if (use != 1 && ti.textureType != UnityEditor.TextureImporterType.Default) { ti.textureType = UnityEditor.TextureImporterType.Default; changed = true; }
+    if (use != 1 && ti.sRGBTexture != (use == 0)) { ti.sRGBTexture = use == 0; changed = true; }
+    if (changed) ti.SaveAndReimport();
+  }
+  var t = UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Texture2D>(path);
+  if (t == null) log.AppendLine("skipped " + path + ": Unity did not load it as a texture");
+  return t;
+};
+var albedo = Tex(${m("albedo")}, 0); var normal = Tex(${m("normal")}, 1);
+var metal = Tex(${m("metallic")}, 2); var rough = Tex(${m("roughness")}, 2); var smooth = Tex(${m("smoothness")}, 2); var ao = Tex(${m("ao")}, 2);
+// Any texture's pixels, through the GPU (works for compressed and non-readable textures).
+System.Func<UnityEngine.Texture2D, int, int, UnityEngine.Color32[]> Pixels = (src, w, h) => {
+  var rt = UnityEngine.RenderTexture.GetTemporary(w, h, 0, UnityEngine.RenderTextureFormat.ARGB32, UnityEngine.RenderTextureReadWrite.Linear);
+  UnityEngine.Graphics.Blit(src, rt);
+  var prev = UnityEngine.RenderTexture.active; UnityEngine.RenderTexture.active = rt;
+  var tmp = new UnityEngine.Texture2D(w, h, UnityEngine.TextureFormat.RGBA32, false, true);
+  tmp.ReadPixels(new UnityEngine.Rect(0, 0, w, h), 0, 0); tmp.Apply();
+  UnityEngine.RenderTexture.active = prev; UnityEngine.RenderTexture.ReleaseTemporary(rt);
+  var px = tmp.GetPixels32(); UnityEngine.Object.DestroyImmediate(tmp); return px;
+};
+UnityEngine.Texture2D packed = null;
+var gloss = smooth ?? rough;
+if (metal != null || gloss != null || (kind == "hdrp" && ao != null)) {
+  int w = 0, h = 0;
+  foreach (var t in new[] { metal, gloss, kind == "hdrp" ? ao : null }) if (t != null) { w = System.Math.Max(w, t.width); h = System.Math.Max(h, t.height); }
+  w = System.Math.Min(w, 4096); h = System.Math.Min(h, 4096);
+  var mp = metal != null ? Pixels(metal, w, h) : null; var gp = gloss != null ? Pixels(gloss, w, h) : null; var ap = kind == "hdrp" && ao != null ? Pixels(ao, w, h) : null;
+  var outPx = new UnityEngine.Color32[w * h];
+  for (var i = 0; i < outPx.Length; i++) {
+    byte mv = mp != null ? mp[i].r : (byte)0;
+    byte sv = gp != null ? (smooth != null ? gp[i].r : (byte)(255 - gp[i].r)) : (byte)128;
+    byte av = ap != null ? ap[i].r : (byte)255;
+    outPx[i] = kind == "hdrp" ? new UnityEngine.Color32(mv, av, 0, sv) : new UnityEngine.Color32(mv, mv, mv, sv);
+  }
+  var pt = new UnityEngine.Texture2D(w, h, UnityEngine.TextureFormat.RGBA32, true, true); pt.SetPixels32(outPx); pt.Apply();
+  var packedPath = UnityEditor.AssetDatabase.GenerateUniqueAssetPath(folder + "/" + name + (kind == "hdrp" ? "_MaskMap.png" : "_MetallicSmoothness.png"));
+  System.IO.File.WriteAllBytes(packedPath, pt.EncodeToPNG()); UnityEngine.Object.DestroyImmediate(pt);
+  UnityEditor.AssetDatabase.ImportAsset(packedPath, UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+  var pi = UnityEditor.AssetImporter.GetAtPath(packedPath) as UnityEditor.TextureImporter;
+  if (pi != null) { pi.sRGBTexture = false; pi.alphaSource = UnityEditor.TextureImporterAlphaSource.FromInput; pi.alphaIsTransparency = false; pi.SaveAndReimport(); }
+  packed = UnityEditor.AssetDatabase.LoadAssetAtPath<UnityEngine.Texture2D>(packedPath);
+  log.AppendLine("packed " + (kind == "hdrp" ? "mask map" : "metallic/smoothness map") + ": " + packedPath);
+}
+var mat = new UnityEngine.Material(shader); mat.name = name;
+if (kind == "urp") {
+  if (albedo != null) mat.SetTexture("_BaseMap", albedo);
+  if (normal != null) { mat.SetTexture("_BumpMap", normal); mat.EnableKeyword("_NORMALMAP"); }
+  if (packed != null) { mat.SetTexture("_MetallicGlossMap", packed); mat.EnableKeyword("_METALLICSPECGLOSSMAP"); mat.SetFloat("_Smoothness", 1f); }
+  if (ao != null) { mat.SetTexture("_OcclusionMap", ao); mat.EnableKeyword("_OCCLUSIONMAP"); }
+} else if (kind == "hdrp") {
+  if (albedo != null) mat.SetTexture("_BaseColorMap", albedo);
+  if (normal != null) { mat.SetTexture("_NormalMap", normal); mat.EnableKeyword("_NORMALMAP"); mat.EnableKeyword("_NORMALMAP_TANGENT_SPACE"); }
+  if (packed != null) { mat.SetTexture("_MaskMap", packed); mat.EnableKeyword("_MASKMAP"); mat.SetFloat("_MetallicRemapMax", 1f); mat.SetFloat("_SmoothnessRemapMax", 1f); mat.SetFloat("_AORemapMax", 1f); }
+  // HDRP's own keyword reset, when its editor code is here (it is internal in some versions).
+  foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies()) {
+    var hu = asm.GetType("UnityEditor.Rendering.HighDefinition.HDShaderUtils");
+    var reset = hu == null ? null : hu.GetMethod("ResetMaterialKeywords", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, new[] { typeof(UnityEngine.Material) }, null);
+    if (reset != null) { try { reset.Invoke(null, new object[] { mat }); } catch (System.Exception) { } break; }
+  }
+} else {
+  if (albedo != null) mat.SetTexture("_MainTex", albedo);
+  if (normal != null) { mat.SetTexture("_BumpMap", normal); mat.EnableKeyword("_NORMALMAP"); }
+  if (packed != null) { mat.SetTexture("_MetallicGlossMap", packed); mat.EnableKeyword("_METALLICGLOSSMAP"); mat.SetFloat("_GlossMapScale", 1f); }
+  if (ao != null) mat.SetTexture("_OcclusionMap", ao);
+}
+var matPath = UnityEditor.AssetDatabase.GenerateUniqueAssetPath(folder + "/" + name + ".mat");
+UnityEditor.AssetDatabase.CreateAsset(mat, matPath);
+UnityEditor.AssetDatabase.SaveAssets();
+log.Insert(0, "Made " + matPath + " (" + shaderName + ", " + (kind == "builtin" ? "Built-in" : kind.ToUpperInvariant()) + " pipeline)\\n");
+var targets = new System.Collections.Generic.List<UnityEngine.GameObject>();
+foreach (var k in new string[] { ${o.apply.map(csString).join(", ")} }) { var g = Resolve(k); if (g == null) log.AppendLine("not put on " + k + ": no such GameObject in the open scene"); else targets.Add(g); }
+${o.selection ? "foreach (var g in UnityEditor.Selection.gameObjects) if (g.scene.IsValid() && !targets.Contains(g)) targets.Add(g);" : ""}
+if (targets.Count > 0) {
+  UnityEditor.Undo.IncrementCurrentGroup(); var group = UnityEditor.Undo.GetCurrentGroup(); UnityEditor.Undo.SetCurrentGroupName("KesherAI: material " + name);
+  var count = 0;
+  foreach (var g in targets) {
+    foreach (var r in g.GetComponentsInChildren<UnityEngine.Renderer>(true)) {
+      UnityEditor.Undo.RecordObject(r, "KesherAI: material");
+      var mats = r.sharedMaterials;
+      if (mats.Length == 0) r.sharedMaterial = mat; else { for (var i = 0; i < mats.Length; i++) mats[i] = mat; r.sharedMaterials = mats; }
+      count++;
+    }
+    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(g.scene);
+    log.AppendLine("put on " + PathOf(g.transform));
+  }
+  UnityEditor.Undo.CollapseUndoOperations(group);
+  log.AppendLine(count + " renderers changed (one Undo step; not saved yet: unity_scene save)" + (count == 0 ? ": none of these objects has a renderer" : ""));
+}
+return log.ToString();`;
+}
+
 /**
  * The Unity scene tools that work on single objects.
  *
  * @param d - The project, the "no project" check and C# in the open Editor (from `unityTools`).
- * @returns `unity_inspect_object`, `unity_modify_scene` and `unity_import_sprite`.
+ * @returns `unity_inspect_object`, `unity_modify_scene`, `unity_import_sprite` and `unity_create_pbr_material`.
  */
 export function unityEditTools(d: UnityEditDeps): AgentTool[] {
   return [
@@ -631,6 +765,64 @@ export function unityEditTools(d: UnityEditDeps): AgentTool[] {
         const said = await d.evalCs(importSpriteCs(brought.rel, o));
         const failed = /^(Unity did not run it|C# failed)/.test(said);
         return { output: `${head}${head ? "\n" : ""}${failed ? `${said}\nThe file is in the project; run unity_import_sprite again on ${brought.rel} once the Editor is ready (unity_status).` : said}` };
+      },
+    },
+    {
+      risk: "write",
+      spec: {
+        name: "unity_create_pbr_material",
+        description: `Make a PBR material for the project's render pipeline (URP Lit, HDRP Lit or Built-in Standard, found by itself) from texture maps, and optionally put it on objects (one Undo step). Each map is a library picture id, a full path on this computer or an Assets/ path; copies go to ${GENERATED}/<name>/. Give roughness OR smoothness; metallic, roughness/smoothness (and AO in HDRP) are packed into the map the shader reads. The normal map is imported as a Normal map.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The material's name, e.g. 'Rusty Metal'." },
+            maps: {
+              type: "object",
+              properties: Object.fromEntries(PBR_MAPS.map((k) => [k, { type: "string" }])),
+              description: "albedo (base color), normal, metallic, roughness or smoothness, ao (ambient occlusion); at least one.",
+            },
+            apply_to: { type: "array", items: { type: "string" }, description: "Objects (#id or path) to put it on, or 'selection' for the objects selected in Unity." },
+          },
+          required: ["name", "maps"],
+        },
+      },
+      askFirst: (input) => {
+        const list = Array.isArray(input.apply_to) ? input.apply_to.map(String) : [];
+        if (list.includes("selection")) return "Changes the selected objects in the Unity scene.";
+        return sceneAskReason(new Set(list).size, 0);
+      },
+      preview: async (input) => {
+        const maps = (input.maps ?? {}) as Record<string, unknown>;
+        const name = safeName(String(input.name ?? ""), "Material");
+        const lines = PBR_MAPS.filter((k) => maps[k]).map((k) => `  ${k}: ${String(maps[k])}`);
+        const list = Array.isArray(input.apply_to) ? input.apply_to.map(String) : [];
+        return `Make the material ${GENERATED}/${name}/${name}.mat in ${d.project() ?? "(no project)"}\n${lines.join("\n")}${list.length ? `\nPut it on: ${list.join(", ")} (one Undo step)` : ""}`;
+      },
+      run: async (input, ctx) => {
+        d.need();
+        const name = safeName(String(input.name ?? ""), "Material");
+        const given = (input.maps && typeof input.maps === "object" ? input.maps : {}) as Record<string, unknown>;
+        const unknown = Object.keys(given).filter((k) => !(PBR_MAPS as readonly string[]).includes(k));
+        if (unknown.length) return { output: `Unknown map ${unknown.join(", ")}: use ${PBR_MAPS.join(", ")}.` };
+        if (given.roughness && given.smoothness) return { output: "Give roughness OR smoothness, not both." };
+        const list = input.apply_to === undefined ? [] : Array.isArray(input.apply_to) ? input.apply_to.map((x) => String(x).trim()).filter(Boolean) : null;
+        if (!list || list.length > 50 || list.some((k) => k.length > 300)) return { output: "apply_to is a list of up to 50 objects (#id or path), or 'selection'." };
+        const folder = `${GENERATED}/${name}`;
+        const maps: PbrMaps = {};
+        const copied: string[] = [];
+        for (const k of PBR_MAPS) {
+          if (!given[k]) continue;
+          try {
+            const b = await bringImage(d, String(given[k]), folder, `${name}_${k}`, ctx);
+            maps[k] = b.rel;
+            if (b.copied) copied.push(b.rel);
+          } catch (e) {
+            return { output: `${k}: ${(e as Error).message}${copied.length ? ` (already copied: ${copied.join(", ")})` : ""}` };
+          }
+        }
+        if (!Object.keys(maps).length) return { output: `Give at least one map: ${PBR_MAPS.join(", ")}.` };
+        const said = await d.evalCs(pbrCs({ name, folder, maps, apply: list.filter((k) => k !== "selection"), selection: list.includes("selection") }));
+        return { output: `${copied.length ? `Copied ${copied.join(", ")}.\n` : ""}${said}` };
       },
     },
   ];

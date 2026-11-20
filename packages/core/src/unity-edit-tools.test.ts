@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnityCli, type CliRunner } from "./unity-cli.js";
 import { UNITY_TOOL_NAMES, unityTools } from "./unity-tools.js";
-import { clampInt, describeSceneChange, modifyCs, parseSceneChanges, sniffImage } from "./unity-edit-tools.js";
+import { clampInt, describeSceneChange, modifyCs, parseSceneChanges, pbrCs, sniffImage } from "./unity-edit-tools.js";
 
 /** A Unity project and a fake `unity` CLI that records every call and answers `script eval` with `answer`. */
 async function setup(answer = "ok") {
@@ -160,4 +160,42 @@ test("unity_import_sprite: copies a real picture to Assets/Generated (never over
   assert.ok(lastCs().includes('var path = "Assets/Tree.png";'));
   assert.equal(sniffImage(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0])), "jpg");
   assert.match(await tool.preview!({ file: id, name: "Hero" }, rctx), /to: Assets\/Generated\/Hero\n.*100 pixels per unit, bilinear filter, normal compression/);
+});
+
+test("unity_create_pbr_material: maps copied next to the material, pipeline found in Unity, applied with Undo", async () => {
+  const { root, project, ctx, calls, lastCs } = await setup("Made");
+  const id = "1b5f7f6e-1c1e-4a7e-9a55-2f2d3c4b5a69";
+  const u = new UnityCli({ projects: [project], active: project }, async () => undefined, async (args) => {
+    calls.push(args);
+    return { code: 0, stdout: JSON.stringify({ success: true, result: "Made Assets/Generated/Rust/Rust.mat" }), stderr: "" };
+  });
+  const tools = Object.fromEntries(unityTools(u, join(root, "out"), async () => "a", () => [], async () => ({ data: PNG, mimeType: "image/png" })).map((t) => [t.spec.name, t]));
+  const tool = tools.unity_create_pbr_material!;
+  await writeFile(join(project, "Assets/n.png"), PNG);
+  const n = calls.length;
+  assert.match((await tool.run({ name: "Rust", maps: { roughness: id, smoothness: id } }, ctx)).output, /OR smoothness/);
+  assert.match((await tool.run({ name: "Rust", maps: { height: id } }, ctx)).output, /Unknown map height/);
+  assert.match((await tool.run({ name: "Rust", maps: {} }, ctx)).output, /at least one map/);
+  assert.match((await tool.run({ name: "Rust", maps: { albedo: id }, apply_to: "Door" }, ctx)).output, /apply_to is a list/);
+  assert.equal(calls.length, n);
+
+  const out = await tool.run({ name: "Rust", maps: { albedo: id, normal: "Assets/n.png", roughness: id }, apply_to: ["#-5", "selection"] }, ctx);
+  assert.match(out.output, /Copied Assets\/Generated\/Rust\/Rust_albedo\.png, Assets\/Generated\/Rust\/Rust_roughness\.png\.\nMade/);
+  const cs = lastCs();
+  assert.match(cs, /GraphicsSettings\.currentRenderPipeline/);
+  assert.match(cs, /"Universal Render Pipeline\/Lit"/);
+  assert.match(cs, /"HDRP\/Lit"/);
+  assert.match(cs, /Tex\("Assets\/n.png", 1\)/, "the normal map is imported as a normal map");
+  assert.match(cs, /Tex\("Assets\/Generated\/Rust\/Rust_roughness.png", 2\)/);
+  assert.match(cs, /var smooth = Tex\("", 2\)/);
+  assert.match(cs, /255 - gp\[i\]\.r/, "roughness becomes smoothness");
+  assert.match(cs, /new string\[\] \{ "#-5" \}/);
+  assert.match(cs, /Selection\.gameObjects/);
+  assert.match(cs, /Undo\.RecordObject\(r, "KesherAI: material"\)[\s\S]*CollapseUndoOperations/);
+
+  assert.equal(tool.askFirst!({ apply_to: ["#-5"] }), undefined);
+  assert.equal(tool.askFirst!({ apply_to: ["A", "B"] }), "Changes 2 objects in the Unity scene.");
+  assert.equal(tool.askFirst!({ apply_to: ["selection"] }), "Changes the selected objects in the Unity scene.");
+  assert.match(await tool.preview!({ name: "Rust", maps: { albedo: id }, apply_to: ["A", "B"] }, ctx), /Rust\/Rust\.mat[\s\S]*albedo: [\s\S]*Put it on: A, B/);
+  assert.doesNotMatch(pbrCs({ name: "M", folder: "Assets/Generated/M", maps: { albedo: "Assets/a.png" }, apply: [], selection: false }), /Selection\.gameObjects/);
 });

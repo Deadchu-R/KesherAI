@@ -119,7 +119,8 @@ export function reasonText(reason: string): string {
   if (reason === "The agent wants to run a command on your computer.") return t("reasonExec");
   const danger = /^This command (.+), so it always needs your approval\.$/.exec(reason);
   if (danger) return t("reasonDanger", { what: danger[1]! });
-  // Unity scene changes that are always asked (unity-edit-tools.ts sceneAskReason).
+  // Unity scene changes that are always asked (unity-edit-tools.ts sceneAskReason, unity_create_pbr_material).
+  if (reason === "Changes the selected objects in the Unity scene.") return L("שינוי האובייקטים שנבחרו בסצנה של Unity", reason);
   const unity = /^Changes (\d+) objects? in the Unity scene(?:, deleting (\d+))?\.$/.exec(reason);
   if (unity) {
     const n = Number(unity[1]);
