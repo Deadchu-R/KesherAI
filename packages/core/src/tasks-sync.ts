@@ -222,6 +222,8 @@ export class TasksSync {
   private sync?: DriveSync;
   private running?: Promise<TasksSyncStatus>;
   private timer?: ReturnType<typeof setTimeout>;
+  /** A state write that has not started yet (later calls join it). */
+  private queued?: Promise<void>;
   /** When the timer fires (ms), so a ping never postpones a pull already due sooner. */
   private timerAt = 0;
   /** A pull after the running sync is already arranged (pings during a sync arrange only one). */
@@ -269,16 +271,22 @@ export class TasksSync {
 
   /** Writes the state file (owner-only, one write at a time, write then rename). */
   private persist(): Promise<void> {
-    const body = JSON.stringify(this.saved);
-    this.saving = this.saving
+    // Calls while a write waits share it (scan 168: the Drive sync saves its state on every change, so one sync made
+    // many whole-file writes). The state is read when the write starts, so it holds every change made before.
+    if (this.queued) return this.queued;
+    const next = this.saving
       .then(async () => {
+        this.queued = undefined;
+        const body = JSON.stringify(this.saved);
         await mkdir(dirname(this.d.file), { recursive: true });
         const tmp = `${this.d.file}.${process.pid}.tmp`;
         await writeFile(tmp, body, { mode: 0o600 });
         await rename(tmp, this.d.file);
       })
       .catch(() => undefined);
-    return this.saving;
+    this.queued = next;
+    this.saving = next;
+    return next;
   }
 
   /**

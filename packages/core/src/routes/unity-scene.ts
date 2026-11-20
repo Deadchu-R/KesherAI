@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { GameCheckpoints } from "../game-checkpoints.js";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import { mergeMoves, readUnityScene, type UnityMove, type UnityObject } from "../unity-scene.js";
 
@@ -238,7 +238,9 @@ export async function unitySceneRoutes(app: FastifyInstance, checkpoints?: GameC
       if (ok.length) await checkpoints?.beforeSave("unity", dir, "stand-in", `Stand-in: ${rel}`, [join(dir, rel!), file]);
       const waiting = JSON.parse(await readFile(file, "utf8").catch(() => "{}")) as Record<string, UnityMove[]>;
       const next = mergeMoves(waiting, rel!, ok.map((m) => ({ id: String(m.id), name: String(m.name ?? "").slice(0, 200), from: m.from, to: m.to })));
-      await writeFile(file, JSON.stringify(next, null, 1));
+      // Write then rename: the KesherAI package in Unity reads this file when Unity opens (scan 168: never half of it).
+      await writeFile(`${file}.tmp`, JSON.stringify(next, null, 1));
+      await rename(`${file}.tmp`, file);
       return { queued: ok.length, waiting: next[rel!]!.length };
     } catch (e) {
       const f = fail(e);

@@ -112,13 +112,23 @@ const RECENT_MS = 15_000;
 export async function projectIndex(root: string): Promise<{ files: Indexed[]; assets: IndexedAsset[] }> {
   const hit = recent.get(root);
   if (hit && Date.now() - hit.at < RECENT_MS) return hit;
-  const [files, listed] = await Promise.all([indexProject(root).then((f) => f.filter((x) => GAME_CODE.test(x.path))), listAssets(root)]);
-  const { assets } = await withUnrealKinds(root, listed);
-  const item = { at: Date.now(), files, assets };
-  recent.set(root, item);
-  if (recent.size > 20) recent.delete(recent.keys().next().value!);
-  return item;
+  // One walk at a time per project: key presses while a big project is read wait for that walk (scan 168).
+  const running = building.get(root);
+  if (running) return running;
+  const job = (async () => {
+    const [files, listed] = await Promise.all([indexProject(root).then((f) => f.filter((x) => GAME_CODE.test(x.path))), listAssets(root)]);
+    const { assets } = await withUnrealKinds(root, listed);
+    const item = { at: Date.now(), files, assets };
+    recent.set(root, item);
+    if (recent.size > 20) recent.delete(recent.keys().next().value!);
+    return item;
+  })().finally(() => building.delete(root));
+  building.set(root, job);
+  return job;
 }
+
+/** Index walks running now, by project folder. */
+const building = new Map<string, Promise<{ at: number; files: Indexed[]; assets: IndexedAsset[] }>>();
 
 /**
  * Searches one game project: classes and functions (with their lines), script files, scenes and levels, prefabs and

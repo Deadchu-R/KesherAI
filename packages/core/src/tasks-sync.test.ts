@@ -353,3 +353,20 @@ test("tasks sync: steady pings do not postpone the pull", async () => {
     await t.done();
   }
 });
+
+test("tasks sync: state saves made together share one write that holds the last state (security scan 168)", async () => {
+  const t = await setup();
+  await t.sync.syncNow();
+  const inner = t.sync as unknown as { persist(): Promise<void>; saved: { lastError?: string } };
+  const all: Array<Promise<void>> = [];
+  for (let i = 0; i < 6; i++) {
+    inner.saved.lastError = `step ${i}`;
+    all.push(inner.persist());
+  }
+  await Promise.all(all);
+  const saved = JSON.parse(await readFile(t.file, "utf8")) as { lastError?: string };
+  assert.equal(saved.lastError, "step 5");
+  // The first write may already have started; every later call joined one queued write.
+  assert.ok(new Set(all).size <= 2);
+  await t.done();
+});

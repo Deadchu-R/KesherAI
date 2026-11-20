@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assetGroup, definitionsOf, gameFindTool, searchGameProject, searchWords } from "./game-index.js";
+import { assetGroup, definitionsOf, gameFindTool, projectIndex, searchGameProject, searchWords } from "./game-index.js";
 import type { GameProject } from "./game-projects.js";
 import { build, doorSpec } from "./uasset-fake.test.js";
 import { unrealAssetView } from "./routes/game-inspector.js";
@@ -94,4 +94,16 @@ test("Unreal packages get their class and parent from their headers, and who use
   const meshView = await unrealAssetView(root, "Content/Props/SM_Door.uasset", await readUassetFile(join(root, "Content", "Props", "SM_Door.uasset")));
   assert.deepEqual(meshView.usedBy, [{ path: "Content/BP/Gate.uasset", soft: false }]);
   assert.equal(meshView.usedByComplete, true);
+});
+
+test("projectIndex: searches typed while a project is read share that one walk (scan 168)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-gidx-"));
+  try {
+    await mkdir(join(root, "Assets"), { recursive: true });
+    await writeFile(join(root, "Assets", "Door.cs"), "class Door {}\n");
+    const [a, b] = await Promise.all([projectIndex(root), projectIndex(root)]);
+    assert.equal(a, b);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
