@@ -4,6 +4,7 @@
  * names, checks the work itself and returns it as a branch for Claude to review. These are the shapes the server
  * sends to the page (`GET /api/task-inbox`), shared so the page and the server agree.
  */
+import type { AgentLabel } from "./agent-label.js";
 
 /** Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts). */
 export type InboxExecutor = "auto" | "antigravity" | "local" | "opus";
@@ -86,6 +87,8 @@ export interface InboxCheck {
 /** A task with everything the queue and the task page show. */
 export interface InboxTaskView extends InboxTaskSpec {
   status: InboxStatus;
+  /** The owner's own name and note for its agent run (agent-labels.ts; added by the route, not stored with it). */
+  label?: AgentLabel;
   /** The executor after routing (`auto` resolved). */
   runBy: Exclude<InboxExecutor, "auto">;
   /** The branch the work goes to (`agy/<id>-<slug>`, `-partial` when kept unfinished). */

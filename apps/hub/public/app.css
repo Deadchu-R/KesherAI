@@ -151,6 +151,10 @@ button.chip { cursor: pointer; min-height: 30px; }
 .acard { display: flex; flex-direction: column; gap: 6px; padding: 11px 14px; border-top: 1px solid #222226; cursor: pointer; min-width: 0; }
 .acard:hover { background: #1e1e22; }
 .acard.wait { background: #1f1b13; }
+/* Agent names and notes (agents.ts; boards HubAgentLabel, PhoneHubAgentLabel): the note wraps whole, "Now" is its own line. */
+.alab-k { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 999px; background: #a5b4ff26; color: #a5b4ff; }
+.anote { background: #2a2416; border-radius: 8px; padding: 6px 9px; line-height: 1.5; }
+.alabel label { gap: 4px; }
 .acard .row { min-width: 0; }
 .pin { border-color: #4a3c1e; }
 .acts { gap: 6px; }

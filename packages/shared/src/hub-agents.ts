@@ -41,9 +41,27 @@ export function applyAgentBatch(cards: Map<string, AgentCard>, deviceId: string,
   const seen = new Set(old?.events.map((e) => e.seq));
   const events = [...(old?.events ?? []), ...body.events.filter((e) => !seen.has(e.seq))].sort((a, b) => a.seq - b.seq).slice(-HUB_LIMITS.agentEventsPerRun);
   const newer = !old || body.state.lastEventAt >= old.state.lastEventAt;
-  const card: AgentCard = { deviceId, runId: body.runId, state: newer ? body.state : old.state, events, at: Math.max(at, old?.at ?? 0), seq: Math.max(seq, old?.seq ?? 0) };
+  const state = withLabel(newer ? body.state : old.state, (body.state.labelAt ?? 0) >= (old?.state.labelAt ?? 0) ? body.state : old!.state);
+  const card: AgentCard = { deviceId, runId: body.runId, state, events, at: Math.max(at, old?.at ?? 0), seq: Math.max(seq, old?.seq ?? 0) };
   cards.set(key, card);
   return card;
+}
+
+/** A state with the name and note of another (the newer label; a label is changed without new events). */
+function withLabel(s: AgentRunState, from: AgentRunState): AgentRunState {
+  if (s === from) return s;
+  const { name: _n, note: _o, labelAt: _a, ...rest } = s;
+  return { ...rest, ...(from.name ? { name: from.name } : {}), ...(from.note ? { note: from.note } : {}), ...(from.labelAt ? { labelAt: from.labelAt } : {}) };
+}
+
+/**
+ * The name to show for a run: the owner's, or its title.
+ *
+ * @param s - The run's state.
+ * @returns The name, and the original title when a name replaces it.
+ */
+export function agentName(s: Pick<AgentRunState, "title" | "name">): { name: string; title?: string } {
+  return s.name && s.name !== s.title ? { name: s.name, title: s.title } : { name: s.title };
 }
 
 /**

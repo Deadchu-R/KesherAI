@@ -124,6 +124,10 @@ export interface HelperRunInfo {
   agent?: string;
   /** The task in a few words. */
   title: string;
+  /** The owner's own name and note for the run, and when set (agent-label.ts; kept by the PC, not in the run). */
+  name?: string;
+  note?: string;
+  labelAt?: number;
   /** The model's short name, e.g. `Qwen3-4B`. */
   model: string;
   /** Why this model: "same as the chat", "ran on X, no swap", "fits beside the chat's model" (and in Hebrew). */

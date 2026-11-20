@@ -64,8 +64,9 @@ import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
-import { inboxCommand } from "./hub-commands.js";
-import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxSnapshot } from "./agent-activity.js";
+import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
+import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxRunId, inboxSnapshot, type RunSnapshot } from "./agent-activity.js";
+import { AgentLabels } from "./agent-labels.js";
 
 /** The hub approval list's name for the task inbox's run asks. */
 const INBOX_ASKS = "task-inbox";
@@ -574,6 +575,34 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     fileNames: () => config.hub.optIn.reportFileNames,
   });
   const helperRuns = services.conversations.helpers.runs;
+  // The owner's names and notes for agent runs (agent-labels.ts): this PC keeps them; every screen and device shows them.
+  const agentLabels = new AgentLabels(join(paths.root, "agent-labels.json"));
+  await agentLabels.load();
+  services.agentLabels = agentLabels;
+  helperRuns.labelOf = (id) => agentLabels.get(id);
+  /** An inbox run's snapshot with the owner's label. */
+  const labelled = (snap: RunSnapshot): RunSnapshot => {
+    const l = agentLabels.get(snap.runId);
+    return l ? { ...snap, ...(l.name ? { name: l.name } : {}), ...(l.note ? { note: l.note } : {}), ...(l.at ? { labelAt: l.at } : {}) } : snap;
+  };
+  // A new name or note: the chat's cards update, and the run's state goes again to the phones and to Google Drive.
+  agentLabels.on("change", (runId: string) => {
+    const h = helperRuns.get(runId);
+    if (h) {
+      helperRuns.touch(runId);
+      const snap = helperSnapshot(h, INBOX_ASKS);
+      activity.relabel(snap);
+      services.tasksSync?.observeAgent(snap, undefined, true);
+      return;
+    }
+    void taskInbox.list().then((tasks) => {
+      const t = tasks.find((x) => inboxRunId(x.id) === runId);
+      const snap = t && inboxSnapshot(t, t.runAsk, INBOX_ASKS);
+      if (!t || !snap) return;
+      activity.relabel(labelled(snap));
+      services.tasksSync?.observeAgent(labelled(snap), t.summary, true);
+    }, () => undefined);
+  });
   // A chat's helper that ended in the background or waits for an answer: on this computer and the phone (notify.ts).
   const chatTitle = (id: string) => library.summary(id)?.title ?? "KesherAI";
   helperRuns.on("end", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperEnd(r, chatTitle(r.chatId)));
@@ -592,8 +621,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     void hubRef.client?.reportInbox().catch(() => undefined);
     void taskInbox.list().then((tasks) => {
       for (const t of tasks) {
-        const snap = inboxSnapshot(t, t.runAsk, INBOX_ASKS);
-        if (!snap) continue;
+        const found = inboxSnapshot(t, t.runAsk, INBOX_ASKS);
+        if (!found) continue;
+        const snap = labelled(found);
         activity.observe(snap, () => taskInbox.stop(t.id));
         services.tasksSync?.observeAgent(snap, t.summary);
       }
@@ -621,6 +651,16 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         action,
         taskId,
         from,
+      ),
+    // A name and note for an agent, from the owner's phone or hub page (hub-commands.ts).
+    agentLabel: (runId, label) =>
+      agentLabelCommand(
+        {
+          known: async (id) => !!helperRuns.get(id) || (await taskInbox.list()).some((t) => inboxRunId(t.id) === id),
+          set: (id, l) => agentLabels.set(id, l),
+        },
+        runId,
+        label,
       ),
     version: CORE_VERSION,
     notify: (title, body) => void notifier.send({ title, body, path: "#/settings", tags: ["inbox_tray"] }).catch(() => undefined),

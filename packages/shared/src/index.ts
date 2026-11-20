@@ -14,6 +14,7 @@ export * from "./media.js";
 export * from "./branding.config.js";
 export * from "./features.config.js";
 export * from "./agent.js";
+export * from "./agent-label.js";
 export * from "./store.js";
 export * from "./recommended.js";
 export * from "./explain.js";

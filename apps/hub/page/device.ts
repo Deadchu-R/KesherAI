@@ -10,6 +10,7 @@ import { dropLocalPush } from "./push.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
+import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
 import type { DriveMark } from "./drive-view.js";
 
 /** This browser's identity at the hub. */
@@ -166,6 +167,11 @@ export class HubDevice {
   agents = new Map<string, AgentCard>();
   /** Actions sent from an agent card and not yet answered by a new state ("stop", "allow", "deny"), by card key. */
   agentActions = new Map<string, string>();
+  /**
+   * Names and notes sent from here (by card key): waiting for the PC (shown at once), saved (shown until the run's new
+   * state comes, at most 15 seconds), or the PC's "no" in its words.
+   */
+  agentLabels = new Map<string, { commandId: string; label: AgentLabel; savedAt?: number; error?: string }>();
   /**
    * What waits for the owner on each PC (its newest sealed snapshot; in memory, the PC sends it again when the page
    * connects), and the answers sent from here that the PC has not taken yet, by `<pc id>/<request id>`.
@@ -478,6 +484,8 @@ export class HubDevice {
     const card = applyAgentBatch(this.agents, env.from, body, typeof env.at === "number" ? env.at : Date.now(), seq);
     // A new state answers a pending Stop or Approve: the card shows the PC's word again.
     if (body.events.length) this.agentActions.delete(`${card.deviceId}/${card.runId}`);
+    const sent = this.agentLabels.get(`${card.deviceId}/${card.runId}`);
+    if (sent?.savedAt && sameLabel(card.state, sent.label)) this.agentLabels.delete(`${card.deviceId}/${card.runId}`);
     if (live) this.changed();
   }
 
@@ -503,6 +511,42 @@ export class HubDevice {
     const w = c.state.waiting;
     if (!w) return false;
     return this.sendToAgent(c, "approval_answer", { type: "approval_answer", requestId: w.requestId, conversationId: w.conversationId, decision }, decision);
+  }
+
+  /**
+   * Renames a run and sets its note on its PC: a sealed `agent-label` command, which the PC takes only from the
+   * owner's paired phone or hub page; the PC keeps it and sends the run's state again.
+   *
+   * @param c - The card.
+   * @param label - The new name and note (empty fields clear them).
+   * @returns Whether it was sent.
+   */
+  async labelAgent(c: AgentCard, label: AgentLabel): Promise<boolean> {
+    const id = this.ident;
+    const pc = this.presence.find((d) => d.id === c.deviceId);
+    if (!id || !pc?.online || !this.connected) return false;
+    const commandId = randomB64url(12);
+    const clean = { ...(label.name?.trim() ? { name: label.name.trim() } : {}), ...(label.note?.trim() ? { note: label.note.trim() } : {}) };
+    const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "agent-label", taskId: c.runId, label: clean }, id.privateKey, pc.publicKey);
+    if (!this.sendFrame({ t: "send", env })) return false;
+    this.agentLabels.set(`${c.deviceId}/${c.runId}`, { commandId, label: clean });
+    this.changed();
+    return true;
+  }
+
+  /**
+   * The name and note to show for a run: one sent from here and not yet answered or just saved, else the PC's.
+   *
+   * @param c - The card.
+   * @returns The label, and whether it waits for the PC or the PC refused it.
+   */
+  shownLabel(c: AgentCard): { label: AgentLabel; pending?: boolean; error?: string } {
+    const sent = this.agentLabels.get(`${c.deviceId}/${c.runId}`);
+    const pc = { ...(c.state.name ? { name: c.state.name } : {}), ...(c.state.note ? { note: c.state.note } : {}) };
+    if (!sent) return { label: pc };
+    if (sent.error) return { label: pc, error: sent.error };
+    if (sent.savedAt && Date.now() - sent.savedAt > 15_000) return { label: pc };
+    return { label: sent.label, pending: !sent.savedAt };
   }
 
   private async sendToAgent(c: AgentCard, kind: "cancel" | "approval_answer", body: Parameters<typeof sealMessage>[1], action: string): Promise<boolean> {
@@ -618,6 +662,12 @@ export class HubDevice {
    * acted answers yes; a "no" is shown only when every PC said no (the last one's words).
    */
   private onCommandResult(commandId: string, taskId: string, ok: boolean, text: string): void {
+    for (const sent of this.agentLabels.values()) {
+      if (sent.commandId !== commandId) continue;
+      if (ok) sent.savedAt = Date.now();
+      else sent.error = text || "It did not work.";
+      return this.changed();
+    }
     const a = this.taskActions.get(taskId);
     if (!a || a.commandId !== commandId || a.result?.ok) return;
     a.left--;

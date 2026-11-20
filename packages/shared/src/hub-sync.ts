@@ -16,6 +16,7 @@
  * device that runs it), `meta` (any device: the owner's marks), and `agent` (a finished agent run's snapshot).
  * WebCrypto only: the same code runs in Node, the Cloudflare Worker and the phone's WebView.
  */
+import { cleanAgentLabel } from "./agent-label.js";
 import { fromB64url, randomB64url, toB64url, type HubCryptoKey } from "./hub-crypto.js";
 import { WORK_LIST_STATUSES, type WorkListStatus } from "./work-list.js";
 
@@ -139,6 +140,15 @@ export interface SyncAgentBody {
   updatedAt?: string;
   endedAt?: string;
   summary?: string;
+  /** The owner's name and note for the run (agent-label.ts). */
+  name?: string;
+  note?: string;
+}
+
+/** An agent snapshot's name and note, cleaned. */
+function cleanLabel(b: Record<string, unknown>): Pick<SyncAgentBody, "name" | "note"> {
+  const l = cleanAgentLabel(b);
+  return { ...(l.name ? { name: l.name } : {}), ...(l.note ? { note: l.note } : {}) };
 }
 
 /** The plain content of a record. */
@@ -283,6 +293,7 @@ export function cleanSyncBody<K extends SyncKind>(x: unknown, kind: K): BodyOf<K
           ...opt("updatedAt", optStr(b.updatedAt, 40)),
           ...opt("endedAt", optStr(b.endedAt, 40)),
           ...opt("summary", optStr(b.summary, SYNC_LIMITS.summaryChars)),
+          ...cleanLabel(b),
         };
       }
       default:

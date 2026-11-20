@@ -2,9 +2,11 @@ import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { isLocalRequest, pairedDeviceIdOf, pairedDeviceOf } from "../auth.js";
+import { inboxRunId } from "../agent-activity.js";
 import type { TaskInbox } from "../inbox-runner.js";
 import type { KesherServices } from "../services.js";
 import { validBranchName } from "../task-inbox.js";
+import type { InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox (inbox-runner.ts): the queue, a task's page, Run / Stop / Skip, answers to the PC's "Run this task
@@ -24,9 +26,18 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   /** Who answered, as verified: this computer, or the paired device whose key the request carried. */
   const verifiedBy = (req: FastifyRequest): string | undefined => (isLocalRequest(req) ? "pc" : pairedDeviceIdOf(req) ?? pairedDeviceOf(req));
 
-  app.get("/api/task-inbox", async (req) => inbox.state(isLocalRequest(req)));
+  /** A task with the owner's name and note for its agent run (agent-labels.ts). */
+  const labelled = <T extends InboxTaskView>(t: T): T => {
+    const l = s.agentLabels?.get(inboxRunId(t.id));
+    return l ? { ...t, label: l } : t;
+  };
 
-  app.get<{ Params: { id: string } }>("/api/task-inbox/tasks/:id", async (req, reply) => inbox.task(req.params.id).catch((e) => failed(reply, e)));
+  app.get("/api/task-inbox", async (req) => {
+    const st = await inbox.state(isLocalRequest(req));
+    return { ...st, tasks: st.tasks.map(labelled) };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/task-inbox/tasks/:id", async (req, reply) => inbox.task(req.params.id).then(labelled, (e) => failed(reply, e)));
 
   app.post("/api/task-inbox/sync", async (_req, reply) => {
     try {
@@ -64,6 +75,12 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     }
   });
 
+  /** The owner's name and note for an inbox task's agent run (agent-labels.ts; empty fields clear them). */
+  app.put<{ Params: { id: string }; Body: { name?: unknown; note?: unknown } }>("/api/task-inbox/tasks/:id/label", async (req, reply) => {
+    const ok = await inbox.task(req.params.id).then(() => true, () => false);
+    if (!ok || !s.agentLabels) return reply.code(404).send({ error: "No such task" });
+    return { label: s.agentLabels.set(inboxRunId(req.params.id), { name: req.body?.name, note: req.body?.note }) };
+  });
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {

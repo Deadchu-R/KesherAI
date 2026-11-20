@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import {
+  AGENT_LABEL_LIMITS,
   DriveError,
   DriveRest,
   DriveSync,
@@ -328,11 +329,13 @@ export class TasksSync {
    *
    * @param s - The run.
    * @param summary - A short result line, when the run has one (scrubbed and cut here).
+   * @param relabel - The owner renamed it or changed its note: an ended run is written again too.
    */
-  observeAgent(s: RunSnapshot, summary?: string): void {
+  observeAgent(s: RunSnapshot, summary?: string, relabel = false): void {
     if (!this.ready) return void this.agents.clear();
     const known = this.agents.get(s.runId);
-    if (!known && !AGENT_GOING.has(s.state)) return;
+    // An ended run is written again only when the owner renamed it or changed its note (`relabel`).
+    if (!known && !AGENT_GOING.has(s.state) && !relabel) return;
     this.agents.delete(s.runId);
     this.agents.set(s.runId, { ...known, snap: s, ...(summary ? { summary } : {}) });
     if (this.agents.size > AGENTS_MAX) this.agents.delete(this.agents.keys().next().value!);
@@ -641,5 +644,7 @@ export function agentBody(s: RunSnapshot, summary: string | undefined, home = ho
     ...(iso(s.startedAt) ? { startedAt: iso(s.startedAt) } : {}),
     ...(iso(s.endedAt) ? { endedAt: iso(s.endedAt) } : {}),
     ...(result ? { summary: scrubText(result, home).slice(0, SYNC_LIMITS.summaryChars) } : {}),
+    ...(s.name ? { name: scrubText(s.name, home).slice(0, AGENT_LABEL_LIMITS.nameChars) } : {}),
+    ...(s.note ? { note: scrubText(s.note, home).slice(0, AGENT_LABEL_LIMITS.noteChars) } : {}),
   };
 }

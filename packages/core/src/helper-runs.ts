@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import type { AgentMessage, HelperKind, HelperPlanRef, HelperRunInfo, HelperUsage } from "@kesher/shared";
+import type { AgentLabel, AgentMessage, HelperKind, HelperPlanRef, HelperRunInfo, HelperUsage } from "@kesher/shared";
 
 /**
  * The helper runs of every chat (docs/RESEARCH_LOG.md, "Helper agents in the chat", plan steps 3, 5 and 6): a queue
@@ -174,6 +174,8 @@ export interface SavedHelperRun {
 export class HelperRuns extends EventEmitter {
   private readonly runs = new Map<string, Run>();
   private readonly now: () => number;
+  /** The owner's name and note of a run (agent-labels.ts), merged into what the screens get; set by the app. */
+  labelOf?: (id: string) => AgentLabel | undefined;
 
   /**
    * @param o.limit - How many local helpers may run at once now (helperLimit, read each time).
@@ -313,9 +315,22 @@ export class HelperRuns extends EventEmitter {
     return r ? { ...this.view(r), chatId: r.chatId, ...(r.full ? { full: r.full } : {}) } : undefined;
   }
 
-  /** A run's info for the screen and the model, with whether it can be continued. */
+  /** A run's info for the screen and the model, with whether it can be continued and the owner's label. */
   private view(r: Run): HelperRunInfo {
-    return { ...r.info, ...(this.continuable(r) ? { canContinue: true } : {}) };
+    const l = this.labelOf?.(r.info.id);
+    return { ...r.info, ...(this.continuable(r) ? { canContinue: true } : {}), ...(l?.name ? { name: l.name } : {}), ...(l?.note ? { note: l.note } : {}), ...(l?.at ? { labelAt: l.at } : {}) };
+  }
+
+  /**
+   * Tells the screens a run changed without a change of its own (its name or note was set).
+   *
+   * @param id - The run.
+   * @returns Whether the run is known.
+   */
+  touch(id: string): boolean {
+    const r = this.runs.get(id);
+    if (r) this.changed(r);
+    return !!r;
   }
 
   /** It ended, kept its conversation, and its work can be built again. */

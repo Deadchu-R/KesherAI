@@ -11,7 +11,7 @@
  * Privacy: events carry titles, tool names, step numbers, relative paths (only with `reportFileNames`) and counts,
  * never a prompt, a file's text, a diff or the model's output; paths pass `cleanAgentPath` (no home, no `..`).
  */
-import { cleanAgentPath, HUB_LIMITS, type ActivityEvent, type AgentFile, type AgentRunState, type AgentSource, type AgentWaiting, type HelperRunInfo, type InboxRunAsk, type InboxTaskView } from "@kesher/shared";
+import { AGENT_LABEL_LIMITS, cleanAgentPath, HUB_LIMITS, sameLabel, type ActivityEvent, type AgentFile, type AgentRunState, type AgentSource, type AgentWaiting, type HelperRunInfo, type InboxRunAsk, type InboxTaskView } from "@kesher/shared";
 
 /** One run as an adapter sees it now (the activity works out the events from the change). */
 export interface RunSnapshot {
@@ -34,6 +34,10 @@ export interface RunSnapshot {
   branch?: string;
   link?: string;
   failReason?: string;
+  /** The owner's name and note for it, and when they were set (agent-labels.ts). */
+  name?: string;
+  note?: string;
+  labelAt?: number;
 }
 
 /** One run's batch, ready to seal. */
@@ -67,6 +71,8 @@ interface Tracked {
   seenFiles: Set<string>;
   lastEventAt: number;
   stop?: () => Promise<boolean>;
+  /** Its name or note changed: the next flush sends its state even without new events. */
+  relabelled?: boolean;
 }
 
 const FLUSH_MS = 2000;
@@ -145,12 +151,27 @@ export class AgentActivity {
       this.add(r, { type: "started", title: s.title.slice(0, 120), source: s.source, ...(s.model ? { model: s.model } : {}) });
     }
     if (stop) r.stop = stop;
+    if (before && !sameLabel(before, s)) r.relabelled = true;
     r.snap = s;
     if (s.step > (before?.step ?? 0)) this.step(r, s, t);
     if (s.tokensIn !== undefined && (s.tokensIn !== before?.tokensIn || s.tokensOut !== before?.tokensOut)) this.usage(r, s);
     this.files(r, s.files ?? []);
     if (s.state !== before?.state || s.waiting?.requestId !== before?.waiting?.requestId) this.stateChanged(r, s);
     this.soon();
+  }
+
+  /**
+   * The owner renamed a run or changed its note: a going run sends its state at the next flush; one that ended (and
+   * was forgotten here) is sent once now, from its snapshot, so the viewers' card shows the new name.
+   *
+   * @param s - The run as it is now, with its label.
+   */
+  relabel(s: RunSnapshot): void {
+    if (!this.o.enabled()) return;
+    if (this.runs.has(s.runId) || GOING.has(s.state)) return this.observe(s);
+    const t = this.now();
+    const state = this.stateOf({ snap: s, seq: 0, pending: [], lastStepAt: 0, lastSentAt: t, files: s.files?.length ?? 0, fileNames: [], seenFiles: new Set(), lastEventAt: s.endedAt ?? s.startedAt ?? t });
+    this.o.send([{ runId: s.runId, state, events: [] }]);
   }
 
   /** A step event, at most one per second per run (a newer step replaces the one not yet sent). */
@@ -240,6 +261,9 @@ export class AgentActivity {
       ...(s.state === "waiting" && s.waiting ? { waiting: s.waiting } : {}),
       ...(s.branch ? { branch: s.branch } : {}),
       ...(s.link ? { link: s.link } : {}),
+      ...(s.name ? { name: s.name.slice(0, AGENT_LABEL_LIMITS.nameChars) } : {}),
+      ...(s.note ? { note: s.note.slice(0, AGENT_LABEL_LIMITS.noteChars) } : {}),
+      ...(s.labelAt ? { labelAt: s.labelAt } : {}),
     };
   }
 
@@ -252,7 +276,8 @@ export class AgentActivity {
     const out: ActivityBatch[] = [];
     const t = this.now();
     for (const r of this.runs.values()) {
-      if (!r.pending.length) continue;
+      if (!r.pending.length && !r.relabelled) continue;
+      r.relabelled = false;
       out.push({ runId: r.snap.runId, state: this.stateOf(r), events: r.pending.splice(0, HUB_LIMITS.agentBatchEvents) });
       r.lastSentAt = t;
     }
@@ -336,6 +361,9 @@ export function helperSnapshot(r: HelperRunInfo, inboxAsks: string): RunSnapshot
     files,
     ...(waiting ? { waiting } : {}),
     ...(r.state === "failed" ? { failReason: r.error?.startsWith("Took longer") ? "Took too long" : "Failed" } : {}),
+    ...(r.name ? { name: r.name } : {}),
+    ...(r.note ? { note: r.note } : {}),
+    ...(r.labelAt ? { labelAt: r.labelAt } : {}),
   };
 }
 

@@ -7,6 +7,7 @@
  * Everything here is plain data and small validators, with no Node or browser API, so the Worker, the PC (core) and
  * the phone page share one copy.
  */
+import { cleanAgentLabel, type AgentLabel } from "./agent-label.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -210,8 +211,11 @@ export type SealedBody =
   | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny"; forMinutes?: number }
   /** Everything waiting for the user's approval on a PC, whole (the newest snapshot replaces the last). */
   | { type: "approvals"; items: HubApproval[]; at: number }
-  /** The owner's press on the hub page or the phone, for a task of a PC's task inbox (see {@link HubCommandAction}). */
-  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string }
+  /**
+   * The owner's press on the hub page or the phone, for a task of a PC's task inbox (see {@link HubCommandAction}).
+   * `agent-label`: `taskId` is an agent run's id and `label` its new name and note (empty fields clear them).
+   */
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel }
   /** The PC's answer to a command: done, or why not (a short line). */
   | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
@@ -223,9 +227,10 @@ export type SealedBody =
 /**
  * What the owner can press for a task of a PC's task inbox from another device: `inbox-run` runs a task that waits for
  * Run (as the PC's own Run button, one press one run, within the daily limit), `inbox-cancel` skips a waiting task or
- * stops a running one. The task is named by its inbox id or by its Google Drive record id.
+ * stops a running one. The task is named by its inbox id or by its Google Drive record id. `agent-label` renames an
+ * agent run and sets its note (agent-label.ts); the PC keeps the label and sends the run's state again.
  */
-export type HubCommandAction = "inbox-run" | "inbox-cancel";
+export type HubCommandAction = "inbox-run" | "inbox-cancel" | "agent-label";
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -383,6 +388,10 @@ export interface AgentRunState {
   link?: string;
   /** The ended run's short result line (from its `done` event). */
   summary?: string;
+  /** The owner's name and note for the run, and when they were set (agent-label.ts; the newest `labelAt` wins). */
+  name?: string;
+  note?: string;
+  labelAt?: number;
 }
 
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
@@ -596,7 +605,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
     case "command":
-      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel")) return null;
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label")) return null;
+      if (b.action === "agent-label") return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
       return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
     case "command_result":
       if (!isHubId(b.commandId) || !isHubId(b.taskId)) return null;
@@ -743,7 +753,14 @@ export function parseAgentState(x: unknown, runId: string): AgentRunState | null
     ...(branch ? { branch } : {}),
     ...(isSafeLink(s.link) ? { link: s.link } : {}),
     ...optStr("summary", s.summary, 300),
+    ...labelOf(s),
   };
+}
+
+/** The owner's label carried in a run's state, cleaned (agent-label.ts). */
+function labelOf(s: Record<string, unknown>): Pick<AgentRunState, "name" | "note" | "labelAt"> {
+  const l = cleanAgentLabel(s, typeof s.labelAt === "number" ? s.labelAt : undefined);
+  return { ...(l.name ? { name: l.name } : {}), ...(l.note ? { note: l.note } : {}), ...(l.at ? { labelAt: l.at } : {}) };
 }
 
 /** What {@link syncPinger} gives back. */

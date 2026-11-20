@@ -86,6 +86,15 @@ export async function helperRoutes(app: FastifyInstance, s: KesherServices): Pro
   /** "Stop all" in the strip: the helpers only (the chat's own Stop stops the chat and them). */
   app.post<{ Params: { id: string } }>("/api/conversations/:id/helpers/stop", async (req) => ({ stopped: helpers().runs.stopAll(req.params.id) }));
 
+  /**
+   * The owner's name and note for a helper (docs/RESEARCH_LOG.md, "Agent names and notes"): empty fields clear them.
+   * The note is the owner's own and is never given to the helper's model (to tell it something, use `message`).
+   */
+  app.put<{ Params: { id: string; hid: string }; Body: { name?: unknown; note?: unknown } }>("/api/conversations/:id/helpers/:hid/label", async (req, reply) => {
+    if (!runOf(req.params.id, req.params.hid) || !s.agentLabels) return reply.code(404).send({ error: "No such sub-agent" });
+    return { label: s.agentLabels.set(req.params.hid, { name: req.body?.name, note: req.body?.note }) };
+  });
+
   /** The card's question (a cloud helper and the project's files): asked once per project, the answer is kept. */
   app.post<{ Params: { id: string; hid: string }; Body: { yes?: boolean } }>("/api/conversations/:id/helpers/:hid/answer", async (req, reply) => {
     if (!runOf(req.params.id, req.params.hid)) return reply.code(404).send({ error: "No such sub-agent" });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { HelperRunInfo } from "@kesher/shared";
+import { agentDoing, stepTool, type AgentLabel, type HelperRunInfo, type LabelWords } from "@kesher/shared";
+import { AgentLabelEditor, AgentLabelLines, words } from "./AgentLabel";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
@@ -110,6 +111,21 @@ export function useHelperRuns(convId: string): { runs: HelperRunInfo[]; set: (ru
   }, [convId]);
   return { runs, set, agents };
 }
+
+/**
+ * Saves the owner's name and note for a run (empty fields clear them).
+ *
+ * @param convId - The chat.
+ * @param id - The run.
+ * @param label - The name and note.
+ */
+export const saveLabel = (convId: string, id: string, label: AgentLabel) => api(`/api/conversations/${convId}/helpers/${id}/label`, { method: "PUT", body: label });
+
+/** The run's own "doing now" line, from its state and latest step (none once it ended). */
+export const helperDoing = (r: HelperRunInfo): LabelWords | undefined => agentDoing({ state: r.state === "waiting" ? "queued" : r.state, ...stepTool(r.steps.at(-1)) });
+
+/** The run's shown name: the owner's, or its task. */
+export const helperName = (r: HelperRunInfo): string => r.name || r.title;
 
 export const stop = (convId: string, id: string) => void api(`/api/conversations/${convId}/helpers/${id}/stop`, { method: "POST" }).catch(() => undefined);
 
@@ -346,6 +362,7 @@ function Report({ r, convId }: { r: HelperRunInfo; convId: string }) {
 export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: string }) {
   const now = useNow(going(r));
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const note = getLocale() === "he" ? r.modelNoteHe ?? r.modelNote : r.modelNote;
   return (
     <div className={`hcard ${going(r) && r.state !== "waiting" ? "live" : ""}`} id={`helper-${r.id}`}>
@@ -353,13 +370,14 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         <StateMark r={r} />
         <span aria-hidden>{KINDS[r.kind].icon}</span>
         <b>{helperKindName(r)}</b>
-        <span className="htitle" title={r.title}>{r.title}</span>
+        <span className={`htitle${r.name ? " named" : ""}`} title={r.title} dir="auto">{helperName(r)}</span>
         {r.cloud && <span className="htag t-wait">☁ {r.cloudFiles === false ? L("ענן · רק שאלה, בלי קבצי הפרויקט", "cloud · the question only, no project files") : L("ענן", "cloud")}</span>}
         <ModelChip r={r} />
         <UsageChip r={r} />
         <ResumedTag r={r} />
         <ContinuedTag r={r} />
         <StateTag r={r} now={now} />
+        <button type="button" className="hbtn" aria-expanded={editing} aria-label={L("שם והערה לסוכן", "The agent's name and note")} title={L("שם והערה", "Name and note")} onClick={() => setEditing((e) => !e)}>✎ <span className="hbtn-t">{r.name || r.note ? L("ערוך", "Edit") : L("שם והערה", "Name & note")}</span></button>
         {going(r) ? (
           <button type="button" className="hbtn" onClick={() => stop(convId, r.id)}>■ {L("עצור", "Stop")}</button>
         ) : r.steps.length > 0 ? (
@@ -367,6 +385,8 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
         ) : null}
       </div>
       {note && (going(r) || open) && <div className="hnote muted small">{note}</div>}
+      <AgentLabelLines title={r.title} name={r.name} note={r.note} doing={r.state === "running" ? helperDoing(r) : undefined} />
+      {editing && <AgentLabelEditor title={r.title} label={{ name: r.name, note: r.note }} save={(l) => saveLabel(convId, r.id, l)} onClose={() => setEditing(false)} />}
       {r.state === "waiting" && r.restart === "paused" && <div className="hsteps warn">{L("KesherAI הופעל מחדש באמצע העבודה. הסוכן ימשיך לבד מהצעד שבו עצר כשהמודל מוכן.", "KesherAI restarted while it worked. It goes on by itself from the step where it stopped once the model is ready.")}</div>}
       {r.state === "waiting" && !r.restart && <div className="hsteps warn">{L(`ממתין לתור: עד ${r.waitLimit ?? 1} בבת אחת על כרטיס המסך הזה. יתחיל כשאחד יסתיים.`, `Waiting in the queue: up to ${r.waitLimit ?? 1} at once on this graphics card. Starts when one ends.`)}</div>}
       {r.state === "asking" && (r.runAsk ? <RunAskRow r={r} /> : <AskRow r={r} convId={convId} />)}
@@ -415,10 +435,10 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
           const t = elapsed(r, now);
           return (
             <div key={r.id} className={`hchip ${r.state === "waiting" ? "waiting" : ""}`}>
-              <button type="button" className="hchip-open" onClick={() => onOpen(r)} title={r.usage ? `${r.title} · ↑${kTokens(r.usage.input)} ↓${kTokens(r.usage.output)}` : r.title}>
+              <button type="button" className="hchip-open" onClick={() => onOpen(r)} title={[r.name, r.title, r.note, r.usage ? `↑${kTokens(r.usage.input)} ↓${kTokens(r.usage.output)}` : ""].filter(Boolean).join(" · ")}>
                 <StateMark r={r} />
                 <span aria-hidden>{KINDS[r.kind].icon}</span>
-                <span className="hchip-name">{helperKindName(r)}<span className="hchip-task">: {r.title}</span></span>
+                <span className="hchip-name">{r.name || helperKindName(r)}<span className="hchip-task">: {r.name ? words(helperDoing(r)) || r.title : r.title}</span></span>
                 <span className="hmodel">{r.model}</span>
                 {r.state === "waiting" && r.restart === "paused" ? <span className="warn small">{L("הושהה", "paused")}</span> : r.state === "waiting" ? <span className="warn small">{L("בתור", "queued")}</span> : r.state === "asking" ? <span className="ask small">{L("שואל", "asking")}</span> : <span className="mono muted">{t === undefined ? "" : clock(t)}</span>}
               </button>
@@ -445,10 +465,11 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
  */
 export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; convId: string; onClose: () => void }) {
   const now = useNow(going(r));
+  const [editing, setEditing] = useState(false);
   const note = getLocale() === "he" ? r.modelNoteHe ?? r.modelNote : r.modelNote;
   return (
     <div className="hsheet-wrap" onClick={onClose}>
-      <div className="hsheet" role="dialog" aria-modal="true" aria-label={`${helperKindName(r)}: ${r.title}`} onClick={(e) => e.stopPropagation()}>
+      <div className="hsheet" role="dialog" aria-modal="true" aria-label={`${helperKindName(r)}: ${helperName(r)}`} onClick={(e) => e.stopPropagation()}>
         <div className="hsheet-handle" aria-hidden />
         <div className="hd">
           <StateMark r={r} />
@@ -459,7 +480,12 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
           <ContinuedTag r={r} />
           <StateTag r={r} now={now} />
         </div>
-        <div className="hsheet-task">{r.title}</div>
+        <div className="row">
+          <div className="hsheet-task grow" dir="auto">{helperName(r)}</div>
+          <button type="button" className="hbtn" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>✎ {r.name || r.note ? L("ערוך", "Edit") : L("שם והערה", "Name & note")}</button>
+        </div>
+        <AgentLabelLines title={r.title} name={r.name} note={r.note} doing={r.state === "running" ? helperDoing(r) : undefined} />
+        {editing && <AgentLabelEditor title={r.title} label={{ name: r.name, note: r.note }} save={(l) => saveLabel(convId, r.id, l)} onClose={() => setEditing(false)} />}
         <div className="row small"><ModelChip r={r} /><UsageChip r={r} />{note && <span className="muted">{note}</span>}</div>
         <div className="hprog small">
           <span>{L(`צעד ${r.step} מתוך ${r.maxSteps}`, `Step ${r.step} of ${r.maxSteps}`)}</span>

@@ -4,7 +4,7 @@
  * button: one press is one run, with every check of `TaskInbox.run` (Antigravity only, one at a time, the daily limit,
  * the quota, the PC not busy). Cancel skips a waiting task, or stops a running one (its work so far is kept).
  */
-import type { HubCommandAction } from "@kesher/shared";
+import type { AgentLabel, HubCommandAction } from "@kesher/shared";
 
 /** What a command needs from the app. */
 export interface InboxCommandDeps {
@@ -29,6 +29,7 @@ export interface InboxCommandDeps {
  * @returns Done, or why not (the inbox's own words).
  */
 export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction, taskId: string, from: { id: string }): Promise<{ ok: boolean; text: string }> {
+  if (action === "agent-label") return { ok: false, text: "Not a task command." };
   const ids = await d.ids();
   const id = ids.includes(taskId) ? taskId : await d.fromDrive?.(taskId);
   if (!id || !ids.includes(id)) return { ok: false, text: "This PC does not have that task." };
@@ -43,4 +44,28 @@ export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction
   } catch (e) {
     return { ok: false, text: ((e as Error).message || "It did not work.").slice(0, 300) };
   }
+}
+
+/** What renaming an agent from the hub needs from the app. */
+export interface AgentLabelDeps {
+  /** Whether this PC has the run (a chat helper's or an inbox run's id). */
+  known: (runId: string) => Promise<boolean>;
+  /** Keeps the label (agent-labels.ts); the app then sends the run's state again. */
+  set: (runId: string, label: AgentLabel) => AgentLabel | undefined;
+}
+
+/**
+ * Renames an agent run and sets its note, pressed on the owner's paired phone or hub page (hub-client.ts checks the
+ * sender). Only a run this PC has is labelled, so a stray id never grows the list.
+ *
+ * @param d - The runs and the labels.
+ * @param runId - The run.
+ * @param label - Its new name and note (cleaned by the protocol and again by the store; empty clears).
+ * @returns Done, or why not.
+ */
+export async function agentLabelCommand(d: AgentLabelDeps, runId: string, label: AgentLabel): Promise<{ ok: boolean; text: string }> {
+  if (!(await d.known(runId).catch(() => false))) return { ok: false, text: "This PC does not have that agent." };
+  const l = d.set(runId, { ...(label.name ? { name: label.name } : {}), ...(label.note ? { note: label.note } : {}) });
+  if (!l) return { ok: false, text: "This PC does not have that agent." };
+  return { ok: true, text: l.name || l.note ? "Saved on the PC." : "Cleared on the PC." };
 }

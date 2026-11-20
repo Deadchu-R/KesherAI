@@ -7,10 +7,11 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { INBOX_GIT_MISSING, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { agentDoing, INBOX_GIT_MISSING, type AgentLabel, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -236,7 +237,9 @@ function QueueRow({ t, state, act, busy }: { t: InboxTaskView; state: InboxState
     <div className="tinbox-row">
       <span className="tinbox-id small muted" dir="ltr">{t.id}</span>
       <div className="tinbox-title">
-        <button type="button" className="link" onClick={open}>{t.title}</button>
+        <button type="button" className="link" onClick={open} dir="auto">{t.label?.name || t.title}</button>
+        {t.label?.name && <div className="small muted alab-sub" dir="auto">{t.title}</div>}
+        {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}</div>
       </div>
       <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span></span>
@@ -307,6 +310,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
 /** A task's own page: the spec, the live plan, the policy, an asked step, the changes, the checks and the result. */
 function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act: Act; busy: boolean }) {
   const [t, setT] = useState<InboxTaskView | null>(null);
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     const get = () => void api<InboxTaskView>(`/api/task-inbox/tasks/${encodeURIComponent(id)}`).then(setT, () => setT(null));
     get();
@@ -324,12 +328,22 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
     <div className="page stack tinbox tinbox-task">
       <p className="small"><a href="#/task-inbox">📥 {L("תיבת משימות", "Task inbox")}</a> › <span dir="ltr">{t.id}</span></p>
       <div className="row wrap">
-        <h1 className="grow">{t.title}</h1>
+        <h1 className="grow" dir="auto">{t.label?.name || t.title}</h1>
+        <button type="button" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>✎ {t.label?.name || t.label?.note ? L("ערוך שם והערה", "Edit name & note") : L("שם והערה", "Name & note")}</button>
         <span className={`tinbox-ex ${ex.cls}`}>{ex.text}{t.modelUsed ? ` · ${t.modelUsed}` : ""}</span>
         <span className={`tinbox-st ${st.cls}`}>{st.text}{minutes !== undefined ? ` · ${minutes} ${L("דק׳", "min")}` : ""}</span>
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
       </div>
+      <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
+      {editing && (
+        <AgentLabelEditor
+          title={t.title}
+          label={t.label ?? {}}
+          save={(l: AgentLabel) => api<{ label: AgentLabel }>(`/api/task-inbox/tasks/${encodeURIComponent(t.id)}/label`, { method: "PUT", body: l }).then((r) => setT({ ...t, label: r.label }))}
+          onClose={() => setEditing(false)}
+        />
+      )}
       {t.runAsk && <RunAsk t={t} state={state} act={act} busy={busy} />}
       {t.note && <p className="small tinbox-err">{t.note}</p>}
 

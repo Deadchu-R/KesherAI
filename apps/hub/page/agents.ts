@@ -9,9 +9,15 @@
  * - Detail: the step timeline (newest first), files touched, and the buttons: Stop (a sealed `cancel`), Approve /
  *   Deny / Run (the sealed `approval_answer`), Open in Claude for a cloud run.
  *
+ * Names and notes (docs/RESEARCH_LOG.md, "Agent names and notes", 2026-11-20; boards HubAgentLabel, PhoneHubAgentLabel):
+ * the owner's name shows instead of the title (the title stays as a subtitle), the owner's note on the card and the
+ * detail, and the run's own "doing now" line apart from it. Edited on the detail; the edit goes to the PC as a sealed
+ * `agent-label` command, and the PC (the source of truth) sends the run's state again.
+ *
  * Everything shown came sealed from the PC (titles, steps, tool names, counts); the hub cannot read it.
  */
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
+import { agentDoing, AGENT_LABEL_LIMITS, type LabelWords } from "../../../packages/shared/src/agent-label.js";
 import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSource, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
@@ -106,23 +112,87 @@ function actions(v: AgentsView, c: AgentCard, pc: HubPresence | undefined): HTML
         ? [btn(L("כן", "Yes"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("לא", "No"), "", () => v.device.answerAgent(c, "deny"))]
         : [btn(L("✓ אשר", "✓ Approve"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("דחה", "Deny"), "", () => v.device.answerAgent(c, "deny"))]
     : [];
-  const stop = btn(L("■ עצור", "■ Stop"), "bad", async () => (confirm(L(`לעצור את "${c.state.title}"?`, `Stop "${c.state.title}"?`)) ? v.device.stopAgent(c) : true));
+  const stop = btn(L("■ עצור", "■ Stop"), "bad", async () => (confirm(L(`לעצור את "${c.state.name || c.state.title}"?`, `Stop "${c.state.name || c.state.title}"?`)) ? v.device.stopAgent(c) : true));
   return h("div", { class: "row wrap acts" }, ...answer, stop, off ? h("span", { class: "mut xs" }, L("המחשב כבוי", "The PC is off")) : null);
 }
+
+/** The run's own "doing now" line (a going run, from its latest tool and file), in words. */
+function doingOf(c: AgentCard, st: AgentRunStateName): LabelWords | undefined {
+  if (st !== "running") return undefined;
+  return agentDoing({ state: "running", tool: c.state.label, target: c.state.fileNames.at(-1) });
+}
+
+/** "Now: …" as a line. */
+const doingLine = (d: LabelWords) => h("div", { class: "sm wrapl adoing", dir: "auto" }, h("span", { class: "alab-k" }, L("עכשיו", "Now")), " ", L(d.he, d.en));
+
+/** The owner's note as a line (wraps; never cut). */
+const noteLine = (note: string) => h("div", { class: "sm wrapl anote", dir: "auto" }, h("span", { "aria-hidden": "true" }, "📝 "), note);
 
 /** One card of the list. */
 function card(v: AgentsView, c: AgentCard, now: number, pc: HubPresence | undefined): HTMLElement {
   const st = shownState(c, now);
   const src = SOURCE[c.state.source];
   const key = `${c.deviceId}/${c.runId}`;
-  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : c.state.label && isGoing(c) ? L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`) : (!isGoing(c) && c.state.summary) || "";
+  const { label } = v.device.shownLabel(c);
+  const name = label.name || c.state.title;
+  const doing = doingOf(c, st);
+  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : (!isGoing(c) && c.state.summary) || "";
   return h(
     "div",
-    { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": c.state.title, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
-    h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, c.state.title), stateTag(st)),
+    { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": name, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
+    h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: `grow ${label.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, name), stateTag(st)),
+    label.name ? h("div", { class: "xs mut wrapl", dir: "auto" }, c.state.title) : null,
     h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))),
+    doing ? doingLine(doing) : null,
     line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null,
+    label.note ? noteLine(label.note) : null,
     st === "waiting" ? actions(v, c, pc) : null,
+  );
+}
+
+/** The name-and-note form open on a run's detail (kept across redraws, so typing survives live updates). */
+let edit: { key: string; name: string; note: string } | undefined;
+
+/**
+ * A run's name and note on its detail: the note, "✎ Name and note", and the form. Saving sends it to the run's PC
+ * (disabled while that PC is off); the PC's "no" shows here in its words.
+ */
+function labelSection(v: AgentsView, c: AgentCard, pc: HubPresence | undefined): HTMLElement {
+  const key = `${c.deviceId}/${c.runId}`;
+  const shown = v.device.shownLabel(c);
+  const off = !pc?.online || !v.device.connected;
+  if (edit && edit.key !== key) edit = undefined;
+  const status = shown.pending ? h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…")) : shown.error ? h("span", { class: "sm bad wrapl" }, L("המחשב לא שמר: ", "The PC did not save it: ") + shown.error) : null;
+  if (!edit) {
+    return h(
+      "section",
+      { class: "card pad stack alabel" },
+      h("div", { class: "row wrap" }, h("b", { class: "grow" }, L("שם והערה", "Name and note")), status, h("button", { type: "button", class: "btn sm-btn", disabled: off, onclick: () => { edit = { key, name: shown.label.name ?? "", note: shown.label.note ?? "" }; v.render(); } }, shown.label.name || shown.label.note ? L("✎ ערוך", "✎ Edit") : L("✎ הוסף", "✎ Add"))),
+      shown.label.note ? noteLine(shown.label.note) : h("span", { class: "sm mut" }, L("אין הערה. אפשר לתת לסוכן שם ולכתוב לעצמך מה הוא עושה.", "No note. You can name the agent and note for yourself what it does.")),
+      off ? h("span", { class: "mut xs" }, L("המחשב כבוי: אפשר לערוך כשהוא מחובר.", "The PC is off: edit when it is on.")) : null,
+    );
+  }
+  const e = edit;
+  const save = (name: string, note: string) =>
+    void v.device.labelAgent(c, { name, note }).then((ok) => {
+      if (ok) edit = undefined;
+      v.render();
+    });
+  return h(
+    "section",
+    { class: "card pad stack alabel" },
+    h("b", null, L("שם והערה", "Name and note")),
+    h("label", { class: "stack sm mut" }, L("שם לסוכן", "Agent name"), h("input", { class: "inp", dir: "auto", maxlength: AGENT_LABEL_LIMITS.nameChars, "aria-label": L("שם לסוכן", "Agent name"), placeholder: c.state.title, value: e.name, oninput: (ev: Event) => { e.name = (ev.target as HTMLInputElement).value; } })),
+    h("label", { class: "stack sm mut" }, L("הערה (רק בשבילך, לא נשלחת לסוכן)", "Note (just for you, not sent to the agent)"), h("textarea", { class: "inp area", rows: 3, dir: "auto", maxlength: AGENT_LABEL_LIMITS.noteChars, "aria-label": L("הערה לסוכן", "Agent note"), placeholder: L("למשל: בודק את הבאג של ההתחברות", "For example: checking the login bug"), value: e.note, oninput: (ev: Event) => { e.note = (ev.target as HTMLTextAreaElement).value; } })),
+    h(
+      "div",
+      { class: "row wrap" },
+      h("button", { type: "button", class: "btn pri", disabled: off, onclick: () => save(e.name, e.note) }, L("שמור במחשב", "Save on the PC")),
+      h("button", { type: "button", class: "btn", onclick: () => { edit = undefined; v.render(); } }, L("ביטול", "Cancel")),
+      h("span", { class: "grow" }),
+      shown.label.name || shown.label.note ? h("button", { type: "button", class: "link sm", disabled: off, onclick: () => save("", "") }, L("נקה שם והערה", "Clear name and note")) : null,
+    ),
+    off ? h("span", { class: "mut xs" }, L("המחשב כבוי: אפשר לשמור כשהוא מחובר.", "The PC is off: save when it is on.")) : status,
   );
 }
 
@@ -154,7 +224,8 @@ function snapshotCard(a: SyncedAgent): HTMLElement {
   return h(
     "div",
     { class: "acard snap" },
-    h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: "grow ell1" }, b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))),
+    h("div", { class: "row" }, h("span", { class: `dot ${st ? STATE[st].dot : "off"}`, "aria-hidden": "true" }), h("b", { class: `grow ${b.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, b.name || b.title), st ? stateTag(st) : h("span", { class: "tag t-off" }, L("לא הסתיים", "Did not finish"))),
+    b.name ? h("div", { class: "xs mut wrapl", dir: "auto" }, b.title) : null,
     h(
       "div",
       { class: "row wrap mut sm" },
@@ -165,6 +236,7 @@ function snapshotCard(a: SyncedAgent): HTMLElement {
       h("span", { class: "mono xs" }, [b.steps ? L(`${b.steps} צעדים`, `${b.steps} steps`) : "", Number.isFinite(span) ? `⏱ ${duration(span)}` : "", b.endedAt ? when(b.endedAt) : b.updatedAt ? L("נראה לאחרונה ", "last seen ") + when(b.updatedAt) : ""].filter(Boolean).join(" · ")),
     ),
     b.summary ? h("div", { class: "sm wrapl", dir: "auto" }, b.summary) : null,
+    b.note ? noteLine(b.note) : null,
   );
 }
 
@@ -277,11 +349,14 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
   const src = SOURCE[s.source];
   const fact = (he: string, en: string, value: string) => h("div", { class: "card stat" }, h("b", null, value), h("div", { class: "mut xs" }, L(he, en)));
   const end = s.endedAt ?? (isGoing(c) ? now : s.lastEventAt);
+  const name = v.device.shownLabel(c).label.name;
+  const doing = doingOf(c, st);
   return h(
     "main",
     { class: "page" },
     back(v),
-    h("div", { class: "row wrap" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow" }, s.title), stateTag(st)),
+    h("div", { class: "row wrap" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow min0 wrapl", dir: "auto" }, name || s.title), stateTag(st)),
+    name ? h("div", { class: "sm mut wrapl", dir: "auto" }, L("משימה: ", "Task: "), s.title) : null,
     h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `${deviceIcon(pc?.kind)} ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)),
     st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null,
     st !== "waiting" ? actions(v, c, pc) : null,
@@ -293,7 +368,8 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
       fact("טוקנים", "Tokens", s.tokensIn !== undefined ? tokens(s.tokensIn + (s.tokensOut ?? 0)) : "–"),
       fact("קבצים", "Files", String(s.files)),
     ),
-    s.label && isGoing(c) ? h("div", { class: "sm" }, L("עכשיו: ", "Now: "), h("span", { class: "mono" }, s.label)) : null,
+    doing ? doingLine(doing) : null,
+    labelSection(v, c, pc),
     s.summary && !isGoing(c) ? h("section", { class: "card pad sm lines" }, s.summary) : null,
     s.fileNames.length ? h("section", { class: "sec" }, h("h3", { class: "sm" }, L(`קבצים שנגעו בהם (${s.files})`, `Files touched (${s.files})`)), h("ul", { class: "files" }, s.fileNames.map((f) => h("li", { class: "mono xs ell", dir: "ltr" }, f)))) : s.files ? h("div", { class: "mut sm" }, L(`נגע ב-${s.files} קבצים (השמות לא משותפים; במחשב: הגדרות › ענן Kesher).`, `Touched ${s.files} files (names are not shared; on the PC: Settings › Kesher Cloud).`)) : null,
     s.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono", dir: "ltr" }, s.branch)) : null,
@@ -336,7 +412,7 @@ export function agentsSummary(v: AgentsView): HTMLElement | null {
     h("div", { class: "row head" }, h("b", null, L("סוכנים עכשיו", "Agents now")), h("span", { class: "tag t-run" }, String(going.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#agents" }, L("הכול ›", "All ›"))),
     going.slice(0, 3).map((c) => {
       const st = shownState(c, now);
-      return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell" }, c.state.title), stateTag(st));
+      return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell", dir: "auto" }, v.device.shownLabel(c).label.name || c.state.title), stateTag(st));
     }),
   );
 }
