@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agentPrompt, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushAllowed, pushRef, resultFileText, routeTask, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
+import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushAllowed, pushRef, resultFileText, routeTask, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
 const FILE = `---
 id: c-20261119-04
@@ -175,4 +175,18 @@ test("inbox: the research prompt may search but not download, sign in or pay, an
   assert.doesNotMatch(p, /do not use the network/i);
   const text = resultFileText({ ...r.spec, status: "done", runBy: "gemini", branch: "", researchReport: "# Sync\n\nText [1]\n\n## Sources\n\n1. [A](https://a.example/x)" });
   assert.match(text, /## Research report\n# Sync/);
+});
+
+test("inbox: a local task is small, unless it converts or ports something (then big, like the other executors)", () => {
+  const small = { title: "Fix a typo in the docs", goal: "Fix the typo in README.", maxFiles: 2 };
+  assert.equal(boardSizeFor(small, "local"), "small");
+  assert.equal(boardSizeFor(small, "antigravity"), "big");
+  assert.equal(boardSizeFor({ ...small, title: "Convert the Unreal plugin to Unreal 5.2" }, "local"), "big");
+  assert.equal(boardSizeFor({ ...small, goal: "Port the helper to the new API." }, "local"), "big");
+  assert.equal(boardSizeFor({ ...small, title: "המר את התוסף" }, "local"), "big");
+  // A plugin copy (extra folder under integrations/) or a task that may touch many files is big too.
+  assert.equal(boardSizeFor({ ...small, allowedPaths: ["integrations/unreal/KesherAI-5.2/**"] }, "local"), "big");
+  assert.equal(boardSizeFor({ ...small, maxFiles: 60 }, "local"), "big");
+  // "report" or "support" are not "port".
+  assert.equal(boardSizeFor({ ...small, goal: "Write the report and support text." }, "local"), "small");
 });

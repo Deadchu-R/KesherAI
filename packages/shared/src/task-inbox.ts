@@ -105,6 +105,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   branch: string;
   /** The board item it was put on (the shared task board). */
   boardId?: string;
+  /** A local-model task's board item while it is not ended: open = waits for the local agent, claimed = it works on it. */
+  boardState?: "open" | "claimed";
   /** The model it ran on, as the agent named it. */
   modelUsed?: string;
   plan?: Array<{ content: string; status: string }>;

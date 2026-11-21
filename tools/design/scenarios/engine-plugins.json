@@ -136,6 +136,23 @@
     "executor": "antigravity",
     "copy": "integrations/unreal/KesherAIBridge-ue4.27"
    }
+  },
+  {
+   "url": "**/api/self-work",
+   "json": {
+    "run": {
+     "repo": "D:/Projects/KesherAI",
+     "goal": "המשימות בלוח",
+     "branch": "self-work/last",
+     "check": "pnpm -s typecheck",
+     "convId": "c1",
+     "status": "stopped",
+     "until": 0,
+     "steps": 0,
+     "items": [],
+     "note": "The worker is not running now."
+    }
+   }
   }
  ],
  "boards": [
@@ -186,6 +203,40 @@
     },
     {
      "scroll": ".convert-ai"
+    }
+   ]
+  },
+  {
+   "id": "EngineConvertLocalOff",
+   "title": "תוסף מנוע: \"המר במודל המקומי\" כשהסוכן המקומי כבוי — \"המודל המקומי לא פועל עכשיו — הפעל\" (לא מתחיל בשקט)",
+   "titleEn": "Engine plugin: \"Convert with the local model\" while the local agent is off — \"The local agent is not running — Start\" (never started silently)",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "steps": [
+    {
+     "wait": ".ue-batch .convert-ai-open"
+    },
+    {
+     "click": ".ue-batch .convert-ai-open"
+    },
+    {
+     "wait": ".convert-ai"
+    },
+    {
+     "click": ".convert-ai button:has-text(\"המר במודל המקומי\")"
+    },
+    {
+     "wait": ".local-agent-off"
+    },
+    {
+     "scroll": ".local-agent-off"
     }
    ]
   }

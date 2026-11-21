@@ -9,7 +9,7 @@ import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import type { TaskBoard } from "./task-board.js";
-import { agentPrompt, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
+import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
 /**
  * The task inbox on the PC (docs/RESEARCH_LOG.md, "A task inbox", plan steps 2, 4 and 6): fetches the `kesher-inbox`
@@ -388,7 +388,7 @@ export class TaskInbox {
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
-      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: runBy === "local" ? "small" : "big" }]).catch(() => undefined);
+      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: boardSizeFor(spec, runBy) }]).catch(() => undefined);
       const added = b?.tasks.at(-1);
       if (added) {
         t.boardId = added.id;
@@ -412,6 +412,11 @@ export class TaskInbox {
     for (const t of this.saved.tasks) {
       if (t.runBy !== "local" || t.status !== "queued" || !t.boardId) continue;
       const item = board.tasks.find((x) => x.id === t.boardId);
+      if (item && (item.status === "open" || item.status === "claimed")) {
+        // Shown on the hub: open = waits for the local agent, claimed = it is working on it.
+        if (t.boardState !== item.status) t.boardState = item.status;
+        continue;
+      }
       if (!item || (item.status !== "done" && item.status !== "blocked")) continue;
       t.status = item.status === "done" ? "done" : "failed";
       t.summary = (item.result ?? "").slice(0, 2000);

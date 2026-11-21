@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
+import { LocalAgentNotice } from "../LocalAgentNotice";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -52,11 +53,15 @@ export function ConvertWithAI({ engine, version, project, errors }: Unsupported 
   };
   if (done)
     return (
+      <>
       <p className="pill good convert-ai-done">
         ✅ {L(`משימה ${done.id} נוספה לתיבת המשימות`, `Task ${done.id} added to the task inbox`)}
         {" · "}
         {done.executor === "antigravity" ? L("לחצו Run במחשב כדי להתחיל", "Press Run on the computer to start") : L("המודל המקומי ייקח אותה מלוח המשימות", "The local model takes it from the task board")}
       </p>
+      {/* A local task only runs while self-work does: say so, with a Start button (never started silently). */}
+      {done.executor === "local" && <LocalAgentNotice />}
+      </>
     );
   if (!open) return <button type="button" className="convert-ai-open" onClick={() => setOpen(true)}>✨ {L("המר עם AI", "Convert with AI")}</button>;
   return (

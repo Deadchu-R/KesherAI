@@ -756,9 +756,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .queue { display: grid; gap: 6px; padding: 2px 4px 8px; }
 .queue-head { display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
 .queue ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.queue li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); border: 1px dashed var(--border-strong); font-size: 13.5px; }
+.queue li { display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px 8px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); border: 1px dashed var(--border-strong); font-size: 13.5px; }
 .queue-n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--panel-2); color: var(--muted); flex: none; }
-.queue-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+.queue-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.queue-top { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.queue-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; flex-wrap: wrap; }
+.queue-now { min-height: 26px; padding: 0 10px; font-size: 12px; border-radius: 999px; margin-inline-end: auto; }
+.queue-x:disabled { opacity: .35; }
+.queue li[draggable="true"] { cursor: grab; }
+.queue li.dragging { opacity: .5; }
+.queue-note { color: var(--muted); }
+.queue-stop { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); }
+/* Phone: the chips sit in one row that scrolls sideways, so the message box stays in view. */
+@media (max-width: 760px) {
+  .queue ol { display: flex; overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; padding-bottom: 2px; }
+  .queue li { flex: 0 0 min(78vw, 260px); scroll-snap-align: start; }
+  .queue-x { width: 32px; height: 32px; }
+  .queue-now { min-height: 32px; }
+}
 .queue li.steer { border-style: solid; border-color: var(--accent); }
 .queue-tag { display: inline-block; margin-inline-end: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; background: var(--panel-2); color: var(--accent); }
 .queue-edit { flex: 1; min-width: 0; display: grid; gap: 6px; }
@@ -766,7 +781,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .queue-edit .row { display: flex; gap: 6px; justify-content: flex-end; }
 .queue-head { flex-wrap: wrap; gap: 6px; }
 .queue-mode button { padding: 2px 10px; font-size: 12px; min-height: 28px; }
-.send.stop.stop-clear { font-size: 14px; }
 .queue-x { width: 26px; height: 26px; padding: 0; border: 0; border-radius: calc(8px * var(--r-scale, 1)); background: transparent; color: var(--muted); flex: none; }
 .queue-x:hover { background: var(--panel-2); color: var(--text); }
 .send.queue-send { background: var(--raised); color: var(--text); border: 1px dashed var(--border-strong); margin-inline-end: 6px; }
@@ -4674,3 +4688,5 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .sp-langs .chip-text { height: 34px; padding: 0 12px; color: var(--text); }
 .sp-langs .chip-text[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 .mic-detected { position: fixed; inset-inline: 12px; bottom: 88px; margin-inline: auto; max-width: 420px; z-index: 40; padding: 8px 12px; gap: 8px; justify-content: space-between; align-items: flex-start; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
+.local-agent-off { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn, #c9a227); background: color-mix(in srgb, var(--warn, #c9a227) 10%, transparent); }
+.local-agent-off button, .local-agent-off .btn { white-space: normal; }

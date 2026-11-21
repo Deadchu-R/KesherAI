@@ -421,3 +421,18 @@ test("board: one sealed snapshot to the online phones, on change only; a board c
   await r.client.reportBoard();
   assert.equal(snaps().length, 2, "stopped after the hub refused it");
 });
+
+test("a local task: waiting for the local agent while open on the board, running once the agent claimed it", () => {
+  const l = inboxTask({ runBy: "local", status: "queued", branch: "local/c-1120-01-fix", note: "Self-work takes it from the task board." });
+  assert.equal(hubInboxTask(l, 1)!.executor, "local");
+  assert.equal(hubInboxTask(l, 1)!.state, "waiting");
+  assert.equal(hubInboxTask({ ...l, boardState: "open" }, 1)!.state, "waiting");
+  assert.equal(hubInboxTask({ ...l, boardState: "claimed" }, 1)!.state, "running");
+  // Ended: the board's result.
+  const done = hubInboxTask({ ...l, boardState: "claimed", status: "done", summary: "Converted." }, 1)!;
+  assert.equal(done.state, "done");
+  assert.equal(done.result, "Converted.");
+  assert.equal(hubInboxTask({ ...l, status: "failed", summary: "Blocked: no tests." }, 1)!.state, "failed");
+  // Only a local task follows the board.
+  assert.equal(hubInboxTask(inboxTask({ boardState: "claimed" }), 1)!.state, "waiting-run");
+});

@@ -788,6 +788,113 @@
      "wait": ".assign-list"
     }
    ]
+  },
+  {
+   "id": "HubLocalTasks",
+   "title": "ענן Kesher: משימות — צ׳יפ \"מקומי\" וקבוצה משלו: ממתין לסוכן המקומי, רץ, הסתיים ונתקע (לפי הלוח)",
+   "titleEn": "Kesher Cloud: Tasks — a \"Local\" chip and group: waiting for the local agent, running, done and blocked (from the board)",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".trow"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "להמיר את תוסף Unreal לגרסה 5.2",
+      "status": "waiting",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "12m"
+      },
+      "line": "הסוכן המקומי לא פועל: הפעל אותו במחשב או בעבודה עצמית."
+     },
+     {
+      "title": "לסדר את שמות הקבצים בתיקיית התיעוד",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      }
+     },
+     {
+      "title": "לתקן שגיאת כתיב בקובץ ההגדרות",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "3h"
+      },
+      "line": "תוקן והבדיקות עברו."
+     },
+     {
+      "title": "להמיר את חבילת Unity לגרסה 2020",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "6h"
+      },
+      "line": "נתקע: חסרה הגדרה בקובץ החבילה."
+     }
+    ]
+   }
   }
  ]
 }

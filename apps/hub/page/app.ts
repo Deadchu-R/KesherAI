@@ -211,7 +211,8 @@ function statusTag(t: PageTask): HTMLElement {
     case "outbox":
       return h("span", { class: "tag t-wait" }, L("⇡ ממתין לשליחה", "⇡ Waiting to send"));
     case "waiting":
-      return h("span", { class: "tag t-wait" }, t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
+      // A local-model task waits on the board until the PC's local agent takes it.
+      return h("span", { class: "tag t-wait" }, t.inbox?.executor === "local" ? L("ממתין לסוכן המקומי", "Waiting for the local agent") : t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
     case "waiting-run":
       return h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
     case "deferred":
@@ -242,7 +243,7 @@ function routeChip(t: PageTask): HTMLElement {
     if (ex === "claude") return h("span", { class: "ex ex-opus" }, "✷ Claude");
     if (ex === "gemini") return h("span", { class: "ex ex-gem", title: t.toName }, L("✧ Gemini (חינמי)", "✧ Gemini (free)"));
     // An executor this page does not know yet (a newer PC) is shown as written.
-    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מודל מקומי", "Local model") : ex;
+    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מקומי", "Local") : ex;
     return h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${name}`);
   }
   return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
@@ -738,11 +739,12 @@ function runButtons(t: PageTask): HTMLElement | null {
 }
 
 /** The task list's groups, in this order. */
-type TaskGroup = "agents" | "agy" | "gemini" | "pc" | "claude";
+type TaskGroup = "agents" | "agy" | "gemini" | "local" | "pc" | "claude";
 const GROUPS: Array<[TaskGroup, string, string, string]> = [
   ["agents", "🤖", "סוכנים", "Agents"],
   ["agy", "✦", "Antigravity", "Antigravity"],
   ["gemini", "✧", "Gemini (חינמי)", "Gemini (free)"],
+  ["local", "◆", "מקומי", "Local"],
   ["pc", "🖥", "מחשב", "PC"],
   ["claude", "✷", "Claude", "Claude"],
 ];
@@ -752,6 +754,8 @@ function groupOf(t: PageTask): Exclude<TaskGroup, "agents"> {
   const ex = t.inbox?.executor;
   if (ex === "antigravity" || (!ex && t.executor === "pc-antigravity")) return "agy";
   if (ex === "gemini") return "gemini";
+  // The PC's local agent (self-work): its own group, so the task is found by who runs it.
+  if (ex === "local") return "local";
   if (ex === "claude" || (!ex && t.route === "claude-cloud")) return "claude";
   return "pc";
 }
@@ -782,7 +786,7 @@ function agentRow(c: AgentCard): HTMLElement {
 }
 
 /**
- * The task list in groups: Agents (the PCs' agent runs), Antigravity, PC and Claude, each with a head and a count;
+ * The task list in groups: Agents (the PCs' agent runs), Antigravity, Gemini, Local, PC and Claude, each with a head and a count;
  * an empty group is left out.
  *
  * @param list - The tasks that fit the filter and the search.

@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
+import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
@@ -33,7 +34,7 @@ function statusChip(t: InboxTaskView): { text: string; cls: string } {
   const step = t.plan?.length ? ` · ${L("שלב", "step")} ${Math.min(t.plan.filter((p) => p.status === "completed").length + 1, t.plan.length)}/${t.plan.length}` : "";
   const m: Record<InboxStatus, [string, string, string]> = {
     waiting: [t.runBy === "antigravity" ? 'ממתין ל"הפעל"' : "ממתין", t.runBy === "antigravity" ? "Waiting for Run" : "Waiting", ""],
-    queued: [t.runBy === "opus" ? "בתור" : "בתור לעבודה עצמית", t.runBy === "opus" ? "Queued" : "Queued for self-work", ""],
+    queued: [t.runBy === "opus" ? "בתור" : t.boardState === "claimed" ? "הסוכן המקומי עובד עליה" : "ממתין לסוכן המקומי", t.runBy === "opus" ? "Queued" : t.boardState === "claimed" ? "The local agent is on it" : "Waiting for the local agent", t.boardState === "claimed" ? "run" : ""],
     running: [`רץ${step}`, `Running${step}`, "run"],
     "needs-approval": ["🔔 צריך אישור", "🔔 Needs approval", "ask"],
     done: ["✓ הסתיים", "✓ Done", "good"],
@@ -189,6 +190,9 @@ export function TaskInboxPage({ id }: { id?: string }) {
           <p className="small muted">{L("גם אחרי זה זה לא ירוץ לבד: ההפעלה תמיד בלחיצה שלך. המודל המקומי ממשיך כרגיל.", "Even then it will not run by itself: it always starts on your tap. The local model goes on as usual.")}</p>
         </section>
       )}
+
+      {/* A local-model task only runs while the local agent (self-work) does. */}
+      {s.tasks.some((t) => t.runBy === "local" && t.status === "queued") && <LocalAgentNotice className="tinbox-local-off" />}
 
       {asks.map((t) => <RunAsk key={t.id} t={t} state={s} act={act} busy={busy} />)}
 

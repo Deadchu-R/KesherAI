@@ -112,6 +112,23 @@ export function branchFor(spec: Pick<InboxTaskSpec, "id" | "title">, runBy: Excl
   return name;
 }
 
+/** A goal that converts or ports something (a plugin copy to another engine version): big work, whoever runs it. */
+const CONVERSION = /\b(convert|conversion|port|porting|migrate)\b|המר|העבר/i;
+
+/**
+ * The board size of a task's item: a local-model task is "small" (self-work takes small ones) unless it converts or
+ * ports something (a plugin's conversion touches up to 60 files), which is "big" like every other executor's.
+ *
+ * @param spec - The task (title, goal, and the extra folders it may change).
+ * @param runBy - Its executor after routing.
+ * @returns "small" or "big".
+ */
+export function boardSizeFor(spec: Pick<InboxTaskSpec, "title" | "goal" | "maxFiles"> & { allowedPaths?: string[] }, runBy: Exclude<InboxExecutor, "auto">): "small" | "big" {
+  if (runBy !== "local") return "big";
+  const copies = (spec.allowedPaths ?? []).some((p) => p.startsWith("integrations/"));
+  return CONVERSION.test(`${spec.title}\n${spec.goal.slice(0, 400)}`) || copies || spec.maxFiles > 15 ? "big" : "small";
+}
+
 /** Text the routing reads as security or infrastructure (always Claude's Opus agent). */
 const SENSITIVE = /secur|auth|token|password|secret|share.?link|updater|release|migrat|\bgit\b|\bacp\b|אבטח|טוקן|סיסמ/i;
 
