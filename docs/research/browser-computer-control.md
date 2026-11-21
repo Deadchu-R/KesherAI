@@ -208,6 +208,18 @@ Roee was asleep; these were taken so Phases 0 and 1 could be built, and each can
   last 10 runs in `vision-bench.json`. Checked with a fake vision engine and a fake llama server. **Not checked
   here:** real models on the 3090 (latency still the estimate above), whether llama.cpp's resize for UI-TARS matches
   `smartResize` exactly, the pane's new-tab debugger timing for the bench.
+- **Phase 7 (phone and polish, 2026-11-21):** the inbox's #/watch tab is now "What the agent is doing"
+  (`ControlLive.tsx`, one read of `GET /api/control/live` every 2 s): one big Stop everything, Manual/Auto, Pause
+  (`POST /api/control/pause`: new browser and computer actions are refused until resumed, chats go on, not kept across
+  a restart), the "now" line, the waiting browser/computer approvals as card v2 with the crop, a refreshed picture of the
+  pane, the user's Chrome tab (`GET /api/browser/chrome/shot`, `CdpPage.peek`: only an attached tab, never brought to
+  the front, JPEG, 1 s cache) or the screen, and one merged action log (`control-live.ts`). The top banner now covers
+  the browser and Pause too. Notifications: a browser/computer approval goes out after at most 10 s (not the 60 s
+  "waiting" delay), names the site/app when notes may carry text, and is skipped while a screen shows it (the live view,
+  or a visible card: `POST /api/control/seen`, `ControlWatchers`, 12 s). Router words for every browser_* and
+  computer_* tool in Hebrew and English (`chat-tool-groups.ts`). Checked: node:test (merge, watchers, notifier, Pause in
+  bridge and computer, router phrasings, source picking) and design boards ControlLiveBrowser/Computer/Paused at 390 px.
+  Not checked here: a real Chrome tab picture through the extension, the phone app's notification on a device.
 
 ## 6. Open questions for Roee
 1. The extension needs Chrome's `debugger` permission (Chrome shows a yellow "started debugging this browser" bar while it works; Claude in Chrome has the same). OK?

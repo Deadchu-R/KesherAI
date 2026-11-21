@@ -76,6 +76,7 @@ import { CORE_VERSION } from "./routes/system.js";
 import { OneDrive, ONEDRIVE_ENDPOINTS } from "./onedrive.js";
 import { sdProvider } from "./sdcpp.js";
 import { BrowserBridge } from "./browser-bridge.js";
+import { ControlWatchers } from "./control-live.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
 import { ChatTimers } from "./chat-timers.js";
@@ -147,9 +148,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Stops conversations through a late-bound reference: the manager is created below.
   let stopConversation: (id: string) => void = () => undefined;
   const browser = new BrowserBridge();
+  const controlWatchers = new ControlWatchers();
   // One Stop for the browser and the computer: either button (or Ctrl+Alt+Esc) ends both.
   const computer = new ComputerControl(() => config.computer.enabled, (ids) => ids.forEach((id) => stopConversation(id)), undefined, {
-    peer: { stoppedAt: () => browser.activity(1).stoppedAt, stop: () => browser.stop() },
+    peer: { stoppedAt: () => browser.activity(1).stoppedAt, stop: () => browser.stop(), paused: () => browser.paused() },
   });
   const speakers = new Speakers(join(paths.engines, "speakers"), downloads);
   const sd = buildSdEngine(paths, downloads, config);
@@ -382,7 +384,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }
   // The phone app's own notifications (live connection, or UnifiedPush through ntfy).
   const phonePush = new PhonePush(() => config.remote.devices, persist);
-  const notifier = buildNotifier({ config, phonePush, ...(options.notify ? { desktop: options.notify } : {}), tunnel, chats: () => services.conversations, worker, paths });
+  const notifier = buildNotifier({ config, phonePush, watching: (c) => controlWatchers.watching(c), ...(options.notify ? { desktop: options.notify } : {}), tunnel, chats: () => services.conversations, worker, paths });
   // A lecture from the phone that the computer summarized by itself: "the lecture is ready" on the phone.
   study.onLectureReady = (course, lecture) => {
     const he = /[\u0590-\u05ff]/.test(`${course.name} ${lecture.title}`);
@@ -499,6 +501,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const services: KesherServices = {
     localModels: localGgufs,
     browser,
+    controlWatchers,
     config,
     paths,
     registry,

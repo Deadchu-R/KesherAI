@@ -54,7 +54,10 @@ export function actionWord(tool: string): string {
     browser_emulate: ["שינוי תצוגה", "Change the view"],
     browser_try_change: ["בדיקת השינוי", "Try the change"],
     browser_record: ["הקלטה", "Record"],
+    browser_find_visual: ["חיפוש בתמונה", "Find by sight"],
     stop: ["נעצר", "Stopped"],
+    pause: ["הושהה", "Paused"],
+    resume: ["חזר לפעול", "Resumed"],
   };
   const w = words[tool];
   return w ? L(w[0], w[1]) : tool;

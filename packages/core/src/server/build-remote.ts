@@ -96,14 +96,15 @@ export function setupRemoteAccess(app: FastifyInstance, p: { paths: DataPaths; c
 /**
  * The notifier: the phone app (live or through ntfy), this computer's notifications, and the Approve / Deny buttons.
  *
- * @param p - The settings, the phone link, the desktop's own notifications, the tunnel (for links), the chats (made
+ * @param p - The settings, the phone link, whether a screen shows a chat's control approval, the desktop's own notifications, the tunnel (for links), the chats (made
  *   later: read when a button is pressed), worker mode and the data folders.
  * @returns The notifier.
  */
-export function buildNotifier(p: { config: KesherConfig; phonePush: PhonePush; desktop?: (n: Note) => boolean | Promise<boolean>; tunnel: Tunnel; chats: () => ConversationManager; worker: unknown; paths: DataPaths }): Notifier {
-  const { config, phonePush, desktop, tunnel, chats, worker, paths } = p;
+export function buildNotifier(p: { config: KesherConfig; phonePush: PhonePush; watching?: (convId: string) => boolean; desktop?: (n: Note) => boolean | Promise<boolean>; tunnel: Tunnel; chats: () => ConversationManager; worker: unknown; paths: DataPaths }): Notifier {
+  const { config, phonePush, desktop, tunnel, chats, worker, paths, watching } = p;
   return new Notifier(() => config.notifications, {
     app: phonePush,
+    ...(watching ? { watching } : {}),
     ...(desktop ? { desktop } : {}),
     publicUrl: () => tunnel.status().url,
     // The Approve / Deny buttons on the phone's (and watch's) notification.

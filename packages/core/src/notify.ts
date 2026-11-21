@@ -4,6 +4,7 @@ import type { AgentEvent, HelperRunInfo } from "@kesher/shared";
 import type { KesherConfig } from "./config.js";
 import type { PhoneMessage } from "./phone-push.js";
 import { phoneMessage } from "./phone-push.js";
+import { controlNoteDelay } from "./control-live.js";
 
 /**
  * Notifications: on the phone (ntfy) and on this computer, when a long chat
@@ -70,6 +71,8 @@ export class Notifier {
       history?: string;
       /** The KesherAI phone app's own notifications (live or UnifiedPush; phone-push.ts). */
       app?: { deliver: (m: PhoneMessage) => Promise<boolean>; hasReceivers: () => boolean };
+      /** Whether a screen shows this chat's browser/computer approval now (the phone's live view, a visible card). */
+      watching?: (convId: string) => boolean;
     } = {},
   ) {
     if (opts.history) void this.loadHistory(opts.history);
@@ -214,17 +217,23 @@ export class Notifier {
     }
     if ((e.type === "approval_request" || e.type === "question") && s.waiting) {
       this.clearWaiting(convId);
+      // A browser or computer action counts as denied after 5 minutes: its note comes sooner (Phase 7), and not at
+      // all while a screen (the phone's live view, the card on screen) already shows it.
+      const control = e.type === "approval_request" ? e.control : undefined;
       const t = setTimeout(() => {
         this.waiting.delete(convId);
+        if (control && this.opts.watching?.(convId)) return;
         const approval = e.type === "approval_request";
         // The phone app sends its buttons to this computer itself, so it needs no internet link.
         const buttons = approval && s.approveButtons && !!this.opts.decide && (!!this.opts.publicUrl?.() || !!this.opts.app?.hasReceivers());
         const code = buttons ? this.quickCode(convId, e.requestId) : undefined;
         const what = approval ? (s.includeText && e.preview ? `${e.name}: ${e.preview.replace(/\s+/g, " ").slice(0, 160)}` : e.name) : "";
+        // The site or app and the target, only when notes may carry text (otherwise just "the browser" / "the computer").
+        const where = control ? (s.includeText ? [control.verb, control.target, control.site ?? control.app].filter(Boolean).join(" · ").slice(0, 160) : control.kind === "browser" ? "the browser" : "the computer") : "";
         void this.send({
           title: `Waiting for you: ${title()}`,
           // A sub-agent's step names it (its own "waits for you" note is not sent for an approval: onHelperAsk).
-          body: approval ? `${e.helper ? `The sub-agent "${e.helper.title}"` : "The agent"} needs your approval to go on (${what}).` : "The agent asked you a question.",
+          body: approval ? `${e.helper ? `The sub-agent "${e.helper.title}"` : "The agent"} needs your approval to go on (${control ? where : what}).${control ? " No answer in 5 minutes counts as denied." : ""}` : "The agent asked you a question.",
           // The chat itself: its card shows the whole step, in context (as Remote Control and Happy do).
           path: `#/c/${convId}`,
           ref: convId,
@@ -232,7 +241,7 @@ export class Notifier {
           priority: 4,
           ...(code ? { actions: [{ label: "Approve", path: `api/quick-approve/${code}?d=allow` }, { label: "Deny", path: `api/quick-approve/${code}?d=deny` }] } : {}),
         }).catch(() => undefined);
-      }, s.waitingSeconds * 1000);
+      }, (control ? controlNoteDelay(s.waitingSeconds) : s.waitingSeconds) * 1000);
       t.unref?.();
       this.waiting.set(convId, t);
       return;

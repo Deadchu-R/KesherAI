@@ -177,3 +177,22 @@ test("a sub-agent that waits notifies after the wait, once; an answer before tha
   slow.onHelperAnswered({ id: "h-2", state: "running" });
   assert.equal(slow.sent.length, 0);
 });
+
+test("a browser approval: no note while a screen shows it, one naming the site when none does", async () => {
+  const posts: string[] = [];
+  let shown = true;
+  const n = new Notifier(() => ({ ...settings, waitingSeconds: 0, includeText: true }), {
+    watching: () => shown,
+    fetch: (async (_url: string, init: RequestInit) => (posts.push(String(init.body)), new Response("{}"))) as unknown as typeof fetch,
+  });
+  const control = { kind: "browser" as const, site: "mail.example.com", target: 'button "Send"', verb: "click", why: ["manual"], expiresAt: new Date(Date.now() + 300_000).toISOString() };
+  n.onConversationEvent("c1", () => "Mail", ev({ type: "approval_request", requestId: "r1", callId: "x", name: "browser_click", input: {}, preview: "Click", control }), () => undefined);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(posts.length, 0);
+  shown = false;
+  n.onConversationEvent("c1", () => "Mail", ev({ type: "approval_request", requestId: "r2", callId: "y", name: "browser_click", input: {}, preview: "Click", control }), () => undefined);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(posts.length, 1);
+  assert.match(posts[0]!, /mail\.example\.com.*5 minutes/);
+  n.close();
+});

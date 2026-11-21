@@ -181,3 +181,14 @@ test("computer: one Stop with the browser, and Stop kills the UIA worker", async
   assert.equal(browserStops, 1, "turning computer control off leaves the browser alone");
   assert.equal(cc.status().uia, "running");
 });
+
+test("computer: the browser's Pause holds computer actions too, until resumed", async () => {
+  const f = fakeUia();
+  let paused = true;
+  const cc = new ComputerControl(() => true, () => undefined, be(), { uia: f.uia, peer: { stoppedAt: () => 0, stop: () => undefined, paused: () => paused } });
+  const tool = (n: string) => cc.tools("c1").find((t) => t.spec.name === n)!;
+  await assert.rejects(tool("computer_tree").run({}, ctx), /paused browser and computer control/);
+  paused = false;
+  await tool("computer_use_app").run({ app: "notepad" }, ctx);
+  await tool("computer_tree").run({}, ctx);
+});

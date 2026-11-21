@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { mergeControlLog } from "../control-live.js";
 import "@fastify/websocket";
 import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
@@ -135,6 +136,47 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
   app.get<{ Querystring: { chat?: string; n?: string } }>("/api/control/decisions", async (req) => ({
     decisions: s.browser.decisions.last(Math.min(200, Math.max(1, Number(req.query.n) || 50)), req.query.chat || undefined),
   }));
+
+  /**
+   * The phone's live view (Phase 7) in one read every 2 seconds: what the browser and the computer are doing, the
+   * merged action log, the waiting browser/computer approvals (whole, for card v2), the mode and Pause. `watch=1`
+   * (only while the view is on screen) also says a screen shows every chat's approvals, so no notification is sent.
+   */
+  app.get<{ Querystring: { watch?: string; lite?: string } }>("/api/control/live", async (req) => {
+    if (req.query.watch === "1") s.controlWatchers.mark(["*"]);
+    // `lite=1` (the banner on every page): only what is going on and the last action, no log or approvals.
+    const lite = req.query.lite === "1";
+    const b = s.browser.activity(40);
+    const c = s.computer.status();
+    const st = s.browser.status();
+    return {
+      paused: s.browser.paused(),
+      mode: s.config.controlMode,
+      skipAllowed: s.config.controlSkipAllowed === true,
+      browser: { active: b.active, pane: st.pane, chrome: s.browser.chromeDriving() },
+      computer: { enabled: c.enabled, active: c.active, app: c.app },
+      log: mergeControlLog(b.log, c.log, lite ? 1 : 40),
+      approvals: lite ? [] : s.conversations.pendingControl(),
+    };
+  });
+  /** A screen shows these chats' browser/computer approval cards now (`{ chats }`): their notification waits. */
+  app.post<{ Body: { chats?: unknown } }>("/api/control/seen", async (req) => {
+    const chats = Array.isArray(req.body?.chats) ? req.body.chats.filter((x): x is string => typeof x === "string") : [];
+    s.controlWatchers.mark(chats);
+    return { ok: true };
+  });
+  /** Pause or resume browser and computer control (`{ on }`): new actions are refused until resumed; chats go on. */
+  app.post<{ Body: { on?: boolean } }>("/api/control/pause", async (req, reply) => {
+    if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "Send { on: true | false }" });
+    s.browser.setPaused(req.body.on);
+    return { paused: s.browser.paused() };
+  });
+  /** A picture of the user's Chrome tab KesherAI drives now (only an attached tab), for the live view. */
+  app.get<{ Querystring: { w?: string } }>("/api/browser/chrome/shot", async (req, reply) => {
+    const shot = await s.browser.chromePeek(Number(req.query.w) || 960);
+    if (!shot) return reply.code(404).send({ error: "KesherAI is not driving a Chrome tab now." });
+    return reply.header("cache-control", "no-store").type("image/jpeg").send(shot.jpg);
+  });
 
   /** Whether helpers may also use "Always on this site" (off: they ask before every action; Settings → Browser). */
   app.post<{ Body: { on?: boolean } }>("/api/browser/helper-always", async (req) => {

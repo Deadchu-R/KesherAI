@@ -6,7 +6,7 @@ import { toast } from "../library";
 import { BarPopover } from "../ui/BarPopover";
 import { groupNotes } from "../note-groups";
 import { noteTitle } from "../note-text";
-import { ComputerScreen } from "./WatchPage";
+import { ControlLive } from "../ControlLive";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -226,10 +226,10 @@ export function InboxPage({ tab: first }: { tab?: InboxTab }) {
     <div className="page inbox">
       <div className="page-head">
         <h1>{L("תיבת דואר", "Inbox")}</h1>
-        <p className="muted">{L("מה שמחכה לאישור שלך מכל שיחה ומהעבודה העצמית, ההתראות האחרונות, והמסך של המחשב כשסוכן משתמש בו.", "What waits for your approval from every chat and self-work, the latest notifications, and the computer's screen while an agent uses it.")}</p>
+        <p className="muted">{L("מה שמחכה לאישור שלך מכל שיחה ומהעבודה העצמית, ההתראות האחרונות, ומה שסוכן עושה בדפדפן ובמחשב.", "What waits for your approval from every chat and self-work, the latest notifications, and what an agent does in the browser and on the computer.")}</p>
       </div>
       <nav className="tabs" role="tablist" aria-label={L("תיבת דואר", "Inbox")}>
-        {([["waiting", L("מחכה לך", "Waiting for you"), box.approvals.length], ["notes", L("הודעות", "Notifications"), 0], ["screen", L("מסך המחשב", "The computer's screen"), 0]] as const).map(([id, label, n]) => (
+        {([["waiting", L("מחכה לך", "Waiting for you"), box.approvals.length], ["notes", L("הודעות", "Notifications"), 0], ["screen", L("מה הסוכן עושה", "What the agent is doing"), 0]] as const).map(([id, label, n]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
             {label}{n > 0 && <span className="tab-count">{n}</span>}
           </button>
@@ -283,7 +283,7 @@ export function InboxPage({ tab: first }: { tab?: InboxTab }) {
         <p className="muted small"><a href="#/settings/notifications">{L("הגדרות התראות (טלפון ומחשב)", "Notification settings (phone and computer)")}</a></p>
       </section>
       )}
-      {tab === "screen" && <ComputerScreen />}
+      {tab === "screen" && <ControlLive />}
     </div>
   );
 }

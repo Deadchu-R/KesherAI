@@ -117,6 +117,14 @@ export function ControlApproval({ convId, ev, pending, result }: { convId: strin
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const left = useLeft(c.expiresAt);
+  // While the card waits on a screen that is in front, the computer is told so: no phone notification for it then.
+  useEffect(() => {
+    if (!pending) return;
+    const seen = () => !document.hidden && void api("/api/control/seen", { method: "POST", body: { chats: [convId] } }).catch(() => undefined);
+    seen();
+    const id = setInterval(seen, 5000);
+    return () => clearInterval(id);
+  }, [pending, convId]);
   const decide = async (decision: "allow" | "always" | "deny") => {
     setBusy(true);
     await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(note ? { feedback: note } : {}) } }).catch(() => undefined);

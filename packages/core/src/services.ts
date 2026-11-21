@@ -4,6 +4,7 @@
  * creates its own and everything shares one state.
  */
 import type { ModelUse } from "./pc-fix.js";
+import type { ControlWatchers } from "./control-live.js";
 import type { MemoryStore } from "./memory-store.js";
 import type { ProjectFacts } from "./project-facts.js";
 import type { SelfWork } from "./self-work.js";
@@ -119,6 +120,8 @@ export interface KesherServices {
   kokoro: Kokoro;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */
   computer: ComputerControl;
+  /** Which chats a screen shows now (browser/computer approvals skip the phone notification then). */
+  controlWatchers: ControlWatchers;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */
   coach: Coach;
   /** The user's memory by topic (see memory-store.ts). */

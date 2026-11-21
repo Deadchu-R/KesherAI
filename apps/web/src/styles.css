@@ -607,6 +607,10 @@ html, body { overflow-x: hidden; }
 .cc-log li.bad { color: var(--bad); }
 .cc-banner { position: fixed; top: calc(var(--bar-h) + 8px); inset-inline: 0; margin: 0 auto; width: fit-content; max-width: 92vw; z-index: 40; display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; border-radius: calc(999px * var(--r-scale, 1)); background: #3a1d1d; border: 1px solid #7a3434; color: #ffd9d9; font-size: 13.5px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
 .cc-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b6b; animation: live-pulse 1s infinite; }
+.cc-banner-text { min-width: 0; overflow-wrap: anywhere; }
+.cc-banner a { white-space: nowrap; color: inherit; text-decoration: underline; }
+.cc-banner.paused { background: #3a2f12; border-color: #7a6220; color: #ffeec2; }
+.cc-banner.paused .dot { background: #e0a020; animation: none; }
 .cc-banner button { height: 28px; padding: 0 14px; border-radius: calc(999px * var(--r-scale, 1)); border: 0; background: #ff6b6b; color: #2a0e0e; font-weight: 600; }
 
 /* ---------- computer hub (hover the computer icon) ---------- */
@@ -983,9 +987,6 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 /* Watch and approve */
 .watch-item { display: flex; flex-direction: column; gap: 8px; }
 .watch-item p { margin: 0; }
-.watch-screen { width: 100%; height: auto; border-radius: calc(12px * var(--r-scale, 1)); border: 1px solid var(--border); background: #000; }
-.watch-log { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 2px; }
-.watch-log li.bad { color: var(--danger, #f87171); }
 .danger-btn { border-color: #b4232a; color: #fca5a5; }
 .approvals-pill { position: fixed; inset-block-end: 18px; inset-inline-start: 50%; transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: calc(999px * var(--r-scale, 1)); background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none; box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
 [dir="rtl"] .approvals-pill { transform: translateX(50%); }

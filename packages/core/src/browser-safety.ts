@@ -176,6 +176,9 @@ export function redactBody(body: string | undefined): string {
 /** Address parameters whose values are hidden (sign-in links, keys in a query). */
 const SECRET_PARAM = /token|secret|key|sig|signature|auth|code|session|password|pass/i;
 
+/** What the model reads while the user has paused browser and computer control. */
+export const PAUSED_MESSAGE = "The user paused browser and computer control. Do not try again now; tell the user where you stopped and wait until they resume.";
+
 /**
  * An address with secret-looking query values hidden (`?token=…` → `?token=(hidden)`), for console and network lines.
  *

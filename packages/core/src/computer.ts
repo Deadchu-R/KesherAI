@@ -8,6 +8,7 @@ import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-
 import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
 import { deletesFiles, isOwnApp, isSecureWindow, isSystemSettings } from "./computer-safety.js";
 import { withControlInfo } from "./control-gate.js";
+import { PAUSED_MESSAGE } from "./browser-safety.js";
 import { computerFindTool } from "./vision-find-tools.js";
 import { bestNameMatch } from "./vision-ground.js";
 import type { Grounding } from "./vision-service.js";
@@ -599,7 +600,7 @@ export class ComputerControl {
   /** Windows UI Automation (undefined elsewhere): started on the first UIA call. */
   private readonly uia: UiaClient | undefined;
   /** The browser's Stop, shared: either Stop stops both. */
-  private readonly peer: { stoppedAt(): number; stop(): void } | undefined;
+  private readonly peer: { stoppedAt(): number; stop(): void; paused?(): boolean } | undefined;
   /** Per conversation: UI Automation refs from its last computer_tree. */
   private readonly uiaRefs = new Map<string, Map<string, UiaRef>>();
   /** Per conversation: the app in front as last seen (for rules that must answer at once). */
@@ -612,14 +613,14 @@ export class ComputerControl {
    * @param onStop - Stops the conversations that used it.
    * @param be - Platform backend (tests pass a fake).
    * @param opts.uia - The UI Automation worker (default: PowerShell on Windows, none elsewhere; tests pass a fake).
-   * @param opts.peer - The browser's Stop (its time, and how to press it), so one Stop ends both.
+   * @param opts.peer - The browser's Stop (its time, and how to press it), so one Stop ends both, and its Pause.
    * @param opts.vision - The local vision models (computer_find), when the app has them.
    */
   constructor(
     private readonly enabled: () => boolean,
     private readonly onStop: (conversationIds: string[]) => void,
     private readonly be: Backend = backend(),
-    opts: { uia?: UiaClient | null; peer?: { stoppedAt(): number; stop(): void }; vision?: () => Grounding | undefined } = {},
+    opts: { uia?: UiaClient | null; peer?: { stoppedAt(): number; stop(): void; paused?(): boolean }; vision?: () => Grounding | undefined } = {},
   ) {
     this.vision = opts.vision;
     this.uia =
@@ -726,6 +727,9 @@ export class ComputerControl {
         "The user pressed Stop. Do not continue controlling the computer; tell the user what you were doing.",
       );
     }
+    // The user's Pause (the phone's live view, the banner) holds the browser and the computer alike.
+    if (this.peer?.paused?.())
+      throw new Error(PAUSED_MESSAGE);
     if (!this.allowed.get(conversationId)?.size)
       throw new Error(
         "First ask the user which app you may use: call computer_use_app with its name.",

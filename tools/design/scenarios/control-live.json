@@ -1,0 +1,496 @@
+{
+ "group": "דפדפן",
+ "now": "2026-11-21T10:05:00Z",
+ "boards": [
+  {
+   "id": "ControlLiveBrowser",
+   "title": "טלפון: מה הסוכן עושה — דפדפן, אישור v2 ועצירה",
+   "route": "#/watch",
+   "height": {
+    "desktop": 1100,
+    "phone": 1650
+   },
+   "steps": [
+    {
+     "wait": ".cl-live .cc-card"
+    },
+    {
+     "wait": ".cl-shot"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/pane/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/browser/chrome/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#1e2a44'/><rect x='80' y='50' width='560' height='380' rx='8' fill='#fff'/><rect x='80' y='50' width='560' height='34' rx='8' fill='#dde3ee'/><text x='96' y='73' font-size='16' fill='#222' font-family='sans-serif'>notes.txt - Notepad</text><text x='100' y='120' font-size='16' fill='#333' font-family='monospace'>Shopping list:</text><text x='100' y='146' font-size='16' fill='#333' font-family='monospace'>- milk</text><rect x='0' y='500' width='960' height='40' fill='#0f1626'/></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#eef0f4'/><rect x='90' y='34' width='140' height='52' rx='4' fill='#fff' stroke='#2b6cd4' stroke-width='3'/><text x='160' y='68' font-size='22' text-anchor='middle' fill='#222' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/control/seen",
+     "json": {
+      "ok": true
+     }
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": false,
+      "mode": "manual",
+      "skipAllowed": false,
+      "browser": {
+       "active": true,
+       "pane": true,
+       "chrome": null
+      },
+      "computer": {
+       "enabled": true,
+       "active": false,
+       "app": "notepad"
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "3m"
+        },
+        "kind": "browser",
+        "action": "browser_open",
+        "where": "mail.example.com",
+        "target": "https://mail.example.com/compose",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "150s"
+        },
+        "kind": "browser",
+        "action": "browser_snapshot",
+        "where": "mail.example.com",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "2m"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"To\" (ref e1)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "100s"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"Subject\" (ref e2)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "90s"
+        },
+        "kind": "computer",
+        "action": "click",
+        "where": "notepad",
+        "ok": false,
+        "note": "Denied by the user"
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "browser",
+        "action": "browser_click",
+        "where": "mail.example.com",
+        "target": "button \"Attach\" (ref e5)",
+        "ok": true
+       }
+      ],
+      "approvals": [
+       {
+        "conversationId": "c2",
+        "title": "חשבונית לדנה",
+        "ev": {
+         "seq": 3,
+         "at": {
+          "$ago": "30s"
+         },
+         "type": "approval_request",
+         "requestId": "r1",
+         "callId": "b1",
+         "name": "browser_click",
+         "input": {
+          "ref": "e3"
+         },
+         "preview": "Click button \"Send\" (ref e3) on mail.example.com",
+         "reason": "mail.example.com is email, so every action there is asked, in every mode.",
+         "purpose": "לשלוח לדנה את המייל עם החשבונית שצירפתי",
+         "noAlways": true,
+         "helper": {
+          "id": "h1",
+          "title": "כותב המייל",
+          "kind": "research"
+         },
+         "control": {
+          "kind": "browser",
+          "verb": "click",
+          "site": "mail.example.com",
+          "target": "button \"Send\"",
+          "crop": "crop-send",
+          "why": [
+           "sensitive",
+           "manual"
+          ],
+          "sensitive": "email",
+          "expiresAt": "2026-11-21T10:09:12Z"
+         }
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ControlLiveComputer",
+   "title": "טלפון: מה הסוכן עושה — מחשב במצב אוטומטי, Chrome ומסך",
+   "route": "#/watch",
+   "height": {
+    "desktop": 1100,
+    "phone": 1650
+   },
+   "steps": [
+    {
+     "wait": ".cl-live .cc-card"
+    },
+    {
+     "click": ".cl-tabs button:last-child"
+    },
+    {
+     "wait": ".cl-shot"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/pane/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/browser/chrome/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#1e2a44'/><rect x='80' y='50' width='560' height='380' rx='8' fill='#fff'/><rect x='80' y='50' width='560' height='34' rx='8' fill='#dde3ee'/><text x='96' y='73' font-size='16' fill='#222' font-family='sans-serif'>notes.txt - Notepad</text><text x='100' y='120' font-size='16' fill='#333' font-family='monospace'>Shopping list:</text><text x='100' y='146' font-size='16' fill='#333' font-family='monospace'>- milk</text><rect x='0' y='500' width='960' height='40' fill='#0f1626'/></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#eef0f4'/><rect x='90' y='34' width='140' height='52' rx='4' fill='#fff' stroke='#2b6cd4' stroke-width='3'/><text x='160' y='68' font-size='22' text-anchor='middle' fill='#222' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/control/seen",
+     "json": {
+      "ok": true
+     }
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": false,
+      "mode": "auto",
+      "skipAllowed": false,
+      "browser": {
+       "active": false,
+       "pane": true,
+       "chrome": "shop.example"
+      },
+      "computer": {
+       "enabled": true,
+       "active": true,
+       "app": "notepad"
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "3m"
+        },
+        "kind": "browser",
+        "action": "browser_open",
+        "where": "mail.example.com",
+        "target": "https://mail.example.com/compose",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "150s"
+        },
+        "kind": "browser",
+        "action": "browser_snapshot",
+        "where": "mail.example.com",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "2m"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"To\" (ref e1)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "100s"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"Subject\" (ref e2)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "90s"
+        },
+        "kind": "computer",
+        "action": "click",
+        "where": "notepad",
+        "ok": false,
+        "note": "Denied by the user"
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "browser",
+        "action": "browser_click",
+        "where": "mail.example.com",
+        "target": "button \"Attach\" (ref e5)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "10s"
+        },
+        "kind": "computer",
+        "action": "tree",
+        "where": "notepad",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "5s"
+        },
+        "kind": "computer",
+        "action": "set value",
+        "where": "notepad",
+        "ok": true
+       }
+      ],
+      "approvals": [
+       {
+        "conversationId": "c3",
+        "title": "רשימת קניות",
+        "ev": {
+         "seq": 4,
+         "at": {
+          "$ago": "15s"
+         },
+         "type": "approval_request",
+         "requestId": "r2",
+         "callId": "k1",
+         "name": "computer_invoke",
+         "input": {
+          "ref": "u7"
+         },
+         "preview": "Press button \"Save\" in notepad",
+         "reason": "Auto mode: the local reviewer left it to you: saving changes a file.",
+         "purpose": "לשמור את הרשימה",
+         "control": {
+          "kind": "computer",
+          "verb": "invoke",
+          "app": "notepad",
+          "window": "notes.txt - Notepad",
+          "target": "button \"Save\"",
+          "crop": "crop-save",
+          "why": [
+           "review"
+          ],
+          "expiresAt": "2026-11-21T10:08:40Z"
+         }
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "ControlLivePaused",
+   "title": "טלפון: השליטה מושהית — הפס העליון והתצוגה החיה",
+   "route": "#/watch",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".cl-now.paused"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/pane/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/browser/chrome/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#1e2a44'/><rect x='80' y='50' width='560' height='380' rx='8' fill='#fff'/><rect x='80' y='50' width='560' height='34' rx='8' fill='#dde3ee'/><text x='96' y='73' font-size='16' fill='#222' font-family='sans-serif'>notes.txt - Notepad</text><text x='100' y='120' font-size='16' fill='#333' font-family='monospace'>Shopping list:</text><text x='100' y='146' font-size='16' fill='#333' font-family='monospace'>- milk</text><rect x='0' y='500' width='960' height='40' fill='#0f1626'/></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#eef0f4'/><rect x='90' y='34' width='140' height='52' rx='4' fill='#fff' stroke='#2b6cd4' stroke-width='3'/><text x='160' y='68' font-size='22' text-anchor='middle' fill='#222' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/control/seen",
+     "json": {
+      "ok": true
+     }
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": true,
+      "mode": "manual",
+      "skipAllowed": false,
+      "browser": {
+       "active": false,
+       "pane": true,
+       "chrome": null
+      },
+      "computer": {
+       "enabled": false,
+       "active": false,
+       "app": ""
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "3m"
+        },
+        "kind": "browser",
+        "action": "browser_open",
+        "where": "mail.example.com",
+        "target": "https://mail.example.com/compose",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "150s"
+        },
+        "kind": "browser",
+        "action": "browser_snapshot",
+        "where": "mail.example.com",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "2m"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"To\" (ref e1)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "100s"
+        },
+        "kind": "browser",
+        "action": "browser_type",
+        "where": "mail.example.com",
+        "target": "textbox \"Subject\" (ref e2)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "90s"
+        },
+        "kind": "computer",
+        "action": "click",
+        "where": "notepad",
+        "ok": false,
+        "note": "Denied by the user"
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "browser",
+        "action": "browser_click",
+        "where": "mail.example.com",
+        "target": "button \"Attach\" (ref e5)",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "8s"
+        },
+        "kind": "browser",
+        "action": "pause",
+        "ok": true,
+        "note": "Paused by the user"
+       }
+      ],
+      "approvals": []
+     }
+    }
+   ]
+  }
+ ]
+}

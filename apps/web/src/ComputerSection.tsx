@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, he$, t } from "./i18n";
+import type { LiveState } from "./control-live-view";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -71,27 +72,40 @@ export function ComputerSection() {
   );
 }
 
-/** A bar across the top while a model is controlling the computer, with Stop. */
-export function ComputerBanner() {
-  const [s, setS] = useState<Status | null>(null);
+/**
+ * A bar across the top while a model uses the browser or controls the computer, or while control is paused: what it
+ * does, a link to the live view (#/watch, also on the phone) and one Stop for both. Not on the live view itself.
+ *
+ * @param p.hidden - Hide it (the live view has its own big Stop).
+ */
+export function ComputerBanner({ hidden }: { hidden?: boolean }) {
+  const [s, setS] = useState<LiveState | null>(null);
   useEffect(() => {
     let alive = true;
-    const tick = () => api<Status>("/api/computer/status").then((x) => alive && setS(x), () => undefined);
+    const tick = () => !document.hidden && api<LiveState>("/api/control/live?lite=1").then((x) => alive && setS(x), () => undefined);
     void tick();
-    const id = setInterval(tick, 1500);
+    const id = setInterval(tick, 2000);
     return () => {
       alive = false;
       clearInterval(id);
     };
   }, []);
-  if (!s?.enabled || !s.active) return null;
+  const active = !!s && (s.browser.active || (s.computer.enabled && s.computer.active));
+  if (hidden || !s || (!active && !s.paused)) return null;
   const last = s.log.at(-1);
+  const what = s.paused
+    ? L("השליטה בדפדפן ובמחשב מושהית", "Browser and computer control is paused")
+    : s.computer.active
+      ? t("ccActive", { app: s.computer.app || "?" })
+      : L(`KesherAI משתמש בדפדפן${last?.where ? ` · ${last.where}` : ""}`, `KesherAI is using the browser${last?.where ? ` · ${last.where}` : ""}`);
+  const stop = () => void Promise.all([api("/api/browser/stop", { method: "POST" }), api("/api/computer/stop", { method: "POST" })]).then(() => setS({ ...s, browser: { ...s.browser, active: false }, computer: { ...s.computer, active: false } }), () => undefined);
+  const resume = () => void api<{ paused: boolean }>("/api/control/pause", { method: "POST", body: { on: false } }).then((r) => setS({ ...s, paused: r.paused }), () => undefined);
   return (
-    <div className="cc-banner" role="status">
+    <div className={`cc-banner${s.paused ? " paused" : ""}`} role="status">
       <span className="dot" aria-hidden />
-      <span dir="auto">{t("ccActive", { app: s.app || "?" })}{last ? ` · ${last.action}` : ""}</span>
-      <a href="#/watch">{getLocale() === "he" ? "מסך המחשב בתיבת הדואר" : "The computer's screen in the inbox"}</a>
-      <button type="button" onClick={() => void api("/api/computer/stop", { method: "POST" }).then(() => setS({ ...s, active: false }))}>{t("ccStop")}</button>
+      <span dir="auto" className="cc-banner-text">{what}</span>
+      <a href="#/watch">{L("צפייה", "Watch")}</a>
+      {s.paused ? <button type="button" onClick={resume}>{L("המשך", "Resume")}</button> : <button type="button" onClick={stop}>{t("ccStop")}</button>}
     </div>
   );
 }

@@ -26,3 +26,28 @@
 .cs-section textarea { width: 100%; box-sizing: border-box; }
 .cs-log li { line-height: 1.5; overflow-wrap: anywhere; }
 .cs-log .cs-no { color: var(--live); }
+
+/* The live view of browser and computer control (ControlLive.tsx, the inbox's #/watch tab). Works at 390 px. */
+.cl-live { gap: 12px; }
+.cl-stop { width: 100%; min-height: 52px; font-size: 17px; font-weight: 700; border-radius: 14px; border: 1px solid #b4232a; background: rgb(180 35 42 / 0.18); color: var(--text); }
+.cl-stop.on { background: #d6363e; color: #fff; }
+.cl-toggles { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.cl-seg { display: inline-flex; border: 1px solid var(--border, rgba(127,127,127,.3)); border-radius: 999px; overflow: hidden; }
+.cl-seg button { border: 0; border-radius: 0; min-height: 40px; padding: 0 16px; background: transparent; }
+.cl-seg button.on { background: var(--accent); color: var(--accent-text, #fff); }
+.cl-pause { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 40px; flex: 1 1 160px; min-width: 0; line-height: 1.35; }
+.cl-pause input { width: auto; flex: none; }
+.cl-mode-help { margin: 0; line-height: 1.45; }
+.cl-now { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--hover, rgba(127,127,127,.12)); line-height: 1.45; overflow-wrap: anywhere; }
+.cl-now.on { border-inline-start: 3px solid var(--live, #ff6b6b); }
+.cl-now.paused { border-inline-start: 3px solid #e0a020; }
+.cl-now .cl-k { font-weight: 700; }
+.cl-approval { display: flex; flex-direction: column; gap: 4px; }
+.cl-view { display: flex; flex-direction: column; gap: 8px; }
+.cl-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.cl-tabs button { min-height: 36px; border-radius: 999px; padding: 0 12px; white-space: normal; }
+.cl-tabs button.on { border-color: var(--accent); }
+.cl-shot { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border, rgba(127,127,127,.3)); background: #000; }
+.cl-log { margin: 6px 0 0; padding-inline-start: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.cl-log li { line-height: 1.45; overflow-wrap: anywhere; }
+.cl-log li.bad { color: var(--danger, #f87171); }

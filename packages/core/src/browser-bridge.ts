@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
-import { BrowserLog, hostOf, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
+import { BrowserLog, hostOf, PAUSED_MESSAGE, redactUrl, untrusted, UNTRUSTED_RULE } from "./browser-safety.js";
 import { ControlLog } from "./control-policy.js";
 import { withControlInfo } from "./control-gate.js";
 import { CdpPage, type CdpTransport } from "./cdp.js";
@@ -39,6 +39,12 @@ export interface BrowserTab {
 /** KesherAI's own browser pane (the desktop app): carries out the same commands as the extension. */
 export type PaneHandler = (action: string, args: Record<string, unknown>) => Promise<unknown>;
 
+/** Rejects when a promise takes longer than `ms` (a picture for watching must never hang a request). */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: NodeJS.Timeout | undefined;
+  return Promise.race([p, new Promise<never>((_, reject) => (t = setTimeout(() => reject(new Error("timed out")), ms)))]).finally(() => clearTimeout(t));
+}
+
 /** Sends the agent's browser commands to KesherAI's own pane or to the user's browser (the extension). */
 export class BrowserBridge {
   private socket: BridgeSocket | undefined;
@@ -75,6 +81,26 @@ export class BrowserBridge {
     this.log.add({ tool: "stop", ok: true, note: "Stopped by the user" });
   }
 
+  /** Since when the user paused browser and computer control (0: not paused). */
+  private pausedAt = 0;
+
+  /**
+   * Pause (the phone's live view, the banner): refuses every new browser and computer action until the user resumes,
+   * without ending the chats. Unlike Stop it lasts until it is turned off; it is not kept across a restart.
+   *
+   * @param on - Pause, or resume.
+   */
+  setPaused(on: boolean): void {
+    if (on === this.paused()) return;
+    this.pausedAt = on ? Date.now() : 0;
+    this.log.add({ tool: on ? "pause" : "resume", ok: true, note: on ? "Paused by the user" : "Resumed by the user" });
+  }
+
+  /** @returns Whether browser and computer control are paused. */
+  paused(): boolean {
+    return this.pausedAt > 0;
+  }
+
   /** @returns Whether the browser tools acted in the last 15 seconds, and the last actions. */
   activity(n = 30): { active: boolean; stoppedAt: number; log: ReturnType<BrowserLog["last"]> } {
     // Calls ended by a Stop are logged just after it; they are not activity.
@@ -85,6 +111,7 @@ export class BrowserBridge {
   /** @throws Error while a Stop is fresh (10 seconds). */
   private gate(): void {
     if (Date.now() - this.stoppedAt < 10_000) throw new Error("The user pressed Stop. Do not continue using the browser; tell the user what you were doing and wait for them.");
+    if (this.paused()) throw new Error(PAUSED_MESSAGE);
   }
 
   /**
@@ -181,6 +208,7 @@ export class BrowserBridge {
         await page.enable();
       }
       const p = page;
+      this.lastChromeTab = tabId;
       return this.guarded("cdp", () => fn(p, tabId), signal);
     }
     if (!this.pane) throw new Error("This tool needs KesherAI's own browser, which runs in the desktop app.");
@@ -188,6 +216,41 @@ export class BrowserBridge {
     const page = this.cdpTabs.get(tabId);
     if (!page) throw new Error("KesherAI cannot inspect this tab now (are its developer tools open? close them and try again).");
     return this.guarded("cdp", () => fn(page, tabId), signal);
+  }
+
+  /** The user's Chrome tab KesherAI drove last (the phone's live view shows its picture). */
+  private lastChromeTab: number | undefined;
+  private chromePeekCache: { at: number; tabId: number; shot: { jpg: Buffer; url: string; title: string } } | undefined;
+
+  /** @returns The site of the user's Chrome tab KesherAI drives now (attached), or undefined when none. */
+  chromeDriving(): string | undefined {
+    const c = this.chromePeekCache;
+    if (this.lastChromeTab === undefined || !this.chromeTabs.has(this.lastChromeTab)) return undefined;
+    return c && c.tabId === this.lastChromeTab ? hostOf(c.shot.url) || "chrome" : "chrome";
+  }
+
+  /**
+   * A small picture of the user's Chrome tab that KesherAI drives now (the phone's live view), with its address and
+   * title. Only a tab it is attached to (so only an allowed site, while Chrome shows its "debugging" bar); it never
+   * brings the tab to the front, and pictures are reused for a second so several screens watching cost one.
+   *
+   * @param maxWidth - Width at most (320–1280).
+   * @returns The picture, or undefined when no Chrome tab is driven (or the tab cannot be pictured now).
+   */
+  async chromePeek(maxWidth = 960): Promise<{ jpg: Buffer; url: string; title: string } | undefined> {
+    const tabId = this.lastChromeTab;
+    const page = tabId === undefined ? undefined : this.chromeTabs.get(tabId);
+    if (!page || tabId === undefined) return undefined;
+    const c = this.chromePeekCache;
+    if (c && c.tabId === tabId && Date.now() - c.at < 1000) return c.shot;
+    try {
+      const [jpg, where] = await withTimeout(Promise.all([page.peek(Math.min(1280, Math.max(320, maxWidth))), page.where()]), 4000);
+      const shot = { jpg, url: redactUrl(where.url), title: where.title.slice(0, 200) };
+      this.chromePeekCache = { at: Date.now(), tabId, shot };
+      return shot;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Which browser a call goes to: KesherAI's pane unless the user's own was asked for (or there is no pane). */

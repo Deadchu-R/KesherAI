@@ -681,6 +681,21 @@ export class CdpPage {
   }
 
   /**
+   * A small JPEG of the visible area for the user to watch (the phone's live view). Unlike `screenshot` it leaves the
+   * click mapping of the model's last picture alone and never moves the tab to where it paints.
+   *
+   * @param maxWidth - Width at most, in pixels.
+   * @returns JPEG bytes.
+   */
+  async peek(maxWidth = 960): Promise<Buffer> {
+    const m = (await this.t.send("Page.getLayoutMetrics")) as { cssVisualViewport: { pageX: number; pageY: number; clientWidth: number; clientHeight: number } };
+    const v = m.cssVisualViewport;
+    const scale = Math.min(1, maxWidth / Math.max(1, v.clientWidth));
+    const r = (await this.t.send("Page.captureScreenshot", { format: "jpeg", quality: 60, clip: { x: v.pageX, y: v.pageY, width: v.clientWidth, height: v.clientHeight, scale } })) as { data: string };
+    return Buffer.from(r.data, "base64");
+  }
+
+  /**
    * A picture of the visible area, the whole page or one element, as PNG, in CSS pixels (at most 1600 wide).
    *
    * @param o - `full` for the whole page, `ref` for one element, or `area` for a part of the last picture of the

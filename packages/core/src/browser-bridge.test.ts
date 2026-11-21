@@ -106,6 +106,19 @@ test("browser bridge: Stop ends running commands and refuses new ones for a whil
   assert.ok(b.activity().log.some((a) => a.tool === "stop"));
 });
 
+test("browser bridge: Pause refuses new actions until resumed, and no Chrome tab is pictured when none is driven", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(async (action) => (action === "tabs" ? [] : null));
+  b.setPaused(true);
+  assert.equal(b.paused(), true);
+  await assert.rejects(b.call("tabs"), /paused browser and computer control/);
+  b.setPaused(false);
+  assert.deepEqual(await b.call("tabs"), []);
+  assert.deepEqual(b.activity().log.map((a) => a.tool).filter((t) => t === "pause" || t === "resume"), ["pause", "resume"]);
+  assert.equal(b.chromeDriving(), undefined);
+  assert.equal(await b.chromePeek(), undefined);
+});
+
 test("browser bridge: the pane gets the CDP tools; snapshot refs name elements on cards; eval and upload always ask", async () => {
   const b = new BrowserBridge();
   b.attachPane(async (action) => (action === "tabs" ? [{ id: 4, title: "Shop", url: "https://shop.example/cart", active: true }] : null));

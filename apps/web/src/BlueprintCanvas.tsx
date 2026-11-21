@@ -16,6 +16,7 @@ const KNOT = 16;
 /** One node the "All Actions" menu offers. */
 export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
 import { wireFits } from "./wire-fits";
+import { resizeAction } from "./graph-fit";
 import { ribbonOffset, wireLook, wirePath } from "./wire-style";
 import { saveAppearance, useAppearance } from "./appearance";
 import { isVsNote, noteLines, unityPortsFit, type WireStyle } from "@kesher/shared";
@@ -206,14 +207,19 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   };
   // Fit when another Blueprint or graph opens, not after each change (found on the real editor: moving a node re-fitted the view).
   const fitted = useRef("");
+  /** When the graph was fitted on opening (0 once the user touches it): the frame may still settle after that. */
+  const fitAt = useRef(0);
   useEffect(() => {
     if (!layout || fitted.current === `${path}|${graph}`) return;
     fitted.current = `${path}|${graph}`;
     fit();
+    fitAt.current = Date.now();
   }, [layout, path, graph]);
   // When the frame changes size (full screen, a turned phone, the side panel filling after a click on a node), the
   // view keeps its zoom and the point in the middle stays in the middle, as in Unreal: it never jumps to "fit"
-  // by itself (found by Roee: clicking a node zoomed out). Only a frame that had no size yet (a hidden tab) fits.
+  // by itself (found by Roee: clicking a node zoomed out). Only a frame that had no size yet (a hidden tab), or one
+  // still settling just after the graph opened, fits (the Unity graph loaded low: its frame appears with the graph,
+  // after this effect first ran, and kept changing size after the first fit).
   const fitRef = useRef(fit);
   fitRef.current = fit;
   useEffect(() => {
@@ -222,17 +228,14 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     let last = el.getBoundingClientRect();
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2) return;
-      const was = last;
-      last = r;
-      if (was.width < 2 || was.height < 2) return fitRef.current();
-      const dx = (r.width - was.width) / 2;
-      const dy = (r.height - was.height) / 2;
-      if (dx || dy) setView((v) => ({ ...v, x: v.x + dx, y: v.y + dy }));
+      const act = resizeAction(last, r, Date.now() - fitAt.current);
+      if (r.width >= 2 && r.height >= 2) last = r;
+      if (act === "fit") fitRef.current();
+      else if (act) setView((v) => ({ ...v, x: v.x + act.dx, y: v.y + act.dy }));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [!!layout]);
   const zoomAt = (factor: number, cx?: number, cy?: number) =>
     setView((v) => {
       const r = frame.current?.getBoundingClientRect();
@@ -253,6 +256,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       // Over a menu or the search box, the wheel scrolls its list (found by Roee: it zoomed the graph instead).
       if ((e.target as Element | null)?.closest?.(".bp-menu, .bp-find")) return;
       e.preventDefault();
+      fitAt.current = 0;
       const r = el.getBoundingClientRect();
       zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
     };
@@ -360,6 +364,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   };
 
   const down = (e: React.PointerEvent) => {
+    fitAt.current = 0;
     if (menu && !(e.target as Element).closest(".bp-menu")) setMenu(null);
     if (pinMenu && !(e.target as Element).closest(".bp-menu")) setPinMenu(null);
     if (varMenu && !(e.target as Element).closest(".bp-menu")) setVarMenu(null);

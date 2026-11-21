@@ -31,6 +31,16 @@ test("Hebrew and English requests point at their tool groups by words", () => {
   assert.deepEqual(groupsByWords("a rampage"), []);
 });
 
+test("natural browser and computer requests reach their groups (Phase 7)", () => {
+  for (const t of ["תפתח לי את האתר", "תלחץ על הכפתור הכחול", "תבדוק למה הכפתור לא עובד", "תמלא את הטופס בדף", "תראה לי את הדף בתצוגת מובייל", "יש שגיאה בקונסול", "click the Send button", "fill in the form", "check it in mobile view", "try my change"])
+    assert.ok(groupsByWords(t).includes("browser"), t);
+  for (const t of ["תזיז את החלון למסך השני", "תלחץ על הכפתור בפנקס רשימות", "move the window to the second monitor", "open file explorer", "drag the file to the taskbar"])
+    assert.ok(groupsByWords(t).includes("computer"), t);
+  assert.ok(!groupsByWords("תכתוב מסמך על הפרויקט").includes("browser"));
+  // English words at a word's start: "table", "format" and "dragon" are not browser or computer requests.
+  for (const t of ["make a table", "format this text", "draw a dragon"]) assert.ok(!groupsByWords(t).some((g) => g === "browser" || g === "computer"), t);
+});
+
 test("every tool is in at most one group, the first that matches", () => {
   assert.equal(groupOfTool("generate_image"), "images");
   assert.equal(groupOfTool("browser_open"), "browser");

@@ -406,7 +406,7 @@ export function App() {
         <PageBoundary page={hash}><Suspense fallback={<div className="page-loading" aria-busy="true" />}>{page}</Suspense></PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}
-      <ComputerBanner />
+      <ComputerBanner hidden={hash === "#/watch"} />
       <ApprovalsPill hidden={hash === "#/watch" || hash === "#/inbox" || hash.startsWith("#/c/")} />
       <ModelPickerHost />
       <PluginStyles />

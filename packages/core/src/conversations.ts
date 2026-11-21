@@ -1619,6 +1619,22 @@ export class ConversationManager {
     return out.sort((a, b) => a.at.localeCompare(b.at));
   }
 
+  /**
+   * Browser and computer actions waiting for the user, whole (the phone's live view draws approval card v2 from them).
+   *
+   * @returns Oldest first, each with its conversation and title.
+   */
+  pendingControl(): Array<{ conversationId: string; title: string; ev: Extract<AgentEvent, { type: "approval_request" }> }> {
+    const out: Array<{ conversationId: string; title: string; ev: Extract<AgentEvent, { type: "approval_request" }> }> = [];
+    const titles = new Map(this.deps.library.listConversations().map((c) => [c.id, c.title]));
+    for (const [id, s] of this.sessions) {
+      const pending = new Set(s.info().pendingApprovals);
+      if (!pending.size) continue;
+      for (const e of s.events) if (e.type === "approval_request" && e.control && pending.has(e.requestId)) out.push({ conversationId: id, title: titles.get(id) ?? "", ev: e });
+    }
+    return out.sort((a, b) => a.ev.at.localeCompare(b.ev.at));
+  }
+
   /** @returns Which conversations are working or waiting. */
   activity(): Record<string, "running" | "waiting"> {
     const out: Record<string, "running" | "waiting"> = {};
