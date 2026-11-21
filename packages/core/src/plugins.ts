@@ -324,6 +324,30 @@ export class PluginHost {
   }
 
   /**
+   * Puts an already verified plugin folder (from the store) in place and loads it. A plugin that is already installed
+   * is replaced (an update); a new one starts turned off.
+   *
+   * @param staged - Folder holding the unpacked plugin.
+   * @param id - Plugin id (from its checked manifest).
+   * @param into - The user's plugin folder.
+   * @param beforeLoad - Runs before it loads (the server marks it off, or keeps the old on/off choice).
+   * @param update - Replace an installed copy (only one in the user's folder).
+   */
+  async installStaged(staged: string, id: string, into: string, beforeLoad: (id: string) => Promise<void>, update: boolean): Promise<void> {
+    const final = join(into, id);
+    const have = this.plugins.find((p) => p.manifest.id === id);
+    if (have && !update) throw new Error(`A plugin with the id "${id}" is already installed.`);
+    if (have && !resolve(have.dir).startsWith(resolve(into) + sep)) throw new Error("This plugin ships with KesherAI and is updated with the app.");
+    if (!have && existsSync(final)) throw new Error(`A plugin with the id "${id}" is already installed.`);
+    const { rename } = await import("node:fs/promises");
+    await beforeLoad(id);
+    await this.reload(async () => {
+      await rm(final, { recursive: true, force: true });
+      await rename(staged, final);
+    });
+  }
+
+  /**
    * Removes a plugin the user installed (only from their plugin folder).
    *
    * @param id - Plugin id.

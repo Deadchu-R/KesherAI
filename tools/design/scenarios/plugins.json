@@ -1,0 +1,441 @@
+{
+ "group": "תוספים · Plugins",
+ "now": "2026-11-22T09:00:00Z",
+ "boards": [
+  {
+   "id": "PluginStoreList",
+   "title": "חנות התוספים: רשימה מהאינדקס, עדכון זמין, מותקן",
+   "titleEn": "Plugin store: the index list, an update available, installed",
+   "route": "#/plugins",
+   "height": {
+    "desktop": 1500,
+    "phone": 2700
+   },
+   "mocks": [
+    {
+     "url": "**/api/plugins",
+     "json": [
+      {
+       "id": "image-editor",
+       "name": "Image editor",
+       "version": "1.4.0",
+       "description": "Edit pictures with AI.",
+       "permissions": [],
+       "uses": [
+        "image"
+       ],
+       "status": "active",
+       "removable": false,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      },
+      {
+       "id": "weather-card",
+       "name": "Weather card",
+       "version": "1.0.0",
+       "description": "A weather card for the chat.",
+       "author": "dana-dev",
+       "permissions": [
+        "network"
+       ],
+       "status": "disabled",
+       "removable": true,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      }
+     ]
+    },
+    {
+     "url": "**/api/plugins/store",
+     "json": {
+      "source": "bundled",
+      "plugins": [
+       {
+        "id": "weather-card",
+        "name": {
+         "he": "כרטיס מזג אוויר",
+         "en": "Weather card"
+        },
+        "description": {
+         "he": "כרטיס מזג אוויר קטן בצ'אט",
+         "en": "A small weather card in the chat"
+        },
+        "version": "1.1.0",
+        "author": "dana-dev",
+        "repo": "dana-dev/weather-card",
+        "permissions": [
+         "network"
+        ],
+        "size": 48213,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": "1.0.0",
+        "updateAvailable": true
+       },
+       {
+        "id": "blender-bridge",
+        "name": {
+         "he": "גשר ל-Blender",
+         "en": "Blender bridge"
+        },
+        "description": {
+         "he": "שולח מודלים ל-Blender ובחזרה",
+         "en": "Sends models to Blender and back"
+        },
+        "version": "0.3.0",
+        "author": "omer-3d",
+        "repo": "omer-3d/blender-bridge",
+        "permissions": [
+         "files",
+         "engines",
+         "models"
+        ],
+        "size": 912340,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       },
+       {
+        "id": "night-theme",
+        "name": {
+         "he": "ערכת לילה",
+         "en": "Night theme"
+        },
+        "description": {
+         "he": "ערכת צבעים כהה ורכה",
+         "en": "A dark, soft colour theme"
+        },
+        "version": "2.0.0",
+        "author": "noa-ui",
+        "repo": "noa-ui/night-theme",
+        "permissions": [],
+        "size": 8120,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       }
+      ],
+      "requests": []
+     }
+    },
+    {
+     "url": "**/api/plugins/catalog",
+     "json": {
+      "official": [],
+      "community": []
+     }
+    },
+    {
+     "url": "**/api/plugins/dev",
+     "json": {
+      "folders": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".plugin-store .plugin-list li"
+    }
+   ]
+  },
+  {
+   "id": "PluginStorePermissions",
+   "title": "חנות התוספים: כרטיס הרשאות לפני התקנה (קבצים, תוכנות, מודלים) ולחיצה מפורשת",
+   "titleEn": "Plugin store: the permissions card before installing, and an explicit press",
+   "route": "#/plugins",
+   "height": {
+    "desktop": 1500,
+    "phone": 2700
+   },
+   "mocks": [
+    {
+     "url": "**/api/plugins",
+     "json": [
+      {
+       "id": "image-editor",
+       "name": "Image editor",
+       "version": "1.4.0",
+       "description": "Edit pictures with AI.",
+       "permissions": [],
+       "uses": [
+        "image"
+       ],
+       "status": "active",
+       "removable": false,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      },
+      {
+       "id": "weather-card",
+       "name": "Weather card",
+       "version": "1.0.0",
+       "description": "A weather card for the chat.",
+       "author": "dana-dev",
+       "permissions": [
+        "network"
+       ],
+       "status": "disabled",
+       "removable": true,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      }
+     ]
+    },
+    {
+     "url": "**/api/plugins/store",
+     "json": {
+      "source": "bundled",
+      "plugins": [
+       {
+        "id": "weather-card",
+        "name": {
+         "he": "כרטיס מזג אוויר",
+         "en": "Weather card"
+        },
+        "description": {
+         "he": "כרטיס מזג אוויר קטן בצ'אט",
+         "en": "A small weather card in the chat"
+        },
+        "version": "1.1.0",
+        "author": "dana-dev",
+        "repo": "dana-dev/weather-card",
+        "permissions": [
+         "network"
+        ],
+        "size": 48213,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": "1.0.0",
+        "updateAvailable": true
+       },
+       {
+        "id": "blender-bridge",
+        "name": {
+         "he": "גשר ל-Blender",
+         "en": "Blender bridge"
+        },
+        "description": {
+         "he": "שולח מודלים ל-Blender ובחזרה",
+         "en": "Sends models to Blender and back"
+        },
+        "version": "0.3.0",
+        "author": "omer-3d",
+        "repo": "omer-3d/blender-bridge",
+        "permissions": [
+         "files",
+         "engines",
+         "models"
+        ],
+        "size": 912340,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       },
+       {
+        "id": "night-theme",
+        "name": {
+         "he": "ערכת לילה",
+         "en": "Night theme"
+        },
+        "description": {
+         "he": "ערכת צבעים כהה ורכה",
+         "en": "A dark, soft colour theme"
+        },
+        "version": "2.0.0",
+        "author": "noa-ui",
+        "repo": "noa-ui/night-theme",
+        "permissions": [],
+        "size": 8120,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       }
+      ],
+      "requests": []
+     }
+    },
+    {
+     "url": "**/api/plugins/catalog",
+     "json": {
+      "official": [],
+      "community": []
+     }
+    },
+    {
+     "url": "**/api/plugins/dev",
+     "json": {
+      "folders": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".plugin-store .plugin-list li"
+    },
+    {
+     "click": ".plugin-store .plugin-list li:nth-child(2) button"
+    },
+    {
+     "wait": ".plugin-store .pl-preview"
+    },
+    {
+     "scroll": ".plugin-store .pl-preview"
+    }
+   ]
+  },
+  {
+   "id": "PluginStorePhoneRequest",
+   "title": "חנות התוספים: הטלפון מבקש התקנה והמחשב מציג כרטיס אישור",
+   "titleEn": "Plugin store: the phone requests an install, the computer shows an approval card",
+   "route": "#/plugins",
+   "height": {
+    "desktop": 1500,
+    "phone": 2700
+   },
+   "mocks": [
+    {
+     "url": "**/api/plugins",
+     "json": [
+      {
+       "id": "image-editor",
+       "name": "Image editor",
+       "version": "1.4.0",
+       "description": "Edit pictures with AI.",
+       "permissions": [],
+       "uses": [
+        "image"
+       ],
+       "status": "active",
+       "removable": false,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      },
+      {
+       "id": "weather-card",
+       "name": "Weather card",
+       "version": "1.0.0",
+       "description": "A weather card for the chat.",
+       "author": "dana-dev",
+       "permissions": [
+        "network"
+       ],
+       "status": "disabled",
+       "removable": true,
+       "isolation": {
+        "process": true,
+        "files": true
+       }
+      }
+     ]
+    },
+    {
+     "url": "**/api/plugins/store",
+     "json": {
+      "source": "bundled",
+      "plugins": [
+       {
+        "id": "weather-card",
+        "name": {
+         "he": "כרטיס מזג אוויר",
+         "en": "Weather card"
+        },
+        "description": {
+         "he": "כרטיס מזג אוויר קטן בצ'אט",
+         "en": "A small weather card in the chat"
+        },
+        "version": "1.1.0",
+        "author": "dana-dev",
+        "repo": "dana-dev/weather-card",
+        "permissions": [
+         "network"
+        ],
+        "size": 48213,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": "1.0.0",
+        "updateAvailable": true
+       },
+       {
+        "id": "blender-bridge",
+        "name": {
+         "he": "גשר ל-Blender",
+         "en": "Blender bridge"
+        },
+        "description": {
+         "he": "שולח מודלים ל-Blender ובחזרה",
+         "en": "Sends models to Blender and back"
+        },
+        "version": "0.3.0",
+        "author": "omer-3d",
+        "repo": "omer-3d/blender-bridge",
+        "permissions": [
+         "files",
+         "engines",
+         "models"
+        ],
+        "size": 912340,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       },
+       {
+        "id": "night-theme",
+        "name": {
+         "he": "ערכת לילה",
+         "en": "Night theme"
+        },
+        "description": {
+         "he": "ערכת צבעים כהה ורכה",
+         "en": "A dark, soft colour theme"
+        },
+        "version": "2.0.0",
+        "author": "noa-ui",
+        "repo": "noa-ui/night-theme",
+        "permissions": [],
+        "size": 8120,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "installedVersion": null,
+        "updateAvailable": false
+       }
+      ],
+      "requests": [
+       {
+        "id": "r1",
+        "pluginId": "blender-bridge",
+        "at": 1763802000000
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/plugins/catalog",
+     "json": {
+      "official": [],
+      "community": []
+     }
+    },
+    {
+     "url": "**/api/plugins/dev",
+     "json": {
+      "folders": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".plugin-store .pl-preview[role=alert]"
+    },
+    {
+     "scroll": ".plugin-store .pl-preview"
+    }
+   ]
+  }
+ ]
+}

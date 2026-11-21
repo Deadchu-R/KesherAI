@@ -2,11 +2,12 @@ import { isLocalRequest } from "../auth.js";
 import { findAffinity, findBlender, openInAffinity, openInBlender } from "../open-in-app.js";
 import type { FastifyInstance } from "fastify";
 import { PLUGIN_FILES_KEY } from "../auth.js";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import type { KesherServices } from "../services.js";
 import { PluginManifestSchema } from "@kesher/plugin-sdk";
+import { acceptedAll, compareVersions, downloadRelease, loadStoreIndex, unpackVerified, type StoreEntry } from "../plugin-store.js";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -88,6 +89,93 @@ export async function pluginRoutes(app: FastifyInstance, s: KesherServices): Pro
     await s.plugins.reload();
     return { folders: s.config.pluginDevFolders, plugins: s.plugins.list().filter((p) => p.dev).map((p) => ({ id: p.manifest.id, dir: p.dir, status: p.status, error: p.error })) };
   });
+
+  // ---------- The plugin store (plugins/index.json): see plugin-store.ts for the rules ----------
+  /** The index, with what is installed here and which installs are waiting for the computer's approval. */
+  const storeIndex = () =>
+    loadStoreIndex(s.pluginRoots, process.env.KESHER_STORE_INDEX_URL === "off" ? undefined : async () => {
+      // KESHER_STORE_INDEX_URL=off keeps the copy shipped with the app (tests, offline use).
+      const r = await fetch("https://raw.githubusercontent.com/Deadchu-R/KesherAI/main/plugins/index.json", { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+      return r.json();
+    });
+  const entryOf = async (id: unknown): Promise<StoreEntry | undefined> => (await storeIndex()).index.plugins.find((p) => p.id === id);
+  const installedVersion = (id: string) => s.plugins.list().find((p) => p.manifest.id === id)?.manifest.version;
+
+  /** Downloads, checks and installs an entry. Installs start turned off; an update keeps the old on/off choice. */
+  const installEntry = async (entry: StoreEntry): Promise<{ id: string; version: string; updated: boolean }> => {
+    const have = s.plugins.list().find((p) => p.manifest.id === entry.id);
+    if (have && compareVersions(entry.version, have.manifest.version) <= 0) throw new Error("This version is already installed.");
+    await mkdir(s.paths.plugins, { recursive: true });
+    const { dir } = await unpackVerified(entry, await downloadRelease(entry), s.paths.plugins);
+    try {
+      const was = s.config.plugins[entry.id];
+      await s.plugins.installStaged(dir, entry.id, s.paths.plugins, async (id) => {
+        s.config.plugins[id] = { enabled: have ? was?.enabled ?? false : false, settings: was?.settings ?? {} };
+        await s.saveConfig();
+      }, !!have);
+    } catch (err) {
+      await rm(dir, { recursive: true, force: true });
+      throw err;
+    }
+    return { id: entry.id, version: entry.version, updated: !!have };
+  };
+
+  app.get("/api/plugins/store", async () => {
+    const { index, source } = await storeIndex();
+    return {
+      source,
+      plugins: index.plugins.map((p) => {
+        const have = installedVersion(p.id);
+        return { ...p, installedVersion: have ?? null, updateAvailable: !!have && compareVersions(p.version, have) > 0 };
+      }),
+      requests: s.pluginInstallRequests.list(),
+    };
+  });
+
+  /** Installs on this computer. Body: `{ id, accept }`, where `accept` lists the permissions the user pressed install on. */
+  app.post<{ Body: { id?: string; accept?: unknown } }>("/api/plugins/store/install", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Plugins are installed at the computer that runs KesherAI. Send a request instead.", request: true });
+    const entry = await entryOf(req.body?.id);
+    if (!entry) return reply.code(404).send({ error: "That plugin is not in the store." });
+    if (!acceptedAll(entry, req.body?.accept)) return reply.code(400).send({ error: "Accept the permissions the plugin asks for first.", permissions: entry.permissions });
+    try {
+      return await installEntry(entry);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** A phone (or any paired device) asks for an install; the computer shows an approval card. Body: `{ id }`. */
+  app.post<{ Body: { id?: string } }>("/api/plugins/store/requests", async (req, reply) => {
+    const entry = await entryOf(req.body?.id);
+    if (!entry) return reply.code(404).send({ error: "That plugin is not in the store." });
+    try {
+      const request = s.pluginInstallRequests.create(entry.id);
+      void s.notifier.send({ title: "Plugin install request", body: `${entry.name.en}: approve at the computer`, path: "#/plugins", tags: ["package"] }).catch(() => undefined);
+      return { request, waiting: true };
+    } catch (err) {
+      return reply.code(429).send({ error: (err as Error).message });
+    }
+  });
+
+  /** The computer approves a request, with the permissions it was shown. Body: `{ accept }`. */
+  app.post<{ Params: { rid: string }; Body: { accept?: unknown } }>("/api/plugins/store/requests/:rid/approve", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only the computer that runs KesherAI can approve an install." });
+    const waiting = s.pluginInstallRequests.list().find((r) => r.id === req.params.rid);
+    const entry = waiting && (await entryOf(waiting.pluginId));
+    if (!waiting || !entry) return reply.code(404).send({ error: "That request is gone." });
+    if (!acceptedAll(entry, req.body?.accept)) return reply.code(400).send({ error: "Accept the permissions the plugin asks for first.", permissions: entry.permissions });
+    s.pluginInstallRequests.take(waiting.id);
+    try {
+      return await installEntry(entry);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Declines (or cancels) a request; allowed from anywhere, it only removes it. */
+  app.delete<{ Params: { rid: string } }>("/api/plugins/store/requests/:rid", async (req) => ({ ok: !!s.pluginInstallRequests.take(req.params.rid) }));
 
   /** Turns a plugin on or off. Body: `{ enabled }`. */
   app.put<{ Params: { id: string }; Body: { enabled?: boolean } }>("/api/plugins/:id", async (req, reply) => {

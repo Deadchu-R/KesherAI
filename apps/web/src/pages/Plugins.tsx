@@ -3,6 +3,7 @@ import { api } from "../api";
 import { refreshPluginUi } from "../plugins";
 import { getLocale, t } from "../i18n";
 import { toast } from "../library";
+import { PluginStore } from "./PluginStore";
 
 interface Installed {
   id: string;
@@ -197,6 +198,8 @@ export function PluginsPage() {
           ))}
         </ul>
       </section>
+
+      <PluginStore />
 
       <section className="card">
         <h2>{t("plCatalog")}</h2>

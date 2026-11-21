@@ -23,6 +23,7 @@ import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
 import { PluginHost } from "./plugins.js";
+import { InstallRequests } from "./plugin-store.js";
 import { findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { modelTurnFor, onModelSpeed } from "./conversations.js";
@@ -531,6 +532,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     assets,
     downloads,
     plugins,
+    pluginRoots: options.pluginRoots ?? [],
+    pluginInstallRequests: new InstallRequests(),
     engine,
     library,
     projectFacts,

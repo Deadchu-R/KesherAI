@@ -256,6 +256,65 @@ Calls cross the processes as messages (tools, model providers with their streame
 This is not a full sandbox: a plugin with `network` can still send what it can read, and one with `filesystem` can read
 your files. Only install plugins you trust, and as an author, ask only for what your plugin needs.
 
+## Make a plugin
+
+*בעברית: יוצרים תיקייה עם `kesher-plugin.json`, מפתחים אותה מהמקום שלה (נטענת מחדש בכל שמירה), ובודקים בטלפון ברוחב 390.*
+
+1. **Start:** `pnpm create-plugin my-plugin --dir ~/dev/my-plugin` makes the folder with a manifest and an example page.
+2. **Manifest:** see [The manifest](#the-manifest-kesher-pluginjson). `id` is lower-case letters, digits and `-`; `version` is `x.y.z`; `kesher.apiVersion` is `1`. A folder with only `ui` is a mod and needs no build.
+3. **Bridge API:** pages and panels talk to the app only through the methods in the table under [Interface](#4-interface-pages-panels-themes-composer-buttons-mods) (`chat`, `storage`, `image.*`, `speech.*`, `editor.*`, …). Nothing else is reachable from the sandboxed frame. A method that needs a model kind needs it in `uses` (`image`, `speech`, `video`, `sound`, `model`).
+4. **Permissions:** declare only what you need. The store shows them to the user in these words:
+
+   | Manifest | Store shows | Meaning |
+   |---|---|---|
+   | `permissions: ["filesystem"]` | Files | reads and writes outside its own folder |
+   | `permissions: ["network"]` | Internet | outbound requests |
+   | `uses: [...]` other than `chat` | Models | the local image, speech, video, sound or 3D models |
+   | `permissions: ["shell"]` / `programs` | Programs | starts programs on the computer, each time with approval |
+
+5. **Local development:** Plugins page → *Make your own* → *Load a folder*. The folder loads from where it is and reloads after each save. Check it at 390 px wide, in Hebrew and English, and from the phone (remote): the page runs on the phone while its tools run on the computer, so never assume the page runs on the PC.
+6. **Check:** `pnpm plugin:check <folder>` validates the manifest; write `node:test` tests for code you ship.
+
+## Publish to the store
+
+*בעברית: פותחים בקשת משיכה ל-`plugins/index.json` עם סכום הביקורת של קובץ ה-zip. החנות מתקינה רק מה שברשימה.*
+
+The store lists what is in [`plugins/index.json`](../plugins/index.json). It is the allowlist: nothing outside it can be installed from the store.
+
+1. Build your plugin and make a zip with `kesher-plugin.json` at its root (one wrapping folder is accepted). Include built `dist/`; leave out `node_modules` and `.git`.
+2. Publish it as a GitHub release **`v<version>`** of your repository, with the zip as an asset named `<id>.zip` (or set `asset`).
+3. Get its checksum: `sha256sum my-plugin.zip` (Windows: `certutil -hashfile my-plugin.zip SHA256`). Lower-case hex.
+4. Open a pull request that adds an entry to `plugins/index.json`:
+
+   ```json
+   {
+     "id": "my-plugin",
+     "name": { "he": "התוסף שלי", "en": "My plugin" },
+     "description": { "he": "מה הוא עושה, במשפט", "en": "What it does, in a sentence" },
+     "version": "1.0.0",
+     "author": "your-github-name",
+     "repo": "your-github-name/my-plugin",
+     "permissions": ["network"],
+     "size": 48213,
+     "sha256": "<64 hex digits>"
+   }
+   ```
+
+   `permissions` is any of `files`, `network`, `models`, `engines`, and must cover what the manifest asks for: the app refuses a zip whose manifest asks for more than the entry lists, or whose `id` or `version` differ.
+5. To release an update, upload the new zip, then change `version`, `size` and `sha256` in a pull request. Users see an update button; the permissions card is shown again.
+
+What the app does for the user: downloads only from `github.com/<repo>/releases/download/v<version>/<asset>`, stops if the file is bigger than `size`, checks `sha256` before opening it, refuses unsafe paths in the zip, shows the permissions and waits for a press. The plugin installs turned off. From a phone the user can only *request* an install; the computer shows an approval card.
+
+## Fork KesherAI
+
+*בעברית: כל מה שמזהה את האפליקציה נמצא בקובץ מיתוג אחד; מוסיפים תוספים בתיקיית `plugins/` בלי לגעת בליבה.*
+
+KesherAI is Apache-2.0; forks are welcome. [FORKING.md](FORKING.md) has the whole guide. In short:
+
+- Rebrand in `packages/shared/src/branding.config.ts` (name, `appId`, colours, links, port), then the installer identity in `apps/desktop/package.json`.
+- Ship your own plugins by adding folders under `plugins/` (they are bundled with the app) and your own store by pointing the index address in `packages/core/src/routes/plugins.ts` at your repository's `plugins/index.json` (or leave an `index.json` in `plugins/`, which the app reads when offline).
+- Keep merging upstream: change branding and plugins, not core files.
+
 ## Publishing
 
 - Put it on GitHub with `kesher-plugin.json` at the root (and a built `dist/` if it has code).

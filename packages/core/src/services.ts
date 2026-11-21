@@ -15,6 +15,7 @@ import type { DownloadManager } from "@kesher/downloads";
 import type { KesherConfig, DataPaths } from "./config.js";
 import type { AssetStore } from "./assets.js";
 import type { PluginHost } from "./plugins.js";
+import type { InstallRequests } from "./plugin-store.js";
 import type { LlamaEngine } from "./llamacpp.js";
 import type { Library } from "./library.js";
 import type { ConversationManager } from "./conversations.js";
@@ -68,6 +69,10 @@ export interface KesherServices {
   assets: AssetStore;
   downloads: DownloadManager;
   plugins: PluginHost;
+  /** Folders that hold the bundled plugins (and the store's `index.json`). */
+  pluginRoots: string[];
+  /** Install requests from paired devices, waiting for the computer's approval. */
+  pluginInstallRequests: InstallRequests;
   /** The built-in llama.cpp engine. */
   engine: LlamaEngine;
   /** The chat model files on this computer (KesherAI's own and the scanned folders), cached for 5 minutes. */
