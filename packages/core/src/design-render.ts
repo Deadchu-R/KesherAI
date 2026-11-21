@@ -197,7 +197,7 @@ async function prepareHub(page: PwPage, hubBase: string, job: DesignJob): Promis
   const seed = job.hub!;
   const plan = hubPlan(seed, job.now);
   await page.goto(`${hubBase}/__blank`, { waitUntil: "load" });
-  const sealed = (await page.evaluate(`(${HUB_SEED_JS})(${JSON.stringify(plan)})`)) as { presence: Array<{ id: string; name: string; kind: string; online: boolean }>; envs: unknown[]; hubKey: string };
+  const sealed = (await page.evaluate(`(${HUB_SEED_JS})(${JSON.stringify(plan)})`)) as { presence: Array<{ id: string; name: string; kind: string; online: boolean }>; envs: unknown[]; boardEnvs: unknown[]; hubKey: string };
   // This browser is a device of the hub too (a phone), as the real hub lists it.
   const me = seed.device ? [{ id: plan.deviceId, name: seed.device.name, kind: "phone", publicKey: "", online: true, busy: false, optIn: plan.optIn, agents: [] }] : [];
   const presence = [...sealed.presence, ...me];
@@ -211,7 +211,11 @@ async function prepareHub(page: PwPage, hubBase: string, job: DesignJob): Promis
     json("**/api/agents*", { envs: sealed.envs, more: false }),
     json("**/api/push/*", { ok: true }, "POST"),
   ]);
-  await page.routeWebSocket(/\/ws\/device/, (ws) => ws.send(JSON.stringify({ t: "welcome", deviceId: plan.deviceId, hubKey: sealed.hubKey, presence, paused: false, rotateDue: false })));
+  await page.routeWebSocket(/\/ws\/device/, (ws) => {
+    ws.send(JSON.stringify({ t: "welcome", deviceId: plan.deviceId, hubKey: sealed.hubKey, presence, paused: false, rotateDue: false }));
+    // The PCs' shared boards come as sealed snapshots, as the real hub delivers them.
+    for (const env of sealed.boardEnvs) ws.send(JSON.stringify({ t: "deliver", env }));
+  });
 }
 
 /** Shoots one job; returns the PNG. */

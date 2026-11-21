@@ -406,6 +406,31 @@ test("task-inbox reports: only from a PC to a phone, queued while the phone is o
   assert.ok(!JSON.stringify(store.auditList(100)).includes("inbox"));
 });
 
+test("board snapshot: only from a PC to a phone, sealed (the hub reads nothing), not audited; a board command is a phone's", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  sockets.on.add(phone.id);
+  await hub.onOpen(pc.id);
+  await hub.onOpen(phone.id);
+  const body: SealedBody = { type: "board", rev: 4, items: [{ id: "t1", title: "SECRET board task", status: "open", size: "big", priority: 5, at: 1 }], doneTotal: 0, at: 5 };
+  const env = await sealMessage({ from: pc.id, to: phone.id, kind: "board", ttl: 1800 }, body, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env }));
+  const got = sockets.frames(phone.id, "deliver").at(-1);
+  assert.ok(got?.t === "deliver");
+  assert.ok(!JSON.stringify(got.env).includes("SECRET"));
+  assert.deepEqual(await openEnvelope(got.env, phone.keys.privateKey, pc.keys.publicKey), body);
+  const fake = await sealMessage({ from: phone.id, to: pc.id, kind: "board" }, body, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fake }));
+  assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fake.id });
+  assert.ok(!JSON.stringify(store.auditList(100)).includes("board"));
+  const cmd: SealedBody = { type: "command", commandId: "c1", action: "board", taskId: "t1", board: { op: "raise" } };
+  const ok = await sealMessage({ from: phone.id, to: pc.id, kind: "command" }, cmd, phone.keys.privateKey, pc.keys.publicKey);
+  await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: ok }));
+  assert.deepEqual(sockets.frames(phone.id, "sent").at(-1), { t: "sent", id: ok.id, queued: false });
+});
+
 test("Claude chat device: pairs by code, reports agent activity without PC opt-ins, never relays or takes tasks", async () => {
   const { hub, store, sockets } = await setup();
   const chat = await pair(hub, "claude-chat", "Claude chat");

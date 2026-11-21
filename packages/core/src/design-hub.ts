@@ -165,6 +165,8 @@ export interface HubPlan {
   pcs: Array<{ id: string; name: string; kind: string; online: boolean }>;
   tasks: Array<Record<string, unknown>>;
   agents: Array<{ pc: string; runId: string; state: Record<string, unknown>; events: Array<Record<string, unknown>> }>;
+  /** The PCs' shared task boards, whole (sealed to this device and delivered after the welcome). */
+  boards: Array<{ pc: string; rev: number; items: Array<Record<string, unknown>>; doneTotal: number; at: number }>;
 }
 
 /**
@@ -180,7 +182,12 @@ export function hubPlan(seed: HubSeed, now: number): HubPlan {
     const state = hubAgentState(a.state, a.runId, now);
     return { pc: a.pc, runId: a.runId, state, events: a.events.map((e, i) => ({ seq: i + 1, t: now - (a.events.length - i) * 30_000, ...e })) };
   });
-  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents };
+  const boards = seed.boards.map((b) => {
+    if (!seed.pcs.some((p) => p.id === b.pc)) throw new Error(`hub seed: the board is on PC "${b.pc}", which is not in "pcs"`);
+    const items = b.items.map((i, n) => ({ id: `t${n + 1}`, status: "open", size: "big", priority: 5, at: now - (n + 1) * 600_000, ...i }));
+    return { pc: b.pc, rev: 40, items, doneTotal: b.doneTotal ?? items.filter((i) => i.status === "done").length, at: now };
+  });
+  return { deviceId: HUB_DEVICE_ID, ...(seed.device ? { device: seed.device } : {}), nowIso: new Date(now).toISOString(), optIn: PC_OPT_IN, pcs: seed.pcs, tasks: hubTasks(seed, now), agents, boards };
 }
 
 /**
@@ -207,6 +214,8 @@ export const HUB_SEED_JS = `async (plan) => {
     env.run = a.runId; env.n = a.events.length; env.seq = seq++; env.at = a.state.lastEventAt;
     envs.push(env);
   }
+  const boardEnvs = [];
+  for (const b of plan.boards) boardEnvs.push(await c.sealMessage({ from: b.pc, to: plan.deviceId, kind: "board" }, { type: "board", rev: b.rev, items: b.items, doneTotal: b.doneTotal, at: b.at }, keys[b.pc].privateKey, me.publicKey));
   const db = await new Promise((ok, fail) => {
     const r = indexedDB.open("kesher-hub", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("kv");
@@ -222,7 +231,7 @@ export const HUB_SEED_JS = `async (plan) => {
   if (plan.device) await put("device", { deviceId: plan.deviceId, token: "design-token", hubKey, privateKey: me.privateKey, publicKey: me.publicKey, name: plan.device.name });
   await put("tasks", plan.tasks);
   db.close();
-  return { presence, envs, hubKey };
+  return { presence, envs, boardEnvs, hubKey };
 }`;
 
 /**

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chooseRoute } from "./hub-route.js";
-import { cleanAgents, cleanApproval, fitApprovals, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, syncPinger, ttlFor, type HubPresence } from "./hub-protocol.js";
+import { boardView, boardWaitsOnMe, boardWho, cleanAgents, cleanApproval, cleanBoardCommand, fitApprovals, fitBoard, type HubBoardItem, DEFAULT_OPT_IN, HUB_LIMITS, isSafeLink, parseDeviceFrame, parseEnvelope, parseSealedBody, syncPinger, ttlFor, type HubPresence } from "./hub-protocol.js";
 
 const env = { v: 1, id: "m1", from: "pc1", to: "phone1", kind: "result", ttl: 3600, iv: "AAAAAAAAAAAAAAAA", ct: "abc_-" };
 
@@ -111,4 +111,45 @@ test("inbox_task: the gemini executor, the deferred state with its reset time, s
   assert.equal((parseSealedBody({ ...base, executor: "mistral" }, "inbox_task") as { executor: string }).executor, "mistral");
   assert.equal((parseSealedBody({ ...base, executor: "<b>x" }, "inbox_task") as { executor: string }).executor, "claude");
   assert.equal(parseSealedBody({ ...base, state: "unknown-state" }, "inbox_task"), null);
+});
+
+test("board: caps (active and the last 20 done), the text limit, bad items and commands", () => {
+  const item = (n: number, x: Partial<HubBoardItem> = {}): HubBoardItem => ({ id: `t${n}`, title: `Task ${n} ${"x".repeat(190)}`, status: "open", size: "big", priority: 5, at: n, ...x });
+  const all = [
+    ...Array.from({ length: 70 }, (_, n) => item(n + 1)),
+    ...Array.from({ length: 30 }, (_, n) => item(100 + n, { status: "done", result: "r".repeat(300) })),
+    item(200, { status: "claimed", owner: "claude", priority: 9 }),
+  ];
+  const fit = fitBoard(all);
+  assert.equal(fit.items.filter((i) => i.status !== "done").length, HUB_LIMITS.boardActive, "active items are capped");
+  assert.equal(fit.items[0]!.id, "t200", "taken ones first");
+  assert.equal(fit.doneTotal, 30);
+  assert.ok(fit.items.filter((i) => i.status === "done").length <= HUB_LIMITS.boardDone);
+  assert.ok(fit.items.filter((i) => i.status === "done").every((i) => i.at >= 110), "the newest done ones");
+  assert.ok(JSON.stringify(fit.items).length <= HUB_LIMITS.boardChars, "one snapshot fits one sealed message");
+  assert.equal(fitBoard([item(1, { id: "../x" }), item(2, { status: "weird" as never })]).items.length, 0, "bad items are dropped");
+  const body = parseSealedBody({ type: "board", rev: 3, items: [...fit.items, { nope: 1 }], doneTotal: 30, at: 9 }, "board");
+  assert.equal((body as { items: unknown[] }).items.length, fit.items.length);
+  assert.equal(parseSealedBody({ type: "board", rev: 3, items: [] }, "approvals"), null, "a kind cannot be swapped");
+  assert.equal(ttlFor("board", 7 * 24 * 3600), HUB_LIMITS.approvalTtl);
+  assert.deepEqual(cleanBoardCommand({ op: "note", text: `  ${"n".repeat(2000)}` })!.op, "note");
+  assert.equal(cleanBoardCommand({ op: "note", text: "   " }), null);
+  assert.equal(cleanBoardCommand({ op: "delete" }), null);
+  const cmd = (board: unknown) => parseSealedBody({ type: "command", commandId: "c1", action: "board", taskId: "t4", board }, "command");
+  assert.deepEqual(cmd({ op: "for-kesher", on: false }), { type: "command", commandId: "c1", action: "board", taskId: "t4", board: { op: "for-kesher", on: false } });
+  assert.equal(cmd({ op: "rm" }), null);
+});
+
+test("board: filters, who an item is for, waiting on me", () => {
+  const it = (id: string, x: Partial<HubBoardItem>): HubBoardItem => ({ id, title: id, status: "open", size: "big", priority: 5, at: 1, ...x });
+  const items = [it("t1", {}), it("t2", { size: "small" }), it("t3", { status: "blocked", owner: "claude" }), it("t4", { status: "claimed", owner: "roee" }), it("t5", { status: "done", owner: "kesher" }), it("t6", { forKesher: true }), it("t7", { fable: true, size: "small" })];
+  assert.equal(boardWho(items[1]!), "kesher");
+  assert.equal(boardWho(items[0]!), "claude");
+  assert.equal(boardWho(items[5]!), "kesher");
+  assert.equal(boardWho(items[6]!), "claude", "Fable tasks are Claude's");
+  assert.deepEqual(boardView(items, "open").map((i) => i.id), ["t1", "t2", "t3", "t4", "t6", "t7"]);
+  assert.deepEqual(boardView(items, "me").map((i) => i.id), ["t3", "t4"]);
+  assert.deepEqual(boardView(items, "done").map((i) => i.id), ["t5"]);
+  assert.deepEqual(boardView(items, "open", "kesher").map((i) => i.id), ["t2", "t6"]);
+  assert.equal(boardWaitsOnMe(items[4]!), false);
 });

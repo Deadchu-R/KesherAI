@@ -212,6 +212,16 @@ button.chip { cursor: pointer; min-height: 30px; }
 .wl-row:disabled { cursor: default; opacity: 1; }
 .wl-title { white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
 .wl-text { padding: 0 14px 12px; padding-inline-start: calc(14px + 2.2em); white-space: pre-wrap; overflow-wrap: anywhere; color: #b9b9c0; line-height: 1.5; }
+/* The shared task board (board.ts): rows like the work list's, filters and owner chips above, actions when a row is open. */
+.sb-pc + .sb-pc { border-top: 1px solid #222226; margin-top: 8px; }
+.sb-pc .head { padding: 12px 14px 4px; gap: 8px; align-items: baseline; }
+.sb-filters { padding: 4px 14px 6px; }
+.sb-row { width: 100%; border: 0; border-top: 1px solid #1f1f23; background: none; color: inherit; font: inherit; text-align: start; align-items: flex-start; }
+.sb-title { display: block; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; }
+.sb-meta { gap: 4px 10px; margin-top: 2px; }
+.sb-result { display: block; margin-top: 2px; color: #b9b9c0; overflow-wrap: anywhere; }
+.sb-body { padding: 0 14px 12px; display: grid; gap: 8px; }
+.sb-note .inp { min-width: 0; }
 .tag.wl-done { background: #1f2a24; color: var(--ok); } .tag.wl-doing { background: #262a45; color: #c3cbff; }
 .tag.wl-next { background: #26262a; color: #a9a9b0; } .tag.wl-roee { background: #2a2520; color: var(--warn); }
 .tag.wl-paused { background: transparent; border: 1px dashed #3a3a40; color: #77777e; }

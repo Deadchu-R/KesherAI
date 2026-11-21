@@ -378,3 +378,46 @@ test("Run / Cancel commands: only from a paired phone; the PC answers sealed wit
   assert.equal(res.length, 1);
   assert.deepEqual(await openEnvelope(res[0]!, phone.privateKey, pcPub), { type: "command_result", commandId: "k1", taskId: "agy-1", ok: true, text: "Started on the PC." });
 });
+
+test("board: one sealed snapshot to the online phones, on change only; a board command from a phone is applied as Roee", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  await r.board.change("roee", [{ op: "add", title: "Build the hub board", details: "SECRET" }]);
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const presence = [
+    { id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} },
+    { id: "dphone2", name: "Phone 2", kind: "phone", publicKey: phone.publicKey, online: false, busy: false, agents: [], optIn: {} },
+  ];
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence }));
+  await r.client.reportBoard();
+  const snaps = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "board").map((f) => f.env as SealedEnvelope);
+  assert.deepEqual(snaps().map((e) => e.to), ["dphone"], "online phones only: nothing queues on the hub for an off one");
+  assert.equal(snaps()[0]!.ttl, 30 * 60);
+  const body = (await openEnvelope(snaps()[0]!, phone.privateKey, pcPub)) as Extract<SealedBody, { type: "board" }>;
+  assert.equal(body.items[0]!.title, "Build the hub board");
+  assert.ok(!JSON.stringify(body).includes("SECRET"));
+  await r.client.reportBoard();
+  assert.equal(snaps().length, 1, "nothing changed, nothing sent");
+  await r.board.change("claude", [{ op: "claim", id: "t1" }]);
+  await r.client.reportBoard();
+  assert.equal(snaps().length, 2, "a change sends a new snapshot");
+  // A command from the phone goes through the board's own rules (the app's `boardCommand`, wired in server.ts).
+  const applied: Array<[string, unknown]> = [];
+  (r.client as unknown as { deps: { boardCommand: unknown } }).deps.boardCommand = async (id: string, cmd: unknown) => (applied.push([id, cmd]), { ok: true, text: "Reopened." });
+  const cmd: SealedBody = { type: "command", commandId: "c1", action: "board", taskId: "t1", board: { op: "reopen" } };
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: await sealMessage({ from: "dphone", to: "dpc", kind: "command" }, cmd, phone.privateKey, pcPub) }));
+  assert.deepEqual(applied, [["t1", { op: "reopen" }]]);
+  const result = r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "command_result").map((f) => f.env as SealedEnvelope);
+  assert.equal(((await openEnvelope(result[0]!, phone.privateKey, pcPub)) as { ok: boolean; text: string }).text, "Reopened.");
+  // An older hub that cannot read the frame: no more snapshots on this link.
+  await r.board.change("claude", [{ op: "release", id: "t1" }]);
+  await r.client.onMessage(JSON.stringify({ t: "refused", code: "bad-frame" }));
+  await r.client.reportBoard();
+  assert.equal(snaps().length, 2, "stopped after the hub refused it");
+});

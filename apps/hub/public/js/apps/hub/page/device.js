@@ -88,6 +88,12 @@ export class HubDevice {
      */
     approvals = new Map();
     approvalActions = new Map();
+    /**
+     * Each PC's shared task board (its newest sealed snapshot, in memory; the PC sends it again when the page connects),
+     * and the board commands sent from here by `<pc id>/<task id>`: waiting for the PC, then its answer.
+     */
+    boards = new Map();
+    boardActions = new Map();
     /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
     taskActions = new Map();
     agentSeq = 0;
@@ -513,6 +519,8 @@ export class HubDevice {
             return;
         if (body.type === "approvals")
             return this.onApprovals(env.from, body.items, body.at);
+        if (body.type === "board")
+            return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
         if (body.type === "command_result")
             return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
         if (body.type === "inbox_task")
@@ -548,6 +556,35 @@ export class HubDevice {
             }
         }
         await this.saveTasks();
+    }
+    /** A PC's board snapshot: replaces the last one (an older one that arrives late is ignored). */
+    onBoard(from, items, doneTotal, rev, at) {
+        const last = this.boards.get(from);
+        if (last && last.at > at)
+            return;
+        this.boards.set(from, { items, doneTotal, rev, at });
+        this.changed();
+    }
+    /**
+     * Reopen, a higher priority, "for self-work" or a note on a board task: a sealed `command` to that PC, which applies
+     * it through the board's own rules as it does for the same buttons on its screen.
+     *
+     * @param pc - The PC whose board it is (on).
+     * @param taskId - The board task's id.
+     * @param board - What to do.
+     * @returns Whether it was sent.
+     */
+    async boardCommand(pc, taskId, board) {
+        const id = this.ident;
+        if (!id || !this.connected || !pc.online)
+            return false;
+        const commandId = randomB64url(12);
+        const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "board", taskId, board }, id.privateKey, pc.publicKey);
+        if (!this.sendFrame({ t: "send", env }))
+            return false;
+        this.boardActions.set(`${pc.id}/${taskId}`, { commandId });
+        this.changed();
+        return true;
     }
     /** A PC's approvals snapshot: replaces the last one (an older one that arrives late is ignored). */
     onApprovals(from, items, at) {
@@ -646,6 +683,12 @@ export class HubDevice {
      * acted answers yes; a "no" is shown only when every PC said no (the last one's words).
      */
     onCommandResult(commandId, taskId, ok, text, ask) {
+        for (const sent of this.boardActions.values()) {
+            if (sent.commandId !== commandId)
+                continue;
+            sent.result = { ok, text, at: Date.now() };
+            return this.changed();
+        }
         const as = this.assignActions.get(taskId);
         if (as && as.commandId === commandId && !as.result?.ok && !as.result?.ask) {
             as.left--;

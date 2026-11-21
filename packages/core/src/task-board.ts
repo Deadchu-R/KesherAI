@@ -111,9 +111,21 @@ export type BoardChange =
 /** The task board in a file. */
 export class TaskBoard {
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly listeners = new Set<() => void>();
 
   /** @param file - The board file (in KesherAI's data folder). */
   constructor(readonly file: string) {}
+
+  /**
+   * Calls `cb` after every change that was written (the hub client reports the board then: on change only, no polling).
+   *
+   * @param cb - What to call.
+   * @returns A function that stops it.
+   */
+  onChange(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
 
   /** The board as it is now (empty when there is none yet). */
   async read(): Promise<Board> {
@@ -235,6 +247,13 @@ export class TaskBoard {
       const tmp = `${this.file}.${process.pid}.tmp`;
       await writeFile(tmp, JSON.stringify(b, null, 2));
       await rename(tmp, this.file);
+      for (const cb of this.listeners) {
+        try {
+          cb();
+        } catch {
+          // A listener never breaks a write.
+        }
+      }
       return b;
     });
     this.queue = run.catch(() => undefined);

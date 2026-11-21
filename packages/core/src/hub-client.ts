@@ -31,6 +31,7 @@ import {
   type HubCommandAction,
   type HubApproval,
   type HubAskNote,
+  type HubBoardCommand,
   type HubCryptoKey,
   type HubFrame,
   type HubInboxState,
@@ -43,6 +44,7 @@ import {
 } from "@kesher/shared";
 import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
+import { hubBoardSnapshot } from "./hub-board.js";
 import type { TaskBoard } from "./task-board.js";
 
 /** The hub part of KesherAI's config. */
@@ -126,6 +128,8 @@ export interface HubClientDeps {
   assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
   /** Renames an agent run and sets its note, from the owner's phone or hub page (agent-labels.ts). */
   agentLabel?: (runId: string, label: AgentLabel, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
+  /** Applies a board command (reopen, a higher priority, for self-work, a note) from the owner's phone or hub page (hub-board.ts). */
+  boardCommand?: (taskId: string, cmd: HubBoardCommand) => Promise<{ ok: boolean; text: string }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
 }
@@ -277,6 +281,15 @@ export class HubClient {
   /** The last approvals snapshot sent (its request ids), and the online phones it went to. */
   private approvalsKey = "";
   private approvalsTo = new Set<string>();
+  /** The last board snapshot sent (a hash of it) and the online phones it went to; the board is reported on change only. */
+  private boardKey = "";
+  private boardTo = new Set<string>();
+  /** A hub that refused the board snapshot (an older hub) is not sent it again on this connection. */
+  private boardOff = false;
+  private boardSentAt = 0;
+  private boardTimer?: NodeJS.Timeout;
+  private boardRun?: Promise<void>;
+  private boardAgain = false;
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
@@ -488,6 +501,8 @@ export class HubClient {
     clearInterval(this.beatTimer);
     clearInterval(this.pingTimer);
     clearInterval(this.approvalsTimer);
+    clearTimeout(this.boardTimer);
+    this.boardTimer = undefined;
     clearTimeout(this.pollTimer);
     this.syncPings.cancel();
     this.socket?.close();
@@ -580,6 +595,9 @@ export class HubClient {
         // New approvals reach the hub page within seconds (compared in memory; a snapshot goes only when they change).
         this.approvalsKey = "";
         this.approvalsTo.clear();
+        this.boardKey = "";
+        this.boardTo.clear();
+        this.boardOff = false;
         clearInterval(this.approvalsTimer);
         this.approvalsTimer = setInterval(() => void this.sendApprovals().catch(() => undefined), APPROVALS_MS);
         this.approvalsTimer.unref?.();
@@ -599,6 +617,8 @@ export class HubClient {
         clearInterval(this.beatTimer);
         clearInterval(this.pingTimer);
         clearInterval(this.approvalsTimer);
+        clearTimeout(this.boardTimer);
+        this.boardTimer = undefined;
         this.socket = undefined;
         this.later();
       },
@@ -672,12 +692,14 @@ export class HubClient {
         this.presence = Array.isArray(f.presence) ? f.presence : [];
         this.paused = f.paused === true;
         void this.reportInbox().catch(() => undefined);
+        void this.reportBoard().catch(() => undefined);
         return;
       case "presence":
         this.presence = Array.isArray(f.presence) ? f.presence : [];
         // A phone that just paired gets the inbox's tasks too, and a phone that came on the approvals waiting now.
         void this.reportInbox().catch(() => undefined);
         void this.sendApprovals().catch(() => undefined);
+        void this.reportBoard().catch(() => undefined);
         return;
       case "pause":
         this.paused = f.paused === true;
@@ -691,6 +713,8 @@ export class HubClient {
       case "refused":
         // Over the hub's rate (or the free plan's quota): live activity goes every 10 seconds for a while.
         if (f.code === "rate-limited") this.deps.activity?.slowDown();
+        // An older hub does not know the board snapshot (it cannot read the frame): the board is not sent again on this link.
+        if (f.code === "bad-frame" && Date.now() - this.boardSentAt < 10_000) this.boardOff = true;
         return;
       default:
         return;
@@ -794,6 +818,10 @@ export class HubClient {
               ? !this.deps.assign || !body.to
                 ? { ok: false, text: "This PC cannot give tasks to others yet." }
                 : await this.deps.assign(body.taskId, body.to, body.confirm === true).catch(failed)
+            : body.action === "board"
+              ? !this.deps.boardCommand || !body.board
+                ? { ok: false, text: "This PC cannot change its board from here yet." }
+                : await this.deps.boardCommand(body.taskId, body.board).catch(failed)
             : body.action === "agent-label"
               ? !this.deps.agentLabel
                 ? { ok: false, text: "This PC cannot name agents yet." }
@@ -915,6 +943,63 @@ export class HubClient {
       this.s.inboxSent = Object.fromEntries(Object.entries(sent).slice(-600));
       await this.deps.persist();
     }
+  }
+
+  /**
+   * Schedules a board report a moment from now (the board changed; several changes in a row make one report).
+   * Called by the board's change listener: the board is never polled.
+   */
+  scheduleBoard(): void {
+    if (this.boardTimer || !this.connected) return;
+    this.boardTimer = setTimeout(() => {
+      this.boardTimer = undefined;
+      void this.reportBoard().catch(() => undefined);
+    }, 1500);
+    this.boardTimer.unref?.();
+  }
+
+  /**
+   * Reports the shared task board to the owner's online phones and hub pages: one sealed snapshot (metadata only,
+   * capped, see hub-board.ts) that replaces the last, sent when it changed and to a phone that just came on. Offline
+   * phones get nothing (it would only queue on the hub); they get the current board when they come on.
+   */
+  async reportBoard(): Promise<void> {
+    // One report at a time; a call during one runs once more after it.
+    if (this.boardRun) {
+      this.boardAgain = true;
+      return this.boardRun;
+    }
+    this.boardRun = (async () => {
+      try {
+        do {
+          this.boardAgain = false;
+          await this.reportBoardOnce();
+        } while (this.boardAgain);
+      } finally {
+        this.boardRun = undefined;
+      }
+    })();
+    return this.boardRun;
+  }
+
+  private async reportBoardOnce(): Promise<void> {
+    if (!this.deps.board || !this.connected || !this.s.deviceId || this.boardOff) return;
+    const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
+    if (!phones.length) {
+      this.boardTo.clear();
+      return;
+    }
+    const board = await this.deps.board.read();
+    const snap = hubBoardSnapshot(board);
+    const key = createHash("sha256").update(JSON.stringify(snap)).digest("base64url").slice(0, 16);
+    const changed = key !== this.boardKey;
+    const to = changed ? phones : phones.filter((p) => !this.boardTo.has(p.id));
+    this.boardKey = key;
+    this.boardTo = new Set(phones.map((p) => p.id));
+    if (!to.length) return;
+    const at = Date.now();
+    this.boardSentAt = at;
+    for (const p of to) await this.sendSealed(p.id, "board", { type: "board", rev: board.rev, ...snap, at }, HUB_LIMITS.approvalTtl);
   }
 
   /**

@@ -66,6 +66,7 @@ import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
+import { boardCommand } from "./hub-board.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxRunId, inboxSnapshot, type RunSnapshot } from "./agent-activity.js";
 import { AgentLabels } from "./agent-labels.js";
@@ -716,6 +717,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       ),
     // "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts).
     assign: (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm),
+    // Reopen, a higher priority, "for self-work" and a note on a board task, from the owner's phone or hub page (hub-board.ts).
+    boardCommand: (taskId, cmd) => boardCommand(taskBoard, taskId, cmd),
     // A name and note for an agent, from the owner's phone or hub page (hub-commands.ts).
     agentLabel: (runId, label) =>
       agentLabelCommand(
@@ -777,6 +780,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   services.hub = hub;
   hubRef.client = hub;
+  // The hub page's "Shared board" follows the board: reported on change only, sealed to the phones (hub-client.ts).
+  taskBoard.onChange(() => hub.scheduleBoard());
   // Tasks on all your devices: the inbox's tasks as sealed records in the user's Google Drive (off until turned on).
   services.tasksSync = new TasksSync({
     settings: () => config.tasksSync,

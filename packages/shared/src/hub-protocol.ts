@@ -57,6 +57,12 @@ export const HUB_LIMITS = {
   /** The approvals a PC lists for the hub page at once, and the plain text one snapshot may hold (to fit {@link ctChars}). */
   approvalItems: 8,
   approvalsChars: 10_000,
+  /** The shared task board a PC reports: active items (open, taken, blocked), the newest done ones, and one snapshot's plain text. */
+  boardActive: 60,
+  boardDone: 20,
+  boardChars: 10_000,
+  /** A note from the hub page onto a board task, in characters. */
+  boardNoteChars: 1000,
   /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
   approvalForMaxMin: 24 * 60,
   /** The largest `ask_note` ciphertext (it rides in a Web Push payload, at most about 4 KB in all). */
@@ -82,9 +88,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -230,7 +236,7 @@ export type SealedBody =
    * `assign`: `taskId` is an inbox task (or its Drive record) or a work-list item, `to` who does it now, `confirm` the
    * user's yes to stopping a running task or running a finished one again (task-assign.ts).
    */
-  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean }
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean; board?: HubBoardCommand }
   /** The PC's answer to a command: done, or why not (a short line); `ask`: an `assign` that needs the user's yes. */
   | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string; ask?: "running" | "finished" }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
@@ -238,6 +244,8 @@ export type SealedBody =
   | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
   /** A task of the PC's task inbox (Claude's `kesher-inbox` branch) as the hub page lists it: metadata, never its text. */
   | ({ type: "inbox_task" } & HubInboxTask)
+  /** The PC's shared task board, whole (the newest snapshot replaces the last; see {@link fitBoard}). */
+  | { type: "board"; rev: number; items: HubBoardItem[]; doneTotal: number; at: number }
   /** The newest ask, for the phone's notification with buttons (see {@link SealedEnvelope.note}); `waiting`: the whole count. */
   | { type: "ask_note"; ask: HubAskNote; waiting: number };
 
@@ -262,7 +270,7 @@ export interface HubAskNote {
  * a task or a work-list item to another executor ("Who does it", task-assign.ts). `inbox-ask` makes the PC ask again
  * "Run this task in Antigravity?" for a task whose earlier ask expired (one ask, nothing runs until Run is pressed).
  */
-export type HubCommandAction = "inbox-run" | "inbox-cancel" | "inbox-ask" | "agent-label" | "assign";
+export type HubCommandAction = "inbox-run" | "inbox-cancel" | "inbox-ask" | "agent-label" | "assign" | "board";
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -452,6 +460,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   command: "command",
   command_result: "command_result",
   ask_note: "ask_note",
+  board: "board",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -531,7 +540,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -666,7 +675,11 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
     case "command":
-      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign")) return null;
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign" && b.action !== "board")) return null;
+      if (b.action === "board") {
+        const board = cleanBoardCommand(b.board);
+        return board ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, board } : null;
+      }
       if (b.action === "assign") {
         const to = parseAssignTo(b.to);
         return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
@@ -679,6 +692,11 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     case "approvals":
       if (!Array.isArray(b.items)) return null;
       return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a): a is HubApproval => !!a), at: num(b.at) };
+    case "board": {
+      if (!Array.isArray(b.items)) return null;
+      const items = b.items.slice(0, HUB_LIMITS.boardActive + HUB_LIMITS.boardDone).map(cleanBoardItem).filter((i): i is HubBoardItem => !!i);
+      return { type: "board", rev: num(b.rev), items, doneTotal: Math.max(num(b.doneTotal), items.filter((i) => i.status === "done").length), at: num(b.at) };
+    }
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;
       const error = str(b.error, 300);
@@ -711,6 +729,141 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
     default:
       return null;
   }
+}
+
+/** One task of the PC's shared task board as the hub page lists it (no details: those stay on the PC). */
+export interface HubBoardItem {
+  /** The board's id ("t12"). */
+  id: string;
+  title: string;
+  status: "open" | "claimed" | "blocked" | "done";
+  /** Who took it (claimed, blocked, done). */
+  owner?: HubBoardWho;
+  size: "small" | "big";
+  /** A Fable task (kept for Claude Fable). */
+  fable?: boolean;
+  /** Lower is more urgent (the board's own number). */
+  priority: number;
+  /** Roee handed it to the local model (self-work takes it first). */
+  forKesher?: boolean;
+  /** What was done, first line, shortened. */
+  result?: string;
+  /** When it last changed (ms since epoch). */
+  at: number;
+}
+
+/** Who works the shared board. */
+export type HubBoardWho = "claude" | "kesher" | "roee";
+
+/** What the hub page may do to a board task: the board's own reopen, a higher priority, "for self-work" on or off, and a note. */
+export type HubBoardCommand = { op: "reopen" } | { op: "raise" } | { op: "for-kesher"; on: boolean } | { op: "note"; text: string };
+
+/**
+ * Checks a board command (after opening it, before applying it).
+ *
+ * @param x - Untrusted input.
+ * @returns The command, or null.
+ */
+export function cleanBoardCommand(x: unknown): HubBoardCommand | null {
+  if (!x || typeof x !== "object") return null;
+  const c = x as Record<string, unknown>;
+  if (c.op === "reopen" || c.op === "raise") return { op: c.op };
+  if (c.op === "for-kesher") return { op: "for-kesher", on: c.on !== false };
+  if (c.op === "note") {
+    const text = str(c.text, HUB_LIMITS.boardNoteChars).trim();
+    return text ? { op: "note", text } : null;
+  }
+  return null;
+}
+
+/**
+ * Checks one board item of a snapshot.
+ *
+ * @param x - Untrusted input.
+ * @returns The item, or null.
+ */
+export function cleanBoardItem(x: unknown): HubBoardItem | null {
+  if (!x || typeof x !== "object") return null;
+  const i = x as Record<string, unknown>;
+  const status = i.status === "open" || i.status === "claimed" || i.status === "blocked" || i.status === "done" ? i.status : null;
+  const title = str(i.title, HUB_LIMITS.titleChars).trim();
+  if (!isHubId(i.id) || !status || !title) return null;
+  const result = str(i.result, 300).trim();
+  return {
+    id: i.id,
+    title,
+    status,
+    ...(i.owner === "claude" || i.owner === "kesher" || i.owner === "roee" ? { owner: i.owner } : {}),
+    size: i.size === "small" ? "small" : "big",
+    ...(i.fable === true ? { fable: true } : {}),
+    priority: Math.min(num(i.priority) || 5, 99),
+    ...(i.forKesher === true ? { forKesher: true } : {}),
+    ...(result ? { result } : {}),
+    at: num(i.at),
+  };
+}
+
+/**
+ * Fits a PC's board into one sealed snapshot: the active items (taken first, then blocked, then open by priority; at
+ * most {@link HUB_LIMITS.boardActive}) and the newest {@link HUB_LIMITS.boardDone} done ones, fields capped, and
+ * results then titles shortened (and the oldest done items dropped) until the whole is at most
+ * {@link HUB_LIMITS.boardChars} characters.
+ *
+ * @param all - Every task of the board, as {@link HubBoardItem}s.
+ * @returns The items to send, and how many done items the board holds in all.
+ */
+export function fitBoard(all: readonly HubBoardItem[]): { items: HubBoardItem[]; doneTotal: number } {
+  const clean = all.map(cleanBoardItem).filter((i): i is HubBoardItem => !!i);
+  const rank = { claimed: 0, blocked: 1, open: 2, done: 3 } as const;
+  const active = clean.filter((i) => i.status !== "done").sort((a, b) => rank[a.status] - rank[b.status] || a.priority - b.priority || a.at - b.at).slice(0, HUB_LIMITS.boardActive);
+  const doneAll = clean.filter((i) => i.status === "done").sort((a, b) => b.at - a.at);
+  const done = doneAll.slice(0, HUB_LIMITS.boardDone);
+  const size = (items: HubBoardItem[]) => JSON.stringify(items).length;
+  const cut = (title: number, result: number) => (i: HubBoardItem): HubBoardItem => {
+    const { result: r, ...rest } = i;
+    return { ...rest, title: i.title.slice(0, title), ...(result && r ? { result: r.slice(0, result) } : {}) };
+  };
+  for (const [title, result] of [[200, 300], [120, 120], [80, 0]] as const) {
+    const items = [...active.map(cut(title, result)), ...done.map(cut(title, result))];
+    if (size(items) <= HUB_LIMITS.boardChars) return { items, doneTotal: doneAll.length };
+  }
+  // Still too big: the oldest done items go first.
+  const short = active.map(cut(80, 0));
+  const shortDone = done.map(cut(80, 0));
+  while (shortDone.length && size([...short, ...shortDone]) > HUB_LIMITS.boardChars) shortDone.pop();
+  return { items: [...short, ...shortDone], doneTotal: doneAll.length };
+}
+
+/**
+ * Who an item is for: whoever took it, else KesherAI's self-work for a small or handed-over task, else Claude.
+ *
+ * @param i - The item.
+ * @returns The worker.
+ */
+export function boardWho(i: Pick<HubBoardItem, "owner" | "forKesher" | "size" | "fable">): HubBoardWho {
+  return i.owner ?? (!i.fable && (i.forKesher || i.size === "small") ? "kesher" : "claude");
+}
+
+/**
+ * Whether an item waits on Roee: blocked, or taken by him and not done.
+ *
+ * @param i - The item.
+ * @returns True when it needs him.
+ */
+export function boardWaitsOnMe(i: Pick<HubBoardItem, "status" | "owner">): boolean {
+  return i.status === "blocked" || (i.status !== "done" && i.owner === "roee");
+}
+
+/**
+ * The page's filters over a snapshot: Open (not done), Waiting on me, Done; and optionally one owner chip.
+ *
+ * @param items - The snapshot's items.
+ * @param filter - The status filter.
+ * @param who - An owner chip, or none for all.
+ * @returns The matching items.
+ */
+export function boardView(items: readonly HubBoardItem[], filter: "open" | "me" | "done", who?: HubBoardWho): HubBoardItem[] {
+  return items.filter((i) => (filter === "done" ? i.status === "done" : filter === "me" ? boardWaitsOnMe(i) : i.status !== "done") && (!who || boardWho(i) === who));
 }
 
 const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "running", "done", "failed", "partial", "deferred"];

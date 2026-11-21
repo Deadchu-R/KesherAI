@@ -21,6 +21,7 @@ import { HubDevice, post } from "./device.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
+import { boardGroup } from "./board.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
 import { clearShown, notifySection, startPush } from "./push.js";
 import { connectorSection } from "./connector.js";
@@ -99,6 +100,8 @@ const agentsView = {
 };
 /** Settings › Notifications (push.ts): this browser's Web Push for "N waiting for you". */
 const pushView = { device, vapidKey: () => app.vapidKey, inApp: () => app.inApp, externalHref: () => externalHref(), render: () => render() };
+/** The shared task board (board.ts): its actions go sealed to the PC, which applies them through the board's own rules. */
+const boardParts = { device, render: () => render() };
 /** "Waiting for you" (waiting.ts): answers go sealed to the PC; an agent card opens on the Agents tab. */
 const waitingView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key) };
 // ---- helpers ----
@@ -458,7 +461,7 @@ function tasksTab() {
     const count = (f) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : HubDevice.expired(t))).length;
     const chip = (f, he, en) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
     const open = all.find((t) => t.taskId === app.openTask);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, workListGroup(q));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, boardGroup(boardParts, q), workListGroup(q));
 }
 /**
  * Claude's work list (HubWorkList / PhoneHubWorkList): the items the PC copies from docs/WORK_LIST.md to Drive,

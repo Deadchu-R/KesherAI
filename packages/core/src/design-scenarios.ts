@@ -55,8 +55,8 @@ const stepSchema = z.union([
 ]);
 /**
  * What a hub board (`"target": "hub"`) starts from: whether the owner is signed in (and the fields of `/api/state` to
- * change), whether this browser is a paired device, the PCs the hub lists, the tasks the page keeps, and the runs the
- * PCs report (`state` and `events` as in packages/shared/src/hub-protocol.ts; times as `{ "$agoMs": "5m" }`). The
+ * change), whether this browser is a paired device, the PCs the hub lists, the tasks the page keeps, and the runs and
+ * shared boards the PCs report (`state` and `events` as in packages/shared/src/hub-protocol.ts; times as `{ "$agoMs": "5m" }`). The
  * missing fields are filled in by design-hub.ts.
  */
 const hubSeedSchema = z.object({
@@ -66,6 +66,8 @@ const hubSeedSchema = z.object({
   pcs: z.array(z.object({ id: z.string().regex(/^[\w-]{1,64}$/), name: z.string().min(1).max(60), online: z.boolean().default(true), kind: z.enum(["pc", "claude-chat"]).default("pc") })).max(8).default([]),
   tasks: z.array(z.record(z.string(), z.unknown())).max(50).default([]),
   agents: z.array(z.object({ pc: z.string(), runId: z.string().regex(/^[\w-]{1,64}$/), state: z.record(z.string(), z.unknown()).default({}), events: z.array(z.record(z.string(), z.unknown())).max(50).default([]) })).max(30).default([]),
+  /** The shared task boards the PCs report (items as in `HubBoardItem`; times as `{ "$agoMs": "5m" }`; the rest is filled in). */
+  boards: z.array(z.object({ pc: z.string(), items: z.array(z.record(z.string(), z.unknown())).max(80).default([]), doneTotal: z.number().int().min(0).optional() })).max(4).default([]),
   /** The browser is subscribed to Web Push (Settings › Notifications shows its switch on). */
   push: z.boolean().default(false),
 }).strict();

@@ -31,7 +31,7 @@ export interface InboxCommandDeps {
  * @returns Done, or why not (the inbox's own words).
  */
 export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction, taskId: string, from: { id: string }): Promise<{ ok: boolean; text: string }> {
-  if (action === "agent-label" || action === "assign") return { ok: false, text: "Not a task command." };
+  if (action === "agent-label" || action === "assign" || action === "board") return { ok: false, text: "Not a task command." };
   const ids = await d.ids();
   const id = ids.includes(taskId) ? taskId : await d.fromDrive?.(taskId);
   if (!id || !ids.includes(id)) return { ok: false, text: "This PC does not have that task." };

@@ -21,6 +21,7 @@ import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
+import { boardGroup, type BoardView } from "./board.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
 import { connectorSection, type ConnectionView } from "./connector.js";
@@ -124,6 +125,9 @@ const agentsView: AgentsView = {
 
 /** Settings › Notifications (push.ts): this browser's Web Push for "N waiting for you". */
 const pushView: PushView = { device, vapidKey: () => app.vapidKey, inApp: () => app.inApp, externalHref: () => externalHref(), render: () => render() };
+
+/** The shared task board (board.ts): its actions go sealed to the PC, which applies them through the board's own rules. */
+const boardParts: BoardView = { device, render: () => render() };
 
 /** "Waiting for you" (waiting.ts): answers go sealed to the PC; an agent card opens on the Agents tab. */
 const waitingView: WaitingView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key) };
@@ -656,6 +660,7 @@ function tasksTab(): HTMLElement {
       list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
     ),
     open ? taskDetail(open) : null,
+    boardGroup(boardParts, q),
     workListGroup(q),
   );
 }

@@ -1,0 +1,257 @@
+{
+  "group": "האב · Hub",
+  "target": "hub",
+  "now": "2026-11-21T09:00:00Z",
+  "boards": [
+    {
+      "id": "HubBoard",
+      "title": "ענן Kesher: משימות › מחשב › לוח משותף — סינון (פתוחות / מחכות לי / הושלמו), שבבי בעלים, גודל ועדיפות",
+      "route": "#tasks",
+      "hub": {
+        "device": {
+          "name": "הטלפון"
+        },
+        "pcs": [
+          {
+            "id": "pc-studio",
+            "name": "PC-Studio"
+          }
+        ],
+        "boards": [
+          {
+            "pc": "pc-studio",
+            "items": [
+              {
+                "id": "t1",
+                "title": "בניית לוח המשימות המשותף במרכז",
+                "status": "claimed",
+                "size": "big",
+                "priority": 2,
+                "at": {
+                  "$agoMs": "25m"
+                },
+                "owner": "claude"
+              },
+              {
+                "id": "t2",
+                "title": "תיקון סמל המסך הראשי",
+                "status": "claimed",
+                "size": "small",
+                "priority": 3,
+                "at": {
+                  "$agoMs": "50m"
+                },
+                "owner": "kesher"
+              },
+              {
+                "id": "t3",
+                "title": "איחוד בדיקות הרשת",
+                "status": "open",
+                "size": "small",
+                "priority": 4,
+                "at": {
+                  "$agoMs": "75m"
+                },
+                "forKesher": true
+              },
+              {
+                "id": "t4",
+                "title": "מחקר: עורכי תמונה מול Affinity",
+                "status": "open",
+                "size": "big",
+                "priority": 3,
+                "at": {
+                  "$agoMs": "100m"
+                }
+              },
+              {
+                "id": "t5",
+                "title": "לאשר את גרסת התוסף לחנות",
+                "status": "blocked",
+                "size": "big",
+                "priority": 1,
+                "at": {
+                  "$agoMs": "125m"
+                },
+                "owner": "roee",
+                "result": "מחכה לאישור שלך לפני העלאה לחנות."
+              },
+              {
+                "id": "t6",
+                "title": "עדכון מסמך העיצוב",
+                "status": "open",
+                "size": "big",
+                "priority": 6,
+                "at": {
+                  "$agoMs": "150m"
+                }
+              },
+              {
+                "id": "t7",
+                "title": "תיקון הבדיקה שנכשלת בלילה",
+                "status": "done",
+                "size": "small",
+                "priority": 5,
+                "at": {
+                  "$agoMs": "175m"
+                },
+                "owner": "kesher",
+                "result": "נוסף ביטול זמן לבדיקת הרשת; 12 בדיקות עברו (commit 3f9a1c2)."
+              },
+              {
+                "id": "t8",
+                "title": "חיבור התראות לטלפון",
+                "status": "done",
+                "size": "big",
+                "priority": 2,
+                "at": {
+                  "$agoMs": "200m"
+                },
+                "owner": "claude",
+                "result": "התראה עם כפתורים עובדת במחשב ובטלפון; נבדק מרחוק."
+              }
+            ],
+            "doneTotal": 31
+          }
+        ]
+      },
+      "height": {
+        "desktop": 1250,
+        "phone": 1500
+      },
+      "steps": [
+        {
+          "wait": ".sboard"
+        }
+      ]
+    },
+    {
+      "id": "HubBoardActions",
+      "title": "ענן Kesher: לוח משותף — משימה פתוחה: החזר לפתוחה, ↑ עדיפות, תן למודל המקומי והערה (נשלחים למחשב, שמחיל אותם בכללי הלוח)",
+      "route": "#tasks",
+      "hub": {
+        "device": {
+          "name": "הטלפון"
+        },
+        "pcs": [
+          {
+            "id": "pc-studio",
+            "name": "PC-Studio"
+          }
+        ],
+        "boards": [
+          {
+            "pc": "pc-studio",
+            "items": [
+              {
+                "id": "t1",
+                "title": "בניית לוח המשימות המשותף במרכז",
+                "status": "claimed",
+                "size": "big",
+                "priority": 2,
+                "at": {
+                  "$agoMs": "25m"
+                },
+                "owner": "claude"
+              },
+              {
+                "id": "t2",
+                "title": "תיקון סמל המסך הראשי",
+                "status": "claimed",
+                "size": "small",
+                "priority": 3,
+                "at": {
+                  "$agoMs": "50m"
+                },
+                "owner": "kesher"
+              },
+              {
+                "id": "t3",
+                "title": "איחוד בדיקות הרשת",
+                "status": "open",
+                "size": "small",
+                "priority": 4,
+                "at": {
+                  "$agoMs": "75m"
+                },
+                "forKesher": true
+              },
+              {
+                "id": "t4",
+                "title": "מחקר: עורכי תמונה מול Affinity",
+                "status": "open",
+                "size": "big",
+                "priority": 3,
+                "at": {
+                  "$agoMs": "100m"
+                }
+              },
+              {
+                "id": "t5",
+                "title": "לאשר את גרסת התוסף לחנות",
+                "status": "blocked",
+                "size": "big",
+                "priority": 1,
+                "at": {
+                  "$agoMs": "125m"
+                },
+                "owner": "roee",
+                "result": "מחכה לאישור שלך לפני העלאה לחנות."
+              },
+              {
+                "id": "t6",
+                "title": "עדכון מסמך העיצוב",
+                "status": "open",
+                "size": "big",
+                "priority": 6,
+                "at": {
+                  "$agoMs": "150m"
+                }
+              },
+              {
+                "id": "t7",
+                "title": "תיקון הבדיקה שנכשלת בלילה",
+                "status": "done",
+                "size": "small",
+                "priority": 5,
+                "at": {
+                  "$agoMs": "175m"
+                },
+                "owner": "kesher",
+                "result": "נוסף ביטול זמן לבדיקת הרשת; 12 בדיקות עברו (commit 3f9a1c2)."
+              },
+              {
+                "id": "t8",
+                "title": "חיבור התראות לטלפון",
+                "status": "done",
+                "size": "big",
+                "priority": 2,
+                "at": {
+                  "$agoMs": "200m"
+                },
+                "owner": "claude",
+                "result": "התראה עם כפתורים עובדת במחשב ובטלפון; נבדק מרחוק."
+              }
+            ],
+            "doneTotal": 31
+          }
+        ]
+      },
+      "height": {
+        "desktop": 1250,
+        "phone": 1500
+      },
+      "steps": [
+        {
+          "wait": ".sboard"
+        },
+        {
+          "click": ".sb-row:has-text(\"איחוד בדיקות הרשת\")"
+        },
+        {
+          "wait": ".sb-body"
+        }
+      ]
+    }
+  ]
+}

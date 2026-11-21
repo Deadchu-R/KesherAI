@@ -692,8 +692,8 @@ export class Hub {
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
     if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
-    // A task-inbox report and the approvals waiting on a PC go from a PC to the owner's phones (and the hub page) only.
-    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
+    // A task-inbox report, the approvals waiting on a PC and its shared task board go from a PC to the owner's phones (and the hub page) only.
+    if ((env.kind === "inbox_task" || env.kind === "approvals" || env.kind === "approval_request" || env.kind === "board") && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     // An approval answer or a command (Run, Cancel) goes from a paired phone (or the hub page) to a PC only, at a human pace.
     if (env.kind === "command_result" && (from.kind !== "pc" || to.kind !== "phone")) return refuse("not-allowed", env.id);
     if (env.kind === "approval_answer" || env.kind === "command") {
@@ -707,7 +707,7 @@ export class Hub {
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
     const online = this.sockets.send(to.id, { t: "deliver", env: plain });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
-    if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
+    if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "board" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
     if (env.kind === "approvals" && env.waiting !== undefined) {
       this.noteWaiting(from.id, env.waiting);
       await this.notifyWaiting(to.id, env.waiting, online, note);

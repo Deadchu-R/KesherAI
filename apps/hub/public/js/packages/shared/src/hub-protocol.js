@@ -55,6 +55,12 @@ export const HUB_LIMITS = {
     /** The approvals a PC lists for the hub page at once, and the plain text one snapshot may hold (to fit {@link ctChars}). */
     approvalItems: 8,
     approvalsChars: 10_000,
+    /** The shared task board a PC reports: active items (open, taken, blocked), the newest done ones, and one snapshot's plain text. */
+    boardActive: 60,
+    boardDone: 20,
+    boardChars: 10_000,
+    /** A note from the hub page onto a board task, in characters. */
+    boardNoteChars: 1000,
     /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
     approvalForMaxMin: 24 * 60,
     /** The largest `ask_note` ciphertext (it rides in a Web Push payload, at most about 4 KB in all). */
@@ -71,7 +77,7 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -133,6 +139,7 @@ export const BODY_FOR_KIND = {
     command: "command",
     command_result: "command_result",
     ask_note: "ask_note",
+    board: "board",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -210,7 +217,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -361,8 +368,12 @@ export function parseSealedBody(x, kind) {
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }
         case "command":
-            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign"))
+            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign" && b.action !== "board"))
                 return null;
+            if (b.action === "board") {
+                const board = cleanBoardCommand(b.board);
+                return board ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, board } : null;
+            }
             if (b.action === "assign") {
                 const to = parseAssignTo(b.to);
                 return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
@@ -378,6 +389,12 @@ export function parseSealedBody(x, kind) {
             if (!Array.isArray(b.items))
                 return null;
             return { type: "approvals", items: b.items.slice(0, HUB_LIMITS.approvalItems).map(cleanApproval).filter((a) => !!a), at: num(b.at) };
+        case "board": {
+            if (!Array.isArray(b.items))
+                return null;
+            const items = b.items.slice(0, HUB_LIMITS.boardActive + HUB_LIMITS.boardDone).map(cleanBoardItem).filter((i) => !!i);
+            return { type: "board", rev: num(b.rev), items, doneTotal: Math.max(num(b.doneTotal), items.filter((i) => i.status === "done").length), at: num(b.at) };
+        }
         case "cloud_started": {
             if (!isHubId(b.taskId))
                 return null;
@@ -417,6 +434,115 @@ export function parseSealedBody(x, kind) {
         default:
             return null;
     }
+}
+/**
+ * Checks a board command (after opening it, before applying it).
+ *
+ * @param x - Untrusted input.
+ * @returns The command, or null.
+ */
+export function cleanBoardCommand(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const c = x;
+    if (c.op === "reopen" || c.op === "raise")
+        return { op: c.op };
+    if (c.op === "for-kesher")
+        return { op: "for-kesher", on: c.on !== false };
+    if (c.op === "note") {
+        const text = str(c.text, HUB_LIMITS.boardNoteChars).trim();
+        return text ? { op: "note", text } : null;
+    }
+    return null;
+}
+/**
+ * Checks one board item of a snapshot.
+ *
+ * @param x - Untrusted input.
+ * @returns The item, or null.
+ */
+export function cleanBoardItem(x) {
+    if (!x || typeof x !== "object")
+        return null;
+    const i = x;
+    const status = i.status === "open" || i.status === "claimed" || i.status === "blocked" || i.status === "done" ? i.status : null;
+    const title = str(i.title, HUB_LIMITS.titleChars).trim();
+    if (!isHubId(i.id) || !status || !title)
+        return null;
+    const result = str(i.result, 300).trim();
+    return {
+        id: i.id,
+        title,
+        status,
+        ...(i.owner === "claude" || i.owner === "kesher" || i.owner === "roee" ? { owner: i.owner } : {}),
+        size: i.size === "small" ? "small" : "big",
+        ...(i.fable === true ? { fable: true } : {}),
+        priority: Math.min(num(i.priority) || 5, 99),
+        ...(i.forKesher === true ? { forKesher: true } : {}),
+        ...(result ? { result } : {}),
+        at: num(i.at),
+    };
+}
+/**
+ * Fits a PC's board into one sealed snapshot: the active items (taken first, then blocked, then open by priority; at
+ * most {@link HUB_LIMITS.boardActive}) and the newest {@link HUB_LIMITS.boardDone} done ones, fields capped, and
+ * results then titles shortened (and the oldest done items dropped) until the whole is at most
+ * {@link HUB_LIMITS.boardChars} characters.
+ *
+ * @param all - Every task of the board, as {@link HubBoardItem}s.
+ * @returns The items to send, and how many done items the board holds in all.
+ */
+export function fitBoard(all) {
+    const clean = all.map(cleanBoardItem).filter((i) => !!i);
+    const rank = { claimed: 0, blocked: 1, open: 2, done: 3 };
+    const active = clean.filter((i) => i.status !== "done").sort((a, b) => rank[a.status] - rank[b.status] || a.priority - b.priority || a.at - b.at).slice(0, HUB_LIMITS.boardActive);
+    const doneAll = clean.filter((i) => i.status === "done").sort((a, b) => b.at - a.at);
+    const done = doneAll.slice(0, HUB_LIMITS.boardDone);
+    const size = (items) => JSON.stringify(items).length;
+    const cut = (title, result) => (i) => {
+        const { result: r, ...rest } = i;
+        return { ...rest, title: i.title.slice(0, title), ...(result && r ? { result: r.slice(0, result) } : {}) };
+    };
+    for (const [title, result] of [[200, 300], [120, 120], [80, 0]]) {
+        const items = [...active.map(cut(title, result)), ...done.map(cut(title, result))];
+        if (size(items) <= HUB_LIMITS.boardChars)
+            return { items, doneTotal: doneAll.length };
+    }
+    // Still too big: the oldest done items go first.
+    const short = active.map(cut(80, 0));
+    const shortDone = done.map(cut(80, 0));
+    while (shortDone.length && size([...short, ...shortDone]) > HUB_LIMITS.boardChars)
+        shortDone.pop();
+    return { items: [...short, ...shortDone], doneTotal: doneAll.length };
+}
+/**
+ * Who an item is for: whoever took it, else KesherAI's self-work for a small or handed-over task, else Claude.
+ *
+ * @param i - The item.
+ * @returns The worker.
+ */
+export function boardWho(i) {
+    return i.owner ?? (!i.fable && (i.forKesher || i.size === "small") ? "kesher" : "claude");
+}
+/**
+ * Whether an item waits on Roee: blocked, or taken by him and not done.
+ *
+ * @param i - The item.
+ * @returns True when it needs him.
+ */
+export function boardWaitsOnMe(i) {
+    return i.status === "blocked" || (i.status !== "done" && i.owner === "roee");
+}
+/**
+ * The page's filters over a snapshot: Open (not done), Waiting on me, Done; and optionally one owner chip.
+ *
+ * @param items - The snapshot's items.
+ * @param filter - The status filter.
+ * @param who - An owner chip, or none for all.
+ * @returns The matching items.
+ */
+export function boardView(items, filter, who) {
+    return items.filter((i) => (filter === "done" ? i.status === "done" : filter === "me" ? boardWaitsOnMe(i) : i.status !== "done") && (!who || boardWho(i) === who));
 }
 const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "partial", "deferred"];
 const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
