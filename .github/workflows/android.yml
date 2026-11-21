@@ -165,6 +165,7 @@ jobs:
         with:
           name: KesherAI-android
           path: KesherAI-android.apk
+          retention-days: 1
       - if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -170,6 +170,7 @@ jobs:
         with:
           name: app-unsigned
           path: apps/desktop/out/win-unpacked
+          retention-days: 1
       - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
         uses: signpath/github-action-submit-signing-request@v1
         with:
@@ -189,6 +190,7 @@ jobs:
         with:
           name: installer-unsigned
           path: apps/desktop/out/*Setup*.exe
+          retention-days: 1
       - if: runner.os == 'Windows' && vars.SIGNPATH_ORGANIZATION_ID != ''
         uses: signpath/github-action-submit-signing-request@v1
         with:

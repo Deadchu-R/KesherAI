@@ -43,6 +43,7 @@ jobs:
         with:
           name: ui-check
           path: ui-check
+          retention-days: 1
 
   # Windows: tests and the smoke test where Windows-only things live (cmd quoting, paths with spaces, .bat jobs).
   # Blocking: a release waits for it (green on Windows since 0.5.9x).
