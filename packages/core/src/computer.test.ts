@@ -50,6 +50,7 @@ test("computer control: per-app approval, browsers view-only, terminals click-on
     tool("computer_screenshot").run({}, ctx),
     /computer_use_app/,
   );
+  await assert.rejects(tool("computer_use_app").run({ app: "KesherAI" }, ctx), /cannot be controlled/, "never KesherAI itself (scan 169)");
   await tool("computer_use_app").run({ app: "Notepad" }, ctx);
   const shot = await tool("computer_screenshot").run({}, ctx);
   assert.equal(shot.images?.[0]?.mimeType, "image/png");

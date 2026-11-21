@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
 import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-worker.js";
 import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
-import { deletesFiles, isSecureWindow, isSystemSettings } from "./computer-safety.js";
+import { deletesFiles, isOwnApp, isSecureWindow, isSystemSettings } from "./computer-safety.js";
 import { withControlInfo } from "./control-gate.js";
 import { computerFindTool } from "./vision-find-tools.js";
 import { bestNameMatch } from "./vision-ground.js";
@@ -755,6 +755,8 @@ export class ComputerControl {
       throw new Error(
         `${fg.app} ("${fg.title}") holds system or security settings. KesherAI never changes them: tell the user what to change.`,
       );
+    if (isOwnApp(fg.app))
+      throw new Error("KesherAI itself is in front: the model never clicks or types in it (its approvals are the user's). Bring the app you work in to the front.");
     if (kind === "view-only")
       throw new Error(
         `${fg.app} is a web browser: KesherAI only looks at browsers, it does not click or type in them. Use the web tools (web_fetch, web_search), or ask the user.`,
@@ -895,6 +897,7 @@ export class ComputerControl {
         run: async (input) => {
           const app = String(input.app ?? "").trim();
           if (!app) throw new Error("Name the app.");
+          if (isOwnApp(app)) throw new Error("KesherAI itself cannot be controlled (its approvals are the user's).");
           this.allow(conversationId, app);
           this.record({
             conversationId,

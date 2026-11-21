@@ -139,6 +139,7 @@ async function run(action, a) {
     return tabs.filter((t) => t.id !== undefined).map((t) => ({ id: t.id, title: t.title || "", url: t.url || "", active: !!t.active }));
   }
   if (action === "open") {
+    if (!/^https?:/i.test(String(a.url || "")) || (await isAppAddress(String(a.url)))) throw new Error("KesherAI's extension opens web pages only, not KesherAI itself.");
     const tab = typeof a.tabId === "number" ? await chrome.tabs.update(a.tabId, { url: a.url }) : await chrome.tabs.create({ url: a.url, active: false });
     await groupTab(tab.id);
     await waitLoaded(tab.id);
@@ -158,6 +159,7 @@ async function run(action, a) {
     return null;
   }
   if (/^(chrome|edge|about|chrome-extension):/.test(tab.url || "")) throw new Error("The browser does not let extensions use its own pages.");
+  if (await isAppAddress(tab.url || "")) throw new Error("KesherAI never works in its own pages.");
   if (action === "read") return inPage(tab.id, readPage);
   if (action === "click") {
     await inPage(tab.id, clickRef, [a.ref]);
@@ -198,14 +200,27 @@ function toApp(msg) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
 
-/** Refuses the browser's own pages and the KesherAI app's own address (its port on this computer). */
+/**
+ * Whether an address is the KesherAI app itself: its port on any host name (`*.localhost` reaches this computer and
+ * the app counts it as local; with remote on it also answers on the computer's other addresses; security scan 169).
+ */
+async function isAppAddress(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  const { port } = await settings();
+  return /^https?:$/.test(u.protocol) && Number(u.port || (u.protocol === "https:" ? 443 : 80)) === Number(port);
+}
+
+/** Refuses the browser's own pages and the KesherAI app's own address; checks where the tab is going too. */
 async function checkPage(tab) {
   const url = tab.url || tab.pendingUrl || "";
   if (!/^https?:/.test(url)) throw new Error("KesherAI uses the debugger on web pages only (not the browser's own pages).");
-  const u = new URL(url);
-  const { port } = await settings();
-  if (["127.0.0.1", "localhost", "[::1]"].includes(u.hostname) && Number(u.port || 80) === Number(port)) throw new Error("KesherAI never debugs its own pages.");
-  return u.origin;
+  if ((await isAppAddress(url)) || (tab.pendingUrl && (await isAppAddress(tab.pendingUrl)))) throw new Error("KesherAI never debugs its own pages.");
+  return new URL(url).origin;
 }
 
 /** Asks for the optional "debugger" permission the first time (debug.html explains Chrome's bar). */
@@ -262,6 +277,8 @@ async function cdpAttach(tabId) {
 async function cdpSend(tabId, method, params) {
   if (!CDP_DOMAINS.test(method)) throw new Error(`KesherAI's extension does not send ${method}.`);
   if (typeof tabId !== "number") throw new Error("Which tab?");
+  // A navigation goes to web pages only, never the app (the tab is checked again before each later command).
+  if (method === "Page.navigate" && (!/^https?:/i.test(String(params?.url ?? "")) || (await isAppAddress(String(params.url))))) throw new Error("KesherAI's extension opens web pages only, not KesherAI itself.");
   const tab = await chrome.tabs.get(tabId);
   const origin = await checkPage(tab);
   const a = attached.get(tabId);

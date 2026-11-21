@@ -73,8 +73,10 @@ export function paneAllows(url: string, ownPort: number): boolean {
     return false;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return url === "about:blank";
-  const own = ["127.0.0.1", "localhost", "[::1]", "0.0.0.0"].includes(u.hostname) && Number(u.port || (u.protocol === "https:" ? 443 : 80)) === ownPort;
-  return !own;
+  // KesherAI's port on any host name: `*.localhost` resolves to this computer and counts as local (no token), and with
+  // remote on the server also answers on the computer's other addresses (security scan 169). A web site that happens
+  // to use the same port is the price.
+  return Number(u.port || (u.protocol === "https:" ? 443 : 80)) !== ownPort;
 }
 
 /** Turns what the user typed in the address bar into an address (a search when it is not one). */

@@ -77,6 +77,20 @@ export function deletesFiles(keys: string, app: string): boolean {
   return del && (parts.includes("shift") || FILE_MANAGERS.test(bare(app)));
 }
 
+/** KesherAI's own app (the installed `kesherai.exe`, "KesherAI"): its approval cards must never be clicked by the model. */
+const OWN_APP = /^kesher ?ai$/i;
+
+/**
+ * Whether a process is KesherAI itself. The model may look at it, never act in it: a click there could press
+ * "Approve" on its own approval card (security scan 169).
+ *
+ * @param app - Process name.
+ * @returns True for KesherAI's own app.
+ */
+export function isOwnApp(app: string): boolean {
+  return OWN_APP.test(bare(app));
+}
+
 /**
  * Decides what may happen to a target.
  *
@@ -89,6 +103,7 @@ export function uiaVerdict(action: UiaAction, t: UiaTarget): Verdict {
   if (isSecureWindow(app, t.title))
     return { kind: "never", reason: `"${t.title || app}" is a Windows security or sign-in window (User Account Control, credentials). KesherAI never reads or touches it: ask the user to answer it.` };
   if (action === "read" || action === "focus" || action === "move") return { kind: "ok" };
+  if (isOwnApp(app)) return { kind: "never", reason: "This is KesherAI itself: the model never clicks or types in it (its approvals are the user's)." };
   if (isSystemSettings(app, t.title))
     return { kind: "never", reason: `${app} ("${t.title}") holds system or security settings. KesherAI never changes them: tell the user what to change, and they will.` };
   const kind = appKind(app);

@@ -16,6 +16,10 @@ test("computer safety: UAC and sign-in never, system settings never acted in, pa
   assert.equal(uiaVerdict("read", { app: "consent", title: "" }).kind, "never", "not even read");
   assert.equal(uiaVerdict("read", { app: "SystemSettings", title: "Settings" }).kind, "ok", "settings may be looked at");
   assert.equal(uiaVerdict("invoke", { app: "SystemSettings", title: "Settings" }).kind, "never");
+  // KesherAI itself: looked at, never acted in (its approval cards; scan 169).
+  assert.equal(uiaVerdict("read", { app: "KesherAI.exe", title: "KesherAI" }).kind, "ok");
+  assert.equal(uiaVerdict("invoke", { app: "kesherai", title: "KesherAI", element: { name: "Approve" } }).kind, "never");
+  assert.equal(uiaVerdict("set_value", { app: "KesherAI", title: "KesherAI" }).kind, "never");
   assert.equal(uiaVerdict("invoke", { app: "regedit", title: "Registry Editor" }).kind, "never");
   assert.equal(uiaVerdict("invoke", { app: "chrome", title: "x" }).kind, "never", "browsers go through the browser tools");
   assert.equal(uiaVerdict("set_value", { app: "explorer", title: "Documents" }).kind, "never", "no typing in file managers");
