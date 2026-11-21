@@ -169,7 +169,7 @@ function commandAllowed(command: string, allowed: string[], filters: string[] = 
   if (filters.length && /(^|[^|])\|(?!\|)/.test(command) && !command.includes("&&")) {
     const stages = command.split("|").map((p) => p.trim());
     if (stages.some((p) => !p)) return false;
-    return commandAllowed(stages[0], allowed) && stages.slice(1).every((p) => commandAllowed(p, filters));
+    return commandAllowed(stages[0] ?? "", allowed) && stages.slice(1).every((p) => commandAllowed(p, filters));
   }
   const parts = command.split("&&").map((p) => p.trim()).filter(Boolean);
   // No other shell syntax: PowerShell runs `(…)` and `{…}` as code, and cmd expands `%VAR%` (scan 172).
