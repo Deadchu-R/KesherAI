@@ -24,7 +24,11 @@ const KIND: Record<IdeaKind, [string, string]> = {
 /** Recording lengths in minutes; 30 is the longest a dump may run. */
 const MINUTES = [5, 10, 15, 30];
 /** The server's two plain-English failures, in the page's language (anything else is shown as it came). */
-const errorText = (e?: string) => (/^No speech was found/.test(e ?? "") ? L("לא נמצא דיבור בהקלטה. נסו להקליט קרוב יותר למיקרופון.", "No speech was found in the recording. Try recording closer to the microphone.") : /^No ideas were found/.test(e ?? "") ? L("לא נמצאו רעיונות במה שנאמר.", "No ideas were found in what was said.") : e);
+const errorText = (e?: string) => (/^No speech was found/.test(e ?? "") ? L("לא נמצא דיבור בהקלטה. נסו להקליט קרוב יותר למיקרופון.", "No speech was found in the recording. Try recording closer to the microphone.") : /^No ideas were found/.test(e ?? "") ? L("לא נמצאו רעיונות במה שנאמר.", "No ideas were found in what was said.")
+  : /^The model is busy/.test(e ?? "") ? L("המודל עמוס כרגע; נסו שוב בעוד כמה דקות.", "The model is busy right now; try again in a few minutes.")
+  : /^The model's limit/.test(e ?? "") ? L("הגעתם למגבלת המודל לעכשיו; נסו שוב מאוחר יותר.", "The model's limit was reached for now; try again later.")
+  : /^The model could not be reached/.test(e ?? "") ? L("אין חיבור למודל (האם הוא טעון?).", "The model could not be reached (is it loaded?).")
+  : e);
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**

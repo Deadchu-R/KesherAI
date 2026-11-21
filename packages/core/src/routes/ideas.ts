@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Ideas } from "../ideas.js";
 import { modelTurnFor } from "../model-turn.js";
-import { pickFlash } from "../translate.js";
 import { toWav, transcribeWith } from "../speech-tools.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import type { KesherServices } from "../services.js";
@@ -23,20 +22,18 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   const notesDir = join(s.paths.root, "ideas-notes");
   const ideas = new Ideas(root, {
     ask: async (system, user, signal, onText, strong) => {
-      // A stronger model for the deeper passes: the user's free Gemini connection when there is one, else the chat model.
-      const flash = strong ? await s.registry.get("gemini")?.listModels(AbortSignal.timeout(10_000)).then(pickFlash, () => undefined) : undefined;
-      const id = flash ?? s.config.activeModels.chat;
+      // Her speech stays on this computer: the deeper passes use the local chat model too (sending a transcript to a cloud
+      // model waits for her choice). `strong` only asks for the more thorough prompt.
+      void strong;
+      const id = s.config.activeModels.chat;
       if (!id) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
       return (await modelTurnFor(s.registry, id)({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(30 * 60_000), onText ?? (() => undefined))).text;
     },
     transcribe: async (file, lang) => {
       const ffmpeg = () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
       const wav = await toWav(file, ffmpeg);
-      // "auto" detection mistook Hebrew for Spanish: with the speech language left on auto, the language of the app
-      // that recorded it (Hebrew or English) is used.
-      const set = s.config.speech?.language ?? "auto";
-      const language = set !== "auto" ? set : lang === "he" || lang === "en" ? lang : "auto";
-      return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", language)).text;
+      // Detection picks from "my languages"; the recording app's language (he or en) is the hint and the fallback.
+      return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto", false, { hint: lang })).text;
     },
     projects: () => s.library.listProjects().map((p) => p.name),
     // Hits go to a model: a guest's words come marked as untrusted (conversation-search.ts forModel).

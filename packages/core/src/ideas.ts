@@ -176,7 +176,7 @@ export class Ideas {
       this.live.delete(id);
       const msg = (e as Error).message.slice(0, 300);
       // A deeper pass that fails leaves what was found before: the session stays "done" with the reason beside it.
-      s = before.length ? { ...(await this.get(id)), ideas: before, status: "done", deeperError: msg } : { ...(await this.get(id)), status: "error", error: msg };
+      s = before.length ? { ...(await this.get(id)), ideas: before, status: "done", deeperError: plainError(msg) } : { ...(await this.get(id)), status: "error", error: msg };
       await this.save(s);
       return s;
     }
@@ -449,4 +449,16 @@ export class Ideas {
     await this.save(s);
     return s;
   }
+}
+
+/**
+ * A model or network error in words for the page, without the raw request (the user saw "POST https://… 503 …").
+ *
+ * @param msg - The error's message.
+ */
+export function plainError(msg: string): string {
+  if (/\b(500|502|503|504)\b|UNAVAILABLE|overloaded|high demand/i.test(msg)) return "The model is busy right now; try again in a few minutes.";
+  if (/\b429\b|quota|rate.?limit|RESOURCE_EXHAUSTED/i.test(msg)) return "The model's limit was reached for now; try again later.";
+  if (/ECONNREFUSED|fetch failed|ENOTFOUND|network/i.test(msg)) return "The model could not be reached (is it loaded?).";
+  return msg.replace(/(POST|GET) https?:\/\/\S+/g, "").replace(/\[\{[\s\S]*$/, "").trim().slice(0, 200) || "The analysis failed.";
 }
