@@ -1,0 +1,500 @@
+{
+ "group": "הורדות · Downloads",
+ "now": "2026-11-21T09:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/hardware",
+   "json": {
+    "platform": "win32",
+    "ramTotal": 34359738368,
+    "gpus": [
+     {
+      "name": "RTX 4070",
+      "vramTotal": 12884901888
+     }
+    ],
+    "unifiedMemory": false
+   }
+  },
+  {
+   "url": "**/api/hub/search*",
+   "json": [
+    {
+     "repo": "unsloth/Qwen3-8B-GGUF",
+     "author": "unsloth",
+     "category": "chat",
+     "pipelineTag": "text-generation",
+     "downloads": 1840000,
+     "likes": 412,
+     "gated": false,
+     "createdAt": {
+      "$ago": "150d"
+     },
+     "lastModified": {
+      "$ago": "12d"
+     },
+     "library": "gguf",
+     "license": "apache-2.0",
+     "parameters": "8B",
+     "tags": [
+      "gguf",
+      "text-generation"
+     ],
+     "fit": {
+      "fit": "gpu",
+      "needGb": 7.4,
+      "gpuShare": 1.0,
+      "sizeGb": 4.9
+     },
+     "baseModel": "Qwen/Qwen3-8B"
+    },
+    {
+     "repo": "bartowski/gemma-3-27b-it-GGUF",
+     "author": "bartowski",
+     "category": "chat",
+     "pipelineTag": "image-text-to-text",
+     "downloads": 905000,
+     "likes": 286,
+     "gated": false,
+     "createdAt": {
+      "$ago": "190d"
+     },
+     "lastModified": {
+      "$ago": "40d"
+     },
+     "library": "gguf",
+     "license": "gemma",
+     "parameters": "27B",
+     "tags": [
+      "gguf",
+      "image-text-to-text"
+     ],
+     "fit": {
+      "fit": "partial",
+      "needGb": 19.8,
+      "gpuShare": 0.6,
+      "sizeGb": 16.5
+     },
+     "baseModel": "google/gemma-3-27b-it"
+    },
+    {
+     "repo": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+     "author": "Qwen",
+     "category": "chat",
+     "pipelineTag": "text-generation",
+     "downloads": 640000,
+     "likes": 198,
+     "gated": false,
+     "createdAt": {
+      "$ago": "400d"
+     },
+     "lastModified": {
+      "$ago": "90d"
+     },
+     "library": "gguf",
+     "license": "apache-2.0",
+     "parameters": "7B",
+     "tags": [
+      "gguf",
+      "text-generation"
+     ],
+     "fit": {
+      "fit": "gpu",
+      "needGb": 6.9,
+      "gpuShare": 1.0,
+      "sizeGb": 4.7
+     }
+    },
+    {
+     "repo": "unsloth/Llama-3.3-70B-Instruct-GGUF",
+     "author": "unsloth",
+     "category": "chat",
+     "pipelineTag": "text-generation",
+     "downloads": 520000,
+     "likes": 350,
+     "gated": true,
+     "createdAt": {
+      "$ago": "300d"
+     },
+     "lastModified": {
+      "$ago": "60d"
+     },
+     "library": "gguf",
+     "license": "llama3.3",
+     "parameters": "70B",
+     "tags": [
+      "gguf",
+      "text-generation"
+     ],
+     "fit": {
+      "fit": "too-big",
+      "needGb": 46.0,
+      "gpuShare": 0.0,
+      "sizeGb": 42.5
+     }
+    },
+    {
+     "repo": "someone/tiny-mystery-gguf",
+     "author": "someone",
+     "category": "chat",
+     "pipelineTag": "text-generation",
+     "downloads": 3400,
+     "likes": 12,
+     "gated": false,
+     "createdAt": {
+      "$ago": "20d"
+     },
+     "lastModified": {
+      "$ago": "5d"
+     },
+     "library": "gguf",
+     "license": "",
+     "parameters": "",
+     "tags": [
+      "gguf"
+     ],
+     "fit": {
+      "fit": "unknown",
+      "needGb": 0,
+      "gpuShare": 1.0
+     }
+    }
+   ]
+  },
+  {
+   "url": "**/api/hub/summary*",
+   "json": {
+    "summary": "גרסת Gemma 3 בגודל 27 מיליארד פרמטרים שמבינה גם תמונות. קובץ ה-mmproj הנלווה נותן לה לראות; בלעדיו היא רק צ'אט."
+   }
+  },
+  {
+   "url": "**/api/hub/files*",
+   "json": [
+    {
+     "path": "gemma-3-27b-it-Q2_K.gguf",
+     "size": 11274289152,
+     "quant": "Q2_K",
+     "kind": "llm",
+     "fit": {
+      "fit": "gpu",
+      "needGb": 11.3,
+      "gpuShare": 1.0,
+      "sizeGb": 10.5
+     }
+    },
+    {
+     "path": "gemma-3-27b-it-Q4_K_M.gguf",
+     "size": 17716740096,
+     "quant": "Q4_K_M",
+     "kind": "llm",
+     "fit": {
+      "fit": "partial",
+      "needGb": 19.8,
+      "gpuShare": 0.6,
+      "sizeGb": 16.5
+     }
+    },
+    {
+     "path": "gemma-3-27b-it-Q8_0.gguf",
+     "size": 30816390348,
+     "quant": "Q8_0",
+     "kind": "llm",
+     "fit": {
+      "fit": "too-big",
+      "needGb": 33.0,
+      "gpuShare": 0.0,
+      "sizeGb": 28.7
+     }
+    },
+    {
+     "path": "mmproj-gemma-3-27b-it-F16.gguf",
+     "size": 912680550,
+     "quant": "F16",
+     "kind": "mmproj",
+     "fit": {
+      "fit": "gpu",
+      "needGb": 1.1,
+      "gpuShare": 1.0,
+      "sizeGb": 0.85
+     }
+    }
+   ]
+  },
+  {
+   "url": "**/api/downloads/events",
+   "method": "GET",
+   "body": "",
+   "contentType": "text/event-stream"
+  }
+ ],
+ "boards": [
+  {
+   "id": "DownloadsRunning",
+   "title": "הורדות: שלב, מהירות ברשת, התקדמות הבדיקה וזמן שנותר לכל הורדה, ושורת סיכום כשכמה רצות",
+   "route": "#/models",
+   "shot": {
+    "desktop": ".dl-panel"
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "d1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/bartowski/gemma-3-27b-it-GGUF/resolve/main/gemma-3-27b-it-Q4_K_M.gguf",
+       "dest": "E:/KesherAI/heavy/chat/gemma-3-27b-it-Q4_K_M.gguf",
+       "status": "downloading",
+       "received": 6871947673,
+       "total": 17716740096,
+       "speed": 19084083,
+       "etaSeconds": 556
+      },
+      {
+       "id": "d2",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
+       "dest": "E:/KesherAI/heavy/chat/Qwen3-8B-Q4_K_M.gguf",
+       "status": "verifying",
+       "received": 5261334937,
+       "total": 5261334937,
+       "speed": 0,
+       "verified": 2254857830
+      },
+      {
+       "id": "d3",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/city96/FLUX.1-dev-gguf/resolve/main/flux1-dev-Q4_K_S.gguf",
+       "dest": "E:/KesherAI/heavy/chat/flux1-dev-Q4_K_S.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 7301444403,
+       "speed": 0
+      }
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "click": ".dl-button"
+    },
+    {
+     "wait": ".dl-job"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "phoneSteps": [
+    {
+     "click": ".dl-button"
+    },
+    {
+     "wait": ".dl-job"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "height": {
+    "phone": 900
+   }
+  },
+  {
+   "id": "DownloadsNoSpace",
+   "title": "הורדות: אין מספיק מקום (הגודל, 10% ועוד 2 GB) והצעה לכונן האחר, עם המקום הפנוי בכל כונן",
+   "route": "#/models",
+   "shot": {
+    "desktop": "section.hub"
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": []
+    },
+    {
+     "url": "**/api/downloads/plan*",
+     "json": {
+      "items": [
+       {
+        "name": "gemma-3-27b-it-Q4_K_M.gguf",
+        "sizeGb": 16.5,
+        "have": false,
+        "why": "model"
+       },
+       {
+        "name": "mmproj-gemma-3-27b-it-F16.gguf",
+        "sizeGb": 0.85,
+        "have": false,
+        "why": "extra"
+       }
+      ],
+      "totalGb": 17.35,
+      "needGb": 21.3,
+      "freeGb": 14,
+      "fitsDisk": false,
+      "suggestDrive": "heavy",
+      "drive": "models",
+      "drives": [
+       {
+        "id": "models",
+        "dir": "C:/KesherAI/models",
+        "freeGb": 14,
+        "fits": false,
+        "default": false
+       },
+       {
+        "id": "heavy",
+        "dir": "E:/KesherAI/heavy",
+        "freeGb": 412,
+        "fits": true,
+        "default": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".hub-row"
+    },
+    {
+     "click": ".hub-row:nth-child(2) .hub-row-head"
+    },
+    {
+     "wait": ".hub-file"
+    },
+    {
+     "click": ".hub-file:has-text(\"Q4_K_M\") button.primary"
+    },
+    {
+     "wait": ".hub-nospace"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".hub-row"
+    },
+    {
+     "click": ".hub-row:nth-child(2) .hub-row-head"
+    },
+    {
+     "wait": ".hub-file"
+    },
+    {
+     "click": ".hub-file:has-text(\"Q4_K_M\") button.primary"
+    },
+    {
+     "wait": ".hub-nospace"
+    },
+    {
+     "waitMs": 300
+    },
+    {
+     "top": "section.hub"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "height": {
+    "phone": 2200
+   }
+  },
+  {
+   "id": "DownloadsErrors",
+   "title": "הורדות: כרטיס שגיאה עם הסיבה במילים פשוטות וכפתור תיקון אחד (כונן אחר, טוקן, נסה שוב, התחל מחדש)",
+   "route": "#/models",
+   "shot": {
+    "desktop": ".dl-panel"
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "e1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/bartowski/gemma-3-27b-it-GGUF/resolve/main/gemma-3-27b-it-Q4_K_M.gguf",
+       "dest": "E:/KesherAI/heavy/chat/gemma-3-27b-it-Q4_K_M.gguf",
+       "status": "failed",
+       "received": 12025908428,
+       "total": 17716740096,
+       "speed": 0,
+       "error": "Not enough disk space: this needs 5.3 GB, and only 2.1 GB is free on that drive. Free up space or choose another models folder, then press Retry.",
+       "errorKind": "disk-full"
+      },
+      {
+       "id": "e2",
+       "label": "meta-llama/Llama-3.1-8B-Instruct-GGUF · llama-3.1-8b-instruct-Q4_K_M.gguf",
+       "url": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct-GGUF/resolve/main/llama-3.1-8b-instruct-Q4_K_M.gguf",
+       "dest": "E:/KesherAI/heavy/chat/llama-3.1-8b-instruct-Q4_K_M.gguf",
+       "status": "failed",
+       "received": 0,
+       "total": 5261334937,
+       "speed": 0,
+       "error": "HTTP 403 Forbidden",
+       "errorKind": "auth"
+      },
+      {
+       "id": "e3",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q6_K.gguf",
+       "url": "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q6_K.gguf",
+       "dest": "E:/KesherAI/heavy/chat/Qwen3-8B-Q6_K.gguf",
+       "status": "failed",
+       "received": 2899102924,
+       "total": 6764573491,
+       "speed": 0,
+       "error": "fetch failed: ETIMEDOUT",
+       "errorKind": "network"
+      },
+      {
+       "id": "e4",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/city96/FLUX.1-dev-gguf/resolve/main/flux1-dev-Q4_K_S.gguf",
+       "dest": "E:/KesherAI/heavy/chat/flux1-dev-Q4_K_S.gguf",
+       "status": "failed",
+       "received": 5476083302,
+       "total": 7301444403,
+       "speed": 0,
+       "error": "HTTP 416 Range Not Satisfiable",
+       "errorKind": "changed"
+      }
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "click": ".dl-button"
+    },
+    {
+     "wait": ".dl-job"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "phoneSteps": [
+    {
+     "click": ".dl-button"
+    },
+    {
+     "wait": ".dl-job"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   }
+  }
+ ]
+}

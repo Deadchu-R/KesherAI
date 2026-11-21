@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
-import { mkdir, readFile, statfs, writeFile } from "node:fs/promises";
-import { budgetOf, detectHardwareCached, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort } from "@kesher/downloads";
+import { mkdir, readFile, statfs, unlink, writeFile } from "node:fs/promises";
+import { budgetOf, detectHardwareCached, driveWithRoom, hasHeadroom, headroomBytes, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
 import { existsSync } from "node:fs";
@@ -266,7 +266,8 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
       items.push({ name: "llama.cpp", sizeGb: process.platform === "win32" ? 0.68 : 0.04, have: false, why: "engine" });
     }
     const totalGb = items.filter((i) => !i.have).reduce((n, i) => n + i.sizeGb, 0);
-    const drives = await driveChoices(s, path);
+    const totalBytes = totalGb * 1024 ** 3;
+    const drives = (await driveChoices(s, path)).map((d) => ({ ...d, fits: hasHeadroom(d.freeGb === undefined ? undefined : d.freeGb * 1024 ** 3, totalBytes) }));
     const disk = drives.find((d) => d.id === req.query.drive) ?? drives.find((d) => d.default) ?? drives[0]!;
     const hw = await detectHardwareCached();
     const mlx = isMlx(`${repo}/${path}`) && process.platform !== "darwin";
@@ -275,7 +276,10 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
       ...(mlx ? { warning: "mlx" } : {}),
       totalGb,
       freeGb: disk.freeGb,
-      fitsDisk: disk.freeGb === undefined || disk.freeGb > totalGb + 1,
+      // The file + 10% + 2 GB must fit the chosen drive; when it does not, the other drive is offered if it fits there.
+      needGb: headroomBytes(totalBytes) / 1024 ** 3,
+      fitsDisk: disk.fits,
+      ...(disk.fits ? {} : { suggestDrive: driveWithRoom(drives, disk.id, totalBytes) }),
       estimate: estimatePerformance(size, hw),
       drives,
       drive: disk.id,
@@ -315,8 +319,9 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     const drives = await driveChoices(s, body.path);
     const drive = body.drive ? drives.find((d) => d.id === body.drive) : drives.find((d) => d.default);
     if (!drive) return { refused: 400, error: "Choose one of the offered drives." };
-    if (drive.freeGb !== undefined && drive.freeGb < file.size / 1024 ** 3 + 1) {
-      return { refused: 507, error: `Not enough disk space: the file needs ${(file.size / 1024 ** 3).toFixed(1)} GB and ${drive.freeGb.toFixed(1)} GB is free. Free some space or choose another drive.` };
+    if (!hasHeadroom(drive.freeGb === undefined ? undefined : drive.freeGb * 1024 ** 3, file.size)) {
+      const other = driveWithRoom(drives, drive.id, file.size);
+      return { refused: 507, error: `Not enough disk space: the file needs ${(headroomBytes(file.size) / 1024 ** 3).toFixed(1)} GB free (its size, 10% and 2 GB of room) and ${drive.freeGb?.toFixed(1)} GB is free. ${other ? `It fits on the ${other === "heavy" ? "heavy-data drive" : "download folder"}: choose that drive.` : "Free some space or choose another drive."}` };
     }
     if (drive.id === "heavy") {
       // The chat finds models in the folders it reads from: add the heavy drive's models folder once.
@@ -391,6 +396,36 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     const job = s.downloads.list().find((j) => j.id === req.params.id);
     if (!job) return reply.code(404).send({ error: "Download not found" });
     return s.downloads.retry(req.params.id);
+  });
+
+  /** Starts a failed download again from zero (its partial file is deleted first): the file changed on the hub. */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/restart", async (req, reply) => {
+    const job = await s.downloads.restart(req.params.id);
+    return job ?? reply.code(404).send({ error: "Download not found" });
+  });
+
+  /**
+   * The disk-full fix: moves a failed download to the other drive (models / heavy) when the file fits there with the
+   * headroom, and starts it there. The old partial file is deleted.
+   */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/other-drive", async (req, reply) => {
+    const job = s.downloads.list().find((j) => j.id === req.params.id);
+    const body = pending.get(req.params.id);
+    if (!job || !body) return reply.code(404).send({ error: "Download not found" });
+    const drives = await driveChoices(s, body.path);
+    const current = body.drive ?? drives.find((d) => d.default)?.id ?? "models";
+    const to = driveWithRoom(drives, current, job.total ?? 0);
+    if (!to) return reply.code(409).send({ error: "No other drive has enough room for this file. Free some space, then press Retry." });
+    s.downloads.cancel(job.id);
+    s.downloads.dismiss(job.id);
+    pending.delete(job.id);
+    await unlink(`${job.dest}.part`).catch(() => undefined);
+    try {
+      const r = await start({ ...body, drive: to });
+      return "refused" in r ? reply.code(r.refused).send({ error: r.error }) : r;
+    } catch (err) {
+      return reply.code(400).send({ error: hubError(err) });
+    }
   });
 
   /** Cancels a running download, or removes a finished one from the list. */

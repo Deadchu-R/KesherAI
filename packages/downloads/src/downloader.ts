@@ -5,6 +5,7 @@ import { mkdir, rename, stat, statfs, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { RateMeter, classifyDownloadError, secondsLeft, type DownloadErrorKind } from "./progress.js";
 
 /** Lifecycle of a download. */
 export type DownloadStatus = "queued" | "downloading" | "paused" | "verifying" | "done" | "failed" | "cancelled";
@@ -36,9 +37,15 @@ export interface DownloadJob {
   received: number;
   /** Total bytes, when known. */
   total?: number;
-  /** Bytes per second over the last second or so. */
+  /** Bytes per second, smoothed (a moving average over the last few seconds, so it does not jump). */
   speed: number;
+  /** Seconds left at the smoothed speed; absent when it cannot be told yet. */
+  etaSeconds?: number;
+  /** While `verifying`: bytes of the file hashed so far (of `received`). */
+  verified?: number;
   error?: string;
+  /** Why it failed, for the error card and its fix button; see {@link classifyDownloadError}. */
+  errorKind?: DownloadErrorKind;
 }
 
 /**
@@ -160,7 +167,28 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     if (!entry) return undefined;
     if (entry.job.status === "failed" || entry.job.status === "cancelled" || entry.job.status === "paused") {
       delete entry.job.error;
+      delete entry.job.errorKind;
       this.update(entry.job, { status: "queued", speed: 0 });
+      this.pump();
+    }
+    return { ...entry.job };
+  }
+
+  /**
+   * Starts a failed, cancelled or paused job again from zero: the `.part` file is deleted first. For a file that
+   * changed on the hub, where resuming the old bytes cannot work.
+   *
+   * @param id - Job id.
+   * @returns The job, or `undefined` if it does not exist.
+   */
+  async restart(id: string): Promise<DownloadJob | undefined> {
+    const entry = this.jobs.get(id);
+    if (!entry) return undefined;
+    if (entry.job.status === "failed" || entry.job.status === "cancelled" || entry.job.status === "paused") {
+      await unlink(`${entry.req.dest}.part`).catch(() => undefined);
+      delete entry.job.error;
+      delete entry.job.errorKind;
+      this.update(entry.job, { status: "queued", speed: 0, received: 0 });
       this.pump();
     }
     return { ...entry.job };
@@ -206,6 +234,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       await mkdir(dirname(req.dest), { recursive: true });
       const existing = await stat(part).then((s) => s.size).catch(() => 0);
       const headers: Record<string, string> = { ...req.headers, ...(existing > 0 ? { range: `bytes=${existing}-` } : {}) };
+      delete job.etaSeconds;
+      delete job.verified;
       this.update(job, { status: "downloading", received: existing });
 
       const res = await fetchRetrying(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
@@ -230,6 +260,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
         }
       }
 
+      const meter = new RateMeter();
       let windowBytes = 0;
       let windowStart = Date.now();
       const body = Readable.fromWeb(res.body as import("node:stream/web").ReadableStream<Uint8Array>);
@@ -238,7 +269,10 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
         windowBytes += chunk.length;
         const elapsed = Date.now() - windowStart;
         if (elapsed >= 1000) {
-          this.update(job, { speed: Math.round((windowBytes * 1000) / elapsed) });
+          const speed = meter.add(windowBytes, elapsed);
+          const left = job.total !== undefined ? secondsLeft(job.total - job.received, speed) : undefined;
+          if (left === undefined) delete job.etaSeconds;
+          this.update(job, { speed, ...(left !== undefined ? { etaSeconds: left } : {}) });
           windowBytes = 0;
           windowStart = Date.now();
         }
@@ -263,22 +297,33 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       await pipeline(body, throttle, createWriteStream(part, { flags: resumed ? "a" : "w" }));
 
       if (req.sha256) {
-        this.update(job, { status: "verifying", speed: 0 });
-        const actual = await sha256File(part);
+        delete job.etaSeconds;
+        this.update(job, { status: "verifying", speed: 0, verified: 0 });
+        let lastTick = 0;
+        const actual = await sha256File(part, (bytes) => {
+          // A few updates a second are enough for a progress bar.
+          if (Date.now() - lastTick < 250) return;
+          lastTick = Date.now();
+          this.update(job, { verified: bytes });
+        });
         if (actual.toLowerCase() !== req.sha256.toLowerCase()) {
           await unlink(part).catch(() => undefined);
           throw new Error(`SHA-256 mismatch: expected ${req.sha256}, got ${actual}`);
         }
       }
       await rename(part, req.dest);
+      delete job.etaSeconds;
+      delete job.verified;
       this.update(job, { status: "done", speed: 0, received: job.total ?? job.received });
     } catch (err) {
       // Stopped on purpose (pause or cancel), even if it was resumed since: not a failure.
       if ((ctrl.signal.aborted && !diskFull) || job.status === "cancelled" || job.status === "paused") return;
       // Node reports network problems as "fetch failed" with the real reason in `cause`.
-      const e = err as Error & { cause?: { code?: string; message?: string } };
+      const e = err as Error & { code?: string; cause?: { code?: string; message?: string } };
       const reason = e.message === "fetch failed" || e.message === "terminated" ? `${e.message}: ${e.cause?.code ?? e.cause?.message ?? "network error"}` : (e.message ?? String(err));
-      this.update(job, { status: "failed", speed: 0, error: reason });
+      delete job.etaSeconds;
+      delete job.verified;
+      this.update(job, { status: "failed", speed: 0, error: reason, errorKind: classifyDownloadError(`${reason} ${e.code ?? ""}`.trim()) });
     }
   }
 }
@@ -310,10 +355,16 @@ export async function freeSpace(dir: string): Promise<number | undefined> {
  * Hashes a file with SHA-256 without loading it into memory.
  *
  * @param path - File to hash.
+ * @param onProgress - Called after each chunk with the bytes hashed so far (for a progress bar).
  * @returns Lower-case hex digest.
  */
-export async function sha256File(path: string): Promise<string> {
+export async function sha256File(path: string, onProgress?: (bytes: number) => void): Promise<string> {
   const hash = createHash("sha256");
-  await pipeline(createReadStream(path), hash);
+  let done = 0;
+  for await (const chunk of createReadStream(path) as AsyncIterable<Buffer>) {
+    hash.update(chunk);
+    done += chunk.length;
+    onProgress?.(done);
+  }
   return hash.digest("hex");
 }

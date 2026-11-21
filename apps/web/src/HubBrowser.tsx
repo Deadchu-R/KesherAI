@@ -314,10 +314,15 @@ interface Plan {
   /** `mlx`: the file runs only on Mac computers. */
   warning?: "mlx";
   freeGb?: number;
+  /** Free space the chosen drive needs: the files, 10% more and 2 GB. */
+  needGb?: number;
+  /** Whether the chosen drive has that much free. */
   fitsDisk: boolean;
+  /** The other drive the files fit on, when the chosen one is too full. */
+  suggestDrive?: "models" | "heavy";
   estimate?: Estimate;
   /** Where the file can go (the download folder, and the heavy-data drive for chat models), and the one chosen. */
-  drives?: Array<{ id: "models" | "heavy"; dir: string; freeGb?: number; default: boolean }>;
+  drives?: Array<{ id: "models" | "heavy"; dir: string; freeGb?: number; fits: boolean; default: boolean }>;
   drive?: string;
 }
 
@@ -343,6 +348,9 @@ function PlanBox({ plan, onDrive, onCancel, onConfirm }: { plan?: Plan; onDrive:
         <strong className="grow">{t("planTotal", { size: size(plan.totalGb) })}</strong>
         {plan.freeGb !== undefined && <span className={plan.fitsDisk ? "muted" : "error"}>{t("diskFree", { gb: plan.freeGb.toFixed(0) })}</span>}
       </div>
+      {plan.drives && plan.drives.length === 1 && plan.drives[0]!.freeGb !== undefined && (
+        <span className="muted small hub-drive-dir" dir="ltr">{plan.drives[0]!.dir}</span>
+      )}
       {plan.drives && plan.drives.length > 1 && (
         <div className="stack hub-drives" role="radiogroup" aria-label={L("לאיזה כונן", "Which drive")}>
           <span className="muted small">{L("לאיזה כונן להוריד", "Download to which drive")}</span>
@@ -352,14 +360,23 @@ function PlanBox({ plan, onDrive, onCancel, onConfirm }: { plan?: Plan; onDrive:
               <span className="grow">{d.id === "heavy" ? L("כונן הנתונים הכבדים", "Heavy-data drive") : L("תיקיית ההורדות", "Download folder")}
                 <span className="muted small mono hub-drive-dir" dir="ltr">{d.dir}</span>
               </span>
-              {d.freeGb !== undefined && <span className="muted small">{t("diskFree", { gb: d.freeGb.toFixed(0) })}</span>}
+              {d.freeGb !== undefined && <span className={d.fits ? "muted small" : "error small"}>{t("diskFree", { gb: d.freeGb.toFixed(0) })}{d.fits ? "" : ` · ${L("לא מספיק", "too little")}`}</span>}
             </label>
           ))}
         </div>
       )}
       {plan.warning === "mlx" && <p className="error">{t("planMlx")}</p>}
       {plan.estimate && plan.estimate.rating === "too-big" && <p className="error">{t("planTooBig")}</p>}
-      {!plan.fitsDisk && <p className="error">{t("planNoSpace")}</p>}
+      {!plan.fitsDisk && (
+        <div className="stack hub-nospace" role="alert">
+          <p className="error">{plan.needGb !== undefined
+            ? L(`ההורדה צריכה ${plan.needGb.toFixed(1)} GB פנויים (הגודל, עוד 10% ועוד 2 GB מרווח) ואין מספיק בכונן הזה.`, `This download needs ${plan.needGb.toFixed(1)} GB free (its size, 10% more and 2 GB of room) and this drive has too little.`)
+            : t("planNoSpace")}</p>
+          {plan.suggestDrive
+            ? <button type="button" onClick={() => onDrive(plan.suggestDrive!)}>{L(`זה נכנס ב${plan.suggestDrive === "heavy" ? "כונן הנתונים הכבדים" : "תיקיית ההורדות"}: עבור אליו`, `It fits on the ${plan.suggestDrive === "heavy" ? "heavy-data drive" : "download folder"}: switch to it`)}</button>
+            : <p className="muted small">{t("planNoSpace")}</p>}
+        </div>
+      )}
       <div className="row">
         <button type="button" className="primary" disabled={!plan.fitsDisk} onClick={onConfirm}>{t("planDownload", { size: size(plan.totalGb) })}</button>
         <button type="button" onClick={onCancel}>{t("cancel")}</button>

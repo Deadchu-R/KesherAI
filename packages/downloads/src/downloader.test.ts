@@ -64,6 +64,7 @@ test("a wrong hash fails the job", async () => {
     const job = await failed;
     assert.equal(job.status, "failed");
     assert.match(job.error ?? "", /SHA-256 mismatch/);
+    assert.equal(job.errorKind, "changed");
   } finally {
     server.close();
   }
@@ -175,4 +176,25 @@ test("the speed limit slows a download down", async () => {
   await new Promise<void>((ok, no) => dm.on("update", (j: { id: string; status: string; error?: string }) => j.id === job.id && (j.status === "done" ? ok() : j.status === "failed" ? no(new Error(j.error)) : undefined)));
   assert.ok(Date.now() - t0 > 1000, `took ${Date.now() - t0} ms`);
   srv.close();
+});
+
+test("a failed download says why, and restart starts it again from zero", async () => {
+  const { server, url } = await startServer();
+  try {
+    const dir = await mkdtemp(join(tmpdir(), "kesher-dl-"));
+    const dest = join(dir, "r.bin");
+    const dm = new DownloadManager();
+    const failed = waitFor(dm, "failed");
+    const queued = dm.enqueue({ url, dest, sha256: "0".repeat(64) });
+    assert.equal((await failed).errorKind, "changed");
+    // A stale partial file must be gone after a restart, and the job runs again (and fails the same way here).
+    await writeFile(`${dest}.part`, Buffer.alloc(10));
+    const again = waitFor(dm, "queued");
+    const job = await dm.restart(queued.id);
+    assert.equal(job?.received, 0);
+    assert.equal(job?.errorKind, undefined);
+    assert.equal((await again).status, "queued");
+  } finally {
+    server.close();
+  }
 });

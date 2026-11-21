@@ -364,15 +364,18 @@
         "id": "models",
         "dir": "C:/KesherAI/models",
         "freeGb": 96,
-        "default": false
+        "default": false,
+        "fits": true
        },
        {
         "id": "heavy",
         "dir": "E:/KesherAI/heavy",
         "freeGb": 412,
-        "default": true
+        "default": true,
+        "fits": true
        }
-      ]
+      ],
+      "needGb": 21.3
      }
     }
    ],

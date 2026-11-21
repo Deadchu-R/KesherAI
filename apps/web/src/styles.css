@@ -4690,3 +4690,15 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .mic-detected { position: fixed; inset-inline: 12px; bottom: 88px; margin-inline: auto; max-width: 420px; z-index: 40; padding: 8px 12px; gap: 8px; justify-content: space-between; align-items: flex-start; box-shadow: 0 6px 24px rgba(0,0,0,.25); }
 .local-agent-off { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--warn, #c9a227); background: color-mix(in srgb, var(--warn, #c9a227) 10%, transparent); }
 .local-agent-off button, .local-agent-off .btn { white-space: normal; }
+/* Downloads: the phase track, the total line, the error card with its fix button, the not-enough-space note. */
+.dl-phases { display: flex; gap: 4px; list-style: none; margin: 0; padding: 0; font-size: 11px; color: var(--muted); }
+.dl-phases li { flex: 1 1 0; text-align: center; padding-block: 2px; border-block-end: 3px solid var(--border-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl-phases li.past { border-color: var(--accent); }
+.dl-phases li.now { border-color: var(--accent); color: var(--text); font-weight: 700; }
+.dl-total { padding-block-end: 6px; border-block-end: 1px solid var(--border); flex-wrap: wrap; }
+.dl-error { gap: 6px; padding: 10px; border-radius: calc(10px * var(--r-scale, 1)); border: 1px solid color-mix(in srgb, #f87171 55%, transparent); background: color-mix(in srgb, #f87171 8%, var(--panel)); }
+.dl-error .row { flex-wrap: wrap; }
+.dl-error-raw { overflow-wrap: anywhere; }
+.dl-error .button, .dl-error button { min-height: 44px; }
+.hub-nospace button { min-height: 44px; }
+.dl-job > .row { flex-wrap: wrap; justify-content: flex-end; }

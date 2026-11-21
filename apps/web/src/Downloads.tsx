@@ -1,10 +1,23 @@
 import { useEffect, useState } from "react";
 import { api, withToken } from "./api";
-import { getLocale, t, type StringKey } from "./i18n";
+import { getLocale, t, he$, type StringKey } from "./i18n";
 import { Select } from "./ui/Select";
 
 /** One download, as the server reports it. */
-export interface Job { id: string; label: string; url?: string; dest?: string; status: string; received: number; total?: number; speed: number; error?: string }
+export interface Job {
+  id: string; label: string; url?: string; dest?: string; status: string; received: number; total?: number;
+  /** Bytes per second, smoothed on the computer (no jumping). */
+  speed: number;
+  /** Seconds left at that speed, when known. */
+  etaSeconds?: number;
+  /** While checking the file: bytes hashed so far. */
+  verified?: number;
+  error?: string;
+  /** Why it failed: decides the error card's cause and its one fix button. */
+  errorKind?: "disk-full" | "auth" | "network" | "changed" | "other";
+}
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * Downloads, shared by every screen: one live connection to the server,
@@ -71,6 +84,104 @@ function eta(seconds: number): string {
   return m ? `${nf(h, "hour")} ${nf(m, "minute")}` : nf(h, "hour");
 }
 
+const mbps = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MB/s`;
+
+/** The steps a download goes through; the current one is marked (waiting, downloading, checking, done). */
+const PHASES = ["queued", "downloading", "verifying", "done"] as const;
+
+/** The four phases as a small track: passed ones filled, the current one bold. Failed and paused ones show no track. */
+function PhaseTrack({ status }: { status: string }) {
+  const at = PHASES.indexOf(status as (typeof PHASES)[number]);
+  if (at < 0) return null;
+  return (
+    <ol className="dl-phases" aria-label={t(`dl-${status}` as StringKey)}>
+      {PHASES.map((p, i) => (
+        <li key={p} className={i < at ? "past" : i === at ? "now" : ""} aria-current={i === at ? "step" : undefined}>{t(`dl-${p}` as StringKey)}</li>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * One line for several downloads together: how many, the speed they share, and the time left for all of them.
+ *
+ * @param active - The downloads that are waiting, downloading or being checked.
+ */
+function TotalLine({ active }: { active: Job[] }) {
+  if (active.length < 2) return null;
+  const left = active.reduce((n, j) => n + Math.max(0, (j.total ?? 0) - j.received), 0);
+  const speed = active.filter((j) => j.status === "downloading").reduce((n, j) => n + j.speed, 0);
+  return (
+    <div className="row small dl-total">
+      <strong className="grow">{L(`${active.length} הורדות פעילות`, `${active.length} downloads running`)}</strong>
+      <span className="muted mono" dir="ltr">{speed > 0 ? mbps(speed) : ""}</span>
+      {speed > 0 && left > 0 && <span className="muted">{L("בסך הכול", "in all")}: {t("timeLeft", { time: eta(left / speed) })}</span>}
+    </div>
+  );
+}
+
+/**
+ * What one download shows while it is not finished: its phase, a bar, and the numbers that fit the phase: the
+ * network speed and time left while downloading, the check's progress while the file is verified.
+ */
+function JobMeters({ j }: { j: Job }) {
+  const pct = j.total ? Math.floor((100 * j.received) / j.total) : 0;
+  const size = `${gb(j.received)}${j.total ? ` / ${gb(j.total)}` : ""}`;
+  if (j.status === "verifying") {
+    const vp = j.received ? Math.min(100, Math.floor((100 * (j.verified ?? 0)) / j.received)) : 0;
+    return (
+      <>
+        <div className="bar" role="progressbar" aria-valuenow={vp} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${vp}%` }} /></div>
+        <div className="row small muted"><span className="grow">{L("בודק שהקובץ שלם", "Checking the file is intact")}</span><span className="mono" dir="ltr">{vp}%</span></div>
+      </>
+    );
+  }
+  if (j.status === "queued") return <div className="muted small">{L("מחכה לתור שלו", "Waiting for its turn")}</div>;
+  return (
+    <>
+      {j.total ? <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pct}%` }} /></div> : null}
+      <div className="row small muted">
+        <span className="mono grow" dir="ltr">{size}{j.speed ? ` · ${mbps(j.speed)}` : ""}</span>
+        {j.status === "downloading" && j.etaSeconds !== undefined && <span>{t("timeLeft", { time: eta(j.etaSeconds) })}</span>}
+      </div>
+    </>
+  );
+}
+
+/**
+ * A failed download: what went wrong in plain words and one button that fixes it. A full disk offers the other
+ * drive; a refused file (401/403) points to the Hugging Face token setting (the token is never asked for here);
+ * a network problem retries (it resumes); a file that changed on the hub restarts from zero.
+ */
+function ErrorCard({ j }: { j: Job }) {
+  const [problem, setProblem] = useState("");
+  const kind = j.errorKind ?? "other";
+  const post = (path: string) => {
+    setProblem("");
+    return api(`/api/downloads/${j.id}/${path}`, { method: "POST" }).catch((e: Error) => setProblem(e.message));
+  };
+  const cause: Record<NonNullable<Job["errorKind"]>, string> = {
+    "disk-full": L("אין מספיק מקום בכונן הזה להורדה.", "There is not enough room on this drive for the download."),
+    auth: L("המודל הזה צריך טוקן של Hugging Face.", "This model needs a Hugging Face token."),
+    network: L("החיבור לאינטרנט נקטע או איטי מדי. מה שירד נשמר.", "The connection dropped or timed out. What was downloaded is kept."),
+    changed: L("הקובץ השתנה באתר, אז מה שירד כבר לא מתאים.", "The file changed on the hub, so what was downloaded no longer matches."),
+    other: L("ההורדה נכשלה.", "The download failed."),
+  };
+  return (
+    <div className="dl-error stack" role="alert">
+      <strong>{cause[kind]}</strong>
+      {j.error && <span className="muted small mono dl-error-raw" dir="ltr">{j.error}</span>}
+      <div className="row">
+        {kind === "disk-full" && <button type="button" className="primary" onClick={() => void post("other-drive")}>{L("בחר כונן אחר", "Choose another drive")}</button>}
+        {kind === "auth" && <a className="button primary" href="#/settings/accounts">{L("הוסף טוקן בהגדרות", "Add a token in Settings")}</a>}
+        {kind === "changed" && <button type="button" className="primary" onClick={() => void post("restart")}>{L("התחל מחדש", "Restart")}</button>}
+        {(kind === "network" || kind === "other") && <button type="button" className="primary" onClick={() => void post("retry")}>{L("נסה שוב (ממשיך מאיפה שעצר)", "Retry (resumes)")}</button>}
+      </div>
+      {problem && <span className="error small">{problem}</span>}
+    </div>
+  );
+}
+
 /**
  * The small round downloads button in the corner of every screen. It shows
  * a progress ring while something downloads and a dot when one failed, and
@@ -107,6 +218,7 @@ export function DownloadsButton() {
       {open && (
         <div className="dl-panel card" role="dialog" aria-label={t("downloads")}>
           <div className="row"><strong className="grow">{t("downloads")}</strong><button type="button" onClick={() => setOpen(false)} aria-label={t("cancel")}>✕</button></div>
+          <TotalLine active={active} />
           <div className="list">
             {all.map((j) => (
               <div key={j.id} className="dl-job">
@@ -114,17 +226,17 @@ export function DownloadsButton() {
                   <span className="mono grow dl-name" dir="ltr" title={j.label}>{j.label}</span>
                   <span className={`pill ${j.status === "done" ? "good" : j.status === "failed" ? "bad" : ""}`}>{t(`dl-${j.status}` as StringKey)}</span>
                 </div>
-                {ACTIVE.has(j.status) && j.total ? <div className="bar"><div style={{ width: `${(100 * j.received) / j.total}%` }} /></div> : null}
+                {ACTIVE.has(j.status) && <PhaseTrack status={j.status} />}
+                {ACTIVE.has(j.status) || j.status === "paused" ? <JobMeters j={j} /> : j.status === "done" && j.total ? <span className="muted small mono" dir="ltr">{gb(j.total)}</span> : null}
+                {j.status === "failed" && <ErrorCard j={j} />}
                 <div className="row muted">
-                  <span className="mono grow" dir="ltr">{gb(j.received)}{j.total ? ` / ${gb(j.total)}` : ""}{j.speed ? ` · ${(j.speed / 1024 ** 2).toFixed(1)} MB/s` : ""}</span>
-                  {j.status === "downloading" && j.total && j.speed > 0 && <span className="muted">{t("timeLeft", { time: eta((j.total - j.received) / j.speed) })}</span>}
+                  <span className="grow" />
                   {(j.status === "downloading" || j.status === "queued") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/pause`, { method: "POST" })}>{t("dlPause")}</button>}
                   {j.status === "paused" && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("dlResume")}</button>}
                   {(ACTIVE.has(j.status) || j.status === "paused") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
-                  {(j.status === "failed" || j.status === "cancelled") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
+                  {j.status === "cancelled" && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
                   {!ACTIVE.has(j.status) && <button type="button" onClick={() => remove(j.id)} aria-label={t("remove")}>✕</button>}
                 </div>
-                {j.error && <span className="error">{j.error}</span>}
               </div>
             ))}
           </div>
@@ -167,19 +279,20 @@ export function DownloadBar({ repo, file }: { repo: string; file?: string }) {
   const mine = all.filter((j) => j.url?.includes(`/${repo}/resolve/`) && (!file || decodeURIComponent(j.url).endsWith(`/${file}`)));
   const j = mine.find((x) => ACTIVE.has(x.status) || x.status === "paused") ?? mine.find((x) => x.status === "failed");
   if (!j) return null;
-  const pct = j.total ? Math.floor((100 * j.received) / j.total) : 0;
+  if (j.status === "failed") return <div className="dl-inline stack"><ErrorCard j={j} /></div>;
   return (
     <div className="dl-inline stack">
       <div className="row small">
-        <strong className="grow">{j.status === "failed" ? t("dl-failed") : j.status === "paused" ? t("dl-paused") : j.status === "queued" ? t("dl-queued") : `${pct}%`}</strong>
-        <span className="muted mono" dir="ltr">{gb(j.received)}{j.total ? ` / ${gb(j.total)}` : ""}{j.speed ? ` · ${(j.speed / 1024 ** 2).toFixed(1)} MB/s` : ""}</span>
+        <strong className="grow">{j.status === "paused" ? t("dl-paused") : t(`dl-${j.status}` as StringKey)}</strong>
+        {j.total ? <span className="muted mono" dir="ltr">{Math.floor((100 * j.received) / j.total)}%</span> : null}
       </div>
-      {j.total ? <div className="bar"><div style={{ width: `${pct}%` }} /></div> : null}
+      <PhaseTrack status={j.status} />
+      <JobMeters j={j} />
       <div className="row small">
-        <span className="muted grow">{j.status === "downloading" && j.total && j.speed > 0 ? t("timeLeft", { time: eta((j.total - j.received) / j.speed) }) : j.error ?? ""}</span>
+        <span className="grow" />
         {(j.status === "downloading" || j.status === "queued") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/pause`, { method: "POST" })}>{t("dlPause")}</button>}
-        {(j.status === "paused" || j.status === "failed") && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{j.status === "paused" ? t("dlResume") : t("retry")}</button>}
-        {j.status !== "failed" && <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>}
+        {j.status === "paused" && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("dlResume")}</button>}
+        <button type="button" onClick={() => void api(`/api/downloads/${j.id}`, { method: "DELETE" })}>{t("cancel")}</button>
       </div>
     </div>
   );
@@ -203,7 +316,7 @@ export function DownloadsMatching({ match }: { match: RegExp }) {
               <strong>{j.status === "failed" ? t("dl-failed") : j.status === "paused" ? t("dl-paused") : j.status === "queued" ? t("dl-queued") : `${pct}%`}</strong>
             </div>
             {j.total ? <div className="bar"><div style={{ width: `${pct}%` }} /></div> : null}
-            {j.status === "failed" && <button type="button" className="primary" onClick={() => void api(`/api/downloads/${j.id}/retry`, { method: "POST" })}>{t("retry")}</button>}
+            {j.status === "failed" && <ErrorCard j={j} />}
           </div>
         );
       })}
