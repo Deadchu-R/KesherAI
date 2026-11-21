@@ -1675,3 +1675,67 @@ batch sync, offer_install and /api/installables, the tool router and per-chat to
   - Carried from 167: the hub keeps no total cap on agent-event rows (per run and 7 days only). FIXED: `agentEventsTotal` (2000 rows), oldest evicted first (`capAgentEvents`).
 - Performance otherwise: checkpoint copies stream (hash while copying, no buffering), ≤ 2 GB a file, store pruned
   after every capture; uasset reads 16 KB first and the rest only to the header's end.
+
+## Scan 169 (2026-11-21): the hub as a Claude connector (OAuth 2.1), browser and computer control, vision models
+Scope: everything since scan 168 (5c302ab..99a51d5, 0.6.411–0.6.414 and the hub connector 99a51d5, not pushed yet;
+pushing `main` deploys the hub): oauth.ts, connector.ts, mcp.ts, /connect, the store's OAuth tables; cdp.ts, the
+browser bridge and extension CDP, control policy/gate/reviewer, UIA worker and scripts, vision models (downloads,
+service, llama.cpp slot), quick actions (`runDirect`), canvas/design rendering, resume.json, the draw-change
+screenshot route, `tool_output`, Unreal level tools, GIF recording.
+- **Fixed (medium): a full connector client table locked the owner out for a day.** Registering is open (5 a minute
+  per IP); when the 50 slots are full, unused registrations older than 10 minutes are dropped first (0e492d0).
+- **Fixed (medium): browser and computer control could drive KesherAI itself.** KesherAI's port is refused on any
+  host name (`x.localhost` reached it as a local, token-free request), the extension also checks `pendingUrl`,
+  `Page.navigate` and in-page actions; KesherAI's own window can be looked at, never clicked or typed in, so a model
+  cannot press Approve on its own card (3d5f384).
+- **Fixed (low): vision model files and Unreal level paths could leave their folders** (a repo name with `\` or
+  `..`; a level path with `..`) (bc462b5).
+- **Fixed (low): two refreshes with the same refresh token at once gave two live token pairs.** The hashing awaits
+  between the read and the write; the grant is now checked again right before the write (one wins, the other gets
+  `invalid_grant`). Test: connector.test.ts.
+- **Fixed (low): `/mcp` had no limit before the token lookup** (a flood cost SQL reads); 120 a minute per caller IP.
+- **Fixed (low, consent phishing): the approval page did not warn about shared links.** Someone can add the owner's
+  hub as a connector in their own Claude and send the `/oauth/authorize` link; if Claude's callback accepted the code
+  in another session, their Claude would reach the hub. /connect now says to approve only a Connect the owner just
+  pressed (the loopback warning was already there).
+- **Fixed (perf): GIF recording held every decoded frame** (120 × 800 × 800 RGBA, ~300 MB); frames are decoded one at
+  a time and the output is joined in chunks (8a0c242). Test: gif.test.ts.
+- **Checked, fine (connector):** PKCE S256 only (43–128 chars, verifier checked at the token endpoint), plain and
+  missing refused; redirect URIs only Claude's two hosted callbacks or loopback `http://localhost|127.0.0.1:*/callback`
+  (no query, user info or fragment), exact match except the loopback port (RFC 8252); unknown client or redirect shown
+  on the hub, never redirected; `state` passed back unchanged (≤ 500); `iss` added; `resource` must be this hub's
+  `/mcp` (RFC 8707), tokens are opaque and only `/mcp` accepts them. Codes: 32 random bytes, hashed, 1 minute, taken
+  (deleted) before any check, bound to client, redirect and challenge. Refresh: rotates every use, the previous token
+  coming back ends the connection, 30 days, 90 days per approval; access 1 hour; only hashes kept; at most 10
+  connections (the oldest ends); revoke and "disconnect everything" end tokens at once (the kill switch too).
+  Approval: `/api/oauth/check|decide` need the owner's session cookie (only the pinned `ALLOWED_EMAIL` account can
+  sign in) and the same Origin; /connect has `frame-ancestors 'none'` and `X-Frame-Options: DENY`, no-referrer, a
+  separate small script, and navigates only to https or loopback. `/mcp`: POST only, a foreign Origin refused (DNS
+  rebinding), body ≤ 20 KB, protocol version checked, tools/call writes the tool name only to the log, paused hub
+  refuses. Read tools give metadata only (device names, presence, agent labels, waiting counts, task ids);
+  `send_task` text lives in memory for the call only, sealed with the hub's own key (the key the Claude cloud path
+  already used: no new trust) to one PC that opted in to that kind of task, 30 an hour per connection; the PC still
+  checks its own opt-in, Antigravity waits for Run. E2E for device-to-device messages is unchanged (the hub opens
+  nothing new; PC answers to the hub are dropped unopened).
+- **Checked, fine (rest):** UIA: requests go as JSON lines on stdin (no text in PowerShell commands), the release
+  one-shot takes numbers only, the script file is random-named 0600 and deleted after parsing, an elevated worker
+  exits. llama.cpp (and the vision slot) listens on 127.0.0.1 with a per-start key; the vision slot unloads when idle;
+  downloads from Hugging Face through the download manager with sha256 when listed. Quick actions: an allow-list of
+  tools and inputs (`quickActionProblem`), `runDirect` goes through the normal `execute` (approvals apply), refuses a
+  busy chat. `tool_output` reads only the current chat's own messages, ≤ OPEN_CHARS a call. resume.json: items
+  validated (`isResumeItem`, links `#/` only, ≤ 40), written then renamed. Draw-change screenshot: the whole screen
+  only for a local request (`isLocalRequest`: loopback, no forwarding headers, own host name); from the phone only the
+  engine's own view. No new HTML sinks (`innerHTML`, `srcDoc`) in the web or plugin changes; SVG is served only from
+  plugins' own files. CDP: console and network kept to 300 each, response bodies only on request and redacted.
+  Privacy: no email, Windows user name or personal path in the new commits (tests use `/home/u`).
+- **Open (left for the lead):**
+  - Low: registering a client stays open; a spread-out attacker can keep the 50 slots full (owner sees "try again in
+    a few minutes"). The approval itself is safe; a per-IP cap on live registrations would narrow it.
+  - Low: a code used twice does not end the tokens it gave (OAuth 2.1 SHOULD). Codes live 1 minute and are taken
+    on first use, so a second use only fails.
+  - Low: the hub's audit log is pruned by age only; connector tool calls (owner) and registrations (anyone, 5 a
+    minute per IP) each add a row. A row cap like `agentEventsTotal` would bound it.
+  - Low (perf): a browser recording keeps up to 300 PNG frames (800 px) in memory until it ends, tens of MB at worst;
+    JPEG frames or thinning while recording would cut it.
+  - Carried from 168: TOCTOU on real-path checks, game-source backups never pruned, hub page unbundled.
+- Verdict: the connector is safe to deploy with these fixes (main pushes the hub).
