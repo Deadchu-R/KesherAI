@@ -1,21 +1,21 @@
+import { SlideGesture } from "./slideGesture";
+
 /**
  * Press-and-slide menus, like Apple's: press a menu button and keep your
  * finger (or mouse button) down, slide over the items (the one under the
  * finger lights up), and let go to choose it. A plain tap still just opens
  * the menu. Works for every button marked `data-slide-menu` and the menus
- * and side menu it opens.
+ * and side menu it opens. One press toggles the menu once, by finger, pen or
+ * mouse (the rules are in slideGesture.ts); the keyboard still clicks as usual.
  */
 const MENUS = ".bar-pop, .sidebar.open, .model-pop, .acc-pop, [role=menu], [role=listbox]";
 const ITEMS = "a[href], button:not([disabled]), [role=menuitem], [role=option]";
 
 /** Installs the behaviour once, for the whole app. */
 export function installSlideMenus(): void {
+  const gesture = new SlideGesture();
   let trigger: HTMLElement | null = null;
-  let start = { x: 0, y: 0 };
-  let sliding = false;
   let hot: HTMLElement | null = null;
-  let swallowClick = false;
-  let opened: HTMLElement | null = null;
 
   // Sliding to the top or bottom edge of a long menu scrolls it, like Apple's menus.
   let edge: { menu: HTMLElement; speed: number } | null = null;
@@ -64,39 +64,33 @@ export function installSlideMenus(): void {
   addEventListener(
     "pointerdown",
     (e) => {
+      gesture.press();
       if (e.button !== 0) return;
       const t = (e.target as HTMLElement | null)?.closest("[data-slide-menu]") as HTMLElement | null;
       if (!t) return;
       trigger = t;
-      start = { x: e.clientX, y: e.clientY };
-      sliding = false;
+      gesture.down({ x: e.clientX, y: e.clientY }, t, e.timeStamp);
       // Open now (not on release), so the finger can slide into the menu.
-      swallowClick = true;
-      opened = t;
       t.click();
     },
     true,
   );
-  // The release on the button itself would toggle the menu closed again: skip that one click.
+  // The browser's own click for the press comes after the lift and would be a second toggle, or (on a phone,
+  // where the menu opens as a sheet under the finger) a tap on an item. The press already acted: skip it.
   addEventListener(
     "click",
     (e) => {
-      if (!swallowClick || !e.isTrusted) return;
-      const t = (e.target as HTMLElement | null)?.closest("[data-slide-menu]");
-      if (t && t === opened) {
+      if (gesture.swallowClick(e.isTrusted, e.timeStamp)) {
         e.stopPropagation();
         e.preventDefault();
       }
-      swallowClick = false;
     },
     true,
   );
   addEventListener(
     "pointermove",
     (e) => {
-      if (!trigger) return;
-      if (!sliding && Math.hypot(e.clientX - start.x, e.clientY - start.y) < 8) return;
-      sliding = true;
+      if (!trigger || !gesture.move({ x: e.clientX, y: e.clientY })) return;
       last = { x: e.clientX, y: e.clientY };
       setHot(itemAt(e.clientX, e.clientY));
       followEdge(e.clientX, e.clientY);
@@ -105,13 +99,12 @@ export function installSlideMenus(): void {
   );
   const end = (e: PointerEvent) => {
     if (!trigger) return;
-    const chosen = sliding && e.type === "pointerup" ? itemAt(e.clientX, e.clientY) : null;
+    const chosen = gesture.isSliding && e.type === "pointerup" ? itemAt(e.clientX, e.clientY) : null;
     setHot(null);
     trigger = null;
     edge = null;
-    // A tap (no slide) leaves the menu open; the next click event is the tap's own.
-    if (!sliding) return;
-    swallowClick = false;
+    // A tap (no slide) leaves the menu open; a slide chooses the item under the finger.
+    gesture.lift(e.timeStamp);
     if (chosen) setTimeout(() => chosen.click(), 0);
   };
   addEventListener("pointerup", end, true);

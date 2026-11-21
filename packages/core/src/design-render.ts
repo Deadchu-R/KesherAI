@@ -113,7 +113,7 @@ interface PwPage {
   screenshot(o: Record<string, unknown>): Promise<Buffer>;
 }
 interface PwLocator {
-  click(o?: { timeout?: number }): Promise<void>;
+  click(o?: { timeout?: number; force?: boolean }): Promise<void>;
   waitFor(o?: { timeout?: number }): Promise<void>;
   fill(v: string, o?: { timeout?: number }): Promise<void>;
   hover(o?: { timeout?: number }): Promise<void>;
@@ -134,7 +134,7 @@ interface PwBrowser {
 /** Runs one step before the shot. */
 async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   const T = { timeout: 15_000 };
-  if ("click" in s) await page.locator(s.click).first().click(s.optional ? { timeout: 2500 } : T).catch((e: unknown) => { if (!s.optional) throw e; });
+  if ("click" in s) await page.locator(s.click).first().click({ ...(s.optional ? { timeout: 2500 } : T), ...(s.force ? { force: true } : {}) }).catch((e: unknown) => { if (!s.optional) throw e; });
   else if ("wait" in s) await page.locator(s.wait).first().waitFor(T);
   else if ("waitMs" in s) await page.waitForTimeout(s.waitMs);
   else if ("fill" in s) await page.locator(s.fill).first().fill(s.value, T);

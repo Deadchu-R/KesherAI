@@ -211,7 +211,23 @@
     }
    ],
    "viewports": [
-    "desktop"
+    "desktop",
+    "phone"
+   ],
+   "phoneSteps": [
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible",
+     "force": true
+    },
+    {
+     "click": "text=כלים בצ'אט הזה"
+    },
+    {
+     "wait": "text=קונקטורים"
+    }
    ]
   }
  ]

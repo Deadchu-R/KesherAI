@@ -40,7 +40,8 @@ const mockSchema = z.object({
   contentType: z.string().max(100).optional(),
 });
 const stepSchema = z.union([
-  z.object({ click: selector, optional: z.boolean().optional() }).strict(),
+  // force: no "is something covering it" check, for a button whose menu opens over it (the phone's sheets).
+  z.object({ click: selector, optional: z.boolean().optional(), force: z.boolean().optional() }).strict(),
   z.object({ wait: selector }).strict(),
   z.object({ waitMs: z.number().int().min(0).max(10_000) }).strict(),
   z.object({ fill: selector, value: z.string().max(2000) }).strict(),
