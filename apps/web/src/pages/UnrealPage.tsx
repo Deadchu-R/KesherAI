@@ -40,6 +40,8 @@ interface Status {
   /** Unreal: the editor is closed and commands run in a headless editor (plugin 0.1.13+). */
   offline?: boolean;
 }
+/** An entry of the Unity project menu (GET /api/unity/projects). */
+interface UnityMenuItem { name: string; path: string; engine?: string; added: boolean; active: boolean; parent?: string }
 interface BpItem { path: string; name: string; parent?: string; saved?: boolean }
 interface Blueprint { path: string; name: string; parent?: string; variables: BpVar[]; graphs: Array<{ name: string; kind: string; nodes: GNode[] }> }
 interface Queued { id: string; path: string; graph: string; request?: string; at: string; ops: unknown[] }
@@ -146,6 +148,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
 
   const loadStatus = () => void api<Status>(base).then(setSt, () => undefined);
   const loadList = () => void api<typeof list>(`${base}/blueprints`).then(setList, () => undefined);
+  // Unity: the project menu lists every project found on the computer; reloaded when the added ones or the active one change (not on every poll: it scans folders).
+  const [menu, setMenu] = useState<UnityMenuItem[]>([]);
+  const menuKey = `${st?.projects.join("|") ?? ""}#${st?.active ?? ""}`;
+  useEffect(() => {
+    if (unity && st) void api<{ projects: UnityMenuItem[] }>(`${base}/projects`).then((r) => setMenu(r.projects), () => undefined);
+  }, [unity, base, menuKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadQueue = () => void api<Queued[]>(`${base}/queue`).then(setQueue, () => undefined);
   const loadBp = (p: string) =>
     void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(p)}`).then(
@@ -384,19 +392,25 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       {unity ? <StandInScenes engine="unity" /> : <StandInLevels />}
       {!unity && <PlayTests ready={ready} />}
       {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}
-      {unity && st.projects.length > 0 && (
+      {unity && (st.projects.length > 0 || menu.length > 0) && (
         <div className="row ue-projects">
-          <Select value={st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); })} aria-label={L("פרויקט", "Project")}>
-            {st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
+          <Select value={menu.find((m) => m.active)?.path ?? st.active ?? ""} onChange={(e) => void api("/api/unity/project", { method: "PUT", body: { project: e.target.value } }).then(() => { loadStatus(); loadList(); }, (err: Error) => toast(err.message))} aria-label={L("פרויקט", "Project")}>
+            {/* Every Unity project on the computer; picking one that is not added yet adds it (the phone may only pick found ones). */}
+            {!menu.length && st.projects.map((p) => <option key={p} value={p}>{p.split(/[\\/]/).pop()}</option>)}
+            {menu.map((m) => <option key={m.path} value={m.path}>{`${m.added ? "" : "＋ "}${m.name}${m.parent ? ` · ${m.parent}` : ""}${m.engine ? ` · Unity ${m.engine}` : ""}${m.added ? "" : ` · ${L("לא נוסף", "not added")}`}`}</option>)}
           </Select>
-          <AddUnityPackage compact {...(st.active ? { project: st.active } : {})} />
-          <ConnectUnityAssistant />
-          <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
-            <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
-            <button type="button" role="tab" aria-selected={source === "scripts"} className={source === "scripts" ? "on" : ""} onClick={() => setSource("scripts")} title={L("סקריפטי C# כנודים, לעבודה בלי קוד", "C# scripts as nodes, to work without code")}>{L("סקריפטים C#", "C# scripts")}</button>
-            <button type="button" role="tab" aria-selected={source === "code"} className={source === "code" ? "on" : ""} onClick={() => setSource("code")} title={L("קוד ה-C# של הפרויקט, גם כש-Unity סגור", "The project's C# code, also with Unity closed")}>{L("קוד", "Code")}</button>
-          </span>
-          {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
+          {st.projects.length > 0 && (
+            <>
+              <AddUnityPackage compact {...(st.active ? { project: st.active } : {})} />
+              <ConnectUnityAssistant />
+              <span className="row bp-code-lang" role="tablist" aria-label={L("מה להציג", "What to show")}>
+                <button type="button" role="tab" aria-selected={source === "graphs"} className={source === "graphs" ? "on" : ""} onClick={() => setSource("graphs")}>{L("גרפים", "Graphs")}</button>
+                <button type="button" role="tab" aria-selected={source === "scripts"} className={source === "scripts" ? "on" : ""} onClick={() => setSource("scripts")} title={L("סקריפטי C# כנודים, לעבודה בלי קוד", "C# scripts as nodes, to work without code")}>{L("סקריפטים C#", "C# scripts")}</button>
+                <button type="button" role="tab" aria-selected={source === "code"} className={source === "code" ? "on" : ""} onClick={() => setSource("code")} title={L("קוד ה-C# של הפרויקט, גם כש-Unity סגור", "The project's C# code, also with Unity closed")}>{L("קוד", "Code")}</button>
+              </span>
+              {!st.connected && <span className="muted small">{L("Unity סגור: כל פעולה תריץ את Unity ברקע (איטי יותר).", "Unity is closed: each action runs Unity in the background (slower).")}</span>}
+            </>
+          )}
         </div>
       )}
       {outdated && !unity && <PluginUpdate latest={st.latestBridge} now={st.editor!.bridge} download={st.download} />}

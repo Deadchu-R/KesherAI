@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findGameProjects, findScripts } from "./game-projects.js";
+import { findGameProjects, findScripts, unityProjectMenu } from "./game-projects.js";
 
 test("Unity and Unreal projects on the computer are found for a chat", async () => {
   const home = await mkdtemp(join(tmpdir(), "kesher-home-"));
@@ -108,4 +108,20 @@ test("a project's scripts are found even behind a huge asset pack, Plugins inclu
   const r = await listUnityScripts(p);
   assert.deepEqual(r.scripts, ["Assets/Plugins/MyLib/Lib.cs", "Assets/Scripts/Player/Move.cs"]);
   assert.equal(r.partial, false);
+});
+
+test("the Unity project menu lists found and added projects once, marks added ones and tells same names apart", () => {
+  const u = (path: string, engine?: string) => ({ kind: "unity" as const, name: path.split("/").pop()!, path, ...(engine ? { engine } : {}) });
+  const menu = unityProjectMenu(
+    [u("/h/Documents/ProjectBossRush", "6000.0.1f1"), u("/h/OneDrive/GitHub/Runner", "2022.3.5f1"), u("/h/Documents/Runner"), { kind: "unreal", name: "Door", path: "/h/Door" }],
+    ["/h/Documents/Runner", "/h/Gone/Old"],
+    "/h/Documents/Runner",
+  );
+  assert.deepEqual(menu.map((i) => `${i.name}:${i.added}:${i.active}:${i.parent ?? ""}`), [
+    "Old:true:false:",
+    "Runner:true:true:h › Documents",
+    "ProjectBossRush:false:false:",
+    "Runner:false:false:OneDrive › GitHub",
+  ]);
+  assert.equal(menu.find((i) => i.name === "ProjectBossRush")?.engine, "6000.0.1f1");
 });

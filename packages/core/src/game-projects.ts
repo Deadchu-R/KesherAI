@@ -237,3 +237,46 @@ export async function listUnityScripts(project: string): Promise<{ scripts: stri
   }
   return { scripts: out.sort(), folders, partial: queue.length > 0 };
 }
+
+/** One entry of the Unity page's project menu. */
+export interface UnityMenuItem {
+  name: string;
+  path: string;
+  /** The Unity version (project's own or Unity Hub's), when known. */
+  engine?: string;
+  /** Added to KesherAI (the rest of the page works on it); false = found on the computer only. */
+  added: boolean;
+  /** The project the page works on now. */
+  active: boolean;
+  /** The two folders above the project (e.g. "OneDrive › GitHub"), only when another project has the same name. */
+  parent?: string;
+}
+
+/**
+ * The Unity page's project menu: every Unity project on the computer (the found ones, plus added ones that
+ * are not found any more), once each, the added ones marked. Projects with the same name in two folders
+ * (e.g. Documents and OneDrive copies) get a short parent label so they can be told apart.
+ *
+ * @param found - Unity projects found on the computer (findGameProjects, Unity only).
+ * @param added - The project folders added to KesherAI.
+ * @param active - The project the page works on now.
+ * @returns The menu, added ones first, then by name.
+ */
+export function unityProjectMenu(found: GameProject[], added: string[], active?: string): UnityMenuItem[] {
+  const norm = (p: string) => (process.platform === "win32" ? resolve(p).toLowerCase() : resolve(p));
+  const addedSet = new Set(added.map(norm));
+  const items = new Map<string, UnityMenuItem>();
+  for (const p of found) {
+    if (p.kind !== "unity" || items.has(norm(p.path))) continue;
+    items.set(norm(p.path), { name: p.name, path: p.path, ...(p.engine ? { engine: p.engine } : {}), added: addedSet.has(norm(p.path)), active: !!active && norm(active) === norm(p.path) });
+  }
+  for (const a of added) if (!items.has(norm(a))) items.set(norm(a), { name: basename(a), path: a, added: true, active: !!active && norm(active) === norm(a) });
+  const list = [...items.values()];
+  const count = new Map<string, number>();
+  for (const i of list) count.set(i.name.toLowerCase(), (count.get(i.name.toLowerCase()) ?? 0) + 1);
+  for (const i of list) {
+    if ((count.get(i.name.toLowerCase()) ?? 0) < 2) continue;
+    i.parent = dirname(i.path).split(/[\\/]/).filter(Boolean).slice(-2).join(" › ");
+  }
+  return list.sort((a, b) => Number(b.added) - Number(a.added) || a.name.localeCompare(b.name));
+}

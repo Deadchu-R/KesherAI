@@ -22,8 +22,8 @@ import { messageVersions, openVersion, takeVersionScroll } from "../branch-versi
 import { ContextRing } from "../chat/ContextRing";
 import { dayBreaks, dayLabel } from "../chat-archive";
 import { deleteChatForever, setArchived } from "./ArchivedPage";
-import { TurnStatusLine } from "../chat/TurnStatusLine";
-import { turnStatus } from "../turn-status";
+import { TurnDoneLine, TurnStatusLine } from "../chat/TurnStatusLine";
+import { turnStatus, turnSummary } from "../turn-status";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -1191,6 +1191,11 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
           ))}
           {/* What the turn does now (a tool, an approval, thinking) and how long it has run (turn-status.ts). */}
           {busy && <TurnStatusLine status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} />}
+          {/* When the turn ends, the live line collapses to "Done in 0:42 · 38 tok/s" (turn-status.ts). */}
+          {!busy && events.at(-1)?.type === "assistant" && (() => {
+            const summary = turnSummary(events);
+            return summary ? <TurnDoneLine summary={summary} /> : null;
+          })()}
           {busy && stalled && (
             <div className="card row resume-card" role="status">
               <span className="grow small">{L("נראה שהצ'אט נתקע — לא הגיע ממנו כלום כבר שתי דקות.", "This chat looks stuck: nothing has come from it for two minutes.")}</span>

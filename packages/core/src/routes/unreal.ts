@@ -27,7 +27,7 @@ import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { convertTask, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
 import { MCP_PRESETS } from "../mcp.js";
-import { findGameProjects, listUnityScripts } from "../game-projects.js";
+import { findGameProjects, listUnityScripts, unityProjectMenu } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
 
 /** The plugin and package versions that edit variables. */
@@ -752,6 +752,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     // Unity projects found on this computer (Unity Hub's list and the usual folders) that are not added yet.
     const foundUnity = async () => (await findGameProjects({ unity: s.config.unity.projects })).filter((p) => p.kind === "unity");
     app.get(`${base}/found`, async () => ({ projects: (await foundUnity()).filter((p) => !s.config.unity.projects.includes(p.path)) }));
+
+    // The page's project menu: every Unity project on this computer, the added ones marked (a phone may only pick these; see PUT project).
+    app.get(`${base}/projects`, async () => ({ projects: unityProjectMenu(await foundUnity(), s.config.unity.projects, unity.activeProject) }));
 
     // Unity AI Assistant gets KesherAI's tools (local models, images, knowledge) through its MCP settings. On this computer only.
     app.post(`${base}/assistant-connect`, async (req, reply) => {
