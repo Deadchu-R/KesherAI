@@ -11,6 +11,7 @@ import { FunctionGraph } from "./FunctionGraph";
 import { artifactKey, isArtifact, openArtifact } from "./ArtifactPanel";
 import { parseChart } from "./chart";
 import { parseGraph } from "@kesher/shared";
+import { isolateRuns, textDir } from "./bidi";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -38,6 +39,16 @@ export function texText(tex: string): string {
 }
 
 /**
+ * Plain text of an RTL sentence with its English words, paths, numbers and percentages isolated (`<bdi dir="ltr">`),
+ * so the spaces and punctuation around them do not jump to the wrong side. Other text comes back as it is.
+ */
+function bidiText(text: string, key: string): React.ReactNode {
+  const runs = isolateRuns(text);
+  if (runs.length === 1 && !runs[0]!.iso) return text;
+  return runs.map((r, n) => (r.iso ? <bdi key={`${key}b${n}`} dir="ltr">{r.text}</bdi> : r.text));
+}
+
+/**
  * Inline Markdown: **bold**, *italic*, ~~struck~~, `code`, $math$, [links](https://…), pictures, bare https links, and
  * ||spoilers|| (Discord's mark; the game helper's guides hide story and solutions this way). A spoiler's bars touch its
  * text, so "a || b" in prose stays as it is.
@@ -48,13 +59,13 @@ function inline(text: string, key: string): React.ReactNode[] {
   let last = 0;
   let i = 0;
   for (const m of text.matchAll(re)) {
-    if (m.index! > last) out.push(text.slice(last, m.index));
+    if (m.index! > last) out.push(bidiText(text.slice(last, m.index), `${key}-t${i}`));
     const tok = m[0];
     const k = `${key}-${i++}`;
     if (tok.startsWith("||")) out.push(<Spoiler key={k} text={tok.slice(2, -2)} />);
-    else if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
-    else if (tok.startsWith("`")) out.push(<code key={k} className="inline-code">{tok.slice(1, -1)}</code>);
-    else if (tok.startsWith("~~")) out.push(<s key={k}>{tok.slice(2, -2)}</s>);
+    else if (tok.startsWith("**")) out.push(<strong key={k}>{bidiText(tok.slice(2, -2), k)}</strong>);
+    else if (tok.startsWith("`")) out.push(<code key={k} className="inline-code" dir="ltr">{tok.slice(1, -1)}</code>);
+    else if (tok.startsWith("~~")) out.push(<s key={k}>{bidiText(tok.slice(2, -2), k)}</s>);
     else if (tok.startsWith("$")) out.push(<MathView key={k} tex={tok.slice(1, -1)} fallback={texText(tok.slice(1, -1))} />);
     else if (tok.startsWith("![")) {
       const [, alt, src] = /!\[([^\]]*)\]\(([^)]+)\)/.exec(tok)!;
@@ -64,11 +75,11 @@ function inline(text: string, key: string): React.ReactNode[] {
     else if (tok.startsWith("[")) {
       const [, label, href] = /\[([^\]]+)\]\(([^)]+)\)/.exec(tok)!;
       // KesherAI's own file (inside a sentence): the link carries the token, so it opens from the phone too.
-      out.push(<a key={k} href={assetIdOf(href!) ? withToken(`/api/assets/${assetIdOf(href!)}`) : href} target="_blank" rel="noreferrer">{label}</a>);
-    } else out.push(<em key={k}>{tok.slice(1, -1)}</em>);
+      out.push(<a key={k} href={assetIdOf(href!) ? withToken(`/api/assets/${assetIdOf(href!)}`) : href} target="_blank" rel="noreferrer">{bidiText(label!, k)}</a>);
+    } else out.push(<em key={k}>{bidiText(tok.slice(1, -1), k)}</em>);
     last = m.index! + tok.length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(bidiText(text.slice(last), `${key}-tail`));
   return out;
 }
 
@@ -106,12 +117,12 @@ function table(lines: string[], k: string): React.ReactNode {
     <div key={k} className="md-table-wrap">
       <table className="md-table">
         <thead>
-          <tr>{head.map((c, i) => <th key={i} dir="auto" style={align[i] ? { textAlign: align[i] } : undefined}>{inline(c, `${k}h${i}`)}</th>)}</tr>
+          <tr>{head.map((c, i) => <th key={i} dir={textDir(c)} style={align[i] ? { textAlign: align[i] } : undefined}>{inline(c, `${k}h${i}`)}</th>)}</tr>
         </thead>
         <tbody>
           {rows.map((r, j) => (
             <tr key={j}>
-              {head.map((_, i) => <td key={i} dir="auto" style={align[i] ? { textAlign: align[i] } : undefined}>{inline(r[i] ?? "", `${k}r${j}c${i}`)}</td>)}
+              {head.map((_, i) => <td key={i} dir={textDir(r[i] ?? "")} style={align[i] ? { textAlign: align[i] } : undefined}>{inline(r[i] ?? "", `${k}r${j}c${i}`)}</td>)}
             </tr>
           ))}
         </tbody>
@@ -128,10 +139,10 @@ export function RichText({ text }: { text: string }) {
     const prose = parts[i];
     if (prose) {
       const lines = prose.split("\n");
-      let list: { ordered: boolean; items: React.ReactNode[] } | null = null;
+      let list: { ordered: boolean; dir: "ltr" | "rtl" | "auto"; items: React.ReactNode[] } | null = null;
       const flush = (k: string) => {
         if (!list) return;
-        out.push(list.ordered ? <ol key={k} dir="auto">{list.items}</ol> : <ul key={k} dir="auto">{list.items}</ul>);
+        out.push(list.ordered ? <ol key={k} dir={list.dir}>{list.items}</ol> : <ul key={k} dir={list.dir}>{list.items}</ul>);
         list = null;
       };
       let skip = 0;
@@ -155,7 +166,7 @@ export function RichText({ text }: { text: string }) {
           let end = j;
           while (end < lines.length && /^\s*>/.test(lines[end]!)) end++;
           flush(`l${k}`);
-          out.push(<blockquote key={k} dir="auto" className="md-quote">{lines.slice(j, end).map((q, n) => <p key={n}>{inline(q.replace(/^\s*>\s?/, ""), `${k}q${n}`)}</p>)}</blockquote>);
+          out.push(<blockquote key={k} dir={textDir(lines.slice(j, end).join(" ").replace(/>/g, ""))} className="md-quote">{lines.slice(j, end).map((q, n) => { const body = q.replace(/^\s*>\s?/, ""); return <p key={n} dir={textDir(body)}>{inline(body, `${k}q${n}`)}</p>; })}</blockquote>);
           skip = end - j - 1;
           return;
         }
@@ -193,17 +204,17 @@ export function RichText({ text }: { text: string }) {
         const li = /^\s*(?:([-*•])|(\d+)[.)])\s+(.*)$/.exec(line);
         if (h) {
           flush(`l${k}`);
-          out.push(<p key={k} dir="auto" className={`md-h md-h${h[1]!.length}`}>{inline(h[2]!, k)}</p>);
+          out.push(<p key={k} dir={textDir(h[2]!)} className={`md-h md-h${h[1]!.length}`}>{inline(h[2]!, k)}</p>);
         } else if (li) {
           const ordered = !!li[2];
           if (!list || list.ordered !== ordered) {
             flush(`l${k}`);
-            list = { ordered, items: [] };
+            list = { ordered, dir: textDir(li[3]!), items: [] };
           }
-          list.items.push(<li key={k} dir="auto" {...(ordered ? { value: Number(li[2]) } : {})}>{inline(li[3]!, k)}</li>);
+          list.items.push(<li key={k} dir={textDir(li[3]!)} {...(ordered ? { value: Number(li[2]) } : {})}>{inline(li[3]!, k)}</li>);
         } else {
           flush(`l${k}`);
-          if (line.trim()) out.push(<p key={k} dir="auto">{inline(line, k)}</p>);
+          if (line.trim()) out.push(<p key={k} dir={textDir(line)}>{inline(line, k)}</p>);
         }
       });
       flush(`l${i}-end`);

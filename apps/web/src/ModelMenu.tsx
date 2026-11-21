@@ -123,7 +123,7 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
         {auto?.on && <span className="model-chip-auto">✨ {L("אוטומטי", "Auto")} ·</span>}
-        <span className="model-chip-name" title={value || undefined}>{current?.name ?? (value ? shortModelName(value) : t("defaultModel"))}</span>
+        <span className="model-chip-name" title={value || undefined}><bdi>{current?.name ?? (value ? shortModelName(value) : t("defaultModel"))}</bdi></span>
         {levels.length > 0 && thinking?.value && levels.includes(thinking.value) && <span className="model-chip-think" title={L("רמת חשיבה", "Thinking level")}>· {levelName(thinking.value)}</span>}
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>

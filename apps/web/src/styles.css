@@ -177,7 +177,7 @@ label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: c
 .diff .add { color: #6ee7a8; background: rgba(110, 231, 168, 0.08); }
 .diff .del { color: var(--bad); background: rgba(252, 165, 165, 0.08); }
 .diff .hunk { color: #93c5fd; }
-.diff .diff-hunk-undo { float: right; min-height: 0; padding: 0 0.4rem; margin: -1px 0 0 0.4rem; font: inherit; line-height: 1.3; }
+.diff .diff-hunk-undo { float: inline-end; min-height: 0; padding: 0 0.4rem; margin: -1px 0 0; margin-inline-start: 0.4rem; font: inherit; line-height: 1.3; }
 .tool { border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel); padding: 8px 12px; }
 .tool summary { cursor: pointer; display: flex; gap: 8px; align-items: center; font-size: 13px; }
 .tool summary .muted { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; }
@@ -419,7 +419,7 @@ button.on { border-color: var(--accent); }
 .msg-text li { margin: 2px 0; }
 .md-h { font-weight: 600; margin-top: 12px !important; }
 .md-h1, .md-h2 { font-size: 17px; }
-.inline-code { font-family: "IBM Plex Mono", monospace; font-size: 13px; background: var(--panel-2); border: 1px solid var(--border); border-radius: calc(5px * var(--r-scale, 1)); padding: 0 5px; }
+.inline-code { font-family: "IBM Plex Mono", monospace; font-size: 13px; background: var(--panel-2); border: 1px solid var(--border); border-radius: calc(5px * var(--r-scale, 1)); padding: 0 5px; direction: ltr; unicode-bidi: isolate; }
 /* Files the agent made */
 .made { display: flex; flex-direction: column; gap: 8px; }
 .file-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
@@ -2623,7 +2623,7 @@ html.handheld .palette-list button { min-height: 44px; }
 /* Attached files in a message, and their preview (tables, slides, a Word page in a frame without scripts). */
 .attach-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .attach-chip { height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; background: var(--panel); max-width: 100%; }
-.attach-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.attach-chip > span, .attach-chip > .attach-chip-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .attach-chip > .glyph { margin: 0; color: var(--muted); }
 .attach-preview { width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 48px); display: flex; flex-direction: column; gap: 10px; }
 .attach-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3291,7 +3291,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .md-quote { margin: 6px 0 10px; padding: 6px 12px; border-inline-start: 3px solid var(--accent); background: var(--panel-2); border-radius: 0 calc(10px * var(--r-scale, 1)) calc(10px * var(--r-scale, 1)) 0; }
 .md-quote p { margin: 2px 0; }
 .md-hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
-.md-math { font-family: "Times New Roman", "STIX Two Math", serif; font-style: italic; unicode-bidi: isolate; }
+.md-math { direction: ltr; font-family: "Times New Roman", "STIX Two Math", serif; font-style: italic; unicode-bidi: isolate; }
 .md-math-block { display: block; text-align: center; font-size: 1.15em; margin: 8px 0; padding: 8px; overflow-x: auto; white-space: pre-wrap; }
 .md-img { max-width: min(480px, 100%); border-radius: calc(12px * var(--r-scale, 1)); display: block; margin: 6px 0; }
 .md-link-card { display: flex; align-items: center; gap: 10px; max-width: 520px; margin: 6px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); color: inherit; text-decoration: none; }
@@ -3300,7 +3300,9 @@ html.handheld .palette-list button { min-height: 44px; }
 .md-link-text { display: flex; flex-direction: column; min-width: 0; }
 .md-link-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md-code { margin: 8px 0; border: 1px solid var(--border); border-radius: calc(12px * var(--r-scale, 1)); overflow: hidden; max-width: 100%; }
-.md-code-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 4px 12px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+.md-code-bar { display: flex; align-items: center; justify-content: space-between; padding-block: 4px; padding-inline: 12px 6px; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+/* Code, formulas and the code block always read left to right, whatever the language around them. */
+.md-code pre, .md-code code, .md-katex .katex { direction: ltr; text-align: left; unicode-bidi: isolate; }
 .md-code > :last-child { margin: 0; border: none; border-radius: 0; }
 .md-katex { font-style: normal; font-family: inherit; }
 .md-katex .katex { font-size: 1.05em; }

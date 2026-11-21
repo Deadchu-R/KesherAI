@@ -1627,6 +1627,101 @@
      "wait": ".archived-row"
     }
    ]
+  },
+  {
+   "id": "ChatBidiMixed",
+   "title": "צ'אט: עברית ואנגלית מעורבות — קוד ונוסחאות תמיד משמאל לימין, שמות, נתיבים ומספרים בבידוד, כיוון לפי כל פסקה, CSS לוגי",
+   "titleEn": "Chat: mixed Hebrew and English — code and math always left to right, isolated names, paths and numbers, direction per block",
+   "route": "#/c/c9",
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c9",
+     "json": {
+      "id": "c9",
+      "projectId": null,
+      "title": "תנועת שחקן ב-Unity",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c9",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "למה השחקן ב-Unity לא זז? הקובץ PlayerController.cs נראה תקין."
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מצאתי את הבעיה ב-`PlayerController.cs`: הקובץ src/Player/Move.cs קורא ל-Unreal Engine 5 רק ב-85% מהמקרים, והזיכרון הוא 2.5 GB.\n\nהנוסחה היא $E = mc^2$, והקוד:\n\n```csharp\nvoid Update() {\n    // תנועה שמאלה וימינה\n    rb.velocity = new Vector2(Input.GetAxis(\"Horizontal\") * speed, rb.velocity.y);\n}\n```\n\n- First, open the Scene view and check the colliders.\n- אחר כך הפעל את הבדיקה ב-Play mode.\n- Then commit the change.\n\n> Note: the speed is 5 m/s, אבל אפשר לשנות אותו.\n\n| Metric | ערך | הערה |\n|---|---|---|\n| FPS | 60 | יעד 90 |\n| זיכרון | 2.5 GB | ירד ב-12% |\n| Build | OK | דוח.pdf |\n"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c9/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c9/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".md-table"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".md-table"
+    }
+   ]
   }
  ]
 }

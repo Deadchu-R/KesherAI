@@ -34,7 +34,7 @@ export function AttachmentChips({ convId, files }: { convId: string; files: stri
       {files.map((f) => (
         <button key={f} type="button" className="attach-chip" onClick={() => setOpen(f)} title={L("תצוגה מקדימה", "Preview")}>
           <LineIcon name={fileIcon(f)} size={15} />
-          <span dir="auto">{f.split(/[\\/]/).pop()}</span>
+          <bdi dir="ltr" className="attach-chip-name">{f.split(/[\\/]/).pop()}</bdi>
         </button>
       ))}
       {open && <AttachmentPreview convId={convId} path={open} onClose={() => setOpen(null)} />}
@@ -56,7 +56,7 @@ function AttachmentPreview({ convId, path, onClose }: { convId: string; path: st
       <div className="dialog card attach-preview" role="dialog" aria-modal="true" aria-label={name} onClick={(e) => e.stopPropagation()}>
         <header className="row">
           <LineIcon name={fileIcon(path)} />
-          <strong className="grow attach-name" dir="auto">{name}</strong>
+          <strong className="grow attach-name"><bdi dir="ltr">{name}</bdi></strong>
           <a className="btn" href={download} download>{L("הורדה", "Download")}</a>
           <button type="button" className="icon-btn" onClick={onClose} aria-label={L("סגירה", "Close")}><LineIcon name="close" size={16} /></button>
         </header>
