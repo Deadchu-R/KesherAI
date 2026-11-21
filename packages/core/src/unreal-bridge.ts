@@ -17,7 +17,7 @@ import { batchFiles, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, typ
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.24";
+export const BRIDGE_VERSION = "0.1.25";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -147,6 +147,43 @@ export class UnrealBridge {
       this.emit("changed");
     }
     return answers;
+  }
+
+  /** Runs a gameplay test in a headless editor (Unreal's automation runner); set by the server. */
+  private headlessPlay?: (projectFile: string, plan: unknown) => Promise<unknown>;
+
+  /**
+   * Lets gameplay tests run with the editor closed (plugin 0.1.25+: the automation test KesherAI.PlayTest.Request).
+   *
+   * @param run - Starts a headless editor on the project with the plan and returns the plugin's end state.
+   */
+  setHeadlessPlay(run: (projectFile: string, plan: unknown) => Promise<unknown>): void {
+    this.headlessPlay = run;
+  }
+
+  /** Whether a gameplay test can run with the editor closed (the project is known and a runner is set). */
+  get canPlayHeadless(): boolean {
+    return !!this.headlessPlay && !!this.lastProjectFile && existsSync(this.lastProjectFile);
+  }
+
+  /** The project file in use: the connected editor's, else the last one that connected. */
+  get knownProjectFile(): string | undefined {
+    return this.projectFile ?? this.lastProjectFile;
+  }
+
+  /**
+   * Runs a gameplay test in a headless editor, the editor being closed (one headless editor at a time).
+   *
+   * @param plan - The checked plan (play-test.ts).
+   * @returns The plugin's end state: steps, log, passed.
+   */
+  async playHeadless(plan: unknown): Promise<unknown> {
+    await this.project();
+    const file = this.lastProjectFile;
+    if (!this.headlessPlay || !file || !existsSync(file)) throw new Error(`The ${this.editor} is closed and KesherAI does not know the project yet: open it once with the KesherAI Bridge plugin.`);
+    const run = this.headlessChain.then(() => this.headlessPlay!(file, plan));
+    this.headlessChain = run.catch(() => undefined);
+    return run;
   }
 
   /**

@@ -154,6 +154,27 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     const j = JSON.parse(text) as { answers?: Array<{ ok: boolean; result?: unknown; error?: string }>; ok?: boolean; result?: unknown; error?: string };
     return j.answers ?? [j as { ok: boolean; result?: unknown; error?: string }];
   });
+  // With Unreal closed, a gameplay test runs in a headless editor through Unreal's automation runner: the plugin's
+  // automation test KesherAI.PlayTest.Request reads the plan file, plays it in PIE (no rendering, so no pictures) and
+  // writes each step's result to the response file.
+  unrealBridge.setHeadlessPlay(async (projectFile, plan) => {
+    const p = await readProject(projectFile);
+    const e = engineFor(await findEngines(), p.engine);
+    if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
+    if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
+    const win = process.platform === "win32";
+    const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
+    const dir = join(p.dir, "Saved", "KesherAI");
+    await mkdir(dir, { recursive: true });
+    const request = join(dir, "play-test-request.json");
+    const response = join(dir, "play-test-response.json");
+    await rmFs(response, { force: true });
+    await writeFileFs(request, JSON.stringify(plan));
+    const r = await runProgram(cmd, [p.file, "-ExecCmds=Automation RunTests KesherAI.PlayTest.Request; Quit", "-unattended", "-nop4", "-nosplash", "-NullRHI", "-stdout", "-testexit=Automation Test Queue Empty"], { env: { ...process.env, KESHER_PLAYTEST_REQUEST: request, KESHER_PLAYTEST_RESPONSE: response }, timeoutMs: 900_000 });
+    const text = await readFileFs(response, "utf8").catch(() => "");
+    if (!text) throw new Error(/No automation tests matched|KesherAI\.PlayTest/i.test(r.out) ? "The KesherAI Bridge plugin in this project cannot run gameplay tests with Unreal closed yet: update it to 0.1.25 or newer from the Unreal page." : r.out.split(/\r?\n/).filter((l) => /Error/i.test(l)).slice(-5).join("\n") || `The headless Unreal editor stopped (exit ${r.code}).`);
+    return JSON.parse(text) as unknown;
+  });
   // Checkpoints around engine writes, on the heavy-data drive (Roee: not on C:), else next to the models, else the data folder.
   const gameCheckpoints = new GameCheckpoints(
     () => join(config.heavyDir ?? suggestHeavyDir(paths.models, paths.root) ?? paths.root, "game-checkpoints"),

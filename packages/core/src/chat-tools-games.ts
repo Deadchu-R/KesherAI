@@ -22,6 +22,7 @@ import { gameFindTool } from "./game-index.js";
 import { findGameProjects } from "./game-projects.js";
 import { homedir } from "node:os";
 import type { GameCheckpoints, GameEngine } from "./game-checkpoints.js";
+import { planFile, playTestTool } from "./play-test.js";
 import { unityAssetFile, unrealAssetFile, unrealLevelFile } from "./game-sync.js";
 import { unrealLevelTools } from "./unreal-level-tools.js";
 
@@ -59,6 +60,10 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
   if (deps.unreal?.available) {
     tools.push(...graphTools("unreal", deps.unreal, deps.registry, p.chatModel, async (png) => (await deps.assets.save(png, "image/png", { meta: { use: "unreal-test" } })).id));
     notes.push((deps.unreal.connected ? "The user's Unreal Editor is connected (KesherAI Bridge)" : "The user's Unreal Editor is closed: graph tools start a headless editor (30-90 s a call, so batch a change into one unreal_change_graph)") + ": unreal_list_graphs, unreal_read_graph and unreal_change_graph see and change Blueprints in words (one undo step, then compiled); unreal_test_blueprint plays the game in the editor for a few seconds and returns the log and a picture, to check a change works.");
+    // Gameplay tests (Enhanced Input or keys, conditions, checks, pictures), kept in Content/KesherTests.
+    const bridge = deps.unreal;
+    tools.push(playTestTool({ bridge, projectDir: () => (bridge.knownProjectFile ? dirname(bridge.knownProjectFile) : undefined), saveImage: async (png) => (await deps.assets.save(png, "image/png", { meta: { use: "unreal-play-test" } })).id }));
+    notes.push("unreal_play_test runs a gameplay test (press input actions or keys for some frames, wait, check values, pictures) and can keep it in the project; prefer it over unreal_test_blueprint when input or a pass/fail check matters.");
   }
   // Unreal 5.8's own MCP server (the "Unreal Engine" connection): how to use it well.
   if ((deps.mcpTools?.() ?? []).some((t) => /(^|_)(list_toolsets|describe_toolset)$/.test(t.spec.name))) {
@@ -158,6 +163,12 @@ export function engineWrites(name: string, input: Record<string, unknown>, dirs:
       return one("unity", dirs.unity, dirs.unity ? unityAssetFile(dirs.unity, path) : undefined);
     case "unreal_change_graph":
       return one("unreal", dirs.unreal, dirs.unreal ? unrealAssetFile(dirs.unreal, path) : undefined);
+    case "unreal_play_test": {
+      // The only file a gameplay test writes: its plan, when it is kept.
+      const keep = input.action === "save" || input.save === true;
+      const name = typeof input.name === "string" ? input.name : input.plan && typeof input.plan === "object" ? String((input.plan as { name?: unknown }).name ?? "") : "";
+      return keep && name && dirs.unreal ? one("unreal", dirs.unreal, planFile(dirs.unreal, name)) : undefined;
+    }
     case "unreal_apply_material":
       return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim()) : undefined);
     case "unreal_write_source":

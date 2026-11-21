@@ -30,7 +30,13 @@ public class KesherAIBridge : ModuleRules
 			"UMGEditor",
 			"AssetTools",
 			"ImageCore",
+			"InputCore",
 		});
+
+		// Gameplay tests inject Enhanced Input actions (the EnhancedInput plugin, on by default since UE 5.1). Without
+		// it, KESHER_WITH_ENHANCED_INPUT is 0 and input steps say to use key steps instead.
+		PrivateDependencyModuleNames.Add("EnhancedInput");
+		PublicDefinitions.Add("KESHER_WITH_ENHANCED_INPUT=1");
 
 		// Live Coding from KesherAI's C++ editor (Windows editor only).
 		if (Target.Platform == UnrealTargetPlatform.Win64)

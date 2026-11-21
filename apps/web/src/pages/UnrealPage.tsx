@@ -19,6 +19,7 @@ import { OpenInChat } from "../engine/OpenInChat";
 import { PluginUpdate } from "../engine/PluginUpdate";
 import { CloseEditor } from "../engine/CloseEditor";
 import { GameSource } from "../engine/GameSource";
+import { PlayTests } from "../engine/PlayTests";
 import { Select } from "../ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -369,6 +370,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
       {unity ? <StandInScenes engine="unity" /> : <StandInLevels />}
+      {!unity && <PlayTests ready={ready} />}
       {unity && <FoundUnityProjects onAdded={() => { loadStatus(); loadList(); }} />}
       {unity && st.projects.length > 0 && (
         <div className="row ue-projects">

@@ -9,7 +9,7 @@
  * Runs one KesherAI command ({ "cmd", "path", ... }): from the open editor (the WebSocket) or, with the editor
  * closed, from the KesherBridge commandlet. Commands: list, graph, apply, vars, compile, save, actions, widget,
  * create, import_texture, widget_apply; with the open editor also open, undo, redo, live_coding, play, play_status,
- * play_stop, quit_for_update, ping.
+ * play_stop, play_test, play_test_status, play_test_stop, quit_for_update, ping.
  */
 namespace KesherDispatch
 {

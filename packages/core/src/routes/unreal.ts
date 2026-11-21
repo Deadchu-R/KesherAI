@@ -15,6 +15,7 @@ import { modelTurnFor } from "../conversations.js";
 import { blueprintToCode, codeText, type CodeNode } from "@kesher/shared";
 import { describeRun, judgeRun, runBlueprintTest } from "../blueprint-test.js";
 import { runUnityTest } from "../unity-test.js";
+import { describePlayTest, functionalTestStub, listPlans, loadPlan, parsePlan, runPlayTest, savePlan, stepLine, type PlayStepResult } from "../play-test.js";
 import { projectPath } from "../unity-tools.js";
 import { connectUnityAssistant } from "../unity-assistant.js";
 import { applyCodeAnswer, codeEditPrompt, parseCodeErrors, type CodeError } from "../code-errors.js";
@@ -125,8 +126,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   });
 
   // "Test": play the game in the editor for a few seconds, then a model says whether the Blueprint did what it should.
+  /** A Test (or gameplay test) runs: one at a time per editor. */
+  let testing = false;
   {
-    let testing = false;
     app.post<{ Body: { path?: string; seconds?: number; goal?: string; model?: string; judge?: boolean; lang?: string } }>(`${base}/test`, async (req, reply) => {
       const path = String(req.body?.path ?? "");
       if (testing) return reply.code(409).send({ error: "A test is already running." });
@@ -149,6 +151,69 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
         return reply.code(502).send({ error: (err as Error).message });
       } finally {
         testing = false;
+      }
+    });
+  }
+
+  // Gameplay tests kept in the project (Content/KesherTests): list, keep, run (one at a time; the page and the phone
+  // poll the run for each step as it finishes), and a Functional Test stub.
+  if (kind === "unreal") {
+    const dir = () => {
+      const f = unreal.knownProjectFile;
+      if (!f) throw Object.assign(new Error("Open the project in Unreal with the KesherAI Bridge plugin once first."), { code: 400 });
+      return dirname(f);
+    };
+    const fail = (reply: { code(n: number): { send(b: unknown): unknown } }, err: unknown) => reply.code((err as { code?: number }).code === 400 ? 400 : 502).send({ error: (err as Error).message });
+    /** The run in progress or the last one: what the page shows. */
+    let live: { name: string; running: boolean; total: number; steps: Array<PlayStepResult & { line: string }>; passed?: boolean; reason?: string; mode?: string; pictureIds: string[]; log: string[]; summary?: string; error?: string } | undefined;
+    let stopRun: AbortController | undefined;
+    app.get(`${base}/play-tests`, async (_req, reply) => {
+      try {
+        return { tests: await listPlans(dir()), connected: unreal.connected, headless: unreal.canPlayHeadless };
+      } catch (err) {
+        return fail(reply, err);
+      }
+    });
+    app.post<{ Body: { plan?: unknown } }>(`${base}/play-tests`, async (req, reply) => {
+      try {
+        const d = dir();
+        const plan = parsePlan(req.body?.plan);
+        const file = await savePlan(d, plan, (f) => s.gameCheckpoints.beforeSave("unreal", d, "chat", `Keep test ${plan.name}`, [f]));
+        return { name: plan.name, file: file.slice(d.length + 1) };
+      } catch (err) {
+        return reply.code((err as { code?: number }).code === 502 ? 502 : 400).send({ error: (err as Error).message });
+      }
+    });
+    app.post<{ Body: { name?: string } }>(`${base}/play-tests/run`, async (req, reply) => {
+      if (live?.running || testing) return reply.code(409).send({ error: "A test is already running." });
+      let plan;
+      try {
+        plan = await loadPlan(dir(), String(req.body?.name ?? ""));
+      } catch (err) {
+        return fail(reply, err);
+      }
+      const run = { name: plan.name, running: true, total: plan.steps.length, steps: [] as Array<PlayStepResult & { line: string }>, pictureIds: [] as string[], log: [] as string[] };
+      live = run;
+      stopRun = new AbortController();
+      void runPlayTest(unreal, plan, { signal: stopRun.signal, onStep: (r, p) => run.steps.push({ ...r, line: stepLine(r, p) }) })
+        .then(async (r) => {
+          for (const pic of r.pictures.slice(0, 8)) run.pictureIds.push((await s.assets.save(pic.data, "image/png", { meta: { use: "unreal-play-test" } })).id);
+          Object.assign(run, { passed: r.passed, mode: r.mode, ...(r.reason ? { reason: r.reason } : {}), log: r.log.map((l) => `${l.kind === "error" ? "⛔ " : l.kind === "warning" ? "⚠ " : ""}${l.text}`), summary: describePlayTest(r, plan) });
+        })
+        .catch((e: Error) => Object.assign(run, { passed: false, error: e.message }))
+        .finally(() => (run.running = false));
+      return { started: true, name: plan.name, total: plan.steps.length };
+    });
+    app.get(`${base}/play-tests/run`, async () => live ?? { running: false });
+    app.post(`${base}/play-tests/stop`, async () => {
+      stopRun?.abort();
+      return { ok: true };
+    });
+    app.post<{ Body: { name?: string; kind?: string } }>(`${base}/play-tests/stub`, async (req, reply) => {
+      try {
+        return { text: functionalTestStub(await loadPlan(dir(), String(req.body?.name ?? "")), req.body?.kind === "blueprint" ? "blueprint" : "cpp") };
+      } catch (err) {
+        return fail(reply, err);
       }
     });
   }

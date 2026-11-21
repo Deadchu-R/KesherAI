@@ -25,5 +25,10 @@ Connects the Unreal Editor to KesherAI on the same computer. In KesherAI (**Crea
 | `compile` | Compiles and returns errors and warnings |
 | `save` | Saves the Blueprint's package |
 | `open` | Opens the Blueprint in its editor |
+| `play_test`, `play_test_status`, `play_test_stop` | A gameplay test (0.1.25): a plan of steps (spawn/possess, Enhanced Input actions, keys and axes for N frames, wait for a condition, assert a value, screenshot) runs in Play In Editor; each step's result is read while it runs |
+
+### Gameplay tests
+
+KesherAI keeps each test as `Content/KesherTests/<name>.json`. The plugin also registers them as automation tests, `KesherAI.PlayTest.<name>`, so they run from **Session Frontend → Automation** or CI (`UnrealEditor-Cmd <project> -ExecCmds="Automation RunTests KesherAI.PlayTest" -unattended -NullRHI`). With Unreal closed, KesherAI runs `KesherAI.PlayTest.Request` the same way (no pictures without rendering). A test changes nothing in the level or assets: it runs only in the play world, and a map in the plan is only the map played.
 
 Changes are not saved to disk until you press Save (in KesherAI or in Unreal).

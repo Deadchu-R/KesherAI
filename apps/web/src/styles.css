@@ -1658,6 +1658,16 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ue-test-pic { display: block; width: 100%; max-width: 360px; border-radius: 8px; margin-top: 6px; }
 .ue-test-log { margin-top: 6px; font-size: 0.85em; }
 .ue-test-log pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0 0; }
+.play-tests { padding: 10px 12px; gap: 8px; display: flex; flex-direction: column; }
+.play-tests-head { gap: 8px; align-items: center; cursor: pointer; }
+.play-tests-actions { gap: 8px; flex-wrap: wrap; }
+.play-tests-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.play-tests-list li { gap: 6px; flex-wrap: wrap; align-items: center; }
+.play-tests-list li > .grow { min-width: 0; flex: 1 1 180px; overflow-wrap: anywhere; }
+.play-tests-steps { margin: 0; padding-inline-start: 18px; font-size: 0.9em; overflow-wrap: anywhere; }
+.play-tests-steps li.ok { color: var(--good); }
+.play-tests-steps li.bad { color: var(--bad); font-weight: 600; }
+.play-tests-stub pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.85em; margin: 0; }
 .bp-chat-panel { margin: 8px 12px; padding: 10px 12px; gap: 8px; display: flex; flex-direction: column; }
 .bp-chat-head { gap: 8px; align-items: center; flex-wrap: wrap; }
 .bp-chat-head select { min-width: 0; flex: 1 1 140px; }

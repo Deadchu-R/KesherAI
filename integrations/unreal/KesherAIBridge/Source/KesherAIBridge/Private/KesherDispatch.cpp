@@ -7,6 +7,7 @@
 #include "KesherGraph.h"
 #include "KesherLevel.h"
 #include "KesherPlay.h"
+#include "KesherPlayTest.h"
 #include "KesherWidget.h"
 #include "Modules/ModuleManager.h"
 #if WITH_LIVE_CODING
@@ -135,6 +136,14 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 	}
 	else if (Cmd == TEXT("play_status")) Result = KesherPlay::Status();
 	else if (Cmd == TEXT("play_stop")) Result = KesherPlay::Stop();
+	// Gameplay tests (0.1.25): a plan of steps in Play In Editor, read step by step while it runs.
+	else if (Cmd == TEXT("play_test"))
+	{
+		const TSharedPtr<FJsonObject>* Plan = nullptr;
+		Result = In->TryGetObjectField(TEXT("plan"), Plan) ? KesherPlayTest::Start(*Plan) : KesherPlayTest::Start(nullptr);
+	}
+	else if (Cmd == TEXT("play_test_status")) Result = KesherPlayTest::Status();
+	else if (Cmd == TEXT("play_test_stop")) Result = KesherPlayTest::Stop();
 	// The stand-in (a level shown in KesherAI's 3D editor): levels, a level's actors, a mesh's shape, the moves back.
 	else if (Cmd == TEXT("levels")) Result = KesherLevel::Levels();
 	else if (Cmd == TEXT("level")) Result = KesherLevel::Read(Path);

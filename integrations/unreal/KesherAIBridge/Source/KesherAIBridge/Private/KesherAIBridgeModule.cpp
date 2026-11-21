@@ -7,6 +7,7 @@
 #include "KesherDispatch.h"
 #include "KesherGraph.h"
 #include "KesherPlay.h"
+#include "KesherPlayTest.h"
 #include "KesherWidget.h"
 #include "Misc/App.h"
 #include "Misc/CoreDelegates.h"
@@ -27,7 +28,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.24");
+static const TCHAR* BridgeVersion = TEXT("0.1.25");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -48,6 +49,7 @@ void FKesherAIBridgeModule::ShutdownModule()
 	FCoreDelegates::OnPostEngineInit.Remove(EngineReadyHandle);
 	if (TickHandle.IsValid()) FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
 	KesherPlay::Shutdown();
+	KesherPlayTest::Shutdown();
 	if (GEditor) GEditor->OnBlueprintCompiled().Remove(CompiledHandle);
 	if (Socket.IsValid())
 	{

@@ -80,7 +80,7 @@ export interface NewConversation {
 const CORE_TOOLS = ["read_file", "view_image", "write_file", "edit_file", "list_files", "code_map", "find_symbol", "search", "check_code", "run_command", "web_search", "web_fetch", "read_document", "generate_image", "remember", "recall", "search_knowledge", "use_skill", "ask_member", "delegate", "split_across_computers"] as const;
 
 /** The Blueprint tools: always in full while the Unreal Editor is connected (so a model never misses the Test tool). */
-const UNREAL_GRAPH_TOOLS = ["unreal_list_graphs", "unreal_read_graph", "unreal_change_graph", "unreal_test_blueprint"];
+const UNREAL_GRAPH_TOOLS = ["unreal_list_graphs", "unreal_read_graph", "unreal_change_graph", "unreal_test_blueprint", "unreal_play_test"];
 
 /** Thrown when something needs a model of a category and none is chosen. The API answers 400 with `code: "no-model"`. */
 export class NoModelError extends Error {
