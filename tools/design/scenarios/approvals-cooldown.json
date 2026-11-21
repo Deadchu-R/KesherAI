@@ -1,0 +1,592 @@
+{
+ "group": "סוכנים · Agents",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "ApprovalGrantPicker",
+   "title": "אישור: לכמה זמן לאשר (הפעם, לצ'אט הזה, לשעה, עד שאבטל)",
+   "route": "#/c/c4",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c4",
+     "json": {
+      "id": "c4",
+      "projectId": null,
+      "title": "לתקן את כפתור השליחה",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Arena",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "c4",
+       "status": "waiting",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Arena",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תקן את הצבע של כפתור השליחה בקובץ הסגנונות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מצאתי את זה ב-src/ui/send.css. אני משנה שורה אחת."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "w1",
+        "name": "write_file",
+        "input": {
+         "path": "D:/Games/Arena/src/ui/send.css"
+        },
+        "preview": "--- a/src/ui/send.css\n+++ b/src/ui/send.css\n@@ -3,3 +3,3 @@\n .send {\n-  background: #2d3a8c;\n+  background: #3b4fd1;\n }",
+        "reason": "Writing a file needs your approval in this mode.",
+        "folder": "D:/Games/Arena"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c4/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c4/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".approval"
+    },
+    {
+     "click": ".grant-pick"
+    },
+    {
+     "wait": "[role=option]"
+    }
+   ]
+  },
+  {
+   "id": "ApprovalGrantHour",
+   "title": "אישור לשעה: הכפתור והשורה \"רק בתיקייה src\" שמראות מה בדיוק יאושר",
+   "route": "#/c/c4",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c4",
+     "json": {
+      "id": "c4",
+      "projectId": null,
+      "title": "לתקן את כפתור השליחה",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Arena",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "c4",
+       "status": "waiting",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Arena",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תקן את הצבע של כפתור השליחה בקובץ הסגנונות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מצאתי את זה ב-src/ui/send.css. אני משנה שורה אחת."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "w1",
+        "name": "write_file",
+        "input": {
+         "path": "D:/Games/Arena/src/ui/send.css"
+        },
+        "preview": "--- a/src/ui/send.css\n+++ b/src/ui/send.css\n@@ -3,3 +3,3 @@\n .send {\n-  background: #2d3a8c;\n+  background: #3b4fd1;\n }",
+        "reason": "Writing a file needs your approval in this mode.",
+        "folder": "D:/Games/Arena"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c4/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c4/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".approval"
+    },
+    {
+     "click": ".grant-pick"
+    },
+    {
+     "click": "[role=option] >> nth=2"
+    },
+    {
+     "wait": ".grant-where"
+    }
+   ]
+  },
+  {
+   "id": "SettingsApprovals",
+   "title": "הגדרות › אישורים: מה רץ בלי לשאול, איפה, כמה זמן נשאר, וביטול",
+   "route": "#/settings/approvals",
+   "height": {
+    "desktop": 800,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/permissions/active",
+     "json": [
+      {
+       "index": 0,
+       "rule": {
+        "tool": "write_file",
+        "scope": "everywhere",
+        "createdAt": {
+         "$ago": "30m"
+        },
+        "target": "folder:src/ui",
+        "until": {
+         "$in": "47m"
+        }
+       },
+       "kind": "chat",
+       "leftMs": {
+        "$inMs": "47m"
+       }
+      },
+      {
+       "index": 1,
+       "rule": {
+        "tool": "browser_*",
+        "scope": "everywhere",
+        "createdAt": {
+         "$ago": "30m"
+        },
+        "target": "site:docs.example.com",
+        "until": {
+         "$in": "2h"
+        }
+       },
+       "kind": "chat",
+       "leftMs": {
+        "$inMs": "2h"
+       }
+      },
+      {
+       "index": 2,
+       "rule": {
+        "tool": "run_command",
+        "scope": "everywhere",
+        "createdAt": {
+         "$ago": "30m"
+        },
+        "command": "pnpm test"
+       },
+       "kind": "chat"
+      },
+      {
+       "index": 3,
+       "rule": {
+        "tool": "helper:browser_*",
+        "scope": "everywhere",
+        "createdAt": {
+         "$ago": "30m"
+        },
+        "target": "site:shop.example",
+        "until": {
+         "$in": "18m"
+        }
+       },
+       "kind": "helper",
+       "leftMs": {
+        "$inMs": "18m"
+       }
+      },
+      {
+       "index": 4,
+       "rule": {
+        "tool": "computer_use_app",
+        "scope": "everywhere",
+        "createdAt": {
+         "$ago": "30m"
+        },
+        "target": "app:notepad"
+       },
+       "kind": "chat"
+      }
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".grant-row"
+    }
+   ]
+  },
+  {
+   "id": "CooldownCard",
+   "title": "Claude בקירור: הפס העליון וכרטיס \"כש-Claude בקירור\" בעבודה העצמית",
+   "route": "#/self-work",
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/cooldown",
+     "json": {
+      "cooldown": {
+       "until": {
+        "$inMs": "3h"
+       },
+       "since": {
+        "$agoMs": "25m"
+       },
+       "source": "claude",
+       "reason": "usage limit"
+      },
+      "cooling": true,
+      "phase": "working",
+      "handed": [
+       {
+        "boardId": "kesher/t-212",
+        "title": "לתקן אזהרות לינט ב-apps/web",
+        "status": "done"
+       },
+       {
+        "boardId": "kesher/t-215",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "status": "working"
+       },
+       {
+        "boardId": "kesher/t-219",
+        "title": "לשנות שמות משתנים בקובץ הסגנונות",
+        "status": "returned"
+       }
+      ],
+      "today": {
+       "date": "2026-11-20",
+       "used": 2
+      },
+      "settings": {
+       "enabled": true,
+       "repo": "D:/Projects/KesherAI",
+       "check": "pnpm -s typecheck",
+       "dailyCap": 6,
+       "batch": 2
+      }
+     }
+    },
+    {
+     "url": "**/api/self-work",
+     "json": {
+      "run": {
+       "repo": "D:/Projects/KesherAI",
+       "goal": "אזהרות לינט",
+       "branch": "self/lint",
+       "check": "pnpm -s typecheck",
+       "convId": "c9",
+       "status": "done",
+       "until": {
+        "$inMs": "1h"
+       },
+       "steps": 0,
+       "items": []
+      }
+     }
+    },
+    {
+     "url": "**/api/self-work/board",
+     "json": {
+      "rev": 7,
+      "notes": [],
+      "tasks": [
+       {
+        "id": "kesher/t-215",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "status": "claimed",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "owner": "kesher",
+        "localOk": true
+       },
+       {
+        "id": "kesher/t-221",
+        "title": "להוסיף בדיקה למיון הרשימה",
+        "status": "open",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "localOk": true,
+        "details": "בדיקה אחת, בלי לשנות את הקוד עצמו"
+       },
+       {
+        "id": "kesher/t-224",
+        "title": "לשכתב את דף ההגדרות",
+        "status": "open",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "big",
+        "details": "גדולה: נשארת אצל Claude"
+       },
+       {
+        "id": "kesher/t-212",
+        "title": "לתקן אזהרות לינט ב-apps/web",
+        "status": "done",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "owner": "kesher",
+        "localOk": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".cooldown-banner"
+    },
+    {
+     "wait": ".cooldown-card"
+    }
+   ]
+  },
+  {
+   "id": "CooldownLocalOk",
+   "title": "לוח המשימות: כפתור \"מקומי בסדר\" ומה שהמודל המקומי לקח",
+   "route": "#/self-work",
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/cooldown",
+     "json": {
+      "cooldown": {
+       "until": {
+        "$inMs": "3h"
+       },
+       "since": {
+        "$agoMs": "25m"
+       },
+       "source": "claude",
+       "reason": "usage limit"
+      },
+      "cooling": true,
+      "phase": "working",
+      "handed": [
+       {
+        "boardId": "kesher/t-212",
+        "title": "לתקן אזהרות לינט ב-apps/web",
+        "status": "done"
+       },
+       {
+        "boardId": "kesher/t-215",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "status": "working"
+       },
+       {
+        "boardId": "kesher/t-219",
+        "title": "לשנות שמות משתנים בקובץ הסגנונות",
+        "status": "returned"
+       }
+      ],
+      "today": {
+       "date": "2026-11-20",
+       "used": 2
+      },
+      "settings": {
+       "enabled": true,
+       "repo": "D:/Projects/KesherAI",
+       "check": "pnpm -s typecheck",
+       "dailyCap": 6,
+       "batch": 2
+      }
+     }
+    },
+    {
+     "url": "**/api/self-work",
+     "json": {
+      "run": {
+       "repo": "D:/Projects/KesherAI",
+       "goal": "אזהרות לינט",
+       "branch": "self/lint",
+       "check": "pnpm -s typecheck",
+       "convId": "c9",
+       "status": "done",
+       "until": {
+        "$inMs": "1h"
+       },
+       "steps": 0,
+       "items": []
+      }
+     }
+    },
+    {
+     "url": "**/api/self-work/board",
+     "json": {
+      "rev": 7,
+      "notes": [],
+      "tasks": [
+       {
+        "id": "kesher/t-215",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "status": "claimed",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "owner": "kesher",
+        "localOk": true
+       },
+       {
+        "id": "kesher/t-221",
+        "title": "להוסיף בדיקה למיון הרשימה",
+        "status": "open",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "localOk": true,
+        "details": "בדיקה אחת, בלי לשנות את הקוד עצמו"
+       },
+       {
+        "id": "kesher/t-224",
+        "title": "לשכתב את דף ההגדרות",
+        "status": "open",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "big",
+        "details": "גדולה: נשארת אצל Claude"
+       },
+       {
+        "id": "kesher/t-212",
+        "title": "לתקן אזהרות לינט ב-apps/web",
+        "status": "done",
+        "priority": 2,
+        "updatedAt": {
+         "$ago": "1h"
+        },
+        "size": "small",
+        "owner": "kesher",
+        "localOk": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".task-row"
+    },
+    {
+     "click": ".task:has-text('t-221') .task-row"
+    },
+    {
+     "wait": ".task-body"
+    },
+    {
+     "scroll": ".task-body"
+    }
+   ]
+  }
+ ]
+}
