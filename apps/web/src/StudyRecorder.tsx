@@ -4,6 +4,7 @@ import { getLocale, he$ } from "./i18n";
 import { encodeWav } from "./Mic";
 import { stamp, stampSeconds } from "./study-time";
 import { busy } from "./VersionWatch";
+import { openMic } from "./mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const PIECE_SEC = 30;
@@ -62,9 +63,9 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
     setError("");
     let mic: MediaStream;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
-    } catch {
-      setError(L("אין גישה למיקרופון. אשרי גישה למיקרופון ונסי שוב.", "No access to the microphone. Allow it and try again."));
+      mic = await openMic({ channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true });
+    } catch (e) {
+      setError((e as Error).message);
       return;
     }
     let sys: MediaStream | undefined;

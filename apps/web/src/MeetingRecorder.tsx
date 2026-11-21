@@ -3,6 +3,7 @@ import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { encodeWav } from "./Mic";
 import { toast } from "./library";
+import { openMic } from "./mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const PIECE_SEC = 30;
@@ -40,9 +41,9 @@ export function MeetingRecorder({ suggestedTitle, onDone }: { suggestedTitle?: s
     setError("");
     let mic: MediaStream;
     try {
-      mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      setError(L("אין גישה למיקרופון.", "No access to the microphone."));
+      mic = await openMic({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
+    } catch (e) {
+      setError((e as Error).message);
       return;
     }
     // The call's sound: the desktop app grants the screen's audio ("loopback"); we drop the picture.

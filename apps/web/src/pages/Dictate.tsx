@@ -5,6 +5,7 @@ import { desktop } from "../library";
 import { encodeWav } from "../Mic";
 import { hearFrame, type SilenceState } from "../dictate-silence";
 import { LineIcon } from "../ui/Glyph";
+import { openMic } from "../mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -44,9 +45,9 @@ export function Dictate() {
     void (async () => {
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-      } catch {
-        setError(L("אין גישה למיקרופון", "No access to the microphone"));
+        stream = await openMic({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
+      } catch (e) {
+        setError((e as Error).message);
         setState("error");
         return;
       }

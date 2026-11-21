@@ -3,6 +3,7 @@ import { api, withToken } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { encodeWav } from "./Mic";
+import { openMic } from "./mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 interface State { installed: boolean; phase?: string; message?: string; log: string[]; voices: string[]; langs: string[] }
@@ -33,8 +34,8 @@ export function VoiceCloneSection() {
     load();
   };
   const record = async () => {
-    const mic = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }).catch(() => undefined);
-    if (!mic) return toast(L("אין גישה למיקרופון.", "No access to the microphone."));
+    const mic = await openMic({ channelCount: 1 }).catch((e: Error) => e);
+    if (mic instanceof Error) return toast(mic.message);
     const ctx = new AudioContext({ sampleRate: 24000 });
     const node = ctx.createScriptProcessor(4096, 1, 1);
     const chunks: Float32Array[] = [];

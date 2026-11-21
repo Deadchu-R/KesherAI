@@ -5,6 +5,7 @@ import { encodeWav } from "./Mic";
 import { speak, stopSpeaking } from "./Speak";
 import { toast } from "./library";
 import { getLocale, he$, t } from "./i18n";
+import { openMic as openMicStream } from "./mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -252,10 +253,10 @@ export function VoiceMode({ chatId, onSend, answer, live, busy, approvals, appro
       }
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      } catch {
+        stream = await openMicStream({ channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+      } catch (e) {
         // Blocked: stay open in push-to-talk, so a press after allowing the microphone tries again.
-        toast(t("micDenied"));
+        toast((e as Error).message || t("micDenied"));
         m.opening = undefined;
         pttRef.current = true;
         setPtt(true);

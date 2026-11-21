@@ -4,6 +4,7 @@ import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
 import { openWithDraft } from "../phone";
+import { openMic } from "../mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Row = Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number; titles?: string[] };
@@ -100,9 +101,9 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
   const start = async () => {
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      return toast(L("אין גישה למיקרופון.", "No access to the microphone."));
+      stream = await openMic({ echoCancellation: true, noiseSuppression: true });
+    } catch (e) {
+      return toast((e as Error).message);
     }
     const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported?.(t)) ?? "";
     const r = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32_000 } : undefined);

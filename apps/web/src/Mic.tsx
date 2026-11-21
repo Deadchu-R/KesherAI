@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, withToken } from "./api";
 import { toast } from "./library";
 import { getLocale, t } from "./i18n";
+import { openMic } from "./mic-access";
 
 interface SttInfo {
   choice: string;
@@ -114,9 +115,9 @@ export function Mic({ onText }: { onText: (text: string, seconds?: number) => vo
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      toast(t("micDenied"));
+      stream = await openMic({ channelCount: 1, echoCancellation: true, noiseSuppression: true });
+    } catch (e) {
+      toast((e as Error).message || t("micDenied"));
       return;
     }
     const ctx = new AudioContext({ sampleRate: 16000 });
