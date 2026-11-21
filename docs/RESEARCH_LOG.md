@@ -4366,3 +4366,9 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Claude / ChatGPT composers**: connectors and tools are shown as chips beside the box only when they are in use. Taken: Unity's chip shows in a plain chat only once a project is chosen or the Editor is open; ComfyUI's only when installed or answering.
 - **Unity MCP servers (2025-26)**: a status line in the Editor, not in the chat. KesherAI's difference: both chips live in every chat, also on the phone, polled cheaply (one `/queue` call every 5 s, none while hidden).
 - **Stopped at:** done (built in core/comfy-live.ts, web/ComfyChip.tsx, UnityChip.tsx).
+
+## 2026-11-21: the new-chat box with the same + menu as a chat (competitor note)
+- **Claude (web/desktop)**: the start screen's box has the same + menu as a chat: files, connectors and tools on/off, research, before the chat exists. Taken: "Tools in this chat" on the start screen (the chat is made when the menu needs it, as with the first file).
+- **ChatGPT / Gemini**: tools and modes picked on the empty start box carry into the first message. Taken: the approvals mode chosen there goes into the new chat (+ menu on the home box, a chip on the code start box, as in their chats).
+- Left: incognito stays home-only (it decides how the chat is made, so it cannot change after).
+- **Stopped at:** done (AddMenu ensure, ChatAttach, App Home, CodeHome).

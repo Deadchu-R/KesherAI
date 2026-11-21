@@ -98,6 +98,120 @@
    "viewports": [
     "desktop",
     "phone"
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".comfy-chip > button"
+    },
+    {
+     "click": ".comfy-chip > button",
+     "optional": true
+    },
+    {
+     "wait": "text=עצור את ComfyUI"
+    }
+   ]
+  },
+  {
+   "id": "HomeBoxMenu",
+   "title": "מסך הבית: תיבת הצ'אט החדש עם אותו תפריט + (כלים בצ'אט ואישורים)",
+   "titleEn": "Home: the new-chat box gets the same + menu (tools in this chat, approvals)",
+   "route": "#/",
+   "height": {
+    "desktop": 900,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations",
+     "method": "POST",
+     "json": {
+      "id": "d1"
+     }
+    },
+    {
+     "url": "**/api/conversations/d1/tool-switches",
+     "json": {
+      "groups": [
+       {
+        "id": "files",
+        "he": "קבצים וקוד",
+        "en": "Files and code",
+        "tools": 12,
+        "on": true
+       },
+       {
+        "id": "web",
+        "he": "אינטרנט",
+        "en": "Web",
+        "tools": 4,
+        "on": true
+       },
+       {
+        "id": "computer",
+        "he": "שליטה במחשב",
+        "en": "Computer control",
+        "tools": 9,
+        "on": false
+       },
+       {
+        "id": "browser",
+        "he": "דפדפן",
+        "en": "Browser",
+        "tools": 15,
+        "on": true
+       },
+       {
+        "id": "media",
+        "he": "תמונות ווידאו",
+        "en": "Pictures and video",
+        "tools": 5,
+        "on": true
+       }
+      ],
+      "connectors": [
+       {
+        "id": "mcp-github",
+        "name": "GitHub",
+        "tools": 18,
+        "on": true
+       },
+       {
+        "id": "mcp-drive",
+        "name": "Google Drive",
+        "tools": 6,
+        "on": false
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "button[aria-label='צרף קבצים']:visible"
+    },
+    {
+     "click": "text=כלים בצ'אט הזה"
+    },
+    {
+     "wait": "text=קונקטורים"
+    }
+   ],
+   "viewports": [
+    "desktop"
    ]
   }
  ]

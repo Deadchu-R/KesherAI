@@ -18,7 +18,7 @@ import { Select } from "./ui/Select";
  */
 export function ComposerBar(p: {
   /** The + menu's attachments (from useChatAttach). */
-  attach: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onGameProject" | "onScript" | "convId">;
+  attach: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onGameProject" | "onScript" | "convId" | "ensure">;
   /** Adds text to the box (the + menu's pages, skills, research…). */
   onInsert: (text: string) => void;
   web: boolean;

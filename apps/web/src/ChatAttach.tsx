@@ -41,7 +41,7 @@ export function useChatAttach(o: {
   insert: (text: string) => void;
   onError: (message: string) => void;
   onProject?: (r: ProjectAdded) => void;
-}): { menu: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onUploadFolder" | "onGameProject" | "onScript" | "convId">; elements: ReactNode; takePhoto: () => void; attach: (paths: string[]) => Promise<void> } {
+}): { menu: Pick<AddMenuProps, "onFiles" | "onPhoto" | "onAnnotate" | "onProject" | "onUploadFolder" | "onGameProject" | "onScript" | "convId" | "ensure">; elements: ReactNode; takePhoto: () => void; attach: (paths: string[]) => Promise<void> } {
   const uploadInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const annotInput = useRef<HTMLInputElement>(null);
@@ -157,7 +157,7 @@ export function useChatAttach(o: {
       ...(bridge?.pickFiles ? { onProject: () => void addProject() } : FOLDER_PICK ? { onUploadFolder: () => folderInput.current?.click() } : {}),
       onGameProject: (path) => void addProject(path),
       // Scripts are found in the chat's own folders, so only a chat that exists can list them.
-      ...(o.convId ? { convId: o.convId, onScript: (path: string) => o.insert(`${line(path)}\n`) } : {}),
+      ...(o.convId ? { convId: o.convId, onScript: (path: string) => o.insert(`${line(path)}\n`) } : o.ensure ? { ensure: o.ensure } : {}),
     },
     takePhoto: () => photoInput.current?.click(),
     attach,

@@ -32,7 +32,7 @@ import { Sidebar } from "./Sidebar";
 import { useAppMenu } from "./AppMenu";
 import { ToolIcon } from "./ToolIcon";
 import { useAppearance } from "./appearance";
-import { HOME_SECTIONS } from "@kesher/shared";
+import { HOME_SECTIONS, type PermissionMode } from "@kesher/shared";
 import { createConversation, refreshLibrary, toast, useLibrary, useToast } from "./library";
 import { useModels } from "./useModels";
 import { PairPrompt } from "./PairPrompt";
@@ -124,6 +124,8 @@ function Home() {
   const [web, setWeb] = useWebSearch();
   // 👻 Incognito: this chat neither reads nor files memory, and stays out of search (like Claude's incognito chat).
   const [incognito, setIncognito] = useState(false);
+  // The approvals mode in the + menu, as in a chat (a new chat's default: edits without asking).
+  const [mode, setMode] = useState<PermissionMode>("auto-edit");
   useEffect(() => {
     void api<{ activeModels: Record<string, string> }>("/api/settings").then((s) => setModelId((m) => m || s.activeModels.chat || "")).catch(() => undefined);
   }, []);
@@ -144,11 +146,12 @@ function Home() {
   const [draftId, setDraftId] = useState<string>();
   const ensure = async () => {
     if (draftId) return draftId;
-    const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}) }, { open: false });
+    const id = await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}), mode }, { open: false });
     if (id) setDraftId(id);
     return id;
   };
   const attachments = useChatAttach({
+    ...(draftId ? { convId: draftId } : {}),
     ensure,
     insert: (txt) => setText((v) => `${v}${v && !v.endsWith("\n") ? "\n" : ""}${txt}`),
     onError: (m) => toast(m),
@@ -158,7 +161,7 @@ function Home() {
     if (!value || busy) return;
     setBusy(true);
     try {
-      const id = draftId ?? (await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}) }));
+      const id = draftId ?? (await createConversation({ kind: "chat", ...(modelId ? { modelId } : {}), ...(personaId ? { personaId } : {}), ...(incognito ? { incognito: true } : {}), mode }));
       if (!id) return;
       if (draftId) {
         // Made by an attachment: the model or persona may have changed since, and now the chat opens.
@@ -212,6 +215,8 @@ function Home() {
             onDictate={(txt) => setText((v) => (v ? `${v.trimEnd()} ${txt}` : txt))}
             persona={{ value: personaId, onChange: (p) => { setPersonaId(p?.id); if (p?.modelId) setModelId(p.modelId); } }}
             model={{ models, value: modelId, onChange: setModelId }}
+            mode={{ value: mode, onChange: (m) => { setMode(m); if (draftId) void api(`/api/conversations/${draftId}`, { method: "PATCH", body: { mode: m } }).catch(() => undefined); } }}
+            modeInMenu
             extra={
               <button type="button" className={`model-chip${incognito ? " on" : ""}`} aria-pressed={incognito} disabled={!!draftId} onClick={() => setIncognito(!incognito)} title={getLocale() === "he" ? "צ'אט בלי זיכרון: לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש" : "Incognito: no memory read or filed, left out of search"}>
                 👻{incognito ? (getLocale() === "he" ? " בלי זיכרון" : " Incognito") : ""}

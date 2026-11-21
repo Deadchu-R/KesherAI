@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposerBar } from "../ComposerBar";
 import { SelfWorkPanel } from "../SelfWorkPanel";
 import { ProjectFacts } from "../ProjectFacts";
+import type { PermissionMode } from "@kesher/shared";
 import { useChatAttach } from "../ChatAttach";
 import { useWebSearch } from "../WebToggle";
 import { PromptTextarea, expandSlash } from "../SlashMenu";
@@ -100,6 +101,8 @@ export function CodeHome() {
   const [envChoice, setEnvChoice] = useState("");
   // The same + menu as every chat box: the session is made in the chosen folder on the first thing added.
   const [draftId, setDraftId] = useState<string>();
+  // The approvals mode, as a chip like in a code chat (a code session's default: ask first).
+  const [mode, setMode] = useState<PermissionMode>("ask");
   setDraftIdRef.current = setDraftId;
   const ensure = async () => {
     if (draftId) return draftId;
@@ -108,7 +111,7 @@ export function CodeHome() {
       toast(L("בחרו תיקייה לעבוד בה.", "Choose a folder to work in."));
       return undefined;
     }
-    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}) }, { open: false });
+    const id = await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}), mode }, { open: false });
     if (id) setDraftId(id);
     return id;
   };
@@ -123,7 +126,7 @@ export function CodeHome() {
     }
     setBusy(true);
     try {
-      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}) }));
+      const id = draftId ?? (await createConversation({ kind: "code", workspace: folder.trim(), ...(modelId ? { modelId } : {}), ...(worktree ? { worktree: true } : {}), ...(envChoice && namedEnvs.some((n) => n.id === envChoice) || envChoice === "none" ? { environment: envChoice } : {}), mode }));
       if (!id) return;
       if (draftId) location.hash = `#/c/${id}`;
       choose(folder.trim());
@@ -164,6 +167,7 @@ export function CodeHome() {
             web={web}
             onWeb={setWeb}
             model={{ models, value: modelId, onChange: setModelId }}
+            mode={{ value: mode, onChange: (m) => { setMode(m); if (draftId) void api(`/api/conversations/${draftId}`, { method: "PATCH", body: { mode: m } }).catch(() => undefined); } }}
             extra={
               <>
                 {typing ? (

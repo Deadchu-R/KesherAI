@@ -20,6 +20,8 @@ export interface AddMenuProps {
   onGameProject?: (path: string) => void;
   /** The chat, for finding scripts in its folders. */
   convId?: string;
+  /** A box with no chat yet (the start screen): makes the chat, so its per-chat switches (tools) work there too. */
+  ensure?: () => Promise<string | undefined>;
   /** Adds a script found in the chat's folders. */
   onScript?: (path: string) => void;
   /** Mark up a picture (the computer's screen, or one from this device) before it goes to the chat. */
@@ -89,6 +91,9 @@ export function AddMenu(p: AddMenuProps) {
   const [scriptQ, setScriptQ] = useState("");
   const [scripts, setScripts] = useState<{ roots: string[]; scripts: Array<{ path: string; rel: string }> } | null>(null);
   const [switches, setSwitches] = useState<ToolSwitches | null>(null);
+  // The chat the tool switches belong to: the box's own, or the one made for the start screen's box.
+  const [toolsConv, setToolsConv] = useState<string>();
+  const toolsChat = p.convId ?? toolsConv;
   // Scripts: searched as you type (a short pause first).
   useEffect(() => {
     if (sub !== "scripts" || !p.convId) return;
@@ -119,19 +124,24 @@ export function AddMenu(p: AddMenuProps) {
       setScripts(null);
       setScriptQ("");
     }
-    if (s === "tools" && p.convId) {
+    if (s === "tools") {
       setSwitches(null);
-      void api<ToolSwitches>(`/api/conversations/${encodeURIComponent(p.convId)}/tool-switches`).then(setSwitches, () => setSwitches({ groups: [], connectors: [] }));
+      // On the start screen the chat is made now (as with the first file added), then its switches load.
+      void (async () => p.convId ?? toolsConv ?? (await p.ensure?.()))().then((id) => {
+        if (!id) return setSwitches({ groups: [], connectors: [] });
+        setToolsConv(id);
+        return api<ToolSwitches>(`/api/conversations/${encodeURIComponent(id)}/tool-switches`).then(setSwitches);
+      }).catch(() => setSwitches({ groups: [], connectors: [] }));
     }
   };
   // A tool group or connector on/off for this chat only (kept with the chat; the server routes only to what is on).
   const toggleTool = (key: string) => {
-    if (!switches || !p.convId) return;
+    if (!switches || !toolsChat) return;
     const flip = <T extends { id: string; on: boolean }>(x: T): T => (x.id === key ? { ...x, on: !x.on } : x);
     const next = { groups: switches.groups.map(flip), connectors: switches.connectors.map(flip) };
     setSwitches(next);
     const toolsOff = [...next.groups, ...next.connectors].filter((x) => !x.on).map((x) => x.id);
-    void api(`/api/conversations/${encodeURIComponent(p.convId)}`, { method: "PATCH", body: { toolsOff } }).catch(() => setSwitches(switches));
+    void api(`/api/conversations/${encodeURIComponent(toolsChat)}`, { method: "PATCH", body: { toolsOff } }).catch(() => setSwitches(switches));
   };
   // The board's tasks are work on the project. In a plain chat there is no project folder (found on the phone:
   // the model asked where the code is), so the board's project is granted to this chat first; the model then
@@ -221,7 +231,7 @@ export function AddMenu(p: AddMenuProps) {
       {/* The lead plans sub-questions and runs research sub-agents at once; the report opens beside the chat (deep-research.ts). The tool's name in the text loads it. */}
       <MenuItem icon="🔬" title={L("כמה סוכני מחקר במקביל, ודוח עם מקורות שנפתח ליד הצ׳אט", "Several research agents at once, and a report with sources that opens beside the chat")} onSelect={() => p.onInsert(L("מחקר מעמיק (deep_research): ", "Research deeply (deep_research): "))}>{L("מחקר מעמיק", "Research deeply")}</MenuItem>
       {/* The chat's tools by group, and its connectors (MCP servers), each on/off for this chat (RESEARCH_LOG gap list C1, C13). */}
-      {p.convId && (
+      {(p.convId || p.ensure) && (
         <MenuSub icon="🛠" label={L("כלים בצ'אט הזה", "Tools in this chat")} {...subProps("tools")}>
           {switches === null ? <MenuNote>…</MenuNote> : (
             <>
