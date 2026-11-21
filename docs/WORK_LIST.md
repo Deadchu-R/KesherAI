@@ -18,18 +18,18 @@ Roee's answers for the night (21:20): ForMigration 4.27 → leave to the local m
 Order (from the deep research c-20261121-38, RESEARCH_LOG 2026-11-21; S first):
 - ✅ 0.6.437: research keeps going (safe read-only pipes, second prompt when no report); the deep research finished (32 steps).
 - 🔨 Unreal without the editor: levels from .umap files (committed), then check opening a level on AutoShooter after the build; plugin 0.1.27 into the 5.4 projects once Roee's Unreal 5.4 download finishes (install-all).
-- ⬜ Unity: the project menu at the top of the Unity page lists every Unity project found on the PC (not only added ones); Boss Rush (waiting for Roee's screenshot of where it is missing).
-- ⬜ A2 (S): live turn line — elapsed, tok/s, "step 2/5: tool", waiting-for-approval badge (desktop + phone).
-- ⬜ A7 (S): local speed — prompt-cache reuse between turns and n-gram prompt lookup in llama.cpp, measured on the PC before/after.
-- ⬜ A6 (S): context ring suggests compaction at 80%.
+- ✅ Unity: the project menu at the top of the Unity page lists every Unity project found on the PC (not only added ones); Boss Rush (waiting for Roee's screenshot of where it is missing).
+- ✅ A2 (S): live turn line — elapsed, tok/s, "step 2/5: tool", waiting-for-approval badge (desktop + phone).
+- ✅ A7 (S) (built e4665d9; measure on the PC still open): local speed — prompt-cache reuse between turns and n-gram prompt lookup in llama.cpp, measured on the PC before/after.
+- ✅ A6 (S) (already existed: COMPACT_AT 0.8): context ring suggests compaction at 80%.
 - ⬜ A6b (S/M): bidi pass — `<bdi>` around mixed runs, code/math LTR, logical CSS in chat, docs panel, tool cards.
-- ⬜ A1 (M): type while it answers — queue under the composer, Alt+Enter steers at the next tool step.
-- ⬜ A3 (M): declarative tool cards (name, short parameters, live state, structured result).
-- ⬜ B2 (M): Play-mode VRAM standby — when Unity/Unreal enters Play, unload the local model, reload after.
+- ✅ A1 (M): type while it answers — queue under the composer, Alt+Enter steers at the next tool step.
+- ✅ A3 (M): declarative tool cards (name, short parameters, live state, structured result).
+- ✅ B2 (M) (ba39551; plugin/package code not compiled yet): Play-mode VRAM standby — when Unity/Unreal enters Play, unload the local model, reload after.
 - ⬜ Hub: verify the Run → "Starting…" fix after the hub deploy.
 - ⬜ Morning report 07:00: done / decisions taken / waiting on Roee + design doc publish.
-- ⬜ Unreal install-all on 5.4: the plugin did not compile for 5.4 (errors to read from the retry log), and every next project failed with EPERM unlinking HostProject/Intermediate/.../HostProjectModuleRules.dll in _built/5.4-0.1.27 (a build process still holding it): retry the removal with a short wait, or build into a fresh folder each time and keep the last good one.
-- ⬜ Downloads like Epic (research c-20261121-41): D1 (S) phases + two meters (network / verify) + smoothed time left; D2 (S) headroom check and free space per drive before start; D3 (S) error cards with one fix button; D4 (M) full Downloads page with a reorderable queue (phone too); D5 (M) parallel range parts for big HF files; D6 (M) pause while a big model answers or the engine is in Play; D7 (S) phone push when a download ends/fails; D8 (M) Verify/repair.
+- ✅ Unreal install-all on 5.4 (plugin 0.1.30: reflection for the warning setting; retry/fresh folder; per-engine failure): the plugin did not compile for 5.4 (errors to read from the retry log), and every next project failed with EPERM unlinking HostProject/Intermediate/.../HostProjectModuleRules.dll in _built/5.4-0.1.27 (a build process still holding it): retry the removal with a short wait, or build into a fresh folder each time and keep the last good one.
+- ✅ Downloads like Epic (D1–D8 except none left: a588765, 2d0460d, 8201ef8, e55a289, 5cdf3f8) (research c-20261121-41): D1 (S) phases + two meters (network / verify) + smoothed time left; D2 (S) headroom check and free space per drive before start; D3 (S) error cards with one fix button; D4 (M) full Downloads page with a reorderable queue (phone too); D5 (M) parallel range parts for big HF files; D6 (M) pause while a big model answers or the engine is in Play; D7 (S) phone push when a download ends/fails; D8 (M) Verify/repair.
 - ⬜ Research (Roee 20:58, future): every Unity Muse / Unity AI tool (Chat, Sprite, Texture, Animate, Behavior, Generators, Sentis) and how to bring each into KesherAI — inbox task c-20261121-42 (free Gemini, runs after the quota reset); then plan tasks from it.
 - 🔨 Unity scenes without Unity, full 2D (Roee 22:19): SpriteRenderer from sprite sheets (rects, pivot, tint, flip), sorting layer/order for draw order, Tilemaps, opens in 2D automatically, 2D moves via pending moves; plus UI canvases and prefab instances (ProjectBossRush GameScene showed nothing).
 - ⬜ Collaborators without engines (Roee 20:31): a collaborator's KesherAI needs no Unity/Unreal/Godot at all. Only the main PC has the engine versions and plugins. Key project files (scenes/levels, scripts, data assets, pending moves) move between computers without engines; a collaborator works in the stand-ins and editors, syncs to the main PC, and the main PC applies the changes through the plugins (with Undo when the editor is open, headless when closed) and sends back the result (pictures, compile/play results). First: research how others do engine-less collaboration end to end (Unity Version Control/Plastic, Perforce + Unreal multi-user, Diversion, Anchorpoint, Godot's text scenes), then a plan board. PLAN WRITTEN 2026-11-21: docs/COLLAB_PLAN.md and design boards (collab.json); the channel (git or hub) waits for research c-20261121-39.
@@ -255,8 +255,8 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Unreal plugin 0.1.27: "Install in all projects" with each project's engine version and result; current ones skipped; 5.8+ MCP offer per project
 - ✅ "Convert with AI" for an unsupported engine version or a compile failure: warning (he/en), a task-inbox task for Antigravity or the local model, a copy only, its own branch (engine-support.ts)
 - ✅ Unity scene reader: streamed and fast (parallel cached GUID index, size/time guards, binary scenes explained), scenes outside Assets/Scenes, versions read from ProjectVersion.txt
-- ⬜ Unity: report a compile failure of the package back from Unity to offer "Convert with AI" (Unreal does this already)
-- ⬜ Install an AI-converted plugin copy after review (the conversion task only makes the branch)
+- ✅ Unity: report a compile failure of the package back from Unity to offer "Convert with AI" (Unreal does this already)
+- ✅ Install an AI-converted plugin copy (1b6a3a4) after review (the conversion task only makes the branch)
 - ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting not built
 - ✅ Draw on a screenshot from the phone and send it as a change request to the engine (Annotator.tsx) (fadc4d4)
 - ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64) not built
