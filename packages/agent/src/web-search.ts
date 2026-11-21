@@ -245,6 +245,8 @@ export interface BackendCheck {
   count: number;
   ms: number;
   error?: string;
+  /** The first results (title — address), to see that they match the query. */
+  sample?: string[];
 }
 
 /**
@@ -260,7 +262,7 @@ export async function checkBackends(query: string, signal: AbortSignal): Promise
     const t = Date.now();
     try {
       const hits = await runBackend(b, { query, kp: "-1", signal, page: 1 });
-      out.push({ backend: b.name, ok: true, count: hits.length, ms: Date.now() - t });
+      out.push({ backend: b.name, ok: true, count: hits.length, ms: Date.now() - t, sample: hits.slice(0, 3).map((h) => `${h.title.slice(0, 80)} — ${h.url.slice(0, 120)}`) });
     } catch (e) {
       out.push({ backend: b.name, ok: false, count: 0, ms: Date.now() - t, error: (e as Error).message });
     }

@@ -569,7 +569,11 @@ export class TaskInbox {
     let status: InboxStatus = "done";
     try {
       const question = [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
-      const report = (await r.run(question, stop.signal)).trim();
+      // The time limit holds even if a search or a page read ignores the signal (a run once hung for two hours).
+      const report = (await Promise.race([
+        r.run(question, stop.signal),
+        new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the time limit.")), { once: true })),
+      ])).trim();
       if (!report) throw new Error("The model wrote no report.");
       t.researchReport = report;
       t.summary = report.slice(0, 2000);
