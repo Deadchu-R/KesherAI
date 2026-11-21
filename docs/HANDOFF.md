@@ -91,11 +91,10 @@ so a new chat starts from a few small files.
   ComfyUI → Unity demo. Start with a gap list against the code.
 
 ## State (update on each move)
-- Last chat: 2026-11-14 → 2026-11-20 (chat 1). Last release: 0.6.402 (2 builds since scan 166; scan due after 3 more).
-  Usage numbers of chat 1: docs/usage/history/2026-11-20_chat1.json (partial: only since its last compaction).
-  Next up: Roee checks 0.6.402 on the PC (Online in the hub, inbox tasks); then the usability gap list (WORK_LIST).
-  Previous build: Hub: hub.roeetal.com (Cloudflare Worker
-  kesher-hub, auto-deploys from main). Claude cloud task: "Kesher hub (cloud)" (API trigger only).
+- Chat 3 (2026-11-20 evening → night run to 2026-11-21 10:00). Last release: 0.6.419 (build 1 since scan 170; scan 171 after 4 more builds).
+  Night run: 0.6.408 → 0.6.419, 144 commits; security scans 168, 169, 170 (SECURITY_REVIEW.md).
+  Waiting for Roee in the morning: (1) one design-doc publish of tools/design/out/night/ (156 boards; BASE_VERSION in that folder; publish.json lists the files), (2) the PC link was down from ~01:30: update the PC to the newest release via the built-in browser, start vision model downloads (WORK_LIST "Morning"), (3) real tests with him: computer control (Notepad; UIA worker start time), Unreal plugin 0.1.25 build + play tests + level tools, Unity package 0.2.11 (VS editor), voice latency (data-latency), PBR flow with ComfyUI, (4) approve the Chrome extension 0.3.0 store release (debugger permission; manifest held at 0.2.6), (5) connect the hub to Claude (hub Settings › Connect to Claude), (6) phone: hub as installed app + Notifications.
+  Decisions taken overnight (reversible, recommended): helpers ask per action on signed-in sites; auto/reviewer mode local-only; UIA via PowerShell worker; extension debugger permission optional; Manual is the default control mode in chat too; Skip never for helpers/computer; browser/computer tools removed from guest turns.
 
 ## Updating KesherAI on Roee's PC (2026-11-20)
 Use the Claude desktop app's built-in browser (remote-devices Claude_Browser tools) at http://127.0.0.1:7420/#/updates: "בדוק עדכונים" → "הורד והתקן", then poll /api/version. No computer-use approval needed (computer-use access expires after 30 min and blocks at night). Overnight runs: no design-doc publishes (prepare boards under tools/design/out/, publish once in the morning with Roee).
