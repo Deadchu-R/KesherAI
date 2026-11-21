@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, statfs, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Ideas } from "../ideas.js";
+import { IdeaAudio, type AudioPolicy } from "../ideas-audio.js";
 import { modelTurnFor } from "../model-turn.js";
 import { toWav, transcribeWith } from "../speech-tools.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
@@ -20,7 +21,12 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   const root = join(s.paths.root, "ideas");
   /** Where "Save as a note" writes: one Markdown file per idea, read by the "Open mind notes" knowledge base. */
   const notesDir = join(s.paths.root, "ideas-notes");
+  /** Recordings kept for "Transcribe again": on this computer only, in KesherAI's data folder (not in a synced folder). */
+  const audio = new IdeaAudio(join(s.paths.root, "ideas-audio"));
+  const policy = (): AudioPolicy => ({ mode: s.config.ideas.keepAudio, days: s.config.ideas.keepAudioDays, capBytes: Math.round(s.config.ideas.audioCapGb * 1024 ** 3) });
   const ideas = new Ideas(root, {
+    audio,
+    audioPolicy: policy,
     ask: async (system, user, signal, onText, strong) => {
       // Her speech stays on this computer: the deeper passes use the local chat model too (sending a transcript to a cloud
       // model waits for her choice). `strong` only asks for the more thorough prompt.
@@ -29,11 +35,11 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (!id) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
       return (await modelTurnFor(s.registry, id)({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(30 * 60_000), onText ?? (() => undefined))).text;
     },
-    transcribe: async (file, lang) => {
+    transcribe: async (file, lang, language) => {
       const ffmpeg = () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
       const wav = await toWav(file, ffmpeg);
       // Detection picks from "my languages"; the recording app's language (he or en) is the hint and the fallback.
-      const r = await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto", false, { hint: lang });
+      const r = await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", language ?? s.config.speech?.language ?? "auto", false, { hint: lang });
       return { text: r.text, ...(r.detected ? { language: r.detected.lang } : {}) };
     },
     projects: () => s.library.listProjects().map((p) => p.name),
@@ -74,10 +80,36 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
     },
   });
 
+  // Old and surplus recordings go at start and then every hour (a session's own delete removes its recording at once).
+  void ideas.cleanupAudio().catch(() => undefined);
+  const sweep = setInterval(() => void ideas.cleanupAudio().catch(() => undefined), 3_600_000);
+  sweep.unref();
+  app.addHook("onClose", async () => clearInterval(sweep));
+
+  /** How long recordings are kept for "Transcribe again": `{ keepAudio, keepAudioDays, audioCapGb }`. */
+  const audioSettings = () => ({ keepAudio: s.config.ideas.keepAudio, keepAudioDays: s.config.ideas.keepAudioDays, audioCapGb: s.config.ideas.audioCapGb });
+  app.get("/api/ideas/audio-settings", async () => audioSettings());
+  app.put<{ Body: { keepAudio?: unknown; keepAudioDays?: unknown; audioCapGb?: unknown } }>("/api/ideas/audio-settings", async (req, reply) => {
+    const b = req.body ?? {};
+    if (b.keepAudio !== undefined && b.keepAudio !== "days" && b.keepAudio !== "forever" && b.keepAudio !== "off") return reply.code(400).send({ error: "Keep recordings: days, forever or off." });
+    if (b.keepAudioDays !== undefined && !(Number.isInteger(b.keepAudioDays) && (b.keepAudioDays as number) >= 1 && (b.keepAudioDays as number) <= 3650)) return reply.code(400).send({ error: "Keep recordings 1 to 3650 days." });
+    if (b.audioCapGb !== undefined && !(typeof b.audioCapGb === "number" && b.audioCapGb >= 0.1 && b.audioCapGb <= 2000)) return reply.code(400).send({ error: "The size limit is 0.1 to 2000 GB." });
+    if (b.keepAudio !== undefined) s.config.ideas.keepAudio = b.keepAudio;
+    if (b.keepAudioDays !== undefined) s.config.ideas.keepAudioDays = b.keepAudioDays as number;
+    if (b.audioCapGb !== undefined) s.config.ideas.audioCapGb = b.audioCapGb as number;
+    await s.saveConfig();
+    // A shorter time or a smaller limit takes effect now.
+    await ideas.cleanupAudio().catch(() => undefined);
+    return audioSettings();
+  });
   app.get<{ Querystring: { q?: string } }>("/api/ideas", async (req) => ({ sessions: await ideas.list(String(req.query?.q ?? "").slice(0, 200)) }));
   app.get<S>("/api/ideas/:id", async (req) => ideas.get(req.params.id));
   /** "Analyse again": one level deeper, keeping what was found before (progress comes with the session). */
   app.post<S>("/api/ideas/:id/deeper", async (req) => ideas.deeper(req.params.id));
+  /** "Transcribe again as …": the kept recording is read again in this language (`he`, `en`, …, or `auto`); runs on this computer. */
+  app.post<S & { Body: { language?: string } }>("/api/ideas/:id/retranscribe", async (req) => ideas.retranscribe(req.params.id, String(req.body?.language ?? "auto")));
+  /** "Delete recording": the kept audio goes; the transcript and ideas stay. */
+  app.delete<S>("/api/ideas/:id/recording", async (req) => ideas.removeRecording(req.params.id));
   app.post<S>("/api/ideas/:id/reset", async (req) => ideas.reset(req.params.id));
   app.delete<S>("/api/ideas/:id", async (req) => {
     await ideas.remove(req.params.id);
@@ -90,7 +122,7 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
     return ideas.start({ text });
   });
   // The recording streams to disk (no length cap: it stops only when the disk is nearly full), then is sorted in the
-  // background; the audio is deleted once transcribed.
+  // background; the audio is kept for "Transcribe again" as the settings say (else deleted once transcribed).
   app.addContentTypeParser("application/x-kesher-audio", (_req, payload, done) => done(null, payload));
   app.post("/api/ideas/record", { bodyLimit: Number.MAX_SAFE_INTEGER }, async (req, reply) => {
     const seconds = Number(req.headers["x-seconds"] ?? 0);
@@ -121,8 +153,9 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       }
       if (bytes < 1000) return reply.code(400).send({ error: "The recording is empty." });
       ok = true;
-      // The session deletes the file once it is transcribed; the folder goes with it below when that is done.
-      const session = await ideas.start({ file, seconds, ...(lang ? { lang } : {}) });
+      // The session deletes the file once it is transcribed, or moves it to the kept recordings; the folder goes below.
+      // `x-incognito`: a private session; its audio is never kept.
+      const session = await ideas.start({ file, seconds, ...(lang ? { lang } : {}), ...(req.headers["x-incognito"] === "1" ? { incognito: true } : {}) });
       void (async () => {
         for (let i = 0; i < 24 * 60; i++) {
           const st = (await ideas.get(session.id).catch(() => undefined))?.status;

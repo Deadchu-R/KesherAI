@@ -430,6 +430,16 @@ export const KesherConfigSchema = z.object({
       linkBeacon: z.boolean().default(true),
     })
     .prefault({}),
+  /** Open mind: how long a session's recording stays on this computer for "Transcribe again as …". */
+  ideas: z
+    .object({
+      /** `days`: for `keepAudioDays` days; `forever`: until she deletes it; `off`: deleted once read. */
+      keepAudio: z.enum(["days", "forever", "off"]).default("days"),
+      keepAudioDays: z.number().int().min(1).max(3650).default(30),
+      /** All kept recordings together, in GB: above it the oldest are deleted first. */
+      audioCapGb: z.number().min(0.1).max(2000).default(5),
+    })
+    .prefault({}),
   /** Speech: how the microphone button turns speech into text. */
   /** Meetings in My day. */
   meetings: z

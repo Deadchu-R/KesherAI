@@ -3,6 +3,7 @@ import type { Idea, IdeaKind, IdeaProgress, IdeaSession, IdeaStage, IdeaVerdict 
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { langName } from "../DetectedLang";
+import { Select } from "../ui/Select";
 import { createConversation, toast } from "../library";
 import { openWithDraft } from "../phone";
 import { openMic } from "../mic-access";
@@ -73,6 +74,7 @@ export function IdeasPage() {
                 ))}
               </ul>
               <PasteText onDone={(id) => { load(); setOpen(id); }} />
+              <KeepAudioOption />
             </>
           )}
         </section>
@@ -320,6 +322,8 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
         {s.status === "done" && <button type="button" className={s.researchAll ? "" : "primary"} onClick={() => void all()}>{s.researchAll ? `⏹ ${L("לעצור את המחקר ברצף", "Stop researching")}` : `🔬 ${L("מחקר על הכל ברצף", "Research all in a row")}`} ({researched}/{s.ideas.length})</button>}
         <button type="button" className="icon-btn" title={L("מחיקת הסשן", "Delete the session")} aria-label={L("מחיקת הסשן", "Delete the session")} onClick={async () => { if (confirm(L("למחוק את הסשן? צ'אטי המחקר, ההערות והמשימות נשארים.", "Delete the session? Research chats, notes and tasks stay."))) { await api(`/api/ideas/${id}`, { method: "DELETE" }); onBack(); } }}>🗑</button>
       </div>
+      {(s.status === "done" || s.status === "error") && !!s.recording && <RecordingRow s={s} act={act} />}
+      {s.redoError && <p className="error">{L("התמלול מחדש נכשל; התמלול והרעיונות הקודמים נשמרו: ", "Transcribing again failed; your earlier transcript and ideas are kept: ")}{errorText(s.redoError)}</p>}
       {(s.status === "transcribing" || s.status === "sorting") && <AnalysisProgress s={s} />}
       {s.deeperError && <p className="error">{L("הפענוח העמוק יותר נכשל; הרעיונות הקודמים נשמרו: ", "The deeper pass failed; your earlier ideas are kept: ")}{errorText(s.deeperError)}</p>}
       {s.status === "error" && <p className="error">{errorText(s.error)}</p>}
@@ -425,6 +429,56 @@ function AnalysisProgress({ s }: { s: IdeaSession }) {
         })}
       </ol>
       <span className="muted small">{p ? `${L("עברו", "Elapsed")} ${clock(elapsed)}${left ? ` · ${L("נשאר", "left")} ${mins(left)}` : ""} · ` : ""}{L("אפשר לצאת ולחזור; זה ממשיך במחשב.", "You can leave and come back; it carries on on the computer.")}</span>
+    </div>
+  );
+}
+
+/** The two languages a recording is most likely in, then the rest of "My languages" (Settings → Speech), then detection. */
+const REDO_FIRST = ["he", "en"];
+
+/**
+ * The kept recording of a session: "Transcribe again as …" (Hebrew, English, my languages, or detect) and "Delete
+ * recording". The audio stays on the computer: from the phone this only sends the choice, and the work runs there.
+ *
+ * @param props.s - The session (it has `recording`).
+ * @param props.act - Calls the server for this session.
+ */
+function RecordingRow({ s, act }: { s: IdeaSession; act: (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown, done?: string) => Promise<boolean> }) {
+  const [mine, setMine] = useState<string[]>([]);
+  useEffect(() => void api<{ languages?: string[] }>("/api/speech/stt").then((r) => setMine(r.languages ?? []), () => undefined), []);
+  const others = mine.filter((c) => !REDO_FIRST.includes(c));
+  const size = s.recording ? (s.recording.bytes >= 1024 ** 2 ? `${Math.round(s.recording.bytes / 1024 ** 2)} MB` : `${Math.max(1, Math.round(s.recording.bytes / 1024))} KB`) : "";
+  const until = s.recording?.until ? new Date(s.recording.until).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric" }) : "";
+  return (
+    <div className="ideas-recording row small" style={{ flexWrap: "wrap", gap: 8 }}>
+      <span className="muted">🎙 {L(`ההקלטה שמורה במחשב (${size})${until ? ` עד ${until}` : ""}`, `Recording kept on the computer (${size})${until ? ` until ${until}` : ""}`)}{s.language && ` · ${L("זוהה:", "Detected:")} ${langName(s.language)}`}</span>
+      <Select value="" aria-label={L("תמלל שוב כ…", "Transcribe again as…")} onChange={(e) => e.target.value && void act("/retranscribe", "POST", { language: e.target.value }, L("מתמלל שוב; זה רץ במחשב", "Transcribing again; it runs on the computer"))}>
+        <option value="">{L("תמלל שוב כ…", "Transcribe again as…")}</option>
+        {REDO_FIRST.map((c) => <option key={c} value={c}>{langName(c)}</option>)}
+        {others.map((c) => <option key={c} value={c}>{langName(c)}</option>)}
+        <option value="auto">{L("זיהוי אוטומטי", "Detect automatically")}</option>
+      </Select>
+      <button type="button" className="link" onClick={() => { if (confirm(L("למחוק את ההקלטה? התמלול והרעיונות נשארים, אבל אי אפשר יהיה לתמלל שוב.", "Delete the recording? The transcript and ideas stay, but you will not be able to transcribe again."))) void act("/recording", "DELETE", undefined, L("ההקלטה נמחקה", "Recording deleted")); }}>{L("מחיקת ההקלטה", "Delete recording")}</button>
+    </div>
+  );
+}
+
+/** Settings for the kept recordings: how long, and the size limit (the oldest go first). */
+function KeepAudioOption() {
+  type Opt = { keepAudio: "days" | "forever" | "off"; keepAudioDays: number; audioCapGb: number };
+  const [opt, setOpt] = useState<Opt | null>(null);
+  useEffect(() => void api<Opt>("/api/ideas/audio-settings").then(setOpt, () => undefined), []);
+  if (!opt) return null;
+  const save = (body: Partial<Opt>) => void api<Opt>("/api/ideas/audio-settings", { method: "PUT", body }).then(setOpt, (e: Error) => toast(e.message));
+  return (
+    <div className="stack ideas-keep-audio" style={{ gap: 4 }}>
+      <h3>{L("שמירת הקלטות לתמלול מחדש", "Keep recordings for re-transcribing")}</h3>
+      <Select value={opt.keepAudio} aria-label={L("שמירת הקלטות", "Keep recordings")} onChange={(e) => save({ keepAudio: e.target.value as Opt["keepAudio"] })}>
+        <option value="days">{L(`${opt.keepAudioDays} ימים`, `${opt.keepAudioDays} days`)}</option>
+        <option value="forever">{L("עד שאמחק", "Until I delete")}</option>
+        <option value="off">{L("לא לשמור", "Don't keep")}</option>
+      </Select>
+      <p className="muted small">{L(`ההקלטות נשארות רק במחשב הזה (לא בענן ולא בטלפון), עד ${opt.audioCapGb} GB; כשחורגים, הישנות נמחקות קודם. הקלטה פרטית (incognito) אף פעם לא נשמרת.`, `Recordings stay on this computer only (not in the cloud or on the phone), up to ${opt.audioCapGb} GB; above that the oldest go first. A private (incognito) recording is never kept.`)}</p>
     </div>
   );
 }

@@ -2,16 +2,25 @@ import { looksLikeGarbage, trimLoops } from "./lang-detect.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
+import { audioUntil, type AudioPolicy, type IdeaAudio } from "./ideas-audio.js";
 import { join } from "node:path";
-import { CHALLENGE_PROMPT, CREATIVE_PROMPT, IDEAS_PROMPT, SUMMARY_PROMPT, TRIED_PROMPT, fallbackDirections, splitTranscript, cleanIdeas, editIdea, ideaNote, ideaQuery, ideaTask, jsonIn, mergeIdeas, mostlyHebrew, researchPrompt, sessionMatches, splitIdea, peekIdeas, type Idea, type IdeaFound, type IdeaProgress, type IdeaSession } from "@kesher/shared";
+import { CHALLENGE_PROMPT, CREATIVE_PROMPT, IDEAS_PROMPT, SUMMARY_PROMPT, TRIED_PROMPT, fallbackDirections, splitTranscript, cleanIdeas, editIdea, ideaNote, ideaQuery, ideaTask, jsonIn, mergeIdeas, mostlyHebrew, researchPrompt, sessionMatches, splitIdea, peekIdeas, isKept, type Idea, type IdeaFound, type IdeaProgress, type IdeaSession } from "@kesher/shared";
 
 /** What the ideas need from the rest of KesherAI (fakes in the tests). */
 export interface IdeasDeps {
   /** The chat model: a system and a user message in, its text out (`onText` gets each piece as it is written; `strong` asks for a stronger model when there is one). */
   ask: (system: string, user: string, signal?: AbortSignal, onText?: (delta: string) => void, strong?: boolean) => Promise<string>;
   /** A recording's speech as text. */
-  /** Speech to text; `lang` is the recording app's language (he, en), used when the speech language is auto. */
-  transcribe: (file: string, lang?: string) => Promise<string | { text: string; language?: string }>;
+  /**
+   * Speech to text. `lang` is the recording app's language (he, en), used when the speech language is auto;
+   * `language` is a language she chose for "Transcribe again as …" (a code, or `auto` to detect from "my languages"),
+   * which is used instead of the speech setting.
+   */
+  transcribe: (file: string, lang?: string, language?: string) => Promise<string | { text: string; language?: string }>;
+  /** Where recordings are kept for "Transcribe again" (left out: they are deleted once read, as before). */
+  audio?: IdeaAudio;
+  /** The retention settings (read each time, so a change in Settings applies at once). */
+  audioPolicy?: () => AudioPolicy;
   /** Her project names. */
   projects: () => string[];
   /** Her past chats that match some words (incognito ones left out). */
@@ -86,6 +95,11 @@ export class Ideas {
     const s = JSON.parse(raw) as IdeaSession;
     const progress = this.live.get(id);
     if (progress && (s.status === "transcribing" || s.status === "sorting")) s.progress = { ...progress, now: Date.now() };
+    const kept = await this.deps.audio?.find(id);
+    if (kept) {
+      const until = this.deps.audioPolicy ? audioUntil(this.deps.audioPolicy(), kept.t) : undefined;
+      s.recording = { bytes: kept.bytes, ...(until ? { until } : {}) };
+    }
     return s;
   }
 
@@ -99,7 +113,7 @@ export class Ideas {
   private async save(s: IdeaSession): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     const tmp = `${this.file(s.id)}.${randomUUID()}.tmp`;
-    const { progress: _live, ...onDisk } = s;
+    const { progress: _live, recording: _rec, ...onDisk } = s;
     await writeFile(tmp, JSON.stringify(onDisk, null, 1));
     await replaceFile(tmp, this.file(s.id));
   }
@@ -107,6 +121,32 @@ export class Ideas {
   /** Deletes a session (its research chats stay). */
   async remove(id: string): Promise<void> {
     await rm(this.file(id), { force: true });
+    await this.deps.audio?.remove(id);
+  }
+
+  /**
+   * "Delete recording": the audio kept for "Transcribe again" goes; the transcript and ideas stay.
+   *
+   * @param id - The session.
+   */
+  async removeRecording(id: string): Promise<IdeaSession> {
+    const s = await this.get(id);
+    if (s.status === "transcribing") throw Object.assign(new Error("It is being transcribed now."), { statusCode: 409 });
+    await this.deps.audio?.remove(id);
+    return this.get(id);
+  }
+
+  /**
+   * Deletes the recordings the retention settings no longer allow (older than the days, over the size cap, of
+   * deleted sessions, or all of them when not kept). Called at start and when the settings change.
+   */
+  async cleanupAudio(): Promise<void> {
+    if (!this.deps.audio || !this.deps.audioPolicy) return;
+    await mkdir(this.dir, { recursive: true });
+    const ids = new Set((await readdir(this.dir)).filter((n) => n.endsWith(".json")).map((n) => n.slice(0, -5)));
+    // A session that is being transcribed still needs its file.
+    for (const id of this.live.keys()) ids.add(id);
+    await this.deps.audio.cleanup(this.deps.audioPolicy(), ids);
   }
 
   /**
@@ -114,10 +154,13 @@ export class Ideas {
    *
    * @param p - The recording's path, or text; and how long it was.
    */
-  async start(p: { file?: string; text?: string; seconds?: number; lang?: string }): Promise<IdeaSession> {
-    const s: IdeaSession = { id: randomUUID(), t: Date.now(), seconds: Math.max(0, Math.round(Number(p.seconds) || 0)), status: p.file ? "transcribing" : "sorting", ideas: [], ...(p.text ? { transcript: p.text.slice(0, 400_000) } : {}) };
+  async start(p: { file?: string; text?: string; seconds?: number; lang?: string; incognito?: boolean }): Promise<IdeaSession> {
+    const s: IdeaSession = { id: randomUUID(), t: Date.now(), seconds: Math.max(0, Math.round(Number(p.seconds) || 0)), status: p.file ? "transcribing" : "sorting", ideas: [], ...(p.text ? { transcript: p.text.slice(0, 400_000) } : {}), ...(p.incognito ? { incognito: true } : {}) };
     await this.save(s);
-    void this.process(s.id, p.file, undefined, p.lang).catch(() => undefined);
+    // The recording is kept for "Transcribe again" unless she turned that off or this was incognito (never kept).
+    const keep = !!p.file && !p.incognito && !!this.deps.audio && (this.deps.audioPolicy?.().mode ?? "off") !== "off";
+    const file = keep && p.file ? await this.deps.audio!.adopt(s.id, p.file).catch(() => p.file) : p.file;
+    void this.process(s.id, file, undefined, p.lang, { keepAudio: keep && file !== p.file }).catch(() => undefined);
     return s;
   }
 
@@ -140,6 +183,31 @@ export class Ideas {
     await this.save(next);
     void this.process(id, undefined, level).catch(() => undefined);
     return { ...next, progress: { stage: "splitting", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level } };
+  }
+
+  /**
+   * "Transcribe again as …": the kept recording is read again in the language she chose, the transcript is replaced and
+   * the analysis runs again. Ideas she edited or sent onward stay; the others are replaced by the new ones. When it
+   * fails, the earlier transcript and ideas are put back. Runs in the background with the same live progress.
+   *
+   * @param id - The session.
+   * @param language - A language code (`he`, `en`, …) or `auto` (detect from "my languages").
+   * @returns The session, now being transcribed.
+   */
+  async retranscribe(id: string, language: string): Promise<IdeaSession> {
+    if (!/^(auto|[a-z]{2,3})$/.test(language)) throw Object.assign(new Error("Unknown language."), { statusCode: 400 });
+    const s = await this.get(id);
+    if (s.status === "transcribing" || s.status === "sorting") throw Object.assign(new Error("It is still being analysed."), { statusCode: 409 });
+    const kept = s.incognito ? undefined : await this.deps.audio?.find(id);
+    if (!kept) throw Object.assign(new Error("The recording is no longer on this computer, so it cannot be transcribed again."), { statusCode: 404 });
+    const { recording: _r, progress: _p, ...snapshot } = s;
+    const next: IdeaSession = { ...snapshot, status: "transcribing" };
+    delete next.error;
+    delete next.deeperError;
+    delete next.redoError;
+    await this.save(next);
+    void this.process(id, kept.path, 1, undefined, { keepAudio: true, redo: { language, snapshot, keep: s.ideas.filter(isKept) } }).catch(() => undefined);
+    return { ...next, progress: { stage: "transcribing", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level: 1, ...(s.seconds ? { audioSeconds: s.seconds, expectedSeconds: Math.max(5, Math.round(s.seconds * this.speed)) } : {}) } };
   }
 
   /**
@@ -170,17 +238,27 @@ export class Ideas {
     return { ...next, progress: { stage: "splitting", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level: 1 } };
   }
 
-  /** Runs a session: transcribe, pull out and sort, check "tried before". Errors are kept on the session. */
-  async process(id: string, file?: string, level = 1, lang?: string): Promise<IdeaSession> {
+  /**
+   * Runs a session: transcribe, pull out and sort, check "tried before". Errors are kept on the session.
+   *
+   * @param id - The session.
+   * @param file - The recording to transcribe (deleted afterwards unless `opts.keepAudio`).
+   * @param level - The depth of the analysis (1 the first pass).
+   * @param lang - The recording app's language.
+   * @param opts - `keepAudio`: leave the file in the store; `redo`: a new transcription of a finished session, with
+   *   the language chosen (`language`) and the session as it was (`snapshot`, put back when this fails) and the
+   *   ideas she worked on (`keep`, which stay).
+   */
+  async process(id: string, file?: string, level = 1, lang?: string, opts: { keepAudio?: boolean; redo?: { language: string; snapshot: IdeaSession; keep: Idea[] } } = {}): Promise<IdeaSession> {
     let s = await this.get(id);
-    const before = level > 1 ? s.ideas : [];
+    const before = opts.redo ? opts.redo.keep : level > 1 ? s.ideas : [];
     this.live.set(id, { stage: file ? "transcribing" : "splitting", startedAt: Date.now(), stageAt: Date.now(), level });
     try {
       if (file) {
         const audio = s.seconds;
         this.mark(id, { stage: "transcribing", ...(audio ? { audioSeconds: audio, expectedSeconds: Math.max(5, Math.round(audio * this.speed)) } : {}) });
         const began = Date.now();
-        const heard = await this.deps.transcribe(file, lang).finally(() => rm(file, { force: true }));
+        const heard = await this.deps.transcribe(file, lang, opts.redo?.language).finally(() => (opts.keepAudio ? undefined : rm(file, { force: true })));
         const text = typeof heard === "string" ? heard : heard.text;
         // Remember how fast this computer reads speech, for the next guess.
         if (audio >= 30) this.speed = Math.min(2, Math.max(0.02, (Date.now() - began) / 1000 / audio));
@@ -201,21 +279,35 @@ export class Ideas {
       // What is left of a looped transcript must still be real speech, not a few stray words.
       if (!s.transcript?.trim() || (file && ((looped && s.transcript.split(" ").length < 8) || looksLikeGarbage(s.transcript)))) throw new Error("No speech was found in the recording.");
       const projects = this.deps.projects().slice(0, 80);
-      const { ideas: found, summary } = await this.extract(id, s.transcript, projects, level, before);
+      const extracted = await this.extract(id, s.transcript, projects, level, before);
+      const summary = extracted.summary;
+      let found = extracted.ideas;
+      // After a new transcription the ideas she worked on stay; a new one with the same title is not added twice.
+      if (opts.redo) {
+        const titles = new Set(before.map((i) => i.title.trim().toLowerCase()));
+        found = found.filter((i) => !titles.has(i.title.trim().toLowerCase()));
+      }
       this.mark(id, { stage: "writing", found: countIdeas([...before, ...found]), checked: { done: 0, of: found.length } });
       await this.markTried(found, (done) => this.mark(id, { stage: "writing", checked: { done, of: found.length } }));
       this.live.delete(id);
       // Earlier ideas stay (she may have edited them); the new ones come after.
-      s = { ...(await this.get(id)), ideas: [...before, ...found], status: "done", depth: Math.max(level, s.depth ?? 1) };
+      s = { ...(await this.get(id)), ideas: [...before, ...found], status: "done", depth: opts.redo ? 1 : Math.max(level, s.depth ?? 1) };
       if (summary && !before.length) s.summary = summary;
       else delete s.summary;
       delete s.error;
       delete s.deeperError;
+      delete s.redoError;
       await this.save(s);
       return s;
     } catch (e) {
       this.live.delete(id);
       const msg = (e as Error).message.slice(0, 300);
+      // A new transcription that fails puts the earlier transcript and ideas back, with the reason beside them.
+      if (opts.redo) {
+        s = { ...opts.redo.snapshot, redoError: plainError(msg) };
+        await this.save(s);
+        return s;
+      }
       // A deeper pass that fails leaves what was found before: the session stays "done" with the reason beside it.
       s = before.length ? { ...(await this.get(id)), ideas: before, status: "done", deeperError: plainError(msg) } : { ...(await this.get(id)), status: "error", error: msg };
       await this.save(s);

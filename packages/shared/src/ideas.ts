@@ -105,6 +105,18 @@ export interface Idea {
   note?: string;
   /** Added to the task inbox (the task's id). */
   task?: string;
+  /** She edited it (or marked it): a new transcription of the recording leaves it in place (see {@link isKept}). */
+  kept?: boolean;
+}
+
+/**
+ * Whether an idea is one she worked on (edited, or sent onward to research, a note or the task inbox), so that
+ * "Transcribe again" keeps it instead of replacing it with the new analysis.
+ *
+ * @param i - The idea.
+ */
+export function isKept(i: Idea): boolean {
+  return !!(i.kept || i.note || i.task || i.research);
 }
 
 /** One recording and what came of it. */
@@ -126,6 +138,12 @@ export interface IdeaSession {
   /** Why the last "Analyse again" found nothing new (the earlier ideas are kept). */
   deeperError?: string;
   ideas: Idea[];
+  /** The recording was made in incognito: its audio is never kept, so it cannot be transcribed again. */
+  incognito?: boolean;
+  /** The recording still on this computer for "Transcribe again" (added when a session is read; never saved with it). */
+  recording?: { bytes: number; until?: number };
+  /** Why the last "Transcribe again" did not work (the earlier transcript and ideas are kept). */
+  redoError?: string;
   /** "Research all in a row" is running. */
   researchAll?: boolean;
 }
@@ -307,6 +325,8 @@ export function editIdea(idea: Idea, e: unknown): Idea {
     if (v) out[k] = v;
     else delete out[k];
   }
+  // A real change marks it as hers: a new transcription of the recording leaves it alone.
+  if (JSON.stringify(out) !== JSON.stringify(idea)) out.kept = true;
   return out;
 }
 

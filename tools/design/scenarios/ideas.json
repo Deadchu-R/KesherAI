@@ -678,6 +678,219 @@
      "wait": ".ideas-progress"
     }
    ]
+  },
+  {
+   "id": "IdeasRedoMenu",
+   "title": "מוח פתוח: \"תמלל שוב כ…\" על סשן עם הקלטה שמורה: עברית, אנגלית, השפות שלי וזיהוי אוטומטי, ו\"מחיקת ההקלטה\"",
+   "titleEn": "Open mind: \"Transcribe again as…\" on a session with a kept recording: Hebrew, English, my languages, auto-detect, and \"Delete recording\"",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 1000
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s1",
+     "json": {
+      "id": "s1",
+      "t": {
+       "$agoMs": "3h"
+      },
+      "seconds": 1260,
+      "status": "done",
+      "language": "he",
+      "ideas": [
+       {
+        "id": "i1",
+        "title": "לבנות מצב \"ללמד בחזרה\" לקוד",
+        "prompt": "לבנות מצב \"ללמד בחזרה\" לקוד",
+        "kind": "idea",
+        "quote": "אולי אפשר שהמודל יסביר לי את הקוד בקול",
+        "next": "לכתוב אב־טיפוס קטן",
+        "verdict": "good",
+        "why": "",
+        "projects": [],
+        "audience": "",
+        "tried": "no",
+        "kept": true
+       },
+       {
+        "id": "i2",
+        "title": "להתקשר לשירות המשלוחים",
+        "prompt": "להתקשר לשירות המשלוחים",
+        "kind": "task",
+        "quote": "אני צריך להתקשר אליהם מחר בבוקר",
+        "next": "להתקשר מחר ב־9:00",
+        "verdict": "maybe",
+        "why": "",
+        "projects": [],
+        "audience": "",
+        "tried": "no"
+       }
+      ],
+      "recording": {
+       "bytes": 19400000,
+       "until": {
+        "$inMs": "27d"
+       }
+      }
+     }
+    },
+    {
+     "url": "**/api/speech/stt*",
+     "json": {
+      "choice": "auto",
+      "language": "auto",
+      "languages": [
+       "he",
+       "en",
+       "ru"
+      ],
+      "languagesSet": true,
+      "local": {
+       "engine": true,
+       "model": "large-v3-turbo",
+       "recommended": {
+        "label": "large-v3-turbo",
+        "sizeGb": 1.6
+       },
+       "localPossible": true
+      },
+      "clouds": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-recording"
+    },
+    {
+     "click": ".ideas-recording button[aria-haspopup=listbox]"
+    },
+    {
+     "wait": ".ksel-menu"
+    }
+   ]
+  },
+  {
+   "id": "IdeasRedoProgress",
+   "title": "מוח פתוח: תמלול מחדש בעברית רץ במחשב: אותו כרטיס התקדמות של הפענוח (דקות שהוקראו, זמן שעבר), הרעיונות שערכת נשמרים",
+   "titleEn": "Open mind: transcribing again as Hebrew runs on the computer: the same progress card as the analysis; the ideas you edited are kept",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s1",
+     "json": {
+      "id": "s1",
+      "t": {
+       "$agoMs": "3h"
+      },
+      "seconds": 1260,
+      "status": "transcribing",
+      "language": "he",
+      "ideas": [],
+      "progress": {
+       "stage": "transcribing",
+       "startedAt": {
+        "$agoMs": "2m"
+       },
+       "stageAt": {
+        "$agoMs": "2m"
+       },
+       "now": {
+        "$agoMs": "0s"
+       },
+       "audioSeconds": 1260,
+       "expectedSeconds": 360,
+       "level": 1
+      }
+     }
+    },
+    {
+     "url": "**/api/speech/stt*",
+     "json": {
+      "choice": "auto",
+      "language": "auto",
+      "languages": [
+       "he",
+       "en",
+       "ru"
+      ],
+      "languagesSet": true,
+      "local": {
+       "engine": true,
+       "model": "large-v3-turbo",
+       "recommended": {
+        "label": "large-v3-turbo",
+        "sizeGb": 1.6
+       },
+       "localPossible": true
+      },
+      "clouds": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-progress"
+    }
+   ]
+  },
+  {
+   "id": "IdeasKeepSetting",
+   "title": "מוח פתוח: הגדרה \"שמירת הקלטות לתמלול מחדש\": 30 ימים / עד שאמחק / לא לשמור, רק במחשב הזה, מגבלת 5 GB והישנות נמחקות קודם",
+   "titleEn": "Open mind: setting \"Keep recordings for re-transcribing\": 30 days / until I delete / don't keep, this computer only, 5 GB limit, oldest deleted first",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/audio-settings",
+     "json": {
+      "keepAudio": "days",
+      "keepAudioDays": 30,
+      "audioCapGb": 5
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-keep-audio"
+    }
+   ]
   }
  ]
 }
