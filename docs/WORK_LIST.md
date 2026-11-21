@@ -14,13 +14,20 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Night 21–22.11 (Roee 19:21–19:58, until 07:00)
 Rules: at most 2 Claude helpers (Sonnet by default, Opus only for hard code), small items to the PC's local model (self-work), research only on Antigravity/Gemini; a build about every 2 hours (security scan after every 5); the design doc published once at 07:00. Reversible decisions: the recommended option, marked in the morning report; irreversible ones wait for Roee. Approved downloads: Qwen3.5 2B router + Qwen3.6 mmproj (started 20:08).
-Order (refined when the deep research c-20261121-34 lands; its top items go first):
-- 🔨 0.6.437: research keeps going (safe read-only pipes, second prompt when no report). Then Roee taps Run on the deep research once.
-- ⬜ A. Main chat like Claude: wire the Auto router to the downloaded Qwen3.5 2B and check on the PC; pictures in chat with the Qwen3.6 mmproj; clear tool-step lines and progress in Hebrew and English; RTL/mixed text pass on chat and docs panel.
-- ⬜ B. Unity/Unreal: Unity compile failure → "Convert with AI" (like Unreal); install a reviewed AI-converted plugin copy; scene-open failures on some Unity projects.
-- ⬜ C. Items from the deep research report (top 15 → tasks here, size S first).
-- ⬜ Open mind: "transcribe again as …" (keep the audio until the session is closed, local only).
+Order (from the deep research c-20261121-38, RESEARCH_LOG 2026-11-21; S first):
+- ✅ 0.6.437: research keeps going (safe read-only pipes, second prompt when no report); the deep research finished (32 steps).
+- 🔨 Unreal without the editor: levels from .umap files (committed), then check opening a level on AutoShooter after the build; plugin 0.1.27 into the 5.4 projects once Roee's Unreal 5.4 download finishes (install-all).
+- ⬜ Unity: the project menu at the top of the Unity page lists every Unity project found on the PC (not only added ones); Boss Rush (waiting for Roee's screenshot of where it is missing).
+- ⬜ A2 (S): live turn line — elapsed, tok/s, "step 2/5: tool", waiting-for-approval badge (desktop + phone).
+- ⬜ A7 (S): local speed — prompt-cache reuse between turns and n-gram prompt lookup in llama.cpp, measured on the PC before/after.
+- ⬜ A6 (S): context ring suggests compaction at 80%.
+- ⬜ A6b (S/M): bidi pass — `<bdi>` around mixed runs, code/math LTR, logical CSS in chat, docs panel, tool cards.
+- ⬜ A1 (M): type while it answers — queue under the composer, Alt+Enter steers at the next tool step.
+- ⬜ A3 (M): declarative tool cards (name, short parameters, live state, structured result).
+- ⬜ B2 (M): Play-mode VRAM standby — when Unity/Unreal enters Play, unload the local model, reload after.
+- ⬜ Hub: verify the Run → "Starting…" fix after the hub deploy.
 - ⬜ Morning report 07:00: done / decisions taken / waiting on Roee + design doc publish.
+- Later from the report: highlight-to-edit popover in docs (A4), night builds + phone scorecard, drive janitor, Hebrew voice → engine code.
 
 ## Agents and chat-first (Roee 19:3x; gap list RESEARCH_LOG 2026-11-20)
 - ✅ "Auto" chat model (Roee 2026-11-21): "✨ אוטומטי / Auto" first in the chat's model menu (chip "Auto · last pick"; picking a model turns it off), and "New chats start on Auto" in Settings › General. Per message: words + tool groups first, then a tiny JSON call to the small model beside (else the loaded main model, never a swap to route); policy: incognito never cloud, cloud only for kinds the user allows (default research), a picture → a model that sees, swap of the big local model only for a strong need (long Hebrew text / lyrics → DictaLM, multi-tool → Qwen), kept 3 turns per task; no swap while another chat uses the engine. Reason line above each reply ("Qwen3.6-27B — כלים", "· טוען את המודל (כ-16 שניות)", measured after the first load). Strengths per model (editable chips, family defaults) and the cloud kinds in Settings; router model Qwen3.5 2B recommended with one-click download+load beside (Settings and Models page). model-router.ts, auto-model.ts, conversations.ts, side-engine.ts (asker), routes/library.ts + engine.ts, ModelMenu.tsx, AutoModelSection.tsx. Boards AutoReasonLine, AutoModelMenu, AutoModelSettings (tools/design/scenarios/auto-model.json, not published). Research in RESEARCH_LOG 2026-11-21.
