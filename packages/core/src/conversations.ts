@@ -17,7 +17,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, editQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
+import { branding, editQueued, moveQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate, type StopAfter } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, HELPER_RULE, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
@@ -1159,7 +1159,7 @@ export class ConversationManager {
       // Steer mode (chat-queue.ts): it joins the running turn at its next step instead of waiting for the answer.
       const { steer, ...data } = opts;
       // A guest's message never steers the owner's running turn: it waits for its own turn and rules.
-      session.queued.push({ id: randomUUID(), text, data, ...(steer && session.busy && !opts.guest ? { steer: true } : {}) });
+      session.queued.push({ id: randomUUID(), text, data, ...(steer && session.busy && session.canSteer && !opts.guest ? { steer: true } : {}) });
       session.queuePaused = false;
       session.queueChanged();
       if (!session.busy) await this.drain(id);
@@ -1268,7 +1268,8 @@ export class ConversationManager {
     if (!session || !next) return false;
     // A guest's message (shared-chat.ts) goes first but never joins the running turn: that turn's tools and memory
     // may be the owner's. It waits for its own turn, under the guest's rules.
-    if ((next[0]!.data as { guest?: unknown } | undefined)?.guest) next[0] = { ...next[0]!, steer: false };
+    // An outside agent runs its own loop and cannot take a message mid-turn: it goes first, after the answer.
+    if ((next[0]!.data as { guest?: unknown } | undefined)?.guest || !session.canSteer) next[0] = { ...next[0]!, steer: false };
     session.queued = next;
     session.queuePaused = false;
     session.queueChanged();
@@ -1277,7 +1278,24 @@ export class ConversationManager {
   }
 
   /**
-   * Empties the queue (the first press of the two-stage Stop): the answer goes on, nothing waits after it.
+   * Moves a queued message to another place (its chip's up and down buttons, or dragging it).
+   *
+   * @param id - Conversation.
+   * @param queuedId - The queued message.
+   * @param to - Its new index (kept inside the queue).
+   * @returns Whether it moved.
+   */
+  moveQueued(id: string, queuedId: string, to: number): boolean {
+    const session = this.sessions.get(id);
+    const next = session ? moveQueued(session.queued, queuedId, to) : undefined;
+    if (!session || !next) return false;
+    session.queued = next;
+    session.queueChanged();
+    return true;
+  }
+
+  /**
+   * Empties the queue: the answer goes on, nothing waits after it.
    *
    * @param id - Conversation.
    * @returns How many messages were removed.
@@ -1765,18 +1783,29 @@ export class ConversationManager {
    * Stops a conversation's work (like pressing Stop in it).
    *
    * @param id - Conversation.
+   * @param after - With messages waiting: `next` sends the first one as soon as the answer stops ("Stop and send
+   *   next"), `clear` removes them all ("Stop and clear queue"). Without it the queue waits until the user goes on.
    */
-  stop(id: string): void {
+  stop(id: string, after?: StopAfter): void {
     const s = this.sessions.get(id);
     if (!s) return;
-    // After Stop, queued messages wait until the user sends again (or removes them).
-    if (s.queued.length) {
+    if (after === "clear") this.clearQueue(id);
+    const goOn = after === "next" && s.queued.length > 0;
+    if (goOn) {
+      // Steering messages can no longer join the stopped turn: they go as ordinary messages, in their order.
+      s.queued = s.queued.map(({ steer: _steer, ...q }) => q);
+      s.queuePaused = false;
+      s.queueChanged();
+    } else if (s.queued.length) {
+      // After a plain Stop, queued messages wait until the user sends again (or removes them).
       s.queuePaused = true;
       s.queueChanged();
     }
     s.stop();
     // The chat's Stop stops all its helpers too (background ones included).
     this.helpers.runs.stopAll(id);
+    // "Stop and send next": the first message goes as soon as the stopped turn has ended (drain waits for it).
+    if (goOn) void this.drain(id);
   }
 
   /**

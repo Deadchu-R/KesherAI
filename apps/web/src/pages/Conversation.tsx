@@ -8,7 +8,7 @@ import { PermissionsSection } from "../settings/PermissionsSection";
 import { ReportDialog } from "../ReportDialog";
 import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
 import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, QueueMode, Teammate, ThinkingLevel, WebPrefs } from "@kesher/shared";
-import { stopStage } from "@kesher/shared";
+import { stopAsks, wantsSteer, type StopAfter } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
 import { chatStatus, contextShare, kTokens } from "../chat-status";
@@ -131,6 +131,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const [input, setInput] = useState("");
   // What a message typed while the chat works does: waits (queue) or joins the running turn (steer).
   const [qMode, setQMode] = useState<QueueMode>(queueMode);
+  // Stop was pressed with messages waiting: the queue asks "Stop and send next" or "Stop and clear queue".
+  const [stopAsk, setStopAsk] = useState(false);
   // A tool's own view (MCP Apps) can put text in the message box; the person sends it.
   useEffect(() => {
     const on = (e: Event) => {
@@ -648,7 +650,23 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     { command: "goal", title: L("להמשיך עד שהמטרה הושגה", "Keep going until the goal is reached"), arg: true },
     { command: "side", title: L("שאלה בצד, שלא נכנסת לצ'אט", "A question on the side that stays out of the chat"), arg: true },
   ];
-  const send = async () => {
+  /**
+   * Stops the running answer.
+   *
+   * @param after - With messages waiting: `next` sends the first one when it stops, `clear` removes them all.
+   */
+  const stopTurn = (after?: StopAfter) => {
+    setStopAsk(false);
+    setStopAsked(Date.now());
+    void api(`/api/conversations/${id}/stop`, { method: "POST", ...(after ? { body: { after } } : {}) }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
+  };
+
+  /**
+   * Sends what is in the message box (or runs its slash command).
+   *
+   * @param alt - Sent with Alt+Enter: while the chat works it steers the running turn whatever the Queue / Steer switch.
+   */
+  const send = async (alt = false) => {
     // "@antigravity …": the outside agent as a sub-agent, started by the user only (never by the lead agent).
     const outside = /^\s*@(antigravity|agy)\s+([\s\S]+)$/i.exec(input);
     if (outside && conv.kind === "code") {
@@ -707,12 +725,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       return;
     }
     const text = expandSlash(input.trim());
-    // While the agent works, the message joins the queue and goes when it is free.
+    // While the agent works, the message joins the queue and goes when it is free (or steers: chat-queue.ts).
     if (!text) return;
     setInput("");
     setError("");
+    const steer = wantsSteer({ busy, mode: qMode, alt, ...(info?.canSteer === false ? { canSteer: false } : {}) });
+    if (busy && (alt || qMode === "steer") && !steer) toast(L("את הסוכן הזה אי אפשר לכוון באמצע: ההודעה נכנסה לתור ותישלח אחרי התשובה.", "This agent can't be steered mid-answer: the message is queued and goes after the answer."));
     try {
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}`, ...(web ? { web: true } : {}), ...(busy && qMode === "steer" ? { steer: true } : {}) } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}`, ...(web ? { web: true } : {}), ...(steer ? { steer: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -1265,14 +1285,15 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
               commands={slashCommands}
               at={{ models: modelOptions.filter((m) => !m.id.startsWith("agent/")).map((m) => ({ id: m.id, name: shortModelName(m.name || m.id) })), onModel: (mid) => void patch({ modelId: mid }), agents: helpers.agents.map((a) => ({ name: a.name, ...(a.description ? { hint: a.description } : a.external ? { hint: L("Antigravity CLI בעותק נפרד, רק כשאתה מפעיל", "Antigravity CLI in its own copy, only when you start it") } : {}) })) }}
               onKeyDown={(e) => {
+                // Enter sends (or queues while it answers); Alt+Enter steers the running turn at its next step.
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  void send();
+                  void send(e.altKey);
                 }
               }}
             />
             {/* Messages typed while it works: chips to edit, send now or remove, and the Queue / Steer switch. */}
-            <QueueChips convId={id} queued={info?.queued ?? []} {...(info?.queuePaused ? { paused: true } : {})} busy={busy} typing={!!input.trim()} mode={qMode} onMode={setQMode} />
+            <QueueChips convId={id} queued={info?.queued ?? []} {...(info?.queuePaused ? { paused: true } : {})} busy={busy} typing={!!input.trim()} mode={qMode} onMode={setQMode} {...(info?.canSteer === false ? { canSteer: false } : {})} asking={stopAsk && busy && stopAsks(info?.queued.length ?? 0, info?.queuePaused)} onStop={(after) => (after ? stopTurn(after) : setStopAsk(false))} />
             {pluginUi.composerActions.length > 0 && (
               <div className="composer-actions">
                 {pluginUi.composerActions.map((a) => (
@@ -1327,28 +1348,27 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   <>
                     {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
                     {(() => {
-                      // Two-stage Stop (chat-queue.ts): with messages waiting, the first press clears them and the answer goes on.
-                      const stage = stopStage(info?.queued.length ?? 0, info?.queuePaused);
-                      const label = stage === "clear" ? L("לנקות את התור (לחיצה נוספת עוצרת)", "Clear the queue (press again to stop)") : t("stop");
+                      // With messages waiting, Stop first asks what happens to them (QueueChips: send next or clear).
+                      const asks = stopAsks(info?.queued.length ?? 0, info?.queuePaused);
+                      const label = asks ? L("לעצור (ולבחור מה לעשות עם התור)", "Stop (and choose what to do with the queue)") : t("stop");
                       return (
                         <button
                           type="button"
-                          className={`send stop${stage === "clear" ? " stop-clear" : ""}`}
+                          className="send stop"
+                          aria-expanded={asks ? stopAsk : undefined}
                           onClick={(ev) => {
-                            if (stage === "clear") {
-                              void api(`/api/conversations/${id}/queue`, { method: "DELETE" }).catch((e: Error) => setError(e.message));
+                            if (asks) {
+                              setStopAsk((v) => !v);
                               return;
                             }
                             // The Stop button goes away: keyboard and screen-reader focus goes back to the message box.
-                            const box = ev.currentTarget.closest(".composer")?.querySelector("textarea");
-                            box?.focus();
-                            setStopAsked(Date.now());
-                            void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
+                            (ev.currentTarget.closest(".composer")?.querySelector("textarea") as HTMLTextAreaElement | null)?.focus();
+                            stopTurn();
                           }}
                           aria-label={label}
                           title={label}
                         >
-                          {stage === "clear" ? "✕" : "■"}
+                          ■
                         </button>
                       );
                     })()}

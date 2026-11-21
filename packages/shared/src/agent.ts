@@ -417,6 +417,8 @@ export interface AgentSessionInfo {
   queued: Array<{ id: string; text: string; steer?: boolean }>;
   /** Whether the queue waits (after Stop) until the user sends again. */
   queuePaused?: boolean;
+  /** `false` when a running turn cannot be steered (an outside agent): steering messages wait in the queue instead. */
+  canSteer?: false;
   /** Tokens the model can read (its context window as the session uses it), for the composer's context ring. */
   contextTokens?: number;
 }

@@ -533,7 +533,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
-  /** Empties the queue (the first press of the two-stage Stop; the answer goes on). */
+  /** Empties the queue (the answer goes on). */
   app.delete<{ Params: { id: string } }>("/api/conversations/:id/queue", async (req) => ({ removed: s.conversations.clearQueue(req.params.id) }));
 
   /** Changes a queued message's text. */
@@ -541,6 +541,13 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const text = typeof req.body?.text === "string" ? req.body.text : "";
     if (!text.trim()) return reply.code(400).send({ error: "Empty message" });
     return s.conversations.editQueued(req.params.id, req.params.qid, text) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" });
+  });
+
+  /** Moves a queued message to index `to` (its chip's up and down buttons, or dragging it). */
+  app.post<{ Params: { id: string; qid: string }; Body: { to?: unknown } }>("/api/conversations/:id/queue/:qid/move", async (req, reply) => {
+    const to = typeof req.body?.to === "number" && Number.isInteger(req.body.to) ? req.body.to : undefined;
+    if (to === undefined) return reply.code(400).send({ error: "Bad position" });
+    return s.conversations.moveQueued(req.params.id, req.params.qid, to) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" });
   });
 
   /** "Send now": joins the running turn at its next step (or goes at once when the chat is free). */
@@ -824,10 +831,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.post<{ Params: { id: string } }>("/api/conversations/:id/stop", async (req, reply) => {
+  /** Stop; with `after` ("next" or "clear") it also says what happens to the messages waiting in the queue. */
+  app.post<{ Params: { id: string }; Body: { after?: unknown } | undefined }>("/api/conversations/:id/stop", async (req, reply) => {
     const opened = await s.conversations.open(req.params.id);
     if (!opened) return reply.code(404).send({ error: "Conversation not found" });
-    s.conversations.stop(req.params.id);
+    const after = req.body?.after === "next" || req.body?.after === "clear" ? req.body.after : undefined;
+    s.conversations.stop(req.params.id, after);
     return { ok: true };
   });
 

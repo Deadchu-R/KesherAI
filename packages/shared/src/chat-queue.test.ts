@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { editQueued, sendNowQueued, stopStage, takeSteers } from "./chat-queue.js";
+import { editQueued, moveQueued, sendNowQueued, stopAsks, takeSteers, wantsSteer } from "./chat-queue.js";
 
 const q = [
   { id: "a", text: "one" },
@@ -29,8 +29,27 @@ test("takeSteers splits steering messages from waiting ones, keeping the order",
   assert.deepEqual(rest.map((x) => x.id), ["b"]);
 });
 
-test("stopStage: the first Stop clears waiting messages, the next one stops", () => {
-  assert.equal(stopStage(2), "clear");
-  assert.equal(stopStage(0), "stop");
-  assert.equal(stopStage(2, true), "stop", "a paused queue does not need a clear first");
+test("moveQueued moves one message to a new index, clamped, and refuses no-op or unknown moves", () => {
+  assert.deepEqual(moveQueued(q, "c", 0)?.map((x) => x.id), ["c", "a", "b"]);
+  assert.deepEqual(moveQueued(q, "a", 1)?.map((x) => x.id), ["b", "a", "c"]);
+  assert.deepEqual(moveQueued(q, "a", 99)?.map((x) => x.id), ["b", "c", "a"], "past the end goes last");
+  assert.deepEqual(moveQueued(q, "c", -5)?.map((x) => x.id), ["c", "a", "b"], "before the start goes first");
+  assert.equal(moveQueued(q, "b", 1), undefined, "already there");
+  assert.equal(moveQueued(q, "z", 0), undefined);
+  assert.equal(moveQueued(q, "a", Number.NaN), undefined);
+  assert.deepEqual(q.map((x) => x.id), ["a", "b", "c"], "the old list is not changed");
+});
+
+test("wantsSteer: only while busy, with Alt+Enter or the Steer mode, and only if the turn can take it", () => {
+  assert.equal(wantsSteer({ busy: true, mode: "queue" }), false);
+  assert.equal(wantsSteer({ busy: true, mode: "queue", alt: true }), true);
+  assert.equal(wantsSteer({ busy: true, mode: "steer" }), true);
+  assert.equal(wantsSteer({ busy: false, mode: "steer", alt: true }), false, "a free chat just sends");
+  assert.equal(wantsSteer({ busy: true, mode: "steer", alt: true, canSteer: false }), false, "an outside agent: falls back to the queue");
+});
+
+test("stopAsks: Stop asks about the queue only when messages wait and it is not paused", () => {
+  assert.equal(stopAsks(2), true);
+  assert.equal(stopAsks(0), false);
+  assert.equal(stopAsks(2, true), false, "a paused queue: Stop stops at once");
 });

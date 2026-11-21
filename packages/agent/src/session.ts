@@ -347,6 +347,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   /** Set after Stop: the queue waits until the user sends again. */
   queuePaused = false;
 
+  /** Whether a running turn takes steering at its next step (an outside agent runs its own loop: it does not). */
+  get canSteer(): boolean {
+    return !this.external;
+  }
+
   /** Tells listeners the queue changed (a `queue` event, not saved, followed by info). */
   queueChanged(): void {
     this.push({ type: "queue" }, false);
@@ -424,6 +429,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       grants: this.grants,
       queued: this.queued.map(({ id, text, steer }) => ({ id, text, ...(steer ? { steer: true } : {}) })),
       ...(this.queuePaused ? { queuePaused: true } : {}),
+      ...(this.external ? { canSteer: false } : {}),
       contextTokens: this.contextTokens,
     };
   }
