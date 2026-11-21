@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { join } from "node:path";
+import { readdir } from "node:fs/promises";
+import { dirname, join, relative, sep } from "node:path";
 import { findGameProjects } from "../game-projects.js";
 import type { UnrealBridge } from "../unreal-bridge.js";
 
@@ -10,6 +11,35 @@ import type { UnrealBridge } from "../unreal-bridge.js";
  */
 
 const LEVEL = /^\/Game\/[\w ./-]{1,300}$/;
+
+/**
+ * The project's levels read from disk: every .umap under Content/ as "/Game/…", no Unreal needed. A headless editor
+ * on Roee's PC answered an empty list for every project (its asset registry was not scanned), so the stand-in showed
+ * "No levels"; the files themselves are always there.
+ *
+ * @param projectDir - The folder with the .uproject.
+ * @returns Up to 500 level paths, sorted.
+ */
+export async function levelsOnDisk(projectDir: string): Promise<string[]> {
+  const content = join(projectDir, "Content");
+  const out: string[] = [];
+  let seen = 0;
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (out.length >= 500 || ++seen > 20_000) return;
+      // One-file-per-actor folders and developer sandboxes hold no levels to open.
+      if (d.isDirectory()) {
+        if (depth > 0 && !/^(__ExternalActors__|__ExternalObjects__|Collections|Developers)$/i.test(d.name) && !d.name.startsWith(".")) await walk(join(dir, d.name), depth - 1);
+      } else if (/\.umap$/i.test(d.name)) {
+        const rel = relative(content, join(dir, d.name)).split(sep).join("/").replace(/\.umap$/i, "");
+        const path = `/Game/${rel}`;
+        if (LEVEL.test(path) && !path.includes("..")) out.push(path);
+      }
+    }
+  };
+  await walk(content, 12);
+  return out.sort((a, b) => a.localeCompare(b));
+}
 const MESH = /^\/(Game|Engine)\/[\w ./-]{1,300}$/;
 const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) => {
   const m = (e as Error).message;
@@ -35,9 +65,18 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
   app.get<{ Querystring: { project?: string } }>("/api/unreal/levels", async (req, reply) => {
     const pf = await projectFile(req.query.project);
     if (pf === null) return bad(reply);
+    // The file list from disk fills in when the editor (open or headless) gives none or cannot run.
+    const dir = pf ? dirname(pf) : b.knownProjectFile ? dirname(b.knownProjectFile) : undefined;
     try {
-      return await b.standIn<{ levels: string[] }>("levels", "", pf);
+      const r = await b.standIn<{ levels: string[] }>("levels", "", pf);
+      if (!r.levels?.length && dir) {
+        const disk = await levelsOnDisk(dir);
+        if (disk.length) return { ...r, levels: disk, fromDisk: true };
+      }
+      return r;
     } catch (e) {
+      const disk = dir ? await levelsOnDisk(dir) : [];
+      if (disk.length) return { levels: disk, fromDisk: true, note: (e as Error).message };
       return fail(reply, e);
     }
   });

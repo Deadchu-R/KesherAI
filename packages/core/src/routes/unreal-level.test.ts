@@ -40,3 +40,27 @@ test("an Unreal level without Unreal: read once in a headless editor, kept, and 
   assert.equal((await app.inject({ url: "/api/unreal/level/mesh?path=C:/x" })).statusCode, 400);
   await app.close();
 });
+
+test("Unreal levels: an empty headless answer falls back to the .umap files on disk", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { levelsOnDisk } = await import("./unreal-level.js");
+  const dir = mkdtempSync(join(tmpdir(), "ul-disk-"));
+  const uproject = join(dir, "Game.uproject");
+  writeFileSync(uproject, "{}");
+  mkdirSync(join(dir, "Content", "Maps", "Sub"), { recursive: true });
+  mkdirSync(join(dir, "Content", "__ExternalActors__", "Maps"), { recursive: true });
+  writeFileSync(join(dir, "Content", "Maps", "Main.umap"), "");
+  writeFileSync(join(dir, "Content", "Maps", "Sub", "Arena.umap"), "");
+  writeFileSync(join(dir, "Content", "__ExternalActors__", "Maps", "X.umap"), "");
+  writeFileSync(join(dir, "Content", "Maps", "Cube.uasset"), "");
+  assert.deepEqual(await levelsOnDisk(dir), ["/Game/Maps/Main", "/Game/Maps/Sub/Arena"]);
+  writeFileSync(join(dir, "last.json"), JSON.stringify({ last: "Game", projectFile: uproject }));
+  const b = new UnrealBridge(dir);
+  b.setHeadless(async (_f, commands) => commands.map(() => ({ ok: true, result: { levels: [] } })));
+  await b.project();
+  const app = Fastify();
+  await unrealLevelRoutes(app, b);
+  const r = (await app.inject({ url: "/api/unreal/levels" })).json();
+  assert.deepEqual(r.levels, ["/Game/Maps/Main", "/Game/Maps/Sub/Arena"]);
+  assert.equal(r.fromDisk, true);
+});
