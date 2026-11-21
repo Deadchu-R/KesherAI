@@ -45,6 +45,33 @@ jobs:
           path: ui-check
           retention-days: 1
 
+  # The end-to-end suite on every build (docs/TESTING.md): the built server with a fake model and fixture projects, the
+  # real interface driven in a browser at computer and phone width, and the security checks. Part of what a release waits for.
+  e2e:
+    name: End-to-end flows and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: pnpm build:packages && pnpm --filter @kesher/web build
+      # Same one try with a time limit, then the browser alone, as in the check job.
+      - run: timeout 300 pnpm exec playwright install --with-deps chromium || pnpm exec playwright install chromium
+      - run: node scripts/e2e.mjs e2e-shots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-shots
+          path: e2e-shots
+          retention-days: 1
+
   # Windows: tests and the smoke test where Windows-only things live (cmd quoting, paths with spaces, .bat jobs).
   # Blocking: a release waits for it (green on Windows since 0.5.9x).
   windows:
