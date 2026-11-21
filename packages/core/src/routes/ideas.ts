@@ -29,10 +29,14 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (!id) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
       return (await modelTurnFor(s.registry, id)({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(30 * 60_000), onText ?? (() => undefined))).text;
     },
-    transcribe: async (file) => {
+    transcribe: async (file, lang) => {
       const ffmpeg = () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
       const wav = await toWav(file, ffmpeg);
-      return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto")).text;
+      // "auto" detection mistook Hebrew for Spanish: with the speech language left on auto, the language of the app
+      // that recorded it (Hebrew or English) is used.
+      const set = s.config.speech?.language ?? "auto";
+      const language = set !== "auto" ? set : lang === "he" || lang === "en" ? lang : "auto";
+      return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", language)).text;
     },
     projects: () => s.library.listProjects().map((p) => p.name),
     // Hits go to a model: a guest's words come marked as untrusted (conversation-search.ts forModel).
@@ -91,6 +95,7 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.addContentTypeParser("application/x-kesher-audio", (_req, payload, done) => done(null, payload));
   app.post("/api/ideas/record", { bodyLimit: Number.MAX_SAFE_INTEGER }, async (req, reply) => {
     const seconds = Number(req.headers["x-seconds"] ?? 0);
+    const lang = /^(he|en)$/.test(String(req.headers["x-lang"] ?? "")) ? String(req.headers["x-lang"]) : undefined;
     const type = String(req.headers["x-audio-type"] ?? "");
     // WAV: the phone app's own background recording, or several resumed parts joined.
     const ext = /webm/.test(type) ? "webm" : /ogg/.test(type) ? "ogg" : /wav/.test(type) ? "wav" : "m4a";
@@ -118,7 +123,7 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (bytes < 1000) return reply.code(400).send({ error: "The recording is empty." });
       ok = true;
       // The session deletes the file once it is transcribed; the folder goes with it below when that is done.
-      const session = await ideas.start({ file, seconds });
+      const session = await ideas.start({ file, seconds, ...(lang ? { lang } : {}) });
       void (async () => {
         for (let i = 0; i < 24 * 60; i++) {
           const st = (await ideas.get(session.id).catch(() => undefined))?.status;

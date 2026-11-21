@@ -97,7 +97,7 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
   const send = async (blob: Blob, seconds: number) => {
     setSendMb(Math.max(0.1, Math.round(blob.size / 1e5) / 10));
     setSending(true);
-    const res = await fetch(withToken("/api/ideas/record"), { method: "POST", headers: { "content-type": "application/x-kesher-audio", "x-audio-type": blob.type || "audio/webm", "x-seconds": String(Math.round(seconds)) }, body: blob }).catch(() => undefined);
+    const res = await fetch(withToken("/api/ideas/record"), { method: "POST", headers: { "content-type": "application/x-kesher-audio", "x-audio-type": blob.type || "audio/webm", "x-seconds": String(Math.round(seconds)), "x-lang": getLocale() }, body: blob }).catch(() => undefined);
     setSending(false);
     const s = res?.ok ? ((await res.json()) as IdeaSession) : undefined;
     if (!s) {

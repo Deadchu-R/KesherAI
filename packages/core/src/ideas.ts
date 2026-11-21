@@ -9,7 +9,8 @@ export interface IdeasDeps {
   /** The chat model: a system and a user message in, its text out (`onText` gets each piece as it is written; `strong` asks for a stronger model when there is one). */
   ask: (system: string, user: string, signal?: AbortSignal, onText?: (delta: string) => void, strong?: boolean) => Promise<string>;
   /** A recording's speech as text. */
-  transcribe: (file: string) => Promise<string>;
+  /** Speech to text; `lang` is the recording app's language (he, en), used when the speech language is auto. */
+  transcribe: (file: string, lang?: string) => Promise<string>;
   /** Her project names. */
   projects: () => string[];
   /** Her past chats that match some words (incognito ones left out). */
@@ -112,10 +113,10 @@ export class Ideas {
    *
    * @param p - The recording's path, or text; and how long it was.
    */
-  async start(p: { file?: string; text?: string; seconds?: number }): Promise<IdeaSession> {
+  async start(p: { file?: string; text?: string; seconds?: number; lang?: string }): Promise<IdeaSession> {
     const s: IdeaSession = { id: randomUUID(), t: Date.now(), seconds: Math.max(0, Math.round(Number(p.seconds) || 0)), status: p.file ? "transcribing" : "sorting", ideas: [], ...(p.text ? { transcript: p.text.slice(0, 400_000) } : {}) };
     await this.save(s);
-    void this.process(s.id, p.file).catch(() => undefined);
+    void this.process(s.id, p.file, undefined, p.lang).catch(() => undefined);
     return s;
   }
 
@@ -141,7 +142,7 @@ export class Ideas {
   }
 
   /** Runs a session: transcribe, pull out and sort, check "tried before". Errors are kept on the session. */
-  async process(id: string, file?: string, level = 1): Promise<IdeaSession> {
+  async process(id: string, file?: string, level = 1, lang?: string): Promise<IdeaSession> {
     let s = await this.get(id);
     const before = level > 1 ? s.ideas : [];
     this.live.set(id, { stage: file ? "transcribing" : "splitting", startedAt: Date.now(), stageAt: Date.now(), level });
@@ -150,7 +151,7 @@ export class Ideas {
         const audio = s.seconds;
         this.mark(id, { stage: "transcribing", ...(audio ? { audioSeconds: audio, expectedSeconds: Math.max(5, Math.round(audio * this.speed)) } : {}) });
         const began = Date.now();
-        const text = await this.deps.transcribe(file).finally(() => rm(file, { force: true }));
+        const text = await this.deps.transcribe(file, lang).finally(() => rm(file, { force: true }));
         // Remember how fast this computer reads speech, for the next guess.
         if (audio >= 30) this.speed = Math.min(2, Math.max(0.02, (Date.now() - began) / 1000 / audio));
         s = { ...(await this.get(id)), transcript: text.slice(0, 400_000), status: "sorting" };
