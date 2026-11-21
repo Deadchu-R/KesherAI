@@ -69,11 +69,11 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   reviews). Roee (12:5x): Antigravity runs only when he presses Run, one at a time, for now; KesherAI may push
   only agy/* and the inbox branch. Defaults until he says otherwise: 10 Antigravity tasks a day, Gemini's default model.
 - ✅ Naming (Roee, 13:20): in Hebrew they are "סוכנים" (lead: "סוכן ראשי"; "סוכן מחקר/בנייה/חיפוש"), not "עוזרים". Design doc boards renamed.
-- 🔨 **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76); ✅ screens: the hub page, Settings > Kesher Cloud, Phone/Computer/Cloud (6254d9bc). ✅ Live at hub.roeetal.com (2026-11-19 18:40): Worker kesher-hub from main (root apps/hub, auto-deploys on push), secrets ALLOWED_EMAIL + GOOGLE_CLIENT_ID, Google sign-in works. ✅ Pair the PC (0.6.401); ✅ Claude path set (scheduled task "Kesher hub (cloud)": API trigger only, KesherAI repo, no connectors; secrets CLAUDE_TRIGGER_ID + CLAUDE_FIRE_TOKEN). ⬜ In the app, Google sign-in in the embedded view shows a white page: hide it there and offer pairing by code / open the system browser.: a small KesherAI web app that is always on, open only to Roee's Google
+- ✅ **Kesher Cloud hub** (Roee, 12:56): ✅ backend v1 (0d228a76); ✅ screens: the hub page, Settings > Kesher Cloud, Phone/Computer/Cloud (6254d9bc). ✅ Live at hub.roeetal.com (2026-11-19 18:40): Worker kesher-hub from main (root apps/hub, auto-deploys on push), secrets ALLOWED_EMAIL + GOOGLE_CLIENT_ID, Google sign-in works. ✅ Pair the PC (0.6.401); ✅ Claude path set (scheduled task "Kesher hub (cloud)": API trigger only, KesherAI repo, no connectors; secrets CLAUDE_TRIGGER_ID + CLAUDE_FIRE_TOKEN). ✅ In the app, Google sign-in is hidden in the embedded view; pairing by code is the main action and "Open in the phone's browser" (de70c8f inWebView, inAppNote; checked 2026-11-21).: a small KesherAI web app that is always on, open only to Roee's Google
   account. It knows which devices (PCs with KesherAI, the phone) and agents (Claude, Gemini/Antigravity, …) are
   on, connects them, and routes a task to a cloud tool when no device is on, so the PC need not stay on.
   Research first (Sonnet helper): hosting that is free or cheap, sign-in, how it reaches Claude only through his
-  Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security. missing: Google sign-in white page in the embedded view
+  Max plan (e.g. Claude scheduled tasks / the task inbox in git) and Gemini (Jules?), security.
 - 🔨 Roee (13:14): the hub at hub.roeetal.com (domain already on his Cloudflare). Later: anyone can host their
   own hub on their own site, set up from KesherAI (a plugin/setup wizard) — research before building. Roee (2026-11-20):
   a hub builder tool, quick and easy (FUTURE_FEATURES, "Hub builder"). hub live (0.6.401); missing: the hub builder for self-hosting
@@ -158,13 +158,13 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 
 ## Backlog: Chat and UI
 - ✅ Typed chat blocks: fold consecutive tool calls into one line ("7 steps"), like Claude's step list (in code: Activity.tsx ActivityGroup)
-- 🔨 Live progress and preview of a media job inside the chat bubble (ComfyUI WebSocket) missing: ComfyUI WebSocket progress; images only, polled
+- ✅ Live progress and preview of a media job inside the chat bubble (4fd5f94 ComfyUI socket steps, preview frames, Cancel; checked 2026-11-21)
 - 🔨 Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations) (c7ae62b file chips) missing: Import to Unity, Apply, 4 variations
 - 🔨 Side canvas for heavy results: images, PBR maps, code diffs (02094ed documents) missing: images, PBR maps, code diffs
-- 🔨 Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes (f13881b Unity chip) missing: ComfyUI chip in every chat
+- ✅ Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes (f13881b Unity chip; 2ee1740 41a33bd ComfyUI chip in every chat, Unity chip in plain chats once in use)
 - 🔨 Approval card shows the diff or object list for Unity scene changes (e72dc60 helper hunks) missing: Unity scene diff or object list on approval
-- 🔨 Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots (fc714f2 tool groups) missing: model size per turn, agent-kind engine slots
-- 🔨 One shared chat component everywhere; the new-chat box on the main screen gets the same + menu (ef0aa01 + menu toggles) missing: one shared component, new-chat box menu
+- ✅ Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots (fc714f2 tool groups; 15aaa9d model size per turn, slotKind main/helper/other via llamaCppFields; checked 2026-11-21)
+- ✅ One shared chat component everywhere; the new-chat box on the main screen gets the same + menu (ComposerBar + useChatAttach in every box; 846a898 tools in this chat and approvals mode on the start screens)
 - ✅ Rich + menu: files, camera, projects, devices, skills, memory and more (apps/web/src/AddMenu.tsx)
 - ✅ Built-in slash commands /compact /fork /model /new /status /goal /side (FUTURE_FEATURES, built 2026-11-18)
 - ✅ Reading aloud off by default, stop once started (Settings > Accessibility)
@@ -204,7 +204,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Unity C# shown as visual nodes and translated back to code (in code: csharp-graph.ts, ScriptNodes.tsx)
 - 🔨 ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s) (5392e12 PBR material) missing: one-request flow with 45 s check
 - 🔨 Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background) (comfy-flows.ts, bg-remove.ts) missing: seamless albedo, normal, roughness, AO set
-- ⬜ Intent routing: "make a tileable wall texture" picks the PBR flow by itself not built
+- ✅ Intent routing: "make a tileable wall texture" picks the PBR flow by itself (df1de61 flowIntent in tool-router.ts; checked 2026-11-21)
 - 🔨 Unreal: Blueprint node editor that supports everything the engine does; the page works with Unreal closed (BlueprintCanvas.tsx, 5c302ab) missing: full node coverage, editing with Unreal closed
 - 🔨 Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets) (blueprint-test.ts) missing: gameplay input tests via 5.9 toolsets
 - ⬜ Unreal: inspect_level and apply_material tools; profiling against the chosen target phones not built
