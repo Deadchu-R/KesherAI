@@ -45,3 +45,10 @@ test("Ask again: the PC asks \"Run this?\" once more; nothing runs; a PC without
   assert.deepEqual(did, ["ask agy-1"]);
   assert.equal((await inboxCommand({ ...d, ask: undefined }, "inbox-ask", "agy-1", { id: "dphone" })).ok, false);
 });
+
+test("inbox-run: a press that waits behind another run says Queued, still ok (the page stops offering Run)", async () => {
+  const d: InboxCommandDeps = { ids: async () => ["agy-1"], run: async () => ({ note: "Queued: starts by itself after the task now running (1 in line)." }), running: async () => false, stop: async () => true, skip: async () => undefined };
+  const r = await inboxCommand(d, "inbox-run", "agy-1", { id: "dphone" });
+  assert.equal(r.ok, true);
+  assert.match(r.text, /^Queued/);
+});

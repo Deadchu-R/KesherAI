@@ -505,6 +505,8 @@ export class HubClient {
     clearInterval(this.approvalsTimer);
     clearTimeout(this.boardTimer);
     this.boardTimer = undefined;
+    clearTimeout(this.inboxTimer);
+    this.inboxTimer = undefined;
     clearTimeout(this.pollTimer);
     this.syncPings.cancel();
     this.socket?.close();
@@ -916,6 +918,22 @@ export class HubClient {
   }
 
   private inboxRun?: Promise<void>;
+  private inboxTimer?: NodeJS.Timeout;
+
+  /**
+   * The task inbox changed (a task started, queued, ended, asked or lost its "Run this?" ask): reports the tasks and
+   * the open asks to the phones and the hub page within a moment (changes in a row make one send, at most 250 ms
+   * later), so a card never keeps offering Run after the task has started.
+   */
+  scheduleInbox(): void {
+    if (this.inboxTimer) return;
+    this.inboxTimer = setTimeout(() => {
+      this.inboxTimer = undefined;
+      void this.reportInbox().catch(() => undefined);
+      void this.sendApprovals().catch(() => undefined);
+    }, 250);
+    this.inboxTimer.unref?.();
+  }
   private inboxAgain = false;
 
   private async reportInboxOnce(): Promise<void> {

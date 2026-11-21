@@ -436,3 +436,23 @@ test("a local task: waiting for the local agent while open on the board, running
   // Only a local task follows the board.
   assert.equal(hubInboxTask(inboxTask({ boardState: "claimed" }), 1)!.state, "waiting-run");
 });
+
+test("scheduleInbox: changes in a row make one inbox report and one approvals check, within a second", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  let reports = 0;
+  let approvals = 0;
+  const c = r.client as unknown as { reportInbox: () => Promise<void>; sendApprovals: () => Promise<void> };
+  c.reportInbox = async () => void reports++;
+  c.sendApprovals = async () => void approvals++;
+  r.client.scheduleInbox();
+  r.client.scheduleInbox();
+  r.client.scheduleInbox();
+  assert.equal(reports, 0, "debounced, not inline");
+  await wait(600);
+  assert.equal(reports, 1);
+  assert.equal(approvals, 1, "the open asks follow the inbox, so a dropped ask leaves the phone at once");
+});

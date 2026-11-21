@@ -42,8 +42,9 @@ export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction
       return { ok: true, text: "Asked again on the PC." };
     }
     if (action === "inbox-run") {
-      await d.run(id, `hub:${from.id}`);
-      return { ok: true, text: "Started on the PC." };
+      const started = (await d.run(id, `hub:${from.id}`)) as { note?: string } | undefined;
+      // A press that waits behind another run says so; either way the page treats the task as no longer waiting for Run.
+      return { ok: true, text: started?.note?.startsWith("Queued") ? "Queued: it starts after the task now running." : "Started on the PC." };
     }
     if (await d.running(id)) return (await d.stop(id)) ? { ok: true, text: "Stopped; the work so far is kept." } : { ok: false, text: "It could not be stopped." };
     await d.skip(id);

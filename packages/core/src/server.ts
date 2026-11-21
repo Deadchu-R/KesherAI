@@ -680,7 +680,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   taskInbox.onChange(() => {
     // The hub page's Tasks list follows the inbox too (metadata, sealed to the phones; hub-client.ts).
-    void hubRef.client?.reportInbox().catch(() => undefined);
+    hubRef.client?.scheduleInbox();
     void taskInbox.list().then((tasks) => {
       for (const t of tasks) {
         const found = inboxSnapshot(t, t.runAsk, INBOX_ASKS);

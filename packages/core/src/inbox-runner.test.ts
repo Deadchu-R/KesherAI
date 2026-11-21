@@ -143,7 +143,7 @@ test("inbox run: Run on the PC, the policy, KesherAI's checks, one agy branch an
 
     t = await inbox.run("c-20261119-02", { here: true });
     assert.equal(t.status, "running");
-    await assert.rejects(inbox.run("c-20261119-02", { here: true }), /One at a time|cannot be run/);
+    assert.equal((await inbox.run("c-20261119-02", { here: true })).status, "running", "a second Run on the running task starts nothing");
     // The install is asked; nobody answers within the (test) 300 ms, so it is denied.
     t = await settle(inbox, "c-20261119-02");
     assert.equal(seen.prompts, 1, "one prompt per Run");
@@ -199,6 +199,48 @@ test("inbox run: from the phone, Run is the answer to the PC's ask — one answe
     assert.equal(t?.status, "running");
     assert.equal(await inbox.answerRun(fresh.requestId, "allow", "phone-1"), undefined, "a yes is never remembered");
     await settle(inbox, "c-20261119-03");
+    assert.equal(seen.prompts, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox run: Run from the hub drops the PC's own ask at once and the phone's later Run tap starts nothing", async () => {
+  const { root, repo } = await setup({ "c-20261121-01": TASK("c-20261121-01") });
+  const seen = { prompts: 0 };
+  const { inbox } = await inboxFor(repo, root, { "apps/a.ts": "export const a = 4;\n" }, seen);
+  try {
+    await inbox.sync();
+    const ask = (await inbox.task("c-20261121-01")).runAsk!;
+    assert.ok(ask, "the PC asked 'Run this?' for the waiting task");
+    // Every change is reported at once: the first one after Run already says running, with no ask left.
+    const seenStates: string[] = [];
+    inbox.onChange(() => void inbox.list().then((l) => seenStates.push(`${l[0]?.status}/${l[0]?.runAsk ? "ask" : "noask"}`)));
+    await inbox.run("c-20261121-01", { approvedBy: "hub:dphone" });
+    await inbox.idle();
+    assert.equal(seenStates[0], "running/noask");
+    assert.equal(inbox.openAsks().length, 0, "no ask is left for the phone to show");
+    // The push's Run button on the old ask: quiet no-op, and a second Run on the task changes nothing.
+    assert.equal(await inbox.answerRun(ask.requestId, "allow", "phone-1"), undefined);
+    await settle(inbox, "c-20261121-01");
+    assert.equal(seen.prompts, 1, "one Run is one run");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox run: a second Run on a task that is already starting is a quiet no-op", async () => {
+  const { root, repo } = await setup({ "c-20261121-02": TASK("c-20261121-02") });
+  const seen = { prompts: 0 };
+  const { inbox } = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  try {
+    await inbox.sync();
+    const first = inbox.run("c-20261121-02", { approvedBy: "hub:dphone" });
+    const second = inbox.run("c-20261121-02", { approvedBy: "phone-1" });
+    const [a, b] = await Promise.all([first, second]);
+    assert.equal(a.status, "running");
+    assert.equal(b.status, "running");
+    await settle(inbox, "c-20261121-02");
     assert.equal(seen.prompts, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -90,4 +90,6 @@ test("runStarting: Starting… from the Run tap until the task leaves \"waiting 
   assert.equal(runStarting(t0, true, t0 + RUN_STARTING_MS), false, "after 60 s Run is offered again");
   assert.equal(runStarting(t0, false, t0 + 1000), false, "the PC reported running / queued / failed");
   assert.equal(runStarting(t0, true, t0 + 1000, true), false, "the PC refused: Run again, with its reason");
+  assert.equal(runStarting(t0, true, t0 + RUN_STARTING_MS + 5000, false, true), true, "the PC said Started: no Run again after 60 s");
+  assert.equal(runStarting(t0, false, t0 + 1000, false, true), false, "and its report moves the card on");
 });

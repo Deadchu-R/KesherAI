@@ -792,6 +792,11 @@ export class TaskInbox {
     const t = this.find(id);
     // Google's terms for a personal plan: every message to Antigravity comes from the user's own press.
     if ("here" in how ? !how.here : !how.approvedBy) throw fail("On the phone, Run answers the PC's ask: tap Run on its card.", 403);
+    // A second press on a task that is already starting or running (a hub card and the phone's ask both tapped): nothing more to start.
+    if (t.status === "running" && this.active?.id === id) {
+      delete t.runAsk;
+      return t;
+    }
     // Another task is running: this press is kept and the task starts by itself when that one ends (each task still
     // runs only from the user's own press; nothing runs that was not pressed).
     if (this.active && this.active.id !== id && !this.queue.some((q) => q.id === id)) {
@@ -805,7 +810,34 @@ export class TaskInbox {
     }
     const no = this.cannotRun(t);
     if (no) throw fail(no.msg, no.code);
+    // Drop the ask for good and show the task as started at once (the hub and the phone follow every save): the fetch
+    // below can take a while, and until then the hub page would still list the task as "waiting for Run" and offer
+    // Run (and the phone's "Run this?" ask) a second time.
+    const before = { status: t.status, note: t.note };
     delete t.runAsk;
+    t.status = "running";
+    t.note = "Starting…";
+    // The task holds the one run slot from now on (another press queues behind it, as for a running task).
+    let end!: () => void;
+    const active: Active = { id, done: new Promise<void>((r) => (end = r)) };
+    this.active = active;
+    await this.save();
+    try {
+      return await this.begin(t, active, end);
+    } catch (e) {
+      this.active = undefined;
+      end();
+      // It did not start: back to waiting, so it can be run again (with the reason as its note).
+      t.status = before.status;
+      if (before.note) t.note = before.note;
+      else delete t.note;
+      await this.save();
+      throw e;
+    }
+  }
+
+  /** The start of {@link run}: the worktree, the counters and the background work. */
+  private async begin(t: InboxTaskView, active: Active, end: () => void): Promise<InboxTaskView> {
     const now = this.now();
     const today = this.today();
     // No "PC is busy" gate here: Antigravity works in Google's cloud, and the PC only fetches and writes a git
@@ -828,9 +860,6 @@ export class TaskInbox {
     today.used++;
     await this.save();
     this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`);
-    let end!: () => void;
-    const active: Active = { id, done: new Promise<void>((r) => (end = r)) };
-    this.active = active;
     void this.work(t, active, wt.path, wt.base, repo).finally(() => {
       this.active = undefined;
       end();
