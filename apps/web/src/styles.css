@@ -1207,6 +1207,16 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .ue-frame:active { cursor: grabbing; }
 .ue-zoom { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; max-width: calc(100% - 16px); display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px; padding: 4px; background: rgb(27 28 32 / 0.9); border: 1px solid var(--border); border-radius: 10px; }
 .ue-zoom button { width: 36px; height: 36px; padding: 0; font-size: 18px; line-height: 1; }
+/* The graph's minimap (bottom corner; folded on a phone by default). */
+.bp-minimap { position: absolute; inset-block-end: 8px; inset-inline-start: 8px; display: flex; align-items: flex-start; gap: 2px; padding: 4px; background: rgb(27 28 32 / 0.9); border: 1px solid var(--border); border-radius: 10px; touch-action: none; }
+.bp-minimap svg { display: block; cursor: pointer; }
+.bp-minimap .icon-btn { width: 28px; height: 28px; padding: 0; }
+.bp-minimap-node { fill: #9aa0a6; opacity: 0.8; }
+.bp-minimap-note { fill: rgb(77 127 255 / 0.18); stroke: rgb(77 127 255 / 0.5); stroke-width: 1; }
+.bp-minimap-view { fill: rgb(240 168 48 / 0.12); stroke: #f0a830; stroke-width: 1.5; }
+.bp-minimap-toggle { position: absolute; inset-block-end: 8px; inset-inline-start: 8px; width: 40px; height: 40px; padding: 0; font-size: 18px; }
+.ue-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 10px; background: rgb(240 168 48 / 0.08); }
+.ue-check > span { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
 .ue-frame:focus { outline: none; }
 .bp-flash { animation: bp-flash 0.6s ease-in-out 4; pointer-events: none; }
 @keyframes bp-flash { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }

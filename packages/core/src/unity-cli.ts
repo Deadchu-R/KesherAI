@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { batchFiles, engineChangedAt, nodeSig, sortForSync, unityAssetFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
 import type { BlueprintJson, QueuedEdit } from "./unreal-bridge.js";
+import { applyVsOps, COMMON_UNITS, diffVsGraphs, searchUnits, type VsDiff, type VsDoc, type VsOp, type VsResult, type VsUnit } from "@kesher/shared";
 
 /** The file a graph's saved copy is kept in. */
 const graphFile = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
@@ -476,19 +477,136 @@ export class UnityCli {
    * @param path - Where the graph lives.
    * @returns The graph, whether it came without the open editor, and when the copy was read from Unity.
    */
-  async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string; cached?: boolean }> {
+  async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string; cached?: boolean; pending?: number }> {
     const folder = this.path;
     const file = folder && this.cacheDir(folder) ? join(this.cacheDir(folder)!, "graphs", graphFile(path)) : undefined;
     const warm = await this.editorReady();
     if (!warm && file && folder) {
       const saved = readJsonFile<{ graph: BlueprintJson; savedAt: string }>(file);
       const changed = saved ? await engineChangedAt({ baseAt: saved.savedAt } as QueuedEdit, unityAssetFile(folder, path)) : undefined;
-      if (saved && !changed) return { graph: saved.graph, offline: true, savedAt: saved.savedAt, cached: true };
+      if (saved && !changed) return { ...(await this.withPending(folder, path, saved.graph)), offline: true, savedAt: saved.savedAt, cached: true };
     }
     const graph = await this.request<BlueprintJson>("graph", { path });
     const savedAt = new Date().toISOString();
     if (file) writeJsonFile(file, { graph, savedAt });
-    return { graph, offline: !warm, savedAt };
+    return { ...(folder && !warm ? await this.withPending(folder, path, graph) : { graph }), offline: !warm, savedAt };
+  }
+
+  /**
+   * The graph with the changes still waiting for Unity applied on top (shared/unity-vs.ts), so an edit made with Unity
+   * closed shows at once instead of only after the sync.
+   */
+  private async withPending(folder: string, path: string, graph: BlueprintJson): Promise<{ graph: BlueprintJson; pending?: number }> {
+    const mine = (await this.queue()).filter((q) => !q.kind && q.path === path && sameFolder(q.project, folder));
+    if (!mine.length) return { graph };
+    let doc = graph as unknown as VsDoc;
+    for (const q of mine) doc = applyVsOps(doc, q.graph, q.ops as VsOp[]).doc;
+    return { graph: doc as unknown as BlueprintJson, pending: mine.length };
+  }
+
+  /**
+   * Queues a change made on the page with Unity closed. It is first applied to the copy shown (with what is already
+   * waiting), so the page gets real answers: operations Unity would refuse (a wire between types that do not fit, a
+   * missing port) answer with the error and are not queued. Added elements get an id here ("new-…") that later
+   * changes can use; it is also their `ref`, and the waiting changes of a graph sync in one apply, so Unity knows it.
+   *
+   * @param path - The graph.
+   * @param graph - The tab.
+   * @param ops - The operations.
+   * @returns One result per operation, and how many were queued.
+   */
+  async enqueueEdit(path: string, graph: string, ops: VsOp[]): Promise<{ queued: boolean; results: VsResult[]; failed: number }> {
+    const folder = this.path;
+    if (!folder || !this.dataDir) throw new Error("Add a Unity project first.");
+    const saved = readJsonFile<{ graph: BlueprintJson }>(join(this.cacheDir(folder)!, "graphs", graphFile(path)));
+    if (!saved) throw new Error("Open this graph once with Unity open (or press Sync now) so KesherAI has a copy to change.");
+    const named = withTempIds(ops);
+    const { graph: shown } = await this.withPending(folder, path, saved.graph);
+    const { results } = applyVsOps(shown as unknown as VsDoc, graph, named);
+    const ok = named.filter((_, i) => results[i]!.ok);
+    if (ok.length) {
+      await this.enqueue({ project: folder, path, graph, ops: ok, request: "Changed on the Visual Scripting page" });
+      this.redoStack.delete(`${folder}|${path}`);
+    }
+    return { queued: ok.length > 0, results, failed: results.filter((r) => !r.ok).length };
+  }
+
+  /** Changes taken back with Undo while Unity was closed, per project and graph (Redo puts them back). */
+  private readonly redoStack = new Map<string, QueuedEdit[]>();
+
+  /**
+   * Undo / Redo with Unity closed: takes back the graph's last waiting change, or puts the last one taken back again.
+   *
+   * @param path - The graph.
+   * @param redo - Redo instead of undo.
+   * @returns Whether there was one.
+   */
+  async undoQueued(path: string, redo = false): Promise<boolean> {
+    const folder = this.path;
+    if (!folder) return false;
+    const k = `${folder}|${path}`;
+    const stack = this.redoStack.get(k) ?? [];
+    const all = await this.queue();
+    if (redo) {
+      const back = stack.pop();
+      if (!back) return false;
+      all.push(back);
+      this.writeQueue(all);
+      return true;
+    }
+    const i = all.map((q, n) => ({ q, n })).filter(({ q }) => !q.kind && !q.clash && q.path === path && sameFolder(q.project, folder)).pop()?.n;
+    if (i === undefined) return false;
+    stack.push(...all.splice(i, 1));
+    this.redoStack.set(k, stack.slice(-50));
+    this.writeQueue(all);
+    return true;
+  }
+
+  /**
+   * "Sync on open": compares the saved copy of a graph with Unity's graph now. With Unity open, Unity is asked (the
+   * saved copy is not replaced; the page offers Refresh); with it closed, only whether Unity saved the graph's file
+   * after the copy was read.
+   *
+   * @param path - The graph.
+   * @returns Whether they are the same, what differs, and whether Unity was asked.
+   */
+  async checkSaved(path: string): Promise<{ editor: boolean; same: boolean; stale?: boolean; diff?: VsDiff; savedAt?: string; pending: number }> {
+    const folder = this.path;
+    const file = folder && this.cacheDir(folder) ? join(this.cacheDir(folder)!, "graphs", graphFile(path)) : undefined;
+    const saved = file ? readJsonFile<{ graph: BlueprintJson; savedAt: string }>(file) : undefined;
+    const pending = folder ? (await this.queue()).filter((q) => !q.kind && q.path === path && sameFolder(q.project, folder)).length : 0;
+    if (!folder || !saved) return { editor: false, same: true, pending };
+    if (!(await this.editorReady())) {
+      const changed = await engineChangedAt({ baseAt: saved.savedAt } as QueuedEdit, unityAssetFile(folder, path));
+      return { editor: false, same: !changed, ...(changed ? { stale: true } : {}), savedAt: saved.savedAt, pending };
+    }
+    const now = await this.request<BlueprintJson>("graph", { path });
+    const diff = diffVsGraphs(saved.graph as unknown as VsDoc, now as unknown as VsDoc);
+    return { editor: true, same: diff.same, diff, savedAt: saved.savedAt, pending };
+  }
+
+  /**
+   * The node palette: Unity's own list when the editor is open (every answer is kept), else the kept list with the
+   * common units, searched here.
+   *
+   * @param path - The graph (Unity lists the units for it).
+   * @param query - The words typed.
+   * @returns The matches, and whether they came without Unity.
+   */
+  async actions(path: string, query: string): Promise<{ actions: VsUnit[]; offline: boolean }> {
+    const folder = this.path;
+    const file = folder && this.cacheDir(folder) ? join(this.cacheDir(folder)!, "units.json") : undefined;
+    const kept = (file && readJsonFile<VsUnit[]>(file)) || [];
+    if (await this.editorReady()) {
+      const r = await this.request<{ actions: VsUnit[] }>("actions", { path, query }, 30_000);
+      if (file && Array.isArray(r.actions)) {
+        const seen = new Set(kept.map((u) => `${u.type}|${u.title}|${u.function ?? ""}`));
+        const add = r.actions.filter((u) => u && typeof u.title === "string" && !seen.has(`${u.type}|${u.title}|${u.function ?? ""}`));
+        if (add.length) writeJsonFile(file, [...kept, ...add].slice(-5000));
+      }
+      return { actions: r.actions, offline: false };
+    }
+    return { actions: searchUnits([...kept, ...COMMON_UNITS], query), offline: true };
   }
 
   /** Where saved graphs of a project are kept (undefined without a data folder: tests, nothing saved). */
@@ -627,19 +745,23 @@ export class UnityCli {
       const files = batchFiles(apply, (q) => unityAssetFile(folder, q.path));
       if (files.length && this.beforeSync) await this.beforeSync({ engine: "unity", project: folder, name: basename(folder), files, count: apply.length }).catch(() => undefined);
       const paths = [...new Set(apply.map((q) => q.path))];
+      // A graph tab's waiting changes go in as one apply, so ids given to added nodes ("new-…" refs) carry over.
+      const groups = mergeEdits(apply);
       const commands = [
-        ...apply.map((q) => ({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops })),
+        ...groups.map((g) => ({ cmd: "apply", path: g.path, graph: g.graph, ops: g.ops })),
         ...paths.map((path) => ({ cmd: "save", path })),
         ...paths.map((path) => ({ cmd: "graph", path })),
       ];
       const answers = await this.batch(folder, commands);
       let applied = 0;
       let failed = 0;
-      for (let i = 0; i < apply.length; i++) {
-        if (answers[i]?.ok) {
-          applied++;
-          await this.unqueue(apply[i]!.id);
-        } else failed++;
+      for (let i = 0; i < groups.length; i++) {
+        for (const q of groups[i]!.edits) {
+          if (answers[i]?.ok) {
+            applied++;
+            await this.unqueue(q.id);
+          } else failed++;
+        }
       }
       // The graphs read at the end are the new saved copies.
       const dir = this.cacheDir(folder);
@@ -879,4 +1001,49 @@ export class UnityCli {
     await this.addProject(folder);
     return `${copied} Unity's Pipeline package was added too.`;
   }
+}
+
+/**
+ * Gives every added element an id of its own ("new-" and 8 hex) that is also its `ref`, and points the operation's
+ * other references to it (a `$n` ref the page used), so later changes can name the node before Unity made it.
+ *
+ * @param ops - The page's operations.
+ * @returns The operations to queue.
+ */
+export function withTempIds(ops: VsOp[]): VsOp[] {
+  const map = new Map<string, string>();
+  const swap = (v: unknown) => (typeof v === "string" && map.has(v) ? map.get(v)! : v);
+  return ops.map((raw) => {
+    const op: VsOp = JSON.parse(JSON.stringify(raw ?? {})) as VsOp;
+    if (op.op === "add") {
+      const id = `new-${randomUUID().slice(0, 8)}`;
+      if (typeof op.ref === "string" && op.ref) map.set(op.ref, id);
+      op.ref = id;
+      op.id = id;
+    }
+    if (op.node !== undefined) op.node = swap(op.node);
+    for (const end of ["from", "to"] as const) {
+      const e = op[end] as { node?: unknown } | undefined;
+      if (e && typeof e === "object") e.node = swap(e.node);
+    }
+    return op;
+  });
+}
+
+/**
+ * Joins waiting graph changes by graph and tab, in order (one apply each, so refs carry over).
+ *
+ * @param edits - The changes to apply.
+ * @returns One group per graph tab, with its changes.
+ */
+export function mergeEdits(edits: QueuedEdit[]): Array<{ path: string; graph: string; ops: unknown[]; edits: QueuedEdit[] }> {
+  const out: Array<{ path: string; graph: string; ops: unknown[]; edits: QueuedEdit[] }> = [];
+  for (const q of edits) {
+    const g = !q.kind ? out.find((x) => x.path === q.path && x.graph === q.graph && !x.edits[0]!.kind) : undefined;
+    if (g) {
+      g.ops.push(...q.ops);
+      g.edits.push(q);
+    } else out.push({ path: q.path, graph: q.graph, ops: [...q.ops], edits: [q] });
+  }
+  return out;
 }

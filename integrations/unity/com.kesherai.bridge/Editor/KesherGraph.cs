@@ -291,7 +291,7 @@ namespace KesherAI.Bridge
                 foreach (var tab in tabs)
                 {
                     var flow = tab.Value as FlowGraph;
-                    graphs.Add(new Dictionary<string, object> { ["name"] = tab.Key, ["kind"] = flow != null ? "function" : "macro", ["nodes"] = flow != null ? FlowNodes(flow) : StateNodes((StateGraph)tab.Value) });
+                    graphs.Add(new Dictionary<string, object> { ["name"] = tab.Key, ["kind"] = flow != null ? "function" : "macro", ["nodes"] = (flow != null ? FlowNodes(flow) : StateNodes((StateGraph)tab.Value)).Concat(NoteNodes(tab.Value)).ToList() });
                 }
                 var vars = new List<object>();
                 var withVars = target.Root as IGraphWithVariables;
@@ -419,17 +419,19 @@ namespace KesherAI.Bridge
                 return Guid.TryParse(id, out g) ? graph.units.FirstOrDefault(u => u.guid == g) : null;
             };
             var results = new List<object>();
+            var notes = new Dictionary<string, IGraphElement>();
             var failed = 0;
             foreach (var o in ops)
             {
                 var op = o as Dictionary<string, object>;
                 if (op == null) continue;
                 var kind = Json.Str(op, "op");
-                string problem = null;
+                string problem = null, noteMade = null;
                 IUnit made = null;
                 try
                 {
-                    if (kind == "add")
+                    if (NoteOp(graph, kind, op, notes, ref problem, ref noteMade)) { }
+                    else if (kind == "add")
                     {
                         var type = Json.Str(op, "type");
                         IUnit unit = null;
@@ -517,7 +519,7 @@ namespace KesherAI.Bridge
                     problem = e.Message;
                 }
                 if (problem != null) failed++;
-                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : null));
+                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : noteMade));
             }
             return Result(results, failed);
         }
@@ -534,17 +536,19 @@ namespace KesherAI.Bridge
                 return Guid.TryParse(id, out g) ? graph.states.FirstOrDefault(s => s.guid == g) : null;
             };
             var results = new List<object>();
+            var notes = new Dictionary<string, IGraphElement>();
             var failed = 0;
             foreach (var o in ops)
             {
                 var op = o as Dictionary<string, object>;
                 if (op == null) continue;
                 var kind = Json.Str(op, "op");
-                string problem = null;
+                string problem = null, noteMade = null;
                 IState made = null;
                 try
                 {
-                    if (kind == "add")
+                    if (NoteOp(graph, kind, op, notes, ref problem, ref noteMade)) { }
+                    else if (kind == "add")
                     {
                         var type = Json.Str(op, "type");
                         IState state = type == "super_state" ? (IState)SuperState.WithStart() : type == "any_state" ? (IState)new AnyState() : FlowState.WithEnterUpdateExit();
@@ -616,9 +620,92 @@ namespace KesherAI.Bridge
                     problem = e.Message;
                 }
                 if (problem != null) failed++;
-                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : null));
+                results.Add(Res(kind, problem, made != null ? made.guid.ToString() : noteMade));
             }
             return Result(results, failed);
+        }
+
+        // --- groups and sticky notes (package 0.2.11) ------------------------------
+
+        /// <summary>A graph's groups and sticky notes, read by reflection (sticky notes came in Visual Scripting 1.7).</summary>
+        static IEnumerable<IGraphElement> Notes(IGraph graph) => graph.elements.Where(e => e != null && (e.GetType().Name == "GraphGroup" || e.GetType().Name == "StickyNote")).ToList();
+
+        static object Member(object o, string name)
+        {
+            var t = o.GetType();
+            var p = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+            if (p != null) return p.GetValue(o, null);
+            var f = t.GetField(name, BindingFlags.Public | BindingFlags.Instance);
+            return f != null ? f.GetValue(o) : null;
+        }
+
+        static void SetMember(object o, string name, object value)
+        {
+            var t = o.GetType();
+            var p = t.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);
+            if (p != null && p.CanWrite) { p.SetValue(o, value, null); return; }
+            var f = t.GetField(name, BindingFlags.Public | BindingFlags.Instance);
+            if (f != null) f.SetValue(o, value);
+        }
+
+        /// <summary>Groups and sticky notes as frames (no pins): title, size, color, the text under the title.</summary>
+        static List<object> NoteNodes(IGraph graph)
+        {
+            var list = new List<object>();
+            foreach (var e in Notes(graph))
+            {
+                var sticky = e.GetType().Name == "StickyNote";
+                var rect = Member(e, "position") is Rect ? (Rect)Member(e, "position") : new Rect(0, 0, 400, 200);
+                var title = (Member(e, sticky ? "title" : "label") as string) ?? "";
+                var body = (Member(e, sticky ? "body" : "comment") as string) ?? "";
+                var n = new Dictionary<string, object> { ["id"] = e.guid.ToString(), ["title"] = title, ["comment"] = title, ["class"] = e.GetType().Name, ["x"] = (double)rect.x, ["y"] = (double)rect.y, ["width"] = (double)rect.width, ["height"] = (double)rect.height, ["pins"] = new List<object>() };
+                if (body != "") n["body"] = body;
+                var color = Member(e, "color");
+                n["color"] = color is Color ? ColorUtility.ToHtmlStringRGBA((Color)color) : "F6E27FFF";
+                list.Add(n);
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// An operation on a group or sticky note: add (type group, comment_box or sticky), move, resize, comment
+        /// (the title), delete. Returns false when the operation is not about one (a unit or state handles it).
+        /// </summary>
+        static bool NoteOp(IGraph graph, string kind, Dictionary<string, object> op, Dictionary<string, IGraphElement> notes, ref string problem, ref string made)
+        {
+            if (kind == "add")
+            {
+                var type = Json.Str(op, "type");
+                if (type != "group" && type != "comment_box" && type != "sticky") return false;
+                var t = type == "sticky" ? AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("Unity.VisualScripting.StickyNote")).FirstOrDefault(x => x != null) : typeof(GraphGroup);
+                if (t == null) { problem = "Sticky notes need Visual Scripting 1.7 or newer"; return true; }
+                var e = (IGraphElement)Activator.CreateInstance(t);
+                SetMember(e, "position", new Rect((float)Json.Num(op, "x", 0), (float)Json.Num(op, "y", 0), (float)Json.Num(op, "width", 400), (float)Json.Num(op, "height", 200)));
+                var text = Json.Str(op, "text");
+                SetMember(e, type == "sticky" ? "title" : "label", string.IsNullOrEmpty(text) ? (type == "sticky" ? "Note" : "Group") : text);
+                graph.elements.Add(e);
+                made = e.guid.ToString();
+                var r = Json.Str(op, "ref");
+                if (!string.IsNullOrEmpty(r)) notes[r] = e;
+                return true;
+            }
+            var id = Json.Str(op, "node");
+            if (string.IsNullOrEmpty(id)) return false;
+            IGraphElement el;
+            if (!notes.TryGetValue(id, out el))
+            {
+                Guid g;
+                el = Guid.TryParse(id, out g) ? Notes(graph).FirstOrDefault(x => x.guid == g) : null;
+            }
+            if (el == null) return false;
+            var rect = Member(el, "position") is Rect ? (Rect)Member(el, "position") : new Rect(0, 0, 400, 200);
+            var isSticky = el.GetType().Name == "StickyNote";
+            if (kind == "move") SetMember(el, "position", new Rect((float)Json.Num(op, "x", rect.x), (float)Json.Num(op, "y", rect.y), rect.width, rect.height));
+            else if (kind == "resize") SetMember(el, "position", new Rect(rect.x, rect.y, Math.Max(40f, (float)Json.Num(op, "width", rect.width)), Math.Max(30f, (float)Json.Num(op, "height", rect.height))));
+            else if (kind == "comment") SetMember(el, isSticky ? "title" : "label", Json.Str(op, "text") ?? "");
+            else if (kind == "delete") graph.elements.Remove(el);
+            else problem = "Groups and sticky notes only move, resize, change their title or go away";
+            return true;
         }
 
         // --- check, save, open -----------------------------------------------------

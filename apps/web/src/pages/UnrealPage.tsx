@@ -53,7 +53,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const app = unity ? "Unity" : "Unreal";
   const [st, setSt] = useState<Status | null>(null);
   const [list, setList] = useState<{ blueprints: BpItem[]; offline: boolean; project?: string } | null>(null);
-  const [path, setPath] = useState("");
+  // A link can open one graph at once (#/unity?graph=Assets/Graphs/Door.asset), e.g. from a notification.
+  const [path, setPath] = useState(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("graph")?.slice(0, 1000) ?? "");
   const [bp, setBp] = useState<{ graph: Blueprint; offline: boolean; savedAt?: string } | null>(null);
   const [graphName, setGraphName] = useState("");
   const [filter, setFilter] = useState("");
@@ -171,15 +172,31 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       removeEventListener("kesher-unity-added", added);
     };
   }, []);
+  // "Sync on open" (Unity): is the copy shown still Unity's graph? Unity open: Unity is asked; closed: whether Unity
+  // saved the file since. When they differ the page says what changed and offers Refresh instead of jumping.
+  const [check, setCheck] = useState<GraphCheck | null>(null);
+  const runCheck = (p: string, thenLoad: boolean) =>
+    void api<GraphCheck>(`${base}/graph/check?path=${encodeURIComponent(p)}`).then(
+      (c) => {
+        setCheck(c.same ? null : c);
+        if (c.same && thenLoad) loadBp(p);
+      },
+      () => thenLoad && loadBp(p),
+    );
   // When the editor connects or leaves, read again (live or the saved copy).
   const connected = st?.connected ?? false;
   useEffect(() => {
     loadList();
     loadQueue();
-    if (path) loadBp(path);
+    if (!path) return;
+    // Unity just opened while the offline copy was shown: compare first, so nothing changes under the user's hands.
+    if (unity && connected && bp?.offline) runCheck(path, true);
+    else loadBp(path);
   }, [connected]);
   useEffect(() => {
+    setCheck(null);
     if (path) loadBp(path);
+    if (path && unity) runCheck(path, false);
     setChat([]);
   }, [path]);
   // When the graph was last read (shown under the canvas), and an immediate read when the editor compiles.
@@ -449,6 +466,18 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
                   />
                 )}
+                {unity && check && !check.same && (
+                  <div className="ue-check small" role="status">
+                    <span dir="auto">
+                      {check.editor
+                        ? L(`הגרף ב-Unity שונה מהעותק השמור: ${checkWords(check, "he")}.`, `Unity's graph differs from the saved copy: ${checkWords(check, "en")}.`)
+                        : L("Unity שמר את הגרף אחרי שהעותק הזה נקרא. רענון קורא אותו שוב (Unity ברקע, כדקה).", "Unity saved this graph after this copy was read. Refresh reads it again (Unity in the background, about a minute).")}
+                      {check.pending > 0 ? ` ${L(`${check.pending} שינויים שלך מחכים ויבדקו מול הגרף החדש.`, `${check.pending} of your changes are waiting and are checked against the new graph.`)}` : ""}
+                    </span>
+                    <button type="button" className="primary small" onClick={() => { setCheck(null); loadBp(path); }}>{L("רענן", "Refresh")}</button>
+                    <button type="button" className="ghost small" onClick={() => setCheck(null)}>{L("השאר את העותק", "Keep this copy")}</button>
+                  </div>
+                )}
                 <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
                 <div className="ue-graph-row">
                 <div className="ue-stage">
@@ -551,4 +580,31 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
       )}
     </div>
   );
+}
+
+/** The answer of /api/unity/graph/check ("sync on open"). */
+interface GraphCheck { editor: boolean; same: boolean; stale?: boolean; savedAt?: string; pending: number; diff?: { added: string[]; removed: string[]; moved: number; rewired: number; values: number; tabs: { added: string[]; removed: string[] } } }
+
+/**
+ * What Unity changed, in a few words for the sync-on-open note.
+ *
+ * @param c - The check.
+ * @param lang - he or en.
+ * @returns e.g. "2 nodes added (On Update, If), 1 removed, 3 moved".
+ */
+function checkWords(c: GraphCheck, lang: "he" | "en"): string {
+  const d = c.diff;
+  if (!d) return "";
+  const he = lang === "he";
+  // Each English node name is isolated (FSI … PDI), so a Hebrew sentence does not scramble its brackets and commas.
+  const names = (l: string[]) => (l.length ? ` (${l.slice(0, 3).map((t) => `\u2068${t}\u2069`).join(", ")}${l.length > 3 ? "…" : ""})` : "");
+  const parts = [
+    d.added.length ? (he ? `${d.added.length} נודים נוספו${names(d.added)}` : `${d.added.length} node(s) added${names(d.added)}`) : "",
+    d.removed.length ? (he ? `${d.removed.length} נמחקו${names(d.removed)}` : `${d.removed.length} removed${names(d.removed)}`) : "",
+    d.moved ? (he ? `${d.moved} זזו` : `${d.moved} moved`) : "",
+    d.rewired ? (he ? `${d.rewired} חוברו אחרת` : `${d.rewired} rewired`) : "",
+    d.values ? (he ? `${d.values} ערכים השתנו` : `${d.values} value(s) changed`) : "",
+    d.tabs.added.length ? (he ? `${d.tabs.added.length} לשוניות חדשות` : `${d.tabs.added.length} new tab(s)`) : "",
+  ].filter(Boolean);
+  return parts.join(", ") || (he ? "המשתנים השתנו" : "the variables changed");
 }

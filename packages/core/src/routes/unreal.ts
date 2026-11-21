@@ -44,7 +44,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.10";
+export const UNITY_PACKAGE_VERSION = "0.2.11";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -261,10 +261,15 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
     }
     // Unity closed: the same, synced in one batch Unity run (not one boot per change).
+    // The change shows at once on the saved copy (operations Unity would refuse answer with the error, not queued).
     if (kind === "unity" && s.unity.canQueue && !(await s.unity.editorReady())) {
-      await s.unity.enqueue({ project: s.unity.activeProject!, path, graph, ops, request: "Changed on the Visual Scripting page" });
-      s.unity.scheduleSync();
-      return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
+      try {
+        const r = await s.unity.enqueueEdit(path, graph, ops.slice(0, 500) as Array<Record<string, unknown>>);
+        if (r.queued) s.unity.scheduleSync();
+        return r;
+      } catch (err) {
+        return reply.code(409).send({ error: (err as Error).message });
+      }
     }
     try {
       return await b.request("apply", { path, graph, ops: kind === "unity" ? JSON.stringify(ops) : ops });
@@ -298,18 +303,34 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
 
   if (kind === "unity") {
     /** The fuzzy finder's nodes, matching the words typed (Unity package 0.2.4+). */
+    // With Unity closed: the units Unity listed before (kept) and the common ones.
     app.get<{ Querystring: { path?: string; q?: string } }>(`${base}/actions`, async (req, reply) => {
       try {
-        return await b.request("actions", { path: String(req.query.path ?? ""), query: String(req.query.q ?? "").slice(0, 100) }, 30_000);
+        return await s.unity.actions(String(req.query.path ?? ""), String(req.query.q ?? "").slice(0, 100));
       } catch (err) {
         const msg = (err as Error).message;
         return reply.code(/kesher_actions/.test(msg) ? 409 : 502).send({ error: /kesher_actions/.test(msg) ? "The node menu needs the KesherAI Unity package 0.2.4. Update it from this page." : msg });
       }
     });
+    /** "Sync on open": is the copy shown still Unity's graph? (Unity open: asked; closed: was its file saved since.) */
+    app.get<{ Querystring: { path?: string } }>(`${base}/graph/check`, async (req, reply) => {
+      if (!req.query.path) return reply.code(400).send({ error: "Which graph?" });
+      try {
+        return await s.unity.checkSaved(req.query.path);
+      } catch (err) {
+        return reply.code(502).send({ error: (err as Error).message });
+      }
+    });
     /** Ctrl+Z / Ctrl+Y in the page: Unity's own undo and redo (package 0.2.4+). */
+    // With Unity closed: the graph's last waiting change is taken back (or put back).
     for (const cmd of ["undo", "redo"] as const) {
-      app.post(`${base}/${cmd}`, async (_req, reply) => {
+      app.post<{ Body: { path?: string } }>(`${base}/${cmd}`, async (req, reply) => {
         try {
+          const path = String(req.body?.path ?? "");
+          if (path && s.unity.canQueue && !(await s.unity.editorReady())) {
+            if (await s.unity.undoQueued(path, cmd === "redo")) return { ok: true, queued: true };
+            return reply.code(409).send({ error: cmd === "undo" ? "Nothing waiting to undo for this graph." : "Nothing to redo." });
+          }
           return await b.request(cmd, {});
         } catch (err) {
           return reply.code(502).send({ error: (err as Error).message });

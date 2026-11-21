@@ -1,0 +1,471 @@
+{
+ "group": "משחקים: Visual Scripting של Unity",
+ "mocks": [
+  {
+   "url": "**/api/unity",
+   "json": {
+    "connected": false,
+    "projects": [
+     "D:/Games/Platformer"
+    ],
+    "queued": 2,
+    "offline": true,
+    "cli": true,
+    "active": "D:/Games/Platformer",
+    "latestBridge": "0.2.11",
+    "download": "https://example.invalid/kesher-unity"
+   }
+  },
+  {
+   "url": "**/api/unity/blueprints",
+   "json": {
+    "blueprints": [
+     {
+      "path": "Assets/Graphs/Door.asset",
+      "name": "Door",
+      "parent": "Script Graph",
+      "saved": true
+     },
+     {
+      "path": "Assets/Graphs/Enemy.asset",
+      "name": "Enemy",
+      "parent": "State Graph",
+      "saved": true
+     }
+    ],
+    "offline": true,
+    "project": "Platformer"
+   }
+  },
+  {
+   "url": "**/api/unity/graph?*",
+   "json": {
+    "graph": {
+     "path": "Assets/Graphs/Door.asset",
+     "name": "Door",
+     "parent": "Script Graph",
+     "variables": [
+      {
+       "name": "speed",
+       "type": "Single",
+       "default": "3.5"
+      },
+      {
+       "name": "hasKey",
+       "type": "Boolean",
+       "default": "False"
+      }
+     ],
+     "graphs": [
+      {
+       "name": "Door",
+       "kind": "function",
+       "nodes": [
+        {
+         "id": "g1",
+         "title": "פתיחת הדלת",
+         "comment": "פתיחת הדלת",
+         "class": "GraphGroup",
+         "x": -40,
+         "y": -60,
+         "width": 900,
+         "height": 330,
+         "color": "4D7FFFFF",
+         "pins": []
+        },
+        {
+         "id": "s1",
+         "title": "לזכור",
+         "comment": "לזכור",
+         "class": "StickyNote",
+         "x": -40,
+         "y": 320,
+         "width": 260,
+         "height": 120,
+         "color": "F6E27FFF",
+         "body": "הדלת נפתחת רק כשיש לשחקן מפתח",
+         "pins": []
+        },
+        {
+         "id": "n1",
+         "title": "On Trigger Enter",
+         "class": "OnTriggerEnter",
+         "x": 0,
+         "y": 0,
+         "pins": [
+          {
+           "name": "trigger",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "n2:enter"
+           ]
+          },
+          {
+           "name": "collider",
+           "dir": "out",
+           "type": "Collider",
+           "links": [
+            "n5:a"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "n5",
+         "title": "Equal",
+         "class": "Equal",
+         "x": 0,
+         "y": 150,
+         "pins": [
+          {
+           "name": "a",
+           "dir": "in",
+           "type": "object",
+           "links": [
+            "n1:collider"
+           ]
+          },
+          {
+           "name": "b",
+           "dir": "in",
+           "type": "object",
+           "default": "Player"
+          },
+          {
+           "name": "comparison",
+           "dir": "out",
+           "type": "Boolean",
+           "links": [
+            "n2:condition"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "n2",
+         "title": "If",
+         "class": "If",
+         "x": 300,
+         "y": 0,
+         "pins": [
+          {
+           "name": "enter",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "n1:trigger"
+           ]
+          },
+          {
+           "name": "condition",
+           "dir": "in",
+           "type": "Boolean",
+           "links": [
+            "n5:comparison"
+           ]
+          },
+          {
+           "name": "ifTrue",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "n3:enter"
+           ]
+          },
+          {
+           "name": "ifFalse",
+           "dir": "out",
+           "type": "exec"
+          }
+         ]
+        },
+        {
+         "id": "n3",
+         "title": "Transform: Translate",
+         "class": "InvokeMember",
+         "function": "UnityEngine.Transform:Translate",
+         "x": 580,
+         "y": 0,
+         "pins": [
+          {
+           "name": "enter",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "n2:ifTrue"
+           ]
+          },
+          {
+           "name": "target",
+           "dir": "in",
+           "type": "Transform",
+           "default": "This"
+          },
+          {
+           "name": "translation",
+           "dir": "in",
+           "type": "Vector3",
+           "default": "(0, 3, 0)"
+          },
+          {
+           "name": "exit",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "n4:enter"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "n4",
+         "title": "Debug: Log",
+         "class": "InvokeMember",
+         "function": "UnityEngine.Debug:Log",
+         "x": 580,
+         "y": 170,
+         "pins": [
+          {
+           "name": "enter",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "n3:exit"
+           ]
+          },
+          {
+           "name": "message",
+           "dir": "in",
+           "type": "object",
+           "default": "Door open"
+          },
+          {
+           "name": "exit",
+           "dir": "out",
+           "type": "exec"
+          }
+         ]
+        },
+        {
+         "id": "n6",
+         "title": "Get speed",
+         "class": "GetVariable",
+         "variable": "speed",
+         "x": 300,
+         "y": 170,
+         "pins": [
+          {
+           "name": "name",
+           "dir": "in",
+           "type": "String",
+           "default": "speed"
+          },
+          {
+           "name": "value",
+           "dir": "out",
+           "type": "Single"
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "offline": true,
+    "savedAt": {
+     "$ago": "12m"
+    },
+    "cached": true,
+    "pending": 2
+   }
+  },
+  {
+   "url": "**/api/unity/graph/check?*",
+   "json": {
+    "editor": false,
+    "same": true,
+    "savedAt": {
+     "$ago": "12m"
+    },
+    "pending": 2
+   }
+  },
+  {
+   "url": "**/api/unity/queue",
+   "json": []
+  },
+  {
+   "url": "**/api/unity/sync",
+   "json": {
+    "waiting": 2,
+    "running": false,
+    "lastAt": {
+     "$ago": "12m"
+    }
+   }
+  },
+  {
+   "url": "**/api/unity/actions?*",
+   "json": {
+    "actions": [
+     {
+      "title": "Wait For Seconds",
+      "category": "Time",
+      "type": "WaitForSecondsUnit"
+     },
+     {
+      "title": "Timer",
+      "category": "Time",
+      "type": "Timer"
+     },
+     {
+      "title": "Cooldown",
+      "category": "Time",
+      "type": "Cooldown"
+     },
+     {
+      "title": "If",
+      "category": "Control",
+      "type": "If"
+     },
+     {
+      "title": "For Loop",
+      "category": "Control",
+      "type": "For"
+     },
+     {
+      "title": "Sequence",
+      "category": "Control",
+      "type": "Sequence"
+     },
+     {
+      "title": "On Update",
+      "category": "Events/Lifecycle",
+      "type": "Update"
+     },
+     {
+      "title": "Debug: Log",
+      "category": "Codebase/Debug",
+      "type": "call"
+     }
+    ],
+    "offline": true
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "UnityVsEditor",
+   "title": "Unity: עורך Visual Scripting כש-Unity סגור",
+   "titleEn": "Unity: Visual Scripting editor with Unity closed",
+   "route": "#/unity?graph=Assets/Graphs/Door.asset",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-comment-box"
+    },
+    {
+     "scroll": ".ue-canvas"
+    }
+   ]
+  },
+  {
+   "id": "UnityVsPalette",
+   "title": "Unity: חיפוש נודים (הרשימה ש-Unity דיווח)",
+   "titleEn": "Unity: node search from the units Unity reported",
+   "route": "#/unity?graph=Assets/Graphs/Door.asset",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-comment-box"
+    },
+    {
+     "scroll": ".ue-canvas"
+    },
+    {
+     "click": ".ue-zoom button[aria-label=\"הוספת נוד\"]"
+    },
+    {
+     "wait": ".bp-menu li button"
+    },
+    {
+     "fill": ".bp-menu input",
+     "value": "wait"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "UnityVsSyncOnOpen",
+   "title": "Unity: הגרף ב-Unity השתנה — רענון או השארת העותק",
+   "titleEn": "Unity: Unity's graph changed — refresh or keep the copy",
+   "route": "#/unity?graph=Assets/Graphs/Door.asset",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/unity/graph/check?*",
+     "json": {
+      "editor": true,
+      "same": false,
+      "savedAt": {
+       "$ago": "12m"
+      },
+      "pending": 2,
+      "diff": {
+       "same": false,
+       "added": [
+        "Wait For Seconds",
+        "Animator: Set Trigger"
+       ],
+       "removed": [
+        "Get speed"
+       ],
+       "moved": 3,
+       "rewired": 1,
+       "values": 1,
+       "tabs": {
+        "added": [],
+        "removed": []
+       }
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-comment-box"
+    },
+    {
+     "wait": ".ue-check"
+    },
+    {
+     "scroll": ".ue-check"
+    }
+   ]
+  }
+ ]
+}

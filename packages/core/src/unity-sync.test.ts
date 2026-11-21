@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UnityCli, type CliRunner } from "./unity-cli.js";
+import { mergeEdits, UnityCli, withTempIds, type CliRunner } from "./unity-cli.js";
 import type { BlueprintJson } from "./unreal-bridge.js";
 import type { SyncReport } from "./game-sync.js";
 
@@ -100,4 +100,58 @@ test("a change that clashes with an edit saved in Unity waits for a choice", asy
   const other = await u.enqueue({ project, path: G.path, graph: "", ops: [] });
   assert.equal(await u.decide(other.id, "engine"), true);
   assert.equal((await u.queue()).length, 0);
+});
+
+test("Unity closed: an edit shows at once on the saved copy; refused ones are not queued; undo / redo the queue", async () => {
+  const { u } = await setup();
+  await u.graph(G.path);
+  const r = await u.enqueueEdit(G.path, "Door", [
+    { op: "add", type: "Update", ref: "$n", x: 10, y: 10 },
+    { op: "move", node: "$n", x: 40, y: 50 },
+    { op: "delete", node: "nope" },
+  ]);
+  assert.deepEqual(r.results.map((x) => x.ok), [true, true, false]);
+  assert.match(r.results[0]!.node!, /^new-[0-9a-f]{8}$/);
+  const q = await u.queue();
+  assert.equal(q.length, 1);
+  assert.equal(q[0]!.ops.length, 2, "the refused delete is not queued");
+  assert.equal((q[0]!.ops[1] as { node: string }).node, r.results[0]!.node);
+  const shown = await u.graph(G.path);
+  assert.equal(shown.pending, 1);
+  const added = shown.graph.graphs[0]!.nodes.find((n) => n.id === r.results[0]!.node)!;
+  assert.equal(added.title, "On Update");
+  assert.equal(added.x, 40);
+  // A later change names the new node by its id.
+  await u.enqueueEdit(G.path, "Door", [{ op: "move", node: r.results[0]!.node, x: 99 }]);
+  assert.equal((await u.graph(G.path)).graph.graphs[0]!.nodes.find((n) => n.id === r.results[0]!.node)!.x, 99);
+  assert.equal(await u.undoQueued(G.path), true);
+  assert.equal((await u.graph(G.path)).graph.graphs[0]!.nodes.find((n) => n.id === r.results[0]!.node)!.x, 40);
+  assert.equal(await u.undoQueued(G.path, true), true);
+  assert.equal((await u.queue()).length, 2);
+  // Sync: the graph's changes go in as one apply.
+  const merged = mergeEdits(await u.queue());
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]!.ops.length, 3);
+});
+
+test("Unity closed: the node palette uses the common units; sync on open says when Unity saved the file", async () => {
+  const { u, project } = await setup();
+  const a = await u.actions(G.path, "wait");
+  assert.equal(a.offline, true);
+  assert.equal(a.actions[0]!.title, "Wait For Seconds");
+  await u.graph(G.path);
+  assert.equal((await u.checkSaved(G.path)).same, true);
+  const now = Date.now() / 1000 + 10;
+  await utimes(join(project, "Assets", "Door.asset"), now, now);
+  const c = await u.checkSaved(G.path);
+  assert.equal(c.same, false);
+  assert.equal(c.stale, true);
+  assert.equal(c.editor, false);
+});
+
+test("temp ids replace the page's refs", () => {
+  const ops = withTempIds([{ op: "add", type: "If", ref: "$v" }, { op: "connect", from: { node: "a", pin: "x" }, to: { node: "$v", pin: "enter" } }]);
+  const id = ops[0]!.id as string;
+  assert.equal(ops[0]!.ref, id);
+  assert.equal((ops[1]!.to as { node: string }).node, id);
 });

@@ -317,13 +317,13 @@ export function App() {
   else if (hash === "#/canvas" || hash.startsWith("#/canvas/")) page = <CanvasPage key={hash} {...(hash.length > 9 ? { id: hash.slice(9) } : {})} />;
   else if (hash === "#/remote") page = <RemotePage />;
   else if (hash === "#/nodes") page = <NodesPage />;
-  else if (hash === "#/unreal") page = <UnrealPage key="unreal" />;
+  else if (hash.split("?")[0] === "#/unreal") page = <UnrealPage key="unreal" />;
   else if (hash === "#/code") page = <CodeHome />;
   else if (hash === "#/self-work") page = <SelfWorkPage />;
   else if (hash === "#/task-inbox" || hash.startsWith("#/task-inbox/")) page = <TaskInboxPage key={hash} {...(hash.length > 13 ? { id: decodeURIComponent(hash.slice(13)) } : {})} />;
   else if (hash === "#/tasks") page = <TasksPage />;
   else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
-  else if (hash === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
+  else if (hash.split("?")[0] === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/godot") page = <GodotPage />;
   else if (hash.split("?")[0] === "#/games") page = <GamesPage key="games" sync={/[?&]sync=1/.test(hash)} />;
   else if (hash === "#/stremio") page = <StremioPage />;

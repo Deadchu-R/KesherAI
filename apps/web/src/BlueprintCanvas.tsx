@@ -7,10 +7,10 @@ import { toast } from "./library";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 export interface Pin { name: string; label?: string; dir: "in" | "out"; type: string; default?: string; links?: string[] }
-export interface GNode { id: string; title: string; class: string; x: number; y: number; comment?: string; pins: Pin[]; /** Comment boxes (plugin 0.1.11). */ width?: number; height?: number; color?: string }
+export interface GNode { id: string; title: string; class: string; x: number; y: number; comment?: string; pins: Pin[]; /** Comment boxes (plugin 0.1.11). */ width?: number; height?: number; color?: string; /** Unity sticky notes: the text under the title. */ body?: string }
 
-/** A comment box (a frame with a title around nodes) and a reroute node (a dot on a wire), as Unreal draws them. */
-const isCommentBox = (n: GNode) => n.class === "EdGraphNode_Comment";
+/** A comment box (a frame with a title around nodes; Unity: a group or sticky note) and a reroute node (a dot on a wire), as Unreal draws them. */
+const isCommentBox = (n: GNode) => n.class === "EdGraphNode_Comment" || isVsNote(n);
 const isKnot = (n: GNode) => n.class === "K2Node_Knot";
 const KNOT = 16;
 /** One node the "All Actions" menu offers. */
@@ -18,7 +18,8 @@ export interface Action { title: string; category: string; type: string; functio
 import { wireFits } from "./wire-fits";
 import { ribbonOffset, wireLook, wirePath } from "./wire-style";
 import { saveAppearance, useAppearance } from "./appearance";
-import type { WireStyle } from "@kesher/shared";
+import { isVsNote, noteLines, unityPortsFit, type WireStyle } from "@kesher/shared";
+import { Minimap } from "./GraphMinimap";
 import { nearest } from "./gamepad";
 
 type Op = Record<string, unknown>;
@@ -321,7 +322,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
   const wireJudge = (w: { dir: "in" | "out"; type: string; moveLinks?: boolean }, t: { dir: "in" | "out"; type: string }): { ok: boolean; why: string } => {
     if (w.moveLinks) return t.dir === w.dir ? { ok: true, why: L("העברת החיבורים", "Move the wires") } : { ok: false, why: L("גררו לפין מאותו כיוון", "Drag to a pin of the same direction") };
     if (t.dir === w.dir) return { ok: false, why: w.dir === "out" ? L("יציאה מתחברת לכניסה (נקודה משמאל)", "An output goes into an input (a pin on the left)") : L("כניסה מקבלת מיציאה (נקודה מימין)", "An input takes an output (a pin on the right)") };
-    const f = w.dir === "out" ? wireFits(w.type, t.type) : wireFits(t.type, w.type);
+    // Unity's own rules (object takes anything, numbers convert, a GameObject gives its components); else Unreal's.
+    const fits = unity ? unityPortsFit : wireFits;
+    const f = w.dir === "out" ? fits(w.type, t.type) : fits(t.type, w.type);
     return { ok: f.ok, why: f.ok ? (f.why ? L(`המרה ${f.why}`, `Convert ${f.why}`) : L("חיבור", "Connect")) : f.why ?? L("סוגים שלא מתחברים", "Types that do not connect") };
   };
 
@@ -345,7 +348,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       setBusy(false);
     }
   };
-  const undo = (redo: boolean) => (onOps ? toast(L("ביטול: \"בטל שינויים\" למעלה מחזיר את הקובץ כמו שהוא שמור.", "Undo: \"Discard changes\" above puts the file back as it is saved.")) : void api(`/api/${engine}/${redo ? "redo" : "undo"}`, { method: "POST" }).then(onChanged, (e: Error) => toast(e.message)));
+  const undo = (redo: boolean) => (onOps ? toast(L("ביטול: \"בטל שינויים\" למעלה מחזיר את הקובץ כמו שהוא שמור.", "Undo: \"Discard changes\" above puts the file back as it is saved.")) : void api(`/api/${engine}/${redo ? "redo" : "undo"}`, { method: "POST", body: { path } }).then(onChanged, (e: Error) => toast(e.message)));
 
   const openMenu = (p: { x: number; y: number }, from?: Menu["from"]) => {
     if (!editable) return;
@@ -792,8 +795,8 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (mod && e.key.toLowerCase() === "f") {
       e.preventDefault();
       setFind({ q: "", i: 0 });
-    } else if (!mod && e.key.toLowerCase() === "c" && editable && !unity && selected.size) {
-      // C: a comment box around the selected nodes, as in Unreal.
+    } else if (!mod && e.key.toLowerCase() === "c" && editable && selected.size) {
+      // C: a comment box around the selected nodes, as in Unreal (Unity: a group).
       const sel = boxes.filter((b) => selected.has(b.n.id));
       if (sel.length) {
         e.preventDefault();
@@ -962,6 +965,16 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
       }
     }
   }
+  /** Whether an input's value can be typed in the graph (a value input with no wire into it). */
+  const valueEditable = (p: Pin) => editable && p.dir === "in" && p.type !== "exec" && !p.links?.length;
+  /** Types a new value for an input port (double-click it, or the pin's menu on a phone). */
+  const editValue = (node: string, pin: string) => {
+    const p = nodes.find((x) => x.id === node)?.pins.find((x) => x.name === pin && x.dir === "in");
+    if (!p) return;
+    void askText(L(`ערך עבור ${p.label ?? p.name} (${p.type}):`, `Value for ${p.label ?? p.name} (${p.type}):`), p.default ?? "", { ltr: true }).then((value) => {
+      if (value !== null && value !== p.default) void apply([{ op: "set", node, pin, value }]);
+    });
+  };
   const pinRow = (n: GNode, p: Pin, i: number, x: number, y: number, side: "in" | "out") => {
     const cx = side === "in" ? x : x + W;
     const cy = y + HEAD + i * ROW + ROW / 2;
@@ -970,7 +983,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         <circle cx={cx} cy={cy} r={p.type === "exec" ? 4.5 : 4} fill={p.links?.length ? pinColor(p.type) : "none"} stroke={pinColor(p.type)} strokeWidth={1.6} />
         {/* A bigger, invisible target, so a finger can grab the pin too. */}
         <circle cx={cx} cy={cy} r={Math.min(ROW / 2 + 2, Math.max(10, 11 / view.k))} fill="transparent" data-pin={p.name} data-node={n.id} data-dir={p.dir} data-type={p.type} className={editable ? "bp-pin" : undefined} />
-        <text x={side === "in" ? x + 10 : x + W - 10} y={cy + 4} textAnchor={side === "in" ? "start" : "end"} className="ue-pin">
+        <text x={side === "in" ? x + 10 : x + W - 10} y={cy + 4} textAnchor={side === "in" ? "start" : "end"} className="ue-pin" {...(valueEditable(p) ? { "data-value-node": n.id, "data-value-pin": p.name } : {})}>
           {p.type === "exec" && !p.label ? "" : p.label ?? p.name}
           {side === "in" && p.default !== undefined && !p.links?.length ? ` = ${p.default.length > 18 ? `${p.default.slice(0, 18)}…` : p.default}` : ""}
         </text>
@@ -1029,6 +1042,9 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           }
           return;
         }
+        // Double-click an input's value: type a new one.
+        const val = under.closest("[data-value-node]") as SVGElement | null;
+        if (val && editable) return editValue(val.dataset.valueNode!, val.dataset.valuePin!);
         // Double-click a comment box's title: rename it.
         const c = under.closest("[data-comment]") as SVGElement | null;
         if (c && editable) {
@@ -1051,6 +1067,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
                 <rect x={x} y={y} width={w} height={h} rx={4} fill={color} fillOpacity={0.12} stroke={on ? "#f0a830" : color} strokeOpacity={on ? 1 : 0.5} strokeWidth={on ? 2 : 1} />
                 <rect x={x} y={y} width={w} height={22} rx={4} fill={color} fillOpacity={0.45} data-node={n.id} data-comment="1" style={{ cursor: editable ? "move" : "default" }} />
                 <text x={x + 8} y={y + 15} className="ue-title" pointerEvents="none">{(n.comment || n.title).slice(0, 60)}</text>
+                {n.body && noteLines(n.body, w, h).map((line, i) => <text key={i} x={x + 8} y={y + 40 + i * 16} className="ue-pin" pointerEvents="none">{line}</text>)}
                 {editable && <rect x={x + w - 12} y={y + h - 12} width={12} height={12} fill={color} fillOpacity={0.6} data-resize={n.id} style={{ cursor: "nwse-resize" }} />}
               </g>
             );
@@ -1127,6 +1144,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
         </button>
         <span className="muted small">{busy ? "…" : `${Math.round(view.k * 100)}%`}</span>
       </div>
+      {boxes.length > 0 && <Minimap boxes={boxes} notes={commentBoxes} bounds={bounds} view={view} frame={frame.current} onPan={(x, y) => setView((v) => ({ ...v, x, y }))} />}
       {wireMenu && (
         <div className="bp-menu bp-wire-menu" role="dialog" aria-label={L("צורת החוטים", "Wire style")} onPointerDown={(e) => e.stopPropagation()}>
           {(["style", "exec"] as const).map((key) => (
@@ -1207,6 +1225,10 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           <strong className="small" dir="ltr">{nodes.find((x) => x.id === pinMenu.node)?.pins.find((x) => x.name === pinMenu.pin)?.label ?? pinMenu.pin}</strong>
           <ul>
             <li><button type="button" role="menuitem" onClick={() => breakLinks(pinMenu)}>{L("נתק את החיבורים (Break Link)", "Break Pin Link(s)")}</button></li>
+            {(() => {
+              const p = nodes.find((x) => x.id === pinMenu.node)?.pins.find((x) => x.name === pinMenu.pin && x.dir === pinMenu.dir);
+              return p && valueEditable(p) ? <li><button type="button" role="menuitem" onClick={() => { setPinMenu(null); editValue(pinMenu.node, pinMenu.pin); }}>{L("ערוך ערך", "Edit value")}</button></li> : null;
+            })()}
             {pinMenu.type !== "exec" && (onOps || !unity) && <li><button type="button" role="menuitem" onClick={() => void promote(pinMenu)}>{L("הפוך למשתנה (Promote to Variable)", "Promote to Variable")}</button></li>}
           </ul>
         </div>
@@ -1220,6 +1242,8 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Action[] | null>(null);
   const [i, setI] = useState(0);
+  // Unity closed: the units Unity listed before and the common ones (said under the search).
+  const [offline, setOffline] = useState(false);
   // Unreal's "Context Sensitive": dragged from a pin, only the nodes that can wire to it (remembered, on by default).
   const [ctx, setCtx] = useState(() => {
     try {
@@ -1238,10 +1262,11 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
     let alive = true;
     const id = setTimeout(() => {
       const pin = fromPin && ctx ? `&pinType=${encodeURIComponent(fromPin.type)}&pinDir=${fromPin.dir}` : "";
-      void api<{ actions: Action[] }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}${pin}`).then(
+      void api<{ actions: Action[]; offline?: boolean }>(`/api/${engine}/actions?path=${encodeURIComponent(path)}&q=${encodeURIComponent(q)}${pin}`).then(
         (r) => {
           if (!alive) return;
           setItems(r.actions);
+          setOffline(!!r.offline);
           setI(0);
         },
         (e: Error) => {
@@ -1259,7 +1284,7 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
   return (
     <div className="bp-menu" style={{ left: menu.left, top: menu.top }} role="dialog" aria-label={L("כל הפעולות", "All actions")} onPointerDown={(e) => e.stopPropagation()}>
       <div className="row">
-        <strong className="grow small">{menu.from ? L(`מ-${menu.from.pin}`, `From ${menu.from.pin}`) : local ? L("כל הפעולות לסקריפט הזה", "All Actions for this script") : L("כל הפעולות ל-Blueprint הזה", "All Actions for this Blueprint")}</strong>
+        <strong className="grow small">{menu.from ? L(`מ-${menu.from.pin}`, `From ${menu.from.pin}`) : local ? L("כל הפעולות לסקריפט הזה", "All Actions for this script") : engine === "unity" ? L("הוספת נוד לגרף הזה", "Add a node to this graph") : L("כל הפעולות ל-Blueprint הזה", "All Actions for this Blueprint")}</strong>
         {fromPin && (
           <label className="row small bp-ctx" title={L("רק נודים שמתחברים לפין שממנו גררתם (Unreal: Context Sensitive)", "Only nodes that connect to the pin you dragged from (Unreal: Context Sensitive)")}>
             <input
@@ -1299,6 +1324,7 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
           } else if (e.key === "Escape") onClose();
         }}
       />
+      {offline && <p className="muted small">{L("Unity סגור: הנודים ש-Unity דיווח עליהם בפעם האחרונה ונודים נפוצים.", "Unity is closed: the nodes Unity reported last time, and common ones.")}</p>}
       <ul>
         {items === null && <li className="muted small">{L("טוען…", "Loading…")}</li>}
         {items?.length === 0 && <li className="muted small">{L("אין תוצאות.", "Nothing found.")}</li>}
