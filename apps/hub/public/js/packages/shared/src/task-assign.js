@@ -1,3 +1,4 @@
+import { SPECIALISTS, SPECIALIST_IDS } from "./engine-specialists.js";
 /** Chat agent roles a task can be given to (an outside agent is Antigravity's own entry). */
 export const ASSIGN_ROLES = ["lookup", "research", "build"];
 /** The list, in the order it is shown. */
@@ -8,6 +9,11 @@ export const ASSIGN_CHOICES = [
     { to: "helper:lookup", icon: "🔎", he: "סוכן חיפוש בצ׳אט", en: "Lookup agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
     { to: "helper:research", icon: "📚", he: "סוכן מחקר בצ׳אט", en: "Research agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
     { to: "helper:build", icon: "🛠️", he: "סוכן בנייה בצ׳אט", en: "Build agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
+    // The engine specialists (engine-specialists.ts): a new chat whose lead hands the task to that specialist.
+    ...SPECIALIST_IDS.map((id) => {
+        const s = SPECIALISTS[id];
+        return { to: `helper:${id}`, icon: s.icon, he: `סוכן ${s.he} למנוע`, en: `${s.en} agent (engine)`, noteHe: s.noteHe, noteEn: s.noteEn };
+    }),
 ];
 /**
  * A target from untrusted input.
@@ -22,7 +28,7 @@ export function parseAssignTo(x) {
 export function inboxExecutorOf(to) {
     return to === "claude" ? "opus" : to === "antigravity" || to === "local" ? to : undefined;
 }
-/** A chat role of a target, if it is one. */
+/** A chat role of a target, if it is one: a helper type, or an engine specialist. */
 export const roleOf = (to) => (to.startsWith("helper:") ? to.slice(7) : undefined);
 /** The current executor of an inbox task as a target (to mark it in the list). */
 export function assignOfExecutor(runBy) {
@@ -32,13 +38,16 @@ export function assignOfExecutor(runBy) {
  * The first message of the chat a task is handed to (a chat role): the lead hands the whole task to one sub-agent of
  * that role and reports back. The task's text is data, quoted.
  *
- * @param role - The role.
+ * @param role - The role (a helper type, or an engine specialist).
  * @param title - The task's title.
  * @param text - What to do.
  * @returns The message.
  */
 export function helperHandoff(role, title, text) {
-    return [`Hand this task to one ${role} sub-agent (delegate with kind "${role}"), then tell me what it found or changed.`, "", `Task: ${title}`, "", "```text", text.replace(/```/g, "'''").slice(0, 6000), "```"].join("\n");
+    const first = SPECIALIST_IDS.includes(role)
+        ? `Hand this task to the ${SPECIALISTS[role].en} engine specialist (delegate with agent "${role}"), then tell me what it made and its checklist.`
+        : `Hand this task to one ${role} sub-agent (delegate with kind "${role}"), then tell me what it found or changed.`;
+    return [first, "", `Task: ${title}`, "", "```text", text.replace(/```/g, "'''").slice(0, 6000), "```"].join("\n");
 }
 /**
  * The question to ask before taking over a task, in both languages.
