@@ -1,7 +1,8 @@
 /**
  * Approvals answered from the Kesher Cloud hub page (or the phone's Cloud tab): the same effect as the chat's own
  * approval card on this PC. "Approve once" and "Deny" answer the request; "Allow for a while" first keeps a rule for
- * that chat's tool that ends by itself (as the card's "Allow for 1 hour" does), then answers "always". A sub-agent's
+ * that chat's tool that ends by itself (as the card's "For 1 hour" does), then answers "allow" (the session keeps no
+ * copy of its own, so the rule's end holds). A sub-agent's
  * step gets a `helper:<tool>` rule (delegate.ts), kept apart from the chat's own rules, as on the card.
  */
 import type { KesherConfig } from "./config.js";
@@ -85,7 +86,7 @@ export async function answerFromHub(d: HubApprovalDeps, conversationId: string, 
     const cfg = d.config();
     cfg.permissions = withTimedRule(cfg.permissions, { tool: `${found.request.helper ? HELPER_RULE : ""}${found.request.name}`, conversationId, minutes: forMinutes, now: (d.now ?? Date.now)() });
     await d.saveConfig();
-    return found.approve("always");
+    return found.approve("allow");
   }
   return found.approve(decision);
 }

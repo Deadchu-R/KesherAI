@@ -379,6 +379,11 @@ button.on { border-color: var(--accent); }
 
 .scope-menu { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
 .scope-menu button { text-align: start; }
+/* Long-term approvals (GrantChoice.tsx, Settings › Approvals): rows wrap on a 390 px phone, no text is cut. */
+.grant-where { margin: 0; overflow-wrap: anywhere; }
+.grant-list .grant-row { flex-wrap: wrap; row-gap: 4px; }
+.grant-list .grant-what { min-width: 0; overflow-wrap: anywhere; }
+.card.approval .row, .cc-buttons { flex-wrap: wrap; }
 
 /* Markdown in replies */
 .msg-text { white-space: normal; }

@@ -147,7 +147,7 @@ export interface DelegateOptions {
    */
   approve?: (req: HelperApproval, signal: AbortSignal) => Promise<{ decision: ApprovalDecision; feedback?: string }>;
   /** Rules the user made on helper cards ("for a while", "always"), by the helper's tool name (`helper:<tool>`). */
-  isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
+  isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>) => boolean;
   /** "Always on this site" from a helper's card (the same list as the chat's). */
   onAlwaysScope?: (scope: string) => void;
   /**
@@ -249,7 +249,9 @@ async function runHelper(
     mode: worker ? "auto-edit" : "ask",
     // Only the rules made on helper cards count (`helper:<tool>`), and sites allowed in the browser.
     // A site the user allowed counts for helpers only when Settings → Browser says so (off by default).
-    ...(o.isAlwaysAllowed ? { isAlwaysAllowed: (tool: string, modelId: string, command?: string, scope?: string) => (scope?.startsWith("site:") ? siteAlways() && o.isAlwaysAllowed!(tool, modelId, command, scope) : o.isAlwaysAllowed!(`${HELPER_RULE}${tool}`, modelId, command, scope)) } : {}),
+    // A grant made on a helper's own card (`helper:<tool>`, for a site, a folder or an app) counts too; on a site only
+    // when the setting lets helpers use site grants at all.
+    ...(o.isAlwaysAllowed ? { isAlwaysAllowed: (tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>) => (scope?.startsWith("site:") ? siteAlways() && (o.isAlwaysAllowed!(tool, modelId, command, scope, input) || o.isAlwaysAllowed!(`${HELPER_RULE}${tool}`, modelId, command, scope, input)) : o.isAlwaysAllowed!(`${HELPER_RULE}${tool}`, modelId, command, scope, input)) } : {}),
     // Browser and computer gates decide by who asks (helpers: Manual by default, never Skip).
     helperName: p.who?.title ?? "helper",
     ...(o.onAlwaysScope ? { onAlwaysScope: (scope: string) => { if (siteAlways()) o.onAlwaysScope!(scope); } } : {}),

@@ -3,14 +3,15 @@ import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { getLocale, he$, t } from "./i18n";
 import { helperAskerName } from "./Helpers";
+import { allowLabel, GrantPicker, type GrantChoice } from "./GrantChoice";
 import "./control-card.css";
 
 /**
  * Approval card v2 for browser and computer actions (safety v2, docs/research/browser-computer-control.md §3.7): who
  * asks (the helper's name), what happens if approved, where (site or app and window), a picture of the target cut
  * from a screenshot, why it is asked, and a countdown — unanswered for 5 minutes counts as denied (the server
- * decides that; the countdown only shows it). Buttons: Allow once, Always on this site (only where the server
- * allows it), Deny, Stop everything. The same card shows on the phone (it is the chat's own thread).
+ * decides that; the countdown only shows it). Buttons: Allow (this time, or for this chat, 1 hour or until revoked
+ * on that site or app, only where the server allows it), Deny, Stop everything. The same card shows on the phone (it is the chat's own thread).
  */
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -116,6 +117,8 @@ export function ControlApproval({ convId, ev, pending, result }: { convId: strin
   const c = ev.control!;
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // How long "Allow" holds (approval-grants.ts): this time, this chat, 1 hour, or until revoked.
+  const [grant, setGrant] = useState<GrantChoice>("once");
   const left = useLeft(c.expiresAt);
   // While the card waits on a screen that is in front, the computer is told so: no phone notification for it then.
   useEffect(() => {
@@ -125,9 +128,9 @@ export function ControlApproval({ convId, ev, pending, result }: { convId: strin
     const id = setInterval(seen, 5000);
     return () => clearInterval(id);
   }, [pending, convId]);
-  const decide = async (decision: "allow" | "always" | "deny") => {
+  const decide = async (decision: "allow" | "deny", choice: GrantChoice = "once") => {
     setBusy(true);
-    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
+    await api(`/api/conversations/${convId}/approvals/${ev.requestId}`, { method: "POST", body: { decision, ...(decision === "allow" && choice !== "once" ? { grant: choice } : {}), ...(note ? { feedback: note } : {}) } }).catch(() => undefined);
     setBusy(false);
   };
   const stopAll = async () => {
@@ -182,12 +185,9 @@ export function ControlApproval({ convId, ev, pending, result }: { convId: strin
       {c.why.includes("review") && reviewerSaid(ev.reason) && <p className="muted small" dir="auto">{L("הבודק:", "Reviewer:")} <bdi>{reviewerSaid(ev.reason)}</bdi></p>}
       <input placeholder={t("noteForAgent")} value={note} onChange={(e) => setNote(e.target.value)} aria-label={t("noteForAgent")} />
       <div className="cc-buttons">
-        <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow")}>{L("אשר פעם אחת", "Allow once")}</button>
-        {canAlways && (
-          <button type="button" disabled={busy} onClick={() => void decide("always")} title={L("בלי לשאול שוב שם. אפשר לבטל בהגדרות ← דפדפן ומחשב.", "Without asking again there. Undo in Settings → Browser and computer.")}>
-            {c.kind === "browser" ? L(`תמיד ב-${where}`, `Always on ${where}`) : L(`תמיד ב-${where}`, `Always in ${where}`)}
-          </button>
-        )}
+        <button type="button" className="primary" disabled={busy} onClick={() => void decide("allow", canAlways ? grant : "once")}>{canAlways ? allowLabel(grant) : L("אשר פעם אחת", "Allow once")}</button>
+        {/* Only there (this site or app): this time, this chat, 1 hour, or until revoked in Settings › Approvals. */}
+        {canAlways && <GrantPicker value={grant} onChange={setGrant} helper={!!ev.helper} where={c.kind === "browser" ? L(`ב-${where}`, `on ${where}`) : L(`ב-${where}`, `in ${where}`)} />}
         <button type="button" disabled={busy} onClick={() => void decide("deny")}>{t("deny")}</button>
         <button type="button" className="danger-btn" disabled={busy} onClick={() => void stopAll()}>■ {L("עצור הכול", "Stop everything")}</button>
       </div>

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
 import { HELPER_RULE } from "../delegate.js";
+import { activeGrants, GRANT_CHOICES, grantFor, withGrant, type GrantChoice } from "../approval-grants.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { createReadStream, existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -587,13 +588,32 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere"; minutes?: number; command?: string } }>(
+  app.post<{ Params: { id: string; requestId: string }; Body: { decision?: "allow" | "always" | "deny"; feedback?: string; scope?: "conversation" | "model" | "everywhere"; minutes?: number; command?: string; grant?: GrantChoice } }>(
     "/api/conversations/:id/approvals/:requestId",
     async (req, reply) => {
       const opened = await s.conversations.open(req.params.id);
-      const d = req.body?.decision;
+      let d = req.body?.decision;
       if (!opened) return reply.code(404).send({ error: "Conversation not found" });
       if (d !== "allow" && d !== "always" && d !== "deny") return reply.code(400).send({ error: "decision must be allow, always or deny" });
+      // The card's "This time / For this chat / For 1 hour / Until I revoke" (approval-grants.ts): one grant for the
+      // tool and where it acts, a helper's kept apart and stricter, never for an always-ask step. The session itself
+      // is answered "allow", so the grant ends when its rule ends or is revoked (the session keeps no copy).
+      const grant = req.body?.grant;
+      if (d !== "deny" && grant !== undefined) {
+        if (!GRANT_CHOICES.includes(grant)) return reply.code(400).send({ error: "grant must be once, chat, hour or revoke" });
+        const ev = opened.session.events.find((e) => e.type === "approval_request" && e.requestId === req.params.requestId);
+        if (ev && ev.type === "approval_request") {
+          const rule = grantFor(
+            { name: ev.name, input: ev.input, reason: ev.reason, ...(ev.scope ? { scope: ev.scope } : {}), ...(ev.helper ? { helper: ev.helper } : {}), ...(ev.noAlways ? { noAlways: true } : {}) },
+            { choice: grant, conversationId: req.params.id, now: Date.now(), ...(typeof req.body.command === "string" ? { command: req.body.command } : {}) },
+          );
+          if (rule) {
+            s.config.permissions = withGrant(s.config.permissions, rule, Date.now());
+            await s.saveConfig();
+          }
+        }
+        d = "allow";
+      }
       if (d === "always") {
         // Remember it, so it also holds after a restart (and, by scope, in other conversations).
         const ev = opened.session.events.find((e) => e.type === "approval_request" && e.requestId === req.params.requestId);
@@ -620,6 +640,8 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           // A newer answer replaces the old rule (e.g. "for an hour" after "for good"); rules that ended are dropped.
           s.config.permissions = [...s.config.permissions.filter((r) => !same(r) && !(r.until && Date.parse(r.until) <= Date.now())), rule];
           await s.saveConfig();
+          // A rule that ends by itself: the session must not keep its own copy for good.
+          if ("until" in rule) d = "allow";
         }
       }
       if (!opened.session.approve(req.params.requestId, d, req.body.feedback)) return reply.code(404).send({ error: "That request is no longer waiting" });
@@ -934,8 +956,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     await s.saveConfig();
     return team();
   });
+  // Settings › Approvals: the grants still in force, with the agent kind and the time left (desktop and phone).
+  app.get("/api/permissions/active", async () => activeGrants(s.config.permissions, Date.now()));
+  // Revoke: from the phone too, since taking an approval away only narrows what runs without asking.
   app.delete<{ Params: { index: string } }>("/api/permissions/:index", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Approvals can only be changed on this computer." });
     const i = Number(req.params.index);
     if (!Number.isInteger(i) || i < 0 || i >= s.config.permissions.length) return reply.code(404).send({ error: "No such approval" });
     s.config.permissions.splice(i, 1);

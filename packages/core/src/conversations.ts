@@ -20,7 +20,7 @@ import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTo
 import { branding, editQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
-import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
+import { continueHelperRun, HELPER_RULE, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
 import { deepResearchTool } from "./deep-research.js";
 import { ChatHelpers, type WorktreeMaker } from "./chat-helpers.js";
 import { reviewHunks, type ReviewOutcome, type ReviewRequest } from "./helper-review.js";
@@ -39,6 +39,7 @@ import { taskBoardTool } from "./task-board-tool.js";
 import { modelTurnFor } from "./model-turn.js";
 import { answerInUserLanguage } from "./answer-language.js";
 import { ruleAllows } from "./approval-rules.js";
+import { targetOf } from "./approval-grants.js";
 import { runIn } from "./run-in.js";
 import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
 import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
@@ -493,10 +494,7 @@ export class ConversationManager {
         return session.relayApproval(req, signal);
       },
       // Rules made on helper cards are named `helper:<tool>` (route), so the chat's own rules never cover a helper and back.
-      isAlwaysAllowed: (tool, modelId, command, scope) =>
-        scope?.startsWith("site:")
-          ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
-          : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      isAlwaysAllowed: (tool, modelId, command, scope, input) => this.grantAllows(id, tool, modelId, command, scope, input),
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
         const list = (this.deps.config.browserSites ??= []);
@@ -512,6 +510,24 @@ export class ConversationManager {
     if (writeReport) o.report = (title, body) => writeReport(id, title, body);
     this.delegateOptions.set(id, o);
     return [...helperToolsFor(o), deepResearchTool(o)];
+  }
+
+  /**
+   * Whether a saved grant lets a call run without asking: a site kept in Settings → Browser (the chat's own browser
+   * only), or a rule from the approvals list for this tool, chat or model, and the folder, site or app it acts on.
+   *
+   * @param id - The chat.
+   * @param tool - The tool (`helper:<tool>` for a helper's step).
+   * @param modelId - The chat's model.
+   * @param command - A command's text.
+   * @param scope - The browser's `site:<host>`.
+   * @param input - The call's arguments.
+   */
+  private grantAllows(id: string, tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>): boolean {
+    if (scope?.startsWith("site:") && !tool.startsWith(HELPER_RULE) && (this.deps.config.browserSites ?? []).includes(scope.slice(5))) return true;
+    const target = targetOf(tool.replace(/^helper:/, ""), input, scope);
+    // On a site only a grant kept for a site counts (a rule for every tool never opens the browser everywhere).
+    return this.deps.config.permissions.some((r) => (!scope?.startsWith("site:") || !!r.target?.startsWith("site:")) && ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}), ...(target ? { target } : {}) }));
   }
 
   private teamCache = new Map<string, Teammate[]>();
@@ -915,10 +931,7 @@ export class ConversationManager {
         const model = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
         return this.deps.config.autoReview && !model.startsWith("agent/") ? modelReviewer(modelTurnFor(this.deps.registry, model)) : undefined;
       },
-      isAlwaysAllowed: (tool, modelId, command, scope) =>
-        scope?.startsWith("site:")
-          ? (this.deps.config.browserSites ?? []).includes(scope.slice(5))
-          : this.deps.config.permissions.some((r) => ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}) })),
+      isAlwaysAllowed: (tool, modelId, command, scope, input) => this.grantAllows(id, tool, modelId, command, scope, input),
       env: () => this.envFor(id),
       // The chat's own web settings with the user's filter from Settings → Web (blocked sites, safe search, .onion).
       web: () => withFilter(this.deps.library.summary(id)?.web, this.deps.config.webFilter, this.deps.tor?.installed() === true),

@@ -42,7 +42,7 @@ test("answers from the hub: once, deny, for a while (a sub-agent's rule is helpe
   assert.equal(await answerFromHub(chat.deps, "c1", "r1", "allow"), true);
   assert.equal(await answerFromHub(chat.deps, "c1", "r1", "deny"), true);
   assert.equal(await answerFromHub(chat.deps, "c1", "r1", "allow", 15), true);
-  assert.deepEqual(chat.answers, ["allow", "deny", "always"]);
+  assert.deepEqual(chat.answers, ["allow", "deny", "allow"]);
   assert.equal(chat.cfg.permissions[0]!.tool, "run_command");
   assert.equal(chat.saved(), 1);
   // Deny with minutes is just a deny; an unknown request answers nothing.

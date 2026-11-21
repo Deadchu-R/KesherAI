@@ -97,7 +97,7 @@ export function BrowserSitesSection() {
           ))}
         </ul>
       ) : (
-        <p className="muted small">{L("עוד אין. כשהמודל מבקש לפעול באתר, \"תמיד ב-…\" מוסיף אותו לכאן.", "None yet. When the model asks to act on a site, \"Always on …\" adds it here.")}</p>
+        <p className="muted small">{L("עוד אין. אישורים חדשים לאתר (לצ'אט, לשעה או עד שתבטלו) נמצאים בהגדרות › אישורים.", "None yet. New site approvals (for a chat, 1 hour or until you revoke) are in Settings › Approvals.")}</p>
       )}
       {/* Off by default: helper agents ask before every browser action, even on sites listed above. */}
       <label className="row">

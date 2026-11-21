@@ -4,7 +4,9 @@ import { getLocale, t, he$ } from "../i18n";
 import { Select } from "../ui/Select";
 import { toast, useLibrary } from "../library";
 
-interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string; until?: string; command?: string }
+interface Rule { tool: string; scope: "conversation" | "model" | "everywhere"; conversationId?: string; modelId?: string; createdAt?: string; until?: string; command?: string; target?: string }
+/** One grant still in force (GET /api/permissions/active): its place in the whole list, the agent kind, time left. */
+interface Active { index: number; rule: Rule; kind: "chat" | "helper"; leftMs?: number }
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -54,41 +56,79 @@ export function AutoReviewSection() {
   );
 }
 
+/** Where a grant holds, in words: a folder, a site, an app, or the whole tool. */
+function targetText(target?: string): string | undefined {
+  if (!target) return undefined;
+  const [kind, ...rest] = target.split(":");
+  const v = rest.join(":");
+  if (kind === "site") return L(`באתר ${v}`, `on ${v}`);
+  if (kind === "app") return L(`באפליקציה ${v}`, `in the ${v} app`);
+  if (kind === "folder") return L(`בתיקייה ${v}`, `in ${v}`);
+  return undefined;
+}
+
+/** A tool's name as people say it: the browser family as "the browser", a helper's without its prefix. */
+function toolText(tool: string): string {
+  const base = tool.replace(/^helper:/, "");
+  return base === "browser_*" ? L("הדפדפן", "the browser") : base === "*" ? L("כל כלי", "any tool") : base;
+}
+
 /**
- * The approvals the user gave (what runs without asking, where, and for how long): in Settings → Privacy all of
- * them; in a chat's "Approvals" only those that apply to that chat. Each can get a time limit (15 minutes, an
- * hour…) or be removed. Loaded from /api/permissions.
+ * Settings › Approvals (and a chat's "Approvals"): the grants still in force — what runs without asking, which agent
+ * kind (the chat or its helpers, kept apart), where (a folder, a site, an app), and the time left — each with a time
+ * limit to set and Revoke. Revoke works from the phone too (it only narrows); widening a grant needs the computer.
+ * Always-ask steps (dangerous commands, sensitive sites, deletes, system settings, guests) never appear here: no
+ * card can grant them.
  *
  * @param props.conversationId - Show only the approvals that hold in this chat.
+ * @param props.modelId - The chat's model (its "for this model" approvals).
  */
 export function PermissionsSection({ conversationId, modelId }: { conversationId?: string; modelId?: string } = {}) {
-  const [rules, setRules] = useState<Rule[] | null>(null);
+  const [grants, setGrants] = useState<Active[] | null>(null);
+  const [, tick] = useState(0);
   const { conversations } = useLibrary();
+  const load = () => void api<Active[]>("/api/permissions/active").then(setGrants).catch(() => setGrants([]));
   useEffect(() => {
-    void api<Rule[]>("/api/permissions").then(setRules).catch(() => setRules([]));
+    load();
+    // The time left counts down while the page is open; ended grants drop off on the next load.
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
   }, []);
-  if (!rules) return null;
-  // In a chat: the rules for this chat, its model, and everywhere (with their place in the whole list).
-  const shown = rules.map((r, i) => ({ r, i })).filter(({ r }) => !conversationId || r.scope === "everywhere" || (r.scope === "conversation" && r.conversationId === conversationId) || (r.scope === "model" && r.modelId === modelId));
+  if (!grants) return null;
+  // In a chat: the grants for this chat, its model, and everywhere.
+  const shown = grants.filter(({ rule: r }) => !conversationId || r.scope === "everywhere" || (r.scope === "conversation" && r.conversationId === conversationId) || (r.scope === "model" && r.modelId === modelId));
   const where = (r: Rule) =>
     r.scope === "everywhere" ? t("scopeEverywhere") : r.scope === "model" ? t("scopeModel", { model: r.modelId ?? "" }) : t("scopeChat", { chat: conversations.find((c) => c.id === r.conversationId)?.title ?? "?" });
+  const revoke = (g: Active) => void api(`/api/permissions/${g.index}`, { method: "DELETE" }).then(load, (err: Error) => toast(err.message));
   return (
     <section className="card stack">
-      <h2>{conversationId ? L("אישורים בצ'אט הזה", "Approvals in this chat") : t("permissionsTitle")}</h2>
-      <p className="muted">{conversationId ? L("מה רץ כאן בלי לשאול, ועד מתי. אפשר לתת לכל אחד הגבלת זמן או להסיר.", "What runs here without asking, and until when. Give each a time limit, or remove it.") : t("permissionsHint")}</p>
+      <h2>{conversationId ? L("אישורים בצ'אט הזה", "Approvals in this chat") : L("אישורים", "Approvals")}</h2>
+      <p className="muted">
+        {conversationId
+          ? L("מה רץ כאן בלי לשאול, ועד מתי. אפשר לתת לכל אחד הגבלת זמן או לבטל.", "What runs here without asking, and until when. Give each a time limit, or revoke it.")
+          : L("מה רץ בלי לשאול, איפה ועד מתי. עוזרים מקבלים אישורים נפרדים ומחמירים יותר. פקודות מסוכנות, סיסמאות, תשלומים, מחיקות, הגדרות מערכת, אתרים רגישים ואורחים תמיד נשאלים.", "What runs without asking, where, and until when. Helpers get their own, stricter approvals. Dangerous commands, passwords, payments, deletes, system settings, sensitive sites and guests are always asked.")}
+      </p>
       {shown.length === 0 && <p className="muted">{t("permissionsNone")}</p>}
-      <div className="list">
-        {shown.map(({ r, i }) => (
-          <div key={`${r.tool}-${r.scope}-${r.conversationId ?? r.modelId ?? ""}-${r.command ?? ""}`} className="row">
-            <span className="mono">{r.tool}{r.command ? <> · <code dir="ltr">{r.command}…</code></> : null}</span>
-            <span className="grow muted" dir="auto">{where(r)} · {left(r.until)}</span>
-            <Select className="model-chip" value={-1} aria-label={L("לכמה זמן", "For how long")} onChange={(e) => void api<Rule[]>(`/api/permissions/${i}`, { method: "PUT", body: { minutes: Number(e.target.value) } }).then(setRules, (err: Error) => toast(err.message))}>
-              <option value={-1}>{L("⏱ זמן…", "⏱ Time…")}</option>
-              {durations().map(([m, label]) => <option key={label} value={m}>{label}</option>)}
-            </Select>
-            <button type="button" onClick={() => void api<Rule[]>(`/api/permissions/${i}`, { method: "DELETE" }).then(setRules)}>{t("remove")}</button>
-          </div>
-        ))}
+      <div className="list grant-list">
+        {shown.map((g) => {
+          const r = g.rule;
+          const place = targetText(r.target);
+          return (
+            <div key={`${g.index}-${r.tool}-${r.target ?? ""}-${r.command ?? ""}`} className="row grant-row">
+              <span className="grant-what" dir="auto">
+                {g.kind === "helper" && <span className="pill">{L("עוזר", "Helper")}</span>} <bdi className="mono">{toolText(r.tool)}</bdi>
+                {r.command ? <> · <code dir="ltr">{r.command}…</code></> : null}
+                {place ? <> · <span>{place}</span></> : null}
+              </span>
+              <span className="grow muted small" dir="auto">{where(r)} · {left(r.until)}</span>
+              <Select className="model-chip" value={-1} aria-label={L("לכמה זמן", "For how long")} onChange={(e) => void api(`/api/permissions/${g.index}`, { method: "PUT", body: { minutes: Number(e.target.value) } }).then(load, (err: Error) => toast(err.message))}>
+                <option value={-1}>{L("⏱ זמן…", "⏱ Time…")}</option>
+                {durations().map(([m, label]) => <option key={label} value={m}>{label}</option>)}
+              </Select>
+              <button type="button" onClick={() => revoke(g)}>{L("בטל", "Revoke")}</button>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

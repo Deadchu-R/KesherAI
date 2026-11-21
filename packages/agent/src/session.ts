@@ -125,8 +125,11 @@ export interface AgentSessionOptions {
    * everywhere). Called before asking; return true to run without asking.
    * Dangerous commands still always ask.
    */
-  /** Whether a saved rule allows this tool (for a command: its text, matched against command rules). */
-  isAlwaysAllowed?(tool: string, modelId: string, command?: string, scope?: string): boolean;
+  /**
+   * Whether a saved rule allows this tool (for a command: its text, matched against command rules; `input`: the
+   * call's arguments, for rules kept for one folder, site or app).
+   */
+  isAlwaysAllowed?(tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>): boolean;
   /**
    * Smart auto approvals (F10): in "auto-edit", a command that would ask goes to this reviewer first; read on each
    * call, so turning it on or off applies at once. Undefined: the person is asked, as before.
@@ -293,7 +296,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
   private readonly questions = new Map<string, (text: string) => void>();
   private readonly alwaysAllowed = new Set<string>();
-  private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string) => boolean;
+  private readonly isAlwaysAllowed?: (tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>) => boolean;
   private readonly onAlwaysScope?: (scope: string) => void;
   private readonly helperName?: string;
   private readonly envOf?: () => Record<string, string>;
@@ -1642,7 +1645,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       scope = undefined;
     }
     const alwaysKey = scope ?? tool.spec.name;
-    const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope);
+    const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope, call.arguments);
     let verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
     // Browser and computer tools decide themselves (safety v2: modes, sensitive sites, the origin gate, the local
     // reviewer); a gate that fails asks the user.
@@ -1680,7 +1683,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         return fail((err as Error).message);
       }
       const requestId = randomUUID();
-      const noAlways = gate?.noAlways === true;
+      // No "always" for what is always asked: a gate's sensitive step, a call the tool insists on, a dangerous command.
+      const noAlways = gate?.noAlways === true || !!mustAsk || (!!command && !!dangerReason(command));
       const { decision: answered, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
         // A gate's time limit (browser and computer: 5 minutes): no answer counts as denied, and the model is told.
         const timer = gate?.timeoutMs

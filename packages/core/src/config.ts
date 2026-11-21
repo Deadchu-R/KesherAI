@@ -121,6 +121,8 @@ export const KesherConfigSchema = z.object({
         until: z.string().optional(),
         /** For a command tool: only commands that start with this (e.g. "pnpm test"); none = any command. */
         command: z.string().optional(),
+        /** Where it holds (approval-grants.ts): `folder:<path>`, `site:<host>` or `app:<name>`; none = anywhere. */
+        target: z.string().max(400).optional(),
       }),
     )
     .default([]),
