@@ -52,10 +52,11 @@ export function ComfyChip() {
     <Menu
       className="model-menu comfy-chip"
       triggerClassName="model-chip"
+      aria-label="ComfyUI"
       title={L("ComfyUI: מצב ותור", "ComfyUI: state and queue")}
       open={open}
       onOpenChange={setOpen}
-      trigger={<><span className={`where-dot ${st.up ? "local" : "off"}`} aria-hidden="true" />🎨 ComfyUI{jobs ? <span className="comfy-jobs" aria-label={L(`${jobs} עבודות`, `${jobs} jobs`)}> · {jobs}</span> : null}</>}
+      trigger={<><span className={`where-dot ${st.up ? "local" : "off"}`} aria-hidden="true" />🎨<span className="comfy-name"> ComfyUI</span>{jobs ? <span className="comfy-jobs" aria-label={L(`${jobs} עבודות`, `${jobs} jobs`)}> · {jobs}</span> : null}</>}
     >
       <MenuLabel end={<span className="muted small" aria-live="polite">{state}</span>}>ComfyUI</MenuLabel>
       <MenuNote>{st.up ? L("תמונות, וידאו, סאונד ותלת־ממד מהצ'אט עוברים דרכו.", "Pictures, video, sound and 3D from the chat go through it.") : L("כבוי: עבודת מדיה מהצ'אט תפעיל אותו לבד, או הפעילו עכשיו.", "Off: a media job from the chat starts it by itself, or start it now.")}</MenuNote>
