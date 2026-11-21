@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { unrealSupport } from "./engine-support.js";
+import { writeConvertedMarker, type ConvertedMarker } from "./engine-conversion.js";
 
 /**
  * Puts the KesherAI Bridge plugin into an Unreal project — also a
@@ -476,10 +477,13 @@ export class BridgeInstaller {
    * the first time, then copies it in (Binaries only, no source).
    *
    * @param folder - The project folder.
+   * @param copy - An AI-converted copy to install instead of the bundled plugin (it is built for the project's engine
+   *   whatever its version; the user pressed "Install this copy"): the folder with its `.uplugin`, a tag for its build
+   *   folder, and the marker written beside the installed files so it can be reverted.
    * @returns When the job has started (it runs on; follow {@link status}).
    * @throws Error when another install runs, the project or its engine is not found, or the plugin source is missing.
    */
-  async install(folder: string): Promise<void> {
+  async install(folder: string, copy?: { source: string; tag: string; marker: ConvertedMarker }): Promise<void> {
     if (
       this.job &&
       (this.job.state === "building" || this.job.state === "copying" || this.job.state === "waiting")
@@ -490,7 +494,7 @@ export class BridgeInstaller {
         "Installing from KesherAI works on Windows for now. On other systems, unzip the plugin into the project's Plugins folder (docs/UNREAL.md).",
       );
     const project = await readProject(folder);
-    if (!unrealSupport(project.engine).supported)
+    if (!copy && !unrealSupport(project.engine).supported)
       throw Object.assign(
         new Error(`Unreal ${project.engine} is older than the plugin supports (5.1 and newer). KesherAI can convert a copy of the plugin with AI.`),
         { unsupported: { engine: "unreal", version: project.engine } },
@@ -503,7 +507,7 @@ export class BridgeInstaller {
       throw new Error(
         `Unreal ${project.engine || "(any)"} was not found on this computer. Installed: ${engines.map((e) => e.version).join(", ") || "none"}.`,
       );
-    const source = bridgeSource();
+    const source = copy?.source ?? bridgeSource();
     if (!source)
       throw new Error(
         "The plugin's files are missing from this copy of KesherAI.",
@@ -515,7 +519,7 @@ export class BridgeInstaller {
       log: [],
     };
     this.job = job;
-    this.running = this.run(job, engine, source, project.dir).catch((err: Error) => {
+    this.running = this.run(job, engine, source, project.dir, copy).catch((err: Error) => {
       job.state = "failed";
       job.message = err.message;
       this.beforeCopy = undefined;
@@ -570,11 +574,13 @@ export class BridgeInstaller {
     engine: UnrealEngine,
     source: string,
     projectDir: string,
+    copy?: { tag: string; marker: ConvertedMarker },
   ): Promise<void> {
     const version = JSON.parse(
       await readFile(join(source, "KesherAIBridge.uplugin"), "utf8"),
     ) as { VersionName?: string };
-    const root = join(this.dir, `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}`);
+    // An AI-converted copy builds in a folder of its own, so it never replaces (or is replaced by) the plugin's own build.
+    const root = join(this.dir, `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}${copy ? `-ai-${copy.tag.replace(/[^\w.-]/g, "_")}` : ""}`);
     // A build kept earlier is used as it is; a fallback sibling (`-b2`…) from a locked folder counts too.
     let built = [root, ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `${root}-b${n}`)]
       .map((r) => join(r, "KesherAIBridge"))
@@ -654,6 +660,11 @@ export class BridgeInstaller {
       if (existsSync(join(built, part)))
         await cp(join(built, part), join(dest, part), { recursive: true });
     }
+    if (copy) {
+      // The AI-converted copy says so, beside its files, and can be reverted from the page.
+      if (existsSync(join(source, "CONVERTED.md"))) await cp(join(source, "CONVERTED.md"), join(dest, "CONVERTED.md"));
+      await writeConvertedMarker(dest, copy.marker);
+    }
     job.state = "done";
     job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.`;
     if (this.afterCopy) await this.afterCopy(job, engine).catch(() => undefined);
@@ -716,10 +727,11 @@ export function unityPackageSource(): string | undefined {
  * neither git nor a compiler is needed. An older copy is replaced.
  *
  * @param folder - The Unity project folder (the one with Assets/ and Packages/).
+ * @param from - A folder of package files to copy instead of the bundled package (an AI-converted copy).
  * @returns What to tell the user.
  * @throws Error when the folder is not a Unity project or the package files are missing.
  */
-export async function installUnityPackage(folder: string): Promise<string> {
+export async function installUnityPackage(folder: string, from?: string): Promise<string> {
   if (
     !existsSync(join(folder, "Assets")) ||
     !existsSync(join(folder, "Packages", "manifest.json"))
@@ -727,7 +739,7 @@ export async function installUnityPackage(folder: string): Promise<string> {
     throw new Error(
       "That is not a Unity project folder (it needs Assets/ and Packages/manifest.json).",
     );
-  const source = unityPackageSource();
+  const source = from ?? unityPackageSource();
   if (!source)
     throw new Error(
       "The package's files are missing from this copy of KesherAI.",
@@ -735,6 +747,8 @@ export async function installUnityPackage(folder: string): Promise<string> {
   const dest = join(folder, "Packages", "com.kesherai.bridge");
   await rm(dest, { recursive: true, force: true });
   await cp(source, dest, { recursive: true });
+  // The new files have not run yet: an old "it compiled" marker must not vouch for them (unity-compile.ts).
+  await rm(join(folder, "Temp", "KesherBridge.ok"), { force: true });
   return `Added to ${dest}. Unity loads it the next time it gets focus (Visual Scripting is added too if the project lacks it).`;
 }
 

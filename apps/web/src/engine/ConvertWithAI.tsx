@@ -66,7 +66,7 @@ export function ConvertWithAI({ engine, version, project, errors }: Unsupported 
   if (!open) return <button type="button" className="convert-ai-open" onClick={() => setOpen(true)}>✨ {L("המר עם AI", "Convert with AI")}</button>;
   return (
     <div className="convert-ai" role="alertdialog" aria-label={L("המרה עם AI", "Convert with AI")}>
-      <strong>⚠ {L(`${label} לא נתמך עדיין`, `${label} is not supported yet`)}</strong>
+      <strong>⚠ {errors && errors.length > 0 ? L(`החבילה לא התקמפלה ב-${label}`, `It did not compile on ${label}`) : L(`${label} לא נתמך עדיין`, `${label} is not supported yet`)}</strong>
       <p className="small">{L(`הקוד פתוח, אז AI יכול לנסות להמיר את ${what} ל-${label}. ייתכן שזה לא יעבוד טוב: ההמרה נעשית אוטומטית ולא נבדקה על הגרסה הזאת.`, `The code is open source, so AI can try to convert ${what} to ${label}. It may not work well: the conversion is automatic and has not been tested on this version.`)}</p>
       <ul className="small">
         <li>{L("נוצר עותק נפרד; התוסף המקורי לא משתנה.", "A separate copy is made; the original plugin is untouched.")}</li>

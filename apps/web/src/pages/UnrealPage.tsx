@@ -13,6 +13,8 @@ import { createConversation, toast, useLibrary } from "../library";
 import { AddUnityPackage } from "../engine/AddUnityPackage";
 import { BlueprintVariables, type BpVar } from "../engine/BlueprintVariables";
 import { ConnectSteps } from "../engine/ConnectSteps";
+import { ConvertedCopy } from "../engine/ConvertedCopy";
+import { UnityCompileFailed } from "../engine/UnityCompileFailed";
 import { ConnectUnityAssistant } from "../engine/ConnectUnityAssistant";
 import { NewBlueprint } from "../engine/NewBlueprint";
 import { OpenInChat } from "../engine/OpenInChat";
@@ -413,6 +415,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
           )}
         </div>
       )}
+      {unity && st.projects.length > 0 && <UnityCompileFailed {...(st.active ? { project: st.active } : {})} />}
+      {unity && menu.length > 0 && <ConvertedCopy engine="unity" projects={menu.filter((m) => m.path === (st.active ?? "")).map((m) => ({ name: m.name, path: m.path, engine: m.engine }))} />}
       {outdated && !unity && <PluginUpdate latest={st.latestBridge} now={st.editor!.bridge} download={st.download} />}
 
       {(neverConnected || (!st.connected && !unity)) && (

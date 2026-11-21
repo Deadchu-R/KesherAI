@@ -31,7 +31,7 @@ export const UNITY_MIN: readonly [number, number] = [2021, 3];
 export const UNREAL_MIN: readonly [number, number] = [5, 1];
 
 /** "2022.3.10f1" / "6000.2.0b6" / "5.4" / "UE_4.27" → [major, minor], or undefined. */
-function majorMinor(version: string | undefined): [number, number] | undefined {
+export function majorMinor(version: string | undefined): [number, number] | undefined {
   const m = /(\d+)\.(\d+)/.exec(String(version ?? ""));
   return m ? [Number(m[1]), Number(m[2])] : undefined;
 }
@@ -91,6 +91,17 @@ export const PLUGIN_SOURCES: Record<PluginEngine, { source: string; name: string
 export function convertedCopyPath(engine: PluginEngine, version: string): string {
   const v = (majorMinor(version) ?? [0, 0]).join(".");
   return `${PLUGIN_SOURCES[engine].source}-${engine === "unity" ? "unity" : "ue"}${v}`;
+}
+
+/**
+ * Which engine and version a "Convert with AI" task is for, from its title (the title is made by {@link convertTask}).
+ *
+ * @param title - A task's title.
+ * @returns The engine and the target version, or undefined for any other task.
+ */
+export function parseConvertTitle(title: string): { engine: PluginEngine; version: string } | undefined {
+  const m = /^Convert the (Unity package|Unreal plugin) to (?:Unity|Unreal) (\d{1,4}\.\d{1,2}[\w.]{0,12})$/.exec(title);
+  return m ? { engine: m[1] === "Unity package" ? "unity" : "unreal", version: m[2]! } : undefined;
 }
 
 /** What the "Convert with AI" task needs. */

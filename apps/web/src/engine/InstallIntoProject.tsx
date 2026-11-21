@@ -4,6 +4,7 @@ import { getLocale, he$ } from "../i18n";
 import type { Job } from "./types";
 import { desktop, toast } from "../library";
 import { ConvertWithAI, unsupportedOf, type Unsupported } from "./ConvertWithAI";
+import { ConvertedCopy } from "./ConvertedCopy";
 
 /** One project in "Install in all projects" (packages/core/src/unreal-install.ts, BatchItem). */
 interface BatchItem { name: string; path: string; engine?: string; state: "queued" | "installing" | "done" | "skipped" | "unsupported" | "failed"; message?: string; errors?: string[]; mcp?: boolean }
@@ -124,6 +125,7 @@ export function InstallIntoProject() {
           })}
         </ul>
       )}
+      {found && found.projects.length > 0 && <ConvertedCopy engine="unreal" projects={found.projects.filter((p) => !p.open)} />}
       <div className="row">
         {bridge && <button type="button" onClick={() => void pickMcp()}>🤖 {L("חבר את הצ'אטים ל-Unreal 5.8+ (MCP)…", "Connect chats to Unreal 5.8+ (MCP)…")}</button>}
         <span className="muted small">{L("מפעיל בפרויקט את שרת ה-MCP הרשמי של Unreal (כלים לשחקנים, Blueprints, חומרים, Niagara, Sequencer ועוד), כך שכל צ'אט יכול לעבוד בעורך הפתוח.", "Turns on Unreal's official MCP server in the project (tools for actors, Blueprints, materials, Niagara, Sequencer and more), so any chat can work in the open editor.")}</span>

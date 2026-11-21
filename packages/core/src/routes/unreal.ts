@@ -26,6 +26,7 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { convertTask, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
+import { engineConversionRoutes } from "./engine-conversion.js";
 import { MCP_PRESETS } from "../mcp.js";
 import { findGameProjects, listUnityScripts, unityProjectMenu } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
@@ -46,7 +47,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.13";
+export const UNITY_PACKAGE_VERSION = "0.2.14";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -889,6 +890,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       return reply.code((err as { statusCode?: number }).statusCode ?? 400).send({ error: (err as Error).message });
     }
   });
+
+  // The rest of "Convert with AI": did the Unity package compile; review, install and revert a converted copy.
+  await engineConversionRoutes(app, s, installer);
 
   /**
    * Opens a project found on this computer in the Unreal Editor of its engine version (like Unity's "Open in Unity").

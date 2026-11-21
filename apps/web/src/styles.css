@@ -4741,3 +4741,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .games-night-switch { min-height: 44px; gap: 8px; }
 .games-night-opts { gap: 12px; padding-inline-start: 28px; }
 .games-night-log { margin: 0; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.compile-failed { border-color: var(--warn, #c9a227); }
+.compile-failed p { margin: 0; overflow-wrap: anywhere; }
+.converted-copy:empty { display: none; }
+.converted-ready { flex-basis: auto; }
+.converted-ready ul { max-height: 180px; overflow: auto; overflow-wrap: anywhere; }
+.converted-installed .pill { white-space: normal; }
+.converted-installed button, .converted-ready .row button { white-space: normal; }

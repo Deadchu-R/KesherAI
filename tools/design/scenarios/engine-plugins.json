@@ -239,6 +239,562 @@
      "scroll": ".local-agent-off"
     }
    ]
+  },
+  {
+   "id": "UnityCompileFailed",
+   "title": "Unity: חבילת KesherAI לא התקמפלה בגרסה הזאת, עם השגיאה הראשונה ו\"המר עם AI\"",
+   "titleEn": "Unity: the KesherAI package did not compile in this version, with the first error and \"Convert with AI\"",
+   "route": "#/unity",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/unity/blueprints",
+     "json": {
+      "blueprints": [
+       {
+        "path": "Assets/Graphs/Door.asset",
+        "name": "Door",
+        "parent": "Script Graph",
+        "saved": true
+       },
+       {
+        "path": "Assets/Graphs/Enemy.asset",
+        "name": "Enemy",
+        "parent": "State Graph",
+        "saved": true
+       }
+      ],
+      "offline": true,
+      "project": "Door"
+     }
+    },
+    {
+     "url": "**/api/unity/queue",
+     "json": []
+    },
+    {
+     "url": "**/api/unity/sync",
+     "json": {
+      "waiting": 2,
+      "running": false,
+      "lastAt": {
+       "$ago": "12m"
+      }
+     }
+    },
+    {
+     "url": "**/api/unity/actions?*",
+     "json": {
+      "actions": [
+       {
+        "title": "Wait For Seconds",
+        "category": "Time",
+        "type": "WaitForSecondsUnit"
+       },
+       {
+        "title": "Timer",
+        "category": "Time",
+        "type": "Timer"
+       },
+       {
+        "title": "Cooldown",
+        "category": "Time",
+        "type": "Cooldown"
+       },
+       {
+        "title": "If",
+        "category": "Control",
+        "type": "If"
+       },
+       {
+        "title": "For Loop",
+        "category": "Control",
+        "type": "For"
+       },
+       {
+        "title": "Sequence",
+        "category": "Control",
+        "type": "Sequence"
+       },
+       {
+        "title": "On Update",
+        "category": "Events/Lifecycle",
+        "type": "Update"
+       },
+       {
+        "title": "Debug: Log",
+        "category": "Codebase/Debug",
+        "type": "call"
+       }
+      ],
+      "offline": true
+     }
+    },
+    {
+     "url": "**/api/unity",
+     "json": {
+      "connected": false,
+      "projects": [
+       "D:/Games/Door"
+      ],
+      "queued": 0,
+      "offline": true,
+      "cli": true,
+      "active": "D:/Games/Door",
+      "latestBridge": "0.2.14",
+      "download": "https://example.invalid/kesher-unity"
+     }
+    },
+    {
+     "url": "**/api/unity/projects",
+     "json": {
+      "projects": [
+       {
+        "name": "Door",
+        "path": "D:/Games/Door",
+        "engine": "2020.3.48f1",
+        "added": true,
+        "active": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/engine-plugins/unity-compile*",
+     "json": {
+      "project": "Door",
+      "editor": "2020.3.48f1",
+      "state": "failed",
+      "version": "0.2.13",
+      "errors": [
+       "Editor/KesherGraph.cs(41,17): error CS0246: The type or namespace name 'GraphReference' could not be found",
+       "Editor/KesherMoves.cs(88,9): error CS1061: 'SceneView' does not contain a definition for 'drawGizmos'",
+       "Editor/KesherVfx.cs(12,24): error CS0234: The type or namespace name 'VFX' does not exist in the namespace 'UnityEngine'"
+      ]
+     }
+    },
+    {
+     "url": "**/api/engine-plugins/converted?*",
+     "json": {
+      "ready": [],
+      "installed": [],
+      "job": null
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".compile-failed .convert-ai-open"
+    },
+    {
+     "click": ".compile-failed .convert-ai-open"
+    },
+    {
+     "wait": ".compile-failed .convert-ai"
+    },
+    {
+     "scroll": ".compile-failed"
+    }
+   ]
+  },
+  {
+   "id": "EngineConvertedReady",
+   "title": "תוסף מנוע: \"תוסף שהומר ב-AI מוכן\" — סקירה (קבצים ושינויים, אזהרה) ו\"התקן עותק זה\"",
+   "titleEn": "Engine plugin: \"AI-converted plugin is ready\" — review (files, changes, warning) and \"Install this copy\"",
+   "route": "#/unity",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/unity/blueprints",
+     "json": {
+      "blueprints": [
+       {
+        "path": "Assets/Graphs/Door.asset",
+        "name": "Door",
+        "parent": "Script Graph",
+        "saved": true
+       },
+       {
+        "path": "Assets/Graphs/Enemy.asset",
+        "name": "Enemy",
+        "parent": "State Graph",
+        "saved": true
+       }
+      ],
+      "offline": true,
+      "project": "Door"
+     }
+    },
+    {
+     "url": "**/api/unity/queue",
+     "json": []
+    },
+    {
+     "url": "**/api/unity/sync",
+     "json": {
+      "waiting": 2,
+      "running": false,
+      "lastAt": {
+       "$ago": "12m"
+      }
+     }
+    },
+    {
+     "url": "**/api/unity/actions?*",
+     "json": {
+      "actions": [
+       {
+        "title": "Wait For Seconds",
+        "category": "Time",
+        "type": "WaitForSecondsUnit"
+       },
+       {
+        "title": "Timer",
+        "category": "Time",
+        "type": "Timer"
+       },
+       {
+        "title": "Cooldown",
+        "category": "Time",
+        "type": "Cooldown"
+       },
+       {
+        "title": "If",
+        "category": "Control",
+        "type": "If"
+       },
+       {
+        "title": "For Loop",
+        "category": "Control",
+        "type": "For"
+       },
+       {
+        "title": "Sequence",
+        "category": "Control",
+        "type": "Sequence"
+       },
+       {
+        "title": "On Update",
+        "category": "Events/Lifecycle",
+        "type": "Update"
+       },
+       {
+        "title": "Debug: Log",
+        "category": "Codebase/Debug",
+        "type": "call"
+       }
+      ],
+      "offline": true
+     }
+    },
+    {
+     "url": "**/api/unity",
+     "json": {
+      "connected": false,
+      "projects": [
+       "D:/Games/Door"
+      ],
+      "queued": 0,
+      "offline": true,
+      "cli": true,
+      "active": "D:/Games/Door",
+      "latestBridge": "0.2.14",
+      "download": "https://example.invalid/kesher-unity"
+     }
+    },
+    {
+     "url": "**/api/unity/projects",
+     "json": {
+      "projects": [
+       {
+        "name": "Door",
+        "path": "D:/Games/Door",
+        "engine": "2020.3.48f1",
+        "added": true,
+        "active": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/engine-plugins/converted?*",
+     "json": {
+      "ready": [
+       {
+        "taskId": "r-20261121-07",
+        "engine": "unity",
+        "version": "2020.3.48f1",
+        "copy": "integrations/unity/com.kesherai.bridge-unity2020.3",
+        "branch": "agy/r-20261121-07-convert",
+        "filesChanged": 5,
+        "added": 52,
+        "removed": 13,
+        "files": [
+         {
+          "path": "package.json",
+          "added": 3,
+          "removed": 2
+         },
+         {
+          "path": "CONVERTED.md",
+          "added": 14,
+          "removed": 0
+         },
+         {
+          "path": "Editor/KesherGraph.cs",
+          "added": 9,
+          "removed": 6
+         },
+         {
+          "path": "Editor/KesherMoves.cs",
+          "added": 4,
+          "removed": 4
+         },
+         {
+          "path": "Editor/KesherVfx.cs",
+          "added": 22,
+          "removed": 1
+         }
+        ],
+        "runBy": "antigravity",
+        "endedAt": 1763700000000
+       }
+      ],
+      "installed": [],
+      "job": null
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".converted-ready button:has-text(\"סקירה\")"
+    },
+    {
+     "click": ".converted-ready button:has-text(\"סקירה\")"
+    },
+    {
+     "wait": ".converted-ready ul"
+    },
+    {
+     "scroll": ".converted-ready"
+    }
+   ]
+  },
+  {
+   "id": "EngineConvertedInstalled",
+   "title": "תוסף מנוע: עותק שהומר ב-AI הותקן — אזהרה ו\"חזרה לבלי\"",
+   "titleEn": "Engine plugin: an AI-converted copy is installed — warning and \"Revert to none\"",
+   "route": "#/unity",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/unity/blueprints",
+     "json": {
+      "blueprints": [
+       {
+        "path": "Assets/Graphs/Door.asset",
+        "name": "Door",
+        "parent": "Script Graph",
+        "saved": true
+       },
+       {
+        "path": "Assets/Graphs/Enemy.asset",
+        "name": "Enemy",
+        "parent": "State Graph",
+        "saved": true
+       }
+      ],
+      "offline": true,
+      "project": "Door"
+     }
+    },
+    {
+     "url": "**/api/unity/queue",
+     "json": []
+    },
+    {
+     "url": "**/api/unity/sync",
+     "json": {
+      "waiting": 2,
+      "running": false,
+      "lastAt": {
+       "$ago": "12m"
+      }
+     }
+    },
+    {
+     "url": "**/api/unity/actions?*",
+     "json": {
+      "actions": [
+       {
+        "title": "Wait For Seconds",
+        "category": "Time",
+        "type": "WaitForSecondsUnit"
+       },
+       {
+        "title": "Timer",
+        "category": "Time",
+        "type": "Timer"
+       },
+       {
+        "title": "Cooldown",
+        "category": "Time",
+        "type": "Cooldown"
+       },
+       {
+        "title": "If",
+        "category": "Control",
+        "type": "If"
+       },
+       {
+        "title": "For Loop",
+        "category": "Control",
+        "type": "For"
+       },
+       {
+        "title": "Sequence",
+        "category": "Control",
+        "type": "Sequence"
+       },
+       {
+        "title": "On Update",
+        "category": "Events/Lifecycle",
+        "type": "Update"
+       },
+       {
+        "title": "Debug: Log",
+        "category": "Codebase/Debug",
+        "type": "call"
+       }
+      ],
+      "offline": true
+     }
+    },
+    {
+     "url": "**/api/unity",
+     "json": {
+      "connected": false,
+      "projects": [
+       "D:/Games/Door"
+      ],
+      "queued": 0,
+      "offline": true,
+      "cli": true,
+      "active": "D:/Games/Door",
+      "latestBridge": "0.2.14",
+      "download": "https://example.invalid/kesher-unity"
+     }
+    },
+    {
+     "url": "**/api/unity/projects",
+     "json": {
+      "projects": [
+       {
+        "name": "Door",
+        "path": "D:/Games/Door",
+        "engine": "2020.3.48f1",
+        "added": true,
+        "active": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/engine-plugins/converted?*",
+     "json": {
+      "ready": [
+       {
+        "taskId": "r-20261121-07",
+        "engine": "unity",
+        "version": "2020.3.48f1",
+        "copy": "integrations/unity/com.kesherai.bridge-unity2020.3",
+        "branch": "agy/r-20261121-07-convert",
+        "filesChanged": 5,
+        "added": 52,
+        "removed": 13,
+        "files": [
+         {
+          "path": "package.json",
+          "added": 3,
+          "removed": 2
+         },
+         {
+          "path": "CONVERTED.md",
+          "added": 14,
+          "removed": 0
+         },
+         {
+          "path": "Editor/KesherGraph.cs",
+          "added": 9,
+          "removed": 6
+         },
+         {
+          "path": "Editor/KesherMoves.cs",
+          "added": 4,
+          "removed": 4
+         },
+         {
+          "path": "Editor/KesherVfx.cs",
+          "added": 22,
+          "removed": 1
+         }
+        ],
+        "runBy": "antigravity",
+        "endedAt": 1763700000000
+       }
+      ],
+      "installed": [
+       {
+        "path": "D:/Games/Door",
+        "name": "Door",
+        "marker": {
+         "taskId": "r-20261121-07",
+         "engine": "unity",
+         "version": "2020.3.48f1",
+         "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "at": 1763700100000
+        }
+       }
+      ],
+      "job": {
+       "engine": "unity",
+       "project": "Door",
+       "taskId": "r-20261121-07",
+       "state": "done",
+       "message": "Added to the project's Packages folder. Unity loads it the next time it gets focus."
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".converted-installed"
+    },
+    {
+     "scroll": ".converted-installed"
+    }
+   ]
   }
  ]
 }
