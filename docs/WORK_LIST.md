@@ -180,6 +180,17 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - 🔨 Train models from the UI: pick the kind, show what is supported, plug the result into a category (TRAINING.md) missing: kinds beyond picture LoRA and chat model
 - ✅ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini (in code: chat-import.ts, persona-import.ts, claude-code-import.ts)
 - 🔨 Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) missing: a guide for every part
+- ⬜ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8)
+- ⬜ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor)
+- ⬜ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude)
+- ⬜ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT)
+- ⬜ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio)
+- ⬜ Context ring in the composer from the last call's prompt size; offer /compact near the limit
+- ⬜ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor)
+- ⬜ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12)
+- ⬜ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI)
+- ⬜ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude)
+- ⬜ Command palette lists chats and projects; /archive instead of delete; day separators in long chats (LM Studio)
 
 ## Backlog: Game engines
 - ✅ Unity: Test button that enters Play mode and reports result and console (in code: unity-test.ts)
