@@ -1,4 +1,4 @@
-import { looksLikeGarbage } from "./lang-detect.js";
+import { looksLikeGarbage, trimLoops } from "./lang-detect.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
@@ -153,7 +153,10 @@ export class Ideas {
     const s = await this.get(id);
     if (s.status === "transcribing" || s.status === "sorting") throw Object.assign(new Error("It is still being analysed."), { statusCode: 409 });
     if (!s.transcript?.trim()) throw Object.assign(new Error("There is no transcript to read again."), { statusCode: 400 });
-    if (looksLikeGarbage(s.transcript)) {
+    const cleaned = trimLoops(s.transcript);
+    const looped = cleaned !== s.transcript;
+    if (looped) s.transcript = cleaned;
+    if ((looped && cleaned.split(" ").length < 8) || looksLikeGarbage(cleaned)) {
       // A looping transcript ("Gracias. Gracias. …") was silence or noise: nothing to analyse.
       const empty: IdeaSession = { ...s, status: "error", ideas: [], error: "No speech was found in the recording." };
       for (const k of ["deeperError", "depth", "summary"] as const) delete (empty as Partial<IdeaSession>)[k];
@@ -186,7 +189,17 @@ export class Ideas {
       }
       this.mark(id, { stage: "splitting", found: { ideas: 0, tasks: 0, questions: 0 } });
       // Silence or noise comes back from whisper as one phrase looping ("Gracias. Gracias. …"): no speech, no ideas from it.
-      if (!s.transcript?.trim() || (file && looksLikeGarbage(s.transcript))) throw new Error("No speech was found in the recording.");
+      let looped = false;
+      if (file && s.transcript) {
+        const cleaned = trimLoops(s.transcript);
+        if (cleaned !== s.transcript) {
+          looped = true;
+          s = { ...s, transcript: cleaned };
+          await this.save(s);
+        }
+      }
+      // What is left of a looped transcript must still be real speech, not a few stray words.
+      if (!s.transcript?.trim() || (file && ((looped && s.transcript.split(" ").length < 8) || looksLikeGarbage(s.transcript)))) throw new Error("No speech was found in the recording.");
       const projects = this.deps.projects().slice(0, 80);
       const { ideas: found, summary } = await this.extract(id, s.transcript, projects, level, before);
       this.mark(id, { stage: "writing", found: countIdeas([...before, ...found]), checked: { done: 0, of: found.length } });

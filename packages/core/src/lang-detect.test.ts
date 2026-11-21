@@ -101,3 +101,10 @@ test("looksLikeGarbage: real speech with repeated words is not garbage; a loopin
   assert.equal(looksLikeGarbage(speech), false);
   assert.equal(looksLikeGarbage(Array(40).fill("Gracias.").join(" ")), true);
 });
+
+test("trimLoops keeps real speech and drops whisper's loops", async () => {
+  const { trimLoops } = await import("./lang-detect.js");
+  assert.equal(trimLoops("אני רוצה לעצור הזה הזה הזה ותודה תודה תודה תודה תודה תודה"), "אני רוצה לעצור הזה הזה הזה ותודה תודה");
+  assert.equal(trimLoops("Gracias. Gracias. Gracias. Gracias. Gracias."), "Gracias.");
+  assert.equal(trimLoops("a b zz yy zz yy zz yy zz yy c"), "a b zz yy c");
+});

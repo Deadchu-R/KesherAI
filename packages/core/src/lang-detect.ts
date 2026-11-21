@@ -381,3 +381,33 @@ export function summarizeParts(parts: DetectedPart[]): { lang: string; langs: st
   const lang = [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
   return { lang, langs, outside: parts.some((p) => p.outside), ranked: parts[0]?.ranked ?? [], retried: parts.some((p) => p.retried) };
 }
+
+/**
+ * Takes out whisper's loops (a phrase repeated over and over on silence or noise: "תודה תודה תודה …",
+ * "Gracias. Gracias. …", "זה פעם שחלטת זה פעם שחלטת …"): any 1–6 word phrase said more than 3 times in a row
+ * is kept once. Real speech around it stays as it was.
+ *
+ * @param text - The transcript.
+ * @returns The transcript without the loops.
+ */
+export function trimLoops(text: string): string {
+  let words = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  for (let n = 1; n <= 6; n++) {
+    const out: string[] = [];
+    let i = 0;
+    while (i < words.length) {
+      const phrase = words.slice(i, i + n).join(" ").toLowerCase().replace(/[.,!?]/g, "");
+      let reps = 1;
+      while (i + (reps + 1) * n <= words.length && words.slice(i + reps * n, i + (reps + 1) * n).join(" ").toLowerCase().replace(/[.,!?]/g, "") === phrase) reps++;
+      if (reps > 3 && phrase) {
+        out.push(...words.slice(i, i + n));
+        i += reps * n;
+      } else {
+        out.push(words[i]!);
+        i++;
+      }
+    }
+    words = out;
+  }
+  return words.join(" ");
+}
