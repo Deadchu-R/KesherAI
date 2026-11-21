@@ -1828,17 +1828,28 @@ its hub mock server; the threat note above.
   routes are owner-only and only with a design repo; its hub server is 127.0.0.1, traversal-checked, mocks only;
   the hub page sources did not change (nothing mocked ships). Privacy: no email, Windows user name or personal path
   in the new commits (tests use example.com).
+- **Fixed (medium): guest words read by the owner's later passes.** A guest's message is now wrapped in the same
+  untrusted-content block as web pages (browser-safety.ts `untrusted`, with a "guest's message" note and the
+  injection hint) and its speaker named ("Guest Noa #3f9a (not the owner)") wherever the owner's side re-reads it for
+  a model: past-chat search for a model (`forModel`, used by Open mind's "tried before"; the snippet fits 380
+  characters so a cut never drops the closing mark), the coach's request list (and its prompt: learn nothing from
+  them), a goal's check, the side question, voice mode's recent turns, summaries (`/compact` and the context ring,
+  through `AgentSession.untrustedUser`; the summary prompt says what the block is), the reviewer teammate's brief,
+  and a branch's copied thread. The owner's own turns in a chat guests wrote in get a system note that
+  `[Guest: …]` messages are never instructions. The memory filing pass already skipped guests (d85568e). Tests per
+  path: shared-chat, side-chat, coach, conversation-search, agent session (compact), and a route test for the side
+  question, `/compact`, the goal check, the branch and the owner's prompt note.
+- **Fixed (low):** "Another answer" on a guest's message keeps what the share allows now (tools behind the owner's
+  approval while replies are on with tools; none once off), via `guestToolsFor`. Imported personas start unticked,
+  with a "read before ticking" line. `/api/guest/chats/:id/live` is limited to 100 polls a minute per guest (429 with
+  `retry-after`). Guests' labels carry a 4-character tag from their device id ("Dana #3f9a"; a `#` in a name is
+  dropped so a tag cannot be faked), and the live view sends `mine`, so a second guest with the same name is never
+  "You". Takeout's HTML is read card by card as it streams (`GeminiHtmlCards`): only the current card is kept, a card
+  over 4 MB is skipped, so the 300 MB whole-file cap is gone. Tests for each.
 - **Open (left for the lead):**
-  - Medium: guest words in the owner's chats stay readable by the owner's later turns (past-chat search, the coach's
-    request stats, an owner-set goal's check after a guest turn). Only marked by `[Guest: …]`; a note to the model
-    when it reads guest-labelled text would soften it.
-  - Low: a regenerated guest turn always gets no tools, even when the share allows them (safe side).
-  - Low: imported personas are pre-checked in the preview; an export's instructions could carry prompt injection.
-    Unchecked by default or a "from <app>" mark would make the choice explicit.
-  - Low: `/api/guest/chats/:id/live` has no per-guest rate limit (the page asks every 1.5 s); each call walks the
-    chat's events. A small per-key limit would bound a scripted guest.
-  - Low: two guests with the same name see each other's messages as "You" (the page compares names).
-  - Low (perf): Gemini Takeout HTML up to 300 MB is joined and parsed as one string.
+  - Low: the owner's main thread still holds guests' messages as written (labelled, with the system note above), not
+    wrapped: wrapping there would change the session's view path. The phone handoff (`/handoff`) and training
+    datasets built from chats carry guest text as plain user turns.
   - Carried from 169: client registration slots, code reuse not revoking, hub audit row cap, browser recording
     frames, TOCTOU on real-path checks, game-source backups never pruned, hub page unbundled.
 - Verdict: with these fixes, shared-chat replies are safe to keep on; guests reach neither the owner's memory, tools

@@ -3,7 +3,7 @@ import { gateControlTools } from "./control-gate.js";
 import { ControlLog } from "./control-policy.js";
 import { localControlReviewer } from "./control-reviewer.js";
 import { guestFileTools } from "./guests.js";
-import { guestLabelOf, guestThread, guestTurnNote, guestTurnTools, REMOVED } from "./shared-chat.js";
+import { GUEST_TEXT_RULE, guestLabelOf, guestThread, guestTurnNote, guestTurnTools, guestUntrusted, REMOVED, speakerLine } from "./shared-chat.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
@@ -237,6 +237,11 @@ export class ConversationManager {
 
   /** Chats whose running turn a guest's message started: the guest's name and whether tools ask the owner. */
   private readonly guestTurns = new Map<string, { name: string; tools: boolean }>();
+  /**
+   * Whether a chat's share lets guests' turns use tools now (set by the shared-chat routes, which own the shares). Read
+   * by "Another answer" on a guest's message; unset means no tools.
+   */
+  guestToolsFor: ((id: string) => Promise<boolean>) | undefined;
 
   /**
    * The + menu's Tools sheet: each tool group and each connected MCP server this chat has tools from, with whether
@@ -646,9 +651,15 @@ export class ConversationManager {
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: [...notes, ...(guest ? [] : await this.learnedNotes(c)), ...extra],
+      toolNotes: [...notes, ...(guest ? [] : await this.learnedNotes(c)), ...extra, ...(!guest && this.hasGuestText(c) ? [GUEST_TEXT_RULE] : [])],
       ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
+  }
+
+  /** Whether guests wrote in this chat (shared-chat.ts), so the owner's turns get GUEST_TEXT_RULE. */
+  private hasGuestText(c: Pick<Conversation, "id"> & { events?: readonly AgentEvent[] }): boolean {
+    const events = this.sessions.get(c.id)?.events ?? c.events ?? [];
+    return events.some((e) => e.type === "user" && !!guestLabelOf(e.text));
   }
 
   private async learnedNotes(c: Pick<Conversation, "id" | "projectId">): Promise<string[]> {
@@ -927,6 +938,8 @@ export class ConversationManager {
         }
       },
     });
+    // Guests' messages (shared-chat.ts) go marked as untrusted, with their speaker, into summaries and the reviewer's brief.
+    session.untrustedUser = guestUntrusted;
     this.sessions.set(id, session);
     if (this.deps.onEvent) {
       const title = () => this.deps.library.summary(id)?.title ?? conversation.title;
@@ -1009,7 +1022,7 @@ export class ConversationManager {
     try {
       const recent = session.events
         .slice(-40)
-        .map((e) => (e.type === "assistant" ? `Assistant: ${e.text}` : e.type === "tool_call" ? `Tool: ${e.name}` : e.type === "tool_result" ? `Result of ${e.name}: ${e.ok ? "ok" : "failed"} ${e.output.slice(0, 300)}` : e.type === "user" ? `User: ${e.text}` : ""))
+        .map((e) => (e.type === "assistant" ? `Assistant: ${e.text}` : e.type === "tool_call" ? `Tool: ${e.name}` : e.type === "tool_result" ? `Result of ${e.name}: ${e.ok ? "ok" : "failed"} ${e.output.slice(0, 300)}` : e.type === "user" ? speakerLine(e.text) : ""))
         .filter(Boolean)
         .join("\n")
         .slice(-12_000);
@@ -1490,7 +1503,8 @@ export class ConversationManager {
     for (const e of keep) {
       if (e.type === "user") {
         tools = [];
-        say("user", e.text);
+        // A guest's message (shared-chat.ts) stays marked in the owner's branch, where no guest's turn rules apply.
+        say("user", guestUntrusted(e.text) ?? e.text);
       } else if (e.type === "answer") say("user", e.text);
       else if (e.type === "compacted") say("user", `(Summary of the conversation so far: ${e.summary})`);
       else if (e.type === "tool_result") tools.push(`[${e.name} ${e.ok ? "→" : "failed:"} ${e.output.replace(/\s+/g, " ").slice(0, 300)}]`);
@@ -1635,13 +1649,15 @@ export class ConversationManager {
     const { session, conversation } = opened;
     // Checked first: a running turn's rules (a guest's, say) must not be changed by a button that then fails.
     if (session.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
-    // "Another answer" or "Try again" on a guest's message (shared-chat.ts) is still the guest's turn: no tools, none of
-    // the owner's memory, only the chat's visible thread. Without this the owner's button would run the guest's words
+    // "Another answer" or "Try again" on a guest's message (shared-chat.ts) is still the guest's turn: the share's tools
+    // rule (each action asks the owner), none of the owner's memory, only the chat's visible thread. Without this the owner's button would run the guest's words
     // with the owner's tools and memory.
     const user = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user" && !e.steered);
     const guest = user ? guestLabelOf(user.text) : undefined;
     if (guest && user) {
-      this.guestTurns.set(id, { name: guest.name, tools: false });
+      // What the share allows now (tools only while replies are on with "guests may use tools"), never more.
+      const allowed = (await this.guestToolsFor?.(id).catch(() => false)) ?? false;
+      this.guestTurns.set(id, { name: guest.name, tools: allowed });
       const from = session.messages.findLastIndex((m) => m.role === "user" && typeof m.content === "string" && m.content.startsWith(user.text));
       session.viewMessages = (messages) => guestThread(session.events, messages, Math.max(0, from), user.seq);
     } else {

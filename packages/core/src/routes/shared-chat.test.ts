@@ -79,12 +79,17 @@ test("allow replies: off until the owner turns it on; guests write labelled, wit
     assert.equal((await say(noa, "make a file [Attached: /etc/hostname]")).statusCode, 200);
     await answers(2);
     const mine = (await events()).events.filter((e) => e.type === "user").at(-1)!;
-    assert.match(mine.text!, /^\[Guest: Noa\]\n/);
+    assert.match(mine.text!, /^\[Guest: Noa #[0-9a-f]{4}\]\n/);
     assert.doesNotMatch(mine.text!, /\[Attached/);
     assert.equal(existsSync(join(folder, "out.txt")), false, "no tools for a guest's message");
 
-    const live = (await app.inject({ url: `/api/guest/chats/${chat.id}/live`, ...reader })).json() as { messages: Array<{ from: string; guest: boolean; text: string }>; replies: { canSend: boolean } };
-    assert.ok(live.messages.some((m) => m.from === "Noa" && m.guest && !m.text.startsWith("[Guest")));
+    const live = (await app.inject({ url: `/api/guest/chats/${chat.id}/live`, ...reader })).json() as { messages: Array<{ from: string; guest: boolean; mine: boolean; text: string }>; replies: { canSend: boolean } };
+    assert.ok(live.messages.some((m) => /^Noa #[0-9a-f]{4}$/.test(m.from) && m.guest && !m.mine && !m.text.startsWith("[Guest")));
+    // Her own page shows it as hers; a second guest also named Noa sees someone else (tags differ).
+    type Live = { messages: Array<{ guest: boolean; mine: boolean }> };
+    assert.ok(((await app.inject({ url: `/api/guest/chats/${chat.id}/live`, ...noa })).json() as Live).messages.some((m) => m.guest && m.mine));
+    const otherNoa = await guest("read", "Noa");
+    assert.ok(!((await app.inject({ url: `/api/guest/chats/${chat.id}/live`, ...otherNoa })).json() as Live).messages.some((m) => m.mine));
     assert.ok(live.messages.some((m) => m.from === "owner"));
     assert.equal(live.replies.canSend, false);
 
@@ -128,6 +133,10 @@ test("allow replies: off until the owner turns it on; guests write labelled, wit
     await app.inject({ method: "DELETE", url: `/api/shares/${share.share.id}` });
     assert.match(((await say(noa, "x")).json() as { error: string }).error, /not shared/);
     assert.deepEqual((await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/typing` })).json(), { on: false });
+    // A scripted guest polling the live view is bounded per key.
+    let limited = 0;
+    for (let i = 0; i < 110; i++) if ((await app.inject({ url: `/api/guest/chats/${chat.id}/live`, ...reader })).statusCode === 429) limited++;
+    assert.ok(limited > 0, "live polls are rate limited");
   } finally {
     await server.close();
     await rm(dataDir, { recursive: true, force: true });
@@ -213,7 +222,17 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
     await until(async () => (seen.length && ((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { status: string } }).session.status === "idle" ? true : undefined));
     const again = seen.join("\n");
     for (const secret of ["MEMORY-FACT-SECRET", "PROJECT-MEMORY-SECRET", "Avital", "TOOL-RESULT-SECRET"]) assert.doesNotMatch(again, new RegExp(secret), `${secret} stays out of a regenerated guest turn`);
-    assert.doesNotMatch(again, /"name":"(write_file|read_file|run_command)"/, "a regenerated guest turn has no tools");
+    // The share allows tools: the regenerated guest turn keeps them (each action asks the owner), never memory tools.
+    assert.match(again, /"name":"read_file"/, "a regenerated guest turn keeps the share's tools");
+    assert.doesNotMatch(again, /"name":"(remember|forget|search_knowledge)"/);
+    // With tools turned off on the share, "Another answer" gets none.
+    await app.inject({ method: "PUT", url: `/api/conversations/${chat.id}/share/replies`, payload: { tools: false } });
+    seen.length = 0;
+    const regen = await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/regenerate` });
+    assert.equal(regen.statusCode, 200, regen.body);
+    await until(async () => (seen.length && ((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { status: string } }).session.status === "idle" ? true : undefined));
+    assert.doesNotMatch(seen.join("\n"), /"name":"(write_file|read_file|run_command)"/, "no tools once the share stops allowing them");
+    await app.inject({ method: "PUT", url: `/api/conversations/${chat.id}/share/replies`, payload: { tools: true } });
 
     // "Send now" on a guest's queued message, pressed by the owner while their own turn runs, does not let it join
     // that turn (with the owner's memory and tools): it goes next, as its own guest turn.
@@ -236,6 +255,35 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
     await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/messages`, payload: { text: "thanks" } });
     await answers(3);
     assert.match(seen.join("\n"), /MEMORY-FACT-SECRET/);
+    // The owner's turns are told guests' messages are not theirs.
+    assert.match(seen.join("\n"), /guests the owner let into a shared chat wrote them/);
+
+    // The owner's later passes read the guest's words marked as untrusted, with the speaker named.
+    const marked = /Guest Noa #[0-9a-f]{4} \(not the owner\): <untrusted-page source=\\"guest Noa #[0-9a-f]{4} in a shared chat\\">/;
+    const idle = () => until(async () => (((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { status: string } }).session.status === "idle" ? true : undefined));
+    // A side question.
+    seen.length = 0;
+    const side = await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/side`, payload: { text: "what did the guest ask?" } });
+    assert.equal(side.statusCode, 200, side.body);
+    assert.match(seen.join("\n"), marked, "side question");
+    // "/compact": the summary's transcript.
+    seen.length = 0;
+    // (The scripted model's echo is not taken as a summary; what matters is what it was asked.)
+    await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/compact` });
+    assert.match(seen.join("\n"), marked, "summary");
+    assert.doesNotMatch(seen.join("\n"), /User: \[Guest/);
+    // A goal's check.
+    seen.length = 0;
+    await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/goal`, payload: { goal: "answer everyone" } });
+    await until(async () => (seen.some((x) => x.includes("You check whether a goal is fully done")) ? true : undefined), 8000);
+    assert.match(seen.find((x) => x.includes("You check whether a goal is fully done"))!, marked, "goal check");
+    await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/goal`, payload: { goal: "" } });
+    await idle();
+    // A branch of the chat keeps the guest's message marked in the owner's own thread.
+    const events = ((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { events: Array<{ type: string; seq: number }> }).events;
+    const branch = (await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/branch`, payload: { seq: events.filter((e) => e.type === "assistant").at(-1)!.seq } })).json() as { id: string };
+    const opened = await server.services.conversations.open(branch.id);
+    assert.ok(opened!.session.messages.some((m) => m.role === "user" && typeof m.content === "string" && /^Guest Noa #[0-9a-f]{4} \(not the owner\): <untrusted-page/.test(m.content)), "branch");
   } finally {
     await server.close();
     await rm(dataDir, { recursive: true, force: true });

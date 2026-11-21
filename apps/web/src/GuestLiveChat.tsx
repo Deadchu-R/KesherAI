@@ -9,7 +9,8 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const REMOVED = "(removed by the owner)";
 
 /** One message as a guest sees it (core routes/shared-chat.ts): who wrote it, its text only. */
-interface LiveMessage { seq: number; role: "user" | "assistant"; from: string; guest: boolean; text: string }
+/** `mine`: written by this guest (the server compares tags, so a guest with the same name is not "You"). */
+interface LiveMessage { seq: number; role: "user" | "assistant"; from: string; guest: boolean; mine?: boolean; text: string }
 /** The chat live (GET /api/guest/chats/:id/live). */
 interface Live {
   title: string;
@@ -95,7 +96,7 @@ export function GuestLiveChat({ id, me, onLeft }: { id: string; me: string; onLe
   };
 
   if (!live) return <p className="muted small">{error || L("טוען…", "Loading…")}</p>;
-  const who = (m: LiveMessage) => (m.role === "assistant" ? "KesherAI" : m.guest ? (m.from === me ? L("את/ה", "You") : m.from) : L("הבעלים", "Owner"));
+  const who = (m: LiveMessage) => (m.role === "assistant" ? "KesherAI" : m.guest ? ((m.mine ?? m.from === me) ? L("את/ה", "You") : m.from) : L("הבעלים", "Owner"));
   return (
     <section className="stack guest-chat-view">
       {live.messages.map((m) => (

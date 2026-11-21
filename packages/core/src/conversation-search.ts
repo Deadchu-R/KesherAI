@@ -1,5 +1,6 @@
 import type { Library } from "./library.js";
 import { rank } from "./knowledge.js";
+import { guestLabelOf, guestUntrusted } from "./shared-chat.js";
 
 /**
  * Search across every conversation: what the user wrote and the answers,
@@ -20,9 +21,14 @@ export interface ConversationHit {
   seq: number;
   role: "user" | "assistant";
   score: number;
+  /** A guest wrote it (a shared chat, shared-chat.ts): their label ("Dana #3f9a"). The snippet is their words only. */
+  guest?: string;
 }
 
-type Passage = { text: string; seq: number; role: "user" | "assistant" };
+/** What a model may be given of a hit (ideas' "tried before"): at most this many characters of snippet. */
+export const MODEL_SNIPPET_CHARS = 380;
+
+type Passage = { text: string; seq: number; role: "user" | "assistant"; guest?: string };
 
 /** Searches conversations. */
 export class ConversationSearch {
@@ -38,8 +44,11 @@ export class ConversationSearch {
     const passages: Passage[] = [];
     for (const e of c?.events ?? []) {
       if ((e.type === "user" || e.type === "assistant") && e.text.trim()) {
+        // A guest's message is kept as their words, with who wrote it (never as the owner's).
+        const g = e.type === "user" ? guestLabelOf(e.text) : undefined;
+        const text = g ? g.text : e.text;
         // Long answers are cut into parts, so the snippet is the part that matches.
-        for (let i = 0; i < e.text.length; i += 1200) passages.push({ text: e.text.slice(i, i + 1400), seq: e.seq, role: e.type });
+        for (let i = 0; i < text.length; i += 1200) passages.push({ text: text.slice(i, i + 1400), seq: e.seq, role: e.type, ...(g ? { guest: g.name } : {}) });
       }
     }
     this.cache.set(id, { updatedAt, passages });
@@ -49,9 +58,11 @@ export class ConversationSearch {
   /**
    * @param query - Words to look for.
    * @param limit - How many results.
+   * @param opts - `forModel`: the hits go to a model (not to the screen), so a guest's snippet comes inside the
+   *   untrusted-content block with its speaker (shared-chat.ts guestUntrusted), within MODEL_SNIPPET_CHARS.
    * @returns The best matches, at most one per conversation, best first.
    */
-  async search(query: string, limit = 20): Promise<ConversationHit[]> {
+  async search(query: string, limit = 20, opts: { forModel?: boolean } = {}): Promise<ConversationHit[]> {
     const q = query.trim();
     if (!q) return [];
     // Incognito chats are left out of search (as in Claude).
@@ -67,10 +78,37 @@ export class ConversationSearch {
     for (const h of rank(all, q, 400)) {
       if (seen.has(h.conv.id)) continue;
       seen.add(h.conv.id);
-      out.push({ id: h.conv.id, title: h.conv.title, updatedAt: h.conv.updatedAt, kind: h.conv.kind, snippet: snippet(h.text, q), seq: h.seq, role: h.role, score: Math.round(h.score * 100) / 100 });
+      const text = snippet(h.text, q);
+      out.push({
+        id: h.conv.id,
+        title: h.conv.title,
+        updatedAt: h.conv.updatedAt,
+        kind: h.conv.kind,
+        snippet: h.guest && opts.forModel ? guestSnippet(h.guest, text) : text,
+        seq: h.seq,
+        role: h.role,
+        score: Math.round(h.score * 100) / 100,
+        ...(h.guest ? { guest: h.guest } : {}),
+      });
       if (out.length >= limit) break;
     }
     return out;
+  }
+}
+
+/**
+ * A guest's snippet for a model: marked as untrusted with its speaker, its words cut so the whole block fits in
+ * MODEL_SNIPPET_CHARS (a caller that cuts the snippet never cuts off the block's closing mark).
+ *
+ * @param guest - The guest's label.
+ * @param text - Their words around the match.
+ */
+export function guestSnippet(guest: string, text: string): string {
+  let body = text;
+  for (;;) {
+    const marked = guestUntrusted(`[Guest: ${guest}]\n${body}`) ?? "";
+    if (marked.length <= MODEL_SNIPPET_CHARS || !body) return marked;
+    body = `${body.slice(0, Math.max(0, body.length - (marked.length - MODEL_SNIPPET_CHARS) - 1))}…`.replace(/^…$/, "");
   }
 }
 

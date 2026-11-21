@@ -9,7 +9,10 @@ import type { KesherServices } from "../services.js";
 import { GuestQuota, guestOf } from "../guests.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
 import { cleanForShare, type ShareStore } from "../shares.js";
-import { canReply, ChatLive, DENIAL_TEXT, guestLabelOf, guestMessage, OWNER_TYPING, REMOVED, ReplyLimit, repliesEnded, updateReplies } from "../shared-chat.js";
+import { canReply, ChatLive, DENIAL_TEXT, guestLabelName, guestLabelOf, guestMessage, guestTag, OWNER_TYPING, REMOVED, ReplyLimit, repliesEnded, updateReplies } from "../shared-chat.js";
+
+/** Live polls a guest may make in a minute (the page asks every 1.5 s, 40 a minute; two tabs fit). */
+export const LIVE_POLLS_PER_MINUTE = 100;
 
 /**
  * Routes for replies in shared chats.
@@ -21,6 +24,8 @@ import { canReply, ChatLive, DENIAL_TEXT, guestLabelOf, guestMessage, OWNER_TYPI
 export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, store: ShareStore): Promise<void> {
   const live = new ChatLive();
   const limit = new ReplyLimit();
+  /** Live polls per guest: each walks the chat's events, so a scripted guest is bounded. */
+  const polls = new ReplyLimit();
   const quota = (s.guestQuota ??= new GuestQuota());
   /** Sessions already followed for the answer being written. */
   const followed = new WeakSet<object>();
@@ -49,6 +54,12 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
   };
   const refuse = (reply: FastifyReply) => reply.code(403).send({ error: "Only a guest of a shared project can use this." });
   const lang = (req: FastifyRequest) => (String(req.headers["accept-language"] ?? "").startsWith("he") ? "he" : "en");
+
+  // "Another answer" on a guest's message keeps what the share allows now (tools only while replies are on with tools).
+  s.conversations.guestToolsFor = async (id) => {
+    const share = await store.live(id);
+    return !!share?.replies?.on && !!share.replies.tools && !repliesEnded(share, Date.now());
+  };
 
   // ---- The owner's (a guest key cannot reach these). ----
 
@@ -128,17 +139,21 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
   app.get<{ Params: { id: string }; Querystring: { after?: string } }>("/api/guest/chats/:id/live", async (req, reply) => {
     const g = guestBehind(req);
     if (!g) return refuse(reply);
+    const wait = polls.take(g.id, LIVE_POLLS_PER_MINUTE);
+    if (wait) return reply.code(429).header("retry-after", String(wait)).send({ error: "Too many updates asked for. Wait a moment." });
     const c = chatFor(g, req.params.id);
     if (!c) return reply.code(404).send({ error: "No such chat in this project." });
     const opened = await openChat(c.id);
     if (!opened) return reply.code(404).send({ error: "No such chat in this project." });
     const after = Math.max(0, Number(req.query.after) || 0);
+    // The guest's own messages carry their tag, so a second guest with the same name is never shown as "You".
+    const me = guestLabelName(g.name, guestTag(g.id));
     const messages = opened.session.events
       .filter((e): e is Extract<AgentEvent, { type: "user" | "assistant" }> => (e.type === "user" || e.type === "assistant") && e.seq > after)
       .slice(-200)
       .map((e) => {
         const label = e.type === "user" ? guestLabelOf(e.text) : undefined;
-        return { seq: e.seq, role: e.type, from: e.type === "assistant" ? "ai" : label ? label.name : "owner", guest: !!label, text: cleanForShare((label ? label.text : e.text).slice(0, 40_000)) };
+        return { seq: e.seq, role: e.type, from: e.type === "assistant" ? "ai" : label ? label.name : "owner", guest: !!label, mine: label?.name === me, text: cleanForShare((label ? label.text : e.text).slice(0, 40_000)) };
       });
     // Deletions the guest's page may already show: guest messages the owner removed, and the last message number (a
     // smaller one than the page has means the owner went back in the chat; the page then reads it all again).
@@ -185,7 +200,7 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
     const share = await store.live(c.id);
     const may = canReply({ share, guest: g, chatProjectId: c.projectId, now: Date.now() });
     if (!may.ok) return reply.code(403).send({ error: DENIAL_TEXT[may.why][lang(req)] });
-    const text = guestMessage(g.name, String(req.body?.text ?? ""));
+    const text = guestMessage(g.name, String(req.body?.text ?? ""), guestTag(g.id));
     if (!text) return reply.code(400).send({ error: "Empty message" });
     const wait = limit.take(g.id, share!.replies!.perMinute);
     if (wait) return reply.code(429).send({ error: lang(req) === "he" ? `לאט יותר: אפשר לשלוח שוב בעוד ${wait} שניות.` : `Slow down: you can send again in ${wait} seconds.` });
@@ -194,7 +209,7 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
     live.stop(c.id, g.id);
     await openChat(c.id);
     try {
-      const r = await s.conversations.send(c.id, text, { guest: { name: g.name, tools: !!share!.replies!.tools } });
+      const r = await s.conversations.send(c.id, text, { guest: { name: guestLabelName(g.name, guestTag(g.id)), tools: !!share!.replies!.tools } });
       return { ok: true, left, ...(r.queued ? { queued: r.queued } : {}) };
     } catch (err) {
       return reply.code(409).send({ error: (err as Error).message });

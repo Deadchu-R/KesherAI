@@ -271,6 +271,12 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * clears it when the turn ends.
    */
   viewMessages: ((messages: readonly AgentMessage[]) => AgentMessage[]) | undefined;
+  /**
+   * When set, how a user message someone other than the owner wrote (a guest in a shared chat) is shown where the
+   * session re-reads its own messages for another model (the summary of the earlier part, the reviewer's brief): its
+   * speaker named and its words marked as untrusted. Returns undefined for the owner's own messages.
+   */
+  untrustedUser: ((content: string) => string | undefined) | undefined;
   private model: ModelTurn;
   private readonly external?: ExternalAgent;
   private tools: Map<string, AgentTool>;
@@ -926,7 +932,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       )
       .slice(-40)
       .join("\n");
-    return `The user's request:\n${request}\n\nWhat the worker did:\n${actions || "(no tools used)"}\n\nThe worker's answer:\n${answer}`;
+    return `The user's request:\n${this.untrustedUser?.(request) ?? request}\n\nWhat the worker did:\n${actions || "(no tools used)"}\n\nThe worker's answer:\n${answer}`;
   }
 
   /**
@@ -1088,7 +1094,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       const earlier = last && last.upTo < cut ? `Earlier summary:\n${last.summary}\n\nThen:\n` : "";
       try {
         const r = await this.model(
-          { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(msgs.slice(from, cut), Math.floor(budget * 0.8)) }], tools: [] },
+          { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(msgs.slice(from, cut), Math.floor(budget * 0.8), this.untrustedUser) }], tools: [] },
           signal,
           () => undefined,
         );
@@ -1119,7 +1125,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const earlier = last ? `Earlier summary:\n${last.summary}\n\nThen:\n` : "";
     const budget = this.contextTokens * this.charsPerToken;
     const r = await this.model(
-      { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(this.messages.slice(from, cut), Math.floor(budget * 0.8)) }], tools: [] },
+      { messages: [{ role: "system", content: SUMMARY_PROMPT }, { role: "user", content: earlier + transcript(this.messages.slice(from, cut), Math.floor(budget * 0.8), this.untrustedUser) }], tools: [] },
       AbortSignal.timeout(300_000),
       () => undefined,
     );

@@ -539,33 +539,93 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+/** One activity of Google's "My Activity", as `MyActivity.json` holds it. */
+export type GeminiActivity = { header: string; title: string; time: string; safeHtmlItem: Array<{ html: string }> };
+
+/** The biggest single card of Takeout's HTML read (a bigger one is skipped; a real card is a few KB). */
+export const MAX_HTML_CARD_CHARS = 4 * 1024 * 1024;
+
+/** Where each card of Takeout's HTML starts. */
+const CARD_MARK = /<div class="outer-cell\b/g;
+
 /**
- * Google Takeout's "My Activity" in its default format, HTML (`MyActivity.html`), as the same list the JSON
- * format holds. Each activity is one card: a header ("Gemini Apps"), then a cell with the prompt on its first
- * line, the time on the second, and the answer after it. Times are written in the account's language; one that
- * cannot be read keeps the card's place in the file (the file is newest first).
- *
- * @param html - The file's text.
- * @returns Activities shaped like `MyActivity.json`'s.
+ * Google Takeout's "My Activity" in its default format, HTML (`MyActivity.html`), read card by card as it streams in,
+ * so a file of hundreds of MB is never held whole: only the card being read is kept (at most MAX_HTML_CARD_CHARS).
+ * Each activity is one card: a header ("Gemini Apps"), then a cell with the prompt on its first line, the time on the
+ * second, and the answer after it. Times are written in the account's language; one that cannot be read keeps the
+ * card's place in the file (the file is newest first).
  */
-export function geminiHtmlToActivity(html: string): Array<{ header: string; title: string; time: string; safeHtmlItem: Array<{ html: string }> }> {
-  const out: Array<{ header: string; title: string; time: string; safeHtmlItem: Array<{ html: string }> }> = [];
-  let last = Date.now();
-  for (const card of html.split(/<div class="outer-cell\b/).slice(1)) {
+export class GeminiHtmlCards {
+  private buf = "";
+  /** Where to look for the next card's start (the text before it was searched already). */
+  private from = 1;
+  private last = Date.now();
+
+  /**
+   * @param onActivity - Each Gemini activity, in the file's order.
+   * @param maxCard - The biggest card kept (characters).
+   */
+  constructor(
+    private readonly onActivity: (a: GeminiActivity) => void,
+    private readonly maxCard = MAX_HTML_CARD_CHARS,
+  ) {}
+
+  /** Adds text of the file; every card that is now complete is read. */
+  push(text: string): void {
+    this.buf += text;
+    for (;;) {
+      CARD_MARK.lastIndex = Math.max(1, this.from);
+      const m = CARD_MARK.exec(this.buf);
+      // A mark at the very end may still go on in the next piece ("outer-cells"): wait for more.
+      if (!m || m.index + m[0].length >= this.buf.length) break;
+      this.card(this.buf.slice(0, m.index));
+      this.buf = this.buf.slice(m.index);
+      this.from = 1;
+    }
+    this.from = Math.max(1, this.buf.length - 32);
+    // A card past the limit is skipped: its text is dropped (the tail is kept, in case a mark starts in it).
+    if (this.buf.length > this.maxCard) {
+      this.buf = this.buf.slice(-32);
+      this.from = 1;
+    }
+  }
+
+  /** The file ended: the last card is read. */
+  end(): void {
+    this.card(this.buf);
+    this.buf = "";
+    this.from = 1;
+  }
+
+  private card(card: string): void {
+    if (!card.startsWith('<div class="outer-cell')) return;
     const header = htmlToText(/class="[^"]*mdl-typography--title[^"]*">([\s\S]*?)<\/p>/.exec(card)?.[1] ?? "");
-    if (!/gemini|bard/i.test(header)) continue;
+    if (!/gemini|bard/i.test(header)) return;
     const cell = /class="content-cell[^"]*mdl-typography--body-1[^"]*">([\s\S]*?)<\/div>\s*<div class="content-cell/.exec(card)?.[1] ?? /class="content-cell[^"]*mdl-typography--body-1[^"]*">([\s\S]*)/.exec(card)?.[1] ?? "";
     const parts = cell.split(/<br\s*\/?>/i);
     const first = htmlToText(parts[0] ?? "");
     const when = htmlToText(parts[1] ?? "").replace(/[\u202f\u00a0]/g, " ");
     const answer = parts.slice(2).join("<br>").trim();
     const parsed = Date.parse(when) || Date.parse(when.replace(/\s[A-Z]{2,5}$/, ""));
-    last = Number.isNaN(parsed) || !parsed ? last - 60_000 : parsed;
+    this.last = Number.isNaN(parsed) || !parsed ? this.last - 60_000 : parsed;
     // English exports say "Prompted …"; in another language the first line is kept whole when an answer follows it.
     const prompt = /^Prompted\s/.test(first) ? first.replace(/^Prompted\s+/, "") : answer ? first : "";
-    if (!prompt.trim()) continue;
-    out.push({ header, title: `Prompted ${prompt.trim()}`, time: new Date(last).toISOString(), safeHtmlItem: answer ? [{ html: answer }] : [] });
+    if (!prompt.trim()) return;
+    this.onActivity({ header, title: `Prompted ${prompt.trim()}`, time: new Date(this.last).toISOString(), safeHtmlItem: answer ? [{ html: answer }] : [] });
   }
+}
+
+/**
+ * Takeout's "My Activity" HTML read whole (GeminiHtmlCards on one piece), as the same list the JSON format holds.
+ *
+ * @param html - The file's text.
+ * @returns Activities shaped like `MyActivity.json`'s.
+ */
+export function geminiHtmlToActivity(html: string): GeminiActivity[] {
+  const out: GeminiActivity[] = [];
+  const cards = new GeminiHtmlCards((a) => out.push(a));
+  cards.push(html);
+  cards.end();
   return out;
 }
 

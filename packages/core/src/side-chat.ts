@@ -1,5 +1,6 @@
 import type { AgentEvent } from "@kesher/shared";
 import type { ModelTurn } from "@kesher/agent";
+import { speakerLine } from "./shared-chat.js";
 
 /** One turn of a side thread. */
 export interface SideTurn {
@@ -39,7 +40,8 @@ export class SideChats {
   async ask(convId: string, main: readonly AgentEvent[], text: string, turn: ModelTurn, signal: AbortSignal): Promise<string> {
     const lines: string[] = [];
     for (const e of main) {
-      if (e.type === "user") lines.push(`User: ${e.text}`);
+      // A guest's message (shared-chat.ts) goes marked as untrusted, with its speaker.
+      if (e.type === "user") lines.push(speakerLine(e.text));
       else if (e.type === "assistant" && e.text.trim()) lines.push(`Assistant: ${e.text}`);
     }
     let context = lines.join("\n\n");

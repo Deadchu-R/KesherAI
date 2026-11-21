@@ -28,7 +28,8 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto")).text;
     },
     projects: () => s.library.listProjects().map((p) => p.name),
-    search: (q) => s.conversationSearch.search(q, 6),
+    // Hits go to a model: a guest's words come marked as untrusted (conversation-search.ts forModel).
+    search: (q) => s.conversationSearch.search(q, 6, { forModel: true }),
     startResearch: async (title, text) => {
       const c = await s.conversations.create({ kind: "chat", title });
       await s.conversations.send(c.id, text, { web: true });

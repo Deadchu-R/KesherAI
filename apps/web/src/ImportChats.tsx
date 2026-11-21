@@ -99,7 +99,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString(getLocale() === "h
 const PAGE = 150;
 
 /**
- * The preview of an export: counts, dates, the chats to pick (new ones picked), the personas found, and Import.
+ * The preview of an export: counts, dates, the chats to pick (new ones picked), the personas found (unticked), and Import.
  *
  * @param props.preview - What the computer found.
  * @param props.onPreview - A new preview (Gemini grouped another way).
@@ -108,7 +108,8 @@ const PAGE = 150;
  */
 function ImportPreviewPanel({ preview, onPreview, onDone, onCancel }: { preview: ImportPreview; onPreview: (p: ImportPreview) => void; onDone: (r: { source: keyof typeof NAMES; added: number; skipped: number; personas: number }) => void; onCancel: () => void }) {
   const [picked, setPicked] = useState(() => new Set(preview.chats.filter((c) => !c.have).map((c) => c.key)));
-  const [personas, setPersonas] = useState(() => new Set(preview.personas.map((p, i) => (p.have ? -1 : i)).filter((i) => i >= 0)));
+  // Personas start unticked: an export's instructions become the AI's rules, so each one is a choice made after reading it.
+  const [personas, setPersonas] = useState(() => new Set<number>());
   const [filter, setFilter] = useState("");
   const [shown, setShown] = useState(PAGE);
   const [busy, setBusy] = useState(false);
@@ -198,6 +199,7 @@ function ImportPreviewPanel({ preview, onPreview, onDone, onCancel }: { preview:
       {preview.personas.length > 0 && (
         <div className="stack">
           <h4>{L("הוראות שנמצאו: להוסיף כפרסונות", "Instructions found: add as personas")}</h4>
+          <p className="muted small">{L("קראו לפני שמסמנים: ההוראות האלה יהפכו לכללים של ה-AI.", "Read before ticking: these instructions become the AI's rules.")}</p>
           <ul className="import-list">
             {preview.personas.map((p, i) => (
               <li key={i}>

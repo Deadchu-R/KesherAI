@@ -9,12 +9,10 @@
 import { createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { Unzip, UnzipInflate } from "fflate";
-import { geminiHtmlToActivity, type ExportReader } from "./chat-import.js";
+import { GeminiHtmlCards, type ExportReader } from "./chat-import.js";
 
 /** The biggest single element of a JSON list (one chat) read; a bigger one is skipped as broken. */
 const MAX_ITEM_CHARS = 256 * 1024 * 1024;
-/** The biggest HTML file read (Google's MyActivity.html is read whole: its cards are not JSON). */
-const MAX_HTML_BYTES = 300 * 1024 * 1024;
 
 /**
  * Cuts a JSON text that comes in pieces into the elements of its top-level list (or its single top-level object),
@@ -172,10 +170,9 @@ export interface ScanOptions {
   mediaOnly?: boolean;
 }
 
-/** Feeds text of one file to the reader: JSON in a stream, HTML whole (Gemini's My Activity). */
+/** Feeds text of one file to the reader: JSON in a stream, HTML card by card (Gemini's My Activity). */
 function textSink(reader: ExportReader, fileName: string, onBroken: (n: number) => void): { push: (s: string) => void; end: () => void; notJson: () => boolean } {
-  let html: string[] | undefined;
-  let htmlSize = 0;
+  let html: GeminiHtmlCards | undefined;
   let decided = false;
   const json = new JsonItemSplitter((item) => {
     if (Array.isArray(item)) for (const x of item) reader.item(x, fileName);
@@ -187,16 +184,14 @@ function textSink(reader: ExportReader, fileName: string, onBroken: (n: number) 
         const t = s.replace(/^\uFEFF/, "").trimStart();
         if (!t) return;
         decided = true;
-        if (t.startsWith("<")) html = [];
+        if (t.startsWith("<")) html = new GeminiHtmlCards((a) => reader.item(a, fileName));
       }
-      if (html) {
-        htmlSize += s.length;
-        if (htmlSize <= MAX_HTML_BYTES) html.push(s);
-      } else json.push(s);
+      if (html) html.push(s);
+      else json.push(s);
     },
     end: () => {
       if (html) {
-        for (const a of geminiHtmlToActivity(html.join(""))) reader.item(a, fileName);
+        html.end();
         html = undefined;
       } else {
         json.end();

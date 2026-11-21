@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectSource, geminiHtmlToActivity, htmlToText, readExport } from "./chat-import.js";
+import { detectSource, GeminiHtmlCards, geminiHtmlToActivity, htmlToText, readExport } from "./chat-import.js";
 
 test("reads a ChatGPT export, keeping the branch the user last saw", () => {
   const data = [
@@ -110,6 +110,20 @@ test("reads Gemini activity from Takeout's HTML file", () => {
   assert.equal(chats.length, 1);
   assert.equal(readExport(items, "gap").chats.length, 1);
   assert.deepEqual(chats[0]!.messages.map((m) => [m.role, m.text]), [["user", "first question"], ["assistant", "A\n• x"], ["user", "second question"], ["assistant", "B & C"]]);
+
+  // Read as it streams, in small pieces (a mark split across pieces too): the same activities, card by card.
+  const streamed: unknown[] = [];
+  const cards = new GeminiHtmlCards((a) => streamed.push(a));
+  for (let i = 0; i < html.length; i += 7) cards.push(html.slice(i, i + 7));
+  cards.end();
+  assert.deepEqual(streamed.map((a) => (a as { title: string }).title), items.map((a) => a.title));
+  // A card past the size limit is skipped; the cards around it are still read.
+  const big = card("Prompted huge", "Nov 13, 2026, 4:30:00 PM GMT+02:00", `<p>${"z".repeat(5000)}</p>`);
+  const capped: Array<{ title: string }> = [];
+  const small = new GeminiHtmlCards((a) => capped.push(a), 2000);
+  for (const part of [card("Prompted before", "Nov 13, 2026, 4:31:00 PM GMT+02:00", "<p>1</p>"), big, card("Prompted after", "Nov 13, 2026, 4:29:00 PM GMT+02:00", "<p>2</p>")]) for (let i = 0; i < part.length; i += 500) small.push(part.slice(i, i + 500));
+  small.end();
+  assert.deepEqual(capped.map((a) => a.title), ["Prompted before", "Prompted after"]);
 });
 
 test("ChatGPT: an edited message becomes a branch; pictures, attachments, code and custom instructions are kept", () => {

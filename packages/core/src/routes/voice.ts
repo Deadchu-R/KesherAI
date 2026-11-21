@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { parseVoiceReply, shortSpoken, voiceSummaryPrompt, voiceTurnPrompt } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { modelTurnFor } from "../conversations.js";
+import { guestUntrusted } from "../shared-chat.js";
 
 /**
  * Voice mode's small local model (shared/voice-handoff.ts): it answers quick turns in one or two spoken sentences and
@@ -40,7 +41,8 @@ export function voiceRoutes(app: FastifyInstance, s: KesherServices): void {
     const recent = c.events
       .filter((e): e is typeof e & { type: "user" | "assistant"; text: string } => (e.type === "user" || e.type === "assistant") && typeof (e as { text?: unknown }).text === "string")
       .slice(-6)
-      .map((e) => ({ role: e.type, text: e.text }));
+      // A guest's message in a shared chat (shared-chat.ts) goes marked as untrusted, with its speaker.
+      .map((e) => ({ role: e.type, text: (e.type === "user" && guestUntrusted(e.text)) || e.text }));
     try {
       const r = await modelTurnFor(s.registry, m.modelId)({ messages: [{ role: "user", content: voiceTurnPrompt({ text, recent, working: req.body?.working === true, he }) }], tools: [] }, AbortSignal.timeout(20_000), () => undefined);
       return { ...parseVoiceReply(r.text, he), model: m.label };
