@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { musicKey, musicLanguage } from "./chat-tools-media.js";
+import { englishPromptVia, musicKey, musicLanguage } from "./chat-tools-media.js";
 
 test("make_music: the model's language and key words become what ACE-Step 1.5 lists", () => {
   assert.equal(musicLanguage("he"), "he");
@@ -54,4 +54,12 @@ test("nonEnglishPrompt: a Hebrew prompt goes back for translation, English and m
   assert.equal(nonEnglishPrompt("pixel art of a monkey eating a banana"), false);
   assert.equal(nonEnglishPrompt("a café in Montréal, pixel art, sign that says שלום"), false);
   assert.equal(nonEnglishPrompt("1024x1024"), false);
+});
+
+test("englishPromptVia: English as it is, Hebrew through the translator, back to the chat model without one", async () => {
+  const translator = { englishPrompt: async () => ({ prompt: "a monkey on a tree", translated: true }) };
+  assert.deepEqual(await englishPromptVia(translator, "a red fox"), { prompt: "a red fox", translated: false });
+  assert.deepEqual(await englishPromptVia(translator, "קוף על עץ"), { prompt: "a monkey on a tree", translated: true });
+  assert.equal(await englishPromptVia(undefined, "קוף על עץ"), undefined);
+  assert.equal(await englishPromptVia({ englishPrompt: async () => { throw new Error("no model"); } }, "קוף על עץ"), undefined);
 });

@@ -20,6 +20,8 @@ export interface ToolOutput {
   assetIds?: string[];
   /** Video assets the tool produced, shown as players. */
   videoIds?: string[];
+  /** The English prompt actually sent to an image, video or sound model (shown under the result). */
+  promptUsed?: string;
   /** Sound assets the tool produced (music, speech), shown as players. */
   audioIds?: string[];
   /** Files the tool made for the user (paths relative to the workspace), shown as cards with Download. */

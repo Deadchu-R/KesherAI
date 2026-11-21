@@ -1739,6 +1739,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         ...(out.assetIds?.length ? { assetIds: out.assetIds } : {}),
         ...(out.videoIds?.length ? { videoIds: out.videoIds } : {}),
         ...(out.audioIds?.length ? { audioIds: out.audioIds } : {}),
+        ...(out.promptUsed ? { promptUsed: out.promptUsed.slice(0, 2000) } : {}),
         ...(out.files?.length ? { files: out.files } : {}),
         ...(out.app ? { app: out.app } : {}),
       });

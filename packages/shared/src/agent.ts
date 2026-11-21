@@ -332,6 +332,8 @@ export type AgentEvent = EventBase &
         videoIds?: string[];
         /** Sound assets produced (music), shown as players. */
         audioIds?: string[];
+        /** The English prompt actually sent to the image, video or sound model, shown under the result. */
+        promptUsed?: string;
         /** Files made for the user, relative to the conversation's folder (e.g. a built .exe). */
         files?: string[];
         /** An MCP App: the tool's own view (a `ui://` resource on that server), with the call's input and result. */

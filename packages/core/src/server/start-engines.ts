@@ -27,7 +27,6 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
   // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
   /** The last model's load at start-up, while it runs. */
   let startLoad: Promise<unknown> | undefined;
-  let comfyUsed = false;
   guard.add({
     name: "chat model",
     providers: ["llamacpp"],
@@ -50,17 +49,28 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
       await loadModel(services, path, undefined, titles.length ? { kind: "chat", chats: titles as string[] } : { kind: "request" });
     },
     pids: () => (engine.pid ? [engine.pid] : []),
+    // Load on demand: unloaded after its idle minutes (Settings → graphics card), 0 keeps it loaded.
+    idleMinutes: () => config.guard.unloadAfterMinutes,
   });
   guard.add({
-    name: "ComfyUI models",
+    name: "ComfyUI",
     providers: ["comfyui"],
-    loaded: () => comfyUsed && comfy.status().running,
-    // Frees ComfyUI's memory without stopping it; the next flow loads what it needs.
-    unload: async () => {
-      comfyUsed = false;
-      await fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) });
+    loaded: () => comfy.status().running,
+    // Load on demand: a picture, video or music job starts ComfyUI when it is not running.
+    reload: async () => {
+      if (config.parts.nodes !== false && comfy.status().installed) await comfy.start();
     },
-    used: () => void (comfyUsed = true),
+    // Frees ComfyUI's memory, then stops it (it starts again for the next job). Its own editor open in a page keeps
+    // it running, with only the models freed.
+    unload: async () => {
+      await fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+      if (!comfy.editors) await comfy.stop();
+    },
+    // Started by hand (Models → ComfyUI) counts as a use, so it is not stopped at the next check.
+    lastUsed: () => comfy.startedAt,
+    // A job queued in ComfyUI's own editor runs without the guard seeing it: kept while the editor is open and busy.
+    busy: () => comfy.editors > 0 && Date.now() - comfy.editorActiveAt < 60_000,
+    idleMinutes: () => config.guard.idleComfy ?? 5,
     pids: () => (comfy.pid ? [comfy.pid] : []),
   });
   registry.setGate(guard);
@@ -84,7 +94,9 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
   // not loaded) waits for it through the guard instead of failing with "No provider llamacpp" (found on the phone,
   // and on the PC half a minute after an update).
   if (last && existsSync(last) && engine.status().installed) services.registerEngineProvider();
-  if (config.engines.autoLoadLast && !afterTerminate && !config.engines.lastUnloaded && last && existsSync(last) && engine.status().installed) {
+  // Nothing heavy at start (Roee, 2026-11-21): the last model comes back at start only when it is kept loaded
+  // (Settings → load on demand → chat model: keep loaded); otherwise the first message loads it through the guard.
+  if (config.engines.autoLoadLast && config.guard.unloadAfterMinutes === 0 && !afterTerminate && !config.engines.lastUnloaded && last && existsSync(last) && engine.status().installed) {
     startLoad = loadModel(services, last, undefined, { kind: "startup" })
       .catch((err) => engine.fail(err))
       .finally(() => (startLoad = undefined));

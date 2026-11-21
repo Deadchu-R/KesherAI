@@ -28,6 +28,9 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Chat step 8b (Roee 19:38): when the chat wants a tool that is not installed, it says so and shows an "Install" button in the chat; the button opens a floating window with what it is, its size and where to save it (default the heavy-data drive), then installs and continues.
 - ✅ Chat step 9: file reading in the + menu (audio, video, code), per-hunk accept/reject on helper diffs.
 
+- ✅ Load on demand (Roee 2026-11-21): chat model, embeddings and ComfyUI start only when needed and unload after their own idle time (10/5/5 min, translator 5, "keep loaded" per engine) in Settings → computer; nothing heavy at start; never in the middle of work (gpu-guard idleDue, semantic.ts, start-engines.ts). sd.cpp already per job.
+- ✅ Translator (Roee 2026-11-21, "מחולל תרגום"): translate.ts in core (loaded chat model → free Gemini flash → TranslateGemma 4B on demand); image/video/music prompts go out in English, "Prompt used" under the result; Translate page (#/translate) with one-click TranslateGemma download.
+
 ## Now (2026-11-19): research and code only, no new builds (Roee, 10:13)
 - ✅ **Mark it and let the model work** (FUTURE_FEATURES), in all four editors:
   - ✅ Pictures: repaint the selection (earlier).

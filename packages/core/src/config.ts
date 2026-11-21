@@ -309,7 +309,14 @@ export const KesherConfigSchema = z.object({
       enabled: z.boolean().default(true),
       maxTemp: z.number().int().min(60).max(95).default(83),
       resumeTemp: z.number().int().min(50).max(90).default(75),
-      unloadAfterMinutes: z.number().int().min(0).max(1440).default(20),
+      /** Load on demand: the chat model's idle minutes before it is unloaded (0 = keep it loaded). */
+      unloadAfterMinutes: z.number().int().min(0).max(1440).default(10),
+      /** The embedding engine's idle minutes (0 = keep it loaded). */
+      idleEmbeddings: z.number().int().min(0).max(1440).default(5),
+      /** ComfyUI's idle minutes after the last job (0 = keep it running). */
+      idleComfy: z.number().int().min(0).max(1440).default(5),
+      /** The translation model's idle minutes (0 = keep it loaded). */
+      idleTranslator: z.number().int().min(0).max(1440).default(5),
       gentle: z.boolean().default(false),
       maxRamPercent: z.number().int().min(0).max(98).default(0),
       maxCpuPercent: z.number().int().min(0).max(100).default(0),

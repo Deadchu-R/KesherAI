@@ -6,7 +6,7 @@ import { Select } from "./ui/Select";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Reading { index: number; name: string; temp: number; util: number; memUsed: number; memTotal: number; power?: number; powerLimit?: number }
-interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; gentle: boolean; maxRamPercent?: number; maxCpuPercent?: number; maxCpuTemp?: number }
+interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; idleEmbeddings?: number; idleComfy?: number; idleTranslator?: number; gentle: boolean; maxRamPercent?: number; maxCpuPercent?: number; maxCpuTemp?: number }
 /** What `/api/guard` answers. */
 export interface GuardStatus {
   config: GuardConfig;
@@ -131,12 +131,25 @@ export function GuardSection() {
           <span>{t("guardResumeAt", { temp: c.resumeTemp })}</span>
           <input type="range" min={55} max={c.maxTemp - 3} value={c.resumeTemp} onChange={(e) => set({ resumeTemp: Number(e.target.value) })} />
         </label>
-        <label className="field">
-          <span>{t("guardUnload")}</span>
-          <Select value={c.unloadAfterMinutes} onChange={(e) => set({ unloadAfterMinutes: Number(e.target.value) })}>
-            {[0, 5, 10, 20, 30, 60, 120].map((m) => <option key={m} value={m}>{m ? t("guardMinutes", { n: m }) : t("guardNever")}</option>)}
-          </Select>
-        </label>
+        <fieldset className="guard-on-demand stack">
+          <legend>{L("טעינה לפי צורך", "Load on demand")}</legend>
+          <p className="muted small">{L("שום דבר כבד לא נטען כשהאפליקציה עולה. כל מנוע נטען כשמשהו צריך אותו, ויורד מהזיכרון אחרי זמן בלי שימוש. אף פעם לא באמצע עבודה. \"להשאיר טעון\" למי שרוצה מהירות.", "Nothing heavy loads when the app starts. Each engine loads when something needs it and leaves memory after an idle time, never in the middle of work. \"Keep loaded\" if you want speed.")}</p>
+          {([
+            ["unloadAfterMinutes", L("מודל הצ'אט", "Chat model"), 10],
+            ["idleEmbeddings", L("חיפוש לפי משמעות", "Search by meaning"), 5],
+            ["idleComfy", L("ComfyUI (תמונות, וידאו, מוזיקה)", "ComfyUI (pictures, video, music)"), 5],
+            ["idleTranslator", L("מודל התרגום", "Translation model"), 5],
+          ] as const).map(([key, label, def]) => (
+            <label key={key} className="field">
+              <span>{label}</span>
+              <Select value={c[key] ?? def} onChange={(e) => set({ [key]: Number(e.target.value) })}>
+                {[...new Set([1, 2, 5, 10, 20, 30, 60, 120, c[key] ?? def])].filter((m) => m > 0).sort((a, b) => a - b).map((m) => <option key={m} value={m}>{L(`לפרוק אחרי ${m} דק'`, `Unload after ${m} min`)}</option>)}
+                <option value={0}>{L("להשאיר טעון", "Keep loaded")}</option>
+              </Select>
+            </label>
+          ))}
+          <p className="muted small">{L("מנוע התמונות המובנה (sd.cpp) רץ רק בזמן יצירת תמונה ונסגר מיד אחריה.", "The built-in image engine (sd.cpp) runs only while it makes a picture and closes right after.")}</p>
+        </fieldset>
         {!c.maxRamPercent && !c.maxCpuPercent && (
           <div className="row wrap guard-suggest">
             <span className="small grow">{L("הצעה: אם משחקים או עובדים ב-Unreal בזמן ש-KesherAI עובד, להגביל לזיכרון עד 85% ומעבד עד 80%, כדי שהמחשב יישאר מהיר.", "Suggestion: if you game or work in Unreal while KesherAI works, limit memory to 85% and the processor to 80%, so the computer stays quick.")}</span>

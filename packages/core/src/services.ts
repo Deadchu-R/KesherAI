@@ -208,6 +208,8 @@ export interface KesherServices {
   resume?: import("./resume-board.js").ResumeBoard;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
+  /** KesherAI's translator (translate.ts): the Translate page and English prompts for media models. */
+  translator?: import("./translate.js").Translator;
   /** "Access from anywhere" (Cloudflare tunnel). */
   tunnel: Tunnel;
   /** Ids of providers found by auto-detection (not saved in the config file). */

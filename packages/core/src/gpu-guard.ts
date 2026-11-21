@@ -44,8 +44,17 @@ export interface GuardConfig {
   maxTemp: number;
   /** …and goes on once every card is back under this. */
   resumeTemp: number;
-  /** Unload a model unused for this long (minutes); 0 = keep it loaded. */
+  /**
+   * Load on demand (Roee, 2026-11-21): the chat model is unloaded after this many idle minutes; 0 = keep it loaded.
+   * Also the time for any engine without its own setting.
+   */
   unloadAfterMinutes: number;
+  /** Search by meaning's embedding engine: stopped after this many idle minutes; 0 = keep it loaded. */
+  idleEmbeddings?: number;
+  /** ComfyUI (pictures, video, music flows): its models freed and the program stopped after this many idle minutes; 0 = keep it. */
+  idleComfy?: number;
+  /** The small translation model beside the main one: unloaded after this many idle minutes; 0 = keep it loaded. */
+  idleTranslator?: number;
   /** Run the engines at low priority. */
   gentle: boolean;
   /** New local work waits while the computer's memory (RAM) use is at or above this percent; 0 = no limit. Idle models are unloaded to free it. */
@@ -119,7 +128,7 @@ export function systemHold(r: SystemReading, cfg: Pick<GuardConfig, "maxRamPerce
 }
 
 /** The defaults: safe for every NVIDIA card (they slow themselves down near 90 °C). */
-export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 20, gentle: false, maxRamPercent: 0, maxCpuPercent: 0, maxCpuTemp: 0 };
+export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 10, idleEmbeddings: 5, idleComfy: 5, idleTranslator: 5, gentle: false, maxRamPercent: 0, maxCpuPercent: 0, maxCpuTemp: 0 };
 
 /** What Settings and the status bar show. */
 export interface GuardStatus {
@@ -205,6 +214,15 @@ export interface Unloadable {
   reload?(): Promise<void>;
   /** Called when one of its providers starts work (for engines that track use themselves). */
   used?(): void;
+  /**
+   * Its own idle time in minutes (0 = keep it loaded); undefined uses `unloadAfterMinutes`. Read at every check, so a
+   * change in Settings applies at once.
+   */
+  idleMinutes?(): number;
+  /** True while it works on something the guard does not see (an index build, a job in ComfyUI's own editor): never unloaded then. */
+  busy?(): boolean;
+  /** When it was last used by itself (ms), for engines whose calls do not pass the guard (embeddings). */
+  lastUsed?(): number;
   /** Process ids to lower in gentle mode. */
   pids(): number[];
 }
@@ -240,6 +258,8 @@ export class GpuGuard {
   private smiWorks = true;
   private readonly wakers = new Set<() => void>();
   private readonly items: Unloadable[] = [];
+  /** When each engine was last used through the guard (ms). */
+  private readonly usedAt = new Map<Unloadable, number>();
 
   /**
    * @param config - The `guard` config section (read live, so changes apply at once).
@@ -285,6 +305,30 @@ export class GpuGuard {
    */
   add(item: Unloadable): void {
     this.items.push(item);
+    // Counted from now: an engine loaded before it was added is not unloaded at the first check.
+    this.usedAt.set(item, Date.now());
+  }
+
+  /** Marks the engines that serve a provider (all of them when none is named) as used now. */
+  private markUsed(providerId?: string): void {
+    for (const item of this.items) if (!providerId || item.providers.includes(providerId)) this.usedAt.set(item, Date.now());
+  }
+
+  /**
+   * The engines due to be unloaded now: loaded, not busy, not kept loaded, and idle longer than their own time.
+   * Nothing is due while any local work runs or waits (never in the middle of a generation or a job).
+   *
+   * @param now - The time (ms).
+   */
+  idleDue(now = Date.now()): Unloadable[] {
+    if (this.running > 0 || this.waiting > 0) return [];
+    const cfg = this.config();
+    return this.items.filter((item) => {
+      const minutes = item.idleMinutes?.() ?? cfg.unloadAfterMinutes;
+      if (!(minutes > 0) || !item.loaded() || item.busy?.()) return false;
+      const last = Math.max(this.usedAt.get(item) ?? 0, item.lastUsed?.() ?? 0);
+      return now - last > minutes * 60_000;
+    });
   }
 
   /** Starts watching. */
@@ -345,8 +389,15 @@ export class GpuGuard {
     }
     if (!this.sysHold && hadSys) this.release();
 
-    if (cfg.enabled && cfg.unloadAfterMinutes > 0 && this.running === 0 && this.waiting === 0 && Date.now() - this.lastActive > cfg.unloadAfterMinutes * 60_000) {
-      await this.freeNow();
+    // Load on demand: each engine is unloaded after its own idle time (Settings → load on demand), whether or not the
+    // temperature guard is on.
+    for (const item of this.idleDue()) {
+      if (!item.loaded()) continue;
+      await item.unload().catch(() => undefined);
+      this.lastUnload = { what: item.name, at: new Date().toISOString() };
+      // Still running after its unload (ComfyUI with its editor open keeps the program, only its models are freed):
+      // counted from now, so it is not freed again at every check.
+      if (item.loaded()) this.usedAt.set(item, Date.now());
     }
 
     if (cfg.gentle) {
@@ -368,7 +419,7 @@ export class GpuGuard {
   /** Unloads every loaded engine now (while nothing runs), to free the cards' memory. */
   async freeNow(): Promise<void> {
     for (const item of this.items) {
-      if (!item.loaded()) continue;
+      if (!item.loaded() || item.busy?.()) continue;
       await item.unload().catch(() => undefined);
       this.lastUnload = { what: item.name, at: new Date().toISOString() };
     }
@@ -399,6 +450,7 @@ export class GpuGuard {
    */
   touch(providerId?: string): void {
     this.lastActive = Date.now();
+    if (providerId) this.markUsed(providerId);
     if (providerId) for (const item of this.items) if (item.providers.includes(providerId)) item.used?.();
   }
 
@@ -441,6 +493,7 @@ export class GpuGuard {
     }
     this.running++;
     this.lastActive = Date.now();
+    this.markUsed(providerId);
     try {
       for (const item of this.items) {
         if (!item.providers.includes(providerId)) continue;
@@ -453,10 +506,15 @@ export class GpuGuard {
     }
   }
 
-  /** Ends what {@link before} started. */
-  after(): void {
+  /**
+   * Ends what {@link before} started.
+   *
+   * @param providerId - The provider that ran; its engines' idle time starts again now (all engines when not named).
+   */
+  after(providerId?: string): void {
     this.running = Math.max(0, this.running - 1);
     this.lastActive = Date.now();
+    this.markUsed(providerId);
   }
 
   /** @returns What Settings shows. */

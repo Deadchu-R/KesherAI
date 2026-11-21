@@ -48,6 +48,11 @@ export class ComfyManager {
   private message?: string;
   private readonly log: string[] = [];
   private busy?: Promise<void>;
+  /** When KesherAI last started it (ms): load on demand counts a start as a use (start-engines.ts). */
+  startedAt = 0;
+  /** ComfyUI's own editor pages open now (their live connection), and when one last sent or got something (ms). */
+  editors = 0;
+  editorActiveAt = 0;
 
   /**
    * @param dir - engines/comfyui.
@@ -203,6 +208,7 @@ export class ComfyManager {
   /** Starts ComfyUI and waits until it answers. */
   async start(timeoutMs = 300_000): Promise<void> {
     if (this.status().running) return;
+    this.startedAt = Date.now();
     const folder = this.folder();
     if (!folder) throw new Error("ComfyUI is not installed. Install it, or choose the folder of your own ComfyUI.");
     // Also look for checkpoints in KesherAI's models folder.

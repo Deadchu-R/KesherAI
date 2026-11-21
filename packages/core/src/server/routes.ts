@@ -51,6 +51,7 @@ import { codeRoutes } from "../routes/code.js";
 import { spanEditRoutes } from "../routes/span-edit.js";
 import { voiceRoutes } from "../routes/voice.js";
 import { guardRoutes } from "../routes/guard.js";
+import { translateRoutes } from "../routes/translate.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
 import { healthRoutes } from "../routes/health.js";
@@ -208,6 +209,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
+  await translateRoutes(app, services);
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);
   await godotRoutes(app, services);

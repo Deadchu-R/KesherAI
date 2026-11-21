@@ -64,7 +64,7 @@ test("an idle model is unloaded and comes back by itself on the next request", a
   guard.add({ name: "chat model", providers: ["llamacpp"], loaded: () => loaded, unload: async () => void (loaded = false), reload: async () => void ((loaded = true), reloads++), pids: () => [] });
   await guard.check();
   assert.equal(loaded, true, "used recently: stays");
-  (guard as unknown as { lastActive: number }).lastActive = Date.now() - 2 * 60_000;
+  ago(guard, 2 * 60_000);
   await guard.check();
   assert.equal(loaded, false);
   assert.equal(guard.status().lastUnload?.what, "chat model");
@@ -75,6 +75,48 @@ test("an idle model is unloaded and comes back by itself on the next request", a
   guard.after();
   assert.equal(reloads, 1);
   assert.equal(loaded, true);
+});
+
+/** Moves every engine's last use `ms` into the past. */
+function ago(guard: GpuGuard, ms: number): void {
+  const used = (guard as unknown as { usedAt: Map<unknown, number> }).usedAt;
+  for (const k of used.keys()) used.set(k, Date.now() - ms);
+}
+
+test("load on demand: each engine has its own idle time, 0 keeps it, and busy or running work is never unloaded", async () => {
+  const cfg: GuardConfig = { ...GUARD_DEFAULTS, enabled: false, unloadAfterMinutes: 10 };
+  const guard = new GpuGuard(() => cfg, async () => { throw new Error("no nvidia-smi"); });
+  const state = { chat: true, embed: true, comfy: true, keep: true };
+  let embedBusy = true;
+  let embedLast = 0;
+  guard.add({ name: "chat model", providers: ["llamacpp"], loaded: () => state.chat, unload: async () => void (state.chat = false), pids: () => [], idleMinutes: () => cfg.unloadAfterMinutes });
+  guard.add({ name: "search by meaning", providers: ["llamacpp-embed"], loaded: () => state.embed, unload: async () => void (state.embed = false), pids: () => [], idleMinutes: () => 5, busy: () => embedBusy, lastUsed: () => embedLast });
+  guard.add({ name: "ComfyUI", providers: ["comfyui"], loaded: () => state.comfy, unload: async () => void (state.comfy = false), pids: () => [], idleMinutes: () => 5 });
+  guard.add({ name: "kept", providers: ["x"], loaded: () => state.keep, unload: async () => void (state.keep = false), pids: () => [], idleMinutes: () => 0 });
+  ago(guard, 6 * 60_000);
+  // A ComfyUI job runs: nothing is unloaded in the middle of work.
+  await guard.before("comfyui");
+  await guard.check();
+  assert.deepEqual(state, { chat: true, embed: true, comfy: true, keep: true });
+  guard.after("comfyui");
+  await guard.check();
+  assert.equal(state.comfy, true, "just used: stays");
+  ago(guard, 6 * 60_000);
+  // Six idle minutes (the guard's temperature switch off): ComfyUI goes, the busy embedder and the chat model (10) stay.
+  await guard.check();
+  assert.deepEqual(state, { chat: true, embed: true, comfy: false, keep: true });
+  // The embedder used itself a moment ago: still stays once it is not busy.
+  embedBusy = false;
+  embedLast = Date.now();
+  await guard.check();
+  assert.equal(state.embed, true);
+  embedLast = Date.now() - 6 * 60_000;
+  await guard.check();
+  assert.equal(state.embed, false);
+  ago(guard, 11 * 60_000);
+  await guard.check();
+  assert.equal(state.chat, false);
+  assert.equal(state.keep, true, "0 minutes = keep loaded");
 });
 
 test("the registry sends only local providers' work through the gate", async () => {

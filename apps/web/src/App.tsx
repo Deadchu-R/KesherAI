@@ -64,6 +64,7 @@ const KnowledgePage = lazy(() => import("./pages/Knowledge").then((m) => ({ defa
 const LibrariesPage = lazy(() => import("./pages/Libraries").then((m) => ({ default: m.LibrariesPage })));
 const PersonasPage = lazy(() => import("./pages/PersonasPage").then((m) => ({ default: m.PersonasPage })));
 const PromptsPage = lazy(() => import("./pages/PromptsPage").then((m) => ({ default: m.PromptsPage })));
+const TranslatePage = lazy(() => import("./pages/TranslatePage").then((m) => ({ default: m.TranslatePage })));
 const PipelinesPage = lazy(() => import("./pages/PipelinesPage").then((m) => ({ default: m.PipelinesPage })));
 const ComparePage = lazy(() => import("./pages/ComparePage").then((m) => ({ default: m.ComparePage })));
 const CommunityPage = lazy(() => import("./pages/Community").then((m) => ({ default: m.CommunityPage })));
@@ -366,6 +367,7 @@ export function App() {
   else if (hash === "#/libraries") page = <LibrariesPage />;
   else if (hash === "#/personas") page = <PersonasPage />;
   else if (hash === "#/prompts") page = <PromptsPage />;
+  else if (hash === "#/translate") page = <TranslatePage />;
   else if (hash === "#/watch") page = <InboxPage tab="screen" />;
   else if (hash === "#/inbox") page = <InboxPage />;
   else if (hash === "#/pipelines") page = <PipelinesPage />;

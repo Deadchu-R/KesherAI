@@ -23,6 +23,7 @@ const PAGE_LINES: Record<string, { he: string; en: string }> = {
   "#/personas": { he: "דמויות עם הוראות, מודל וסגנון משלהן.", en: "Characters with their own instructions, model and style." },
   "#/memory": { he: "מה שהמודלים זוכרים עליך, לקריאה ולעריכה.", en: "What the models remember about you, to read and edit." },
   "#/prompts": { he: "בקשות שמורות לשימוש חוזר, עם פקודת /.", en: "Saved requests to use again, with a / command." },
+  "#/translate": { he: "תרגום עברית ⇄ אנגלית של כל טקסט, עם המודל הזול שזמין.", en: "Translate any text Hebrew ⇄ English, with the cheapest model available." },
   "#/usage": { he: "כמה השתמשת בכל מודל, ועצות לשימוש טוב יותר.", en: "How much each model was used, and tips for using them better." },
   "#/models": { he: "הורדה, טעינה והשוואה של מודלים לכל סוג עבודה.", en: "Download, load and compare models for every kind of work." },
   "#/connections": { he: "חיבורים (ענן, שרתים, MCP, המכשירים שלך), פלאגינים ומודים, וחלקי KesherAI שפועלים.", en: "Connections (cloud, servers, MCP, your devices), plugins and mods, and which parts of KesherAI are on." },

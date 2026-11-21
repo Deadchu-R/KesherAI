@@ -4453,3 +4453,13 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Left**: a separate maintained UE4 branch (too costly); instead an AI-converted copy on its own branch, clearly marked as untested.
 - From known practice of these tools, not a fresh web search (broad research goes to Gemini).
 - **Stopped at:** done; built in the same task (engine-support.ts, unreal-install.ts installAll, ConvertWithAI.tsx).
+
+## 2026-11-21: On-demand engines and the translator
+- **Ollama**: a model loads on the first request and stays `keep_alive` long (default 5 min; per request or `OLLAMA_KEEP_ALIVE`; `-1` = forever, `0` = unload now); the timer restarts after every request and never fires while one runs.
+- **LM Studio**: JIT loading (a request for an unloaded model loads it), "idle TTL" per model (default 60 min for JIT-loaded models, `ttl` per request), "auto-evict" keeps one JIT model at a time; models loaded by hand stay.
+- **ComfyUI**: no idle timer of its own; smart memory keeps models in VRAM until another needs room; `POST /free {unload_models, free_memory}` empties it; `--cache-lru N`/`--cache-none` trade speed for RAM; `--disable-smart-memory` unloads after each run.
+- **Open WebUI**: passes Ollama's `keep_alive` per model (Advanced params), plus an "unload" action; no timer of its own.
+- **Taken**: one idle time per engine in the existing GPU guard (no second manager): chat 10, embeddings 5, ComfyUI 5, translator 5 minutes, 0 = keep loaded (Ollama's -1); the timer restarts when work ends and nothing unloads while any local work runs or an engine says it is busy (an index build, ComfyUI's own editor working). Nothing heavy at start: the chat model, embeddings and ComfyUI start on the first job unless kept loaded. ComfyUI: `/free`, then the program stops (kept running, models freed, while its editor is open). sd.cpp already runs per job.
+- **Translator**: cheapest available first: the loaded local chat model, the free Gemini key (flash), else TranslateGemma 4B (Google, Gemma 3 based, 55 languages incl. Hebrew; GGUF Q4_K_M ~2.5 GB, `42ailab/TranslateGemma-4B-GGUF`, plain Gemma chat prompt works, ~2K tokens per call so long text is split), loaded beside the main model on demand. Considered: Qwen3 1.7B/4B (good general, weaker Hebrew), NLLB/Opus-MT (not llama.cpp).
+- From known practice of these tools plus the model page, not a fresh broad search.
+- **Stopped at:** done; built in the same task (gpu-guard idle times, translate.ts, Translate page).

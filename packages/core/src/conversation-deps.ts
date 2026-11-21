@@ -116,6 +116,8 @@ export interface ConversationDeps {
   helperEngine?: HelperEngine;
   /** The translator's model id: a GGUF translator (TranslateGemma) is loaded beside the main model when needed. */
   translatorModel?(pick: string): Promise<string>;
+  /** KesherAI's translator (translate.ts): English prompts for image, video and music models. */
+  translator?: import("./translate.js").Translator;
   /**
    * Model size per turn: the small model loaded beside the main one (side-engine.ts), when one is running and is
    * smaller than the main model; never loads one by itself.

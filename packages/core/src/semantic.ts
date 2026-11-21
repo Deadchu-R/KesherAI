@@ -7,6 +7,7 @@ import { LlamaEngine, waitForDownload } from "./llamacpp.js";
 import { pickEmbedding, scanComputer, scanFolder, type FoundModel } from "./model-scan.js";
 import type { Embedder } from "./knowledge.js";
 import type { KesherConfig } from "./config.js";
+import type { Unloadable } from "./gpu-guard.js";
 
 /**
  * Search by meaning: an embedding model turns passages and questions into
@@ -40,6 +41,10 @@ export function embedText(modelId: string, text: string, kind: "query" | "doc"):
 /** Runs and sets up the embedding model. */
 export class Semantic {
   private engine?: LlamaEngine;
+  /** Load on demand: embeddings running now, when one last ended (ms), and a start in progress. */
+  private active = 0;
+  private lastUse = 0;
+  private starting?: Promise<void>;
   phase?: "downloading" | "loading" | "error";
   message?: string;
 
@@ -63,6 +68,24 @@ export class Semantic {
   embedder(): Embedder | undefined {
     const id = this.d.config.activeModels.embedding;
     if (!id) return undefined;
+    // The built-in engine starts on demand (the first search or index build) and stops when idle (the GPU guard).
+    if (id.startsWith(`${EMBED_PROVIDER}/`) && this.builtInFile()) {
+      return {
+        id,
+        embed: async (texts, kind) => {
+          this.active++;
+          try {
+            await this.ensureRunning();
+            const target = this.d.registry.resolve(id);
+            if (!target.provider.embed) throw new Error("The embedding engine cannot embed.");
+            return await target.provider.embed({ providerModelId: target.providerModelId, input: texts.map((t) => embedText(id, t, kind).slice(0, 6000)) });
+          } finally {
+            this.active--;
+            this.lastUse = Date.now();
+          }
+        },
+      };
+    }
     let target;
     try {
       target = this.d.registry.resolve(id);
@@ -79,13 +102,53 @@ export class Semantic {
     return { active: this.d.config.activeModels.embedding ?? null, usable: !!this.embedder(), builtIn: this.d.config.activeModels.embedding?.startsWith(`${EMBED_PROVIDER}/`) ?? false, ...(this.phase ? { phase: this.phase } : {}), ...(this.message ? { message: this.message } : {}), model: EMBEDDING_MODEL };
   }
 
-  /** Starts the built-in engine with a model file and makes it the active embedding model. */
-  async load(path: string): Promise<string> {
+  /** The built-in engine's model file, when it is set up and still there. */
+  private builtInFile(): string | undefined {
+    const p = this.d.config.engines.embedModel;
+    return p && existsSync(p) ? p : undefined;
+  }
+
+  /** Starts the built-in engine with a model file (once at a time) and offers it as a provider. */
+  private async startEngine(path: string): Promise<void> {
     // On the processor: a 0.6B embedding model is fast enough there, and the graphics card stays for the chat model
     // (found on the PC: with this model, Unreal and Unity on a 24 GB card, Qwen3 Coder read prompts at 20 tokens/s).
     this.engine ??= new LlamaEngine({ dir: this.d.enginesDir, binaryPath: await this.d.binary(), ...(this.d.config.engines.llamaVersion ? { version: this.d.config.engines.llamaVersion } : {}), port: 8082, args: ["--embedding", "-ngl", "0", "-c", "8192", "-ub", "8192", "-b", "8192"] });
     await this.engine.load(path, 180_000);
+    this.lastUse = Date.now();
     if (!this.d.registry.get(EMBED_PROVIDER)) this.d.registry.add({ id: EMBED_PROVIDER, type: "openai-compatible", name: "KesherAI embeddings (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey });
+  }
+
+  /** Starts the built-in engine when it is not running (load on demand). */
+  private async ensureRunning(): Promise<void> {
+    if (this.engine?.status().running) return;
+    const path = this.builtInFile();
+    if (!path) throw new Error("The embedding model file is missing; set up search by meaning again (Knowledge).");
+    this.starting ??= this.startEngine(path).finally(() => (this.starting = undefined));
+    await this.starting;
+  }
+
+  /**
+   * The embedding engine as the GPU guard sees it: stopped after `guard.idleEmbeddings` idle minutes, never while an
+   * embedding runs or the engine starts.
+   *
+   * @returns The guard's entry.
+   */
+  unloadable(): Unloadable {
+    return {
+      name: "search by meaning",
+      providers: [EMBED_PROVIDER],
+      loaded: () => !!this.engine?.status().running,
+      unload: async () => void (await this.engine?.stop("unused for a while (Settings → load on demand)")),
+      busy: () => this.active > 0 || !!this.starting || this.phase === "loading",
+      lastUsed: () => this.lastUse,
+      idleMinutes: () => this.d.config.guard.idleEmbeddings ?? 5,
+      pids: () => (this.engine?.pid ? [this.engine.pid] : []),
+    };
+  }
+
+  /** Starts the built-in engine with a model file and makes it the active embedding model. */
+  async load(path: string): Promise<string> {
+    await this.startEngine(path);
     const id = `${EMBED_PROVIDER}/${basename(path).replace(/\.gguf$/i, "")}`;
     this.d.config.activeModels.embedding = id;
     this.d.config.engines.embedModel = path;
@@ -93,10 +156,18 @@ export class Semantic {
     return id;
   }
 
-  /** On start: runs the built-in embedding model again if it was set up. */
+  /**
+   * On start: nothing is loaded (load on demand, Roee 2026-11-21); the engine starts with the first search or index
+   * build. Kept loaded (Settings → load on demand → 0) it starts now, as before.
+   */
   async resume(): Promise<void> {
-    const p = this.d.config.engines.embedModel;
-    if (p && existsSync(p) && (!this.d.config.activeModels.embedding || this.d.config.activeModels.embedding.startsWith(`${EMBED_PROVIDER}/`))) await this.load(p);
+    const p = this.builtInFile();
+    if (!p || (this.d.config.activeModels.embedding && !this.d.config.activeModels.embedding.startsWith(`${EMBED_PROVIDER}/`))) return;
+    if (this.d.config.guard.idleEmbeddings === 0) return void (await this.load(p));
+    if (!this.d.config.activeModels.embedding) {
+      this.d.config.activeModels.embedding = `${EMBED_PROVIDER}/${basename(p).replace(/\.gguf$/i, "")}`;
+      await this.d.save();
+    }
   }
 
   private seen?: { at: number; model: FoundModel | undefined };

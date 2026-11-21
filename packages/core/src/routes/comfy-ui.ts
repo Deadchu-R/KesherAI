@@ -118,10 +118,19 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
     const search = new URLSearchParams(req.query).toString();
     const up = new WebSocket(`${s.comfy.status().url.replace(/^http/, "ws")}/ws${search ? `?${search}` : ""}`);
     const queued: Array<{ data: WebSocket.RawData; binary: boolean }> = [];
+    // Load on demand: an open editor that is working (progress, previews) keeps ComfyUI running (start-engines.ts).
+    s.comfy.editors++;
+    s.comfy.editorActiveAt = Date.now();
+    let counted = true;
     up.on("open", () => queued.splice(0).forEach((m) => up.send(m.data, { binary: m.binary })));
-    up.on("message", (data, binary) => client.readyState === client.OPEN && client.send(data, { binary }));
+    up.on("message", (data, binary) => {
+      s.comfy.editorActiveAt = Date.now();
+      if (client.readyState === client.OPEN) client.send(data, { binary });
+    });
     client.on("message", (data: WebSocket.RawData, binary: boolean) => (up.readyState === up.OPEN ? up.send(data, { binary }) : queued.push({ data, binary })));
     const end = () => {
+      if (counted) s.comfy.editors = Math.max(0, s.comfy.editors - 1);
+      counted = false;
       up.close();
       client.close();
     };

@@ -9,6 +9,7 @@ import { ComfyUIProvider } from "@kesher/providers";
 import { type JobProgress, APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, cleanAppearance, type Appearance } from "@kesher/shared";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import type { ConversationDeps } from "./conversation-deps.js";
+import type { Translator } from "./translate.js";
 import type { QuickServices } from "./chat-quick-actions.js";
 import { PBR_NOTE, pbrTools } from "./pbr-tools.js";
 
@@ -24,6 +25,20 @@ export function nonEnglishPrompt(prompt: string): boolean {
   if (!letters.length) return false;
   const foreign = letters.filter((c) => !/[A-Za-z\u00C0-\u024F]/.test(c)).length;
   return foreign / letters.length > 0.3;
+}
+/**
+ * The English prompt for an image, video or music model: as it is when already English, else KesherAI's translation.
+ *
+ * @param translator - KesherAI's translator (translate.ts), when the server has one.
+ * @param prompt - The prompt the chat model wrote.
+ * @param signal - Cancels the translation.
+ * @returns The prompt to send and whether it was translated; undefined when it is not English and could not be
+ *   translated (then the chat model is asked to translate it itself).
+ */
+export async function englishPromptVia(translator: Pick<Translator, "englishPrompt"> | undefined, prompt: string, signal?: AbortSignal): Promise<{ prompt: string; translated: boolean } | undefined> {
+  if (!nonEnglishPrompt(prompt)) return { prompt, translated: false };
+  if (!translator) return undefined;
+  return translator.englishPrompt(prompt, signal).catch(() => undefined);
 }
 /** Told to the model when the image model is not ready, so it waits instead of improvising. */
 const WAIT_NOTE =
@@ -44,6 +59,7 @@ export const IMAGE_SUPPORT_FILE = /(^|[\\/])(vae|text_encoders?|clip|clip_vision
 export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = () => ({})): { tools: AgentTool[]; notes: string[] } {
   const tools: AgentTool[] = [];
   const notes: string[] = [];
+  const englishFor = (prompt: string, signal?: AbortSignal) => englishPromptVia(deps.translator, prompt, signal);
   const usable = (id: string | undefined): id is string => {
     if (!id || /(^|[-_./ ])mlx([-_./ ]|$)/i.test(id)) return false;
     // A support file of an image model (a VAE, a text encoder, a LoRA, an upscaler) cannot make a picture on its own.
@@ -82,8 +98,10 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
       },
       run: async (input, ctx) => {
         // Image models read English only: a Hebrew (or other non-Latin) prompt comes out as an unrelated picture
-        // (a "monkey" became an owl). Send it back to the chat model to translate, instead of drawing the wrong thing.
-        if (nonEnglishPrompt(String(input.prompt ?? ""))) {
+        // (a "monkey" became an owl). KesherAI's translator puts it into English; without one, it goes back to the
+        // chat model to translate, instead of drawing the wrong thing.
+        const en = await englishFor(String(input.prompt ?? ""), ctx.signal);
+        if (!en) {
           return { output: "Not generated: the prompt is not in English, and image models only understand English. Translate the user's request into a detailed English prompt (keep every subject, style and detail) and call generate_image again. Do not mention this step to the user." };
         }
         let imageModel = deps.config.activeModels.image;
@@ -99,8 +117,8 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         const { provider, providerModelId } = deps.registry.resolve(imageModel);
         const files = await provider.generateImage!({
           providerModelId,
-          prompt: String(input.prompt ?? ""),
-          ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}),
+          prompt: en.prompt,
+          ...(typeof input.negative_prompt === "string" ? { negativePrompt: (await englishFor(input.negative_prompt, ctx.signal))?.prompt ?? input.negative_prompt } : {}),
           width: Number(input.width ?? 1024),
           height: Number(input.height ?? 1024),
           steps: 0, // 0 = the model family's own default (4 for FLUX schnell, 8 for turbo models)
@@ -113,7 +131,7 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         const assets = await Promise.all(
           files.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: imageModel, ...(f.meta ? { meta: f.meta } : {}) })),
         );
-        return { output: `Generated ${assets.length} image(s); the user can see them (ids: ${assets.map((a) => a.id).join(", ")}).${switched}`, assetIds: assets.map((a) => a.id) };
+        return { output: `Generated ${assets.length} image(s); the user can see them (ids: ${assets.map((a) => a.id).join(", ")}).${switched}${en.translated ? ` The prompt was translated to English and is shown under the picture: "${en.prompt}".` : ""}`, assetIds: assets.map((a) => a.id), promptUsed: en.prompt };
       },
     });
   }
@@ -139,19 +157,20 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         },
       },
       run: async (input, ctx) => {
-        if (nonEnglishPrompt(String(input.prompt ?? ""))) {
+        const en = await englishFor(String(input.prompt ?? ""), ctx.signal);
+        if (!en) {
           return { output: "Not generated: the prompt is not in English, and video models only understand English. Translate the user's request into a detailed English prompt and call the tool again. Do not mention this step to the user." };
         }
         const r = await video.ensure();
         if (!r.path) return { output: `${r.message ?? "No video model is available."} ${WAIT_NOTE}` };
         const file = await video
-          .generate(r.path, { prompt: String(input.prompt ?? ""), ...(typeof input.negative_prompt === "string" ? { negativePrompt: input.negative_prompt } : {}), seconds: Number(input.seconds ?? 2), seed: randomInt(2 ** 31) }, ctx.signal, ctx.jobProgress)
+          .generate(r.path, { prompt: en.prompt, ...(typeof input.negative_prompt === "string" ? { negativePrompt: (await englishFor(input.negative_prompt, ctx.signal))?.prompt ?? input.negative_prompt } : {}), seconds: Number(input.seconds ?? 2), seed: randomInt(2 ** 31) }, ctx.signal, ctx.jobProgress)
           .catch((err: Error) => {
             if (/getting ready|still downloading/i.test(err.message)) throw new Error(`${err.message} ${WAIT_NOTE}`);
             throw err;
           });
         const asset = await deps.assets.save(file.data, file.mimeType, { sourceModelId: "sdcpp-video", ...(file.meta ? { meta: file.meta } : {}) });
-        return { output: "Generated a video; the user can watch it.", videoIds: [asset.id] };
+        return { output: `Generated a video; the user can watch it.${en.translated ? ` The prompt was translated to English and is shown under the video: "${en.prompt}".` : ""}`, videoIds: [asset.id], promptUsed: en.prompt };
       },
     });
   }
@@ -330,6 +349,8 @@ export async function songCover(deps: ConversationDeps, tags: string, title: str
 export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] {
   const flows = deps.flows;
   if (!flows || deps.config.parts?.nodes === false) return [];
+  /** A prompt in English for a ComfyUI model (translated when needed); the prompt as it is when that fails. */
+  const englishOr = async (prompt: string, signal?: AbortSignal) => (await englishPromptVia(deps.translator, prompt, signal))?.prompt ?? prompt;
   const gate = (id: string, download: unknown): string | undefined => {
     const st = flows.state(id);
     if (!st.allowed) return "ComfyUI is turned off by the organisation's business mode.";
@@ -383,10 +404,12 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       if (blocked) return { output: blocked };
       const v15 = id.startsWith("music-ace-step-15");
       const seconds = Math.min(v15 ? 600 : 240, Math.max(10, Number(input.seconds ?? 60) || 60));
+      // The style tags in English (the music model reads English tags; lyrics stay in their own language).
+      const tags = (await englishOr(String(input.tags ?? ""), ctx.signal)).slice(0, 1000);
       const files = await flows.run(id, (flow) => {
         const enc = flow["2"]!.inputs;
         // Bounded (scan 75): the words go into ComfyUI's text encoder and into the song's saved details.
-        enc.tags = String(input.tags ?? "").slice(0, 1000);
+        enc.tags = tags;
         enc.lyrics = String(input.lyrics ?? (v15 ? "[Instrumental]" : "[instrumental]")).slice(0, 8000);
         flow["4"]!.inputs.seconds = seconds;
         flow["8"]!.inputs.seed = randomInt(2 ** 31);
@@ -435,7 +458,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       if (blocked) return { output: blocked };
       const seconds = Math.min(120, Math.max(1, Math.round(Number(input.seconds ?? 10) || 10)));
       // Bounded (as make_music): the words go into ComfyUI's text encoder and the sound's saved details.
-      const prompt = String(input.prompt ?? "").slice(0, 1000);
+      const prompt = (await englishOr(String(input.prompt ?? ""), ctx.signal)).slice(0, 1000);
       const files = await flows.run(sfxId, (flow) => {
         flow["3"]!.inputs.text = prompt;
         flow["5"]!.inputs.seconds = seconds;
@@ -444,7 +467,7 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       const audio = files.filter((f) => f.mimeType.startsWith("audio/"));
       if (!audio.length) return { output: "ComfyUI finished but saved no sound." };
       const assets = await Promise.all(audio.map((f) => deps.assets.save(f.data, f.mimeType, { sourceModelId: "comfyui/stable-audio-3-small-sfx", meta: { prompt } })));
-      return { output: `Made the sound (${seconds} s); the user can play and download it.`, audioIds: assets.map((a) => a.id) };
+      return { output: `Made the sound (${seconds} s); the user can play and download it.`, audioIds: assets.map((a) => a.id), promptUsed: prompt };
     },
   };
   // A picture set in motion (Wan 2.2 TI2V 5B in ComfyUI): the video editor's "continue this shot" (its last frame),
@@ -482,16 +505,17 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       const tall = size ? size.h > size.w : false;
       const seconds = Math.min(5, Math.max(1, Number(input.seconds ?? 5) || 5));
       const frames = 4 * Math.round((seconds * 24) / 4) + 1;
+      const prompt = (await englishOr(String(input.prompt ?? ""), ctx.signal)).slice(0, 1000);
       const files = await flows.run("video-wan22-ti2v", async (flow, upload) => {
         flow["4"]!.inputs.image = await upload(new Uint8Array(data), `kesher-${randomInt(1e9)}-${basename(file)}`);
-        flow["5"]!.inputs.text = String(input.prompt ?? "").slice(0, 1000);
+        flow["5"]!.inputs.text = prompt;
         Object.assign(flow["7"]!.inputs, { width: tall ? 704 : 1280, height: tall ? 1280 : 704, length: frames });
         flow["9"]!.inputs.seed = randomInt(2 ** 31);
       }, ctx.signal, ctx.jobProgress);
       const vid = files.find((f) => f.mimeType.startsWith("video/"));
       if (!vid) return { output: "ComfyUI finished but saved no video." };
-      const asset = await deps.assets.save(vid.data, vid.mimeType, { sourceModelId: "comfyui/wan-2.2-ti2v-5b", meta: { prompt: String(input.prompt ?? "").slice(0, 1000) } });
-      return { output: `Made a ${seconds}-second video from the picture; the user can watch it.`, videoIds: [asset.id] };
+      const asset = await deps.assets.save(vid.data, vid.mimeType, { sourceModelId: "comfyui/wan-2.2-ti2v-5b", meta: { prompt } });
+      return { output: `Made a ${seconds}-second video from the picture; the user can watch it.`, videoIds: [asset.id], promptUsed: prompt };
     },
   };
   const model3d: AgentTool = {

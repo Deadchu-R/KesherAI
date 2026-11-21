@@ -143,6 +143,8 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   const can = useQuickNames(convId);
   const events = useChatLive()?.events;
   const madeBy = new Map(steps.flatMap((s) => (s.result?.assetIds ?? []).map((id) => [id, s] as const)));
+  // The English prompt actually sent to the image/video/sound model (KesherAI's translator), per result.
+  const promptOf = new Map(steps.flatMap((s) => (s.result?.promptUsed ? [...(s.result.assetIds ?? []), ...(s.result.videoIds ?? []), ...(s.result.audioIds ?? [])].map((id) => [id, s.result!.promptUsed!] as const) : [])));
   const lastSeq = Math.max(0, ...steps.map((s) => s.result?.seq ?? 0));
   const next = lastSeq && events ? events.find((e) => e.seq > lastSeq && (e.type === "receipt" || e.type === "user")) : undefined;
   const run = next?.type === "receipt" ? next.run : undefined;
@@ -242,6 +244,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
           {videos.map((id) => (
             <div key={id} className="made-with-actions">
               <MadeMedia file={{ assetId: id }} kind="video" name={`kesher-video-${id.slice(0, 8)}.webm`} {...(convId ? { convId } : {})} />
+              <PromptUsed text={promptOf.get(id)} />
               <ResultActions actions={playerActions(id, "video", can)} label={t("actionsVideo")} />
             </div>
           ))}
@@ -252,12 +255,24 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
           {images.map((id) => (
             <div key={id} className="made-with-actions">
               <MadeMedia file={{ assetId: id }} kind="image" name={`kesher-image-${id.slice(0, 8)}.png`} {...(convId ? { convId } : {})} />
+              <PromptUsed text={promptOf.get(id)} />
               <ResultActions actions={imageActions(id, madeBy.get(id), can)} label={t("actionsPicture")} />
             </div>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** "Prompt used: …" under a made picture or video: the English the model actually got (folded when long). */
+function PromptUsed({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <details className="small muted" style={{ maxWidth: "100%", overflowWrap: "anywhere" }} open={text.length <= 160}>
+      <summary>{t("promptUsed")}</summary>
+      <span dir="ltr">{text}</span>
+    </details>
   );
 }
 

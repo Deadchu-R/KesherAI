@@ -1,0 +1,122 @@
+{
+ "group": "טעינה לפי צורך ומתרגם · On demand and the translator",
+ "mocks": [
+  {
+   "url": "**/api/guard",
+   "method": "GET",
+   "json": {
+    "config": {
+     "enabled": true,
+     "maxTemp": 83,
+     "resumeTemp": 75,
+     "unloadAfterMinutes": 10,
+     "idleEmbeddings": 5,
+     "idleComfy": 5,
+     "idleTranslator": 0,
+     "gentle": false,
+     "maxRamPercent": 85,
+     "maxCpuPercent": 80,
+     "maxCpuTemp": 0
+    },
+    "cards": [
+     {
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 3090",
+      "temp": 46,
+      "util": 3,
+      "memUsed": 1932735283.2,
+      "memTotal": 25769803776,
+      "power": 38,
+      "powerLimit": 350
+     }
+    ],
+    "paused": false,
+    "cooling": false,
+    "system": {
+     "ramUsed": 22548578304,
+     "ramTotal": 99857989632,
+     "cpu": 6
+    },
+    "waiting": 0,
+    "running": 0,
+    "lastUnload": {
+     "what": "chat model",
+     "at": {
+      "$ago": "4m"
+     }
+    }
+   }
+  },
+  {
+   "url": "**/api/translate",
+   "method": "GET",
+   "json": {
+    "which": {
+     "via": "gemini",
+     "model": "gemini/gemini-2.5-flash"
+    },
+    "model": {
+     "name": "TranslateGemma 4B",
+     "sizeGb": 2.5,
+     "downloaded": false
+    },
+    "max": 20000
+   }
+  },
+  {
+   "url": "**/api/translate",
+   "method": "POST",
+   "json": {
+    "text": "A small brown monkey sitting on a palm tree at sunset, watercolor style",
+    "via": "gemini",
+    "model": "gemini/gemini-2.5-flash",
+    "to": "en"
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "LoadOnDemand",
+   "title": "הגדרות: טעינה לפי צורך (זמן פריקה לכל מנוע, להשאיר טעון)",
+   "route": "#/settings/computer",
+   "fullPage": false,
+   "height": {
+    "desktop": 900,
+    "phone": 1600
+   },
+   "steps": [
+    {
+     "wait": ".guard-on-demand"
+    },
+    {
+     "scroll": ".guard-on-demand"
+    }
+   ]
+  },
+  {
+   "id": "TranslatePage",
+   "title": "תרגום: עברית ⇄ אנגלית, עם המודל הזול שזמין",
+   "route": "#/translate",
+   "fullPage": true,
+   "height": {
+    "desktop": 700,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": ".page.translate textarea"
+    },
+    {
+     "fill": ".page.translate textarea",
+     "value": "קוף חום קטן יושב על עץ דקל בשקיעה, בסגנון צבעי מים"
+    },
+    {
+     "click": ".page.translate button.primary"
+    },
+    {
+     "wait": ".page.translate textarea[readonly]"
+    }
+   ]
+  }
+ ]
+}

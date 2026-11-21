@@ -57,6 +57,7 @@ import type { Personas } from "../personas.js";
 import type { PluginHost } from "../plugins.js";
 import type { ProjectFacts } from "../project-facts.js";
 import type { SdEngine } from "../sdcpp.js";
+import type { Translator } from "../translate.js";
 import type { SkillStore } from "../skill-store.js";
 import type { TaskBoard } from "../task-board.js";
 import type { TelegramBridge } from "../telegram.js";
@@ -120,6 +121,8 @@ export interface ConversationParts {
   mainSlot: () => number | undefined;
   /** The engine as helpers need it (absent in a self-work worker). */
   helperEngine?: HelperEngine;
+  /** KesherAI's translator (translate.ts): English prompts for image, video and music models. */
+  translator?: Translator;
   /** Saves the settings. */
   persist: () => Promise<void>;
 }
@@ -129,7 +132,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine } = p;
+  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine, translator } = p;
   /** Starts ComfyUI when nothing answers at its address. */
   const comfyUp = async () => {
     if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
@@ -157,7 +160,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     try {
       return await provider.runFlow(graph, signal, undefined, onProgress);
     } finally {
-      guard.after();
+      guard.after("comfyui");
       // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
       // shared 24 GB and the chat model answered in minutes, not seconds). The next song loads what it needs.
       if (engine.status().running) void fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
@@ -182,6 +185,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath, slots: () => engine.slots(), parallelChats: () => engine.parallelChats() })),
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
+    ...(translator ? { translator } : {}),
     browserPane: () => browser.status().pane,
     controlLog: browser.decisions,
     saveImage: async (data: Buffer, mimeType: string) => (await assets.save(data, mimeType)).id,

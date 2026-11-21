@@ -15,8 +15,8 @@ export interface ModelListing {
 export interface ProviderGate {
   /** Resolves when the call may start; may throw (cancelled, failed to load). */
   before(providerId: string, signal?: AbortSignal): Promise<void>;
-  /** Called once when the call ends. */
-  after(): void;
+  /** Called once when the call ends, with the provider that ran. */
+  after(providerId?: string): void;
 }
 
 /** Methods that put a local model to work; the argument after the request is the abort signal. */
@@ -80,7 +80,7 @@ export class ProviderRegistry {
             try {
               yield* fn.apply(target, args) as AsyncIterable<unknown>;
             } finally {
-              gate.after();
+              gate.after(id);
             }
           };
         }
@@ -91,7 +91,7 @@ export class ProviderRegistry {
           try {
             return await fn.apply(target, args);
           } finally {
-            gate.after();
+            gate.after(id);
           }
         };
       },

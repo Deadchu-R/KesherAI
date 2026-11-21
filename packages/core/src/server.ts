@@ -33,7 +33,8 @@ import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine, loadModel } from "./routes/engine.js";
-import { SideEngine, sideEngineOf } from "./side-engine.js";
+import { SIDE_PROVIDER, SideEngine, sideEngineOf } from "./side-engine.js";
+import { buildTranslator } from "./server/build-translator.js";
 import type { HelperEngine } from "./chat-helpers.js";
 import { StudyModelSwitch } from "./study-model.js";
 import { GodotBridge } from "./godot-bridge.js";
@@ -441,7 +442,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const terminatedFile = join(paths.root, TERMINATED_FILE);
   const afterTerminate = existsSync(terminatedFile) && Date.now() - statSync(terminatedFile).mtimeMs < 10 * 60_000;
   if (existsSync(terminatedFile)) rmSync(terminatedFile, { force: true });
-  if (config.comfyui.autoStart && config.parts.nodes !== false && !afterTerminate) void comfy.start().catch(() => undefined);
+  // Load on demand (Roee, 2026-11-21): ComfyUI starts with the first job that needs it; at start only when it is kept
+  // running (Settings → load on demand → ComfyUI: keep).
+  if (config.comfyui.autoStart && config.guard.idleComfy === 0 && config.parts.nodes !== false && !afterTerminate) void comfy.start().catch(() => undefined);
   semantic = new Semantic({
     config,
     registry,
@@ -456,6 +459,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     changed: () => void knowledge.reindexAll(),
   });
   void semantic.resume().catch(() => undefined);
+  guard.add(semantic.unloadable());
   // Routines: pipelines and prompts on a schedule.
   // The model's timers ("check the build in an hour") and its notifications (chat-timers.ts).
   // Canvases: an Excalidraw board each chat (or the Canvas page) shares with the model.
@@ -478,6 +482,20 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Helpers in the chat (chat-helpers.ts) on this computer's engine: a small model beside the main one, or a build's
   // one swap and back. A self-work worker shares the main app's engine, so it never loads or swaps there.
   const besideEngine = () => sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry }));
+  // The translation model beside the main one (TranslateGemma): unloaded after its own idle minutes.
+  guard.add({
+    name: "translation model",
+    providers: [SIDE_PROVIDER],
+    loaded: () => {
+      const st = besideEngine().status();
+      return st.running && /translat/i.test(st.modelPath ?? "");
+    },
+    unload: () => besideEngine().stop(),
+    idleMinutes: () => config.guard.idleTranslator ?? 5,
+    pids: () => [],
+  });
+  // KesherAI's translator (translate.ts): English prompts for media models, and the Translate page.
+  const translator = buildTranslator({ registry, engine, side: besideEngine, config, modelsDir: () => paths.models });
   const helperEngine: HelperEngine | undefined = worker
     ? undefined
     : {
@@ -511,7 +529,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, ...(helperEngine ? { helperEngine } : {}) }),
+    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}) }),
     coach,
     memory,
     computer,
@@ -564,6 +582,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     devices,
     autodetected,
     saveConfig: persist,
+    translator,
     registerEngineProvider: () => {
       if (!registry.get("llamacpp")) {
         registry.add({ id: "llamacpp", type: "openai-compatible", name: "KesherAI engine (llama.cpp)", location: "local", baseUrl: engine.baseUrl, apiKey: engine.apiKey, options: { llamaCpp: { slots: () => engine.slots(), parallelChats: () => engine.parallelChats() } } });
