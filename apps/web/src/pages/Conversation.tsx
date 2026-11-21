@@ -19,6 +19,7 @@ import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash, type SlashCommand } from "../SlashMenu";
 import { SideChat } from "../chat/SideChat";
 import { QueueChips, queueMode } from "../chat/QueueChips";
+import { messageVersions, openVersion, takeVersionScroll } from "../branch-versions";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -326,6 +327,13 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     // (so the view kept following however the user scrolled).
   }, [id, !!conv]);
   useEffect(() => {
+    // Switched to another version of a message (‹ n/m ›): the same message stays in view, not the end of the chat.
+    const seq = events.length ? takeVersionScroll(id) : undefined;
+    if (seq !== undefined) {
+      following.current = false;
+      requestAnimationFrame(() => document.querySelector(`.msg.user[data-seq="${seq}"]`)?.scrollIntoView({ block: "center" }));
+      return;
+    }
     if (!following.current) return;
     autoAtRef.current = Date.now();
     bottom.current?.scrollIntoView({ block: "end" });
@@ -919,6 +927,18 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
                       const { body, files } = splitAttachments(e.text);
                       return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text;
+                    })()}
+                    {(() => {
+                      // Edited versions of this message (each edit is a branch chat): ‹ n/m › switches in place.
+                      const v = messageVersions(conv, e.seq, conversations);
+                      if (v.ids.length < 2) return null;
+                      return (
+                        <span className="msg-versions" role="group" aria-label={L("גרסאות ההודעה", "Versions of this message")}>
+                          <button type="button" className="say-btn" disabled={v.at === 0} aria-label={t("prevVersion")} onClick={() => openVersion(v.ids[v.at - 1]!, e.seq)}>‹</button>
+                          <span className="muted small" dir="ltr">{v.at + 1}/{v.ids.length}</span>
+                          <button type="button" className="say-btn" disabled={v.at === v.ids.length - 1} aria-label={t("nextVersion")} onClick={() => openVersion(v.ids[v.at + 1]!, e.seq)}>›</button>
+                        </span>
+                      );
                     })()}
                     {!busy && <span className="msg-tools"><button type="button" className="msg-tool" title={t("editMessage")} aria-label={t("editMessage")} onClick={() => { setEditingSeq(e.seq); setEditText(e.text.replace(/\n*\[[^\]\n]+: [^\]\n]+\]\s*$/g, "")); }}><LineIcon name="pencil" size={14} /></button></span>}
                   </div>

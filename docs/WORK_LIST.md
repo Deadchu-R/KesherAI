@@ -183,7 +183,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8) (in code: chat-queue.ts, chat/QueueChips.tsx)
 - ✅ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor) (in code: session.ts injectSteers)
 - ⬜ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude)
-- ⬜ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT)
+- ✅ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT) (in code: branch-versions.ts; regenerated answers already had them)
 - ⬜ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio)
 - ⬜ Context ring in the composer from the last call's prompt size; offer /compact near the limit
 - ⬜ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor)
