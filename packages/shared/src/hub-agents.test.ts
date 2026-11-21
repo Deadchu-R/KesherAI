@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyAgentBatch, runWait, shownState, sortedCards, type AgentCard } from "./hub-agents.js";
+import { applyAgentBatch, RUN_STARTING_MS, runStarting, runWait, shownState, sortedCards, type AgentCard } from "./hub-agents.js";
 import { cleanAgentPath, cleanOptIn, HUB_LIMITS, parseDeviceFrame, parseEnvelope, parseSealedBody, type AgentRunState, type SealedBody } from "./hub-protocol.js";
 
 const state = (over: Partial<AgentRunState> = {}): AgentRunState => ({ runId: "h-1", title: "Fix the login", source: "chat-helper", state: "running", step: 2, startedAt: 1000, lastEventAt: 2000, files: 0, fileNames: [], ...over });
@@ -80,4 +80,14 @@ test("runWait: an Antigravity run whose Run ask expired is waiting for Run, not 
   assert.equal(runWait(expired, undefined, now), undefined);
   assert.equal(runWait(card("chat-helper", "queued", 0), task, now), undefined);
   assert.equal(runWait(card("antigravity", "done", 0), task, now), undefined);
+});
+
+test("runStarting: Starting… from the Run tap until the task leaves \"waiting for Run\", a refusal or 60 s", () => {
+  const t0 = 1_000_000;
+  assert.equal(runStarting(undefined, true, t0), false, "no tap, no Starting…");
+  assert.equal(runStarting(t0, true, t0 + 1000), true);
+  assert.equal(runStarting(t0, true, t0 + RUN_STARTING_MS - 1), true);
+  assert.equal(runStarting(t0, true, t0 + RUN_STARTING_MS), false, "after 60 s Run is offered again");
+  assert.equal(runStarting(t0, false, t0 + 1000), false, "the PC reported running / queued / failed");
+  assert.equal(runStarting(t0, true, t0 + 1000, true), false, "the PC refused: Run again, with its reason");
 });

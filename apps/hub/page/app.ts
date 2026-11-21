@@ -725,6 +725,7 @@ function workListGroup(q: string): HTMLElement | null {
  */
 function runButtons(t: PageTask): HTMLElement | null {
   const a = device.taskActions.get(t.taskId);
+  if (device.runStarting(t)) return h("span", { class: "tag t-run" }, L("מתחיל…", "Starting…"));
   if (a && !a.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
   const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, a.result.text) : null;
   if (!device.canRun(t)) return note;

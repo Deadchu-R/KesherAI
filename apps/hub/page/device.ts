@@ -10,7 +10,7 @@ import { dropLocalPush } from "./push.js";
 import { get, put, type PcKeys } from "./kv.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubBoardCommand, type HubBoardItem, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
-import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
+import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
 import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
 import type { DriveMark } from "./drive-view.js";
@@ -151,7 +151,7 @@ export class HubDevice {
   boards = new Map<string, { items: HubBoardItem[]; doneTotal: number; rev: number; at: number }>();
   boardActions = new Map<string, { commandId: string; result?: { ok: boolean; text: string; at: number } }>();
   /** Run / Cancel sent for a task (by task id): waiting for the PC's answer, then its answer (in memory only). */
-  taskActions = new Map<string, { action: HubCommandAction; commandId: string; left: number; result?: { ok: boolean; text: string } }>();
+  taskActions = new Map<string, { action: HubCommandAction; commandId: string; left: number; at: number; result?: { ok: boolean; text: string } }>();
   private agentSeq = 0;
   private catchingUp = false;
   /** Called when another device wrote to Google Drive (its bare `sync` ping). */
@@ -645,6 +645,18 @@ export class HubDevice {
     return waits && this.connected && this.commandTargets(t).length > 0;
   }
 
+  /**
+   * Whether a task's Run was just tapped and the PC has not reported it yet: its card shows "Starting…" (no Run, so
+   * it cannot be sent twice) until the task is running, queued or failed, the PC refuses it, or 60 s pass.
+   *
+   * @param t - The task.
+   * @returns True while "Starting…" is shown.
+   */
+  runStarting(t: PageTask): boolean {
+    const a = this.taskActions.get(t.taskId);
+    return !!a && a.action === "inbox-run" && runStarting(a.at, this.canRun(t), Date.now(), a.result?.ok === false);
+  }
+
   /** The PCs that are on (a work-list item is sent to one of them). */
   onlinePcs(): HubPresence[] {
     return this.presence.filter((d) => d.kind === "pc" && d.online);
@@ -708,7 +720,11 @@ export class HubDevice {
       const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action, taskId: t.taskId }, id.privateKey, pc.publicKey);
       if (this.sendFrame({ t: "send", env })) sent++;
     }
-    if (sent) this.taskActions.set(t.taskId, { action, commandId, left: sent });
+    if (sent) {
+      this.taskActions.set(t.taskId, { action, commandId, left: sent, at: Date.now() });
+      // "Starting…" ends by itself after RUN_STARTING_MS even when no report comes: draw the card again then.
+      if (action === "inbox-run") setTimeout(() => this.changed(), RUN_STARTING_MS + 200);
+    }
     this.changed();
     return sent > 0;
   }

@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -97,6 +97,12 @@ function forClaude(t: InboxTaskView): string {
   return [`Inbox ${t.id}: ${t.status}`, `Branch: ${t.pushed ? t.branch : "(not pushed)"}${t.headSha ? ` @ ${t.headSha.slice(0, 7)}` : ""}`, `Checks: ${(t.checks ?? []).map((c) => `${c.name} ${c.ok ? "ok" : "FAIL"}`).join(", ") || "none"}`, `Result: results/${t.id}.md on kesher-inbox`, ...(t.note ? [`Note: ${t.note}`] : [])].join("\n");
 }
 
+/** Tasks whose Run was just tapped (task id -> when, ms): their card shows "Starting…" instead of Run (memory only). */
+const runTapped = new Map<string, number>();
+
+/** Whether a task shows "Starting…": Run was tapped and the PC's next report has not moved it (or 60 s have not passed). */
+const startingNow = (t: InboxTaskView): boolean => runStarting(runTapped.get(t.id), t.status === "waiting" || t.status === "failed" || t.status === "partial" || t.status === "deferred-quota" || !!t.runAsk, Date.now());
+
 /** The page. */
 export function TaskInboxPage({ id }: { id?: string }) {
   const [s, setS] = useState<InboxState | null>(null);
@@ -109,11 +115,17 @@ export function TaskInboxPage({ id }: { id?: string }) {
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, []);
-  const act = async (path: string, body: unknown = {}) => {
+  const act = async (path: string, body: unknown = {}, runOf?: string) => {
     setBusy(true);
+    // A Run tap: the card shows "Starting…" at once and again plain Run after 60 s at the latest.
+    if (runOf) {
+      runTapped.set(runOf, Date.now());
+      setTimeout(load, RUN_STARTING_MS + 200);
+    }
     try {
       await api(path, { method: "POST", body });
     } catch (e) {
+      if (runOf) runTapped.delete(runOf);
       toast((e as Error).message);
     } finally {
       setBusy(false);
@@ -252,7 +264,7 @@ function TermsNote() {
   );
 }
 
-type Act = (path: string, body?: unknown) => Promise<void>;
+type Act = (path: string, body?: unknown, runOf?: string) => Promise<void>;
 
 /** The PC's question "Run this task in Antigravity?", with what the user needs to decide. */
 function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean }) {
@@ -272,8 +284,12 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
         <span>{L("מאת", "From")} {fromName(t.from)}</span>
       </div>
       <div className="row wrap">
-        <button type="button" className="primary" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "allow" })}>▶ {L("הפעל", "Run")}</button>
-        <button type="button" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "deny" })}>{L("לא עכשיו", "Not now")}</button>
+        {startingNow(t)
+          ? <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>
+          : <>
+              <button type="button" className="primary" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "allow" }, t.id)}>▶ {L("הפעל", "Run")}</button>
+              <button type="button" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "deny" })}>{L("לא עכשיו", "Not now")}</button>
+            </>}
       </div>
       <p className="small muted">{L("לחיצה אחת מריצה את המשימה הזו בלבד. השאלה פגה אחרי 30 דקות.", "One tap runs this one task only. The ask expires after 30 minutes.")}</p>
     </section>
@@ -303,8 +319,11 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
       <span className="row tinbox-actions">
         {(t.status === "running" || t.status === "needs-approval") && t.runBy !== "gemini" && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "needs-approval" && <button type="button" onClick={open}>{L("אשר / דחה", "Allow / Deny")}</button>}
-        {runnable && state.runHere && <button type="button" className="primary" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/run`)}>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</button>}
-        {runnable && !state.runHere && !t.runAsk && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/ask`)}>▶ {L("הפעל", "Run")}</button>}
+        {runnable && state.runHere && (startingNow(t)
+          ? <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>
+          : <button type="button" className="primary" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id)}>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</button>)}
+        {runnable && !state.runHere && startingNow(t) && <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>}
+        {runnable && !state.runHere && !t.runAsk && !startingNow(t) && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/ask`)}>▶ {L("הפעל", "Run")}</button>}
         {t.status === "waiting" && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/skip`)}>{L("דלג", "Skip")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}

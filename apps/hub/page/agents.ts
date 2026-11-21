@@ -99,6 +99,7 @@ export function runWaitActions(device: HubDevice, c: AgentCard, w: RunWait): HTM
   const t = taskOfRun(device, c);
   if (!t) return null;
   const sent = device.taskActions.get(t.taskId);
+  if (device.runStarting(t)) return h("span", { class: "tag t-run" }, L("מתחיל…", "Starting…"));
   if (sent && !sent.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
   const note = sent?.result ? h("span", { class: `xs ${sent.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, sent.result.text) : null;
   if (!device.canRun(t)) return note;
@@ -140,6 +141,7 @@ function waitText(c: AgentCard): string {
 function actions(v: AgentsView, c: AgentCard, pc: HubPresence | undefined): HTMLElement | null {
   const key = `${c.deviceId}/${c.runId}`;
   const sent = v.device.agentActions.get(key);
+  if (sent === "allow" && c.state.state === "waiting" && c.state.waiting?.reason === "run-press") return h("span", { class: "tag t-run" }, L("מתחיל…", "Starting…"));
   if (sent) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
   if (!isGoing(c)) return null;
   const off = !pc?.online || !v.device.connected;

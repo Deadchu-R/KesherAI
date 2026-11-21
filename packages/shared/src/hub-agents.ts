@@ -106,6 +106,24 @@ export interface RunWait {
   old: boolean;
 }
 
+/** How long a card shows "Starting…" after a Run tap when the PC's next report does not come (ms). */
+export const RUN_STARTING_MS = 60_000;
+
+/**
+ * Whether a task whose Run was just tapped still shows "Starting…" (disabled) instead of Run: from the tap until the
+ * PC's next report moves the task out of "waiting for Run" (running, queued, failed), or {@link RUN_STARTING_MS} pass.
+ * A PC that refused the press ends it at once (the caller passes `refused`), so Run is offered again with the reason.
+ *
+ * @param tappedAt - When Run was tapped (ms), or undefined when it was not.
+ * @param stillWaiting - Whether the task still waits for Run in the latest report.
+ * @param now - Now (ms).
+ * @param refused - Whether the PC answered that it did not start the task.
+ * @returns True while "Starting…" is shown.
+ */
+export function runStarting(tappedAt: number | undefined, stillWaiting: boolean, now: number, refused = false): boolean {
+  return tappedAt !== undefined && stillWaiting && !refused && now - tappedAt >= 0 && now - tappedAt < RUN_STARTING_MS;
+}
+
 /**
  * Whether the task behind an Antigravity run is waiting for the owner's Run, and how. A run whose ask expired is not
  * "waiting" any more and its heartbeat stops, so it would show as "Not answering"; it is waiting for Run.
