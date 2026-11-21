@@ -482,7 +482,7 @@ test("approvals: a PC's snapshot goes to phones only; answers go from a phone to
     sockets.on.add(d.id);
     await hub.onOpen(d.id);
   }
-  const snap: SealedBody = { type: "approvals", at: 1, items: [{ requestId: "r1", conversationId: "c1", title: "Fix the build", tool: "run_command", reason: "Runs a command", preview: "pnpm test", kind: "tool", forWhile: true, at: 1 }] };
+  const snap: SealedBody = { type: "approvals", at: 1, items: [{ requestId: "req-zq9-only-sealed", conversationId: "c1", title: "Fix the build", tool: "run_command", reason: "Runs a command", preview: "pnpm test", kind: "tool", forWhile: true, at: 1 }] };
   const env = await sealMessage({ from: pc.id, to: phone.id, kind: "approvals" }, snap, pc.keys.privateKey, phone.keys.publicKey);
   await hub.onFrame(pc.id, JSON.stringify({ t: "send", env }));
   const got = sockets.frames(phone.id, "deliver").at(-1);
@@ -492,7 +492,7 @@ test("approvals: a PC's snapshot goes to phones only; answers go from a phone to
   const fakeSnap = await sealMessage({ from: phone.id, to: pc.id, kind: "approvals" }, snap, phone.keys.privateKey, pc.keys.publicKey);
   await hub.onFrame(phone.id, JSON.stringify({ t: "send", env: fakeSnap }));
   assert.deepEqual(sockets.frames(phone.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fakeSnap.id });
-  const answer: SealedBody = { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "allow", forMinutes: 60 };
+  const answer: SealedBody = { type: "approval_answer", requestId: "req-zq9-only-sealed", conversationId: "c1", decision: "allow", forMinutes: 60 };
   const fromPc = await sealMessage({ from: pc.id, to: phone.id, kind: "approval_answer" }, answer, pc.keys.privateKey, phone.keys.publicKey);
   await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: fromPc }));
   assert.deepEqual(sockets.frames(pc.id, "refused").at(-1), { t: "refused", code: "not-allowed", id: fromPc.id });
@@ -505,7 +505,7 @@ test("approvals: a PC's snapshot goes to phones only; answers go from a phone to
   const audit = store.auditList(100);
   assert.ok(audit.some((a) => a.action === "relay-approval_answer" && a.deviceId === phone.id));
   assert.ok(!audit.some((a) => a.action === "relay-approvals"), "snapshots are not audited");
-  assert.ok(!JSON.stringify(audit).includes("r1") && !JSON.stringify(audit).includes("Fix the build"));
+  assert.ok(!JSON.stringify(audit).includes("req-zq9-only-sealed") && !JSON.stringify(audit).includes("Fix the build"));
   // At most 30 answers a minute per device (the 31st is refused).
   for (let i = 0; i < 30; i++) {
     const e = await sealMessage({ from: phone.id, to: pc.id, kind: "approval_answer" }, answer, phone.keys.privateKey, pc.keys.publicKey);
