@@ -18,17 +18,6 @@ const ALL = ["images", "video", "image-editor", "video-editor", "sound-editor", 
 
 export const ROLES: RoleDefinition[] = [
   {
-    id: "developer",
-    icon: "💻",
-    title: { en: "Developer", he: "מפתח/ת" },
-    description: { en: "Code sessions, your projects, the browser and the computer", he: "סשנים של קוד, הפרויקטים שלך, הדפדפן והמחשב" },
-    parts: ["pages", "knowledge", "browser", "watch", "pipelines", "compare", "images", "community"],
-    ideas: {
-      en: ["Build me a calculator with buttons as an .exe", "Look at my project and suggest improvements", "Write tests for this function", "Explain this error to me"],
-      he: ["בנה לי מחשבון עם כפתורים כקובץ exe.", "תסתכל על הפרויקט שלי ותציע שיפורים", "תכתוב בדיקות לפונקציה הזאת", "תסביר לי את השגיאה הזאת"],
-    },
-  },
-  {
     id: "gamedev",
     icon: "🎮",
     title: { en: "Game developer", he: "מפתח/ת משחקים" },
@@ -48,6 +37,62 @@ export const ROLES: RoleDefinition[] = [
     ideas: {
       en: ["Paint a lighthouse at sunset, oil painting", "Make five logo ideas for a coffee shop", "Remove the background from my picture", "A short clip of waves on rocks"],
       he: ["צייר מגדלור בשקיעה, ציור שמן", "תן חמישה רעיונות ללוגו של בית קפה", "תוריד את הרקע מהתמונה שלי", "סרטון קצר של גלים על סלעים"],
+    },
+  },
+  {
+    id: "developer",
+    icon: "💻",
+    title: { en: "Developer", he: "מפתח/ת" },
+    description: { en: "Code sessions, your projects, the browser and the computer", he: "סשנים של קוד, הפרויקטים שלך, הדפדפן והמחשב" },
+    parts: ["pages", "knowledge", "browser", "watch", "pipelines", "compare", "images", "community"],
+    ideas: {
+      en: ["Build me a calculator with buttons as an .exe", "Look at my project and suggest improvements", "Write tests for this function", "Explain this error to me"],
+      he: ["בנה לי מחשבון עם כפתורים כקובץ exe.", "תסתכל על הפרויקט שלי ותציע שיפורים", "תכתוב בדיקות לפונקציה הזאת", "תסביר לי את השגיאה הזאת"],
+    },
+  },
+  {
+    id: "student",
+    icon: "🎓",
+    title: { en: "Student", he: "סטודנט/ית" },
+    description: { en: "Lectures and summaries, flashcards, your course materials; light enough for a modest laptop", he: "הרצאות וסיכומים, כרטיסיות, חומרי הקורס; קל מספיק ללפטופ חלש" },
+    // Only what studying needs (light: nothing heavy starts or downloads unless turned on later).
+    parts: ["study", "voice", "knowledge", "pages"],
+    ideas: {
+      en: ["Explain photosynthesis simply", "Quiz me on chapter 3", "Summarize this PDF in ten lines", "Help me plan my exam week"],
+      he: ["תסביר לי פוטוסינתזה בפשטות", "תבחן אותי על פרק 3", "סכם לי את ה-PDF הזה בעשר שורות", "תעזור לי לתכנן את שבוע המבחנים"],
+    },
+  },
+  {
+    id: "writer",
+    icon: "✍️",
+    title: { en: "Writer or content creator", he: "כותב/ת או יוצר/ת תוכן" },
+    description: { en: "Documents, your notes and sources, voice", he: "מסמכים, הפתקים והמקורות שלך, קול" },
+    parts: ["pages", "knowledge", "voice", "day", "browser", "compare", "images", "community"],
+    ideas: {
+      en: ["Write a blog post about local AI", "Turn my notes into an article", "Read this aloud to me", "Give me ten titles for a video"],
+      he: ["כתוב פוסט לבלוג על בינה מלאכותית מקומית", "תהפוך את הפתקים שלי למאמר", "תקריא לי את זה", "תן לי עשר כותרות לסרטון"],
+    },
+  },
+  {
+    id: "researcher",
+    icon: "🔬",
+    title: { en: "Researcher", he: "חוקר/ת" },
+    description: { en: "Your sources and papers, web research, comparing answers and notes", he: "המקורות והמאמרים שלך, מחקר ברשת, השוואת תשובות וסיכומים" },
+    parts: ["knowledge", "pages", "browser", "compare", "voice", "pipelines"],
+    ideas: {
+      en: ["Find recent papers on this topic and summarize them", "Compare these three sources: where do they disagree?", "Turn my notes into a literature review outline", "Check this claim against my sources"],
+      he: ["מצא מאמרים חדשים על הנושא הזה וסכם אותם", "השווה בין שלושת המקורות: איפה הם חלוקים?", "תהפוך את הפתקים שלי לשלד של סקירת ספרות", "תבדוק את הטענה הזאת מול המקורות שלי"],
+    },
+  },
+  {
+    id: "everyday",
+    icon: "☀️",
+    title: { en: "Everyday use", he: "שימוש יומיומי" },
+    description: { en: "Questions, your day, voice, pictures and documents; light on the computer", he: "שאלות, היום שלך, קול, תמונות ומסמכים; קל על המחשב" },
+    parts: ["voice", "day", "pages", "knowledge", "images"],
+    ideas: {
+      en: ["Plan a week of simple dinners", "Write a kind birthday message for my friend", "Explain this bill to me in plain words", "Make a picture of a cozy cabin in the snow"],
+      he: ["תכנן לי שבוע של ארוחות ערב פשוטות", "כתוב ברכת יום הולדת חמה לחבר שלי", "תסביר לי את החשבון הזה במילים פשוטות", "צייר בקתה חמימה בשלג"],
     },
   },
   {
@@ -84,17 +129,6 @@ export const ROLES: RoleDefinition[] = [
     },
   },
   {
-    id: "writer",
-    icon: "✍️",
-    title: { en: "Writer or content creator", he: "כותב/ת או יוצר/ת תוכן" },
-    description: { en: "Documents, your notes and sources, voice", he: "מסמכים, הפתקים והמקורות שלך, קול" },
-    parts: ["pages", "knowledge", "voice", "day", "browser", "compare", "images", "community"],
-    ideas: {
-      en: ["Write a blog post about local AI", "Turn my notes into an article", "Read this aloud to me", "Give me ten titles for a video"],
-      he: ["כתוב פוסט לבלוג על בינה מלאכותית מקומית", "תהפוך את הפתקים שלי למאמר", "תקריא לי את זה", "תן לי עשר כותרות לסרטון"],
-    },
-  },
-  {
     id: "business",
     icon: "💼",
     title: { en: "Manager or business", he: "מנהל/ת או עסק" },
@@ -103,18 +137,6 @@ export const ROLES: RoleDefinition[] = [
     ideas: {
       en: ["Summarize today's meeting", "Draft an email to the team about the deadline", "Every morning, sum up my calendar", "Make a one-page plan for the launch"],
       he: ["סכם לי את הפגישה של היום", "נסח מייל לצוות על הדדליין", "כל בוקר תסכם לי את היומן", "תכין תוכנית של עמוד אחד להשקה"],
-    },
-  },
-  {
-    id: "student",
-    icon: "🎓",
-    title: { en: "Student", he: "סטודנט/ית" },
-    description: { en: "Lectures and summaries, flashcards, your course materials; light enough for a modest laptop", he: "הרצאות וסיכומים, כרטיסיות, חומרי הקורס; קל מספיק ללפטופ חלש" },
-    // Only what studying needs (light: nothing heavy starts or downloads unless turned on later).
-    parts: ["study", "voice", "knowledge", "pages"],
-    ideas: {
-      en: ["Explain photosynthesis simply", "Quiz me on chapter 3", "Summarize this PDF in ten lines", "Help me plan my exam week"],
-      he: ["תסביר לי פוטוסינתזה בפשטות", "תבחן אותי על פרק 3", "סכם לי את ה-PDF הזה בעשר שורות", "תעזור לי לתכנן את שבוע המבחנים"],
     },
   },
   {

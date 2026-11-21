@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PARTS } from "@kesher/shared";
+import { PARTS, categorizeTools } from "@kesher/shared";
 import { getLocale, t } from "../i18n";
 import { NAV_GROUPS, NAV_ICONS, usePins } from "../Sidebar";
 import { setParts, useParts } from "../parts";
@@ -8,6 +8,7 @@ import { toast } from "../library";
 import { orderGroups, useAppearance } from "../appearance";
 import { ToolIcon } from "../ToolIcon";
 import { Glyph } from "../ui/Glyph";
+import { useRoleIds } from "../Welcome";
 
 const pick = <T,>(v: { en: T; he: T }) => (getLocale() === "he" ? v.he : v.en);
 
@@ -35,8 +36,10 @@ const PAGE_LINES: Record<string, { he: string; en: string }> = {
 
 /**
  * All tools, like a launcher (Raycast's, a phone's app library): every page
- * in its group with an icon and one line, a star to pin it to the sidebar,
- * and parts that are off shown greyed with "Turn on".
+ * in its category with an icon and one line, a star to pin it to the sidebar,
+ * and parts that are off shown greyed with "Turn on". The categories match
+ * the welcome's roles: the picked roles' categories come first, the others
+ * wait behind "Show all" (a search always looks everywhere). Nothing is removed.
  */
 export function AppsPage() {
   const [q, setQ] = useState("");
@@ -44,25 +47,31 @@ export function AppsPage() {
   const { parts } = useParts();
   const { pages } = usePluginUi();
   const look = useAppearance();
+  const roles = useRoleIds();
+  const [all, setAll] = useState(false);
   const partOf = (href: string) => parts.find((p) => p.pages.some((x) => href === x || href.startsWith(`${x}/`))) ?? parts.find((p) => p.plugin && href.startsWith(`#/p/${p.plugin}/`));
-  const groups = orderGroups(NAV_GROUPS, look).map((g) => ({
-    ...g,
-    items: [
-      ...g.items.map(([href, key]) => {
-        const part = partOf(href);
-        // The part's line only on its main page; its other pages (and pages with no part) have their own.
-        const line = PAGE_LINES[href];
-        return { href, label: t(key), icon: NAV_ICONS[href] ?? "•", desc: line ? pick(line) : part && part.pages[0] === href ? pick(part.description) : "", part };
-      }),
-      ...(g.id === "create"
-        ? pages.map((p) => {
-            const href = `#/p/${p.pluginId}/${p.id}`;
-            const part = partOf(href);
-            return { href, label: p.title, icon: p.icon ?? "🧷", desc: part ? pick(part.description) : "", part };
-          })
-        : []),
-    ].filter((i) => !q.trim() || `${i.label} ${i.desc}`.toLowerCase().includes(q.trim().toLowerCase())),
-  })).filter((g) => g.items.length);
+  const query = q.trim().toLowerCase();
+  // Every page once (the user's hidden menu groups stay hidden here too), plugin pages included.
+  const items = [
+    ...orderGroups(NAV_GROUPS, look).flatMap((g) => g.items.map(([href, key]) => {
+      const part = partOf(href);
+      // The part's line only on its main page; its other pages (and pages with no part) have their own.
+      const line = PAGE_LINES[href];
+      return { href, label: t(key), icon: NAV_ICONS[href] ?? "•", desc: line ? pick(line) : part && part.pages[0] === href ? pick(part.description) : "", part };
+    })),
+    ...pages.map((p) => {
+      const href = `#/p/${p.pluginId}/${p.id}`;
+      const part = partOf(href);
+      return { href, label: p.title, icon: p.icon ?? "🧷", desc: part ? pick(part.description) : "", part };
+    }),
+  ];
+  const byHref = new Map(items.map((i) => [i.href, i]));
+  const cats = categorizeTools(items.map((i) => i.href), roles);
+  const hiddenCats = query || all ? 0 : cats.filter((c) => !c.first).length;
+  const groups = cats
+    .filter((c) => query || all || c.first)
+    .map((c) => ({ id: c.id, icon: c.icon, label: pick(c.title), items: c.pages.map((h) => byHref.get(h)!).filter((i) => !query || `${i.label} ${i.desc}`.toLowerCase().includes(query)) }))
+    .filter((g) => g.items.length);
   // Parts with no page of their own (video, voice, browser) are listed too, so they can be turned on here.
   const background = PARTS.filter((p) => !p.pages.length && !p.plugin).map((p) => parts.find((x) => x.id === p.id)).filter((p): p is NonNullable<typeof p> => !!p);
 
@@ -81,7 +90,7 @@ export function AppsPage() {
       <input className="apps-search" type="search" dir="auto" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("toolsSearch")} aria-label={t("toolsSearch")} />
       {groups.map((g) => (
         <section key={g.id} className="apps-group">
-          <h2><Glyph of={g.icon} /> {t(g.label)}</h2>
+          <h2><Glyph of={g.icon} /> {g.label}</h2>
           <div className="apps-grid">
             {g.items.map((i) => {
               const off = i.part && !i.part.on;
@@ -106,6 +115,11 @@ export function AppsPage() {
           </div>
         </section>
       ))}
+      {(hiddenCats > 0 || (all && !query && cats.some((c) => !c.first))) && (
+        <button type="button" className="apps-show-all" aria-expanded={all} onClick={() => setAll(!all)}>
+          {all ? (getLocale() === "he" ? "הצג רק את שלי" : "Show only mine") : getLocale() === "he" ? `הצג הכל (עוד ${hiddenCats} קטגוריות)` : `Show all (${hiddenCats} more categories)`}
+        </button>
+      )}
       {!q.trim() && background.length > 0 && (
         <section className="apps-group">
           <h2>⚡ {getLocale() === "he" ? "יכולות בצ'אט" : "In your chats"}</h2>

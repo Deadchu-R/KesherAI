@@ -22,6 +22,7 @@ export * from "./vision-models.js";
 export * from "./explain.js";
 export * from "./parts.js";
 export * from "./roles.js";
+export * from "./tool-categories.js";
 export * from "./appearance.js";
 export * from "./blueprint-code.js";
 export * from "./csharp-graph.js";

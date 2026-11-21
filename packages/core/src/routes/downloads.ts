@@ -7,6 +7,8 @@ import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
 import { existsSync } from "node:fs";
 import { startSSE } from "../sse.js";
 import { forgetFoundModels } from "./engine.js";
+import { RECOMMENDED_MODELS } from "@kesher/shared";
+import { pickStarterModels } from "../starter-models.js";
 
 /** Body of `POST /api/downloads`. */
 interface DownloadBody {
@@ -219,6 +221,25 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
 
   /** Free space on the drive models are saved to. */
   app.get("/api/disk", async () => diskInfo(s.paths.models));
+
+  /**
+   * The welcome's hardware check: the graphics card and memory, the drives a model can be saved to (the heavy-data
+   * drive first when there is one), and 1–3 starter models from the "Start here" list with their run marks.
+   * Query: `roles` (comma-separated role ids), `lang` (`he` adds the Hebrew model for writers and students).
+   */
+  app.get<{ Querystring: { roles?: string; lang?: string } }>("/api/welcome/check", async (req) => {
+    const hw = await detectHardwareCached().catch(() => undefined);
+    const roles = String(req.query.roles ?? "").split(",").map((r) => r.trim()).filter(Boolean).slice(0, 20);
+    const budget = hw ? budgetOf(hw) : undefined;
+    const gpu = hw?.gpus.slice().sort((a, b) => b.vramTotal - a.vramTotal)[0];
+    return {
+      gpu: gpu ? { name: gpu.name, vramGb: round1(gpu.vramTotal / 1024 ** 3) } : null,
+      ramGb: hw ? round1(hw.ramTotal / 1024 ** 3) : null,
+      unified: hw?.unifiedMemory ?? false,
+      drives: await driveChoices(s, "model.gguf"),
+      picks: budget ? pickStarterModels(RECOMMENDED_MODELS, budget, { roles, hebrew: req.query.lang === "he" }) : [],
+    };
+  });
 
   /**
    * Everything a download involves, shown before it starts: the file, the

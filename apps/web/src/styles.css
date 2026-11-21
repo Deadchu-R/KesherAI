@@ -1380,6 +1380,23 @@ button.big { padding: 12px 22px; font-size: 16px; border-radius: calc(12px * var
 .welcome-option > span { grid-row: 1 / 3; font-size: 24px; }
 .welcome-option small { color: var(--muted); font-size: 12.5px; }
 .welcome-option:hover:not(:disabled) { border-color: var(--accent); }
+.welcome-sub { font-size: 17px; margin: 8px 0 0; }
+.welcome-prompts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.welcome-prompt { text-align: start; padding: 12px 14px; border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); border: 1px solid var(--border); line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.welcome-prompt:hover:not(:disabled) { border-color: var(--accent); }
+.welcome-hw { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.welcome-hw li { display: grid; grid-template-columns: 26px 1fr; column-gap: 8px; align-items: start; padding: 10px 12px; border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); border: 1px solid var(--border); min-width: 0; }
+.welcome-hw li > span { grid-row: 1 / 3; font-size: 20px; }
+.welcome-hw b, .welcome-hw small { min-width: 0; overflow-wrap: anywhere; }
+.welcome-hw small { color: var(--muted); font-size: 12px; }
+.welcome-path { overflow-wrap: anywhere; unicode-bidi: isolate; }
+.welcome-models { display: grid; gap: 8px; }
+.welcome-model { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: calc(12px * var(--r-scale, 1)); background: var(--panel-2); border: 1px solid var(--border); }
+.welcome-model-text { flex: 1 1 220px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.welcome-model-text small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.welcome-model-text .welcome-model-why { color: var(--text); }
+.welcome-model-error { flex-basis: 100%; }
+.apps-show-all { margin: 4px 0 18px; }
 @media (max-width: 760px) {
   .welcome { padding: 0; place-items: stretch; }
   .welcome-card { border-radius: 0; max-height: none; min-height: 100dvh; border: 0; }

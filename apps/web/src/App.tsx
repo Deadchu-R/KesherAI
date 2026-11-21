@@ -118,6 +118,15 @@ function Home() {
   const { models } = useModels("chat");
   // `#/?ask=…` (Settings → Appearance "say it in words", and other pages) fills the box.
   const [text, setText] = useState(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("ask") ?? "");
+  // Also when the start screen is already open (a starter prompt picked in the welcome).
+  useEffect(() => {
+    const onHash = () => {
+      const ask = new URLSearchParams(location.hash.split("?")[1] ?? "").get("ask");
+      if (ask) setText(ask);
+    };
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, []);
   const [modelId, setModelId] = useState("");
   const [personaId, setPersonaId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);

@@ -31,9 +31,13 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
     remote: { enabled: s.config.remote.enabled },
   }));
 
-  /** Body: `{ done?, role? }`. */
+  /**
+   * Body: `{ done?, role?, simple? }`. From the phone too ("Show the welcome again" there): the remote sign-in has
+   * already checked the device, and these are the user's own choices, like the parts and the simple mode.
+   * The role is kept to known-looking ids (letters, digits, dashes, commas).
+   */
   app.put<{ Body: { done?: boolean; role?: string; simple?: boolean } }>("/api/onboarding", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The welcome runs on the computer that runs KesherAI." });
+    if (typeof req.body?.role === "string" && !/^[a-z0-9,-]*$/.test(req.body.role)) return reply.code(400).send({ error: "role: role ids joined with commas." });
     if (typeof req.body?.done === "boolean") s.config.onboarding.done = req.body.done;
     if (typeof req.body?.simple === "boolean") s.config.onboarding.simple = req.body.simple;
     if (typeof req.body?.role === "string") s.config.onboarding.role = req.body.role.slice(0, 200);

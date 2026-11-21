@@ -28,3 +28,25 @@ test("the welcome shows once on a fresh computer, only locally, and remembers th
     await server.close();
   }
 });
+
+test("the welcome's roles are saved together, kept after a restart, and checked", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "kesher-welcome-"));
+  const open = () => createKesherServer({ dataDir, autodetect: false, pluginRoots: [] });
+  let server = await open();
+  try {
+    assert.equal((await server.app.inject({ method: "PUT", url: "/api/onboarding", payload: { role: "<script>" } })).statusCode, 400);
+    assert.equal((await server.app.inject({ method: "PUT", url: "/api/onboarding", payload: { done: true, role: "gamedev,researcher" } })).statusCode, 200);
+  } finally {
+    await server.close();
+  }
+  server = await open();
+  try {
+    const o = (await server.app.inject({ url: "/api/onboarding" })).json() as { role?: string; done: boolean };
+    assert.equal(o.role, "gamedev,researcher");
+    assert.equal(o.done, true);
+    const check = (await server.app.inject({ url: "/api/welcome/check?roles=gamedev&lang=he" })).json() as { drives: Array<{ id: string }>; picks: unknown[] };
+    assert.ok(check.drives.length >= 1 && Array.isArray(check.picks));
+  } finally {
+    await server.close();
+  }
+});

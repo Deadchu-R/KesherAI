@@ -1,0 +1,267 @@
+{
+ "group": "פתיחה וכלים",
+ "mocks": [
+  {
+   "url": "**/api/welcome/check*",
+   "json": {
+    "gpu": {
+     "name": "NVIDIA GeForce RTX 4070",
+     "vramGb": 12
+    },
+    "ramGb": 32,
+    "unified": false,
+    "drives": [
+     {
+      "id": "heavy",
+      "dir": "E:/KesherAI/models",
+      "freeGb": 812.4,
+      "totalGb": 1863,
+      "default": true
+     },
+     {
+      "id": "models",
+      "dir": "C:/KesherAI/models",
+      "freeGb": 61.2,
+      "totalGb": 476,
+      "default": false
+     }
+    ],
+    "picks": [
+     {
+      "id": "qwen3-14b",
+      "fit": "gpu",
+      "gpuShare": 1,
+      "why": "best"
+     },
+     {
+      "id": "dictalm-12b",
+      "fit": "gpu",
+      "gpuShare": 1,
+      "why": "hebrew"
+     },
+     {
+      "id": "qwen3-4b",
+      "fit": "gpu",
+      "gpuShare": 1,
+      "why": "fast"
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/models/recommended",
+   "json": [
+    {
+     "id": "qwen3-4b",
+     "downloaded": true
+    },
+    {
+     "id": "qwen3-14b",
+     "downloaded": false
+    },
+    {
+     "id": "dictalm-12b",
+     "downloaded": false
+    }
+   ]
+  }
+ ],
+ "boards": [
+  {
+   "id": "WelcomeRoles",
+   "title": "פתיחה: מה מתאים לך (בחירת תפקידים)",
+   "titleEn": "Welcome: roles",
+   "route": "#/",
+   "height": {
+    "desktop": 800,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/onboarding",
+     "method": "GET",
+     "json": {
+      "done": false,
+      "show": true,
+      "google": {
+       "configured": true,
+       "connected": false
+      },
+      "remote": {
+       "enabled": false
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".welcome-hello"
+    },
+    {
+     "click": ".welcome-hello .primary"
+    },
+    {
+     "wait": ".welcome-roles"
+    },
+    {
+     "click": ".welcome-role:nth-child(1)"
+    },
+    {
+     "click": ".welcome-role:nth-child(5)"
+    }
+   ]
+  },
+  {
+   "id": "WelcomeModels",
+   "title": "פתיחה: בדיקת המחשב ומודלים מומלצים",
+   "titleEn": "Welcome: hardware check and starter models",
+   "route": "#/",
+   "height": {
+    "desktop": 800,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/onboarding",
+     "method": "GET",
+     "json": {
+      "done": false,
+      "show": true,
+      "google": {
+       "configured": true,
+       "connected": false
+      },
+      "remote": {
+       "enabled": false
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".welcome-hello"
+    },
+    {
+     "click": ".welcome-hello .primary"
+    },
+    {
+     "wait": ".welcome-roles"
+    },
+    {
+     "click": ".welcome-role:nth-child(1)"
+    },
+    {
+     "click": ".welcome-role:nth-child(5)"
+    },
+    {
+     "click": ".welcome-actions .primary"
+    },
+    {
+     "wait": ".welcome-tools-scroll"
+    },
+    {
+     "click": ".welcome-actions .primary"
+    },
+    {
+     "wait": ".welcome-model"
+    }
+   ]
+  },
+  {
+   "id": "WelcomeStart",
+   "title": "פתיחה: רעיונות להתחלה וטלפון",
+   "titleEn": "Welcome: starter prompts and phone",
+   "route": "#/",
+   "height": {
+    "desktop": 800,
+    "phone": 1300
+   },
+   "mocks": [
+    {
+     "url": "**/api/onboarding",
+     "method": "GET",
+     "json": {
+      "done": false,
+      "show": true,
+      "google": {
+       "configured": true,
+       "connected": false
+      },
+      "remote": {
+       "enabled": false
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".welcome-hello"
+    },
+    {
+     "click": ".welcome-hello .primary"
+    },
+    {
+     "wait": ".welcome-roles"
+    },
+    {
+     "click": ".welcome-role:nth-child(1)"
+    },
+    {
+     "click": ".welcome-role:nth-child(5)"
+    },
+    {
+     "click": ".welcome-actions .primary"
+    },
+    {
+     "wait": ".welcome-tools-scroll"
+    },
+    {
+     "click": ".welcome-actions .primary"
+    },
+    {
+     "wait": ".welcome-model"
+    },
+    {
+     "click": ".welcome-actions .primary"
+    },
+    {
+     "wait": ".welcome-prompt"
+    }
+   ]
+  },
+  {
+   "id": "ToolsCategories",
+   "title": "כל הכלים: קטגוריות לפי התפקידים, והצג הכל",
+   "titleEn": "All tools: categories by role, Show all",
+   "route": "#/apps",
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "fullPage": false,
+   "mocks": [
+    {
+     "url": "**/api/onboarding",
+     "method": "GET",
+     "json": {
+      "done": true,
+      "show": false,
+      "role": "gamedev,artist",
+      "google": {
+       "configured": false,
+       "connected": false
+      },
+      "remote": {
+       "enabled": false
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".apps-show-all"
+    }
+   ]
+  }
+ ]
+}

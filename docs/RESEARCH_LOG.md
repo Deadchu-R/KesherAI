@@ -4379,3 +4379,10 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Ollama library**: tags with sizes, no hardware check; one command to pull. Taken: one tap to download, the size and free disk on the chosen drive beside it.
 - **ComfyUI-Manager**: a model list with type, base and size that installs into the right folder (checkpoints, loras, vae); no fit check. Taken: the existing folder rules (destinationFor) stay; image/video/audio files get the same fit marks.
 - **Stopped at:** done (built in downloads/fit.ts, routes/downloads.ts, web/HubBrowser.tsx).
+
+## 2026-11-21: First-run welcome with roles, starter models and tool categories (competitor note)
+- **Claude (claude.ai onboarding)**: asks what you use it for (several chips), then suggests starter prompts for those uses. Taken: multi-select role chips and tappable starter prompts that land in the message box.
+- **LM Studio first run**: detects the GPU and memory, recommends one model that fits ("Full GPU offload possible") and downloads it in one click. Taken: the hardware check with the same three fit marks (fit.ts), 1–3 picks, one tap, the heavy-data drive first. Left: a single forced pick.
+- **LobeHub / Open WebUI**: LobeHub asks a role and shapes the agent market; Open WebUI only creates the admin and shows a changelog. Taken: roles that order what is shown; left: an empty first run.
+- **Raycast**: a short onboarding, then a launcher grouped by category with search across everything. Taken: All tools grouped in role categories, the picked ones first, "Show all" for the rest, search always across all. Nothing is removed.
+- **Stopped at:** done (shared/tool-categories.ts, roles.ts researcher + everyday, core/starter-models.ts, GET /api/welcome/check, Welcome.tsx models + start steps, AppsPage categories). From product knowledge, no fresh web check.
