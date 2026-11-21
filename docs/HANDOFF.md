@@ -46,7 +46,7 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
 - Tokens first: agents per LEAD_GUIDE (Opus builds, Sonnet research/docs, Haiku lookups), small tasks to the task inbox
   (local model / Antigravity), short reads and reports, little browser work. Remind him to /compact after each build;
   a new chat every 1–2 weeks with this file.
-- Daily feature review (Roee, 2026-11-20): scheduled task "KesherAI daily feature review vs competitors" (every night 03:17 Israel time, on his Claude account) reviews one area a day in rotation against competitors and writes docs/FEATURE_REVIEW.md (we do better / they do better / missing / ideas) plus ⬜ lines in the WORK_LIST backlog. Each new chat: read the latest FEATURE_REVIEW.md section, keep the task alive, and use its findings when planning.
+- Daily feature review (Roee, 2026-11-20; moved to Gemini 2026-11-21): research no longer runs on Claude. The Claude scheduled task "KesherAI daily feature review vs competitors" is DISABLED. Each review area goes to the task inbox as a `kind: research`, `executor: gemini` task (free key, automatic, KesherAI 0.6.421+); big research goes to Antigravity (one Run tap). Claude only reads the result files, writes the dated section in docs/FEATURE_REVIEW.md and the ⬜ lines in WORK_LIST. Rotation: next area after the last section in FEATURE_REVIEW.md.
 - Research competitors end to end before any new feature; every research goes into docs/RESEARCH_LOG.md with
   "Stopped at:". AI editors: in-depth research (Photoshop, Affinity…).
 - Quality: readable, documented (TSDoc), efficient, secure code; Hebrew + English for every text; works at 390 px and in
