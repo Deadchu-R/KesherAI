@@ -4219,6 +4219,12 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .standin-projects button { height: auto; min-height: 52px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; padding: 10px 12px; min-width: 0; }
 .standin-projects button b { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standin-projects button.on { outline: 2px solid var(--accent); }
+/* An Unreal project card: the open button, and under it the small plugin install/update button. */
+.standin-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.standin-card .standin-open { width: 100%; flex: 1; }
+.standin-projects .standin-install { min-height: 32px; padding: 4px 10px; flex-direction: row; align-items: center; justify-content: center; font-size: 12px; }
+.standin-need { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; }
+.standin-need p { margin: 0; }
 .standin-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .standin-scenes .button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

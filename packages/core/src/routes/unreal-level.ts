@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { findGameProjects } from "../game-projects.js";
@@ -12,34 +13,59 @@ import type { UnrealBridge } from "../unreal-bridge.js";
 
 const LEVEL = /^\/Game\/[\w ./-]{1,300}$/;
 
+/** What a project's Content folder holds, read from disk. */
+export interface ContentScan {
+  /** Every .umap as "/Game/…" (up to 500, sorted). */
+  levels: string[];
+  /** How many .uasset files (Blueprints, meshes, textures, UI…) are there (one-file-per-actor folders left out). */
+  assets: number;
+}
+
 /**
- * The project's levels read from disk: every .umap under Content/ as "/Game/…", no Unreal needed. A headless editor
- * on Roee's PC answered an empty list for every project (its asset registry was not scanned), so the stand-in showed
- * "No levels"; the files themselves are always there.
+ * Reads the project's Content folder: its levels (.umap) and how many assets (.uasset) it has, no Unreal needed. A
+ * headless editor on Roee's PC answered an empty list for every project (its asset registry was not scanned), so the
+ * stand-in showed "No levels"; the files themselves are always there. The asset count tells "no levels, only assets"
+ * (a UI or Blueprint-only project) from "an empty folder".
+ *
+ * @param projectDir - The folder with the .uproject.
+ * @returns The levels and the asset count (at most 20,000 files are looked at).
+ */
+export async function scanContent(projectDir: string): Promise<ContentScan> {
+  const content = join(projectDir, "Content");
+  const levels: string[] = [];
+  let assets = 0;
+  let seen = 0;
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+      if (++seen > 20_000) return;
+      // One-file-per-actor folders and developer sandboxes hold no levels to open.
+      if (d.isDirectory()) {
+        if (depth > 0 && !/^(__ExternalActors__|__ExternalObjects__|Collections|Developers)$/i.test(d.name) && !d.name.startsWith(".")) await walk(join(dir, d.name), depth - 1);
+      } else if (/\.uasset$/i.test(d.name)) {
+        assets++;
+      } else if (/\.umap$/i.test(d.name) && levels.length < 500) {
+        const rel = relative(content, join(dir, d.name)).split(sep).join("/").replace(/\.umap$/i, "");
+        const path = `/Game/${rel}`;
+        if (LEVEL.test(path) && !path.includes("..")) levels.push(path);
+      }
+    }
+  };
+  await walk(content, 12);
+  return { levels: levels.sort((a, b) => a.localeCompare(b)), assets };
+}
+
+/**
+ * The project's levels read from disk: every .umap under Content/ as "/Game/…".
  *
  * @param projectDir - The folder with the .uproject.
  * @returns Up to 500 level paths, sorted.
  */
 export async function levelsOnDisk(projectDir: string): Promise<string[]> {
-  const content = join(projectDir, "Content");
-  const out: string[] = [];
-  let seen = 0;
-  const walk = async (dir: string, depth: number): Promise<void> => {
-    for (const d of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-      if (out.length >= 500 || ++seen > 20_000) return;
-      // One-file-per-actor folders and developer sandboxes hold no levels to open.
-      if (d.isDirectory()) {
-        if (depth > 0 && !/^(__ExternalActors__|__ExternalObjects__|Collections|Developers)$/i.test(d.name) && !d.name.startsWith(".")) await walk(join(dir, d.name), depth - 1);
-      } else if (/\.umap$/i.test(d.name)) {
-        const rel = relative(content, join(dir, d.name)).split(sep).join("/").replace(/\.umap$/i, "");
-        const path = `/Game/${rel}`;
-        if (LEVEL.test(path) && !path.includes("..")) out.push(path);
-      }
-    }
-  };
-  await walk(content, 12);
-  return out.sort((a, b) => a.localeCompare(b));
+  return (await scanContent(projectDir)).levels;
 }
+
+/** The plugin's descriptor inside a project: its absence means the editor cannot list levels, so do not start one. */
+const hasPlugin = (dir: string): boolean => existsSync(join(dir, "Plugins", "KesherAIBridge", "KesherAIBridge.uplugin"));
 const MESH = /^\/(Game|Engine)\/[\w ./-]{1,300}$/;
 const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) => {
   const m = (e as Error).message;
@@ -67,16 +93,23 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
     if (pf === null) return bad(reply);
     // The file list from disk fills in when the editor (open or headless) gives none or cannot run.
     const dir = pf ? dirname(pf) : b.knownProjectFile ? dirname(b.knownProjectFile) : undefined;
+    // A project without the plugin has no editor to ask (starting one would only wait to fail): the files answer.
+    // The answer says `fromDisk` (opening a level needs the plugin) and, with no levels, how many assets there are.
+    const fromFiles = async (note?: string) => {
+      const scan = dir ? await scanContent(dir) : { levels: [], assets: 0 };
+      return { levels: scan.levels, fromDisk: true, assets: scan.assets, ...(note ? { note } : {}) };
+    };
+    if (pf && dir && !hasPlugin(dir)) return fromFiles();
     try {
       const r = await b.standIn<{ levels: string[] }>("levels", "", pf);
       if (!r.levels?.length && dir) {
-        const disk = await levelsOnDisk(dir);
-        if (disk.length) return { ...r, levels: disk, fromDisk: true };
+        const scan = await scanContent(dir);
+        return scan.levels.length ? { ...r, levels: scan.levels, fromDisk: true } : { ...r, assets: scan.assets };
       }
       return r;
     } catch (e) {
-      const disk = dir ? await levelsOnDisk(dir) : [];
-      if (disk.length) return { levels: disk, fromDisk: true, note: (e as Error).message };
+      const disk = await fromFiles((e as Error).message);
+      if (disk.levels.length || (dir && disk.assets > 0)) return disk;
       return fail(reply, e);
     }
   });

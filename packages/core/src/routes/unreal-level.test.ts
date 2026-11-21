@@ -64,3 +64,43 @@ test("Unreal levels: an empty headless answer falls back to the .umap files on d
   assert.deepEqual(r.levels, ["/Game/Maps/Main", "/Game/Maps/Sub/Arena"]);
   assert.equal(r.fromDisk, true);
 });
+
+test("Unreal levels: scanContent counts assets, and a project with only assets says so", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { scanContent } = await import("./unreal-level.js");
+  const dir = mkdtempSync(join(tmpdir(), "ul-assets-"));
+  mkdirSync(join(dir, "Content", "UI"), { recursive: true });
+  mkdirSync(join(dir, "Content", "__ExternalActors__", "A"), { recursive: true });
+  writeFileSync(join(dir, "Content", "UI", "WBP_Hud.uasset"), "");
+  writeFileSync(join(dir, "Content", "UI", "BP_Door.uasset"), "");
+  writeFileSync(join(dir, "Content", "__ExternalActors__", "A", "X.uasset"), "");
+  assert.deepEqual(await scanContent(dir), { levels: [], assets: 2 });
+  writeFileSync(join(dir, "Content", "UI", "Main.umap"), "");
+  assert.deepEqual(await scanContent(dir), { levels: ["/Game/UI/Main"], assets: 2 });
+  assert.deepEqual(await scanContent(join(dir, "missing")), { levels: [], assets: 0 });
+});
+
+test("Unreal levels: a project without the plugin answers from the files at once, with the asset count", async () => {
+  const { mkdirSync } = await import("node:fs");
+  // The project sits where KesherAI looks for Unreal projects (under the home folder; HOME points at a temp folder here).
+  const home = mkdtempSync(join(tmpdir(), "ul-home-"));
+  const dir = join(home, "Documents", "Unreal Projects", "OnlyUi");
+  mkdirSync(join(dir, "Content", "UI"), { recursive: true });
+  writeFileSync(join(dir, "OnlyUi.uproject"), "{}");
+  writeFileSync(join(dir, "Content", "UI", "WBP_Hud.uasset"), "");
+  const was = process.env.HOME;
+  process.env.HOME = home;
+  try {
+    const b = new UnrealBridge(mkdtempSync(join(tmpdir(), "ul-b-")));
+    let asked = 0;
+    b.setHeadless(async () => { asked++; throw new Error("must not start an editor"); });
+    const app = Fastify();
+    await unrealLevelRoutes(app, b);
+    const r = (await app.inject({ url: `/api/unreal/levels?project=${encodeURIComponent(dir)}` })).json();
+    assert.deepEqual(r, { levels: [], fromDisk: true, assets: 1 });
+    assert.equal(asked, 0);
+    await app.close();
+  } finally {
+    if (was === undefined) delete process.env.HOME; else process.env.HOME = was;
+  }
+});

@@ -1,0 +1,198 @@
+{
+ "group": "משחקים · Games",
+ "mocks": [
+  {
+   "url": "**/api/unreal",
+   "json": {
+    "connected": false,
+    "projects": [],
+    "queued": 0,
+    "offline": true,
+    "latestBridge": "0.1.30",
+    "download": "https://example.invalid/kesher-unreal"
+   }
+  },
+  {
+   "url": "**/api/unreal/projects",
+   "json": {
+    "latest": "0.1.30",
+    "projects": [
+     {
+      "name": "DoorGame",
+      "path": "C:/Projects/DoorGame",
+      "engine": "5.6",
+      "plugin": "0.1.30",
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": true
+      }
+     },
+     {
+      "name": "Racer",
+      "path": "C:/Projects/Racer",
+      "engine": "5.4",
+      "plugin": "0.1.20",
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": true
+      }
+     },
+     {
+      "name": "SpaceShooter",
+      "path": "C:/Projects/SpaceShooter",
+      "engine": "5.4",
+      "plugin": null,
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": true
+      }
+     },
+     {
+      "name": "TestProj",
+      "path": "C:/Projects/TestProj",
+      "engine": "5.4",
+      "plugin": null,
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": true
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "SceneStandInUnreal",
+   "title": "רמה בלי Unreal: כל פרויקט מציג את הרמות שלו, ולכל כרטיס כפתור התקנה/עדכון של התוסף (נפרד מהכרטיס)",
+   "titleEn": "A level without Unreal: every project lists its levels, and each card has its own plugin install/update button (apart from the card)",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".standin-card"
+    },
+    {
+     "click": ".standin-open:has-text(\"DoorGame\")"
+    },
+    {
+     "wait": ".standin-scenes"
+    },
+    {
+     "scroll": ".standin-projects"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/unreal/levels?*",
+     "json": {
+      "levels": [
+       "/Game/Maps/Main",
+       "/Game/Maps/Arena",
+       "/Game/Maps/Sub/Lobby"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "SceneStandInUnrealNeedsPlugin",
+   "title": "רמה בלי Unreal: פתיחת רמה בלי תוסף מציעה להתקין אותו (במקום להיכשל אחר כך), ואז \"לפתוח את הרמה\"",
+   "titleEn": "A level without Unreal: opening a level with no plugin offers to install it (instead of failing later), then \"Open the level\"",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".standin-card"
+    },
+    {
+     "click": ".standin-open:has-text(\"SpaceShooter\")"
+    },
+    {
+     "wait": ".standin-scenes .button"
+    },
+    {
+     "click": ".standin-scenes .button"
+    },
+    {
+     "wait": ".standin-need"
+    },
+    {
+     "scroll": ".standin-need"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/unreal/levels?*",
+     "json": {
+      "levels": [
+       "/Game/Maps/Main",
+       "/Game/Maps/Arena"
+      ],
+      "fromDisk": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "SceneStandInUnrealNoLevels",
+   "title": "רמה בלי Unreal: אין קבצי רמה, אומר למה (הפרויקט כולל רק נכסים) וכמה נכסים",
+   "titleEn": "A level without Unreal: no level files, says why (only assets) and how many",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".standin-card"
+    },
+    {
+     "click": ".standin-open:has-text(\"TestProj\")"
+    },
+    {
+     "wait": ".standin-none"
+    },
+    {
+     "scroll": ".standin-none"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/unreal/levels?*",
+     "json": {
+      "levels": [],
+      "fromDisk": true,
+      "assets": 14
+     }
+    }
+   ]
+  }
+ ]
+}
