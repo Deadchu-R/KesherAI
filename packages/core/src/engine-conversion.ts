@@ -176,6 +176,8 @@ const safeRel = (p: string) => p.length > 0 && !p.startsWith("/") && !/(^|\/)\.\
  */
 export async function extractCopy(git: GitBytes, repo: string, ref: string, copy: string, dest: string): Promise<string> {
   if (!/^[\w./-]+$/.test(copy) || copy.includes("..")) throw new Error("The copy's folder name is not valid.");
+  // A ref that starts with "-" would be read by git as an option.
+  if (ref.startsWith("-")) throw new Error("The converted copy's branch name is not valid.");
   const rev = await git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   const sha = rev.out.toString("utf8").trim();
   if (rev.code !== 0 || !/^[0-9a-f]{40,64}$/.test(sha)) throw new Error("The converted copy's branch was not found on this computer. Open the task and sync, then try again.");

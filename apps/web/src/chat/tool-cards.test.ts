@@ -68,3 +68,10 @@ test("prettyOutput formats JSON and keeps text; errorLine is one line", () => {
   assert.equal(errorLine("Error: file not found\nstack…"), "file not found");
   assert.equal(errorLine("\n\nboom"), "boom");
 });
+
+test("maskSecrets stays fast on long key-like text (no quadratic backtracking) and still masks", () => {
+  const t0 = Date.now();
+  maskSecrets("key".repeat(60_000));
+  assert.ok(Date.now() - t0 < 500);
+  assert.equal(maskSecrets("hf_token=abc123 and api_key: zzz"), "hf_token=••• and api_key: •••");
+});

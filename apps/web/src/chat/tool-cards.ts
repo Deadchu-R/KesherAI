@@ -106,7 +106,7 @@ export function maskSecrets(text: string): string {
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, "$1 •••")
     .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{12,}/g, "$1-•••")
     .replace(/\b(gh[pousr]_|github_pat_|xox[abpr]-|AIza|AKIA|hf_)[A-Za-z0-9_-]{8,}/g, "$1•••")
-    .replace(/\b([A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|api[-_]?key|apikey|auth|key)[A-Za-z0-9_-]*)(=|:\s*)(?!•)[^\s&"']+/gi, "$1$2•••");
+    .replace(/\b([A-Za-z0-9_-]{0,40}(?:token|secret|passw(?:or)?d|api[-_]?key|apikey|auth|key)[A-Za-z0-9_-]{0,40})(=|:\s*)(?!•)[^\s&"']+/gi, "$1$2•••");
 }
 
 /** Collapses whitespace and cuts to `max` characters with an ellipsis. */

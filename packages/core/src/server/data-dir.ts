@@ -5,6 +5,7 @@
 import { mkdir } from "node:fs/promises";
 import { dataPaths, loadConfig, saveConfig, useSecretBox, type DataPaths, type KesherConfig } from "../config.js";
 import { applyPendingReset } from "../reset.js";
+import { fileSecretBox } from "../secret-file.js";
 import { finishPending } from "../heavy-folder.js";
 import type { KesherServerOptions } from "./options.js";
 
@@ -19,8 +20,11 @@ export async function openDataDir(options: KesherServerOptions): Promise<{ paths
   // "Start over" (Settings → General): the old data folder moves aside before anything uses it.
   const resetBackup = await applyPendingReset(paths.root).catch(() => undefined);
   // Keys at rest (S2): read and written through the system's protection when the desktop app gives it.
-  if (options.secrets) useSecretBox(options.secrets);
+  // A headless run (no desktop app) uses a key file next to the data folder instead (secret-file.ts).
+  useSecretBox(options.secrets ?? fileSecretBox(`${paths.root}.key`));
   const config = await loadConfig(paths);
+  // Keys saved as plain text by an older start are written sealed now (once; later saves keep them sealed).
+  await saveConfig(paths, config).catch(() => undefined);
   if (config.modelsDir) {
     paths.models = config.modelsDir;
     await mkdir(paths.models, { recursive: true }).catch(() => undefined);

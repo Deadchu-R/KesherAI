@@ -1936,3 +1936,30 @@ Scope: `git diff 3ddbf92..HEAD`.
   linear (no nested quantifiers). `mic-access.ts` only asks the phone's own permission. `asksForMusic` guards are
   plain text checks. No personal e-mail, Windows user name or personal path in the diff (only test fixtures such as
   `tvly-secret`).
+
+## Scan 173 (2026-11-21): downloads queue/parts/verify, hf-token, night builds, engine conversion, ideas audio, devices/away, play-standby, 0.6.437–0.6.440
+
+Scope: `git diff f189a92..HEAD` (225 files).
+
+- **Fixed (medium): a headless server kept the Hugging Face token and API keys as plain text in config.json** (only the
+  desktop app encrypted them). `secret-file.ts`: without the desktop app's box, keys are sealed with AES-256-GCM using a
+  random key in `<data folder>.key` (next to the data folder, not in it; created once, mode 0600). `openDataDir` saves
+  the config once at start, so existing plain values are migrated. A value sealed by one box is never read by the other
+  (own `f1:` marker; unreadable values are kept as they were). Still plain in config.json: Google refresh tokens,
+  the remote token and `browserKey` (not in the sealed slots) - listed for a later pass. Tests: round trip, 0600, tamper.
+- **Fixed (low): quadratic regex in `maskSecrets`** (tool cards): `key`×100 000 took ~1.9 s. The name parts around
+  the keyword are now at most 40 characters; test added. `bidi.ts` runs and the other tool-card regexes timed linear on
+  100 000-character adversarial inputs.
+- **Fixed (low): git option injection** in `extractCopy`: a branch name starting with `-` is refused.
+- **Checked, fine:** hf-token (local-only PUT, `hf_` pattern, GET says set/not set, never logged). Download URLs come from
+  the hub's file list (huggingface.co), the destination is checked inside the folder, the token is sent as a header and
+  fetch drops it on a cross-origin redirect to the CDN; the pending list keeps no token. Queue move, concurrency (1-6),
+  parts (1-8), busy share and verify/repair validate input and take job ids only; open-folder is local-only by job id.
+  Verify hashes by stream. Night builds: only found projects, phone changes the switches only, builds go to the heavy
+  folder outside the project, log route reads by build id from the store. RunUAT runs through `runProgram` (no shell;
+  `.bat` arguments with `" % ^ & | < >` are refused). Engine conversion: found projects only, version match, plain files
+  only (no symlinks, `..`, drive letters), removes only a marked copy, never the own plugin. Unity compile detection
+  reads the first and last bytes of the log. Ideas audio: session ids pattern-checked, language `auto|xx`, settings
+  ranges checked. Presence/away notes carry counts only.
+- **Privacy grep:** no personal e-mail, Windows user name or personal path in the diff or the new docs (only fixtures
+  like `C:\Users\someone`, and public `roeetal.com`).
