@@ -15,6 +15,8 @@ export interface Job {
   error?: string;
   /** Why it failed: decides the error card's cause and its one fix button. */
   errorKind?: "disk-full" | "auth" | "network" | "changed" | "other";
+  /** While waiting: the place in the line (1 starts next). */
+  position?: number;
 }
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -46,6 +48,11 @@ function connect(): void {
   setTimeout(() => void poll(), 3000);
 }
 
+/** Asks the server for the list now (after a move or a pause, so the screen does not wait for the next live event). */
+export async function refreshDownloads(): Promise<void> {
+  await poll();
+}
+
 async function poll(): Promise<void> {
   const list = await api<Job[]>("/api/downloads").catch(() => undefined);
   if (!list) return;
@@ -71,11 +78,11 @@ export function useDownloads(): Job[] {
   return [...jobs.values()].reverse();
 }
 
-const gb = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : `${(b / 1024 ** 2).toFixed(0)} MB`);
-const ACTIVE = new Set(["queued", "downloading", "verifying"]);
+export const gb = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(2)} GB` : `${(b / 1024 ** 2).toFixed(0)} MB`);
+export const ACTIVE = new Set(["queued", "downloading", "verifying"]);
 
 /** "about 4 min" from seconds, in the interface language. */
-function eta(seconds: number): string {
+export function eta(seconds: number): string {
   const nf = (n: number, unit: "second" | "minute" | "hour") => new Intl.NumberFormat(getLocale(), { style: "unit", unit, unitDisplay: "short" }).format(n);
   if (seconds < 60) return nf(Math.max(1, Math.round(seconds)), "second");
   if (seconds < 3600) return nf(Math.round(seconds / 60), "minute");
@@ -84,13 +91,13 @@ function eta(seconds: number): string {
   return m ? `${nf(h, "hour")} ${nf(m, "minute")}` : nf(h, "hour");
 }
 
-const mbps = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MB/s`;
+export const mbps = (bytes: number) => `${(bytes / 1024 ** 2).toFixed(1)} MB/s`;
 
 /** The steps a download goes through; the current one is marked (waiting, downloading, checking, done). */
 const PHASES = ["queued", "downloading", "verifying", "done"] as const;
 
 /** The four phases as a small track: passed ones filled, the current one bold. Failed and paused ones show no track. */
-function PhaseTrack({ status }: { status: string }) {
+export function PhaseTrack({ status }: { status: string }) {
   const at = PHASES.indexOf(status as (typeof PHASES)[number]);
   if (at < 0) return null;
   return (
@@ -124,7 +131,7 @@ function TotalLine({ active }: { active: Job[] }) {
  * What one download shows while it is not finished: its phase, a bar, and the numbers that fit the phase: the
  * network speed and time left while downloading, the check's progress while the file is verified.
  */
-function JobMeters({ j }: { j: Job }) {
+export function JobMeters({ j }: { j: Job }) {
   const pct = j.total ? Math.floor((100 * j.received) / j.total) : 0;
   const size = `${gb(j.received)}${j.total ? ` / ${gb(j.total)}` : ""}`;
   if (j.status === "verifying") {
@@ -153,7 +160,7 @@ function JobMeters({ j }: { j: Job }) {
  * drive; a refused file (401/403) points to the Hugging Face token setting (the token is never asked for here);
  * a network problem retries (it resumes); a file that changed on the hub restarts from zero.
  */
-function ErrorCard({ j }: { j: Job }) {
+export function ErrorCard({ j }: { j: Job }) {
   const [problem, setProblem] = useState("");
   const kind = j.errorKind ?? "other";
   const post = (path: string) => {
@@ -224,7 +231,7 @@ export function DownloadsButton() {
     <div className={`dl-corner${!active.length && !failed && !open ? " idle" : ""}`}>
       {open && (
         <div className="dl-panel card" role="dialog" aria-label={t("downloads")}>
-          <div className="row"><strong className="grow">{t("downloads")}</strong><button type="button" onClick={() => setOpen(false)} aria-label={t("cancel")}>✕</button></div>
+          <div className="row"><strong className="grow">{t("downloads")}</strong><a className="button small" href="#/downloads" onClick={() => setOpen(false)}>{L("פתח הכול", "Open all")}</a><button type="button" onClick={() => setOpen(false)} aria-label={t("cancel")}>✕</button></div>
           <TotalLine active={active} />
           <div className="list">
             {all.map((j) => (

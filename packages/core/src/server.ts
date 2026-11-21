@@ -142,7 +142,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const injectRef: { app?: { inject: (o: { method: "POST"; url: string; payload: unknown; remoteAddress: string; headers: Record<string, string> }) => Promise<{ statusCode: number; json: () => unknown }> } } = {};
 
   const registry = new ProviderRegistry();
-  const downloads = new DownloadManager();
+  const downloads = new DownloadManager(config.maxConcurrentDownloads);
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
   const coach = new Coach(paths.root);

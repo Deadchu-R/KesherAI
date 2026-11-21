@@ -214,7 +214,7 @@ export const NAV_GROUPS: Array<{ id: string; icon: string; label: Parameters<typ
   { id: "create", icon: "🎨", label: "navCreate", items: [["#/images", "images"], ["#/bank", "bankNav"], ["#/canvas", "canvasNav"], ["#/slides", "slidesNav"], ["#/docs", "docsNav"], ["#/sheets", "sheetsNav"], ["#/lens", "lensNav"], ["#/batch", "batchNav"], ["#/nodes", "nodesNav"], ["#/games", "gamesNav"], ["#/unreal", "unrealNav"], ["#/unity", "unityNav"], ["#/godot", "godotNav"], ["#/training", "trainingNav"]] },
   { id: "work", icon: "🧠", label: "navWork", items: [["#/study", "studyNav"], ["#/ideas", "ideasNav"], ["#/knowledge", "knowledgeNav"], ["#/libraries", "librariesNav"], ["#/day", "dayNav"], ["#/compare", "compareNav"], ["#/pipelines", "pipelinesNav"], ["#/inbox", "inboxNav"], ["#/tasks", "tasksNav"], ["#/task-inbox", "taskInboxNav"], ["#/self-work", "selfWorkNav"], ["#/design", "designNav"]] },
   { id: "assistant", icon: "🤖", label: "navAssistant", items: [["#/personas", "personasNav"], ["#/chat-reports", "chatReportsNav"], ["#/stremio", "stremioNav"], ["#/memory", "memoryNav"], ["#/prompts", "promptsNav"], ["#/translate", "translateNav"], ["#/community", "communityNav"], ["#/usage", "usageNav"]] },
-  { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/connections", "customizeNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
+  { id: "system", icon: "⚙", label: "navSystem", items: [["#/models", "models"], ["#/downloads", "downloads"], ["#/connections", "customizeNav"], ["#/health", "healthNav"], ["#/remote", "remoteNav"], ["#/updates", "updatesNav"], ["#/settings", "settings"]] },
 ];
 
 export { NAV_ICONS };

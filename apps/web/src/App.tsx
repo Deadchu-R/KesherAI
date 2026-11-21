@@ -91,6 +91,7 @@ const BankPage = lazy(() => import("./pages/BankPage").then((m) => ({ default: m
 const ChatReportsPage = lazy(() => import("./pages/ChatReportsPage").then((m) => ({ default: m.ChatReportsPage })));
 const GodotPage = lazy(() => import("./pages/GodotPage").then((m) => ({ default: m.GodotPage })));
 const GamesPage = lazy(() => import("./pages/GamesPage").then((m) => ({ default: m.GamesPage })));
+const DownloadsPage = lazy(() => import("./pages/DownloadsPage").then((m) => ({ default: m.DownloadsPage })));
 const ModelsPage = lazy(() => import("./pages/Models").then((m) => ({ default: m.ModelsPage })));
 const SettingsPage = lazy(() => import("./pages/Settings").then((m) => ({ default: m.SettingsPage })));
 const AppsPage = lazy(() => import("./pages/AppsPage").then((m) => ({ default: m.AppsPage })));
@@ -360,6 +361,7 @@ export function App() {
   else if (hash === "#/pages" || hash.startsWith("#/pages/")) page = <DocsPage key={hash} {...(hash.length > 8 ? { id: hash.slice(8) } : {})} />;
   else if (hash === "#/updates") page = <UpdatesPage />;
   else if (hash === "#/models") page = <ModelsPage />;
+  else if (hash === "#/downloads") page = <DownloadsPage />;
   else if (hash.startsWith("#/settings")) page = <SettingsPage />;
   else if (hash === "#/usage") page = <UsagePage />;
   else if (hash === "#/day") page = <DayPage />;

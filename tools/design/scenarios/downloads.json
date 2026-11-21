@@ -505,7 +505,7 @@
   },
   {
    "id": "SettingsHuggingFaceToken",
-   "title": "הגדרות › חשבונות: טוקן של Hugging Face (מוצפן, אף פעם לא מוצג שוב: \"נשמר ✓\" או \"לא מוגדר\", שמור / הסר; בטלפון רק המצב). כפתור \"הוסף טוקן בהגדרות\" בכרטיס שגיאת הורדה פותח את המקום הזה",
+   "title": "הגדרות › חשבונות: טוקן של Hugging Face (מוצפן, לא מוצג שוב; בטלפון רק המצב). כפתור \"הוסף טוקן בהגדרות\" בכרטיס שגיאה פותח אותו",
    "route": "#/settings/accounts",
    "height": {
     "desktop": 900,
@@ -528,6 +528,299 @@
      "url": "**/api/hf-token",
      "json": {
       "set": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "DownloadsPage",
+   "title": "דף הורדות מלא: מהירות כוללת, כוננים, רצות, תור לסידור, הסתיימו ונכשלו",
+   "route": "#/downloads",
+   "steps": [
+    {
+     "wait": ".dl-item"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": ".dl-page",
+    "phone": ".dl-page"
+   },
+   "height": {
+    "desktop": 1300,
+    "phone": 2600
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "r1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 6871947673,
+       "total": 17716740096,
+       "speed": 19084083,
+       "etaSeconds": 556
+      },
+      {
+       "id": "r2",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "verifying",
+       "received": 5261334937,
+       "total": 5261334937,
+       "speed": 0,
+       "verified": 2254857830
+      },
+      {
+       "id": "q1",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 7301444403,
+       "speed": 0,
+       "position": 1
+      },
+      {
+       "id": "q2",
+       "label": "bartowski/Llama-3.3-70B-Instruct-GGUF · Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 42520176230,
+       "speed": 0,
+       "position": 2
+      },
+      {
+       "id": "q3",
+       "label": "unsloth/Qwen3-30B-A3B-GGUF · Qwen3-30B-A3B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 19971597926,
+       "speed": 0,
+       "position": 3
+      },
+      {
+       "id": "p1",
+       "label": "NousResearch/Hermes-3-Llama-3.1-8B-GGUF · Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "paused",
+       "received": 1288490188,
+       "total": 5261334937,
+       "speed": 0
+      },
+      {
+       "id": "f1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · mmproj-gemma-3-27b-it-F16.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 912680550,
+       "total": 912680550,
+       "speed": 0
+      },
+      {
+       "id": "f2",
+       "label": "city96/t5-v1_1-xxl-encoder-gguf · t5-v1_1-xxl-encoder-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 3113851289,
+       "total": 3113851289,
+       "speed": 0
+      },
+      {
+       "id": "x1",
+       "label": "stabilityai/sdxl-turbo · sd_xl_turbo_1.0_fp16.safetensors",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "failed",
+       "received": 3328599654,
+       "total": 7408818585,
+       "speed": 0,
+       "error": "Not enough disk space: this needs 3.8 GB, and only 2.1 GB is free on that drive.",
+       "errorKind": "disk-full"
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/drives",
+     "json": [
+      {
+       "id": "heavy",
+       "freeGb": 312,
+       "totalGb": 2000
+      },
+      {
+       "id": "models",
+       "freeGb": 48,
+       "totalGb": 512
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/concurrency",
+     "json": {
+      "max": 2
+     }
+    }
+   ]
+  },
+  {
+   "id": "DownloadsQueueReorder",
+   "title": "דף הורדות: סידור התור אחרי \"העבר לראש\"; בטלפון כפתורים של 44 פיקסל",
+   "route": "#/downloads",
+   "steps": [
+    {
+     "wait": ".dl-item"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": ".dl-queue",
+    "phone": ".dl-queue"
+   },
+   "height": {
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "r1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 6871947673,
+       "total": 17716740096,
+       "speed": 19084083,
+       "etaSeconds": 556
+      },
+      {
+       "id": "r2",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "verifying",
+       "received": 5261334937,
+       "total": 5261334937,
+       "speed": 0,
+       "verified": 2254857830
+      },
+      {
+       "id": "q3",
+       "label": "unsloth/Qwen3-30B-A3B-GGUF · Qwen3-30B-A3B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 19971597926,
+       "speed": 0,
+       "position": 1
+      },
+      {
+       "id": "q1",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 7301444403,
+       "speed": 0,
+       "position": 2
+      },
+      {
+       "id": "q2",
+       "label": "bartowski/Llama-3.3-70B-Instruct-GGUF · Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 42520176230,
+       "speed": 0,
+       "position": 3
+      },
+      {
+       "id": "p1",
+       "label": "NousResearch/Hermes-3-Llama-3.1-8B-GGUF · Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "paused",
+       "received": 1288490188,
+       "total": 5261334937,
+       "speed": 0
+      },
+      {
+       "id": "f1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · mmproj-gemma-3-27b-it-F16.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 912680550,
+       "total": 912680550,
+       "speed": 0
+      },
+      {
+       "id": "f2",
+       "label": "city96/t5-v1_1-xxl-encoder-gguf · t5-v1_1-xxl-encoder-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 3113851289,
+       "total": 3113851289,
+       "speed": 0
+      },
+      {
+       "id": "x1",
+       "label": "stabilityai/sdxl-turbo · sd_xl_turbo_1.0_fp16.safetensors",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "failed",
+       "received": 3328599654,
+       "total": 7408818585,
+       "speed": 0,
+       "error": "Not enough disk space: this needs 3.8 GB, and only 2.1 GB is free on that drive.",
+       "errorKind": "disk-full"
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/drives",
+     "json": [
+      {
+       "id": "heavy",
+       "freeGb": 312,
+       "totalGb": 2000
+      },
+      {
+       "id": "models",
+       "freeGb": 48,
+       "totalGb": 512
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/concurrency",
+     "json": {
+      "max": 2
      }
     }
    ]

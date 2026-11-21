@@ -475,6 +475,8 @@ export const KesherConfigSchema = z.object({
   apiAuth: z.object({ requireKeyLocally: z.boolean().default(false) }).prefault({}),
   /** Download speed limit in megabytes per second (0: none). */
   downloadLimitMBps: z.number().min(0).default(0),
+  /** How many downloads run at the same time (the rest wait in the queue, which the Downloads page can reorder). */
+  maxConcurrentDownloads: z.number().int().min(1).max(6).default(2),
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */

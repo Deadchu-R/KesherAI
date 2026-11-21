@@ -46,7 +46,12 @@ export interface DownloadJob {
   error?: string;
   /** Why it failed, for the error card and its fix button; see {@link classifyDownloadError}. */
   errorKind?: DownloadErrorKind;
+  /** While `queued`: the place in the line (1 starts next). Absent for every other status. */
+  position?: number;
 }
+
+/** Where {@link DownloadManager.move} puts a queued job: the front, one step earlier or later, or a place (0 is first). */
+export type QueueMove = "top" | "up" | "down" | number;
 
 /**
  * `fetch` that tries again when the server is briefly unwell: a 502, 503 or
@@ -75,8 +80,8 @@ export async function fetchRetrying(url: string, init: RequestInit = {}, tries =
 /**
  * A download queue that resumes interrupted files and verifies hashes.
  *
- * - Runs up to `concurrency` jobs at once (default 1: big files download
- *   faster one at a time and the order stays predictable).
+ * - Runs up to `concurrency` jobs at once (default 1; the server passes the user's setting, 2 by default).
+ * - The queue is the order of the jobs: the first queued job starts next, and {@link move} changes the order.
  * - Resumes from an existing `.part` file using an HTTP `Range` request.
  * - Emits `"update"` with a {@link DownloadJob} whenever a job changes.
  *
@@ -95,8 +100,24 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   limit = 0;
 
   /** @param concurrency - How many downloads run at the same time. */
-  constructor(private readonly concurrency = 1) {
+  constructor(private concurrency = 1) {
     super();
+  }
+
+  /** @returns How many downloads may run at the same time. */
+  get maxConcurrent(): number {
+    return this.concurrency;
+  }
+
+  /**
+   * Changes how many downloads run at the same time; a higher number starts waiting jobs at once, a lower one lets
+   * running jobs finish (none is stopped).
+   *
+   * @param n - 1 or more.
+   */
+  setConcurrency(n: number): void {
+    this.concurrency = Math.max(1, Math.floor(n));
+    this.pump();
   }
 
   /**
@@ -117,6 +138,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       speed: 0,
     };
     this.jobs.set(job.id, { job, req });
+    this.renumber(job);
     this.emit("update", { ...job });
     this.pump();
     return { ...job };
@@ -195,6 +217,58 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   }
 
   /**
+   * Moves a waiting job in the queue. Only queued jobs have a place; the others are not touched.
+   *
+   * @param id - Job id.
+   * @param to - `"top"` (next to start), `"up"` or `"down"` (one place), or a place in the line (0 is first).
+   * @returns `true` if the job is queued and now stands where asked.
+   */
+  move(id: string, to: QueueMove): boolean {
+    const entries = [...this.jobs.values()];
+    const slots = entries.flatMap((e, i) => (e.job.status === "queued" ? [i] : []));
+    const from = slots.findIndex((i) => entries[i]!.job.id === id);
+    if (from < 0) return false;
+    const target = to === "top" ? 0 : to === "up" ? from - 1 : to === "down" ? from + 1 : to;
+    if (!Number.isInteger(target)) return false;
+    const at = Math.min(slots.length - 1, Math.max(0, target));
+    if (at === from) return true;
+    // Only the queued jobs swap places among the slots they already hold, so finished ones keep their order.
+    const queued = slots.map((i) => entries[i]!);
+    const [moved] = queued.splice(from, 1);
+    queued.splice(at, 0, moved!);
+    slots.forEach((slot, n) => (entries[slot] = queued[n]!));
+    this.jobs.clear();
+    for (const e of entries) this.jobs.set(e.job.id, e);
+    this.renumber();
+    return true;
+  }
+
+  /**
+   * Pauses every queued and running job (the `.part` files are kept).
+   *
+   * @returns How many were paused.
+   */
+  pauseAll(): number {
+    return [...this.jobs.keys()].filter((id) => this.pause(id)).length;
+  }
+
+  /**
+   * Starts every paused job again, in their old order.
+   *
+   * @returns How many were resumed.
+   */
+  resumeAll(): number {
+    let n = 0;
+    for (const { job } of [...this.jobs.values()]) {
+      if (job.status === "paused") {
+        this.retry(job.id);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /**
    * Removes a finished, failed or cancelled job from the list.
    *
    * @param id - Job id.
@@ -209,7 +283,23 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
 
   private update(job: DownloadJob, patch: Partial<DownloadJob>): void {
     Object.assign(job, patch);
+    if ("status" in patch) this.renumber(job);
     this.emit("update", { ...job });
+  }
+
+  /**
+   * Gives every queued job its place in the line (1, 2, 3…) and takes it off the others. A job whose place changed
+   * is announced, except `skip`, which the caller announces itself.
+   */
+  private renumber(skip?: DownloadJob): void {
+    let n = 0;
+    for (const { job } of this.jobs.values()) {
+      const place = job.status === "queued" ? ++n : undefined;
+      if (job.position === place) continue;
+      if (place === undefined) delete job.position;
+      else job.position = place;
+      if (job !== skip) this.emit("update", { ...job });
+    }
   }
 
   private pump(): void {
@@ -217,6 +307,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       if (this.active >= this.concurrency) return;
       if (entry.job.status !== "queued") continue;
       this.active++;
+      // Taken out of the line at once (not when its first file check ends), so the queue never shows a job that has begun.
+      this.update(entry.job, { status: "downloading" });
       this.run(entry).finally(() => {
         this.active--;
         this.pump();
@@ -236,7 +328,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       const headers: Record<string, string> = { ...req.headers, ...(existing > 0 ? { range: `bytes=${existing}-` } : {}) };
       delete job.etaSeconds;
       delete job.verified;
-      this.update(job, { status: "downloading", received: existing });
+      this.update(job, { received: existing });
 
       const res = await fetchRetrying(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);

@@ -1,0 +1,24 @@
+/* The Downloads page: summary and drives, the reorderable queue, the 44 px buttons for a thumb. */
+.dl-page h2 { font-size: 15px; margin: 4px 0 0; }
+.dl-page-head { flex-wrap: wrap; }
+.dl-summary { display: flex; flex-direction: column; gap: 12px; }
+.dl-stats { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.dl-stats > div { display: flex; flex-direction: column; gap: 2px; }
+.dl-drives { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 20px; }
+.dl-drives li { display: flex; flex-direction: column; gap: 4px; }
+.dl-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.dl-item { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.dl-item.dragging { opacity: 0.5; }
+.dl-queue .dl-item { cursor: grab; }
+.dl-handle { color: var(--muted); font-size: 18px; line-height: 1; cursor: grab; }
+.dl-place { min-width: 1.5em; text-align: center; color: var(--muted); }
+.dl-name-row { min-width: 0; }
+.dl-name-row .dl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dl-actions { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.dl-actions button, .dl-actions .button { min-height: 44px; min-width: 44px; }
+@media (max-width: 760px) {
+  .dl-name-row .dl-name { white-space: normal; overflow-wrap: anywhere; }
+  .dl-actions { justify-content: flex-start; }
+  .dl-queue .dl-item { cursor: default; }
+  .dl-handle { display: none; }
+}

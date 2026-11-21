@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 /**
  * Opening a file in another app on this computer, for plugins that work
@@ -64,6 +64,19 @@ export async function openInAffinity(file: string, own?: string): Promise<{ app:
     run("open", found ? ["-a", found, file] : [file]);
   } else run("xdg-open", [file]);
   return { app: found ? "affinity" : "default" };
+}
+
+/**
+ * Shows a file in the computer's file manager (Explorer, Finder, or the folder on Linux). Only called with a path the
+ * server itself made (a finished download's destination), never one a client typed.
+ *
+ * @param file - The file to show.
+ */
+export function showInFolder(file: string): void {
+  const run = (cmd: string, args: string[]) => spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true }).on("error", () => undefined).unref();
+  if (process.platform === "win32") run("explorer.exe", [`/select,${file}`]);
+  else if (process.platform === "darwin") run("open", ["-R", file]);
+  else run("xdg-open", [dirname(file)]);
 }
 
 /** Where Blender is: the newest under Program Files (Windows), the app (macOS), or `blender` on the PATH (Linux). */

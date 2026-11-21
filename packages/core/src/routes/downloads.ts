@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
 import { mkdir, readFile, statfs, unlink, writeFile } from "node:fs/promises";
-import { budgetOf, detectHardwareCached, driveWithRoom, hasHeadroom, headroomBytes, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort } from "@kesher/downloads";
+import { budgetOf, detectHardwareCached, driveWithRoom, hasHeadroom, headroomBytes, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort, type QueueMove } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
 import { existsSync } from "node:fs";
 import { startSSE } from "../sse.js";
+import { isLocalRequest } from "../auth.js";
+import { showInFolder } from "../open-in-app.js";
 import { forgetFoundModels } from "./engine.js";
 import { RECOMMENDED_MODELS } from "@kesher/shared";
 import { pickStarterModels } from "../starter-models.js";
@@ -317,8 +319,11 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
   /** The downloads a close cut off, until each starts again (the card's Drop can still take one out). */
   let toStart: DownloadBody[] = [];
   // Started ones, and the ones a restart has not started again yet (once each).
+  // In queue order, so a restart lines the downloads up the way the user arranged them.
   const savePending = () => {
-    const all = new Map([...pending.values(), ...toStart].map((b) => [`${b.repo}\n${b.path}`, b]));
+    const order = new Map(s.downloads.list().map((j, n) => [j.id, n]));
+    const started = [...pending].sort((a, b) => (order.get(a[0]) ?? 0) - (order.get(b[0]) ?? 0)).map(([, b]) => b);
+    const all = new Map([...started, ...toStart].map((b) => [`${b.repo}\n${b.path}`, b]));
     return writeFile(pendingFile, JSON.stringify([...all.values()]), "utf8").catch(() => undefined);
   };
   const start = async (body: DownloadBody): Promise<DownloadJob | { refused: number; error: string }> => {
@@ -398,9 +403,50 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     }
   });
 
-  /** Starts a failed or cancelled download again (it resumes where it stopped). */
   app.post<{ Params: { id: string } }>("/api/downloads/:id/pause", async (req) => ({ ok: s.downloads.pause(req.params.id) }));
 
+  /** Pauses or resumes every download at once. */
+  app.post("/api/downloads/pause-all", async () => ({ count: s.downloads.pauseAll() }));
+  app.post("/api/downloads/resume-all", async () => ({ count: s.downloads.resumeAll() }));
+
+  /**
+   * Moves a waiting download in the queue: body `{ to: "top" | "up" | "down" | <place, 0 is first> }`. The order is
+   * saved, so it survives a restart. Works from the phone too: it takes only a job id and a place, never a path.
+   */
+  app.post<{ Params: { id: string }; Body: { to?: unknown } }>("/api/downloads/:id/move", async (req, reply) => {
+    const to = req.body?.to;
+    if (to !== "top" && to !== "up" && to !== "down" && !(typeof to === "number" && Number.isInteger(to) && to >= 0 && to < 10_000)) {
+      return reply.code(400).send({ error: 'to: "top", "up", "down" or a place number (0 is first).' });
+    }
+    if (!s.downloads.move(req.params.id, to as QueueMove)) return reply.code(404).send({ error: "That download is not waiting in the queue." });
+    void savePending();
+    return { ok: true };
+  });
+
+  /** How many downloads run at once (1 to 6); the others wait in the queue. */
+  app.get("/api/downloads/concurrency", async () => ({ max: s.config.maxConcurrentDownloads }));
+  app.put<{ Body: { max?: number } }>("/api/downloads/concurrency", async (req, reply) => {
+    const v = Number(req.body?.max);
+    if (!Number.isInteger(v) || v < 1 || v > 6) return reply.code(400).send({ error: "A whole number from 1 to 6." });
+    s.config.maxConcurrentDownloads = v;
+    s.downloads.setConcurrency(v);
+    await s.saveConfig();
+    return { max: v };
+  });
+
+  /** The drives downloads go to, with free space (ids and sizes only, no paths). */
+  app.get("/api/downloads/drives", async () => (await driveChoices(s, "model.gguf")).map(({ id, freeGb, totalGb }) => ({ id, ...(freeGb !== undefined ? { freeGb } : {}), ...(totalGb !== undefined ? { totalGb } : {}) })));
+
+  /** Shows a finished download in the file manager. Only on the computer itself, by job id (never a path from the client). */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/open-folder", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Open the folder on the computer that runs KesherAI." });
+    const job = s.downloads.list().find((j) => j.id === req.params.id && j.status === "done");
+    if (!job) return reply.code(404).send({ error: "Download not found" });
+    showInFolder(job.dest);
+    return { ok: true };
+  });
+
+  /** Starts a failed or cancelled download again (it resumes where it stopped). */
   app.post<{ Params: { id: string } }>("/api/downloads/:id/retry", async (req, reply) => {
     const job = s.downloads.list().find((j) => j.id === req.params.id);
     if (!job) return reply.code(404).send({ error: "Download not found" });
