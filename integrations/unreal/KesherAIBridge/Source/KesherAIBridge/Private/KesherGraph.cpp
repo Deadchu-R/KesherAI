@@ -13,11 +13,14 @@
 #include "FileHelpers.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CustomEvent.h"
+#include "K2Node_DynamicCast.h"
 #include "K2Node_Event.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_Knot.h"
 #include "K2Node_MacroInstance.h"
+#include "K2Node_Timeline.h"
+#include "Engine/TimelineTemplate.h"
 #include "EdGraphUtilities.h"
 #include "EdGraphNode_Comment.h"
 #include "K2Node_Variable.h"
@@ -531,6 +534,53 @@ namespace KesherGraph
 						Made = N;
 					}
 				}
+				else if (Type == TEXT("cast"))
+				{
+					// Cast To <class> (0.1.26): an engine class by name, or a Blueprint by its object path.
+					const FString ClassName = JsonStr(Op, TEXT("class"));
+					UClass* Target = nullptr;
+					if (ClassName.StartsWith(TEXT("/")))
+					{
+						if (UBlueprint* Other = LoadObject<UBlueprint>(nullptr, *ClassName)) Target = Other->GeneratedClass;
+					}
+					else Target = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::None);
+					if (!Target)
+					{
+						// A Blueprint by its class name (BP_Enemy or BP_Enemy_C).
+						const FString Short = ClassName.EndsWith(TEXT("_C")) ? ClassName : ClassName + TEXT("_C");
+						Target = FindFirstObject<UClass>(*Short, EFindFirstObjectOptions::None);
+					}
+					if (!Target) Problem = TEXT("No class ") + ClassName;
+					else
+					{
+						FGraphNodeCreator<UK2Node_DynamicCast> Creator(*Graph);
+						UK2Node_DynamicCast* N = Creator.CreateNode();
+						N->TargetType = Target;
+						N->NodePosX = X;
+						N->NodePosY = Y;
+						Creator.Finalize();
+						Made = N;
+					}
+				}
+				else if (Type == TEXT("timeline"))
+				{
+					// A Timeline node (0.1.26) with its own new timeline (empty; its tracks are made in Unreal).
+					const FString Want = JsonStr(Op, TEXT("name"));
+					const FName TlName = Want.IsEmpty() ? FBlueprintEditorUtils::FindUniqueTimelineName(BP) : FName(*Want);
+					if (!FBlueprintEditorUtils::DoesSupportTimelines(BP)) Problem = TEXT("This Blueprint cannot have timelines");
+					else if (BP->FindTimelineTemplateByVariableName(TlName)) Problem = TEXT("A timeline named ") + TlName.ToString() + TEXT(" already exists");
+					else
+					{
+						FGraphNodeCreator<UK2Node_Timeline> Creator(*Graph);
+						UK2Node_Timeline* N = Creator.CreateNode();
+						N->TimelineName = TlName;
+						if (UTimelineTemplate* T = FBlueprintEditorUtils::AddNewTimeline(BP, TlName)) N->TimelineGuid = T->TimelineGuid;
+						N->NodePosX = X;
+						N->NodePosY = Y;
+						Creator.Finalize();
+						Made = N;
+					}
+				}
 				else if (Type == TEXT("sequence"))
 				{
 					FGraphNodeCreator<UK2Node_ExecutionSequence> Creator(*Graph);
@@ -917,9 +967,28 @@ namespace KesherGraph
 			J->SetStringField(TEXT("text"), M->ToText().ToString());
 			Messages.Add(MakeShared<FJsonValueObject>(J));
 		}
+		// The nodes with a compiler message (0.1.26), so KesherAI marks them as Unreal does ("ERROR!" on the node).
+		TArray<TSharedPtr<FJsonValue>> NodeMessages;
+		TArray<UEdGraph*> Graphs;
+		BP->GetAllGraphs(Graphs);
+		for (const UEdGraph* G : Graphs)
+		{
+			if (!G) continue;
+			for (const UEdGraphNode* N : G->Nodes)
+			{
+				if (!N || !N->bHasCompilerMessage) continue;
+				TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
+				J->SetStringField(TEXT("node"), N->NodeGuid.ToString());
+				J->SetStringField(TEXT("graph"), G->GetName());
+				J->SetStringField(TEXT("severity"), N->ErrorType <= EMessageSeverity::Error ? TEXT("error") : TEXT("warning"));
+				J->SetStringField(TEXT("text"), N->ErrorMsg);
+				NodeMessages.Add(MakeShared<FJsonValueObject>(J));
+			}
+		}
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), BP->Status != BS_Error);
 		Out->SetArrayField(TEXT("messages"), Messages);
+		Out->SetArrayField(TEXT("nodes"), NodeMessages);
 		return Out;
 	}
 
@@ -997,13 +1066,48 @@ namespace KesherGraph
 		};
 		TArray<TSharedPtr<FJsonValue>> Items;
 		const int32 Max = 60;
-		auto Add = [&](const FString& Title, const FString& Category, const FString& Type, const FString& Field, const FString& Value)
+		// A function's pins as the graph names them (0.1.26), so KesherAI can add the node with Unreal closed.
+		auto FunctionPins = [&](const UFunction* F)
+		{
+			TArray<TSharedPtr<FJsonValue>> Pins;
+			auto Pin = [&](const FString& Name, const TCHAR* Dir, const FString& Type)
+			{
+				TSharedRef<FJsonObject> P = MakeShared<FJsonObject>();
+				P->SetStringField(TEXT("name"), Name);
+				P->SetStringField(TEXT("dir"), Dir);
+				P->SetStringField(TEXT("type"), Type);
+				Pins.Add(MakeShared<FJsonValueObject>(P));
+			};
+			if (!F->HasAnyFunctionFlags(FUNC_BlueprintPure))
+			{
+				Pin(TEXT("execute"), TEXT("in"), TEXT("exec"));
+				Pin(TEXT("then"), TEXT("out"), TEXT("exec"));
+			}
+			if (!F->HasAnyFunctionFlags(FUNC_Static)) Pin(TEXT("self"), TEXT("in"), TEXT("object:") + F->GetOwnerClass()->GetName());
+			for (TFieldIterator<FProperty> P(F); P && (P->PropertyFlags & CPF_Parm); ++P)
+			{
+				FEdGraphPinType T;
+				if (!K2->ConvertPropertyToPinType(*P, T)) continue;
+				const bool Out = P->HasAnyPropertyFlags(CPF_ReturnParm) || (P->HasAnyPropertyFlags(CPF_OutParm) && !P->HasAnyPropertyFlags(CPF_ReferenceParm));
+				FString Type = T.PinCategory.ToString();
+				if (UObject* Sub = T.PinSubCategoryObject.Get()) Type += TEXT(":") + Sub->GetName();
+				if (T.ContainerType == EPinContainerType::Array) Type += TEXT("[]");
+				Pin(P->GetName(), Out ? TEXT("out") : TEXT("in"), Type);
+			}
+			return Pins;
+		};
+		auto Add = [&](const FString& Title, const FString& Category, const FString& Type, const FString& Field, const FString& Value, const UFunction* F = nullptr)
 		{
 			TSharedRef<FJsonObject> J = MakeShared<FJsonObject>();
 			J->SetStringField(TEXT("title"), Title);
 			J->SetStringField(TEXT("category"), Category);
 			J->SetStringField(TEXT("type"), Type);
 			if (!Field.IsEmpty()) J->SetStringField(Field, Value);
+			if (F)
+			{
+				J->SetArrayField(TEXT("pins"), FunctionPins(F));
+				J->SetBoolField(TEXT("pure"), F->HasAnyFunctionFlags(FUNC_BlueprintPure));
+			}
 			Items.Add(MakeShared<FJsonValueObject>(J));
 		};
 		// Flow control first, like Unreal's own menu.
@@ -1035,7 +1139,7 @@ namespace KesherGraph
 				if (F->HasAnyFunctionFlags(FUNC_BlueprintEvent) && !F->GetReturnProperty() && (!Ctx || (Exec && !FromOutput)) && Matches(TEXT("Event ") + Title, F->GetName(), TEXT("Add Event")))
 					Add(TEXT("Event ") + Title, TEXT("Add Event"), TEXT("event"), TEXT("event"), F->GetName());
 				else if (Usable(F) && FunctionFits(F) && Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
-					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), F->GetOwnerClass()->GetName() + TEXT(":") + F->GetName());
+					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), F->GetOwnerClass()->GetName() + TEXT(":") + F->GetName(), F);
 			}
 		}
 		// Function libraries (Print String, math, Gameplay Statics…).
@@ -1048,7 +1152,7 @@ namespace KesherGraph
 				if (!Usable(F) || !FunctionFits(F)) continue;
 				const FString Title = F->GetDisplayNameText().ToString();
 				if (Matches(Title, F->GetName(), F->GetMetaData(TEXT("Category"))))
-					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), C->GetName() + TEXT(":") + F->GetName());
+					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), C->GetName() + TEXT(":") + F->GetName(), F);
 			}
 		}
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();

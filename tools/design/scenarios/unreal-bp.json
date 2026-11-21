@@ -1,0 +1,978 @@
+{
+ "group": "משחקים · Games",
+ "mocks": [
+  {
+   "url": "**/api/unreal",
+   "json": {
+    "connected": false,
+    "projects": [
+     "DoorGame"
+    ],
+    "queued": 2,
+    "offline": true,
+    "latestBridge": "0.1.26",
+    "download": "https://example.invalid/kesher-unreal"
+   }
+  },
+  {
+   "url": "**/api/unreal/blueprints",
+   "json": {
+    "blueprints": [
+     {
+      "path": "/Game/Doors/BP_Door.BP_Door",
+      "name": "BP_Door",
+      "parent": "Actor",
+      "saved": true
+     },
+     {
+      "path": "/Game/BP_Player.BP_Player",
+      "name": "BP_Player",
+      "parent": "Character",
+      "saved": true
+     }
+    ],
+    "offline": true,
+    "project": "DoorGame"
+   }
+  },
+  {
+   "url": "**/api/unreal/graph?*",
+   "json": {
+    "graph": {
+     "path": "/Game/Doors/BP_Door.BP_Door",
+     "name": "BP_Door",
+     "parent": "Actor",
+     "variables": [
+      {
+       "name": "HasKey",
+       "type": "bool",
+       "ptype": "bool",
+       "default": "false",
+       "editable": true
+      },
+      {
+       "name": "OpenAngle",
+       "type": "real",
+       "ptype": "real",
+       "default": "90"
+      }
+     ],
+     "graphs": [
+      {
+       "name": "EventGraph",
+       "kind": "event",
+       "nodes": [
+        {
+         "id": "c1",
+         "title": "פתיחת הדלת",
+         "comment": "פתיחת הדלת",
+         "class": "EdGraphNode_Comment",
+         "x": -40,
+         "y": -70,
+         "width": 1300,
+         "height": 420,
+         "color": "4D7FFFFF",
+         "pins": []
+        },
+        {
+         "id": "E1",
+         "title": "Event ActorBeginOverlap",
+         "class": "K2Node_Event",
+         "x": 0,
+         "y": 0,
+         "pins": [
+          {
+           "name": "then",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "K1:execute"
+           ]
+          },
+          {
+           "name": "OtherActor",
+           "dir": "out",
+           "type": "object:Actor",
+           "label": "Other Actor",
+           "links": [
+            "K1:Object"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "K1",
+         "title": "Cast To Character",
+         "class": "K2Node_DynamicCast",
+         "x": 320,
+         "y": 0,
+         "pins": [
+          {
+           "name": "execute",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "E1:then"
+           ]
+          },
+          {
+           "name": "Object",
+           "dir": "in",
+           "type": "object:Object",
+           "links": [
+            "E1:OtherActor"
+           ]
+          },
+          {
+           "name": "then",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "B1:execute"
+           ]
+          },
+          {
+           "name": "CastFailed",
+           "dir": "out",
+           "type": "exec",
+           "label": "Cast Failed"
+          },
+          {
+           "name": "AsCharacter",
+           "dir": "out",
+           "type": "object:Character",
+           "label": "As Character"
+          }
+         ]
+        },
+        {
+         "id": "G1",
+         "title": "HasKey",
+         "class": "K2Node_VariableGet",
+         "variable": "HasKey",
+         "x": 420,
+         "y": 200,
+         "pins": [
+          {
+           "name": "HasKey",
+           "dir": "out",
+           "type": "bool",
+           "links": [
+            "B1:Condition"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "B1",
+         "title": "Branch",
+         "class": "K2Node_IfThenElse",
+         "x": 680,
+         "y": 0,
+         "pins": [
+          {
+           "name": "execute",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "K1:then"
+           ]
+          },
+          {
+           "name": "Condition",
+           "dir": "in",
+           "type": "bool",
+           "links": [
+            "G1:HasKey"
+           ]
+          },
+          {
+           "name": "then",
+           "dir": "out",
+           "type": "exec",
+           "label": "True",
+           "links": [
+            "T1:Play"
+           ]
+          },
+          {
+           "name": "else",
+           "dir": "out",
+           "type": "exec",
+           "label": "False",
+           "links": [
+            "P1:execute"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "T1",
+         "title": "OpenDoor",
+         "class": "K2Node_Timeline",
+         "x": 980,
+         "y": -20,
+         "pins": [
+          {
+           "name": "Play",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "B1:then"
+           ]
+          },
+          {
+           "name": "Reverse",
+           "dir": "in",
+           "type": "exec"
+          },
+          {
+           "name": "Update",
+           "dir": "out",
+           "type": "exec",
+           "links": [
+            "S1:execute"
+           ]
+          },
+          {
+           "name": "Finished",
+           "dir": "out",
+           "type": "exec"
+          },
+          {
+           "name": "Alpha",
+           "dir": "out",
+           "type": "real",
+           "links": [
+            "L1:Alpha"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "L1",
+         "title": "Lerp",
+         "class": "K2Node_CallFunction",
+         "function": "KismetMathLibrary:Lerp",
+         "x": 1000,
+         "y": 220,
+         "pins": [
+          {
+           "name": "A",
+           "dir": "in",
+           "type": "real",
+           "default": "0.0"
+          },
+          {
+           "name": "B",
+           "dir": "in",
+           "type": "real",
+           "default": "90.0"
+          },
+          {
+           "name": "Alpha",
+           "dir": "in",
+           "type": "real",
+           "links": [
+            "T1:Alpha"
+           ]
+          },
+          {
+           "name": "ReturnValue",
+           "dir": "out",
+           "type": "real",
+           "label": "Return Value",
+           "links": [
+            "S1:NewYaw"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "S1",
+         "title": "Set Door Yaw",
+         "class": "K2Node_CallFunction",
+         "function": "SetDoorYaw",
+         "x": 1300,
+         "y": 0,
+         "pins": [
+          {
+           "name": "execute",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "T1:Update"
+           ]
+          },
+          {
+           "name": "then",
+           "dir": "out",
+           "type": "exec"
+          },
+          {
+           "name": "NewYaw",
+           "dir": "in",
+           "type": "real",
+           "label": "New Yaw",
+           "links": [
+            "L1:ReturnValue"
+           ]
+          }
+         ]
+        },
+        {
+         "id": "P1",
+         "title": "Print String",
+         "class": "K2Node_CallFunction",
+         "function": "KismetSystemLibrary:PrintString",
+         "x": 980,
+         "y": 420,
+         "pins": [
+          {
+           "name": "execute",
+           "dir": "in",
+           "type": "exec",
+           "links": [
+            "B1:else"
+           ]
+          },
+          {
+           "name": "then",
+           "dir": "out",
+           "type": "exec"
+          },
+          {
+           "name": "InString",
+           "dir": "in",
+           "type": "string",
+           "label": "In String",
+           "default": "צריך מפתח"
+          }
+         ]
+        },
+        {
+         "id": "new-a1b2c3d4",
+         "title": "For Each Loop",
+         "class": "K2Node_MacroInstance",
+         "x": 320,
+         "y": 420,
+         "pins": [
+          {
+           "name": "Exec",
+           "dir": "in",
+           "type": "exec"
+          },
+          {
+           "name": "Array",
+           "dir": "in",
+           "type": "wildcard[]"
+          },
+          {
+           "name": "LoopBody",
+           "dir": "out",
+           "type": "exec",
+           "label": "Loop Body"
+          },
+          {
+           "name": "Array Element",
+           "dir": "out",
+           "type": "wildcard"
+          },
+          {
+           "name": "Array Index",
+           "dir": "out",
+           "type": "int"
+          },
+          {
+           "name": "Completed",
+           "dir": "out",
+           "type": "exec"
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "name": "SetDoorYaw",
+       "kind": "function",
+       "nodes": []
+      },
+      {
+       "name": "CheckKey",
+       "kind": "macro",
+       "nodes": []
+      }
+     ]
+    },
+    "offline": true,
+    "savedAt": {
+     "$ago": "40m"
+    },
+    "pending": 2
+   }
+  },
+  {
+   "url": "**/api/unreal/graph/check?*",
+   "json": {
+    "editor": false,
+    "same": true,
+    "savedAt": {
+     "$ago": "40m"
+    },
+    "pending": 2
+   }
+  },
+  {
+   "url": "**/api/unreal/queue",
+   "json": []
+  },
+  {
+   "url": "**/api/unreal/sync",
+   "json": {
+    "waiting": 2,
+    "running": false,
+    "lastAt": {
+     "$ago": "40m"
+    }
+   }
+  },
+  {
+   "url": "**/api/unreal/actions?*",
+   "json": {
+    "actions": [
+     {
+      "title": "Branch",
+      "category": "Flow Control",
+      "type": "branch"
+     },
+     {
+      "title": "Set HasKey",
+      "category": "Variables",
+      "type": "set",
+      "variable": "HasKey"
+     },
+     {
+      "title": "NOT Boolean",
+      "category": "Math|Boolean",
+      "type": "call",
+      "function": "KismetMathLibrary:Not_PreBool"
+     },
+     {
+      "title": "AND Boolean",
+      "category": "Math|Boolean",
+      "type": "call",
+      "function": "KismetMathLibrary:BooleanAND"
+     },
+     {
+      "title": "Print String",
+      "category": "Development",
+      "type": "call",
+      "function": "KismetSystemLibrary:PrintString"
+     },
+     {
+      "title": "While Loop",
+      "category": "Utilities|Flow Control",
+      "type": "macro",
+      "macro": "WhileLoop"
+     },
+     {
+      "title": "Gate",
+      "category": "Utilities|Flow Control",
+      "type": "macro",
+      "macro": "Gate"
+     },
+     {
+      "title": "Cast To BP_Player",
+      "category": "Utilities|Casting",
+      "type": "cast",
+      "class": "BP_Player"
+     }
+    ],
+    "offline": true
+   }
+  },
+  {
+   "url": "**/api/unreal/play-tests",
+   "json": {
+    "tests": []
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "UnrealBpEditor",
+   "title": "Unreal: עורך Blueprint כש-Unreal סגור",
+   "titleEn": "Unreal: Blueprint editor with Unreal closed",
+   "route": "#/unreal?graph=/Game/Doors/BP_Door.BP_Door",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-comment-box"
+    },
+    {
+     "scroll": ".ue-canvas"
+    }
+   ]
+  },
+  {
+   "id": "UnrealBpPalette",
+   "title": "Unreal: חיפוש נודים (מה ש-Unreal דיווח + נפוצים)",
+   "titleEn": "Unreal: node search from what Unreal reported and common nodes",
+   "route": "#/unreal?graph=/Game/Doors/BP_Door.BP_Door",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-comment-box"
+    },
+    {
+     "scroll": ".ue-canvas"
+    },
+    {
+     "click": ".ue-zoom button[aria-label=\"הוספת נוד\"]"
+    },
+    {
+     "wait": ".bp-menu li button"
+    },
+    {
+     "fill": ".bp-menu input",
+     "value": "bool"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "UnrealBpCompileError",
+   "title": "Unreal: שגיאת קומפילציה מסומנת על הנוד",
+   "titleEn": "Unreal: a compile error marked on its node",
+   "route": "#/unreal?graph=/Game/Doors/BP_Door.BP_Door",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/unreal/graph?*",
+     "json": {
+      "graph": {
+       "path": "/Game/Doors/BP_Door.BP_Door",
+       "name": "BP_Door",
+       "parent": "Actor",
+       "variables": [
+        {
+         "name": "HasKey",
+         "type": "bool",
+         "ptype": "bool",
+         "default": "false",
+         "editable": true
+        },
+        {
+         "name": "OpenAngle",
+         "type": "real",
+         "ptype": "real",
+         "default": "90"
+        }
+       ],
+       "graphs": [
+        {
+         "name": "EventGraph",
+         "kind": "event",
+         "nodes": [
+          {
+           "id": "c1",
+           "title": "פתיחת הדלת",
+           "comment": "פתיחת הדלת",
+           "class": "EdGraphNode_Comment",
+           "x": -40,
+           "y": -70,
+           "width": 1300,
+           "height": 420,
+           "color": "4D7FFFFF",
+           "pins": []
+          },
+          {
+           "id": "E1",
+           "title": "Event ActorBeginOverlap",
+           "class": "K2Node_Event",
+           "x": 0,
+           "y": 0,
+           "pins": [
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "K1:execute"
+             ]
+            },
+            {
+             "name": "OtherActor",
+             "dir": "out",
+             "type": "object:Actor",
+             "label": "Other Actor",
+             "links": [
+              "K1:Object"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "K1",
+           "title": "Cast To Character",
+           "class": "K2Node_DynamicCast",
+           "x": 320,
+           "y": 0,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec",
+             "links": [
+              "E1:then"
+             ]
+            },
+            {
+             "name": "Object",
+             "dir": "in",
+             "type": "object:Object",
+             "links": [
+              "E1:OtherActor"
+             ]
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "B1:execute"
+             ]
+            },
+            {
+             "name": "CastFailed",
+             "dir": "out",
+             "type": "exec",
+             "label": "Cast Failed"
+            },
+            {
+             "name": "AsCharacter",
+             "dir": "out",
+             "type": "object:Character",
+             "label": "As Character"
+            }
+           ]
+          },
+          {
+           "id": "G1",
+           "title": "HasKey",
+           "class": "K2Node_VariableGet",
+           "variable": "HasKey",
+           "x": 420,
+           "y": 200,
+           "pins": [
+            {
+             "name": "HasKey",
+             "dir": "out",
+             "type": "bool",
+             "links": [
+              "B1:Condition"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "B1",
+           "title": "Branch",
+           "class": "K2Node_IfThenElse",
+           "x": 680,
+           "y": 0,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec",
+             "links": [
+              "K1:then"
+             ]
+            },
+            {
+             "name": "Condition",
+             "dir": "in",
+             "type": "bool",
+             "links": [
+              "G1:HasKey"
+             ]
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec",
+             "label": "True",
+             "links": [
+              "T1:Play"
+             ]
+            },
+            {
+             "name": "else",
+             "dir": "out",
+             "type": "exec",
+             "label": "False",
+             "links": [
+              "P1:execute"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "T1",
+           "title": "OpenDoor",
+           "class": "K2Node_Timeline",
+           "x": 980,
+           "y": -20,
+           "pins": [
+            {
+             "name": "Play",
+             "dir": "in",
+             "type": "exec",
+             "links": [
+              "B1:then"
+             ]
+            },
+            {
+             "name": "Reverse",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "Update",
+             "dir": "out",
+             "type": "exec",
+             "links": [
+              "S1:execute"
+             ]
+            },
+            {
+             "name": "Finished",
+             "dir": "out",
+             "type": "exec"
+            },
+            {
+             "name": "Alpha",
+             "dir": "out",
+             "type": "real",
+             "links": [
+              "L1:Alpha"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "L1",
+           "title": "Lerp",
+           "class": "K2Node_CallFunction",
+           "function": "KismetMathLibrary:Lerp",
+           "x": 1000,
+           "y": 220,
+           "pins": [
+            {
+             "name": "A",
+             "dir": "in",
+             "type": "real",
+             "default": "0.0"
+            },
+            {
+             "name": "B",
+             "dir": "in",
+             "type": "real",
+             "default": "90.0"
+            },
+            {
+             "name": "Alpha",
+             "dir": "in",
+             "type": "real",
+             "links": [
+              "T1:Alpha"
+             ]
+            },
+            {
+             "name": "ReturnValue",
+             "dir": "out",
+             "type": "real",
+             "label": "Return Value",
+             "links": [
+              "S1:NewYaw"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "S1",
+           "title": "Set Door Yaw",
+           "class": "K2Node_CallFunction",
+           "function": "SetDoorYaw",
+           "x": 1300,
+           "y": 0,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec",
+             "links": [
+              "T1:Update"
+             ]
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec"
+            },
+            {
+             "name": "NewYaw",
+             "dir": "in",
+             "type": "real",
+             "label": "New Yaw",
+             "links": [
+              "L1:ReturnValue"
+             ]
+            }
+           ]
+          },
+          {
+           "id": "P1",
+           "title": "Print String",
+           "class": "K2Node_CallFunction",
+           "function": "KismetSystemLibrary:PrintString",
+           "x": 980,
+           "y": 420,
+           "pins": [
+            {
+             "name": "execute",
+             "dir": "in",
+             "type": "exec",
+             "links": [
+              "B1:else"
+             ]
+            },
+            {
+             "name": "then",
+             "dir": "out",
+             "type": "exec"
+            },
+            {
+             "name": "InString",
+             "dir": "in",
+             "type": "string",
+             "label": "In String",
+             "default": "צריך מפתח"
+            }
+           ]
+          },
+          {
+           "id": "new-a1b2c3d4",
+           "title": "For Each Loop",
+           "class": "K2Node_MacroInstance",
+           "x": 320,
+           "y": 420,
+           "pins": [
+            {
+             "name": "Exec",
+             "dir": "in",
+             "type": "exec"
+            },
+            {
+             "name": "Array",
+             "dir": "in",
+             "type": "wildcard[]"
+            },
+            {
+             "name": "LoopBody",
+             "dir": "out",
+             "type": "exec",
+             "label": "Loop Body"
+            },
+            {
+             "name": "Array Element",
+             "dir": "out",
+             "type": "wildcard"
+            },
+            {
+             "name": "Array Index",
+             "dir": "out",
+             "type": "int"
+            },
+            {
+             "name": "Completed",
+             "dir": "out",
+             "type": "exec"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "name": "SetDoorYaw",
+         "kind": "function",
+         "nodes": []
+        },
+        {
+         "name": "CheckKey",
+         "kind": "macro",
+         "nodes": []
+        }
+       ]
+      },
+      "offline": true,
+      "savedAt": {
+       "$ago": "40m"
+      },
+      "pending": 2,
+      "compile": {
+       "ok": false,
+       "at": "2026-11-21T10:00:00Z",
+       "messages": [
+        {
+         "severity": "error",
+         "text": "The function SetDoorYaw has no NewYaw input: refresh the node",
+         "node": "S1",
+         "graph": "EventGraph"
+        },
+        {
+         "severity": "warning",
+         "text": "Print String is for development only",
+         "node": "P1",
+         "graph": "EventGraph"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ue-canvas .bp-error"
+    },
+    {
+     "scroll": ".ue-canvas"
+    }
+   ]
+  }
+ ]
+}

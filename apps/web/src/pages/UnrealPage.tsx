@@ -21,6 +21,7 @@ import { CloseEditor } from "../engine/CloseEditor";
 import { GameSource } from "../engine/GameSource";
 import { PlayTests } from "../engine/PlayTests";
 import { Select } from "../ui/Select";
+import type { BpCompileMessage } from "@kesher/shared";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -56,7 +57,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const [list, setList] = useState<{ blueprints: BpItem[]; offline: boolean; project?: string } | null>(null);
   // A link can open one graph at once (#/unity?graph=Assets/Graphs/Door.asset), e.g. from a notification.
   const [path, setPath] = useState(() => new URLSearchParams(location.hash.split("?")[1] ?? "").get("graph")?.slice(0, 1000) ?? "");
-  const [bp, setBp] = useState<{ graph: Blueprint; offline: boolean; savedAt?: string } | null>(null);
+  const [bp, setBp] = useState<{ graph: Blueprint; offline: boolean; savedAt?: string; pending?: number; compile?: { ok: boolean; at: string; messages: BpCompileMessage[] } } | null>(null);
   const [graphName, setGraphName] = useState("");
   const [filter, setFilter] = useState("");
   const [request, setRequest] = useState("");
@@ -81,7 +82,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     }
   };
   const [busy, setBusy] = useState(false);
-  const [report, setReport] = useState<string[]>([]);
+  // The last Compile / Check: each line, with the node it is about when known (tap: shows the node).
+  const [report, setReport] = useState<Array<{ text: string; node?: string; graph?: string }>>([]);
   // The AI bubble over the node view: a short chat about the Blueprint shown (follow-ups know what came before).
   const [bubble, setBubble] = useState(false);
   // Graph, code, or both side by side (remembered); a line clicked in the code flashes its node.
@@ -191,13 +193,13 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
     loadQueue();
     if (!path) return;
     // Unity just opened while the offline copy was shown: compare first, so nothing changes under the user's hands.
-    if (unity && connected && bp?.offline) runCheck(path, true);
+    if (connected && bp?.offline) runCheck(path, true);
     else loadBp(path);
   }, [connected]);
   useEffect(() => {
     setCheck(null);
     if (path) loadBp(path);
-    if (path && unity) runCheck(path, false);
+    if (path) runCheck(path, false);
     setChat([]);
   }, [path]);
   // When the graph was last read (shown under the canvas), and an immediate read when the editor compiles.
@@ -250,8 +252,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
 
   const call = async (cmd: "open" | "compile" | "save") => {
     try {
-      const r = await api<{ ok?: boolean; messages?: Array<{ severity: string; text: string }> }>(`${base}/${cmd}`, { method: "POST", body: { path } });
-      if (cmd === "compile") setReport(r.messages?.length ? r.messages.map((m) => `${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`) : [L("✅ קומפל בלי שגיאות.", "✅ Compiled with no errors.")]);
+      const r = await api<{ ok?: boolean; messages?: Array<{ severity: string; text: string; node?: string; graph?: string }> }>(`${base}/${cmd}`, { method: "POST", body: { path } });
+      if (cmd === "compile") {
+        setReport(r.messages?.length ? r.messages.map((m) => ({ text: `${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`, ...(m.node ? { node: m.node } : {}), ...(m.graph ? { graph: m.graph } : {}) })) : [{ text: L("✅ קומפל בלי שגיאות.", "✅ Compiled with no errors.") }]);
+        // The nodes are marked from the kept result (Unreal).
+        if (!unity) loadBp(path);
+      }
       else toast(cmd === "save" ? L("נשמר.", "Saved.") : L(`נפתח ב-${app}.`, `Opened in ${app}.`));
     } catch (e) {
       toast((e as Error).message);
@@ -352,6 +358,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const graph = bp?.graph.graphs.find((g) => g.name === graphName) ?? bp?.graph.graphs[0];
   // A Widget Blueprint (UMG) opens in the Designer; "design" means graph for any other Blueprint.
   const isWidget = /UserWidget|Widget$/.test(bp?.graph.parent ?? "");
+  // Unreal: the last compile's messages by node (the canvas marks them), and Blueprint classes' parents (pin checks).
+  const errors = new Map<string, BpCompileMessage[]>();
+  for (const m of unity ? [] : bp?.compile?.messages ?? []) if (m.node) errors.set(m.node, [...(errors.get(m.node) ?? []), m]);
+  // The last Compile pressed here, else the kept result of the last compile (e.g. the one after a sync).
+  const shownReport = report.length ? report : (bp?.compile?.messages ?? []).map((m) => ({ text: `${m.severity === "error" ? "⛔" : "⚠"} ${m.text}`, ...(m.node ? { node: m.node } : {}), ...(m.graph ? { graph: m.graph } : {}) }));
+  const parents = Object.fromEntries((list?.blueprints ?? []).filter((b) => b.parent).map((b) => [b.name, b.parent!]));
   const shownView = view === "design" && !(isWidget && !unity) ? "graph" : view;
   const shown = (list?.blueprints ?? []).filter((b) => !filter || b.name.toLowerCase().includes(filter.toLowerCase()));
   const neverConnected = !st.connected && !st.projects.length;
@@ -441,7 +453,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <div className="ue-tabs" role="tablist">
                   {bp.graph.graphs.map((g) => (
                     <button key={g.name} type="button" role="tab" aria-selected={g.name === graph?.name} className={g.name === graph?.name ? "on" : ""} onClick={() => setGraphName(g.name)}>
-                      {g.kind === "function" ? "ƒ " : g.kind === "macro" ? "⧉ " : ""}{g.name}
+                      {g.kind === "function" ? "ƒ " : g.kind === "macro" ? "⧉ " : ""}{g.name}{bp.compile?.messages.some((m) => m.graph === g.name && m.severity === "error") ? " ⛔" : ""}
                     </button>
                   ))}
                 </div>
@@ -468,12 +480,12 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     onApply={(code, before) => void edit(`Change this graph so it does exactly what this code says. The code is the graph written as text (one line per node, in the order the exec wires run; "x = Node(...)" names a node's outputs; indented blocks under "then:" / "else:" are those exec outputs). Make only the differences.\n\nBEFORE:\n${before.slice(0, 3000)}\n\nAFTER:\n${code.slice(0, 3000)}`, L("עדכון הגרף לפי הקוד", "Update the graph from the code"))}
                   />
                 )}
-                {unity && check && !check.same && (
+                {check && !check.same && (
                   <div className="ue-check small" role="status">
                     <span dir="auto">
                       {check.editor
-                        ? L(`הגרף ב-Unity שונה מהעותק השמור: ${checkWords(check, "he")}.`, `Unity's graph differs from the saved copy: ${checkWords(check, "en")}.`)
-                        : L("Unity שמר את הגרף אחרי שהעותק הזה נקרא. רענון קורא אותו שוב (Unity ברקע, כדקה).", "Unity saved this graph after this copy was read. Refresh reads it again (Unity in the background, about a minute).")}
+                        ? L(`הגרף ב-${app} שונה מהעותק השמור: ${checkWords(check, "he")}.`, `${app}'s graph differs from the saved copy: ${checkWords(check, "en")}.`)
+                        : L(`${app} שמר את הגרף אחרי שהעותק הזה נקרא. רענון קורא אותו שוב (${app} ברקע, כדקה).`, `${app} saved this graph after this copy was read. Refresh reads it again (${app} in the background, about a minute).`)}
                       {check.pending > 0 ? ` ${L(`${check.pending} שינויים שלך מחכים ויבדקו מול הגרף החדש.`, `${check.pending} of your changes are waiting and are checked against the new graph.`)}` : ""}
                     </span>
                     <button type="button" className="primary small" onClick={() => { setCheck(null); loadBp(path); }}>{L("רענן", "Refresh")}</button>
@@ -483,7 +495,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 <Fullscreen hidden={shownView === "code"} label={L("הגרף במסך מלא", "The graph, full screen")}>
                 <div className="ue-graph-row">
                 <div className="ue-stage">
-                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={(st.connected && !bp.offline) || (!st.connected && !!st.offline)} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => { loadBp(path); loadSync(); }} flash={flash} onSelect={setPicked} />}</div>
+                  <div className="ue-canvas">{graph && <BlueprintCanvas unity={unity} nodes={graph.nodes} path={path} graph={graph.name} editable={(st.connected && !bp.offline) || (!st.connected && (!!st.offline || !unity))} {...(errors.size ? { errors } : {})} {...(!unity ? { parents } : {})} readOnlyWhy={!st.connected ? L(`${app} לא מחובר ל-KesherAI כרגע, ולכן הגרף לקריאה בלבד. פתחו את הפרויקט ב-${app} (עם התוסף של KesherAI) והוא יתחבר לבד.`, `${app} is not connected to KesherAI now, so the graph is read-only. Open the project in ${app} (with the KesherAI plugin) and it connects by itself.`) : L("זה עותק שנשמר מהפעם האחרונה שהפרויקט היה פתוח. פתחו את הפרויקט בעורך כדי לערוך.", "This is the copy saved the last time the project was open. Open the project in the editor to edit.")} onChanged={() => { loadBp(path); loadSync(); }} flash={flash} onSelect={setPicked} />}</div>
                   {!st.connected && sync && (sync.waiting > 0 || sync.running || sync.lastError) && (
                     <div className="row small ue-sync" role="status">
                       <span className="grow">{sync.running ? L(`מסנכרן ${sync.waiting} שינויים… (${app} ברקע, כדקה)`, `Syncing ${sync.waiting} changes… (${app} in the background, about a minute)`) : sync.waiting > 0 ? L(`${sync.waiting} שינויים מחכים לסנכרון. הם יסונכרנו לבד בעוד רגע, או כשתפתח את הפרויקט ב-${app}.`, `${sync.waiting} changes waiting to sync. They sync by themselves in a moment, or when you open the project in ${app}.`) : sync.lastError}</span>
@@ -558,7 +570,17 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                 </div>
                 </Fullscreen>
                 </div>
-                {report.length > 0 && <ul className="ue-report">{report.map((l, i) => <li key={i} dir="auto">{l}</li>)}</ul>}
+                {shownReport.length > 0 && (
+                  <ul className="ue-report">
+                    {shownReport.map((l, i) => (
+                      <li key={i} dir="auto">
+                        {l.node ? (
+                          <button type="button" className="link-btn" style={{ height: "auto", padding: 0, whiteSpace: "normal" }} onClick={() => { if (l.graph) setGraphName(l.graph); setFlash((f) => ({ id: l.node!, n: (f?.n ?? 0) + 1 })); }} title={L("הצג את הנוד", "Show the node")}>{l.text}</button>
+                        ) : l.text}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             )}
           </section>
@@ -584,11 +606,11 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   );
 }
 
-/** The answer of /api/unity/graph/check ("sync on open"). */
+/** The answer of /api/unity/graph/check and /api/unreal/graph/check ("sync on open"). */
 interface GraphCheck { editor: boolean; same: boolean; stale?: boolean; savedAt?: string; pending: number; diff?: { added: string[]; removed: string[]; moved: number; rewired: number; values: number; tabs: { added: string[]; removed: string[] } } }
 
 /**
- * What Unity changed, in a few words for the sync-on-open note.
+ * What the editor (Unity or Unreal) changed, in a few words for the sync-on-open note.
  *
  * @param c - The check.
  * @param lang - he or en.

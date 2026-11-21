@@ -3,7 +3,9 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import type WebSocket from "ws";
-import { batchFiles, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
+import { batchFiles, engineChangedAt, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
+import { mergeEdits, withTempIds } from "./unity-cli.js";
+import { applyBpOps, bpNodeTemplate, COMMON_BP_ACTIONS, diffBpGraphs, mapCompileMessages, searchBpActions, type BpAction, type BpCompileMessage, type BpDiff, type BpDoc, type BpOp, type BpResult } from "@kesher/shared";
 
 /**
  * The link to the Unreal Editor (the KesherAI Bridge plugin,
@@ -17,7 +19,7 @@ import { batchFiles, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, typ
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.25";
+export const BRIDGE_VERSION = "0.1.26";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -61,6 +63,9 @@ export interface QueuedEdit {
   decision?: "mine" | "skip";
 }
 
+/** A Blueprint's last compile through KesherAI: whether it passed, and its messages tied to nodes. */
+export interface CompileRecord { ok: boolean; at: string; messages: BpCompileMessage[] }
+
 /** What the Unreal page shows about the connection. */
 export interface BridgeStatus {
   connected: boolean;
@@ -96,6 +101,8 @@ const fileFor = (path: string) => `${createHash("sha256").update(path).digest("h
 const queuedFile = (dir: string, q: QueuedEdit) => (q.kind === "material" || q.kind === "spawn" ? unrealLevelFile(dir, q.path) : unrealAssetFile(dir, q.path));
 /** Queued changes that are one bridge command of their own (not a Blueprint graph's ops). */
 const ownCommand = (q: QueuedEdit) => q.kind === "material" || q.kind === "spawn" || q.kind === "vfx";
+/** Graph changes the headless editor cannot make (Collapse to Function needs the open Blueprint editor). */
+const needsEditor = (q: QueuedEdit) => !q.kind && q.ops.some((o) => (o as { op?: unknown })?.op === "collapse");
 /**
  * The bridge command of a queued material, placement or effect.
  *
@@ -385,7 +392,22 @@ export class UnrealBridge {
     await this.checkpoint(project, apply);
     let applied = 0;
     let failed = 0;
-    for (const q of apply) {
+    // A graph's waiting changes go in one apply (the ids of nodes added with Unreal closed are refs within it).
+    for (const group of mergeEdits(apply)) {
+      const q = group.edits[0]!;
+      if (!q.kind) {
+        try {
+          await this.request("apply", { path: group.path, graph: group.graph, ops: group.ops });
+          const answer = await this.request("compile", { path: group.path }, 120_000).catch(() => undefined);
+          for (const e of group.edits) await this.unqueue(e.id);
+          const read = await this.graph(group.path).catch(() => undefined);
+          if (answer) await this.recordCompile(group.path, answer, read?.graph).catch(() => undefined);
+          applied += group.edits.length;
+        } catch {
+          failed += group.edits.length;
+        }
+        continue;
+      }
       try {
         // A Blueprint made in KesherAI while Unreal was closed: made now, before the changes that follow it in the queue.
         if (ownCommand(q)) {
@@ -402,11 +424,6 @@ export class UnrealBridge {
           applied++;
           continue;
         }
-        await this.request("apply", { path: q.path, graph: q.graph, ops: q.ops });
-        await this.request("compile", { path: q.path }).catch(() => undefined);
-        await this.unqueue(q.id);
-        await this.graph(q.path).catch(() => undefined);
-        applied++;
       } catch {
         // stays queued; the page shows it
         failed++;
@@ -651,27 +668,31 @@ export class UnrealBridge {
    * @returns The graphs, and whether they came from the saved copy.
    * @throws Error when the editor is closed and the Blueprint was never read.
    */
-  async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string }> {
+  async graph(path: string): Promise<{ graph: BlueprintJson; offline: boolean; savedAt?: string; pending?: number; compile?: CompileRecord }> {
     const project = await this.project();
     if (!project) throw new Error(`Connect the ${this.editor} once first.`);
     const file = join(this.projectDir(project), "graphs", fileFor(path));
+    const compile = await this.lastCompile(project, path);
+    const extra = compile ? { compile } : {};
     if (this.connected) {
       try {
         const graph = await this.request<BlueprintJson>("graph", { path });
         const savedAt = new Date().toISOString();
         await this.writeJson(file, { graph, savedAt });
-        return { graph, offline: false, savedAt };
+        return { graph, offline: false, savedAt, ...extra };
       } catch (err) {
         if (this.connected) throw err;
       }
     }
-    const saved = await this.readJson<{ graph: BlueprintJson; savedAt: string }>(file);
-    if (saved) return { ...saved, offline: true };
+    // Unreal closed: the saved copy with the changes still waiting applied on top (shared/unreal-bp.ts), so an edit
+    // made with Unreal closed shows at once.
+    const saved = (await this.readJson<{ graph: BlueprintJson; savedAt: string }>(file)) ?? (await this.starterCopy(project, path));
+    if (saved) return { ...(await this.withPending(project, path, saved.graph)), offline: true, savedAt: saved.savedAt, ...extra };
     if (this.available) {
       const graph = await this.request<BlueprintJson>("graph", { path }, 900_000);
       const savedAt = new Date().toISOString();
       await this.writeJson(file, { graph, savedAt });
-      return { graph, offline: true, savedAt };
+      return { graph, offline: true, savedAt, ...extra };
     }
     throw new Error(`This graph was not opened while the ${this.editor} was connected, so there is no copy of it here yet.`);
   }
@@ -697,6 +718,178 @@ export class UnrealBridge {
   async remember(path: string, graph: BlueprintJson): Promise<void> {
     const project = await this.project();
     if (project) await this.writeJson(join(this.projectDir(project), "graphs", fileFor(path)), { graph, savedAt: new Date().toISOString() });
+  }
+
+  /**
+   * The first copy of a Blueprint made in KesherAI while Unreal was closed (its "create" waits in the queue): an empty
+   * event graph, so it can be edited at once.
+   */
+  private async starterCopy(project: string, path: string): Promise<{ graph: BlueprintJson; savedAt: string } | undefined> {
+    const made = (await this.queue()).find((q) => q.kind === "create" && q.project === project && q.path === path);
+    if (!made) return undefined;
+    return { graph: { path, name: path.split(".").pop() ?? path, parent: made.parent ?? "Actor", variables: [], graphs: [{ name: "EventGraph", kind: "event", nodes: [] }] }, savedAt: made.at };
+  }
+
+  /** Blueprint classes' parents in the project (BP_Enemy → Character), for object pin checks with Unreal closed. */
+  private async parentsOf(project: string): Promise<Record<string, string>> {
+    const list = await this.readJson<{ blueprints: Array<{ name: string; parent?: string }> }>(join(this.projectDir(project), "list.json"));
+    return Object.fromEntries((list?.blueprints ?? []).filter((b) => b.parent).map((b) => [b.name, b.parent!]));
+  }
+
+  /** The graph with the project's waiting graph changes for it applied on top. */
+  private async withPending(project: string, path: string, graph: BlueprintJson): Promise<{ graph: BlueprintJson; pending?: number }> {
+    const mine = (await this.queue()).filter((q) => !q.kind && q.project === project && q.path === path);
+    if (!mine.length) return { graph };
+    const parents = await this.parentsOf(project);
+    let doc = graph as unknown as BpDoc;
+    for (const q of mine) doc = applyBpOps(doc, q.graph, q.ops as BpOp[], { parents }).doc;
+    return { graph: doc as unknown as BlueprintJson, pending: mine.length };
+  }
+
+  /**
+   * Queues a change made on the Blueprint page with Unreal closed. It is first applied to the copy shown (with what
+   * already waits), so the page gets real answers: operations Unreal would refuse (pins that do not fit, a missing
+   * variable or pin) answer with the error and are not queued. Added nodes get an id here ("new-…") that later changes
+   * can use; it is also their `ref`, and a graph's waiting changes sync in one apply, so Unreal knows it. A call whose
+   * pins the plugin listed (kept palette) gets them, so the node shows its real pins before the sync.
+   *
+   * @param path - The Blueprint's object path.
+   * @param graph - The graph in it.
+   * @param ops - The operations.
+   * @returns One result per operation, and whether any was queued.
+   */
+  async enqueueEdit(path: string, graph: string, ops: BpOp[]): Promise<{ queued: boolean; results: BpResult[]; failed: number }> {
+    const project = await this.project();
+    if (!project) throw new Error("Open the project in Unreal once (with the KesherAI Bridge plugin) so KesherAI knows it; after that it works with Unreal closed.");
+    const saved = (await this.readJson<{ graph: BlueprintJson; savedAt: string }>(join(this.projectDir(project), "graphs", fileFor(path)))) ?? (await this.starterCopy(project, path));
+    if (!saved) throw new Error("Open this Blueprint once with Unreal open (or press Sync now) so KesherAI has a copy to change.");
+    const kept = (await this.readJson<BpAction[]>(join(this.projectDir(project), "actions.json"))) ?? [];
+    const named = withTempIds(ops).map((op) => {
+      if (op.op !== "add" || op.type !== "call" || Array.isArray(op.pins)) return op;
+      const known = kept.find((a) => a.type === "call" && a.function === op.function && a.pins?.length);
+      return known ? { ...op, pins: known.pins } : op;
+    });
+    const { graph: shown } = await this.withPending(project, path, saved.graph);
+    const { results } = applyBpOps(shown as unknown as BpDoc, graph, named, { parents: await this.parentsOf(project) });
+    const ok = named.filter((_, i) => results[i]!.ok);
+    if (ok.length) {
+      await this.enqueue({ project, path, graph, ops: ok, request: "Changed on the Blueprint page" });
+      this.redoStack.delete(`${project}|${path}`);
+    }
+    return { queued: ok.length > 0, results, failed: results.filter((r) => !r.ok).length };
+  }
+
+  /** Changes taken back with Undo while Unreal was closed, per project and Blueprint (Redo puts them back). */
+  private readonly redoStack = new Map<string, QueuedEdit[]>();
+
+  /**
+   * Undo / Redo with Unreal closed: takes back the Blueprint's last waiting change, or puts the last one taken back.
+   *
+   * @param path - The Blueprint's object path.
+   * @param redo - Redo instead of undo.
+   * @returns Whether there was one.
+   */
+  async undoQueued(path: string, redo = false): Promise<boolean> {
+    const project = await this.project();
+    if (!project) return false;
+    const k = `${project}|${path}`;
+    const stack = this.redoStack.get(k) ?? [];
+    const all = await this.queue();
+    if (redo) {
+      const back = stack.pop();
+      if (!back) return false;
+      all.push(back);
+    } else {
+      const i = all.map((q, n) => ({ q, n })).filter(({ q }) => !q.kind && !q.clash && q.project === project && q.path === path).pop()?.n;
+      if (i === undefined) return false;
+      stack.push(...all.splice(i, 1));
+      this.redoStack.set(k, stack.slice(-50));
+    }
+    await this.writeJson(join(this.dir, "queue.json"), all);
+    return true;
+  }
+
+  /**
+   * The node palette: Unreal's own list when the editor is connected (every answer is kept for later), else the kept
+   * list with the common nodes and casts to the project's Blueprints, searched here ("Context Sensitive" from a pin).
+   *
+   * @param path - The Blueprint (Unreal lists the nodes for it).
+   * @param query - The words typed.
+   * @param from - The pin dragged from, when there is one.
+   * @returns The matches, and whether they came without Unreal.
+   */
+  async actions(path: string, query: string, from?: { type: string; dir: "in" | "out" }): Promise<{ actions: BpAction[]; offline: boolean }> {
+    const project = await this.project();
+    const file = project ? join(this.projectDir(project), "actions.json") : undefined;
+    const kept = (file && (await this.readJson<BpAction[]>(file))) || [];
+    if (this.connected) {
+      const r = await this.request<{ actions: BpAction[] }>("actions", { path, query, ...(from ? { pinType: from.type, pinDir: from.dir } : {}) }, 20_000);
+      if (file && Array.isArray(r.actions)) {
+        const k = (a: BpAction) => `${a.type}|${a.function ?? a.event ?? a.variable ?? ""}|${a.title}`;
+        const fresh = new Map(r.actions.filter((a) => a && typeof a.title === "string").map((a) => [k(a), a]));
+        // Newer answers (with pins) replace older ones; at most 5,000 kept.
+        const merged = [...kept.filter((a) => !fresh.has(k(a))), ...fresh.values()].slice(-5000);
+        if (fresh.size) await this.writeJson(file, merged);
+      }
+      return { actions: r.actions, offline: false };
+    }
+    const graph = project ? await this.savedGraph(path) : undefined;
+    const parents = project ? await this.parentsOf(project) : {};
+    // The Blueprint's own variables and functions, and casts to the project's Blueprints.
+    const own: BpAction[] = [
+      ...(graph?.graph.variables ?? []).flatMap((v) => [{ title: `Get ${v.name}`, category: "Variables", type: "get", variable: v.name }, { title: `Set ${v.name}`, category: "Variables", type: "set", variable: v.name }]),
+      ...(graph?.graph.graphs ?? []).filter((g) => g.kind === "function").map((g) => ({ title: g.name, category: "Functions", type: "call", function: g.name })),
+      ...Object.keys(parents).map((name) => ({ title: `Cast To ${name}`, category: "Utilities|Casting", type: "cast", class: name })),
+    ];
+    // The kept variables of this Blueprint come from the copy (another Blueprint's are not offered).
+    const actions = [...own, ...kept.filter((a) => a.type !== "get" && a.type !== "set"), ...COMMON_BP_ACTIONS].map((a) => (a.type === "get" || a.type === "set") && graph ? { ...a, pins: bpNodeTemplate({ ...a }, graph.graph as unknown as BpDoc).pins } : a);
+    return { actions: searchBpActions(actions, query, from, parents), offline: true };
+  }
+
+  /**
+   * "Sync on open": compares the saved copy of a Blueprint with Unreal's now. With Unreal open it is asked (the copy is
+   * not replaced; the page offers Refresh); with it closed, only whether the .uasset was saved after the copy was read.
+   *
+   * @param path - The Blueprint's object path.
+   * @returns Whether they are the same, what differs, and whether Unreal was asked.
+   */
+  async checkSaved(path: string): Promise<{ editor: boolean; same: boolean; stale?: boolean; diff?: BpDiff; savedAt?: string; pending: number }> {
+    const project = await this.project();
+    const saved = project ? await this.savedGraph(path) : undefined;
+    const pending = project ? (await this.queue()).filter((q) => !q.kind && q.project === project && q.path === path).length : 0;
+    if (!project || !saved) return { editor: false, same: true, pending };
+    if (!this.connected) {
+      const file = this.lastProjectFile ?? this.info?.projectFile;
+      const changed = file ? await engineChangedAt({ baseAt: saved.savedAt } as QueuedEdit, unrealAssetFile(dirname(file), path)) : undefined;
+      return { editor: false, same: !changed, ...(changed ? { stale: true } : {}), savedAt: saved.savedAt, pending };
+    }
+    const now = await this.request<BlueprintJson>("graph", { path });
+    const diff = diffBpGraphs(saved.graph as unknown as BpDoc, now as unknown as BpDoc);
+    return { editor: true, same: diff.same, diff, savedAt: saved.savedAt, pending };
+  }
+
+  /**
+   * Keeps a compile's result, its messages tied to nodes (the page marks them), for when the graph is read again.
+   *
+   * @param path - The Blueprint's object path.
+   * @param answer - The plugin's compile answer.
+   * @param graph - The Blueprint as read after the compile (to tie messages to nodes by title for an older plugin).
+   * @returns The kept record.
+   */
+  async recordCompile(path: string, answer: unknown, graph?: BlueprintJson): Promise<CompileRecord | undefined> {
+    const project = await this.project();
+    if (!project || !answer || typeof answer !== "object") return undefined;
+    const a = answer as { ok?: boolean; messages?: Array<{ severity?: string; text?: string }>; nodes?: Array<{ node?: string; graph?: string; severity?: string; text?: string }> };
+    const doc = graph ?? (await this.savedGraph(path))?.graph;
+    const messages = mapCompileMessages(a, doc as unknown as BpDoc | undefined).slice(0, 200);
+    const rec: CompileRecord = { ok: a.ok !== false && !messages.some((m) => m.severity === "error"), at: new Date().toISOString(), messages };
+    await this.writeJson(join(this.projectDir(project), "compile", fileFor(path)), rec);
+    return rec;
+  }
+
+  /** The last compile's result for a Blueprint (none when it never compiled through KesherAI). */
+  private async lastCompile(project: string, path: string): Promise<CompileRecord | undefined> {
+    return this.readJson<CompileRecord>(join(this.projectDir(project), "compile", fileFor(path)));
   }
 
   /** @returns Changes waiting for the editor. */
@@ -735,36 +928,48 @@ export class UnrealBridge {
       project = await this.project();
       if (!project) return { applied: 0, failed: 0 };
       // Changes that clash with an edit saved in Unreal wait for Roee's choice (the Sync and conflicts sheet).
-      const { apply: mine, newClashes } = await this.sortMine(project);
+      const { apply: sorted, newClashes } = await this.sortMine(project);
       clashes = newClashes.length;
+      // Collapse to Function needs the open editor (the plugin says so): a graph's changes with one wait for it.
+      const held = new Set(sorted.filter(needsEditor).map((q) => q.path));
+      const mine = sorted.filter((q) => q.kind || !held.has(q.path));
       if (!mine.length) return { applied: 0, failed: 0 };
       await this.checkpoint(project, mine);
       const commands: Array<Record<string, unknown>> = [];
-      for (const q of mine) {
+      const groups = mergeEdits(mine);
+      for (const g of groups) {
+        const q = g.edits[0]!;
         if (q.kind === "create") commands.push({ cmd: "create", path: q.path, parent: q.parent ?? "Actor" });
         else if (ownCommand(q)) commands.push(queuedCommand(q));
-        else commands.push({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops });
+        else commands.push({ cmd: "apply", path: g.path, graph: g.graph, ops: g.ops });
       }
       // Blueprints are compiled, saved and read again; a level is saved by its own command.
       const paths = [...new Set(mine.filter((q) => !ownCommand(q)).map((q) => q.path))];
+      const compileAt = commands.length;
       for (const path of paths) commands.push({ cmd: "compile", path }, { cmd: "save", path });
       for (const path of paths) commands.push({ cmd: "graph", path });
       const answers = await this.offline(commands);
       let applied = 0;
       let failed = 0;
-      for (let i = 0; i < mine.length; i++) {
+      for (let i = 0; i < groups.length; i++) {
         const a = answers[i] as { ok?: boolean } | undefined;
+        const g = groups[i]!;
         if (a && a.ok !== false) {
-          applied++;
-          await this.unqueue(mine[i]!.id);
-          // A level changed: its kept copy is old now (the next read takes it again).
-          if (mine[i]!.kind === "material" || mine[i]!.kind === "spawn") await rm(join(this.projectDir(project), "standin", `level-${fileFor(mine[i]!.path)}`), { force: true }).catch(() => undefined);
-        } else failed++;
+          applied += g.edits.length;
+          for (const e of g.edits) {
+            await this.unqueue(e.id);
+            // A level changed: its kept copy is old now (the next read takes it again).
+            if (e.kind === "material" || e.kind === "spawn") await rm(join(this.projectDir(project), "standin", `level-${fileFor(e.path)}`), { force: true }).catch(() => undefined);
+          }
+        } else failed += g.edits.length;
       }
-      // The graphs read at the end become the saved copies the page shows.
+      // The graphs read at the end become the saved copies the page shows; the compile's messages are tied to them.
       for (let i = 0; i < paths.length; i++) {
         const a = answers[commands.length - paths.length + i] as { ok?: boolean; result?: unknown } | undefined;
-        if (a?.ok !== false && a?.result) await this.remember(paths[i]!, a.result as BlueprintJson).catch(() => undefined);
+        const read = a?.ok !== false && a?.result ? (a.result as BlueprintJson) : undefined;
+        if (read) await this.remember(paths[i]!, read).catch(() => undefined);
+        const c = answers[compileAt + i * 2] as { ok?: boolean; result?: unknown } | undefined;
+        if (c?.result) await this.recordCompile(paths[i]!, c.result, read).catch(() => undefined);
       }
       return { applied, failed };
     })()

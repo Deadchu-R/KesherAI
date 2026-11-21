@@ -21,8 +21,9 @@ Connects the Unreal Editor to KesherAI on the same computer. In KesherAI (**Crea
 | --- | --- |
 | `list` | Every Blueprint under `/Game` |
 | `graph` | One Blueprint: variables, and each graph's nodes, pins, defaults and links |
-| `apply` | Operations in one undo step: `add` (call, event, custom_event, branch, sequence, get, set), `connect`, `set` (a pin's default), `move`, `delete`, `comment` |
-| `compile` | Compiles and returns errors and warnings |
+| `apply` | Operations in one undo step: `add` (call, event, custom_event, branch, sequence, macro, get, set, reroute, comment_box; cast and timeline in 0.1.26), `connect`, `set` (a pin's default), `move`, `delete`, `comment`, `collapse` |
+| `compile` | Compiles and returns errors and warnings; 0.1.26: also `nodes`, each node with a compiler message (its id, graph, severity, text) |
+| `actions` | The node menu for a Blueprint; 0.1.26: a function's entry carries its `pins` and `pure`, so KesherAI can add it with Unreal closed |
 | `save` | Saves the Blueprint's package |
 | `open` | Opens the Blueprint in its editor |
 | `play_test`, `play_test_status`, `play_test_stop` | A gameplay test (0.1.25): a plan of steps (spawn/possess, Enhanced Input actions, keys and axes for N frames, wait for a condition, assert a value, screenshot) runs in Play In Editor; each step's result is read while it runs |

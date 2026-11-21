@@ -14,12 +14,12 @@ const isCommentBox = (n: GNode) => n.class === "EdGraphNode_Comment" || isVsNote
 const isKnot = (n: GNode) => n.class === "K2Node_Knot";
 const KNOT = 16;
 /** One node the "All Actions" menu offers. */
-export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string }
+export interface Action { title: string; category: string; type: string; function?: string; event?: string; variable?: string; name?: string; args?: string[]; target?: string; /** Unreal: a standard macro, the class of a cast, the pins when the plugin listed them. */ macro?: string; class?: string; pins?: Pin[] }
 import { wireFits } from "./wire-fits";
 import { resizeAction } from "./graph-fit";
 import { ribbonOffset, wireLook, wirePath } from "./wire-style";
 import { saveAppearance, useAppearance } from "./appearance";
-import { isVsNote, noteLines, unityPortsFit, type WireStyle } from "@kesher/shared";
+import { bpHeadColor, bpNodeKind, isVsNote, noteLines, unityPortsFit, type BpCompileMessage, type BpNodeKind, type WireStyle } from "@kesher/shared";
 import { Minimap } from "./GraphMinimap";
 import { nearest } from "./gamepad";
 
@@ -78,6 +78,9 @@ interface Menu { left: number; top: number; wx: number; wy: number; from?: { nod
  * change something. Unity: moving, connecting and deleting work (what its package supports); adding nodes and
  * breaking links wait for the package's next version.
  */
+/** A small mark at the end of an Unreal node's header, by its kind (pure functions, macros, loops, casts, timelines). */
+const KIND_GLYPH: Partial<Record<BpNodeKind, string>> = { pure: "ƒ", macro: "⧉", loop: "↻", cast: "⇢", timeline: "⏱" };
+
 /** Unreal's hold-a-letter nodes (Epic's Blueprint cheat sheet), by the letter held. */
 const QUICK: Record<string, Partial<Op>> = {
   b: { op: "add", type: "branch" },
@@ -97,7 +100,7 @@ const QUICK: Record<string, Partial<Op>> = {
  * A Blueprint (or C# script) graph as nodes and wires: pan, zoom, select, connect and the add-node menu.
  * Changes go to the editor (Unreal or Unity) or, with `onOps`, to the page.
  */
-export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[] }) {
+export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, onChanged, flash, onSelect, readOnlyWhy, onOps, localActions, errors, parents }: { nodes: GNode[]; path: string; graph: string; editable: boolean; unity?: boolean; onChanged: () => void; flash?: { id: string; n: number }; onSelect?: (ids: Set<string>) => void; /** Why the graph cannot be changed now, said when the user tries. */ readOnlyWhy?: string; /** Changes made here, not in an editor (a C# script as nodes): the page applies them itself. */ onOps?: (ops: Op[]) => Array<{ ok: boolean; error?: string; node?: string; text?: string; nodes?: string[] }>; /** The nodes the menu offers when the graph is changed here (onOps), filtered by the words typed. */ localActions?: (q: string) => Action[]; /** Unreal: the last compile's messages by node id (the node is marked, as Unreal's "ERROR!"). */ errors?: Map<string, BpCompileMessage[]>; /** Unreal: Blueprint classes' parents, for object pin checks. */ parents?: Record<string, string> }) {
   // Unity and Unreal share the canvas; each has its own routes.
   const engine = unity ? "unity" : "unreal";
   const saidWhy = useRef(0);
@@ -327,7 +330,7 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (w.moveLinks) return t.dir === w.dir ? { ok: true, why: L("העברת החיבורים", "Move the wires") } : { ok: false, why: L("גררו לפין מאותו כיוון", "Drag to a pin of the same direction") };
     if (t.dir === w.dir) return { ok: false, why: w.dir === "out" ? L("יציאה מתחברת לכניסה (נקודה משמאל)", "An output goes into an input (a pin on the left)") : L("כניסה מקבלת מיציאה (נקודה מימין)", "An input takes an output (a pin on the right)") };
     // Unity's own rules (object takes anything, numbers convert, a GameObject gives its components); else Unreal's.
-    const fits = unity ? unityPortsFit : wireFits;
+    const fits = unity ? unityPortsFit : (a: string, b: string) => wireFits(a, b, parents);
     const f = w.dir === "out" ? fits(w.type, t.type) : fits(t.type, w.type);
     return { ok: f.ok, why: f.ok ? (f.why ? L(`המרה ${f.why}`, `Convert ${f.why}`) : L("חיבור", "Connect")) : f.why ?? L("סוגים שלא מתחברים", "Types that do not connect") };
   };
@@ -600,6 +603,14 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
     if (a.function) op.function = a.function;
     if (a.event) op.event = a.event;
     if (a.variable) op.variable = a.variable;
+    if (a.macro) op.macro = a.macro;
+    if (a.class) op.class = a.class;
+    if (a.pins?.length && a.type === "call") op.pins = a.pins;
+    if (a.type === "timeline") {
+      const name = await askText(L("שם ה-Timeline:", "Timeline name:"), "Timeline", { ltr: true });
+      if (!name) return;
+      op.name = name.replace(/[^\w]/g, "") || "Timeline";
+    }
     if (a.type === "custom_event") {
       const name = await askText(L("שם האירוע:", "Event name:"), "NewEvent", { ltr: true });
       if (!name) return;
@@ -1099,7 +1110,11 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
           {wire && <path d={`M${wire.ax},${wire.ay} C${wire.ax + (wire.dir === "out" ? 60 : -60)},${wire.ay} ${wire.ex + (wire.dir === "out" ? -60 : 60)},${wire.ey} ${wire.ex},${wire.ey}`} stroke={pinColor(wire.type)} strokeWidth={2} fill="none" strokeDasharray="5 4" />}
           {wire && over?.at && <circle cx={over.at.x} cy={over.at.y} r={Math.max(9, 12 / view.k)} fill={over.ok ? "rgb(123 216 143 / 0.25)" : "rgb(255 123 123 / 0.25)"} stroke={over.ok ? "#7bd88f" : "#ff7b7b"} strokeWidth={2} vectorEffect="non-scaling-stroke" pointerEvents="none" />}
           {boxes.map((b) => {
-            const head = /Event/.test(b.n.class) ? "#7a1f1f" : /_Pure|Operator|MakeStruct|ArrayItem/.test(b.n.class) ? "#3d6b2e" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44";
+            // Unreal: by the node's kind (events red, functions blue, pure green…); Unity units by their class name.
+            const head = unity || onOps ? (/Event/.test(b.n.class) ? "#7a1f1f" : /_Pure|Operator|MakeStruct|ArrayItem/.test(b.n.class) ? "#3d6b2e" : /CallFunction/.test(b.n.class) ? "#1f4f7a" : /Variable/.test(b.n.class) ? "#2c5a2c" : "#3a3a44") : bpHeadColor(b.n);
+            const glyph = unity || onOps ? "" : KIND_GLYPH[bpNodeKind(b.n)] ?? "";
+            const errs = errors?.get(b.n.id);
+            const bad = errs?.some((m) => m.severity === "error") ? "#ff5c5c" : errs?.length ? "#f2c94c" : undefined;
             const on = selected.has(b.n.id);
             const found = current?.n.id === b.n.id ? "#f2c94c" : matches.some((m) => m.n.id === b.n.id) ? "#8a7a3a" : undefined;
             if (isKnot(b.n)) {
@@ -1119,10 +1134,18 @@ export function BlueprintCanvas({ nodes, path, graph, editable, unity = false, o
             return (
               <g key={b.n.id} data-node={b.n.id} className="bp-node">
                 {b.n.comment && <text x={b.x} y={b.y - 6} className="ue-comment">💬 {b.n.comment.length > 40 ? `${b.n.comment.slice(0, 40)}…` : b.n.comment}</text>}
-                <rect x={b.x} y={b.y} width={W} height={b.h} rx={7} fill="#1b1c20" stroke={found ?? (on ? "#f0a830" : "#000")} strokeWidth={found || on ? 2.5 : 1} opacity={0.96} />
+                <rect x={b.x} y={b.y} width={W} height={b.h} rx={7} fill="#1b1c20" stroke={found ?? (on ? "#f0a830" : bad ?? "#000")} strokeWidth={found || on || bad ? 2.5 : 1} opacity={0.96} />
                 {flashing === b.n.id && <rect x={b.x - 5} y={b.y - 5} width={W + 10} height={b.h + 10} rx={10} fill="none" stroke="#ffd34d" strokeWidth={3} className="bp-flash" />}
                 <path d={`M${b.x},${b.y + 7} a7,7 0 0 1 7,-7 h${W - 14} a7,7 0 0 1 7,7 v${HEAD - 7} h-${W} z`} fill={head} />
                 <text x={b.x + 9} y={b.y + 17} className="ue-title">{b.n.title.split("\n")[0]!.slice(0, 30)}</text>
+                {glyph && <text x={b.x + W - 10} y={b.y + 17} textAnchor="end" className="ue-title bp-kind" opacity={0.8} aria-hidden="true">{glyph}</text>}
+                {errs?.length ? (
+                  <g className="bp-error" role="img" aria-label={errs.map((m) => m.text).join("\n")}>
+                    <title>{errs.map((m) => m.text).join("\n")}</title>
+                    <rect x={b.x + W - 62} y={b.y - 11} width={58} height={16} rx={4} fill={bad} />
+                    <text x={b.x + W - 33} y={b.y + 1} textAnchor="middle" className="bp-error-text" fill="#111" fontSize={10} fontWeight={700}>{errs.some((m) => m.severity === "error") ? L("שגיאה", "ERROR!") : L("אזהרה", "Warning")}</text>
+                  </g>
+                ) : null}
                 {b.ins.map((p, i) => pinRow(b.n, p, i, b.x, b.y, "in"))}
                 {b.outs.map((p, i) => pinRow(b.n, p, i, b.x, b.y, "out"))}
               </g>
@@ -1329,7 +1352,7 @@ function ActionMenu({ engine, path, menu, local, onPick, onClose }: { engine: st
           } else if (e.key === "Escape") onClose();
         }}
       />
-      {offline && <p className="muted small">{L("Unity סגור: הנודים ש-Unity דיווח עליהם בפעם האחרונה ונודים נפוצים.", "Unity is closed: the nodes Unity reported last time, and common ones.")}</p>}
+      {offline && <p className="muted small">{engine === "unity" ? L("Unity סגור: הנודים ש-Unity דיווח עליהם בפעם האחרונה ונודים נפוצים.", "Unity is closed: the nodes Unity reported last time, and common ones.") : L("Unreal סגור: הנודים ש-Unreal דיווח עליהם בפעם האחרונה, נודים נפוצים וה-Blueprints של הפרויקט.", "Unreal is closed: the nodes Unreal reported last time, common nodes and the project's Blueprints.")}</p>}
       <ul>
         {items === null && <li className="muted small">{L("טוען…", "Loading…")}</li>}
         {items?.length === 0 && <li className="muted small">{L("אין תוצאות.", "Nothing found.")}</li>}

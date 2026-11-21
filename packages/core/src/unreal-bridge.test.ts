@@ -250,9 +250,59 @@ test("with Unreal closed, queued changes sync in one headless start: applied, co
   await b.enqueue({ project: "Game", path: "/Game/BP_A.BP_A", graph: "EventGraph", ops: [{ op: "connect" }] });
   const r = await b.syncNow();
   assert.deepEqual(r, { applied: 2, failed: 0 });
-  assert.deepEqual(sent.map((c) => c.cmd), ["apply", "apply", "compile", "save", "graph"]);
+  // A graph's waiting changes go in one apply (ids of added nodes are refs within it).
+  assert.deepEqual(sent.map((c) => c.cmd), ["apply", "compile", "save", "graph"]);
+  assert.deepEqual(sent[0]!.ops, [{ op: "add" }, { op: "connect" }]);
   assert.equal((await b.queue()).length, 0);
   assert.equal(b.syncState.running, false);
+});
+
+test("Unreal closed: page edits show at once on the copy, refused ones are not queued, undo / redo, palette, compile marks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-ue-"));
+  const proj = join(root, "Door");
+  await mkdir(join(proj, "Content"), { recursive: true });
+  await writeFile(join(proj, "Door.uproject"), "{}");
+  const data = join(root, "data");
+  await mkdir(data, { recursive: true });
+  await writeFile(join(data, "last.json"), JSON.stringify({ last: "DoorGame", projectFile: join(proj, "Door.uproject") }));
+  const b = new UnrealBridge(data);
+  await assert.rejects(b.enqueueEdit(BP.path, "EventGraph", [{ op: "add", type: "branch" }]), /Open this Blueprint once/);
+  await b.remember(BP.path, BP);
+  // Added, wired by its ref, and a wire that does not fit (exec into a bool): refused, the rest queued.
+  const r = await b.enqueueEdit(BP.path, "EventGraph", [
+    { op: "add", type: "branch", ref: "$b", x: 300, y: 0 },
+    { op: "connect", from: { node: "AAA", pin: "then" }, to: { node: "$b", pin: "execute" } },
+    { op: "connect", from: { node: "AAA", pin: "then" }, to: { node: "$b", pin: "Condition" } },
+  ]);
+  assert.deepEqual(r.results.map((x) => x.ok), [true, true, false]);
+  assert.equal(r.failed, 1);
+  const q = await b.queue();
+  assert.equal(q.length, 1);
+  assert.equal((q[0]!.ops as Array<{ op: string }>).length, 2, "only what Unreal would take is queued");
+  const shown = await b.graph(BP.path);
+  assert.equal(shown.offline, true);
+  assert.equal(shown.pending, 1);
+  const branch = shown.graph.graphs[0]!.nodes.find((n) => n.title === "Branch")!;
+  assert.match(branch.id, /^new-/);
+  assert.deepEqual(branch.pins.find((p) => p.name === "execute")!.links, ["AAA:then"]);
+  // A later change can use the new node's id.
+  assert.equal((await b.enqueueEdit(BP.path, "EventGraph", [{ op: "set", node: branch.id, pin: "Condition", value: "true" }])).queued, true);
+  assert.equal(await b.undoQueued(BP.path), true);
+  assert.equal((await b.queue()).length, 1);
+  assert.equal(await b.undoQueued(BP.path, true), true);
+  assert.equal((await b.queue()).length, 2);
+  // Palette with Unreal closed: common nodes, the Blueprint's variables, context sensitive.
+  const pal = await b.actions(BP.path, "", { type: "bool", dir: "out" });
+  assert.equal(pal.offline, true);
+  assert.ok(pal.actions.some((a) => a.type === "branch"));
+  assert.ok(pal.actions.some((a) => a.type === "set" && a.variable === "Open"));
+  assert.ok(!pal.actions.some((a) => a.type === "event"));
+  // A compile's messages are tied to nodes and come with the graph.
+  const rec = await b.recordCompile(BP.path, { ok: false, messages: [{ severity: "error", text: "x" }], nodes: [{ node: "AAA", graph: "EventGraph", severity: "error", text: "Event BeginPlay is broken" }] }, BP);
+  assert.equal(rec!.ok, false);
+  assert.equal((await b.graph(BP.path)).compile!.messages[0]!.node, "AAA");
+  // Sync on open with Unreal closed: the .uasset was not saved since the copy.
+  assert.equal((await b.checkSaved(BP.path)).same, true);
 });
 
 test("Unreal closed: a queued change that clashes with an edit saved in Unreal waits for a choice", async () => {

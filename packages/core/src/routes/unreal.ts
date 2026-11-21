@@ -318,12 +318,16 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     // Unreal closed: the change waits in the queue and syncs a few seconds after the last one, in a headless editor
     // (no open editor needed; RESEARCH_LOG "Work without the editor").
     if (kind === "unreal" && !(await b.status()).connected) {
+      // The change shows at once on the saved copy; operations Unreal would refuse answer with the error, not queued.
       const ub = b as UnrealBridge;
-      const project = await ub.project();
-      if (!project) return reply.code(409).send({ error: "Open the project in Unreal once (with the KesherAI Bridge plugin) so KesherAI knows it; after that it works with Unreal closed." });
-      await ub.enqueue({ project, path, graph, ops, request: "Changed on the Blueprint page" });
-      ub.scheduleSync();
-      return { queued: true, results: ops.map(() => ({ ok: true })), failed: 0 };
+      try {
+        const r = await ub.enqueueEdit(path, graph, ops.slice(0, 500) as Array<Record<string, unknown>>);
+        // Without a headless editor (the engine not found) the queue waits for Unreal to open.
+        if (r.queued && ub.available) ub.scheduleSync();
+        return r;
+      } catch (err) {
+        return reply.code(409).send({ error: (err as Error).message });
+      }
     }
     // Unity closed: the same, synced in one batch Unity run (not one boot per change).
     // The change shows at once on the saved copy (operations Unity would refuse answer with the error, not queued).
@@ -366,6 +370,16 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     }
   });
 
+  /** "Sync on open": is the copy shown still the editor's graph? (Open: asked; closed: was its file saved since.) */
+  app.get<{ Querystring: { path?: string } }>(`${base}/graph/check`, async (req, reply) => {
+    if (!req.query.path) return reply.code(400).send({ error: "Which graph?" });
+    try {
+      return await (kind === "unity" ? s.unity.checkSaved(req.query.path) : unreal.checkSaved(req.query.path));
+    } catch (err) {
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
   if (kind === "unity") {
     /** The fuzzy finder's nodes, matching the words typed (Unity package 0.2.4+). */
     // With Unity closed: the units Unity listed before (kept) and the common ones.
@@ -375,15 +389,6 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       } catch (err) {
         const msg = (err as Error).message;
         return reply.code(/kesher_actions/.test(msg) ? 409 : 502).send({ error: /kesher_actions/.test(msg) ? "The node menu needs the KesherAI Unity package 0.2.4. Update it from this page." : msg });
-      }
-    });
-    /** "Sync on open": is the copy shown still Unity's graph? (Unity open: asked; closed: was its file saved since.) */
-    app.get<{ Querystring: { path?: string } }>(`${base}/graph/check`, async (req, reply) => {
-      if (!req.query.path) return reply.code(400).send({ error: "Which graph?" });
-      try {
-        return await s.unity.checkSaved(req.query.path);
-      } catch (err) {
-        return reply.code(502).send({ error: (err as Error).message });
       }
     });
     /** Ctrl+Z / Ctrl+Y in the page: Unity's own undo and redo (package 0.2.4+). */
@@ -408,7 +413,13 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     app.post<{ Body: { path?: string } }>(`${base}/${cmd}`, async (req, reply) => {
       if (!req.body?.path) return reply.code(400).send({ error: "Which Blueprint?" });
       try {
-        return await b.request(cmd, { path: req.body.path }, cmd === "compile" ? 120_000 : 30_000);
+        const r = await b.request(cmd, { path: req.body.path }, cmd === "compile" ? 120_000 : 30_000);
+        // Unreal: the compile's messages tied to the nodes they are about (the page marks them; kept for later reads).
+        if (kind === "unreal" && cmd === "compile") {
+          const rec = await unreal.recordCompile(req.body.path, r, (await unreal.graph(req.body.path).catch(() => undefined))?.graph);
+          return rec ? { ...(r as object), messages: rec.messages } : r;
+        }
+        return r;
       } catch (err) {
         return reply.code(502).send({ error: (err as Error).message });
       }
@@ -430,8 +441,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       // Context Sensitive (plugin 0.1.16; an older one ignores it and lists everything).
       const pinType = String(req.query.pinType ?? "").slice(0, 200);
       const pinDir = req.query.pinDir === "in" || req.query.pinDir === "out" ? req.query.pinDir : "";
+      // Unreal closed: the nodes it listed before (kept, with their pins) and the common ones, searched here.
       try {
-        return await unreal.request("actions", { path: req.query.path, query: String(req.query.q ?? "").slice(0, 100), ...(pinType ? { pinType, pinDir } : {}) }, 20_000);
+        return await unreal.actions(req.query.path, String(req.query.q ?? "").slice(0, 100), pinType && pinDir ? { type: pinType, dir: pinDir } : undefined);
       } catch (err) {
         return reply.code(502).send({ error: (err as Error).message });
       }
@@ -521,8 +533,14 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
 
     /** Ctrl+Z / Ctrl+Y in the page: the editor's own undo and redo. */
     for (const cmd of ["undo", "redo"] as const) {
-      app.post(`${base}/${cmd}`, async (_req, reply) => {
+      app.post<{ Body: { path?: string } }>(`${base}/${cmd}`, async (req, reply) => {
         try {
+          // Unreal closed: the Blueprint's last waiting change is taken back (or put back).
+          const path = String(req.body?.path ?? "");
+          if (path && !unreal.connected) {
+            if (await unreal.undoQueued(path, cmd === "redo")) return { ok: true, queued: true };
+            return reply.code(409).send({ error: cmd === "undo" ? "Nothing waiting to undo for this Blueprint." : "Nothing to redo." });
+          }
           return await unreal.request(cmd, {}, 15_000);
         } catch (err) {
           return reply.code(502).send({ error: (err as Error).message });
