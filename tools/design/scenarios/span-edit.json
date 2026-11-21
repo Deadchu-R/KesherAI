@@ -100,17 +100,28 @@
   {
    "url": "**/api/span-edit",
    "method": "POST",
+   "body": "data: {\"type\": \"delta\", \"text\": \"פלטפורמר דו-ממדי מהיר: שועל קט\"}\n\ndata: {\"type\": \"done\", \"text\": \"פלטפורמר דו-ממדי מהיר: שועל קטן אוסף מטבעות ביער קסום ונלחם ביצורים מוזרים.\", \"model\": \"qwen3\"}\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/docs/d1",
+   "method": "PUT",
    "json": {
-    "text": "פלטפורמר דו-ממדי מהיר: שועל קטן אוסף מטבעות ביער קסום ונלחם ביצורים מוזרים.",
-    "model": "qwen3"
+    "id": "d1",
+    "title": "מסמך עיצוב: השועל והיער",
+    "body": "## תקציר\n\nפלטפורמר דו-ממדי מהיר: שועל קטן אוסף מטבעות ביער קסום ונלחם ביצורים מוזרים.\n\n## קהל יעד\n\nשחקנים בני 10 ומעלה שאוהבים משחקי פעולה קצרים בטלפון.",
+    "rev": 4,
+    "ver": 4,
+    "convId": "c5",
+    "versions": []
    }
   }
  ],
  "boards": [
   {
    "id": "DocSpanEditBubble",
-   "title": "מסמך בצד הצ'אט: סימון טקסט מציג בועה \"עריכה עם AI\"",
-   "titleEn": "Doc panel: a selection shows an \"Edit with AI\" bubble",
+   "title": "מסמך בצד הצ'אט: סימון טקסט מציג בועה \"ערוך את זה\" עם פעולות מהירות (קצר יותר, ברור יותר, תרגום עב↔אנ, תקן שגיאות)",
+   "titleEn": "Doc panel: a selection shows an \"Edit this\" bubble with quick actions (shorter, clearer, translate he↔en, fix grammar); Ctrl/Cmd+K opens it",
    "route": "#/c/c5",
    "viewports": [
     "desktop",
@@ -181,7 +192,87 @@
      "click": ".span-edit button[type=submit]"
     },
     {
-     "wait": ".span-edit-diff"
+     "wait": ".span-edit-diff:not(.live)"
+    }
+   ]
+  },
+  {
+   "id": "DocSpanEditQuick",
+   "title": "מסמך בצד הצ'אט: פעולה מהירה (\"קצר יותר\") כותבת מחדש בלי תיבת הוראה, השינוי מופיע תוך כדי כתיבה ואז כהבדלים",
+   "titleEn": "Doc panel: a quick action (\"Shorter\") rewrites without the instruction box; the change streams in, then shows as a diff",
+   "route": "#/c/c5",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".item-card"
+    },
+    {
+     "click": ".item-card"
+    },
+    {
+     "wait": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    },
+    {
+     "select": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    },
+    {
+     "wait": ".span-edit-bubble"
+    },
+    {
+     "click": ".span-edit-quick .chip-text"
+    },
+    {
+     "wait": ".span-edit-diff:not(.live)"
+    }
+   ]
+  },
+  {
+   "id": "DocSpanEditUndo",
+   "title": "מסמך בצד הצ'אט: אחרי אישור — \"נשמר כגרסה חדשה\" עם כפתור ביטול השינוי",
+   "titleEn": "Doc panel: after Accept, \"Saved as a new version\" with an Undo button",
+   "route": "#/c/c5",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".item-card"
+    },
+    {
+     "click": ".item-card"
+    },
+    {
+     "wait": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    },
+    {
+     "select": ".doc-panel-body p:has-text(\"פלטפורמר\")"
+    },
+    {
+     "wait": ".span-edit-bubble"
+    },
+    {
+     "click": ".span-edit-quick .chip-text"
+    },
+    {
+     "wait": ".span-edit-diff:not(.live)"
+    },
+    {
+     "click": ".span-edit .primary"
+    },
+    {
+     "wait": ".span-edit button:has-text(\"ביטול השינוי\")"
     }
    ]
   }

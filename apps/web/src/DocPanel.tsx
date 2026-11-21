@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addr, computeSheet, docxFiles, locateSpan, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet, type TextSpan } from "@kesher/shared";
+import { addr, computeSheet, docxFiles, fenceAt, isEditShortcut, locateSpan, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet, type TextSpan } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { closePanel, openItem } from "./ArtifactPanel";
 import { ITEM_KINDS, selectionMessage, type ItemKind, type PanelItem } from "./doc-items";
@@ -77,6 +77,8 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
   /** Where the selection is in the document's markdown (for "Edit with AI"), and whether she chose to ask the chat instead. */
   const [span, setSpan] = useState<TextSpan | null>(null);
   const [asking, setAsking] = useState(false);
+  /** When Ctrl/Cmd+K was pressed on a selection (the "Edit this" box opens at once). */
+  const [askAt, setAskAt] = useState(0);
   const [ask, setAsk] = useState("");
   const [sending, setSending] = useState(false);
   const view = useRef<HTMLDivElement>(null);
@@ -154,6 +156,7 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
     setSpan(locateSpan(body, text, Math.round(share * body.length)));
   };
   const dropPick = () => {
+    setAskAt(0);
     setPicked("");
     setSpan(null);
     setAsking(false);
@@ -174,6 +177,19 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
     };
     document.addEventListener("selectionchange", onChange);
     return () => document.removeEventListener("selectionchange", onChange);
+  });
+  // Ctrl/Cmd+K on a selection in the document opens "Edit this" (keyboard, with Shift+arrows or a mouse selection).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isEditShortcut(e) || edit || !view.current) return;
+      const a = getSelection()?.anchorNode;
+      if (!a || !view.current.contains(a)) return;
+      e.preventDefault();
+      pick();
+      setAskAt(Date.now());
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   });
   const sendPicked = async (change: boolean) => {
     if (!ask.trim() || !data) return;
@@ -196,6 +212,8 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
     }
   };
 
+  // A selection inside a document's code block is edited as code (kept left-to-right, no prose rewriting).
+  const fence = span && data && typeof data.body === "string" ? fenceAt(data.body, span) : null;
   const Editor = item.kind === "doc" ? DocsPage : item.kind === "sheet" ? SheetsPage : SlidesPage;
   return (
     <>
@@ -244,7 +262,7 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
         </div>
       )}
       {picked && !edit && span && !asking && !old && data ? (
-        <SpanEdit key={`${span.start}-${span.end}`} source={String(data.body ?? "")} span={span} kind="doc" title={title} onAccept={saveSpan} onAsk={() => setAsking(true)} onClose={dropPick} />
+        <SpanEdit key={`${span.start}-${span.end}`} source={String(data.body ?? "")} span={span} kind={fence ? "code" : "doc"} language={fence?.language} fenced={!!fence} title={title} askAt={askAt} onAccept={saveSpan} onAsk={() => setAsking(true)} onClose={dropPick} />
       ) : picked && !edit && (
         <form className="doc-panel-ask" onSubmit={(e) => { e.preventDefault(); void sendPicked(true); }}>
           <div className="row">

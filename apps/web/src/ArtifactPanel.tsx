@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { TextSpan } from "@kesher/shared";
+import { isEditShortcut, type TextSpan } from "@kesher/shared";
 import { CodeView } from "./ide/CodeView";
 import type { PanelItem } from "./doc-items";
 import type { CanvasItem } from "./chat/canvas-items";
@@ -32,6 +32,11 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 /** Every page block seen, by a short key (the blocks on screen carry it as data-artifact). */
 const known = new Map<string, string>();
 let versions: string[] = [];
+/**
+ * Set when "Edit this" in the code adds a version: that version (`at`) is shown under the key of the one before it
+ * (`from`), so the Code tab stays mounted and its "Saved · Undo" bar stays on screen.
+ */
+let accepted: { at: number; from: number } | null = null;
 let current = -1;
 /** The document, sheet or deck open in the panel (instead of a page block), if any. */
 let item: PanelItem | null = null;
@@ -56,6 +61,7 @@ export function openArtifact(code: string): void {
   media = null;
   if (!versions.includes(code)) versions.push(code);
   current = versions.indexOf(code);
+  accepted = null;
   item = null;
   changed();
 }
@@ -69,6 +75,7 @@ export function openItem(p: PanelItem): void {
   item = p;
   media = null;
   versions = [];
+  accepted = null;
   current = -1;
   changed();
 }
@@ -83,6 +90,7 @@ export function openCanvas(m: CanvasItem): void {
   media = m;
   item = null;
   versions = [];
+  accepted = null;
   current = -1;
   changed();
 }
@@ -170,6 +178,7 @@ export function ArtifactPanel() {
     // Another chat or page: the panel closes.
     const away = () => {
       versions = [];
+      accepted = null;
       current = -1;
       item = null;
       media = null;
@@ -240,7 +249,7 @@ export function ArtifactPanel() {
       ) : tab === "preview" ? (
         <iframe key={`${current}-${reload}`} className="artifact-frame" title={title} sandbox="allow-scripts allow-forms allow-modals" srcDoc={framed(code)} />
       ) : (
-        <CodeTab key={current} code={code} title={title} />
+        <CodeTab key={accepted && current === accepted.at ? accepted.from : current} code={code} title={title} />
       )}
       <p className="muted small artifact-note">{L("רץ בתיבה סגורה: בלי גישה לקבצים, לחשבונות או לרשת.", "Runs in a closed box: no access to files, accounts or the network.")}</p>
     </aside>
@@ -274,16 +283,31 @@ function CodeTab({ code, title }: { code: string; title: string }) {
     return () => document.removeEventListener("selectionchange", onChange);
   });
   const accept = (next: string) => {
+    const from = accepted && accepted.at === current ? accepted.from : current;
     versions.push(next);
     current = versions.length - 1;
+    accepted = { at: current, from };
     changed();
   };
+  // Ctrl/Cmd+K on a selection in the code opens "Edit this" (the bubble mounts, then opens its box at once).
+  const [askAt, setAskAt] = useState(0);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const a = getSelection()?.anchorNode;
+      if (!isEditShortcut(e) || !a || !box.current?.contains(a)) return;
+      e.preventDefault();
+      pick();
+      setAskAt(Date.now());
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
   return (
     <>
       <div className="artifact-code" ref={box} onMouseUp={pick} onTouchEnd={pick}><CodeView code={code} language="html" /></div>
       {span && (
         <Suspense fallback={null}>
-          <SpanEdit key={`${span.start}-${span.end}`} source={code} span={span} kind="code" language="html" title={title} onAccept={accept} onClose={() => { setSpan(null); getSelection()?.removeAllRanges(); }} />
+          <SpanEdit key={`${span.start}-${span.end}`} source={code} span={span} kind="code" language="html" title={title} askAt={askAt} onAccept={accept} onClose={() => { setSpan(null); getSelection()?.removeAllRanges(); }} />
         </Suspense>
       )}
     </>

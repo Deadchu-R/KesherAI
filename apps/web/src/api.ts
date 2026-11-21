@@ -171,6 +171,40 @@ export async function streamChat(
   }
 }
 
+/**
+ * Posts JSON and reads the answer as Server-Sent Events (`data:` lines of JSON), calling `onEvent` for each.
+ *
+ * @param path - e.g. `/api/span-edit`.
+ * @param body - Sent as JSON.
+ * @param onEvent - Called for every event.
+ * @param signal - Abort to stop (the server stops the model too).
+ */
+export async function streamPost<T>(path: string, body: unknown, onEvent: (e: T) => void, signal?: AbortSignal): Promise<void> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const tk = token();
+  if (tk) headers.authorization = `Bearer ${tk}`;
+  const res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const data = block.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("\n");
+      if (data) onEvent(JSON.parse(data) as T);
+    }
+  }
+}
+
 /** Result of `GET /api/models`. */
 export interface ModelListing {
   models: ModelInfo[];
