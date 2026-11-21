@@ -31,9 +31,38 @@ const AREAS = '[role="dialog"], .palette, .sidebar, .appbar, .phone-tabs, .scrip
 const lastIn = new WeakMap<Element, HTMLElement>();
 const areaOf = (el: Element): Element => el.closest(AREAS) ?? document.body;
 
-/** Shown at all (not display:none, hidden, faded out or zero-sized); off-screen is fine: the view follows. */
+/** The bits of an element {@link insideClosedDetails} looks at (so it can be tested without a browser). */
+interface NodeLike {
+  tagName: string;
+  parentElement: NodeLike | null;
+  children: ArrayLike<NodeLike>;
+  hasAttribute(name: string): boolean;
+}
+
+/**
+ * Whether an element is in the folded part of a closed `<details>` (anything but its own `<summary>`). Chrome hides
+ * that part with `content-visibility: hidden`, which keeps the boxes: the element still has a size and a place, but
+ * cannot take the focus, so the D-pad picked it and stayed where it was (ui-check 0.6.416: the folded Gameplay tests
+ * card on the Unreal page trapped the focus on its summary).
+ *
+ * @param el - The element.
+ * @returns True when a closed `<details>` around it hides it.
+ */
+export function insideClosedDetails(el: NodeLike): boolean {
+  for (let child = el, up = el.parentElement; up; child = up, up = up.parentElement) {
+    if (up.tagName !== "DETAILS" || up.hasAttribute("open")) continue;
+    // Only the first <summary> right inside it stays shown.
+    const summary = Array.from(up.children).find((c) => c.tagName === "SUMMARY");
+    if (child !== summary) return true;
+  }
+  return false;
+}
+
+/** Shown at all (not display:none, hidden, folded away, faded out or zero-sized); off-screen is fine: the view follows. */
 function rendered(el: HTMLElement): boolean {
   if (!el.getClientRects().length) return false;
+  // checkVisibility() also catches other `content-visibility: hidden` parts; the details check covers browsers without it.
+  if (el.checkVisibility?.() === false || insideClosedDetails(el)) return false;
   const r = el.getBoundingClientRect();
   if (r.width < 4 || r.height < 4) return false;
   const st = getComputedStyle(el);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nearest } from "./gamepad.js";
+import { insideClosedDetails, nearest } from "./gamepad.js";
 
 test("the controller moves to the nearest control in a direction", () => {
   const at = { x: 100, y: 100, w: 100, h: 40 };
@@ -16,4 +16,35 @@ test("the controller moves to the nearest control in a direction", () => {
   assert.equal(nearest(at, boxes, "up"), 3);
   assert.equal(nearest(at, boxes, "left"), 4);
   assert.equal(nearest(at, [], "down"), -1);
+});
+
+test("the controller skips what a closed <details> folds away, but not its summary", () => {
+  type Fake = { tagName: string; parentElement: Fake | null; children: Fake[]; attrs: string[]; hasAttribute(n: string): boolean };
+  const make = (tagName: string, parent: Fake | null, attrs: string[] = []): Fake => {
+    const n: Fake = { tagName, parentElement: parent, children: [], attrs, hasAttribute: (a) => n.attrs.includes(a) };
+    parent?.children.push(n);
+    return n;
+  };
+  const main = make("MAIN", null);
+  const details = make("DETAILS", main);
+  const summary = make("SUMMARY", details);
+  const inSummary = make("STRONG", summary);
+  const body = make("DIV", details);
+  const button = make("BUTTON", body);
+  const outside = make("BUTTON", main);
+  // A nested closed <details> inside an open one: its summary shows, its body does not.
+  const open = make("DETAILS", main, ["open"]);
+  make("SUMMARY", open);
+  const inner = make("DETAILS", open);
+  const innerSummary = make("SUMMARY", inner);
+  const innerBody = make("A", inner);
+
+  assert.equal(insideClosedDetails(button), true);
+  assert.equal(insideClosedDetails(summary), false);
+  assert.equal(insideClosedDetails(inSummary), false);
+  assert.equal(insideClosedDetails(outside), false);
+  assert.equal(insideClosedDetails(innerSummary), false);
+  assert.equal(insideClosedDetails(innerBody), true);
+  details.attrs.push("open");
+  assert.equal(insideClosedDetails(button), false);
 });
