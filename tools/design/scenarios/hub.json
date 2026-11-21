@@ -4,7 +4,7 @@
  "now": "2026-11-21T09:00:00Z",
  "boards": [
   {
-   "id": "HubNotify",
+   "id": "HubNotifyReal",
    "title": "ענן Kesher: הגדרות › התראות — \"הודע למכשיר הזה\" דלוק (רק המספר, בלי תוכן)",
    "route": "#settings",
    "hub": {
