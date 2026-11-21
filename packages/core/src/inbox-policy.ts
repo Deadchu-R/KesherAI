@@ -148,6 +148,12 @@ export function pathAllowed(path: string, allowed: string[], forbidden: string[]
 }
 
 /**
+ * Read-only commands a research task may run in its worktree (listing and reading the project to know what exists):
+ * a research run once ended at once after "Get-ChildItem docs/research" was refused, and wrote nothing.
+ */
+export const RESEARCH_READ_COMMANDS = ["Get-ChildItem", "Get-Content", "Select-String", "ls", "dir", "cat", "type", "rg", "grep", "git log", "git show", "git status"];
+
+/**
  * Whether a command may run without asking: every part of `a && b` starts with an allowed command and has no
  * other shell syntax.
  */
@@ -192,7 +198,7 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     if (SECRET_FILE.test(command.split(/\s+/).find((w) => SECRET_FILE.test(w)) ?? "")) return { verdict: "deny", rule: "secret files", what };
     // Where it runs (cwd) and any path it names must be inside the worktree.
     if (f.paths.some((x) => !insideWorktree(ctx.worktree, x))) return { verdict: "deny", rule: "outside the worktree", what };
-    return commandAllowed(command, ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
+    return commandAllowed(command, ctx.research ? [...ctx.commands, ...RESEARCH_READ_COMMANDS] : ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
   if (kind === "fetch") {
