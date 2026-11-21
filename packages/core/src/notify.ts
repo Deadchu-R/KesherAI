@@ -37,6 +37,44 @@ export interface Note {
   computerOnly?: boolean;
 }
 
+/** Downloads smaller than this (200 MB) end quietly: a notification is only worth it for a long wait. */
+export const BIG_DOWNLOAD_BYTES = 200 * 1024 ** 2;
+
+/** What {@link downloadNote} needs of a download. */
+export interface DownloadEnd {
+  label: string;
+  status: string;
+  received: number;
+  total?: number;
+  error?: string;
+  errorKind?: string;
+}
+
+/** A short cause for a failed download, in Hebrew and English (the notification has no room for more). */
+const DOWNLOAD_CAUSE: Record<string, string> = {
+  "disk-full": "אין מקום בדיסק / disk full",
+  auth: "צריך טוקן של Hugging Face / token needed",
+  network: "החיבור נקטע / connection lost",
+  changed: "הקובץ השתנה באתר / file changed",
+};
+
+/**
+ * The notification for a download that ended: "ההורדה הסתיימה / Download finished: name", or "ההורדה נכשלה / Download
+ * failed: name — cause". Only for a done or failed download of at least {@link BIG_DOWNLOAD_BYTES} (its total size, or
+ * what was received when the size is unknown); anything else gives nothing. It opens Downloads (the Models page).
+ *
+ * @param job - The download as it is now.
+ * @returns The note to send, or undefined when there is none to send.
+ */
+export function downloadNote(job: DownloadEnd): Note | undefined {
+  if (job.status !== "done" && job.status !== "failed") return undefined;
+  if ((job.total ?? job.received) < BIG_DOWNLOAD_BYTES) return undefined;
+  const name = job.label.split(/[\\/·]/).pop()?.trim() || job.label;
+  if (job.status === "done") return { title: `ההורדה הסתיימה / Download finished: ${name}`, body: `${(((job.total ?? job.received)) / 1024 ** 3).toFixed(1)} GB`, path: "#/models", tags: ["inbox_tray"] };
+  const cause = DOWNLOAD_CAUSE[job.errorKind ?? ""] ?? "";
+  return { title: `ההורדה נכשלה / Download failed: ${name}${cause ? ` — ${cause}` : ""}`, body: (job.error ?? "").slice(0, 200) || "פתחו את KesherAI כדי לנסות שוב / Open KesherAI to try again.", path: "#/models", tags: ["warning"], priority: 4 };
+}
+
 /** How long an Approve / Deny button works. */
 const QUICK_MS = 15 * 60_000;
 
@@ -351,30 +389,15 @@ export class Notifier {
   }
 
   /**
-   * Notifies when a long download finishes or fails.
+   * Notifies (this computer and the phone) when a big download finishes or fails: see {@link downloadNote}. Off with
+   * the "Notify when big downloads end" setting.
    *
    * @param job - The download as it is now.
-   * @param job.id - Its id.
-   * @param job.label - What it is.
-   * @param job.status - Its status.
    */
-  onDownload(job: { id: string; label: string; status: string; error?: string }): void {
-    const s = this.settings();
-    if (job.status === "downloading" || job.status === "queued") {
-      if (!this.started.has(`dl:${job.id}`)) this.started.set(`dl:${job.id}`, Date.now());
-      return;
-    }
-    if (job.status !== "done" && job.status !== "failed") return;
-    const t0 = this.started.get(`dl:${job.id}`);
-    this.started.delete(`dl:${job.id}`);
-    if (t0 === undefined || Date.now() - t0 < Math.max(s.minSeconds, 60) * 1000) return;
-    const name = job.label.split(/[\\/]/).pop() ?? job.label;
-    void this.send({
-      title: job.status === "done" ? `Downloaded: ${name}` : `Download failed: ${name}`,
-      body: job.status === "done" ? `Ready after ${minutes(Date.now() - t0)}.` : job.error ?? "Open KesherAI to try again.",
-      path: "#/models",
-      tags: [job.status === "done" ? "inbox_tray" : "warning"],
-    }).catch(() => undefined);
+  onDownload(job: DownloadEnd & { id: string }): void {
+    if (this.settings().bigDownloads === false) return;
+    const note = downloadNote(job);
+    if (note) void this.send(note).catch(() => undefined);
   }
 
   private quickCode(convId: string, requestId: string): string {

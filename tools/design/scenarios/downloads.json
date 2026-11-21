@@ -230,7 +230,7 @@
  "boards": [
   {
    "id": "DownloadsRunning",
-   "title": "הורדות: שלב, מהירות ברשת, התקדמות הבדיקה וזמן שנותר לכל הורדה, ושורת סיכום כשכמה רצות",
+   "title": "הורדות: שלב, מהירות ברשת, התקדמות הבדיקה וזמן שנותר לכל הורדה, ושורת סיכום כשכמה רצות — ובתחתית החלון: הגבלת מהירות ו\"התראה כשהורדה גדולה (200MB ומעלה) מסתיימת\"",
    "route": "#/models",
    "shot": {
     "desktop": ".dl-panel"
@@ -273,6 +273,13 @@
        "speed": 0
       }
      ]
+    },
+    {
+     "url": "**/api/downloads/notify",
+     "method": "GET",
+     "json": {
+      "on": true
+     }
     }
    ],
    "steps": [
@@ -495,6 +502,35 @@
     "desktop": 1000,
     "phone": 1500
    }
+  },
+  {
+   "id": "SettingsHuggingFaceToken",
+   "title": "הגדרות › חשבונות: טוקן של Hugging Face (מוצפן, אף פעם לא מוצג שוב: \"נשמר ✓\" או \"לא מוגדר\", שמור / הסר; בטלפון רק המצב). כפתור \"הוסף טוקן בהגדרות\" בכרטיס שגיאת הורדה פותח את המקום הזה",
+   "route": "#/settings/accounts",
+   "height": {
+    "desktop": 900,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": "#hf-token"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": "#hf-token",
+    "phone": "#hf-token"
+   },
+   "mocks": [
+    {
+     "url": "**/api/hf-token",
+     "json": {
+      "set": true
+     }
+    }
+   ]
   }
  ]
 }

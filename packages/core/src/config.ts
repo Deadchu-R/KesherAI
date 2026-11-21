@@ -537,6 +537,8 @@ export const KesherConfigSchema = z.object({
       includeText: z.boolean().default(false),
       /** Tell when an agent waits for an approval or an answer for a minute. */
       waiting: z.boolean().default(true),
+      /** Tell (desktop and phone) when a download of at least 200 MB finishes or fails. */
+      bigDownloads: z.boolean().default(true),
       /** Tell when a chat's helper (sub-agent) ends or fails in the background, or waits for an answer. */
       agents: z.boolean().default(true),
       /** Approve and Deny buttons on that notification (on the phone and a watch), with "Access from anywhere" on. */
@@ -639,10 +641,12 @@ export function useSecretBox(box: SecretBox | undefined): void {
 /** Encrypted secrets this run could not read, kept as they were so a save does not lose them (by slot). */
 const unreadable = new Map<string, string>();
 
-/** The secrets in a config: provider keys, the Telegram, Figma, GitHub, CivitAI and cloud hub tokens, and the hub key. */
+/** The secrets in a config: provider keys, the Hugging Face token, the Telegram, Figma, GitHub, CivitAI and cloud hub tokens, and the hub key. */
 function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
   const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
   for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
+  // The Hugging Face token (Settings > Accounts).
+  slots.push({ obj: c, key: "huggingFaceToken", slot: "huggingFaceToken" });
   const keys = c.webKeys;
   if (keys && typeof keys === "object") for (const k of ["tavily", "brave"]) slots.push({ obj: keys as Record<string, unknown>, key: k, slot: `webKeys:${k}` });
   for (const k of ["telegram", "figma", "github", "civitai", "hub"]) {

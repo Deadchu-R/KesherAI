@@ -392,7 +392,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     const he = /[\u0590-\u05ff]/.test(`${course.name} ${lecture.title}`);
     void notifier.send({ title: he ? `ההרצאה מוכנה: ${lecture.title}` : `Lecture ready: ${lecture.title}`, body: he ? `${course.name}: סיכום, מונחים ותרשים מחכים לך.` : `${course.name}: the summary, terms and diagram are waiting.`, path: `#/study/${course.id}/l/${lecture.id}`, tags: ["books"] }).catch(() => undefined);
   };
-  downloads.on("update", (job: { id: string; label: string; status: string; error?: string }) => {
+  downloads.on("update", (job) => {
     notifier.onDownload(job);
     // "When a download finishes" routines (once, when it is done).
     if (job.status === "done") {

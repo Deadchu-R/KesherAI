@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentEvent } from "@kesher/shared";
-import { Notifier } from "./notify.js";
+import { Notifier, downloadNote } from "./notify.js";
 
 const settings = { ntfy: { enabled: true, server: "https://ntfy.example", topic: "kesher-abc" }, desktop: true, minSeconds: 0, includeText: false, waiting: true, approveButtons: true, waitingSeconds: 60 };
 const ev = (e: Record<string, unknown>) => ({ seq: 1, at: "", ...e }) as AgentEvent;
@@ -195,4 +195,31 @@ test("a browser approval: no note while a screen shows it, one naming the site w
   assert.equal(posts.length, 1);
   assert.match(posts[0]!, /mail\.example\.com.*5 minutes/);
   n.close();
+});
+
+test("big downloads: a note for done and failed ones of 200 MB and up, none for small ones or when off", async () => {
+  const MB = 1024 ** 2;
+  const done = downloadNote({ label: "org/repo · sub/model-Q4.gguf", status: "done", received: 4000 * MB, total: 4000 * MB });
+  assert.equal(done?.title, "ההורדה הסתיימה / Download finished: model-Q4.gguf");
+  assert.equal(done?.path, "#/models");
+  const failed = downloadNote({ label: "org/repo · model.gguf", status: "failed", received: 10 * MB, total: 5000 * MB, error: "HTTP 401", errorKind: "auth" });
+  assert.match(failed?.title ?? "", /^ההורדה נכשלה \/ Download failed: model\.gguf — /);
+  assert.equal(failed?.body, "HTTP 401");
+  // Small, still running or cancelled: nothing. Unknown size uses what was received.
+  assert.equal(downloadNote({ label: "a · b.bin", status: "done", received: 199 * MB, total: 199 * MB }), undefined);
+  assert.equal(downloadNote({ label: "a · b.bin", status: "downloading", received: 900 * MB, total: 900 * MB }), undefined);
+  assert.equal(downloadNote({ label: "a · b.bin", status: "cancelled", received: 900 * MB }), undefined);
+  assert.notEqual(downloadNote({ label: "a · b.bin", status: "done", received: 200 * MB }), undefined);
+  // Through the notifier: sent to the computer, and nothing with the setting off.
+  const shown: string[] = [];
+  const on = new Notifier(() => ({ ...settings, bigDownloads: true }), { desktop: (x) => (shown.push(x.title), true) });
+  on.onDownload({ id: "1", label: "a · b.bin", status: "done", received: 300 * MB, total: 300 * MB });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(shown, ["ההורדה הסתיימה / Download finished: b.bin"]);
+  const off = new Notifier(() => ({ ...settings, bigDownloads: false }), { desktop: (x) => (shown.push(x.title), true) });
+  off.onDownload({ id: "2", label: "a · c.bin", status: "done", received: 300 * MB, total: 300 * MB });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(shown.length, 1);
+  on.close();
+  off.close();
 });

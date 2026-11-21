@@ -299,6 +299,15 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     return { mbps: v };
   });
 
+  /** "Notify when big downloads end" (200 MB and up; on the computer and the phone): any device may read or change it. */
+  app.get("/api/downloads/notify", async () => ({ on: s.config.notifications.bigDownloads !== false }));
+  app.put<{ Body: { on?: boolean } }>("/api/downloads/notify", async (req, reply) => {
+    if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "on: true or false." });
+    s.config.notifications.bigDownloads = req.body.on;
+    await s.saveConfig();
+    return { on: req.body.on };
+  });
+
   /**
    * Downloads that were not finished when KesherAI closed (an update, a restart) start again by themselves and
    * continue from their `.part` file. What is kept is only which file of which repo, never a token.

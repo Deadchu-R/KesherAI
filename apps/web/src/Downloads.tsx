@@ -191,9 +191,16 @@ export function DownloadsButton() {
   const all = useDownloads();
   const [open, setOpen] = useState(false);
   const [limit, setLimit] = useState(0);
+  const [notify, setNotify] = useState(true);
   useEffect(() => {
-    if (open) void api<{ mbps: number }>("/api/downloads/limit").then((r) => setLimit(r.mbps)).catch(() => undefined);
+    if (!open) return;
+    void api<{ mbps: number }>("/api/downloads/limit").then((r) => setLimit(r.mbps)).catch(() => undefined);
+    void api<{ on: boolean }>("/api/downloads/notify").then((r) => setNotify(r.on)).catch(() => undefined);
   }, [open]);
+  const changeNotify = (on: boolean) => {
+    setNotify(on);
+    void api("/api/downloads/notify", { method: "PUT", body: { on } }).catch(() => undefined);
+  };
   const changeLimit = (mbps: number) => {
     setLimit(mbps);
     void api("/api/downloads/limit", { method: "PUT", body: { mbps } }).catch(() => undefined);
@@ -247,6 +254,9 @@ export function DownloadsButton() {
                 <option key={v} value={v}>{v === 0 ? t("dlNoLimit") : `${v} MB/s`}</option>
               ))}
             </Select>
+          </label>
+          <label className="check small">
+            <input type="checkbox" checked={notify} onChange={(e) => changeNotify(e.target.checked)} /> {L("התראה כשהורדה גדולה (200MB ומעלה) מסתיימת", "Notify when big downloads end (200 MB and up)")}
           </label>
         </div>
       )}
