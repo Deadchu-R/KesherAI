@@ -10,7 +10,7 @@ export interface IdeasDeps {
   ask: (system: string, user: string, signal?: AbortSignal, onText?: (delta: string) => void, strong?: boolean) => Promise<string>;
   /** A recording's speech as text. */
   /** Speech to text; `lang` is the recording app's language (he, en), used when the speech language is auto. */
-  transcribe: (file: string, lang?: string) => Promise<string>;
+  transcribe: (file: string, lang?: string) => Promise<string | { text: string; language?: string }>;
   /** Her project names. */
   projects: () => string[];
   /** Her past chats that match some words (incognito ones left out). */
@@ -151,10 +151,11 @@ export class Ideas {
         const audio = s.seconds;
         this.mark(id, { stage: "transcribing", ...(audio ? { audioSeconds: audio, expectedSeconds: Math.max(5, Math.round(audio * this.speed)) } : {}) });
         const began = Date.now();
-        const text = await this.deps.transcribe(file, lang).finally(() => rm(file, { force: true }));
+        const heard = await this.deps.transcribe(file, lang).finally(() => rm(file, { force: true }));
+        const text = typeof heard === "string" ? heard : heard.text;
         // Remember how fast this computer reads speech, for the next guess.
         if (audio >= 30) this.speed = Math.min(2, Math.max(0.02, (Date.now() - began) / 1000 / audio));
-        s = { ...(await this.get(id)), transcript: text.slice(0, 400_000), status: "sorting" };
+        s = { ...(await this.get(id)), transcript: text.slice(0, 400_000), status: "sorting", ...(typeof heard === "object" && heard.language ? { language: heard.language } : {}) };
         await this.save(s);
       }
       this.mark(id, { stage: "splitting", found: { ideas: 0, tasks: 0, questions: 0 } });

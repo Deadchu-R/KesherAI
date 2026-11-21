@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
+import { myLanguages } from "../lang-detect.js";
 import { CLOUD_STT, transcribeWith } from "../speech-tools.js";
 
 /**
@@ -16,9 +17,12 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
       .map((p) => ({ id: `cloud:${p.id}`, label: CLOUD_STT[p.id]!.label }));
 
   /** Which engine the button uses now, what is available, and the local engine's state. */
-  app.get("/api/speech/stt", async () => ({
+  app.get<{ Querystring: { app?: string } }>("/api/speech/stt", async (req) => ({
     choice: s.config.speech.stt,
     language: s.config.speech.language,
+    /** "My languages" as used (the default filled in), and whether the user chose them. */
+    languages: myLanguages(s.config.speech.languages, req.query.app),
+    languagesSet: (s.config.speech.languages?.length ?? 0) > 0,
     local: await s.whisper.status(),
     clouds: clouds(),
     ttsClouds: s.config.providers.filter((p) => p.id === "openai" && p.apiKey).map((p) => p.id),
@@ -58,7 +62,8 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   /** Settings: `{ stt?, language? }`. */
-  app.put<{ Body: { stt?: string; language?: string } }>("/api/speech/stt", async (req) => {
+  app.put<{ Body: { stt?: string; language?: string; languages?: unknown } }>("/api/speech/stt", async (req) => {
+    if (Array.isArray(req.body?.languages)) s.config.speech.languages = myLanguages(req.body.languages, "he").slice(0, 12);
     if (typeof req.body?.stt === "string") s.config.speech.stt = req.body.stt;
     if (typeof req.body?.language === "string") s.config.speech.language = req.body.language;
     await s.saveConfig();
@@ -92,9 +97,11 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
   /**
    * Turns a WAV recording into text: `POST` the bytes as `audio/wav`, `?lang=he` optional. `?partial=1` (voice mode's
    * live words while the user talks): only through a loaded local model, never the cloud or the slower program;
-   * `{ partial: false }` when it cannot, so the page stops asking.
+   * `{ partial: false }` when it cannot, so the page stops asking. `?app=he|en` is the app's language (default of "my
+   * languages"); the answer has `detected` (language, others heard, outside "my languages") when it was detected, and
+   * `?lang=he` forces a language ("transcribe again as …").
    */
-  app.post<{ Querystring: { lang?: string; partial?: string } }>("/api/speech/transcribe", async (req, reply) => {
+  app.post<{ Querystring: { lang?: string; partial?: string; app?: string } }>("/api/speech/transcribe", async (req, reply) => {
     const wav = req.body as Buffer;
     if (!Buffer.isBuffer(wav) || wav.length < 1000) return reply.code(400).send({ error: "Send a WAV recording as audio/wav." });
     const lang = req.query.lang ?? s.config.speech.language;
@@ -109,7 +116,7 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
     if (usesLocal && (!local.engine || !local.model)) return reply.code(409).send({ error: "needs-setup", code: "needs-setup", ...local });
     try {
-      return await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", lang);
+      return await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", lang, false, { hint: req.query.app });
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
     }

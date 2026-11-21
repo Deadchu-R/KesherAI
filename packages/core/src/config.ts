@@ -433,6 +433,8 @@ export const KesherConfigSchema = z.object({
       stt: z.string().default("auto"),
       /** Spoken language, or `auto`. */
       language: z.string().default("auto"),
+      /** "My languages": what automatic detection chooses from (empty: the app's language plus English). */
+      languages: z.array(z.string().regex(/^[a-z]{2,3}$/)).max(12).default([]),
     })
     .prefault({}),
   /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */

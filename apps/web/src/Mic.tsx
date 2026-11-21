@@ -3,6 +3,7 @@ import { api, withToken } from "./api";
 import { toast } from "./library";
 import { getLocale, t } from "./i18n";
 import { openMic } from "./mic-access";
+import { DetectedLang, type Detected } from "./DetectedLang";
 
 interface SttInfo {
   choice: string;
@@ -54,6 +55,9 @@ export function Mic({ onText }: { onText: (text: string, seconds?: number) => vo
   const rec = useRef<{ stop: () => void; cancel: () => void } | null>(null);
   // When the recording started, for how long she spoke (a presentation's pace).
   const began = useRef(0);
+  // The last recording and what was detected for it, for "Transcribe again as …".
+  const last = useRef<Blob | null>(null);
+  const [detected, setDetected] = useState<Detected | null>(null);
 
   useEffect(() => {
     if (state !== "recording") return;
@@ -69,12 +73,16 @@ export function Mic({ onText }: { onText: (text: string, seconds?: number) => vo
   // The language set under Settings → Speech wins; the server uses it when none is sent.
   const lang = () => "";
 
-  const send = async (wav: Blob) => {
+  const send = async (wav: Blob, forced?: string) => {
     const spoke = Math.round((Date.now() - began.current) / 1000);
     setState("working");
+    last.current = wav;
     try {
-      const res = await fetch(withToken(`/api/speech/transcribe${lang() ? `?lang=${lang()}` : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
-      const j = (await res.json()) as { text?: string; error?: string; code?: string };
+      const q = new URLSearchParams({ app: getLocale() });
+      if (forced || lang()) q.set("lang", forced || lang());
+      const res = await fetch(withToken(`/api/speech/transcribe?${q}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+      const j = (await res.json()) as { text?: string; error?: string; code?: string; detected?: Detected };
+      setDetected(j.detected ?? null);
       if (j.code === "needs-setup") {
         setSetup(await api<SttInfo>("/api/speech/stt"));
         return;
@@ -174,6 +182,12 @@ export function Mic({ onText }: { onText: (text: string, seconds?: number) => vo
         )}
         {state === "recording" && <span className="mic-time" dir="ltr">{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}</span>}
       </button>
+      {detected && last.current && state !== "recording" && (
+        <div className="mic-detected card row">
+          <DetectedLang d={detected} busy={state === "working"} onRedo={(l) => void send(last.current!, l)} />
+          <button type="button" className="link-btn" aria-label={t("cancel")} onClick={() => setDetected(null)}>✕</button>
+        </div>
+      )}
       {setup && (
         <div className="dialog-backdrop" role="presentation" onClick={() => setSetup(null)}>
           <div className="dialog card stack" role="dialog" aria-modal="true" aria-label={t("micSetupTitle")} onClick={(e) => e.stopPropagation()}>

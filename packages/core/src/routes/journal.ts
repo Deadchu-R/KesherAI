@@ -4,7 +4,7 @@ import { rm } from "node:fs/promises";
 import type { MeetingSegment } from "../journal.js";
 import { keepCallPiece, separateSpeakers } from "../meeting-speakers.js";
 import { meetingAudioDir } from "../speakers.js";
-import { transcribeWith } from "../speech-tools.js";
+import { pickLanguage, transcribeWith } from "../speech-tools.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
@@ -67,7 +67,7 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
   // A piece of audio (WAV): transcribed here; the call's pieces are kept until the write-up when
   // speaker separation is on, so the people on the call can be told apart.
-  app.post<{ Params: { day: string; id: string }; Querystring: { t?: string; who?: string } }>("/api/journal/meetings/:day/:id/audio", opts, async (req, reply) => {
+  app.post<{ Params: { day: string; id: string }; Querystring: { t?: string; who?: string; app?: string } }>("/api/journal/meetings/:day/:id/audio", opts, async (req, reply) => {
     const wav = req.body as Buffer;
     if (!Buffer.isBuffer(wav) || wav.length < 1000) return reply.code(400).send({ error: "Send a WAV recording as audio/wav." });
     const m = await s.journal.meeting(req.params.day, req.params.id);
@@ -81,11 +81,11 @@ export async function journalRoutes(app: FastifyInstance, s: KesherServices): Pr
       let text: string;
       let parts: MeetingSegment["parts"];
       if (separate && usesLocal && local.engine && local.model) {
-        parts = await s.whisper.transcribeParts(wav, s.config.speech.language);
+        parts = await s.whisper.transcribeParts(wav, await pickLanguage({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, s.config.speech.language, req.query.app));
         text = parts.map((p) => p.text).join(" ");
       } else {
         if (usesLocal && (!local.engine || !local.model)) return reply.code(409).send({ error: "needs-setup", code: "needs-setup" });
-        text = (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", s.config.speech.language)).text;
+        text = (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", s.config.speech.language, false, { hint: req.query.app })).text;
       }
       if (separate && text.trim()) await keepCallPiece(meetingAudioDir(join(s.paths.root, "journal"), m.id), t, wav);
       if (s.config.meetings.keepRecording) await keepRecordingPiece(recordingDir(join(s.paths.root, "journal"), m.id), t, who, wav);

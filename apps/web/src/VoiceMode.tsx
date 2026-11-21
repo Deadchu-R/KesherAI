@@ -169,7 +169,7 @@ export function VoiceMode({ chatId, onSend, answer, live, busy, approvals, appro
     void (async () => {
       let text: string | null = null;
       try {
-        const res = await fetch(withToken(`/api/speech/transcribe${partial ? "?partial=1" : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: encodeWav(a.blocks, rate) });
+        const res = await fetch(withToken(`/api/speech/transcribe?app=${getLocale()}${partial ? "&partial=1" : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: encodeWav(a.blocks, rate) });
         const j = (await res.json()) as { text?: string; partial?: boolean; error?: string };
         if (!res.ok) throw new Error(j.error ?? String(res.status));
         if (partial && j.partial === false) {

@@ -1785,7 +1785,7 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .script-nodes .ue-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow: auto; }
 .script-nodes .ue-list li button { width: 100%; text-align: start; background: transparent; border: 0; padding: 6px 8px; border-radius: 6px; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .script-nodes .ue-list li button.on { background: var(--hover, rgba(127,127,127,.15)); }
-.script-methods button.on { background: var(--accent); color: var(--on-accent, #fff); }
+.script-methods button.on { background: var(--accent); color: var(--accent-fg, #fff); }
 .script-pure { margin-inline-start: auto; gap: 6px; align-items: center; white-space: nowrap; }
 .script-graph { display: grid; grid-template-columns: 1fr 280px; gap: 12px; min-height: 420px; }
 .script-canvas { position: relative; min-height: 420px; border-radius: 10px; overflow: hidden; }
@@ -4647,3 +4647,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
    items are RTL, so the numbers sit on the right; room on both sides keeps them in either language. */
 .guest-chat-view .msg :is(ol, ul) { padding: 0 1.6em; margin-inline: 0; }
 .guest-chat-view .msg { min-width: 0; overflow-wrap: anywhere; }
+/* "Detected: Hebrew" line under a transcript: wraps on a 390 px phone. */
+.detected-lang { flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.detected-lang select { min-height: 32px; max-width: 100%; }
+.sp-langs { display: flex; flex-wrap: wrap; gap: 6px; }
+.sp-langs .chip-text { height: 34px; padding: 0 12px; }
+.sp-langs .chip-text[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg, #fff); border-color: var(--accent); }
+.mic-detected { position: fixed; inset-inline: 12px; bottom: 88px; margin-inline: auto; max-width: 420px; z-index: 40; padding: 8px 12px; gap: 8px; justify-content: space-between; align-items: flex-start; box-shadow: 0 6px 24px rgba(0,0,0,.25); }

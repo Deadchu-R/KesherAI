@@ -10,7 +10,7 @@ import type { KesherServices } from "../services.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import { paintModel, pictureTo3d } from "../chat-tools-media.js";
 import { checkSegments, cutVideo, EXPORT_HEIGHTS, TRANSITIONS, extractSound, findScenes, SHAPES, srtOf, type MusicTrack, type TextOverlay } from "../video-cut.js";
-import { toWav } from "../speech-tools.js";
+import { pickLanguage, toWav } from "../speech-tools.js";
 import { folderOutline, zipOutline } from "../attach-outline.js";
 
 /** Folders that are build caches or dependencies, not things the user made. */
@@ -278,7 +278,7 @@ export async function fileRoutes(app: FastifyInstance, s: KesherServices): Promi
     if (!local.engine || !local.model) return reply.code(409).send({ error: "needs-setup", code: "needs-setup" });
     try {
       const wav = await toWav(full, () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads }));
-      return { parts: await s.whisper.transcribeParts(wav, s.config.speech?.language ?? "auto") };
+      return { parts: await s.whisper.transcribeParts(wav, await pickLanguage({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, s.config.speech?.language ?? "auto")) };
     } catch (err) {
       return reply.code(500).send({ error: (err as Error).message });
     }

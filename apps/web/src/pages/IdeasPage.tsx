@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Idea, IdeaKind, IdeaProgress, IdeaSession, IdeaStage, IdeaVerdict } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
+import { langName } from "../DetectedLang";
 import { createConversation, toast } from "../library";
 import { openWithDraft } from "../phone";
 import { openMic } from "../mic-access";
@@ -352,7 +353,7 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
       )}
       {s.transcript && (
         <details className="ideas-transcript" open={showText} onToggle={(e) => setShowText((e.target as HTMLDetailsElement).open)}>
-          <summary>{L("התמלול המלא", "The full transcript")}</summary>
+          <summary>{L("התמלול המלא", "The full transcript")}{s.language ? ` · ${L("זוהה", "detected")}: ${langName(s.language)}` : ""}</summary>
           <p dir="auto">{s.transcript}</p>
         </details>
       )}

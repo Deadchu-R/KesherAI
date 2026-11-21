@@ -33,7 +33,8 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       const ffmpeg = () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
       const wav = await toWav(file, ffmpeg);
       // Detection picks from "my languages"; the recording app's language (he or en) is the hint and the fallback.
-      return (await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto", false, { hint: lang })).text;
+      const r = await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers, ffmpeg }, wav, ".wav", s.config.speech?.language ?? "auto", false, { hint: lang });
+      return { text: r.text, ...(r.detected ? { language: r.detected.lang } : {}) };
     },
     projects: () => s.library.listProjects().map((p) => p.name),
     // Hits go to a model: a guest's words come marked as untrusted (conversation-search.ts forModel).

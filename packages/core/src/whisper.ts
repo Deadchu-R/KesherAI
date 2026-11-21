@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import type { DownloadManager } from "@kesher/downloads";
 import { extractArchive, waitForDownload } from "./llamacpp.js";
 import { findFile } from "./sdcpp.js";
+import { normalizeProbs, type LangProbs } from "./lang-detect.js";
 
 /**
  * Speech to text on this computer with whisper.cpp: the microphone button
@@ -551,6 +552,53 @@ export class WhisperEngine {
         execFile(exe, ["-m", model, "-f", file, "-dl", "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: 120_000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(err) : resolve(`${stdout}\n${stderr}`)));
       });
       return detectedLanguage(out) ?? "auto";
+    } finally {
+      await rm(file, { force: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * How likely each language is for a short window of speech (whisper's language detection, no text). Through a
+   * loaded model when the server program is here (all languages' probabilities), else the one-off program's best
+   * guess with its probability. The general multilingual model does it, never the Hebrew fine-tune.
+   *
+   * @param wav - A WAV file of up to ~30 s (whisper reads no more to detect).
+   * @returns Language code → probability, or undefined when this engine cannot detect.
+   */
+  async detectLanguages(wav: Buffer): Promise<LangProbs | undefined> {
+    const general = (await Promise.all((Object.keys(MODELS) as ModelKey[]).filter((k) => k !== "he").map(async (k) => ((await stat(this.modelPath(k)).catch(() => undefined))?.size ? this.modelPath(k) : undefined)))).find(Boolean);
+    if (!general) return undefined;
+    if (await this.serverBinary()) {
+      const port = await this.server(general);
+      if (port) {
+        const form = new FormData();
+        form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "window.wav");
+        form.append("response_format", "verbose_json");
+        form.append("language", "auto");
+        form.append("detect_language", "true");
+        form.append("temperature", "0");
+        const r = await fetch(`http://127.0.0.1:${port}/inference`, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) }).catch(() => undefined);
+        if (r?.ok) {
+          const j = (await r.json().catch(() => ({}))) as { language_probabilities?: Record<string, number>; detected_language?: string; detected_language_probability?: number };
+          const all = normalizeProbs(j.language_probabilities);
+          if (Object.keys(all).length) return all;
+          const top = normalizeProbs({ [j.detected_language ?? ""]: j.detected_language_probability ?? 0 });
+          if (Object.keys(top).length) return top;
+        }
+      }
+    }
+    const exe = await this.binary();
+    if (!exe) return undefined;
+    const file = join(tmpdir(), `kesher-lang-${randomUUID()}.wav`);
+    await writeFile(file, wav);
+    try {
+      const out = await new Promise<string>((resolve, reject) => {
+        execFile(exe, ["-m", general, "-f", file, "-dl", "-np", "-t", String(Math.min(8, Math.max(2, availableParallelism() - 2)))], { timeout: 120_000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => (err ? reject(err) : resolve(`${stdout}\n${stderr}`)));
+      });
+      const m = /auto-detected language:\s*([a-z]{2,3})\b(?:[^()\n]*\(p\s*=\s*([\d.]+)\))?/i.exec(out);
+      return m ? normalizeProbs({ [m[1]!]: m[2] ? Number(m[2]) : 0.5 }) : undefined;
+    } catch {
+      return undefined;
     } finally {
       await rm(file, { force: true }).catch(() => undefined);
     }

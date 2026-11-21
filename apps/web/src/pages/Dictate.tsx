@@ -94,7 +94,7 @@ export function Dictate() {
         setState("working");
         void (async () => {
           try {
-            const res = await fetch(withToken("/api/speech/transcribe"), { method: "POST", headers: { "content-type": "audio/wav" }, body: encodeWav(chunks, rate) });
+            const res = await fetch(withToken(`/api/speech/transcribe?app=${getLocale()}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: encodeWav(chunks, rate) });
             const j = (await res.json()) as { text?: string; error?: string; code?: string };
             if (j.code === "needs-setup") throw new Error(L("צריך להתקין זיהוי דיבור: הגדרות ← דיבור", "Speech recognition needs setting up: Settings → Speech"));
             if (!res.ok) throw new Error(j.error ?? String(res.status));

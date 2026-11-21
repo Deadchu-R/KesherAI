@@ -117,6 +117,8 @@ export interface IdeaSession {
   progress?: IdeaProgress;
   error?: string;
   transcript?: string;
+  /** The language detected in the recording (he, en, …; the main one when it switched). */
+  language?: string;
   /** When no clear idea was found: a short summary of what was talked about (the items are then possible directions). */
   summary?: string;
   /** How deep the analysis went: 1 the normal pass, 2 the creative pass, 3 small parts with a stronger model, 4+ challenging its own result. */

@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { t } from "./i18n";
+import { getLocale, t } from "./i18n";
+import { langName, SPEECH_LANGS } from "./DetectedLang";
 import { VoicePicker } from "./Speak";
 import { Select } from "./ui/Select";
 
 interface Info {
   choice: string;
   language: string;
+  /** "My languages" as the server uses them, and whether they were chosen yet. */
+  languages: string[];
+  languagesSet: boolean;
   local: { engine: boolean; model?: string; recommended: { label: string; sizeGb: number }; busy?: string; error?: string; localPossible: boolean; gpuUpgrade?: number };
   clouds: Array<{ id: string; label: string }>;
   ttsClouds?: string[];
@@ -15,13 +19,20 @@ interface Info {
 /** Settings → Speech: which engine turns speech into text, the language, and the local engine's state. */
 export function SpeechSection() {
   const [info, setInfo] = useState<Info | null>(null);
-  const load = () => api<Info>("/api/speech/stt").then(setInfo, () => undefined);
+  const load = () => api<Info>(`/api/speech/stt?app=${getLocale()}`).then(setInfo, () => undefined);
   useEffect(() => {
     void load();
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
   if (!info) return null;
+  // The first time: keep the default (the app's language plus English) as the saved choice.
+  if (!info.languagesSet && info.languages.length) void api("/api/speech/stt", { method: "PUT", body: { languages: info.languages } }).then(load);
+  const toggle = (code: string) => {
+    const has = info.languages.includes(code);
+    const next = has ? info.languages.filter((c) => c !== code) : [...info.languages, code];
+    if (next.length) void api("/api/speech/stt", { method: "PUT", body: { languages: next } }).then(load);
+  };
   const set = async (body: Record<string, string>) => {
     await api("/api/speech/stt", { method: "PUT", body });
     await load();
@@ -49,6 +60,15 @@ export function SpeechSection() {
           <option value="ru">Русский</option>
         </Select>
       </label>
+      {info.language === "auto" && (
+        <div className="stack" role="group" aria-label={t("spMyLangs")}>
+          <span>{t("spMyLangs")}</span>
+          <div className="sp-langs">
+            {SPEECH_LANGS.map((l) => <button key={l.code} type="button" className="chip-text" aria-pressed={info.languages.includes(l.code)} onClick={() => toggle(l.code)}>{langName(l.code)}</button>)}
+          </div>
+          <p className="muted small">{t("spMyLangsHint")}</p>
+        </div>
+      )}
       {info.local.localPossible && (
         <p className="small">
           {ready ? `✓ ${t("spReady", { model: info.local.recommended.label })}` : info.local.busy ? t("micPreparing") : t("spNotReady", { gb: info.local.recommended.sizeGb.toFixed(1) })}{" "}

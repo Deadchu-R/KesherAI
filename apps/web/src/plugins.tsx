@@ -645,7 +645,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "speech.transcribe": {
           need("speech");
           const wav = await fromDataUrl(p.audio).then((x) => x.blob());
-          const res = await fetch(withToken(`/api/speech/transcribe${typeof p.language === "string" ? `?lang=${encodeURIComponent(p.language)}` : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+          const res = await fetch(withToken(`/api/speech/transcribe?app=${getLocale()}${typeof p.language === "string" ? `&lang=${encodeURIComponent(p.language)}` : ""}`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
           const j = (await res.json()) as { text?: string; error?: string };
           if (!res.ok) throw new Error(j.error === "needs-setup" ? "Speech to text is not set up yet (Models → Speech to text)." : j.error ?? String(res.status));
           return j.text ?? "";

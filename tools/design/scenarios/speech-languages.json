@@ -1,0 +1,53 @@
+{
+ "group": "זיהוי שפה · Language detection",
+ "now": "2026-11-21T10:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/speech/stt*",
+   "method": "GET",
+   "json": {
+    "choice": "local",
+    "language": "auto",
+    "languages": [
+     "he",
+     "en"
+    ],
+    "languagesSet": true,
+    "local": {
+     "engine": true,
+     "model": "ggml-large-v3-turbo.bin",
+     "recommended": {
+      "label": "Whisper turbo",
+      "sizeGb": 1.6
+     },
+     "localPossible": true
+    },
+    "clouds": []
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "SpeechMyLanguages",
+   "title": "הגדרות › דיבור: השפות שלי (עברית + אנגלית כברירת מחדל) לזיהוי שפה אוטומטי",
+   "titleEn": "Settings › Speech: My languages (Hebrew + English by default) for automatic language detection",
+   "route": "#/settings/general",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".sp-langs"
+    },
+    {
+     "scroll": ".sp-langs"
+    }
+   ]
+  }
+ ]
+}

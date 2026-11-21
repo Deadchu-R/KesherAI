@@ -51,3 +51,26 @@ test("transcribe_audio reads a recording with the local engine; speak_text saves
     srv.close();
   }
 });
+
+test("transcribeWith detects from my languages, falls back to the app's language, and can be forced", async () => {
+  const { wavFrom } = await import("./whisper.js");
+  const { transcribeWith } = await import("./speech-tools.js");
+  const wav = wavFrom(new Float32Array(16000 * 10));
+  const calls: string[] = [];
+  let probs: Record<string, number> | undefined = { es: 0.5, he: 0.4 };
+  const whisper = {
+    status: async () => ({ engine: "/bin/whisper", model: "/m.bin" }),
+    detectLanguages: async () => probs,
+    transcribe: async (_d: Buffer, lang: string) => (calls.push(lang), "שלום לכולם ברוכים הבאים היום"),
+  } as unknown as WhisperEngine;
+  const d = { whisper, speech: () => ({ stt: "local", language: "auto" }), providers: () => [] };
+  const r = await transcribeWith(d, wav, ".wav", "auto");
+  assert.deepEqual([calls.at(-1), r.detected?.lang, r.detected?.outside], ["he", "he", false]);
+  // No probabilities (an engine that cannot detect): the app's language.
+  probs = undefined;
+  const r2 = await transcribeWith(d, wav, ".wav", "auto", false, { hint: "en" });
+  assert.deepEqual([calls.at(-1), r2.detected], ["en", undefined]);
+  // Forced ("transcribe again as …").
+  const r3 = await transcribeWith(d, wav, ".wav", "ru");
+  assert.deepEqual([calls.at(-1), r3.detected?.forced], ["ru", true]);
+});

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import { resolveForTool, type AgentTool } from "@kesher/agent";
 import type { ProviderConfig } from "@kesher/providers";
+import { detectWav, myLanguages, summarizeParts, transcribeInParts, type DetectEngine } from "./lang-detect.js";
 import { cloudTranscribe, type WhisperEngine } from "./whisper.js";
 
 /**
@@ -38,35 +39,88 @@ function run(cmd: string, args: string[], timeout = 600_000, env?: Record<string
 export interface SpeechDeps {
   whisper: WhisperEngine;
   /** The user's choice: `auto`, `local` or `cloud:<id>`; and the spoken language. */
-  speech: () => { stt: string; language: string };
+  speech: () => { stt: string; language: string; /** "My languages" (empty: the app's language plus English). */ languages?: string[] };
   providers: () => ProviderConfig[];
   /** FFmpeg's program, downloaded the first time it is needed (videos, and audio types whisper cannot read). */
   ffmpeg?: () => Promise<string>;
 }
 
+/** What was detected for a recording: shown as "Detected: Hebrew" with a "transcribe again as …" choice. */
+export interface DetectedInfo {
+  /** The main language (most parts). */
+  lang: string;
+  /** Every language heard, in order (more than one when the recording switched). */
+  langs: string[];
+  /** A language outside "my languages" won with very high confidence. */
+  outside: boolean;
+  /** Candidates for "transcribe again as …", most likely first. */
+  ranked: string[];
+  /** The first guess did not fit the text, so another language of mine was used. */
+  retried: boolean;
+  /** The language was chosen by the user (a forced re-run), not detected. */
+  forced?: boolean;
+}
+
+/** Extras for {@link transcribeWith}. */
+export interface TranscribeOpts {
+  /** The language of the app that recorded it (`he` or `en`): the default of "my languages" and the fallback when detection is not available. */
+  hint?: string;
+}
+
 /**
- * Turns a recording into text with the engine the user chose (like the
- * microphone button does).
+ * Turns a recording into text with the engine the user chose (like the microphone button does). With the language
+ * `auto` on this computer, the language is detected per part of the recording from "my languages" (lang-detect.ts)
+ * and the text is checked against its script; without detection (a cloud service, or a file type that is not WAV)
+ * the app's language is used when known, else the engine's own guess.
  *
  * @param d - Engines and settings.
  * @param data - The file's bytes.
  * @param ext - Its type, e.g. `.mp3`.
- * @param language - `auto` or a code like `he`.
+ * @param language - `auto` or a code like `he` (a code is used as it is, no detection).
  * @param timestamps - Keep times (local engine only).
- * @returns The text and which engine made it.
+ * @param opts - The app's language as a hint.
+ * @returns The text, which engine made it, and what was detected (local engine, `auto` only).
  */
-export async function transcribeWith(d: SpeechDeps, data: Buffer, ext: string, language: string, timestamps = false): Promise<{ text: string; engine: string }> {
-  const { stt } = d.speech();
+export async function transcribeWith(d: SpeechDeps, data: Buffer, ext: string, language: string, timestamps = false, opts: TranscribeOpts = {}): Promise<{ text: string; engine: string; detected?: DetectedInfo }> {
+  const { stt, languages } = d.speech();
   const local = await d.whisper.status();
   const clouds = d.providers().filter((p) => CLOUD_STT[p.id] && p.apiKey);
   const cloudId = stt.startsWith("cloud:") ? stt.slice(6) : stt === "auto" && !(local.engine && local.model) ? clouds[0]?.id : undefined;
+  const mine = myLanguages(languages, opts.hint);
+  const hinted = language === "auto" && (opts.hint === "he" || opts.hint === "en") ? opts.hint : language;
   if (cloudId) {
     const p = d.providers().find((x) => x.id === cloudId);
     if (!p?.apiKey) throw new Error(`The ${cloudId} connection has no API key.`);
-    return { text: await cloudTranscribe(p.baseUrl ?? CLOUD_STT[cloudId]?.base ?? "https://api.openai.com/v1", p.apiKey, CLOUD_STT[cloudId]?.model ?? "whisper-1", data, language), engine: cloudId };
+    return { text: await cloudTranscribe(p.baseUrl ?? CLOUD_STT[cloudId]?.base ?? "https://api.openai.com/v1", p.apiKey, CLOUD_STT[cloudId]?.model ?? "whisper-1", data, hinted), engine: cloudId };
   }
   if (!local.engine || !local.model) throw new Error("Speech to text is not set up yet: turn it on in Settings → Speech (KesherAI downloads whisper.cpp and a model), or connect Groq or OpenAI.");
-  return { text: await d.whisper.transcribe(data, language, ext, timestamps), engine: "local" };
+  if (language === "auto" && ext.toLowerCase() === ".wav") {
+    const r = await transcribeInParts(localEngine(d, timestamps), data, mine, timestamps).catch(() => undefined);
+    if (r?.parts.length) return { text: r.text, engine: "local", detected: summarizeParts(r.parts) };
+  }
+  const text = await d.whisper.transcribe(data, hinted, ext, timestamps);
+  return { text, engine: "local", ...(language !== "auto" ? { detected: { lang: language, langs: [language], outside: false, ranked: mine, retried: false, forced: true } } : {}) };
+}
+
+/** whisper on this computer as the detection engine. */
+function localEngine(d: SpeechDeps, timestamps: boolean): DetectEngine {
+  return { detect: (w) => d.whisper.detectLanguages(w), transcribe: (w, l) => d.whisper.transcribe(w, l, ".wav", timestamps) };
+}
+
+/**
+ * The language to transcribe a WAV in when only a code will do (the pieces-with-times path of meetings and video
+ * files): a set language as it is; `auto` is detected (one vote over sampled windows); else the app's language.
+ *
+ * @param d - Engines and settings.
+ * @param wav - A WAV.
+ * @param language - `auto` or a code.
+ * @param hint - The app's language.
+ * @returns A language code, or `auto` when nothing is known.
+ */
+export async function pickLanguage(d: SpeechDeps, wav: Buffer, language: string, hint?: string): Promise<string> {
+  if (language !== "auto") return language;
+  const vote = await detectWav(localEngine(d, false), wav, myLanguages(d.speech().languages, hint)).catch(() => undefined);
+  return vote?.lang ?? (hint === "he" || hint === "en" ? hint : "auto");
 }
 
 /**
