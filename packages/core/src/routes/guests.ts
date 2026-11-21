@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
-import { GuestInvites, GuestQuota, GuestWatch, googlePoll, googleStart, guestName, guestOf, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, googlePoll, googleStart, guestName, guestOf, reservedGuestName, guestScope, type GuestAlert, type GuestRole } from "../guests.js";
 import { clientAddress, PLUGIN_FILES_KEY } from "../auth.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
+import { cleanForShare } from "../shares.js";
 import { BeatLimit, roomKey, SceneRooms } from "../scene-rooms.js";
 import { guestEngineProjects, guestPathPrivate, guestProjectFolder, type GuestEngine } from "../guest-scenes.js";
 import { godotAssetOf, godotSceneOf, godotScenes } from "./godot-scene.js";
@@ -156,6 +157,7 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.post<{ Params: { token: string }; Body: { name?: string } }>("/api/join/:token", { bodyLimit: 2048 }, async (req, reply) => {
     const name = guestName(String(req.body?.name ?? ""));
     if (!name) return reply.code(400).send({ error: "Write your name." });
+    if (reservedGuestName(name)) return reply.code(400).send({ error: "Choose another name: this one would look like the owner or KesherAI." });
     if ((await invites.open(req.params.token))?.email) return reply.code(403).send({ error: "This invite is for one Google account: sign in with Google." });
     const i = await invites.use(req.params.token, name);
     const p = i && s.library.getProject(i.projectId);
@@ -193,7 +195,8 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     if (r.email !== i.email) return reply.code(403).send({ error: `You signed in as ${r.email}, but this invite is for another account. Start again and pick the invited account.` });
     const used = await invites.use(req.params.token, r.name);
     if (!used) return reply.code(404).send({ error: "This invite link was used already or has ended. Ask for a new one." });
-    const key = await s.deviceKeys.issue(`${guestName(r.name) || "Guest"} (guest)`, guestScope(used.projectId, used.role), r.email);
+    const shown = guestName(r.name);
+    const key = await s.deviceKeys.issue(`${shown && !reservedGuestName(shown) ? shown : "Guest"} (guest)`, guestScope(used.projectId, used.role), r.email);
     void s.notifier.send({ title: "KesherAI", body: `${r.name} (${r.email}) joined the project "${p.name}" (${used.role === "edit" ? "read and write" : "read"}).`, tags: ["busts_in_silhouette"] }).catch(() => undefined);
     return { waiting: false, key, project: p.name, role: used.role };
   });
@@ -209,7 +212,7 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get("/api/guest/chats", async (req, reply) => {
     const g = guestBehind(req);
     if (!g) return refuse(reply);
-    return { chats: s.library.listConversations(g.projectId).filter((c) => c.kind === "chat").map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, mine: c.source === "guest" })) };
+    return { chats: s.library.listConversations(g.projectId).filter((c) => c.kind === "chat" && !c.incognito).map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, mine: c.source === "guest" })) };
   });
 
   /** One chat of the project: its messages (text only: no tool output, no files). */
@@ -217,12 +220,13 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
     const g = guestBehind(req);
     if (!g) return refuse(reply);
     const c = s.library.summary(req.params.id);
-    if (!c || c.projectId !== g.projectId || c.kind !== "chat") return reply.code(404).send({ error: "No such chat in this project." });
+    if (!c || c.projectId !== g.projectId || c.kind !== "chat" || c.incognito) return reply.code(404).send({ error: "No such chat in this project." });
     const opened = await s.conversations.open(c.id);
     if (!opened) return reply.code(404).send({ error: "No such chat in this project." });
     const messages = opened.session.events
       .filter((e): e is Extract<typeof e, { type: "user" | "assistant" }> => e.type === "user" || e.type === "assistant")
-      .map((e) => ({ seq: e.seq, role: e.type, text: e.text.slice(0, 40_000) }));
+      // Cleaned like a share page and the live view (no local paths, nothing that looks like a key).
+      .map((e) => ({ seq: e.seq, role: e.type, text: cleanForShare(e.text.slice(0, 40_000)) }));
     return { id: c.id, title: c.title, mine: c.source === "guest", busy: opened.session.info().status === "running", messages };
   });
 

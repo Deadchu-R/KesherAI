@@ -220,6 +220,7 @@ test("a shared project: invite, join from outside, read, write in their own chat
     const away = { remoteAddress: "203.0.113.7", headers: { host: "kesher.example" } };
     // The link, from outside, with no key.
     assert.equal(((await server.app.inject({ url: `/api/join/${invite.token}`, ...away })).json() as { project: string }).project, "Game");
+    assert.equal((await server.app.inject({ method: "POST", url: `/api/join/${invite.token}`, payload: { name: "Owner" }, ...away })).statusCode, 400, "a name that reads as the owner");
     const joined = (await server.app.inject({ method: "POST", url: `/api/join/${invite.token}`, payload: { name: "Dani" }, ...away })).json() as { key: string };
     assert.match(joined.key, /^kd_/);
     assert.equal((await server.app.inject({ method: "POST", url: `/api/join/${invite.token}`, payload: { name: "Again" }, ...away })).statusCode, 404, "the link works once");
@@ -231,6 +232,10 @@ test("a shared project: invite, join from outside, read, write in their own chat
     }
     // The owner's chat: readable, not writable.
     assert.equal((await server.app.inject({ url: `/api/guest/chats/${owners.id}`, ...as })).statusCode, 200);
+    // An incognito chat in the project is not the guests' to see.
+    const secret = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", projectId: project.id, incognito: true } })).json() as { id: string };
+    assert.equal((await server.app.inject({ url: `/api/guest/chats/${secret.id}`, ...as })).statusCode, 404);
+    assert.ok(!((await server.app.inject({ url: "/api/guest/chats", ...as })).json() as { chats: Array<{ id: string }> }).chats.some((c) => c.id === secret.id));
     assert.equal((await server.app.inject({ method: "POST", url: `/api/guest/chats/${owners.id}/messages`, payload: { text: "hi" }, ...as })).statusCode, 403);
     // Their own chat: no tools, written and answered.
     const mine = (await server.app.inject({ method: "POST", url: "/api/guest/chats", ...as })).json() as { id: string };

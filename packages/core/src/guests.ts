@@ -55,6 +55,14 @@ export const guestScope = (projectId: string, role: GuestRole): `project:${strin
 /** A guest's name: letters, digits, spaces and a few marks, at most 40. */
 export const guestName = (name: string): string => name.replace(/[^\p{L}\p{N} ._'-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 40);
 
+/**
+ * Whether a guest's name would read as someone else on a shared chat's page, where each message shows who wrote it
+ * ("Owner", "KesherAI", "You", in English and Hebrew).
+ *
+ * @param name - A name already cleaned by {@link guestName}.
+ */
+export const reservedGuestName = (name: string): boolean => /^(the )?(owner|kesher ?ai|kesher|ai|you|me|admin|system)$|^(ה?בעלים|אתה|את|קשר|קשר ?AI)$/iu.test(name.trim());
+
 /** The invites, in one JSON file. */
 export class GuestInvites {
   /** @param file - guest-invites.json in KesherAI's data folder. */

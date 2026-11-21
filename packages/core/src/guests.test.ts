@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GuestInvites, GuestQuota, GuestWatch, guestFileTools, guestName, guestOf, guestScope } from "./guests.js";
+import { GuestInvites, GuestQuota, GuestWatch, guestFileTools, guestName, guestOf, guestScope, reservedGuestName } from "./guests.js";
 
 test("an invite works once, for its project and role, and only its hash is kept", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kesher-guests-"));
@@ -32,6 +32,13 @@ test("a guest key's scope names one project and a role; anything else is not a g
   assert.equal(guestOf("project:p1:admin"), undefined);
   assert.equal(guestOf("project:../x:edit"), undefined);
   assert.equal(guestName("  Noa   K.  "), "Noa K.");
+  // Direction marks (bidi spoofing) and brackets are dropped.
+  assert.equal(guestName("Noa\u202Eresu\u2066 [x]"), "Noaresu x");
+});
+
+test("a guest cannot take a name that reads as the owner or KesherAI", () => {
+  for (const n of ["Owner", "the owner", "KesherAI", "Kesher AI", "You", "הבעלים", guestName("את/ה")]) assert.equal(reservedGuestName(n), true, n);
+  for (const n of ["Noa", "Owner Smith", "נועה"]) assert.equal(reservedGuestName(n), false, n);
 });
 
 test("a guest's daily answers run out", () => {
