@@ -4372,3 +4372,10 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **ChatGPT / Gemini**: tools and modes picked on the empty start box carry into the first message. Taken: the approvals mode chosen there goes into the new chat (+ menu on the home box, a chip on the code start box, as in their chats).
 - Left: incognito stays home-only (it decides how the chat is made, so it cannot change after).
 - **Stopped at:** done (AddMenu ensure, ChatAttach, App Home, CodeHome).
+
+## 2026-11-21: Hugging Face search marked for this computer (competitor note)
+- **LM Studio**: per quant "Full GPU offload possible" / "Partial GPU offload possible" / "Likely too large for this machine", from file size plus context against VRAM and RAM; picks a recommended quant. Taken: the same three marks on every file and a mark per result from the repo's parameter count (Hub `expand[]=gguf,safetensors`).
+- **Jan / GPT4All**: "Recommended" / "Slow on your device" / "Not enough RAM" and "RAM required" in their own model lists, no live Hub search. Taken: the plain-words reason in the mark's tip. Left: their curated lists only.
+- **Ollama library**: tags with sizes, no hardware check; one command to pull. Taken: one tap to download, the size and free disk on the chosen drive beside it.
+- **ComfyUI-Manager**: a model list with type, base and size that installs into the right folder (checkpoints, loras, vae); no fit check. Taken: the existing folder rules (destinationFor) stay; image/video/audio files get the same fit marks.
+- **Stopped at:** done (built in downloads/fit.ts, routes/downloads.ts, web/HubBrowser.tsx).

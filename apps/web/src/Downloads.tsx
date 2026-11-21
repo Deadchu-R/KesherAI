@@ -4,7 +4,7 @@ import { getLocale, t, type StringKey } from "./i18n";
 import { Select } from "./ui/Select";
 
 /** One download, as the server reports it. */
-export interface Job { id: string; label: string; url?: string; status: string; received: number; total?: number; speed: number; error?: string }
+export interface Job { id: string; label: string; url?: string; dest?: string; status: string; received: number; total?: number; speed: number; error?: string }
 
 /**
  * Downloads, shared by every screen: one live connection to the server,

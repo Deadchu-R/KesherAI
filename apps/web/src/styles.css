@@ -4441,3 +4441,9 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .canvas-diff .diff-add { color: var(--good, #3fb950); }
 .canvas-diff .diff-del { color: var(--bad, #f85149); }
 @media (max-width: 480px) { .pbr-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .canvas-thumb { width: 56px; height: 56px; } }
+/* Hugging Face search: task, size and licence chips; the drive choice in the download box. */
+.hub-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hub-chips .chip-text.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.hub-file .pill { white-space: nowrap; }
+.hub-drive { align-items: flex-start; gap: 8px; }
+.hub-drive-dir { display: block; overflow-wrap: anywhere; }

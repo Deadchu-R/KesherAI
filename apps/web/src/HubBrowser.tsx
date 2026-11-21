@@ -8,7 +8,7 @@ import { BUILT_IN_CATEGORIES } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, t, type StringKey, he$ } from "./i18n";
 import { RatingBadge, type Estimate } from "./Estimate";
-import { DownloadBar } from "./Downloads";
+import { DownloadBar, useDownloads } from "./Downloads";
 import { Select } from "./ui/Select";
 
 interface HubModel {
@@ -26,8 +26,26 @@ interface HubModel {
   baseModel?: string;
   parameters?: string;
   tags: string[];
+  /** The run mark for this computer, worked out by the server from the parameter count (see downloads/fit.ts). */
+  fit?: ServerFit;
 }
-interface HubFile { path: string; size: number; estimate?: Estimate }
+/** The server's run mark: fully on the graphics card, partly, too big, or unknown size. */
+interface ServerFit { fit: "gpu" | "partial" | "too-big" | "unknown"; needGb: number; sizeGb?: number; gpuShare: number }
+interface HubFile { path: string; size: number; estimate?: Estimate; fit?: ServerFit; quant?: string; kind?: "llm" | "mmproj" | "diffusion" | "audio" | "other" }
+
+/** Task chips: a KesherAI category, and for vision the Hub task that marks chat models that see pictures. */
+const TASKS: Array<{ id: string; category: string; pipelineTag?: string; he: string; en: string }> = [
+  { id: "chat", category: "chat", pipelineTag: "text-generation", he: "צ'אט", en: "Chat" },
+  { id: "vision", category: "chat", pipelineTag: "image-text-to-text", he: "רואה תמונות", en: "Vision" },
+  { id: "image", category: "image", he: "תמונות", en: "Images" },
+  { id: "video", category: "video", he: "וידאו", en: "Video" },
+  { id: "stt", category: "speech-to-text", he: "דיבור לטקסט", en: "Speech to text" },
+  { id: "tts", category: "text-to-speech", he: "קול", en: "Voice" },
+];
+/** Size chips, by the size of a 4-bit build (or the stored weights). */
+const SIZES = [0, 4, 8, 16, 32];
+/** Licences that allow free use, also commercial. */
+const OPEN_LICENSE = /^(apache-2\.0|mit|bsd(-\d-clause)?|cc-by-4\.0|cc0-1\.0|openrail(\+\+|-m)?|creativeml-openrail-m|unlicense|gpl-3\.0|lgpl-3\.0|afl-3\.0)$/i;
 
 type Sort = "downloads" | "likes" | "trending" | "created" | "modified";
 const SORTS: Sort[] = ["trending", "downloads", "likes", "created", "modified"];
@@ -59,6 +77,10 @@ function ago(iso?: string): string {
 export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDownloaded?: () => void; fixedCategory?: string; initialQuery?: string }) {
   const [query, setQuery] = useState(initialQuery ?? "");
   const [category, setCategory] = useState(fixedCategory ?? "chat");
+  // The Hub task within the category (vision = chat models that see pictures); empty: the category's first.
+  const [task, setTask] = useState("");
+  const [maxGb, setMaxGb] = useState(0);
+  const [openOnly, setOpenOnly] = useState(false);
   const [format, setFormat] = useState((fixedCategory ?? "chat") === "chat" ? "gguf" : "");
   const [sort, setSort] = useState<Sort>("trending");
   const [results, setResults] = useState<HubModel[] | null>(null);
@@ -88,12 +110,18 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
       // only a convenience
     }
   };
-  const shown = results && hw && fitFilter !== "all"
-    ? results.filter((m) => {
-        const f = fitOf(m, hw, category).fit;
-        return fitFilter === "fast" ? f === "fast" : f !== "no";
-      })
-    : results;
+  const shown = results?.filter((m) => {
+    if (hw && fitFilter !== "all") {
+      const f = fitOf(m, hw, category).fit;
+      if (fitFilter === "fast" ? f !== "fast" : f === "no") return false;
+    }
+    if (maxGb && !(m.fit?.sizeGb && m.fit.sizeGb <= maxGb)) return false;
+    if (openOnly && !(m.license && OPEN_LICENSE.test(m.license))) return false;
+    return true;
+  }) ?? null;
+  const tasks = TASKS.filter((x) => !fixedCategory || x.category === fixedCategory);
+  // The chip that is on: the chosen task, else the category's first.
+  const taskOn = task || tasks.find((k) => k.category === category)?.id;
 
   const label = (id: string) => {
     const c = BUILT_IN_CATEGORIES.find((x) => x.id === id);
@@ -103,7 +131,7 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
   const search = async () => {
     setError("");
     setLoading(true);
-    const tag = BUILT_IN_CATEGORIES.find((c) => c.id === category)?.huggingFacePipelineTags?.[0];
+    const tag = TASKS.find((x) => x.id === task)?.pipelineTag ?? BUILT_IN_CATEGORIES.find((c) => c.id === category)?.huggingFacePipelineTags?.[0];
     const params = new URLSearchParams({ sort, ...(query ? { q: query } : {}), ...(tag ? { pipelineTag: tag } : {}), ...(format ? { filter: format } : {}) });
     try {
       setResults(await api<HubModel[]>(`/api/hub/search?${params}`));
@@ -116,7 +144,15 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
   // Show something useful straight away, and search again when a filter changes.
   useEffect(() => {
     void search();
-  }, [category, format, sort]);
+  }, [category, task, format, sort]);
+  const pickTask = (id: string) => {
+    const x = TASKS.find((k) => k.id === id);
+    setTask(id);
+    if (x && x.category !== category) {
+      setCategory(x.category);
+      setFormat(x.category === "chat" ? "gguf" : "");
+    }
+  };
 
   return (
     <section className="card stack hub">
@@ -124,7 +160,7 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
       <p className="muted small">{t("hubHint")}</p>
       <form className="hub-filters" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <input className="grow" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("searchHub")} aria-label={t("searchHub")} />
-        <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label={t("category")}>
+        <Select value={category} onChange={(e) => { setCategory(e.target.value); setTask(""); }} aria-label={t("category")}>
           <option value="">{t("anyCategory")}</option>
           {BUILT_IN_CATEGORIES.filter((c) => c.huggingFacePipelineTags?.length).map((c) => <option key={c.id} value={c.id}>{label(c.id)}</option>)}
         </Select>
@@ -136,12 +172,29 @@ export function HubBrowser({ onDownloaded, fixedCategory, initialQuery }: { onDo
         </Select>
         <button type="submit" className="primary">{t("search")}</button>
       </form>
+      {tasks.length > 1 && (
+        <div className="hub-chips" role="group" aria-label={L("משימה", "Task")}>
+          {tasks.map((x) => (
+            <button key={x.id} type="button" className={`chip-text ${taskOn === x.id ? "on" : ""}`} aria-pressed={taskOn === x.id} onClick={() => pickTask(x.id)}>{L(x.he, x.en)}</button>
+          ))}
+        </div>
+      )}
+      <div className="hub-chips" role="group" aria-label={L("גודל ורישיון", "Size and licence")}>
+        {SIZES.map((g) => (
+          <button key={g} type="button" className={`chip-text ${maxGb === g ? "on" : ""}`} aria-pressed={maxGb === g} onClick={() => setMaxGb(g)}>
+            {g ? L(`עד ${g} GB`, `Up to ${g} GB`) : L("כל גודל", "Any size")}
+          </button>
+        ))}
+        <button type="button" className={`chip-text ${openOnly ? "on" : ""}`} aria-pressed={openOnly} onClick={() => setOpenOnly(!openOnly)} title={L("Apache, MIT ודומים: מותר גם לשימוש מסחרי", "Apache, MIT and similar: free also for commercial use")}>
+          {L("רישיון פתוח", "Open licence")}
+        </button>
+      </div>
       <div className="row hub-fit-filter" role="group" aria-label={L("לפי החומרה שלך", "By your hardware")}>
         <span className="muted small">{L("מה להראות:", "Show:")}</span>
         <div className="segmented">
           {(["fast", "runs", "all"] as const).map((v) => (
             <button key={v} type="button" className={fitFilter === v ? "on" : ""} aria-pressed={fitFilter === v} onClick={() => chooseFilter(v)}>
-              {v === "fast" ? L("🟢 ירוץ מהר", "🟢 Runs fast") : v === "runs" ? L("🟡 ירוץ", "🟡 Runs") : L("הכול", "All")}
+              {v === "fast" ? L("🟢 נכנס לכרטיס", "🟢 Fits my GPU") : v === "runs" ? L("🟡 ירוץ", "🟡 Runs") : L("הכול", "All")}
             </button>
           ))}
         </div>
@@ -168,26 +221,26 @@ function HubRow({ m, fit, open, onToggle, label, onDownloaded, onlyRuns }: { m: 
   useEffect(() => {
     if (!open || files) return;
     void api<{ summary: string }>(`/api/hub/summary?repo=${encodeURIComponent(m.repo)}`).then((r) => setSummary(r.summary)).catch(() => setSummary(""));
-    void api<HubFile[]>(`/api/hub/files?repo=${encodeURIComponent(m.repo)}`)
+    void api<HubFile[]>(`/api/hub/files?repo=${encodeURIComponent(m.repo)}${m.pipelineTag ? `&pipelineTag=${encodeURIComponent(m.pipelineTag)}` : ""}`)
       .then((f) => setFiles(f.filter((x) => WEIGHTS.test(x.path)).sort((a, b) => a.size - b.size)))
       .catch((e: Error) => setError(e.message));
   }, [open]);
   const [plan, setPlan] = useState<{ file: HubFile; data?: Plan } | null>(null);
-  const askDownload = async (f: HubFile) => {
+  const askDownload = async (f: HubFile, drive?: string) => {
     setError("");
-    setPlan({ file: f });
+    setPlan((p) => (p && p.file.path === f.path && drive ? p : { file: f }));
     try {
-      const params = new URLSearchParams({ repo: m.repo, path: f.path, category: m.category ?? "other", size: String(f.size) });
+      const params = new URLSearchParams({ repo: m.repo, path: f.path, category: m.category ?? "other", size: String(f.size), ...(drive ? { drive } : {}) });
       setPlan({ file: f, data: await api<Plan>(`/api/downloads/plan?${params}`) });
     } catch (e) {
       setPlan(null);
       setError((e as Error).message);
     }
   };
-  const download = async (f: HubFile) => {
+  const download = async (f: HubFile, drive?: string) => {
     setError("");
     try {
-      await api("/api/downloads", { method: "POST", body: { repo: m.repo, path: f.path, category: m.category ?? "other" } });
+      await api("/api/downloads", { method: "POST", body: { repo: m.repo, path: f.path, category: m.category ?? "other", ...(drive ? { drive } : {}) } });
       setStarted((s) => [...s, f.path]);
       setPlan(null);
       onDownloaded?.();
@@ -234,16 +287,20 @@ function HubRow({ m, fit, open, onToggle, label, onDownloaded, onlyRuns }: { m: 
               <div key={f.path} className="row hub-file">
                 <span className="mono grow" dir="ltr">{f.path}</span>
                 <span className="muted mono" dir="ltr">{gb(f.size)}</span>
-                {f.estimate && <RatingBadge e={f.estimate} />}
+                {f.quant && <span className="pill mono" dir="ltr">{f.quant}</span>}
+                {f.kind === "mmproj" && <span className="pill" title={L("קובץ נלווה שנותן למודל הצ'אט לראות תמונות", "An add-on file that lets the chat model see pictures")}>{L("תוסף ראייה", "Vision add-on")}</span>}
+                {f.fit && <FitMark fit={f.fit} />}
+                {f.estimate && f.fit?.fit !== "too-big" && <RatingBadge e={f.estimate} />}
                 {/\.(ckpt|bin|pt|pth)$/i.test(f.path) && <span className="pill bad" title={t("pickleWarning")}>pickle</span>}
                 {/(^|[-_./ ])mlx([-_./ ]|$)/i.test(`${m.repo}/${f.path}`) && <span className="pill bad" title={t("planMlx")}>{t("macOnly")}</span>}
                 <button type="button" className={started.includes(f.path) ? "" : "primary"} disabled={started.includes(f.path)} onClick={() => void askDownload(f)}>
                   {started.includes(f.path) ? t("dl-queued") : t("download")}
                 </button>
                 <DownloadBar repo={m.repo} file={f.path} />
+                {f.kind === "llm" && !/-0000[2-9]-of-|-000[1-9]\d-of-/i.test(f.path) && <UseInChat repo={m.repo} file={f.path} />}
               </div>
             ))}
-            {plan && <PlanBox plan={plan.data} onCancel={() => setPlan(null)} onConfirm={() => void download(plan.file)} />}
+            {plan && <PlanBox plan={plan.data} onDrive={(d) => void askDownload(plan.file, d)} onCancel={() => setPlan(null)} onConfirm={() => void download(plan.file, plan.data?.drive)} />}
           </div>
         </div>
       )}
@@ -259,13 +316,16 @@ interface Plan {
   freeGb?: number;
   fitsDisk: boolean;
   estimate?: Estimate;
+  /** Where the file can go (the download folder, and the heavy-data drive for chat models), and the one chosen. */
+  drives?: Array<{ id: "models" | "heavy"; dir: string; freeGb?: number; default: boolean }>;
+  drive?: string;
 }
 
 /**
  * What a download really involves, before it starts: the file, the extra
  * files and engine needed to run it, the total, and the free disk space.
  */
-function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => void; onConfirm: () => void }) {
+function PlanBox({ plan, onDrive, onCancel, onConfirm }: { plan?: Plan; onDrive: (id: string) => void; onCancel: () => void; onConfirm: () => void }) {
   if (!plan) return <div className="plan card"><p className="muted">{t("loading")}</p></div>;
   const size = (g: number) => (g >= 1 ? `${g.toFixed(1)} GB` : `${Math.round(g * 1024)} MB`);
   return (
@@ -283,6 +343,20 @@ function PlanBox({ plan, onCancel, onConfirm }: { plan?: Plan; onCancel: () => v
         <strong className="grow">{t("planTotal", { size: size(plan.totalGb) })}</strong>
         {plan.freeGb !== undefined && <span className={plan.fitsDisk ? "muted" : "error"}>{t("diskFree", { gb: plan.freeGb.toFixed(0) })}</span>}
       </div>
+      {plan.drives && plan.drives.length > 1 && (
+        <div className="stack hub-drives" role="radiogroup" aria-label={L("לאיזה כונן", "Which drive")}>
+          <span className="muted small">{L("לאיזה כונן להוריד", "Download to which drive")}</span>
+          {plan.drives.map((d) => (
+            <label key={d.id} className="row hub-drive">
+              <input type="radio" name="hub-drive" checked={plan.drive === d.id} onChange={() => onDrive(d.id)} />
+              <span className="grow">{d.id === "heavy" ? L("כונן הנתונים הכבדים", "Heavy-data drive") : L("תיקיית ההורדות", "Download folder")}
+                <span className="muted small mono hub-drive-dir" dir="ltr">{d.dir}</span>
+              </span>
+              {d.freeGb !== undefined && <span className="muted small">{t("diskFree", { gb: d.freeGb.toFixed(0) })}</span>}
+            </label>
+          ))}
+        </div>
+      )}
       {plan.warning === "mlx" && <p className="error">{t("planMlx")}</p>}
       {plan.estimate && plan.estimate.rating === "too-big" && <p className="error">{t("planTooBig")}</p>}
       {!plan.fitsDisk && <p className="error">{t("planNoSpace")}</p>}
@@ -311,6 +385,12 @@ function fitOf(m: HubModel, hw: Hw, category: string): Fit {
   const mac = hw.platform === "darwin";
   if (!mac && (MLX.test(m.repo) || m.library === "mlx" || m.tags.includes("mlx"))) return { fit: "no", why: L("גרסת MLX: רק למק", "An MLX build: Mac only") };
   if (category === "chat" && !m.tags.includes("gguf") && m.library !== "gguf") return { fit: "no", why: L("לא בפורמט GGUF שהמנוע מריץ", "Not GGUF, which the engine runs") };
+  // The server's mark (parameter count from the Hub, context and working memory included) when it has one.
+  if (m.fit && m.fit.fit !== "unknown") {
+    const need = `~${m.fit.needGb.toFixed(1)} GB`;
+    const why = L(`צריך ${need} (בגרסת 4 ביט, עם הקשר)`, `Needs ${need} (4-bit build, with context)`);
+    return { fit: m.fit.fit === "gpu" ? "fast" : m.fit.fit === "partial" ? "ok" : "no", why };
+  }
   const p = /^(\d+(?:\.\d+)?)([BM])$/.exec(m.parameters ?? "") ?? /(?:^|[-_ /])(\d+(?:\.\d+)?)([BM])(?:[-_ ]|$)/i.exec(m.repo.replace(/-A\d+(?:\.\d+)?B/i, ""));
   if (!p) return { fit: "unknown", why: L("הגודל לא ידוע: פתח כדי לראות כל קובץ", "Size unknown: open it to see each file") };
   const billions = Number(p[1]) / (p[2]!.toUpperCase() === "M" ? 1000 : 1);
@@ -332,13 +412,53 @@ function fitOf(m: HubModel, hw: Hw, category: string): Fit {
 /** 🟢 / 🟡 / 🔴 on a search result, with the reason. */
 function FitBadge({ fit }: { fit: Fit }) {
   const [icon, text, cls] =
-    fit.fit === "fast" ? ["🟢", L("ירוץ מהר", "Runs fast"), "good"] : fit.fit === "ok" ? ["🟡", L("ירוץ, לאט יותר", "Runs, slower"), "warn"] : fit.fit === "no" ? ["🔴", L("לא ירוץ כאן", "Will not run here"), "bad"] : ["⚪", L("לא ידוע", "Unknown"), ""];
+    fit.fit === "fast" ? ["🟢", L("כולו על כרטיס המסך", "Runs fully on GPU"), "good"] : fit.fit === "ok" ? ["🟡", L("חלקית על הכרטיס (איטי יותר)", "Partly on GPU (slower)"), "warn"] : fit.fit === "no" ? ["🔴", L("גדול מדי", "Too big"), "bad"] : ["⚪", L("גודל לא ידוע", "Size unknown"), ""];
   return <span className={`pill ${cls} hub-fit`} title={fit.why}>{icon} {text}</span>;
+}
+
+/** The run mark on one file: fully on the graphics card, partly, or too big, with the memory it needs in the tip. */
+function FitMark({ fit }: { fit: ServerFit }) {
+  if (fit.fit === "unknown") return null;
+  const [icon, text, cls] =
+    fit.fit === "gpu" ? ["🟢", L("כולו על כרטיס המסך", "Runs fully on GPU"), "good"] : fit.fit === "partial" ? ["🟡", L("חלקית על הכרטיס (איטי יותר)", "Partly on GPU (slower)"), "warn"] : ["🔴", L("גדול מדי", "Too big"), "bad"];
+  const tip = fit.fit === "partial"
+    ? L(`צריך ~${fit.needGb} GB; ${Math.round(fit.gpuShare * 100)}% בכרטיס, השאר בזיכרון הרגיל`, `Needs ~${fit.needGb} GB; ${Math.round(fit.gpuShare * 100)}% on the GPU, the rest in system memory`)
+    : L(`צריך ~${fit.needGb} GB כולל הקשר`, `Needs ~${fit.needGb} GB with context`);
+  return <span className={`pill ${cls} hub-fit`} title={tip}>{icon} {text}</span>;
+}
+
+/**
+ * "Use in chat" once a chat model's download is done: loads the file in the chat engine on the PC and opens the chat
+ * (also from the phone, which only asks the PC to load it).
+ */
+function UseInChat({ repo, file }: { repo: string; file: string }) {
+  const done = useDownloads().find((j) => j.status === "done" && j.dest && j.url?.includes(`/${repo}/resolve/`) && decodeURIComponent(j.url).endsWith(`/${file}`));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!done?.dest) return null;
+  const use = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/engines/llamacpp/load", { method: "POST", body: { modelPath: done.dest } });
+      location.hash = "#/";
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" className="primary" disabled={busy} onClick={() => void use()}>{busy ? t("loading") : L("להשתמש בצ'אט", "Use in chat")}</button>
+      {error && <span className="error small">{error}</span>}
+    </>
+  );
 }
 
 /** Whether one file of a model runs here: not too big, not MLX, not a pickle-only format. */
 function fileRuns(m: HubModel, f: HubFile): boolean {
   if (MLX.test(`${m.repo}/${f.path}`)) return false;
-  if (f.estimate?.rating === "too-big") return false;
+  if (f.fit ? f.fit.fit === "too-big" : f.estimate?.rating === "too-big") return false;
   return /\.(gguf|safetensors)$/i.test(f.path);
 }
