@@ -1,5 +1,5 @@
 {
- "group": "פתיחה וכלים",
+ "group": "פתיחה · Welcome",
  "mocks": [
   {
    "url": "**/api/welcome/check*",

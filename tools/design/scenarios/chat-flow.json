@@ -1,5 +1,5 @@
 {
- "group": "צ'אט",
+ "group": "צ'אט · Chat",
  "now": "2026-11-21T10:00:00Z",
  "boards": [
   {
@@ -402,10 +402,10 @@
    ],
    "steps": [
     {
-     "wait": ".model-chip"
+     "wait": ".model-chip:has(.model-chip-think)"
     },
     {
-     "click": ".model-chip"
+     "click": ".model-chip:has(.model-chip-think)"
     },
     {
      "wait": ".model-think"
@@ -413,10 +413,10 @@
    ],
    "phoneSteps": [
     {
-     "wait": ".model-chip"
+     "wait": ".model-chip:has(.model-chip-think)"
     },
     {
-     "click": ".model-chip",
+     "click": ".model-chip:has(.model-chip-think)",
      "force": true
     },
     {
