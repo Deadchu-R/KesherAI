@@ -20,7 +20,7 @@ export function OpenInChat({ line }: { line: string }) {
     <Menu triggerClassName="primary" trigger={<>💬 {L("פתח בצ'אט", "Open in chat")}</>}>
       <MenuItem icon="＋" onSelect={newChat}>{L("צ'אט חדש", "New chat")}</MenuItem>
       <MenuLabel>{L("או לצ'אט קיים", "Or into a chat")}</MenuLabel>
-      {conversations.slice(0, 12).map((c) => (
+      {conversations.filter((c) => !c.archived).slice(0, 12).map((c) => (
         <MenuItem key={c.id} dir="auto" onSelect={() => openWithDraft(c.id, line)}>{c.title}</MenuItem>
       ))}
       {!conversations.length && <MenuNote>{L("אין עדיין צ'אטים.", "No chats yet.")}</MenuNote>}

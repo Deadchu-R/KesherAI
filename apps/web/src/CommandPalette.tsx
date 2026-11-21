@@ -8,6 +8,7 @@ import { fit } from "./palette-fit";
 import { handheldSetting, setHandheld } from "./PadHints";
 import { Glyph } from "./ui/Glyph";
 import { isShortcut } from "./keyboard";
+import { splitArchived } from "./chat-archive";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -18,7 +19,7 @@ interface Entry {
   title: string;
   /** Words it is found by besides its title (the other language, the page's address). */
   also?: string;
-  group: "action" | "page" | "chat";
+  group: "action" | "page" | "chat" | "project";
   run: () => void;
 }
 
@@ -39,7 +40,7 @@ export function CommandPalette() {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const back = useRef<Element | null>(null);
-  const { conversations } = useLibrary();
+  const { conversations, projects } = useLibrary();
   const nav = useNavItems();
   const { simple } = useParts();
 
@@ -147,22 +148,36 @@ export function CommandPalette() {
     const pages: Entry[] = [
       ...nav.map((n) => ({ id: `page:${n.href}`, icon: NAV_ICONS[n.href] ?? "•", title: n.label, also: `${n.href.slice(2)} ${groupOf(n.group) ? t(groupOf(n.group)!.label) : ""}${n.href === "#/connections" ? ` ${t("connections")} ${t("pluginsNav")} ${t("partsNav")} plugins mods parts` : ""}`, group: "page" as const, run: go(n.href) })),
       { id: "page:#/apps", icon: "▦", title: t("allTools"), also: "apps tools כלים", group: "page" as const, run: go("#/apps") },
+      { id: "page:#/archived", icon: "🗄", title: L("צ'אטים בארכיון", "Archived chats"), also: "archive archived ארכיון", group: "page" as const, run: go("#/archived") },
     ];
-    const chats: Entry[] = [...conversations]
+    // Archived chats stay out (the Archived chats page has them); projects open their latest chat, or a new one.
+    const { active } = splitArchived(conversations);
+    const chats: Entry[] = [...active]
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-      .map((c) => ({ id: `chat:${c.id}`, icon: c.kind === "code" ? "</>" : "💬", title: c.title || L("צ'אט בלי שם", "Untitled chat"), group: "chat" as const, run: go(`#/c/${c.id}`) }));
-    return [...actions, ...pages, ...chats];
-  }, [conversations, open, nav, simple]);
+      .map((c) => ({ id: `chat:${c.id}`, icon: c.kind === "code" ? "</>" : "💬", title: c.title || L("צ'אט בלי שם", "Untitled chat"), also: projects.find((p) => p.id === c.projectId)?.name ?? "", group: "chat" as const, run: go(`#/c/${c.id}`) }));
+    const projectEntries: Entry[] = projects.map((p) => {
+      const latest = active.filter((c) => c.projectId === p.id).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
+      return {
+        id: `project:${p.id}`,
+        icon: "📁",
+        title: p.name,
+        also: `${L("פרויקט", "project")} project`,
+        group: "project" as const,
+        run: latest ? go(`#/c/${latest.id}`) : () => void createConversation({ kind: p.workspace ? "code" : "chat", projectId: p.id }).catch((e: Error) => toast(e.message)),
+      };
+    });
+    return [...actions, ...pages, ...projectEntries, ...chats];
+  }, [conversations, projects, open, nav, simple]);
 
   const shown = useMemo(() => {
     const query = q.trim();
     if (!query) {
       // Empty: the actions, the five latest chats, then the pages.
       const g = (k: Entry["group"]) => entries.filter((e) => e.group === k);
-      return [...g("action"), ...g("chat").slice(0, 5), ...g("page")];
+      return [...g("action"), ...g("chat").slice(0, 5), ...g("project").slice(0, 3), ...g("page")];
     }
     return entries
-      .map((e) => ({ e, s: Math.max(fit(query, e.title), fit(query, e.also ?? "") * 0.9) + (e.group === "action" ? 3 : e.group === "page" ? 2 : 0) }))
+      .map((e) => ({ e, s: Math.max(fit(query, e.title), fit(query, e.also ?? "") * 0.9) + (e.group === "action" ? 3 : e.group === "page" ? 2 : e.group === "project" ? 1 : 0) }))
       .filter((x) => x.s > 3)
       .sort((a, b) => b.s - a.s)
       .slice(0, 30)
@@ -179,7 +194,7 @@ export function CommandPalette() {
     setOpen(false);
     e.run();
   };
-  const groupName: Record<Entry["group"], string> = { action: L("פעולות", "Actions"), page: L("עמודים", "Pages"), chat: L("צ'אטים", "Chats") };
+  const groupName: Record<Entry["group"], string> = { action: L("פעולות", "Actions"), page: L("עמודים", "Pages"), chat: L("צ'אטים", "Chats"), project: L("פרויקטים", "Projects") };
   return (
     <div className="palette-back" onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <div className="palette card" role="dialog" aria-modal="true" aria-label={L("חיפוש ופקודות", "Search and commands")}>

@@ -44,6 +44,7 @@ import { ResumeCard } from "./ResumeCard";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
 import { CodeHome } from "./pages/CodeHome";
+import { ArchivedPage } from "./pages/ArchivedPage";
 import { SelfWorkPage } from "./pages/SelfWorkPage";
 import { TaskInboxPage } from "./pages/TaskInboxPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -336,6 +337,7 @@ export function App() {
   else if (hash === "#/self-work") page = <SelfWorkPage />;
   else if (hash === "#/task-inbox" || hash.startsWith("#/task-inbox/")) page = <TaskInboxPage key={hash} {...(hash.length > 13 ? { id: decodeURIComponent(hash.slice(13)) } : {})} />;
   else if (hash === "#/tasks") page = <TasksPage />;
+  else if (hash === "#/archived") page = <ArchivedPage />;
   else if (hash === "#/study" || hash.startsWith("#/study/")) page = <StudyPage hash={hash.split("?")[0]!} />;
   else if (hash.split("?")[0] === "#/unity") page = <UnrealPage kind="unity" key="unity" />;
   else if (hash === "#/godot") page = <GodotPage />;

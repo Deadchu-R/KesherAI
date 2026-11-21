@@ -138,7 +138,7 @@ export function CodeHome() {
       setBusy(false);
     }
   };
-  const sessions = conversations.filter((c) => c.kind === "code").slice(0, 8);
+  const sessions = conversations.filter((c) => c.kind === "code" && !c.archived).slice(0, 8);
   return (
     <div className="home code-home">
       <h1 className="greeting">{L("מה נבנה?", "What should we build?")}</h1>

@@ -1,4 +1,3 @@
-import { askConfirm } from "../ui/askText";
 import { usePersonas } from "../Personas";
 import { RunReceipt } from "../RunReceipt";
 import { Menu, MenuItem, MenuSeparator } from "../ui/Menu";
@@ -21,6 +20,8 @@ import { SideChat } from "../chat/SideChat";
 import { QueueChips, queueMode } from "../chat/QueueChips";
 import { messageVersions, openVersion, takeVersionScroll } from "../branch-versions";
 import { ContextRing } from "../chat/ContextRing";
+import { dayBreaks, dayLabel } from "../chat-archive";
+import { deleteChatForever, setArchived } from "./ArchivedPage";
 import { TurnStatusLine } from "../chat/TurnStatusLine";
 import { turnStatus } from "../turn-status";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
@@ -442,8 +443,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     return { shown, total, lastAnswerOf, turnOf, lastUser };
   }, [events, chosenVersion]);
   const blocks = useMemo(() => {
-    const out: Array<{ kind: "event"; e: AgentEvent } | { kind: "group"; key: number; steps: Step[] }> = [];
+    const out: Array<{ kind: "event"; e: AgentEvent } | { kind: "group"; key: number; steps: Step[] } | { kind: "day"; key: number; day: string }> = [];
     let group: Step[] | null = null;
+    // A long chat that crosses days gets a separator above each new day's first message (chat-archive.ts).
+    const days = dayBreaks(versions.shown);
     for (const e of versions.shown) {
       if (e.type === "tool_call") {
         if (e.name === "ask_user" || e.name === "request_access") continue; // their question card shows instead
@@ -458,6 +461,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       }
       if (e.type === "tool_result" || e.type === "approval_result" || e.type === "answer" || e.type === "usage" || (e.type === "status" && e.status !== "error")) continue;
       group = null;
+      const day = days.get(e.seq);
+      if (day) out.push({ kind: "day", key: e.seq, day });
       out.push({ kind: "event", e });
     }
     return out;
@@ -714,9 +719,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     }
   };
   const remove = async () => {
-    if (!(await askConfirm(t("delete") + ` "${conv.title}"?`, { yes: t("delete"), danger: true }))) return;
-    await api(`/api/conversations/${id}`, { method: "DELETE" });
-    await refreshLibrary();
+    if (await deleteChatForever(conv)) location.hash = "#/";
+  };
+  const archive = async () => {
+    await setArchived(id, true).catch((e: Error) => setError(e.message));
     location.hash = "#/";
   };
 
@@ -786,6 +792,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
             <MenuItem icon="💭" onSelect={() => setSide({})}>{getLocale() === "he" ? "צ׳אט צד" : "Side chat"}</MenuItem>
             {!conv.incognito && <MenuItem icon="🔗" onSelect={() => setSharing(true)}>{getLocale() === "he" ? "שיתוף…" : "Share…"}</MenuItem>}
             <MenuSeparator />
+            {/* Archive instead of delete (chat-archive.ts); the Archived page restores it or deletes it for good. */}
+            {conv.archived
+              ? <MenuItem icon="↩" onSelect={() => void setArchived(id, false).then(() => setConv({ ...conv, archived: false }), (e: Error) => setError(e.message))}>{L("להחזיר מהארכיון", "Restore from the archive")}</MenuItem>
+              : <MenuItem icon="🗄" onSelect={() => void archive()}>{L("העברה לארכיון", "Archive")}</MenuItem>}
             <MenuItem icon="🗑" danger onSelect={() => void remove()}>{t("delete")}</MenuItem>
           </Menu>
         ),
@@ -894,6 +904,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
           <ChatLiveContext.Provider value={{ convId: id, events, progress: jobProgress, busy }}>
           {blocks.slice(-shownBlocks).map((b, i) => {
             const bi = Math.max(0, blocks.length - shownBlocks) + i;
+            if (b.kind === "day") return <div key={`d${b.key}`} className="day-sep" role="separator"><span>{dayLabel(b.day, new Date(), getLocale() === "he")}</span></div>;
             if (b.kind === "group") {
               return (
                 <ActivityGroup
@@ -1128,6 +1139,12 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
               <button type="button" className="primary" onClick={retry}>{L("נסה שוב", "Try again")}</button>
               <button type="button" onClick={() => { lastWork.current = Date.now(); setStalled(false); }}>{L("לחכות עוד", "Keep waiting")}</button>
               <button type="button" onClick={() => void investigate(true)}><LineIcon name="microscope" size={15} />{L("עצור וחקור", "Stop and investigate")}</button>
+            </div>
+          )}
+          {conv.archived && (
+            <div className="card row archived-note" role="note">
+              <span className="grow small">🗄 {L("הצ'אט הזה בארכיון: הוא לא מופיע ברשימות.", "This chat is archived: it is not in the lists.")}</span>
+              <button type="button" onClick={() => void setArchived(id, false).then(() => setConv({ ...conv, archived: false }), (e: Error) => setError(e.message))}>{L("להחזיר", "Restore")}</button>
             </div>
           )}
           {conv.interruptedAt && !busy && (

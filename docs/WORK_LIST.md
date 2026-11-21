@@ -190,7 +190,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12)
 - ⬜ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI)
 - ⬜ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude)
-- ⬜ Command palette lists chats and projects; /archive instead of delete; day separators in long chats (LM Studio)
+- ✅ Command palette lists chats and projects; /archive instead of delete; day separators in long chats (LM Studio) (in code: chat-archive.ts, pages/ArchivedPage.tsx, CommandPalette.tsx)
 
 ## Backlog: Game engines
 - ✅ Unity: Test button that enters Play mode and reports result and console (in code: unity-test.ts)

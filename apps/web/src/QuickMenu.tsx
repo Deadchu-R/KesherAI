@@ -23,7 +23,7 @@ export function QuickMenu() {
     { key: "community", label: t("communityNav"), icon: "✦", go: nav("#/community") },
     { key: "usage", label: t("usageNav"), icon: "≋", go: nav("#/usage") },
     { key: "settings", label: t("settings"), icon: "⚙", go: nav("#/settings") },
-    ...conversations.slice(0, 5).map((c) => ({ key: c.id, label: c.title, icon: c.kind === "code" ? "</>" : "•", go: nav(`#/c/${c.id}`) })),
+    ...conversations.filter((c) => !c.archived).slice(0, 5).map((c) => ({ key: c.id, label: c.title, icon: c.kind === "code" ? "</>" : "•", go: nav(`#/c/${c.id}`) })),
   ];
 
   const places = items.slice(0, 7);

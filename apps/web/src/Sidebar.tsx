@@ -1,7 +1,9 @@
 import { BrandMark } from "./ui/BrandMark";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { askConfirm, askText } from "./ui/askText";
+import { askText } from "./ui/askText";
+import { splitArchived } from "./chat-archive";
+import { setArchived } from "./pages/ArchivedPage";
 import { branding, type ConversationSummary } from "@kesher/shared";
 import { ToolIcon } from "./ToolIcon";
 import { Glyph } from "./ui/Glyph";
@@ -173,23 +175,11 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
   const state = useActivity()[c.id];
   const he = getLocale() === "he";
   const peek = useChatPeek(c);
-  // Delete a chat from the list (asked for on Linux: there was no way to remove old chats).
-  const remove = async () => {
-    // The app's own dialogs, not confirm(): after a system dialog the desktop app took no typing (Roee, 2026-11-18).
-    if (!(await askConfirm(he ? `למחוק את הצ'אט "${c.title}"? אי אפשר לבטל את זה.` : `Delete the chat "${c.title}"? This cannot be undone.`, { yes: he ? "מחק" : "Delete", danger: true }))) return;
-    // A session in its own worktree: a clean one goes with it; one with work in it is the user's call.
-    let worktree = "";
-    if (c.worktree) {
-      const w = await api<{ branch: string; changed: number; commits: number } | null>(`/api/conversations/${c.id}/worktree`).catch(() => null);
-      if (w && (w.changed || w.commits)) {
-        const lose = he ? `${w.changed} קבצים ששונו ו-${w.commits} קומיטים בענף ${w.branch}` : `${w.changed} changed files and ${w.commits} commits on ${w.branch}`;
-        worktree = (await askConfirm(he ? `ב-worktree של הסשן יש עבודה: ${lose}.\n\nאישור = למחוק גם אותה. ביטול = להשאיר את ה-worktree והענף בדיסק.` : `The session's worktree holds work: ${lose}.\n\nOK = delete it too. Cancel = keep the worktree and branch on disk.`)) ? "?worktree=remove" : "?worktree=keep";
-      }
-    }
+  // Archive instead of delete (chat-archive.ts): the chat leaves the list and is kept; #/archived restores or deletes it.
+  const archive = async () => {
     try {
-      await api(`/api/conversations/${c.id}${worktree}`, { method: "DELETE" });
+      await setArchived(c.id, true);
       if (active) location.hash = "#/";
-      await refreshLibrary();
     } catch (e) {
       toast((e as Error).message);
     }
@@ -211,7 +201,7 @@ function ConversationLink({ c, active }: { c: ConversationSummary; active: boole
       <Menu trigger="⋯" triggerClassName="icon-btn conv-more" aria-label={he ? `אפשרויות: ${c.title}` : `Options: ${c.title}`}>
         <MenuItem icon="✏" onSelect={() => void rename()}>{he ? "שינוי שם" : "Rename"}</MenuItem>
         <MenuSeparator />
-        <MenuItem icon="🗑" danger onSelect={() => void remove()}>{he ? "מחיקת הצ'אט" : "Delete the chat"}</MenuItem>
+        <MenuItem icon="🗄" onSelect={() => void archive()}>{he ? "העברה לארכיון" : "Archive"}</MenuItem>
       </Menu>
       {peek.view}
     </div>
@@ -436,8 +426,10 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
   }, []);
 
   // Chats that routines started keep to their own folded group, so they do not push the user's own chats down.
-  const byRoutine = conversations.filter((c) => !c.projectId && c.source === "routine");
-  const loose = conversations.filter((c) => !c.projectId && c.source !== "routine");
+  // Archived chats stay out of the lists (one link to #/archived at the end).
+  const { active: listed, archived } = splitArchived(conversations);
+  const byRoutine = listed.filter((c) => !c.projectId && c.source === "routine");
+  const loose = listed.filter((c) => !c.projectId && c.source !== "routine");
   // A newer version next to "Updates" (checked once when the app opens).
   const [newVersion, setNewVersion] = useState("");
   useEffect(() => {
@@ -500,7 +492,7 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
           </button>
         </div>
         {projects.map((p) => {
-          const items = conversations.filter((c) => c.projectId === p.id);
+          const items = listed.filter((c) => c.projectId === p.id);
           const expanded = open[p.id] ?? items.some((c) => c.id === activeId);
           return (
             <div key={p.id}>
@@ -543,6 +535,11 @@ export function Sidebar({ hash, online, open: menuOpen, onLocale }: { hash: stri
               <ConversationLink key={c.id} c={c} active={c.id === activeId} />
             ))}
           </details>
+        )}
+        {archived.length > 0 && (
+          <a className="nav-link side-archived muted" href="#/archived" aria-current={hash === "#/archived" ? "page" : undefined}>
+            🗄 {getLocale() === "he" ? `צ'אטים בארכיון (${archived.length})` : `Archived chats (${archived.length})`}
+          </a>
         )}
         </>)}
       </div>

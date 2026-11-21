@@ -4497,3 +4497,12 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .turn-time { font-variant-numeric: tabular-nums; }
 @keyframes turn-pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .turn-dot { animation: none; } }
+/* Day separators in a long chat, the archive (chat-archive.ts, pages/ArchivedPage.tsx). */
+.day-sep { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; color: var(--muted); font-size: 12px; }
+.day-sep::before, .day-sep::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.archived-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.archived-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 12px; }
+.archived-title { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.archived-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.side-archived { font-size: 13px; margin-top: 4px; }
+.archived-note { align-items: center; gap: 8px; margin: 6px 0; }

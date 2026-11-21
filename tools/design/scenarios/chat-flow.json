@@ -643,6 +643,266 @@
      "wait": ".turn-status"
     }
    ]
+  },
+  {
+   "id": "ChatDaySeparators",
+   "title": "צ'אט: מפרידי ימים בשיחה ארוכה (היום, אתמול, תאריך) וקישור 'צ'אטים בארכיון' בסרגל",
+   "titleEn": "Chat: day separators in a long chat (Today, Yesterday, a date) and the Archived chats link in the sidebar",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תכנון שלב ראשון",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 6,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "2d"
+        },
+        "type": "user",
+        "text": "בוא נתכנן את השלב הראשון במשחק"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "2d"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "שלב 1: יער, שלושה אויבים ומטבע סודי."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1d"
+        },
+        "type": "user",
+        "text": "תוסיף בוס בסוף השלב"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "1d"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "בוס: עכביש ענק עם שלושה שלבי התקפה."
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "user",
+        "text": "מה עם מוזיקה?"
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "assistant",
+        "turn": 3,
+        "text": "מנגינה קצבית בסגנון 8-bit, ומעבר דרמטי לבוס."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations",
+     "json": [
+      {
+       "id": "c1",
+       "projectId": null,
+       "title": "תכנון שלב ראשון",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "1m"
+       },
+       "messageCount": 6
+      },
+      {
+       "id": "a1",
+       "projectId": null,
+       "title": "ניסוי ישן עם Godot",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "3d"
+       },
+       "messageCount": 0,
+       "archived": true
+      },
+      {
+       "id": "a2",
+       "projectId": null,
+       "title": "רשימת קניות למשחק",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "9d"
+       },
+       "messageCount": 0,
+       "archived": true
+      }
+     ]
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".day-sep"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".day-sep"
+    }
+   ]
+  },
+  {
+   "id": "ArchivedChats",
+   "title": "צ'אטים בארכיון: העברה לארכיון במקום מחיקה — להחזיר או למחוק לצמיתות",
+   "titleEn": "Archived chats: archive instead of delete — restore or delete for good",
+   "route": "#/archived",
+   "height": {
+    "desktop": 700,
+    "phone": 800
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations",
+     "json": [
+      {
+       "id": "c1",
+       "projectId": null,
+       "title": "תכנון שלב ראשון",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "1m"
+       },
+       "messageCount": 6
+      },
+      {
+       "id": "a1",
+       "projectId": null,
+       "title": "ניסוי ישן עם Godot",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "3d"
+       },
+       "messageCount": 0,
+       "archived": true
+      },
+      {
+       "id": "a2",
+       "projectId": null,
+       "title": "רשימת קניות למשחק",
+       "kind": "chat",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "createdAt": {
+        "$ago": "20m"
+       },
+       "updatedAt": {
+        "$ago": "9d"
+       },
+       "messageCount": 0,
+       "archived": true
+      }
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".archived-row"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".archived-row"
+    }
+   ]
   }
  ]
 }
