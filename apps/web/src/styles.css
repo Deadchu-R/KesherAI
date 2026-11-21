@@ -4729,3 +4729,9 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .dl-error .button, .dl-error button { min-height: 44px; }
 .hub-nospace button { min-height: 44px; }
 .dl-job > .row { flex-wrap: wrap; justify-content: flex-end; }
+
+.games-night { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin-bottom: 12px; }
+.games-night-set { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
+.games-night-switch { min-height: 44px; gap: 8px; }
+.games-night-opts { gap: 12px; padding-inline-start: 28px; }
+.games-night-log { margin: 0; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }

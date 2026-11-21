@@ -189,6 +189,20 @@ export class UnrealBridge {
     return !!this.headlessPlay && !!this.lastProjectFile && existsSync(this.lastProjectFile);
   }
 
+  /**
+   * Runs a gameplay test headless on a given project (the night builds' smoke test), in the same one-at-a-time chain.
+   *
+   * @param file - The project's .uproject.
+   * @param plan - The checked plan (play-test.ts).
+   * @returns The plugin's end state.
+   */
+  async playHeadlessFor(file: string, plan: unknown): Promise<unknown> {
+    if (!this.headlessPlay || !existsSync(file)) throw new Error("Gameplay tests cannot run with Unreal closed here.");
+    const run = this.headlessChain.then(() => this.headlessPlay!(file, plan));
+    this.headlessChain = run.catch(() => undefined);
+    return run;
+  }
+
   /** The project file in use: the connected editor's, else the last one that connected. */
   get knownProjectFile(): string | undefined {
     return this.projectFile ?? this.lastProjectFile;

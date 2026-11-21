@@ -7,6 +7,7 @@ import { GameSource } from "../engine/GameSource";
 import { GameCheckpoints } from "../engine/GameCheckpoints";
 import { GameInspector } from "../engine/GameInspector";
 import { DrawChange } from "../DrawChange";
+import { NightBuilds } from "../engine/NightBuilds";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -149,6 +150,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
           <b>{L("פתח", "Open")}</b>
         </button>
       )}
+      <NightBuilds />
       {!list ? (
         <p className="muted">…</p>
       ) : !list.projects.length ? (
