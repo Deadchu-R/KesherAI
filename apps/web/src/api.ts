@@ -114,7 +114,7 @@ export async function api<T>(path: string, init: Omit<RequestInit, "body"> & { b
   }
   const res = await fetch(path, { ...init, headers, body });
   const json = (await res.json().catch(() => ({}))) as T & { error?: string; code?: string; category?: string };
-  if (!res.ok) throw new ApiError(json.error ?? `${res.status} ${res.statusText}`, res.status, json.code, json.category);
+  if (!res.ok) throw new ApiError(json.error ?? `${res.status} ${res.statusText}`, res.status, json.code, json.category, json as Record<string, unknown>);
   return json;
 }
 
@@ -125,8 +125,9 @@ export class ApiError extends Error {
    * @param status - HTTP status.
    * @param code - e.g. `no-model`.
    * @param category - For `no-model`: which category needs a model.
+   * @param body - The whole answer (e.g. `unsupported` for an engine version a plugin does not support).
    */
-  constructor(message: string, readonly status: number, readonly code?: string, readonly category?: string) {
+  constructor(message: string, readonly status: number, readonly code?: string, readonly category?: string, readonly body?: Record<string, unknown>) {
     super(message);
   }
 }

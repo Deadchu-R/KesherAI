@@ -212,6 +212,12 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - 🔨 Unreal: inspect_level and apply_material tools; profiling against the chosen target phones (c9be703 inspect_level and apply_material built; missing: profiling against the chosen target phones)
 - 🔨 Unreal: code views for C++ and Verse; Blueprint to Verse; prepare for UE6 (cf6bace Source view, blueprint-code.ts) missing: UE6 preparation
 - ⬜ Specialised engine agents: materials, Niagara and VFX, level design not built
+- ✅ Unity package 0.2.12 installs on 2021.3, 2022.3 and Unity 6 (Pipeline and Visual Scripting parts by versionDefines; docs/UNITY.md)
+- ✅ Unreal plugin 0.1.27: "Install in all projects" with each project's engine version and result; current ones skipped; 5.8+ MCP offer per project
+- ✅ "Convert with AI" for an unsupported engine version or a compile failure: warning (he/en), a task-inbox task for Antigravity or the local model, a copy only, its own branch (engine-support.ts)
+- ✅ Unity scene reader: streamed and fast (parallel cached GUID index, size/time guards, binary scenes explained), scenes outside Assets/Scenes, versions read from ProjectVersion.txt
+- ⬜ Unity: report a compile failure of the package back from Unity to offer "Convert with AI" (Unreal does this already)
+- ⬜ Install an AI-converted plugin copy after review (the conversion task only makes the branch)
 - ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting not built
 - ✅ Draw on a screenshot from the phone and send it as a change request to the engine (Annotator.tsx) (fadc4d4)
 - ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64) not built

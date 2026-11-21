@@ -1,5 +1,7 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
 
+// Visual Scripting graphs: only when the project has the Visual Scripting package (KESHER_VS, from the asmdef).
+#if KESHER_VS
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1028,3 +1030,4 @@ namespace KesherAI.Bridge
         }
     }
 }
+#endif

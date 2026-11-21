@@ -39,6 +39,8 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
   const remembered = () => { try { return localStorage.getItem(key) ?? ""; } catch { return ""; } };
   const [project, setProject] = useState(remembered() || connectedProject || "");
   const [scenes, setScenes] = useState<string[] | null>(null);
+  // Why a project shows no scenes (the server says: empty Assets, no .unity files…).
+  const [note, setNote] = useState("");
   // The engine's projects found on the computer (its own project list, Unity Hub, the usual folders): one tap shows
   // their scenes, instead of typing a folder each time (asked 2026-11-18); a folder can still be typed below.
   const [found, setFound] = useState<Array<{ name: string; path: string; engine?: string }> | null>(null);
@@ -49,7 +51,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
   const list = (dir: string) => {
     if (!dir.trim()) return;
     try { localStorage.setItem(key, dir); } catch { /* private window: only remembered for next time */ }
-    void api<{ scenes: string[] }>(`${e.list}?project=${encodeURIComponent(dir)}`).then((r) => setScenes(r.scenes), (er: Error) => { setScenes(null); toast(er.message); });
+    void api<{ scenes: string[]; note?: string; reason?: "empty" | "none"; files?: number }>(`${e.list}?project=${encodeURIComponent(dir)}`).then((r) => { setScenes(r.scenes); setNote(r.reason === "empty" ? L("תיקיית Assets ריקה: ייתכן שהקבצים עוד יורדים, או שהם בתיקייה אחרת.", "Assets is empty: the files may still be downloading, or they are in another folder.") : r.reason === "none" ? L(`אין קובצי סצנה (.unity) ב-Assets או ב-Packages (נבדקו ${r.files ?? 0} קבצים). סצנה שלא נשמרה ב-Unity עדיין אין לה קובץ.`, `No .unity scene files under Assets or Packages (${r.files ?? 0} files looked at). A scene never saved in Unity has no file yet.`) : (r.note ?? "")); }, (er: Error) => { setScenes(null); setNote(""); toast(er.message); });
   };
   const pick = async () => {
     const dir = await desktop()?.pickFolder();
@@ -82,7 +84,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
         <div className="standin-scenes">
           {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={e.open(project, sc)}>{e.label(sc)}</a>)}
         </div>
-      ) : <p className="muted small">{L("אין סצנות בפרויקט.", "No scenes in this project.")}</p>)}
+      ) : <p className="muted small">{L("אין סצנות בפרויקט.", "No scenes in this project.")}{note && <span dir="auto"> {note}</span>}</p>)}
     </section>
   );
 }

@@ -1,5 +1,7 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
 
+// Unity's CLI commands exist only with the Pipeline package (Unity 6+); on 2021.3/2022.3 this file is left out.
+#if KESHER_PIPELINE
 using System.Collections.Generic;
 using Unity.Pipeline.Commands;
 using UnityEditor;
@@ -16,7 +18,7 @@ namespace KesherAI.Bridge
     /// </summary>
     internal static class KesherCommands
     {
-        const string Version = "0.2.11";
+        const string Version = "0.2.12";
 
         static string Out(Dictionary<string, object> result) => Json.Write(result);
 
@@ -26,6 +28,7 @@ namespace KesherAI.Bridge
         [CliCommand("kesher_changed", "KesherAI Bridge: when something last changed in the editor (ms since 1970)")]
         static string Changed() => Out(new Dictionary<string, object> { ["changedAt"] = KesherChanges.ChangedAt });
 
+#if KESHER_VS // the graph commands need Visual Scripting
         [CliCommand("kesher_list", "KesherAI Bridge: every Visual Scripting graph (assets, prefabs, open scenes)")]
         static string List() => Out(KesherGraph.List());
 
@@ -86,6 +89,7 @@ namespace KesherAI.Bridge
 
         [CliCommand("kesher_actions", "KesherAI Bridge: the nodes that can be added (like the fuzzy finder), narrowed by a query")]
         static string Actions([CliArg("path", "Where the graph lives")] string path, [CliArg("query", "Words to look for")] string query = "") => Out(KesherGraph.Actions(query));
+#endif
 
         [CliCommand("kesher_undo", "KesherAI Bridge: undo the last change in the editor")]
         static string Undo() { UnityEditor.Undo.PerformUndo(); return Out(new Dictionary<string, object> { ["ok"] = true }); }
@@ -93,6 +97,7 @@ namespace KesherAI.Bridge
         [CliCommand("kesher_redo", "KesherAI Bridge: redo in the editor")]
         static string Redo() { UnityEditor.Undo.PerformRedo(); return Out(new Dictionary<string, object> { ["ok"] = true }); }
 
+#if KESHER_VS
         [CliCommand("kesher_check", "KesherAI Bridge: check a graph (missing inputs, broken ports)")]
         static string Check([CliArg("path", "Where the graph lives")] string path) => Out(KesherGraph.Check(path));
 
@@ -101,6 +106,7 @@ namespace KesherAI.Bridge
 
         [CliCommand("kesher_open", "KesherAI Bridge: open a graph in the editor")]
         static string Open([CliArg("path", "Where the graph lives")] string path) => Out(KesherGraph.Open(path));
+#endif
 
         [CliCommand("kesher_close", "KesherAI Bridge: close the editor, saving open scenes and assets first or throwing unsaved changes away")]
         static string Close([CliArg("save", "true: save first; false: close without saving")] string save = "false")
@@ -118,3 +124,4 @@ namespace KesherAI.Bridge
         }
     }
 }
+#endif

@@ -22,7 +22,7 @@ export function ConnectSteps(p: { unity: boolean; download: string }) {
         <>
           <AddUnityPackage />
           <ol className="ue-steps">
-            <li>{L("Unity 6 ומעלה, עם Visual Scripting.", "Unity 6 or newer, with Visual Scripting.")}</li>
+            <li>{L("Unity 2021.3 ומעלה (2022.3, Unity 6). הזזות בסצנה ואפקטים עובדים בכולן; פקודות הגרפים דרך ה-CLI של Unity צריכות Unity 6. גרסה ישנה יותר: “המר עם AI”.", "Unity 2021.3 or newer (2022.3, Unity 6). Scene moves and effects work on all of them; graph commands through Unity's CLI need Unity 6. An older version: “Convert with AI”.")}</li>
             <li>{L("\"הוסף לפרויקט\" מעתיק את חבילת KesherAI Bridge לפרויקט ומוסיף את חבילת ה-Pipeline של Unity דרך ה-CLI. Unity מקמפל לבד — בלי Visual Studio.", "“Add to a project” copies the KesherAI Bridge package into the project and adds Unity's Pipeline package through the CLI. Unity compiles it by itself — no Visual Studio.")}</li>
             <li>{L("כש-Unity פתוח, השינויים קורים בו מיד (\u2066Ctrl+Z\u2069 מבטל). כשהוא סגור, KesherAI מריץ את Unity ברקע, משנה ושומר — לוקח קצת יותר זמן.", "With Unity open, changes happen in it at once (Ctrl+Z undoes them). With it closed, KesherAI runs Unity in the background, changes and saves — a little slower.")}</li>
           </ol>

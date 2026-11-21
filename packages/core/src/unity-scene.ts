@@ -108,7 +108,8 @@ export function readUnityScene(text: string): UnityObject[] {
       else if (go && mesh?.guid) looks.set(go, { guid: mesh.guid });
     } else if (cls === "1001") {
       // A placed prefab or model: its place and name are overrides of its root's properties.
-      const src = ref(field("m_SourcePrefab"));
+      // Unity 2018.3+ names the source m_SourcePrefab; older projects (a "Prefab" document) m_ParentPrefab.
+      const src = ref(field("m_SourcePrefab")) ?? ref(field("m_ParentPrefab"));
       const p = [0, 0, 0], r = [0, 0, 0, 1], sc = [1, 1, 1];
       let target: string | undefined, name: string | undefined;
       const mods = d.matchAll(/- target:\s*(\{[^}]*\})\s*\n\s*propertyPath:\s*(\S+)\s*\n\s*value:\s*(.*)/g);

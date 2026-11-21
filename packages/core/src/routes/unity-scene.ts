@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { GameCheckpoints } from "../game-checkpoints.js";
-import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { createReadStream, existsSync } from "node:fs";
+import { mkdir, open, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { join, relative, resolve, sep } from "node:path";
 import { mergeMoves, readUnityScene, type UnityMove, type UnityObject } from "../unity-scene.js";
 
@@ -18,8 +19,8 @@ async function paths(project: unknown, scene?: unknown): Promise<{ dir: string; 
   if (scene === undefined) return { dir };
   const rel = String(scene).replace(/\\/g, "/");
   const file = resolve(dir, rel);
-  const bad = () => Object.assign(new Error("A .unity scene under Assets/."), { statusCode: 400 });
-  if (!/^Assets\/.+\.unity$/i.test(rel) || rel.split("/").includes("..")) throw bad();
+  const bad = () => Object.assign(new Error("A .unity scene under Assets/ or Packages/."), { statusCode: 400 });
+  if (!/^(Assets|Packages)\/.+\.unity$/i.test(rel) || rel.split("/").includes("..")) throw bad();
   const real = relative(await realpath(dir), await realpath(file).catch(() => file));
   if (real.startsWith("..") || real.split(sep).includes("..")) throw bad();
   return { dir, file, rel };
@@ -28,8 +29,70 @@ async function paths(project: unknown, scene?: unknown): Promise<{ dir: string; 
 /** The model files the stand-in can show (three.js reads these). */
 const MODEL = /\.(fbx|obj|glb|gltf)$/i;
 
+/** Runs `fn` over `items`, at most `n` at a time (reading thousands of small files one by one took >20 s). */
+async function pool<T>(items: readonly T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]!);
+  }));
+}
+
+/** The first bytes of a file (a .meta's guid is on its second line). */
+async function head(file: string, bytes = 400): Promise<string> {
+  const h = await open(file, "r").catch(() => undefined);
+  if (!h) return "";
+  try {
+    const buf = Buffer.alloc(bytes);
+    const { bytesRead } = await h.read(buf, 0, bytes, 0);
+    return buf.toString("utf8", 0, bytesRead);
+  } finally {
+    await h.close();
+  }
+}
+
 /**
- * The asset files behind these GUIDs, from the .meta files beside them (Assets/**, stopping once all are found).
+ * Every GUID → file of the .meta files under some folders: the folders are walked first (names only), then the
+ * .meta files are read in parallel, 400 bytes each. Stops at `max` files or `budgetMs`.
+ *
+ * @param dir - The project.
+ * @param roots - The folders to look in.
+ * @param keep - Which .meta files to read (by name).
+ * @param max - The most .meta files read.
+ * @param budgetMs - The time allowed.
+ * @returns GUID → "Assets/…" (without ".meta"), and whether it stopped early.
+ */
+async function metaIndex(dir: string, roots: string[], keep: (name: string) => boolean, max: number, budgetMs: number): Promise<{ map: Map<string, string>; partial: boolean }> {
+  const until = Date.now() + budgetMs;
+  const files: string[] = [];
+  let partial = false;
+  const walk = async (d: string, depth: number): Promise<void> => {
+    if (depth > 16 || files.length >= max) return;
+    if (Date.now() > until) { partial = true; return; }
+    const subs: string[] = [];
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.name.startsWith(".") || e.name.endsWith("~")) continue;
+      if (e.isDirectory()) subs.push(join(d, e.name));
+      else if (e.name.endsWith(".meta") && keep(e.name)) files.push(join(d, e.name));
+    }
+    await pool(subs, 8, (f) => walk(f, depth + 1));
+  };
+  for (const r of roots) await walk(r, 0);
+  if (files.length >= max) partial = true;
+  const map = new Map<string, string>();
+  await pool(files.slice(0, max), 48, async (f) => {
+    if (Date.now() > until) { partial = true; return; }
+    const g = /^guid:\s*([0-9a-f]{32})/m.exec(await head(f))?.[1];
+    if (g) map.set(g, relative(dir, f.slice(0, -5)).split(sep).join("/"));
+  });
+  return { map, partial };
+}
+
+/** Each project's Assets index, kept for a minute (the stand-in reads several scenes in a row). */
+const assetIndex = new Map<string, { at: number; index: Promise<{ map: Map<string, string>; partial: boolean }> }>();
+
+/**
+ * The asset files behind these GUIDs, from the .meta files beside them (Assets/** and embedded packages, indexed
+ * once a minute per project; package scripts from Library/PackageCache too).
  *
  * @param dir - The project.
  * @param wanted - The GUIDs.
@@ -37,22 +100,14 @@ const MODEL = /\.(fbx|obj|glb|gltf)$/i;
  */
 export async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  let seen = 0;
-  const walk = async (d: string, depth: number): Promise<void> => {
-    if (depth > 12 || out.size === wanted.size || seen > 200_000) return;
-    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-      if (out.size === wanted.size) return;
-      if (e.name.startsWith(".")) continue;
-      const f = join(d, e.name);
-      if (e.isDirectory()) await walk(f, depth + 1);
-      else if (e.name.endsWith(".meta")) {
-        seen++;
-        const g = /^guid:\s*([0-9a-f]{32})/m.exec((await readFile(f, "utf8").catch(() => "")).slice(0, 400))?.[1];
-        if (g && wanted.has(g)) out.set(g, relative(dir, f.slice(0, -5)).split(sep).join("/"));
-      }
-    }
-  };
-  if (wanted.size) await walk(join(dir, "Assets"), 0);
+  if (!wanted.size) return out;
+  let cached = assetIndex.get(dir);
+  if (!cached || Date.now() - cached.at > 60_000) {
+    cached = { at: Date.now(), index: metaIndex(dir, [join(dir, "Assets")], () => true, 300_000, 15_000) };
+    assetIndex.set(dir, cached);
+  }
+  const { map } = await cached.index;
+  for (const g of wanted) if (map.has(g)) out.set(g, map.get(g)!);
   // Not in Assets (a package's script: TextMeshPro, UI…): the packages' own .meta files, read once per project.
   if (out.size < wanted.size) {
     const packs = await packageAssets(dir);
@@ -65,26 +120,8 @@ export async function assetsOf(dir: string, wanted: Set<string>): Promise<Map<st
 const packageCache = new Map<string, Promise<Map<string, string>>>();
 function packageAssets(dir: string): Promise<Map<string, string>> {
   if (!packageCache.has(dir)) {
-    packageCache.set(dir, (async () => {
-      const out = new Map<string, string>();
-      let seen = 0;
-      const walk = async (d: string, depth: number): Promise<void> => {
-        if (depth > 10 || seen > 100_000) return;
-        for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-          const f = join(d, e.name);
-          if (e.isDirectory()) { if (!e.name.startsWith(".") && e.name !== "Tests" && e.name !== "Documentation~") await walk(f, depth + 1); }
-          // Scripts only: what a scene's component names.
-          else if (e.name.endsWith(".cs.meta")) {
-            seen++;
-            const g = /^guid:\s*([0-9a-f]{32})/m.exec((await readFile(f, "utf8").catch(() => "")).slice(0, 400))?.[1];
-            if (g) out.set(g, relative(dir, f.slice(0, -5)).split(sep).join("/"));
-          }
-        }
-      };
-      await walk(join(dir, "Library", "PackageCache"), 0);
-      await walk(join(dir, "Packages"), 0);
-      return out;
-    })());
+    // Scripts only: what a scene's component names.
+    packageCache.set(dir, metaIndex(dir, [join(dir, "Library", "PackageCache"), join(dir, "Packages")], (n) => n.endsWith(".cs.meta"), 100_000, 15_000).then((r) => r.map));
   }
   return packageCache.get(dir)!;
 }
@@ -133,40 +170,125 @@ const fail = (e: unknown) => ({ code: (e as { statusCode?: number }).statusCode 
 const err = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
 
 /**
- * A Unity project's scenes ("Assets/….unity"), skipping hidden folders; at most about 500.
+ * A Unity project's scenes: the .unity files under Assets/ and in embedded packages (Packages/<name>/, not the
+ * downloaded cache), and those the Build Settings list, skipping hidden and "~" folders (Unity ignores them).
+ * Folder links (Windows junctions, symlinks) are followed once. At most 2,000 scenes.
+ *
+ * @param project - The project's folder.
+ * @returns The scenes, sorted, and when there are none a note on why (so the page can say more than "none").
+ */
+export async function unitySceneList(project: unknown): Promise<{ scenes: string[]; note?: string; reason?: "empty" | "none"; files?: number }> {
+  const { dir } = await paths(project);
+  const out = new Set<string>();
+  const seen = new Set<string>();
+  let folders = 0, files = 0;
+  const walk = async (d: string, depth: number): Promise<void> => {
+    if (depth > 16 || out.size >= 2000 || ++folders > 50_000) return;
+    const real = await realpath(d).catch(() => d);
+    if (seen.has(real)) return;
+    seen.add(real);
+    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
+      if (e.name.startsWith(".") || e.name.endsWith("~")) continue;
+      const f = join(d, e.name);
+      const isDir = e.isDirectory() || (e.isSymbolicLink() && !!(await stat(f).catch(() => undefined))?.isDirectory());
+      if (isDir) await walk(f, depth + 1);
+      else {
+        files++;
+        if (/\.unity$/i.test(e.name)) out.add(relative(dir, f).split(sep).join("/"));
+      }
+    }
+  };
+  await walk(join(dir, "Assets"), 0);
+  for (const e of await readdir(join(dir, "Packages"), { withFileTypes: true }).catch(() => [])) {
+    if (e.isDirectory() || e.isSymbolicLink()) await walk(join(dir, "Packages", e.name), 1);
+  }
+  // The Build Settings' list (a scene can sit anywhere the project can see).
+  const build = await readFile(join(dir, "ProjectSettings", "EditorBuildSettings.asset"), "utf8").catch(() => "");
+  for (const m of build.matchAll(/^\s*path:\s*((?:Assets|Packages)\/[^\r\n]+?\.unity)\s*$/gim)) {
+    if (!m[1]!.split("/").includes("..") && existsSync(join(dir, m[1]!))) out.add(m[1]!);
+  }
+  const scenes = [...out].sort();
+  if (scenes.length) return { scenes };
+  const empty = !existsSync(join(dir, "Assets")) || files === 0;
+  const note = empty
+    ? "Assets is empty: the project's files may still be downloading, or they are in another folder."
+    : `No .unity scene files under Assets or Packages (${files} files looked at). A scene that was never saved in Unity has no file yet.`;
+  return { scenes, note, reason: empty ? "empty" : "none", files };
+}
+
+/**
+ * A Unity project's scenes (see {@link unitySceneList}).
  *
  * @param project - The project's folder.
  * @returns The scenes, sorted.
  */
 export async function unityScenes(project: unknown): Promise<string[]> {
-  const { dir } = await paths(project);
-  const out: string[] = [];
-  const walk = async (d: string, depth: number) => {
-    if (depth > 8 || out.length > 500) return;
-    for (const e of await readdir(d, { withFileTypes: true }).catch(() => [])) {
-      if (e.name.startsWith(".")) continue;
-      if (e.isDirectory()) await walk(join(d, e.name), depth + 1);
-      else if (/\.unity$/i.test(e.name)) out.push(relative(dir, join(d, e.name)).split(sep).join("/"));
+  return (await unitySceneList(project)).scenes;
+}
+
+/** The biggest scene file read (it is streamed, and only the parts the stand-in shows are kept). */
+export const MAX_SCENE_BYTES = 512 * 1024 * 1024;
+/** How long reading one scene may take. */
+const READ_MS = 20_000;
+/** How long finding the models and pictures behind the objects may take (after that the scene shows boxes). */
+const LOOKS_MS = 8_000;
+/** The classes the stand-in reads (readUnityScene); every other document keeps only its first line. */
+const KEEP = new Set(["1", "4", "224", "33", "114", "212", "1001"]);
+
+/**
+ * Reads a scene file as a stream, keeping only the documents the stand-in uses (GameObjects, Transforms, mesh
+ * filters, scripts, sprites, placed prefabs) and the first line of the rest: a scene with baked meshes, terrain or
+ * lighting data shrinks to a small part, and is never held whole.
+ *
+ * @param file - The .unity file.
+ * @param budgetMs - The time allowed.
+ * @returns The kept text, for readUnityScene.
+ * @throws Error with statusCode 415 for a binary scene, 504 when it took too long.
+ */
+export async function readSceneText(file: string, budgetMs = READ_MS): Promise<string> {
+  if (!/^%YAML/.test(await head(file, 16))) throw err(415, "This scene is saved in binary. In Unity: Edit → Project Settings → Editor → Asset Serialization: Force Text, then save the scene.");
+  const until = Date.now() + budgetMs;
+  const parts: string[] = [];
+  let keep = true;
+  const lines = createInterface({ input: createReadStream(file, { encoding: "utf8", highWaterMark: 1 << 20 }), crlfDelay: Infinity });
+  let n = 0;
+  for await (const line of lines) {
+    if (line.startsWith("--- !u!")) {
+      keep = KEEP.has(/^--- !u!(\d+)/.exec(line)?.[1] ?? "");
+      parts.push(line);
+    } else if (keep) parts.push(line);
+    if ((++n & 0xfff) === 0 && Date.now() > until) {
+      lines.close();
+      throw err(504, "Reading this scene took too long (it is very big). Try a smaller scene, or open it in Unity.");
     }
-  };
-  await walk(join(dir, "Assets"), 0);
-  return out.sort();
+  }
+  return parts.join("\n");
 }
 
 /**
- * One scene's objects for the stand-in (their looks resolved to models and built-in shapes), read only.
+ * One scene's objects for the stand-in (their looks resolved to models and built-in shapes), read only. Streamed,
+ * with a size and a time guard; when finding the models takes too long the objects come without them (`partial`).
  *
  * @param project - The project's folder.
- * @param scene - "Assets/….unity" inside it.
- * @returns The objects and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big).
+ * @param scene - "Assets/….unity" (or "Packages/….unity") inside it.
+ * @returns The objects and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big, 415
+ *   binary, 504 too slow).
  */
-export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number }> {
+export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number; partial?: boolean; note?: string }> {
   const { dir, file } = await paths(project, scene);
   const st = await stat(file!).catch(() => undefined);
   if (!st?.isFile()) throw err(404, "No such scene.");
-  if (st.size > 200 * 1024 * 1024) throw err(413, "The scene is too big to read here.");
-  const objects = readUnityScene(await readFile(file!, "utf8"));
-  await resolveLooks(dir, objects);
+  if (st.size > MAX_SCENE_BYTES) throw err(413, `The scene is too big to read here (${Math.round(st.size / 1048576)} MB; up to ${MAX_SCENE_BYTES / 1048576} MB).`);
+  const objects = readUnityScene(await readSceneText(file!));
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<"late">((r) => { timer = setTimeout(() => r("late"), LOOKS_MS); });
+  const done = await Promise.race([resolveLooks(dir, objects).then(() => "ok" as const), late]);
+  clearTimeout(timer);
+  if (done === "late") {
+    // resolveLooks may still be changing the objects: hand out copies without the unresolved parts.
+    const plain = objects.map((o) => { const { look, sprite, components, ...rest } = o; return { ...rest, ...(look && "builtin" in look ? { look } : {}), ...(components ? { components: components.map((c) => (c.startsWith("script:") ? "Script" : c)) } : {}), ...(sprite && !/^[0-9a-f]{32}$/.test(sprite) ? { sprite } : {}) }; });
+    return { objects: plain, mtime: st.mtimeMs, partial: true, note: "The models are still being found (a big project): the objects show as boxes for now. Open the scene again in a minute." };
+  }
   return { objects, mtime: st.mtimeMs };
 }
 
@@ -198,7 +320,7 @@ export async function unityAssetOf(project: unknown, path: unknown): Promise<Buf
 export async function unitySceneRoutes(app: FastifyInstance, checkpoints?: GameCheckpoints): Promise<void> {
   app.get<{ Querystring: { project?: string } }>("/api/unity/scenes", async (req, reply) => {
     try {
-      return { scenes: await unityScenes(req.query.project) };
+      return await unitySceneList(req.query.project);
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });

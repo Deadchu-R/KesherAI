@@ -2,7 +2,7 @@
 
 Connects the Unity Editor to KesherAI on the same computer. In KesherAI (**Create → Unity Visual Scripting**) you see your project's Script Graphs and change them in words with your local model; the change happens in the open editor as one undo step (Ctrl+Z).
 
-- Unity 2021.3 or newer with Visual Scripting (installed with it if missing). Editor only; nothing goes into a build.
+- Unity 2021.3, 2022.3 or Unity 6, with Visual Scripting (installed with it if missing). Graph commands through Unity's CLI need Unity 6 and its Pipeline package; on older versions those parts are left out at compile time (docs/UNITY.md, Unity versions). Editor only; nothing goes into a build.
 - No compiler or Visual Studio needed: Unity compiles the package by itself.
 - The editor connects to `ws://127.0.0.1:7420/api/unity/ws` (set `KESHER_PORT` for another port). Nothing listens inside Unity, and KesherAI accepts the connection only from the same computer.
 - Licence: Apache-2.0, like KesherAI.

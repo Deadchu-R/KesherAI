@@ -992,10 +992,16 @@ export class UnityCli {
    *
    * @param folder - The project folder.
    * @param copyPackage - Copies the bridge package into Packages/.
+   * @param pipeline - Adds Unity's Pipeline package too (Unity 6+; on 2021.3/2022.3 it does not exist, and the
+   *   package's scene moves and effects work without it).
    * @returns What to tell the user.
    */
-  async install(folder: string, copyPackage: (folder: string) => Promise<string>): Promise<string> {
+  async install(folder: string, copyPackage: (folder: string) => Promise<string>, pipeline = true): Promise<string> {
     const copied = await copyPackage(folder);
+    if (!pipeline) {
+      await this.addProject(folder);
+      return `${copied} Before Unity 6 the scene moves and effects work; graph commands through Unity's CLI need Unity 6.`;
+    }
     const r = await this.run(["pipeline", "install", "--project-path", folder, "--format", "json"], 120_000);
     if (r.code !== 0) throw failure(r);
     await this.addProject(folder);

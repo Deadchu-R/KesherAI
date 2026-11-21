@@ -17,14 +17,17 @@
   "allowUnsafeCode": false,
   "overrideReferences": false,
   "autoReferenced": false,
-  "defineConstraints": [
-    "KESHER_PIPELINE"
-  ],
+  "defineConstraints": [],
   "versionDefines": [
     {
       "name": "com.unity.pipeline",
       "expression": "0.0.0",
       "define": "KESHER_PIPELINE"
+    },
+    {
+      "name": "com.unity.visualscripting",
+      "expression": "1.7.0",
+      "define": "KESHER_VS"
     }
   ],
   "noEngineReferences": false

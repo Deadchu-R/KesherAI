@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { unitySceneRoutes } from "./unity-scene.js";
+import { readSceneText, unitySceneRoutes } from "./unity-scene.js";
 
 const SCENE = "%YAML 1.1\n--- !u!1 &100\nGameObject:\n  m_Name: Crate\n--- !u!4 &101\nTransform:\n  m_GameObject: {fileID: 100}\n  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}\n  m_LocalPosition: {x: 2, y: 0, z: -1}\n  m_LocalScale: {x: 1, y: 1, z: 1}\n  m_Father: {fileID: 0}\n";
 
@@ -63,5 +63,67 @@ test("a package's script (TextMeshPro…) is named from the packages' own files"
   await unitySceneRoutes(app);
   const o = (await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/Main.unity` })).json().objects;
   assert.deepEqual(o[0].components, ["TextMeshProUGUI.cs"]);
+  await app.close();
+});
+
+/** A small fixture project: Assets/, ProjectSettings/ and the files given (path → text). */
+async function fixture(files: Record<string, string>): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "unity-"));
+  await mkdir(join(dir, "Assets"), { recursive: true });
+  await mkdir(join(dir, "ProjectSettings"));
+  for (const [f, text] of Object.entries(files)) {
+    await mkdir(join(dir, f, ".."), { recursive: true });
+    await writeFile(join(dir, f), text);
+  }
+  return dir;
+}
+
+test("scenes outside Assets/Scenes: deep folders, linked folders, embedded packages and the Build Settings' list", async () => {
+  const dir = await fixture({
+    "Assets/_Game/Levels/World1/Zone/Act/Green Hill.unity": SCENE,
+    "Assets/Ignored~/Old.unity": SCENE,
+    "Packages/com.me.levels/Scenes/Boss.unity": SCENE,
+    "Packages/manifest.json": "{}",
+    "Shared/Menu.unity": SCENE,
+    "ProjectSettings/EditorBuildSettings.asset": "EditorBuildSettings:\n  m_Scenes:\n  - enabled: 1\n    path: Assets/Linked/Menu.unity\n  - enabled: 1\n    path: Assets/Gone.unity\n",
+  });
+  await symlink(join(dir, "Shared"), join(dir, "Assets", "Linked"), "junction").catch(() => undefined);
+  const app = Fastify();
+  await unitySceneRoutes(app);
+  const r = (await app.inject({ url: `/api/unity/scenes?project=${encodeURIComponent(dir)}` })).json();
+  assert.deepEqual(r.scenes, ["Assets/Linked/Menu.unity", "Assets/_Game/Levels/World1/Zone/Act/Green Hill.unity", "Packages/com.me.levels/Scenes/Boss.unity"]);
+  const boss = await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=${encodeURIComponent("Packages/com.me.levels/Scenes/Boss.unity")}` });
+  assert.equal(boss.json().objects[0].name, "Crate");
+  await app.close();
+});
+
+test("no scenes says why: an empty Assets, or files but no .unity", async () => {
+  const app = Fastify();
+  await unitySceneRoutes(app);
+  const empty = await fixture({});
+  assert.deepEqual((await app.inject({ url: `/api/unity/scenes?project=${encodeURIComponent(empty)}` })).json().reason, "empty");
+  const none = await fixture({ "Assets/Scripts/Player.cs": "//" });
+  const r = (await app.inject({ url: `/api/unity/scenes?project=${encodeURIComponent(none)}` })).json();
+  assert.equal(r.reason, "none");
+  assert.equal(r.files, 1);
+  await app.close();
+});
+
+test("a big scene is streamed: baked data dropped, binary refused with a clear message, old prefab format read", async () => {
+  const mesh = `--- !u!43 &500\nMesh:\n  m_Name: Baked\n${"  _typelessdata: 0011223344556677\n".repeat(20000)}`;
+  const oldPrefab = "--- !u!1001 &9\nPrefab:\n  m_Modification:\n    m_TransformParent: {fileID: 0}\n    m_Modifications:\n    - target: {fileID: 5, guid: 44444444444444444444444444444444, type: 2}\n      propertyPath: m_LocalPosition.x\n      value: 3\n      objectReference: {fileID: 0}\n  m_ParentPrefab: {fileID: 100100000, guid: 44444444444444444444444444444444, type: 2}\n";
+  const dir = await fixture({ "Assets/Big.unity": `${SCENE}${mesh}${oldPrefab}`, "Assets/Bin.unity": "\u0000\u0000binary" });
+  const kept = await readSceneText(join(dir, "Assets", "Big.unity"));
+  assert.ok(kept.length < 2000, "the mesh's data is not kept");
+  assert.match(kept, /--- !u!43 &500/);
+  const app = Fastify();
+  await unitySceneRoutes(app);
+  const big = (await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/Big.unity` })).json();
+  assert.equal(big.objects[0].name, "Crate");
+  assert.equal(big.objects[1].position[0], 3);
+  const bin = await app.inject({ url: `/api/unity/scene?project=${encodeURIComponent(dir)}&scene=Assets/Bin.unity` });
+  assert.equal(bin.statusCode, 415);
+  assert.match(bin.json().error, /Force Text/);
+  await assert.rejects(readSceneText(join(dir, "Assets", "Big.unity"), -1), /took too long/);
   await app.close();
 });

@@ -4,6 +4,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { unrealSupport } from "./engine-support.js";
 
 /**
  * Puts the KesherAI Bridge plugin into an Unreal project — also a
@@ -36,6 +37,42 @@ export interface InstallJob {
   engine: string;
   log: string[];
   message?: string;
+  /** The compiler's own errors when the plugin did not build (for "Convert with AI"). */
+  errors?: string[];
+}
+
+/** One project in "Install in all projects". */
+export interface BatchItem {
+  name: string;
+  path: string;
+  /** Its engine version (EngineAssociation). */
+  engine?: string;
+  state: "queued" | "installing" | "done" | "skipped" | "unsupported" | "failed";
+  message?: string;
+  /** The compiler's errors, when it failed to build ("Convert with AI" sends them). */
+  errors?: string[];
+  /** Unreal 5.8+: the engine's own MCP server can be connected too. */
+  mcp?: boolean;
+}
+
+/** "Install in all projects": every Unreal project, one after another. */
+export interface BatchJob {
+  running: boolean;
+  items: BatchItem[];
+}
+
+/**
+ * Whether a project needs the plugin: not when it already has the current version, and never a project whose engine
+ * the plugin does not support (those get "Convert with AI").
+ *
+ * @param p - The project, with the plugin version in it (null: none).
+ * @param latest - The plugin's current version.
+ * @returns The item's first state.
+ */
+export function batchStateOf(p: { engine?: string; plugin: string | null }, latest: string): BatchItem["state"] {
+  if (p.plugin === latest) return "skipped";
+  if (!unrealSupport(p.engine).supported) return "unsupported";
+  return "queued";
 }
 
 /**
@@ -332,6 +369,9 @@ export function bridgeSource(): string | undefined {
 /** Builds and installs the plugin; one at a time. */
 export class BridgeInstaller {
   private job?: InstallJob;
+  /** The running install's work (awaited by {@link installAll}). */
+  private running?: Promise<void>;
+  private batch?: BatchJob;
 
   /** @param dir - Where built plugins are kept, one folder per engine version. */
   constructor(private readonly dir: string) {}
@@ -360,6 +400,11 @@ export class BridgeInstaller {
         "Installing from KesherAI works on Windows for now. On other systems, unzip the plugin into the project's Plugins folder (docs/UNREAL.md).",
       );
     const project = await readProject(folder);
+    if (!unrealSupport(project.engine).supported)
+      throw Object.assign(
+        new Error(`Unreal ${project.engine} is older than the plugin supports (5.1 and newer). KesherAI can convert a copy of the plugin with AI.`),
+        { unsupported: { engine: "unreal", version: project.engine } },
+      );
     const engines = await findEngines();
     const engine =
       engines.find((e) => e.version === project.engine) ??
@@ -380,12 +425,65 @@ export class BridgeInstaller {
       log: [],
     };
     this.job = job;
-    void this.run(job, engine, source, project.dir).catch((err: Error) => {
+    this.running = this.run(job, engine, source, project.dir).catch((err: Error) => {
       job.state = "failed";
       job.message = err.message;
       this.beforeCopy = undefined;
       this.afterCopy = undefined;
     });
+  }
+
+  /** @returns "Install in all projects" now or last (null: never started). */
+  batchStatus(): BatchJob | null {
+    return this.batch ? { running: this.batch.running, items: this.batch.items.map((i) => ({ ...i })) } : null;
+  }
+
+  /**
+   * Installs the plugin into every project given, one after another (a build per engine version, kept for the next
+   * project of that version). Projects already on the current version are skipped; those on an engine the plugin
+   * does not support are marked for "Convert with AI". Unreal 5.8+ projects are marked for the MCP offer.
+   *
+   * @param projects - The Unreal projects found on this computer, each with the plugin version in it.
+   * @param latest - The plugin's current version.
+   * @returns The batch (it runs on; follow {@link batchStatus}).
+   * @throws Error when an install or a batch is already running.
+   */
+  installAll(projects: Array<{ name: string; path: string; engine?: string; plugin: string | null; open?: boolean }>, latest: string): BatchJob {
+    if (this.batch?.running || this.job?.state === "building" || this.job?.state === "copying" || this.job?.state === "waiting")
+      throw new Error("An install is already running.");
+    const items: BatchItem[] = projects.map((p) => {
+      const state = p.open && p.plugin !== latest ? "skipped" : batchStateOf(p, latest);
+      return {
+        name: p.name,
+        path: p.path,
+        ...(p.engine ? { engine: p.engine } : {}),
+        state,
+        ...(state === "skipped" ? { message: p.plugin === latest ? `Already ${latest}` : "Open in Unreal: close it, or use Update automatically" } : {}),
+        ...(state === "unsupported" ? { message: `Unreal ${p.engine} is older than 5.1` } : {}),
+        ...(unrealSupport(p.engine).full ? { mcp: true } : {}),
+      };
+    });
+    const batch: BatchJob = { running: true, items };
+    this.batch = batch;
+    void (async () => {
+      for (const item of items) {
+        if (item.state !== "queued") continue;
+        item.state = "installing";
+        try {
+          await this.install(item.path);
+          await this.running;
+          const job = this.job;
+          item.state = job?.state === "done" ? "done" : "failed";
+          if (job?.message) item.message = job.message.split("\n")[0];
+          if (job?.errors?.length) item.errors = job.errors;
+        } catch (err) {
+          item.state = (err as { unsupported?: unknown }).unsupported ? "unsupported" : "failed";
+          item.message = (err as Error).message;
+        }
+      }
+      batch.running = false;
+    })();
+    return batch;
   }
 
   private async run(
@@ -439,6 +537,7 @@ export class BridgeInstaller {
         const text = job.log.join("\n");
         // The compiler's own errors first (the log shown is only its end); "Visual Studio" alone is in every log.
         const errors = [...new Set(text.split("\n").filter((l) => /\berror [A-Z]+\d+:|: fatal error|\): error/.test(l)).map((l) => l.replace(/^.*[\\/](Source[\\/])/, "$1")))].slice(0, 8);
+        if (errors.length) job.errors = errors;
         throw new Error(
           errors.length
             ? `The plugin did not compile for Unreal ${engine.version}:\n${errors.join("\n")}`

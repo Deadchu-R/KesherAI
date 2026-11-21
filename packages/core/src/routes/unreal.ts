@@ -25,6 +25,7 @@ import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
+import { convertTask, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
 import { MCP_PRESETS } from "../mcp.js";
 import { findGameProjects, listUnityScripts } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
@@ -45,7 +46,7 @@ export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/d
 
 /** Where the Unity package comes from in Unity's Package Manager (Add package from git URL). */
 /** The KesherAI Unity package's current version (integrations/unity/com.kesherai.bridge/package.json; a test keeps them equal). */
-export const UNITY_PACKAGE_VERSION = "0.2.11";
+export const UNITY_PACKAGE_VERSION = "0.2.12";
 export const UNITY_PACKAGE_URL = "https://github.com/Deadchu-R/KesherAI.git?path=/integrations/unity/com.kesherai.bridge";
 
 /**
@@ -581,8 +582,11 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     app.post<{ Body: { project?: string } }>(`${base}/install`, async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Add the package on the computer that runs KesherAI." });
       if (!req.body?.project) return reply.code(400).send({ error: "Choose the project folder." });
+      // Older than 2021.3: the package does not install there; the page offers "Convert with AI".
+      const version = await readUnityVersion(req.body.project);
+      if (!unitySupport(version).supported) return reply.code(400).send({ error: `Unity ${version} is older than the KesherAI package supports (2021.3 and newer). KesherAI can convert a copy of the package with AI.`, unsupported: { engine: "unity", version } });
       try {
-        return { message: await unity.install(req.body.project, installUnityPackage) };
+        return { message: await unity.install(req.body.project, installUnityPackage, unitySupport(version).full || !version) };
       } catch (err) {
         return reply.code(400).send({ error: (err as Error).message });
       }
@@ -828,7 +832,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
   });
 
   /** Engines on this computer and the current install (for "Install into a project"). */
-  app.get("/api/unreal/engines", async () => ({ engines: await findEngines(), job: installer.status() ?? null, windows: process.platform === "win32" }));
+  app.get("/api/unreal/engines", async () => ({ engines: await findEngines(), job: installer.status() ?? null, batch: installer.batchStatus(), windows: process.platform === "win32" }));
 
   /**
    * Installs the plugin into a project folder (works for Blueprint-only
@@ -837,11 +841,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    */
   // The Unreal projects found on this computer, each with the KesherAI Bridge version in it (if any): one click installs or updates it.
   const unrealProjects = async () => (await findGameProjects({ ...(s.unreal.projectFile ? { unrealFile: s.unreal.projectFile } : {}) })).filter((p) => p.kind === "unreal");
-  app.get("/api/unreal/projects", async () => {
+  const projectsWithPlugin = async () => {
     const list = await unrealProjects();
-    return {
-      latest: BRIDGE_VERSION,
-      projects: await Promise.all(
+    return await Promise.all(
         list.map(async (p) => {
           const raw = await readFileFs(join(p.path, "Plugins", "KesherAIBridge", "KesherAIBridge.uplugin"), "utf8").catch(() => "");
           let plugin: string | null = null;
@@ -850,10 +852,39 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
           } catch {
             plugin = "?";
           }
-          return { ...p, plugin, open: !!s.unreal.projectFile && dirname(s.unreal.projectFile).toLowerCase() === p.path.toLowerCase() };
+          return { ...p, plugin, open: !!s.unreal.projectFile && dirname(s.unreal.projectFile).toLowerCase() === p.path.toLowerCase(), support: unrealSupport(p.engine) };
         }),
-      ),
-    };
+      );
+  };
+  app.get("/api/unreal/projects", async () => ({ latest: BRIDGE_VERSION, projects: await projectsWithPlugin() }));
+
+  /**
+   * "Install in all projects": the plugin into every Unreal project found on this computer, one after another (from
+   * the phone too: only the found projects). Follow it in GET /api/unreal/engines (`batch`).
+   */
+  app.post("/api/unreal/install-all", async (_req, reply) => {
+    if (process.platform !== "win32") return reply.code(400).send({ error: "Installing from KesherAI works on Windows for now." });
+    try {
+      return { batch: installer.installAll(await projectsWithPlugin(), BRIDGE_VERSION) };
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * "Convert with AI": a task in the task inbox (Antigravity, one Run tap, or the local model) that converts a copy of
+   * the Unity package or the Unreal plugin to an engine version they do not support. The original is never changed;
+   * the copy lands on the task's own branch for review (engine-support.ts).
+   */
+  app.post<{ Body: ConvertRequest }>("/api/engine-plugins/convert", async (req, reply) => {
+    if (!s.taskInbox) return reply.code(409).send({ error: "The task inbox is off (Settings > Task inbox)." });
+    try {
+      const t = convertTask(req.body ?? ({} as ConvertRequest));
+      const task = await s.taskInbox.add({ title: t.title, goal: t.goal, acceptance: t.acceptance, executor: t.executor, risk: t.risk, extraPaths: t.extraPaths, maxFiles: t.maxFiles });
+      return { id: task.id, executor: t.executor, copy: t.copy };
+    } catch (err) {
+      return reply.code((err as { statusCode?: number }).statusCode ?? 400).send({ error: (err as Error).message });
+    }
   });
 
   /**
@@ -881,7 +912,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       await installer.install(req.body.project);
       return { job: installer.status() };
     } catch (err) {
-      return reply.code(400).send({ error: (err as Error).message });
+      // An engine the plugin does not support: the page offers "Convert with AI".
+      const unsupported = (err as { unsupported?: unknown }).unsupported;
+      return reply.code(400).send({ error: (err as Error).message, ...(unsupported ? { unsupported } : {}) });
     }
   });
 

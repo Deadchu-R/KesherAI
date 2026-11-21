@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { desktop } from "../library";
+import { ConvertWithAI, unsupportedOf, type Unsupported } from "./ConvertWithAI";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -9,11 +10,14 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 export function AddUnityPackage({ compact = false, project }: { compact?: boolean; /** The project shown: its package can be updated in one click. */ project?: string }) {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  // A Unity older than the package supports (2021.3): "Convert with AI" is offered.
+  const [unsupported, setUnsupported] = useState<(Unsupported & { project?: string }) | null>(null);
   const bridge = desktop();
   if (!bridge) return null;
   const pick = async (given?: string) => {
     setError("");
     setMsg("");
+    setUnsupported(null);
     const folder = given ?? (await bridge.pickFolder());
     if (!folder) return;
     try {
@@ -21,6 +25,8 @@ export function AddUnityPackage({ compact = false, project }: { compact?: boolea
       dispatchEvent(new Event("kesher-unity-added"));
     } catch (e) {
       setError((e as Error).message);
+      const u = unsupportedOf(e);
+      if (u) setUnsupported({ ...u, project: folder.split(/[\\/]/).pop() });
     }
   };
   return (
@@ -32,6 +38,7 @@ export function AddUnityPackage({ compact = false, project }: { compact?: boolea
       </div>
       {msg && <p className="pill good">✅ {msg}</p>}
       {error && <p className="error">{error}</p>}
+      {unsupported && <ConvertWithAI {...unsupported} />}
     </div>
   );
 }

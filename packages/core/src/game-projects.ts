@@ -3,6 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { readProject } from "./unreal-install.js";
+import { readUnityVersion } from "./engine-support.js";
 
 /** A Unity or Unreal project found on this computer. */
 export interface GameProject {
@@ -78,8 +79,9 @@ export async function findGameProjects(extra: { unity?: string[]; unrealFile?: s
     if (!s?.isDirectory()) return;
     found.set(key, { ...p, at: s.mtimeMs });
   };
-  for (const u of extra.unity ?? []) if (isUnity(u)) await add({ kind: "unity", name: basename(u), path: resolve(u) });
-  for (const u of await unityHubProjects(home)) if (isUnity(u.path)) await add(u);
+  // The version from the project itself when Unity Hub does not say it (projects added to KesherAI, older Hub lists).
+  for (const u of extra.unity ?? []) if (isUnity(u)) await add({ kind: "unity", name: basename(u), path: resolve(u), ...(await unityVersion(u)) });
+  for (const u of await unityHubProjects(home)) if (isUnity(u.path)) await add(u.engine ? u : { ...u, ...(await unityVersion(u.path)) });
   // Unity projects Unity Hub does not list: the usual places, two folder levels deep (like Unreal's "Unreal Projects").
   for (const dir of await unityFolders(home)) await add({ kind: "unity", name: basename(dir), path: resolve(dir), ...(await unityVersion(dir)) });
   // Godot: the projects KesherAI knows (the connected one), the project manager's list, and the usual folders.
@@ -140,8 +142,7 @@ async function godotVersion(dir: string): Promise<{ engine?: string }> {
 
 /** The editor version a Unity project was made with (ProjectSettings/ProjectVersion.txt). */
 async function unityVersion(dir: string): Promise<{ engine?: string }> {
-  const t = await readFile(join(dir, "ProjectSettings", "ProjectVersion.txt"), "utf8").catch(() => "");
-  const v = /m_EditorVersion:\s*(\S+)/.exec(t)?.[1];
+  const v = await readUnityVersion(dir);
   return v ? { engine: v } : {};
 }
 

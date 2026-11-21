@@ -1746,6 +1746,13 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .ue-found { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ue-found li { gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 8px; border-radius: 8px; background: var(--panel-2, #26272c); }
 .ue-found li .grow { min-width: 0; overflow-wrap: anywhere; }
+/* "Convert with AI" (engine plugins on an unsupported version): a warning box, full width on a 390 px phone. */
+.convert-ai { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--warn, #c9a227); background: color-mix(in srgb, var(--warn, #c9a227) 10%, transparent); }
+.convert-ai p, .convert-ai ul { margin: 0; }
+.convert-ai ul { padding-inline-start: 18px; }
+.ue-found .convert-ai li { display: list-item; background: none; padding: 0; border-radius: 0; }
+.convert-ai .row button { white-space: normal; }
+.convert-ai-done { flex-basis: 100%; }
 /* Phone: the chat box's buttons wrap onto a second line instead of squeezing over each other. */
 @media (max-width: 600px) {
   .box-bar { flex-wrap: wrap; row-gap: 6px; }

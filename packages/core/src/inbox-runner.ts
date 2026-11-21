@@ -462,9 +462,10 @@ export class TaskInbox {
    * A task the user writes in the app ("+ Task", also from the phone): added to the queue and written to the inbox
    * branch so Claude sees it too.
    *
-   * @param input - Title, goal and the rest; paths and limits default to Settings.
+   * @param input - Title, goal and the rest; paths and limits default to Settings. `extraPaths`: more folders the task
+   *   may change, only `integrations/<engine>/<folder>/**` (an engine plugin's AI-converted copy, engine-support.ts). `maxFiles`: 1–60 (default 15).
    */
-  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string }): Promise<InboxTaskView> {
+  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number }): Promise<InboxTaskView> {
     await this.load();
     const s = this.s;
     const title = String(input.title ?? "").trim().slice(0, 200);
@@ -475,7 +476,7 @@ export class TaskInbox {
     while (this.saved.tasks.some((t) => t.id === `r-${day}-${String(n).padStart(2, "0")}`)) n++;
     const executor = ["auto", "antigravity", "local", "opus"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
-    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: 15, goal, ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
+    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
     // The same checks as a file from git (the text is data either way).
     const parsed = parseTaskFile(taskFileText(spec), spec.id, s);
     if ("error" in parsed) throw fail(parsed.error, 400);

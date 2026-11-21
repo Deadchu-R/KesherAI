@@ -1,0 +1,193 @@
+{
+ "group": "משחקים · Games",
+ "mocks": [
+  {
+   "url": "**/api/unreal",
+   "json": {
+    "connected": false,
+    "projects": [],
+    "queued": 0,
+    "offline": true,
+    "latestBridge": "0.1.27",
+    "download": "https://example.invalid/kesher-unreal"
+   }
+  },
+  {
+   "url": "**/api/unreal/engines",
+   "json": {
+    "engines": [
+     {
+      "version": "5.8",
+      "path": "C:/UE_5.8"
+     },
+     {
+      "version": "5.6",
+      "path": "C:/UE_5.6"
+     },
+     {
+      "version": "5.4",
+      "path": "C:/UE_5.4"
+     }
+    ],
+    "job": {
+     "state": "building",
+     "project": "C:/Projects/Racer",
+     "engine": "5.4",
+     "log": [
+      "Building KesherAIBridge for UE 5.4…"
+     ]
+    },
+    "batch": {
+     "running": true,
+     "items": [
+      {
+       "name": "SpaceShooter",
+       "path": "C:/Projects/SpaceShooter",
+       "engine": "5.8",
+       "state": "done",
+       "mcp": true,
+       "message": "Installed. Open (or restart) the project in Unreal 5.8."
+      },
+      {
+       "name": "DoorGame",
+       "path": "C:/Projects/DoorGame",
+       "engine": "5.6",
+       "state": "skipped",
+       "message": "Already 0.1.27"
+      },
+      {
+       "name": "Racer",
+       "path": "C:/Projects/Racer",
+       "engine": "5.4",
+       "state": "installing"
+      },
+      {
+       "name": "OldShooter",
+       "path": "C:/Projects/OldShooter",
+       "engine": "4.27",
+       "state": "unsupported",
+       "message": "Unreal 4.27 is older than 5.1"
+      }
+     ]
+    },
+    "windows": true
+   }
+  },
+  {
+   "url": "**/api/unreal/projects",
+   "json": {
+    "latest": "0.1.27",
+    "projects": [
+     {
+      "name": "SpaceShooter",
+      "path": "C:/Projects/SpaceShooter",
+      "engine": "5.8",
+      "plugin": null,
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": true
+      }
+     },
+     {
+      "name": "DoorGame",
+      "path": "C:/Projects/DoorGame",
+      "engine": "5.6",
+      "plugin": "0.1.27",
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": false
+      }
+     },
+     {
+      "name": "Racer",
+      "path": "C:/Projects/Racer",
+      "engine": "5.4",
+      "plugin": "0.1.20",
+      "open": false,
+      "support": {
+       "supported": true,
+       "known": true,
+       "full": false
+      }
+     },
+     {
+      "name": "OldShooter",
+      "path": "C:/Projects/OldShooter",
+      "engine": "4.27",
+      "plugin": null,
+      "open": false,
+      "support": {
+       "supported": false,
+       "known": true,
+       "full": false
+      }
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/engine-plugins/convert",
+   "json": {
+    "id": "r-20261121-03",
+    "executor": "antigravity",
+    "copy": "integrations/unreal/KesherAIBridge-ue4.27"
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "UnrealInstallAll",
+   "title": "Unreal: התקנה בכל הפרויקטים (גרסה ותוצאה לכל פרויקט)",
+   "titleEn": "Unreal: install in all projects (each project's version and result)",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1000,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": ".ue-batch li"
+    },
+    {
+     "scroll": ".ue-batch"
+    }
+   ]
+  },
+  {
+   "id": "EngineConvertWithAI",
+   "title": "תוסף מנוע: \"המר עם AI\" לגרסה לא נתמכת (אזהרה)",
+   "titleEn": "Engine plugin: \"Convert with AI\" for an unsupported version (warning)",
+   "route": "#/unreal",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1900
+   },
+   "steps": [
+    {
+     "wait": ".ue-batch .convert-ai-open"
+    },
+    {
+     "click": ".ue-batch .convert-ai-open"
+    },
+    {
+     "wait": ".convert-ai"
+    },
+    {
+     "scroll": ".convert-ai"
+    }
+   ]
+  }
+ ]
+}

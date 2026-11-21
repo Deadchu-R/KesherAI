@@ -2,12 +2,27 @@
 
 **Create → Unity Visual Scripting** shows your Unity project's Visual Scripting graphs and changes them in words, with the chat model you chose (a local one keeps everything on your computer).
 
-It works through **Unity's own CLI** (`unity`, from unity.com) and the project's **Pipeline** package, with the **KesherAI Bridge** package ([integrations/unity/com.kesherai.bridge](../integrations/unity/com.kesherai.bridge)) adding a few commands (`kesher_list`, `kesher_graph`, `kesher_apply`, `kesher_check`, `kesher_save`, `kesher_open`). Unity 6 or newer.
+It works through **Unity's own CLI** (`unity`, from unity.com) and the project's **Pipeline** package, with the **KesherAI Bridge** package ([integrations/unity/com.kesherai.bridge](../integrations/unity/com.kesherai.bridge)) adding a few commands (`kesher_list`, `kesher_graph`, `kesher_apply`, `kesher_check`, `kesher_save`, `kesher_open`). The CLI commands need Unity 6; the package itself installs on 2021.3 and newer (see Unity versions below).
 
 ## Set up
 
 1. Install Unity's CLI once (free). Windows PowerShell: `irm https://unity.com/install.ps1 | iex` (macOS / Linux: `curl -fsSL https://unity.com/install.sh | bash`).
 2. On the Unity page press **Add to a project…** and pick the project folder (with `Assets/` and `Packages/`). KesherAI copies the bridge package into `Packages/com.kesherai.bridge` and runs `unity pipeline install` for the Pipeline package. Unity compiles both by itself: no Visual Studio.
+
+### Unity versions (package 0.2.12)
+
+One package for every supported version; the parts a version lacks are left out at compile time (asmdef `versionDefines`), so it always compiles.
+
+| Unity | Installs | Scene moves and effects from KesherAI | Visual Scripting graphs | Graph commands through Unity's CLI |
+| --- | --- | --- | --- | --- |
+| 6000.x (Unity 6) | ✅ | ✅ | ✅ | ✅ (Pipeline package, added by **Add to a project…**) |
+| 2022.3 | ✅ | ✅ | ✅ (Unreal-style graph window) | ⬜ (the Pipeline package is Unity 6 only) |
+| 2021.3 | ✅ | ✅ | ✅ | ⬜ |
+| Older | ⬜: **Convert with AI** is offered | | | |
+
+- `KESHER_PIPELINE` (from `com.unity.pipeline`): `KesherCommands.cs`. `KESHER_VS` (from `com.unity.visualscripting` 1.7+): `KesherGraph.cs` and the `Ux` assembly. Visual Scripting 1.8 is still a dependency, so it is added when missing.
+- KesherAI reads the version from `ProjectSettings/ProjectVersion.txt` (also with a byte-order mark or UTF-16). On 2021.3/2022.3 **Add to a project…** copies the package only (no `pipeline install`).
+- **Convert with AI** (a Unity older than 2021.3, or an Unreal before 5.1): KesherAI warns that it may not work well, then adds a task to the task inbox (Antigravity with one Run tap, or the local model) that copies the plugin into `integrations/<engine>/<plugin>-<version>/` and converts the copy only, with the compile errors when there were any. The original is never changed (the task may write only the copy's folder); the result is on the task's own branch for review.
 
 ## What it covers
 
