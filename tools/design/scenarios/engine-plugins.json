@@ -238,6 +238,16 @@
     {
      "scroll": ".local-agent-off"
     }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/engine-plugins/convert",
+     "json": {
+      "id": "r-20261121-04",
+      "executor": "local",
+      "copy": "integrations/unreal/KesherAIBridge-ue4.27"
+     }
+    }
    ]
   },
   {

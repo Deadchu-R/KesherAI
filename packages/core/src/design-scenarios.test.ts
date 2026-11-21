@@ -71,3 +71,9 @@ test("shot is one selector for both sizes, or one per size", () => {
   assert.deepEqual(jobs({ desktop: ".d" }).map((j) => j.shot), [".d", undefined]);
   assert.deepEqual(jobs(undefined).map((j) => j.shot), [undefined, undefined]);
 });
+
+test("a mock may answer with a binary body (base64), and only base64 characters", () => {
+  const ok = parseScenarioFile(file({ mocks: [{ url: "**/v", bodyBase64: "GkXfow==", contentType: "video/webm" }] }), "v.json");
+  assert.equal(ok[0]!.mocks[0]!.bodyBase64, "GkXfow==");
+  assert.throws(() => parseScenarioFile(file({ mocks: [{ url: "**/v", bodyBase64: "not base64!" }] }), "w.json"), /bodyBase64/);
+});

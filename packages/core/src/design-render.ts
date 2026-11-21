@@ -188,7 +188,7 @@ async function addMocks(page: PwPage, mocks: DesignJob["mocks"]): Promise<void> 
   for (const m of [...mocks].reverse()) {
     await page.route(m.url, async (r) => {
       if (m.method && r.request().method() !== m.method) return r.fallback();
-      await r.fulfill({ status: m.status ?? 200, ...(m.json !== undefined ? { json: m.json } : { body: m.body ?? "", contentType: m.contentType ?? "text/plain" }) });
+      await r.fulfill({ status: m.status ?? 200, ...(m.json !== undefined ? { json: m.json } : { body: m.bodyBase64 !== undefined ? Buffer.from(m.bodyBase64, "base64") : m.body ?? "", contentType: m.contentType ?? "text/plain" }) });
     });
   }
 }

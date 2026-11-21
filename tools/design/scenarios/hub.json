@@ -800,7 +800,7 @@
    },
    "steps": [
     {
-     "wait": ".trow"
+     "wait": ".trow:not(.thead)"
     }
    ],
    "hub": {

@@ -38,6 +38,8 @@ const mockSchema = z.object({
   status: z.number().int().min(100).max(599).optional(),
   json: z.unknown().optional(),
   body: z.string().max(200_000).optional(),
+  /** A binary answer (a tiny video), base64; wins over `body`. */
+  bodyBase64: z.string().max(100_000).regex(/^[A-Za-z0-9+/=]*$/).optional(),
   contentType: z.string().max(100).optional(),
 });
 const stepSchema = z.union([
