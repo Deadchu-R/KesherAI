@@ -68,3 +68,10 @@ test("a character card (SillyTavern V2, and V1) becomes a persona; other JSON wi
   assert.equal(v1.personas[0]!.name, "Bo");
   assert.equal(personasFromFile({ name: "just a thing", description: "not a card" }), undefined);
 });
+
+test("an LM Studio preset sent as a file is read as a persona", async () => {
+  const { personasFromFile } = await import("./persona-import.js");
+  const r = personasFromFile({ name: "Coder", operation: { fields: [{ key: "llm.prediction.systemPrompt", value: "Write tidy C#." }, { key: "llm.prediction.temperature", value: 0.3 }] } });
+  assert.equal(r?.source, "LM Studio");
+  assert.deepEqual(r?.personas, [{ name: "Coder", instructions: "Write tidy C#.", params: { temperature: 0.3 } }]);
+});

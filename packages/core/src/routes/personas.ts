@@ -27,10 +27,15 @@ export async function personaRoutes(app: FastifyInstance, s: KesherServices): Pr
   // An exported file (a LobeHub agent, Open WebUI's exported models), uploaded from the page (the phone too): adds them all.
   app.post<{ Body: { data?: unknown } }>("/api/personas/import-file", { bodyLimit: 20 * 1024 * 1024 }, async (req, reply) => {
     const r = personasFromFile(req.body?.data);
-    if (!r) return reply.code(400).send({ error: "This is not a persona file KesherAI knows: a LobeHub agent (.json), Open WebUI's exported models (.json) or a character card (.png or .json)." });
-    const names = new Set((await s.personas.list()).map((p) => p.name.toLowerCase()));
+    if (!r) return reply.code(400).send({ error: "This is not a persona file KesherAI knows: a LobeHub agent (.json), Open WebUI's exported models (.json), an LM Studio preset (.preset.json) or a character card (.png or .json)." });
+    const mine = await s.personas.list();
+    const names = new Set(mine.map((p) => p.name.toLowerCase()));
+    // Importing the same file again adds nothing: a persona with the same instructions is here already.
+    const have = new Set(mine.map((p) => p.instructions.trim()));
     const added: string[] = [];
     for (const f of r.personas.slice(0, 100)) {
+      if (have.has(f.instructions.trim())) continue;
+      have.add(f.instructions.trim());
       const name = names.has(f.name.toLowerCase()) ? `${f.name} (${r.source})`.slice(0, 60) : f.name;
       names.add(name.toLowerCase());
       await s.personas.save({ name, instructions: f.instructions, ...(f.icon ? { icon: f.icon } : {}), ...(f.params ? { params: f.params } : {}), ...(f.starters ? { starters: f.starters } : {}) });

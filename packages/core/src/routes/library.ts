@@ -11,7 +11,8 @@ import { THINKING_LEVELS } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
-import { geminiHtmlToActivity, readExport, readJanThreads } from "../chat-import.js";
+import { EXPORT_SOURCES, geminiHtmlToActivity, readExport, readJanThreads, type GeminiSplit } from "../chat-import.js";
+import { ImportSessions } from "../import-session.js";
 import { chatSlug, parseInstagram, parseWhatsApp, writePeopleChat } from "../people-chats.js";
 import { findClaudeSessions, readClaudeSession } from "../claude-code-import.js";
 import { homedir } from "node:os";
@@ -119,7 +120,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** Removes every chat that was imported from one assistant (to import it again another way). The user confirms in the app. */
   app.delete<{ Querystring: { source?: string } }>("/api/import/chats", async (req, reply) => {
     const source = String(req.query.source ?? "");
-    if (!["chatgpt", "claude", "gemini", "openwebui", "jan"].includes(source)) return reply.code(400).send({ error: "Which import?" });
+    if (!(EXPORT_SOURCES as readonly string[]).includes(source)) return reply.code(400).send({ error: "Which import?" });
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only on the computer that runs KesherAI." });
     const ids = s.library.listConversations().filter((c) => c.importedFrom === source).map((c) => c.id);
     for (const id of ids) await s.conversations.delete(id).catch(() => undefined);
@@ -129,6 +130,75 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     const counts: Record<string, number> = {};
     for (const c of s.library.listConversations()) if (c.importedFrom) counts[c.importedFrom] = (counts[c.importedFrom] ?? 0) + 1;
     return { counts };
+  });
+
+  /*
+   * Import in two steps (import-session.ts), from the computer or the phone: the export file streams to this
+   * computer (a zip, JSON or HTML of any size; it is never held in memory whole), a preview lists its chats, then
+   * the chats picked are saved and the file is deleted. Nothing leaves this computer.
+   */
+  const knownPersonas = new Set<string>();
+  const refreshPersonas = async () => {
+    knownPersonas.clear();
+    for (const p of await s.personas.list().catch(() => [])) knownPersonas.add(p.instructions.trim());
+  };
+  const imports = new ImportSessions(join(s.paths.root, "imports"), (id) => !!s.library.summary(id), (text) => knownPersonas.has(text.trim()));
+  const splitOf = (v: unknown): GeminiSplit => (v === "gap" || v === "one" ? v : "day");
+  app.addContentTypeParser("application/x-kesher-import", (_req, payload, done) => done(null, payload));
+  /** The file's bytes (`application/x-kesher-import`, name in `x-file-name`) → the preview. */
+  app.post<{ Querystring: { geminiSplit?: string } }>("/api/import/upload", { bodyLimit: Number.MAX_SAFE_INTEGER }, async (req, reply) => {
+    try {
+      const name = decodeURIComponent(String(req.headers["x-file-name"] ?? "export"));
+      const token = await imports.receive(req.body as AsyncIterable<Buffer>, name);
+      await refreshPersonas();
+      try {
+        return await imports.preview(token, splitOf(req.query.geminiSplit));
+      } catch (err) {
+        await imports.discard(token);
+        throw err;
+      }
+    } catch (err) {
+      return reply.code((err as { statusCode?: number }).statusCode ?? 400).send({ error: (err as Error).message });
+    }
+  });
+  /** The preview again (Gemini grouped another way), or the one left open (`token` omitted). */
+  app.post<{ Body: { token?: string; geminiSplit?: string } }>("/api/import/preview", async (req, reply) => {
+    try {
+      await refreshPersonas();
+      if (!req.body?.token) return { preview: imports.pending() ?? null };
+      return { preview: await imports.preview(String(req.body.token), splitOf(req.body.geminiSplit)) };
+    } catch (err) {
+      return reply.code((err as { statusCode?: number }).statusCode ?? 400).send({ error: (err as Error).message });
+    }
+  });
+  /** Saves the chats picked (`keys`, all when omitted) and the personas picked (indexes in the preview). */
+  app.post<{ Body: { token?: string; keys?: unknown; personas?: unknown; projectId?: string | null } }>("/api/import/commit", { bodyLimit: 20 * 1024 * 1024 }, async (req, reply) => {
+    const projectId = req.body?.projectId ?? null;
+    if (projectId && !s.library.getProject(projectId)) return reply.code(400).send({ error: "That project does not exist." });
+    const keys = Array.isArray(req.body?.keys) ? req.body.keys.filter((k): k is string => typeof k === "string") : undefined;
+    const personas = Array.isArray(req.body?.personas) ? req.body.personas.filter((i): i is number => Number.isInteger(i)) : [];
+    try {
+      await refreshPersonas();
+      return await imports.commit(String(req.body?.token ?? ""), { ...(keys ? { keys } : {}), personas }, {
+        saveChats: (chats, media) => s.conversations.importChats(chats, projectId, media),
+        savePersona: async (p) => {
+          if (knownPersonas.has(p.instructions.trim())) return false;
+          const names = new Set((await s.personas.list()).map((x) => x.name.toLowerCase()));
+          let name = p.name;
+          for (let i = 2; names.has(name.toLowerCase()); i++) name = `${p.name.slice(0, 54)} (${i})`;
+          await s.personas.save({ name, instructions: p.instructions, ...(p.params ? { params: p.params } : {}) });
+          knownPersonas.add(p.instructions.trim());
+          return true;
+        },
+      });
+    } catch (err) {
+      return reply.code((err as { statusCode?: number }).statusCode ?? 400).send({ error: (err as Error).message });
+    }
+  });
+  /** Drops an upload without importing it. */
+  app.delete<{ Querystring: { token?: string } }>("/api/import/upload", async (req) => {
+    await imports.discard(String(req.query.token ?? ""));
+    return { ok: true };
   });
 
   /**

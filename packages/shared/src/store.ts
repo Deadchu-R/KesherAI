@@ -105,7 +105,7 @@ export interface Conversation {
   /** Where the chat is from: `telegram` chats ask before every change and get no computer or browser control; `routine` chats were started by a routine (the sidebar keeps them in their own group). */
   source?: "telegram" | "routine" | "guest";
   /** For a chat imported from another assistant: which one. */
-  importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "jan" | "claude-code" | "phone";
+  importedFrom?: "chatgpt" | "claude" | "gemini" | "openwebui" | "lmstudio" | "jan" | "claude-code" | "phone";
   /** A code chat on an outside agent (Antigravity): its own session id, resumed after a restart. */
   agentSession?: string;
   /** What the model sees. */

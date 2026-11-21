@@ -68,6 +68,8 @@ import { LineIcon } from "../ui/Glyph";
 /** The first line of a guest's message in a shared chat (core shared-chat.ts guestMessage). */
 const GUEST_LABEL = /^\[Guest: ([^\]\n]{1,40})\]\n/;
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+/** The apps a chat can be imported from, by name (Settings › Accounts, backup and data › Import chats). */
+const IMPORT_NAMES: Record<string, string> = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", lmstudio: "LM Studio", jan: "Jan", "claude-code": "Claude Code" };
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[]; interruptedAt?: string };
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
@@ -868,6 +870,9 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
         )}
       </div>
       {conv.kind === "code" && info?.workspace && <div className="workspace-bar mono" dir="ltr">{info.workspace}</div>}
+      {conv.importedFrom && conv.importedFrom !== "phone" && (
+        <div className="imported-bar muted small">{L(`יובא מ-${IMPORT_NAMES[conv.importedFrom] ?? conv.importedFrom}`, `Imported from ${IMPORT_NAMES[conv.importedFrom] ?? conv.importedFrom}`)} · {new Date(conv.createdAt).toLocaleDateString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "short", year: "numeric" })}</div>
+      )}
       {(conv.branchOf || branches.length > 0) && (
         <div className="branch-bar">
           {conv.branchOf && <span>⑂ {t("branchOf")} <a href={`#/c/${conv.branchOf.id}`} dir="auto">{conv.branchOf.title}</a></span>}

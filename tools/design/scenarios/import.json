@@ -1,0 +1,165 @@
+{
+ "group": "ייבוא · Import",
+ "mocks": [
+  {
+   "url": "**/api/import/preview",
+   "method": "POST",
+   "json": {
+    "preview": {
+     "token": "t1",
+     "fileName": "chatgpt-export.zip",
+     "source": "chatgpt",
+     "chats": [
+      {
+       "key": "c1",
+       "title": "תכנון רמה 3 בפלטפורמר",
+       "createdAt": {
+        "$ago": "30d"
+       },
+       "updatedAt": {
+        "$ago": "2d"
+       },
+       "messages": 42,
+       "branches": 3,
+       "files": 4,
+       "have": false
+      },
+      {
+       "key": "c2",
+       "title": "Shader for toon water in Unreal",
+       "createdAt": {
+        "$ago": "60d"
+       },
+       "updatedAt": {
+        "$ago": "20d"
+       },
+       "messages": 18,
+       "branches": 1,
+       "files": 2,
+       "have": false
+      },
+      {
+       "key": "c3",
+       "title": "קורות חיים למשרת Unity",
+       "createdAt": {
+        "$ago": "90d"
+       },
+       "updatedAt": {
+        "$ago": "45d"
+       },
+       "messages": 26,
+       "branches": 0,
+       "files": 1,
+       "have": true
+      },
+      {
+       "key": "c4",
+       "title": "Blueprint interface vs cast",
+       "createdAt": {
+        "$ago": "120d"
+       },
+       "updatedAt": {
+        "$ago": "100d"
+       },
+       "messages": 9,
+       "branches": 0,
+       "files": 0,
+       "have": false
+      },
+      {
+       "key": "c5",
+       "title": "רעיונות לשם למשחק",
+       "createdAt": {
+        "$ago": "200d"
+       },
+       "updatedAt": {
+        "$ago": "190d"
+       },
+       "messages": 14,
+       "branches": 2,
+       "files": 0,
+       "have": false
+      }
+     ],
+     "personas": [
+      {
+       "name": "ChatGPT custom instructions",
+       "instructions": "I am a game developer. Answer in Hebrew, short, with code examples in C++ or C#.",
+       "have": false
+      }
+     ],
+     "from": {
+      "$ago": "200d"
+     },
+     "to": {
+      "$ago": "2d"
+     },
+     "broken": 0,
+     "geminiSplit": "day"
+    }
+   }
+  },
+  {
+   "url": "**/api/import/chats/counts",
+   "json": {
+    "counts": {
+     "claude": 12
+    }
+   }
+  },
+  {
+   "url": "**/api/import/jan",
+   "json": {
+    "found": 0
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "ImportPreview",
+   "title": "ייבוא צ'אטים: תצוגה מקדימה לפני הייבוא (ספירות, תאריכים, ענפים, קבצים, בחירה, פרסונות)",
+   "titleEn": "Import chats: preview before importing (counts, dates, branches, files, pick, personas)",
+   "route": "#/settings/accounts",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1300,
+    "phone": 2000
+   },
+   "steps": [
+    {
+     "wait": ".import-preview"
+    },
+    {
+     "scroll": ".import-preview"
+    }
+   ]
+  },
+  {
+   "id": "ImportPreviewSearch",
+   "title": "ייבוא צ'אטים: חיפוש בתצוגה המקדימה",
+   "titleEn": "Import chats: search in the preview",
+   "route": "#/settings/accounts",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".import-filter"
+    },
+    {
+     "fill": ".import-filter",
+     "value": "Unreal"
+    },
+    {
+     "scroll": ".import-preview"
+    }
+   ]
+  }
+ ]
+}

@@ -11,8 +11,8 @@ import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
 import type { AcpOption } from "./acp.js";
 import { personaPrompt } from "./personas.js";
 import { createHash, randomUUID } from "node:crypto";
-import type { ImportedChat } from "./chat-import.js";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { importedChatId, type ImportedChat, type ImportedFile } from "./chat-import.js";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -93,6 +93,9 @@ export class NoModelError extends Error {
 
 const IMAGE_WORKAROUND = /\b(pip3?|py(thon3?)?\s+-m\s+pip)\s+install\b.*\b(torch|diffusers|stable[-_]?diffusion|xformers)\b/i;
 const DRAWING_CODE = /^\s*(import\s+turtle|from\s+turtle\s+import|from\s+PIL\s+import\s+.*ImageDraw)/m;
+
+/** A ChatGPT picture pointer's file id (`file-service://file-Ab12` → `file-Ab12`), or "" for none. */
+const pointerId = (ref?: string) => (ref ?? "").replace(/^[a-z-]+:\/\//i, "");
 
 /**
  * In a chat that has generate_image, stops the model from making pictures
@@ -1509,21 +1512,27 @@ export class ConversationManager {
   /**
    * Saves chats imported from another assistant (see `chat-import.ts`) as
    * KesherAI chats you can read and continue. A chat imported before is
-   * skipped (its id comes from where it came from).
+   * skipped (its id comes from where it came from), so importing the same export again adds nothing.
+   * A branch from the other app (an edited message, another answer) becomes a KesherAI branch of its chat.
+   * Pictures and files go into the chat's folder under `imported/<n>/` and are attached to their message;
+   * a file the export has only the text of is saved as text; one it does not hold at all is named.
    *
-   * @param chats - The chats.
+   * @param chats - The chats (a chat's branches after it).
    * @param projectId - A project to put them in, or none.
+   * @param media - The unpacked file on this computer for a picture a chat points to (from the export's zip).
    * @returns How many were added and how many were there already.
    */
-  async importChats(chats: ImportedChat[], projectId: string | null = null): Promise<{ added: number; skipped: number; ids: string[] }> {
+  async importChats(chats: ImportedChat[], projectId: string | null = null, media?: (f: ImportedFile) => string | undefined): Promise<{ added: number; skipped: number; ids: string[] }> {
     const modelId = this.defaultChatModel() ?? "";
     let added = 0;
     let skipped = 0;
     const ids: string[] = [];
+    const titles = new Map<string, string>();
     for (const chat of chats) {
-      const h = createHash("sha256").update(`${chat.source}:${chat.originalId}`).digest("hex");
-      const id = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`;
+      const id = importedChatId(chat.source, chat.originalId);
       ids.push(id);
+      const title = chat.branchOf ? `${chat.title.slice(0, 116)} ↳` : chat.title.slice(0, 120);
+      titles.set(chat.originalId, title);
       if (await this.deps.library.getConversation(id)) {
         skipped++;
         continue;
@@ -1533,26 +1542,30 @@ export class ConversationManager {
       let turn = 0;
       for (const m of chat.messages) {
         const at = m.at ?? chat.createdAt;
-        if (m.role === "user") events.push({ seq: events.length + 1, at, type: "user", text: m.text });
-        else events.push({ seq: events.length + 1, at, type: "assistant", turn: ++turn, text: m.text });
+        const lines = m.files?.length ? await this.importFiles(id, events.length + 1, m.files, media) : [];
+        const text = [m.text, lines.join("\n")].filter(Boolean).join("\n\n");
+        if (m.role === "user") events.push({ seq: events.length + 1, at, type: "user", text });
+        else events.push({ seq: events.length + 1, at, type: "assistant", turn: ++turn, text });
         const last = messages.at(-1);
-        if (last && last.role === m.role && typeof last.content === "string") last.content = `${last.content}\n\n${m.text}`;
-        else messages.push({ role: m.role, content: m.text } as AgentMessage);
+        if (last && last.role === m.role && typeof last.content === "string") last.content = `${last.content}\n\n${text}`;
+        else messages.push({ role: m.role, content: text } as AgentMessage);
       }
       const updatedAt = chat.messages.at(-1)?.at ?? chat.createdAt;
       // A coding session (Claude Code) continues as a code chat in its folder, asking before changes.
       // Not the whole home folder or a drive (found on the PC: a session that ran in the user's own home folder): then a plain chat.
       const broad = (p: string) => { const r = resolvePath(p); return r === resolvePath(homedir()) || r === parsePath(r).root; };
       const folder = chat.workspace && !broad(chat.workspace) && (await stat(chat.workspace).catch(() => undefined))?.isDirectory() ? chat.workspace : undefined;
+      const parent = chat.branchOf ? importedChatId(chat.source, chat.branchOf.originalId) : undefined;
       await this.deps.library.saveConversation({
         id,
         projectId,
-        title: chat.title.slice(0, 120),
+        title,
         kind: folder ? "code" : "chat",
         ...(folder ? { workspace: folder } : {}),
         modelId,
         mode: folder ? "ask" : "auto-edit",
         importedFrom: chat.source,
+        ...(chat.branchOf && parent ? { branchOf: { id: parent, seq: chat.branchOf.seq, title: titles.get(chat.branchOf.originalId) ?? chat.title.slice(0, 120) } } : {}),
         messages,
         events,
         createdAt: chat.createdAt,
@@ -1561,6 +1574,47 @@ export class ConversationManager {
       added++;
     }
     return { added, skipped, ids };
+  }
+
+  /**
+   * Puts an imported message's files into the chat's folder and returns the lines that attach them.
+   *
+   * @param id - The chat.
+   * @param seq - The message's place (each message gets its own folder, so equal names never clash).
+   * @param files - The files.
+   * @param media - The unpacked file for a picture from the export's zip.
+   */
+  private async importFiles(id: string, seq: number, files: ImportedFile[], media?: (f: ImportedFile) => string | undefined): Promise<string[]> {
+    const root = join(this.deps.outputsDir, id);
+    const rel = `imported/${seq}`;
+    const lines: string[] = [];
+    const clean = (n: string) => n.replace(/^.*[\\/]/, "").replace(/[^\p{L}\p{N} ._()-]/gu, "_").replace(/^\.+/, "").slice(0, 120) || "file";
+    for (const f of files.slice(0, 40)) {
+      const from = media?.(f);
+      const name = clean(from ? basename(from).replace(/^\d+-/, "") : f.name);
+      try {
+        if (from && (await stat(from)).size <= 50 * 1024 ** 2) {
+          // ChatGPT names a picture `file-<id>-photo.png`: the id is left out of the name the user sees.
+          const shown = clean(f.name !== pointerId(f.ref) ? f.name : name.replace(/^file[-_][A-Za-z0-9]+-?/, "") || name);
+          const finalName = /\.[a-z0-9]{2,5}$/i.test(shown) ? shown : `${shown}${/\.[a-z0-9]{2,5}$/i.exec(name)?.[0] ?? ""}`;
+          await mkdir(join(root, rel), { recursive: true });
+          await copyFile(from, join(root, rel, finalName));
+          lines.push(`[Attached: ${rel}/${finalName}]`);
+        } else if (f.data && f.data.length <= 70 * 1024 ** 2) {
+          await mkdir(join(root, rel), { recursive: true });
+          await writeFile(join(root, rel, name), Buffer.from(f.data, "base64"));
+          lines.push(`[Attached: ${rel}/${name}]`);
+        } else if (f.text?.trim()) {
+          const textName = /\.(txt|md|csv|json|log|xml|html?|ya?ml)$/i.test(name) ? name : `${name}.txt`;
+          await mkdir(join(root, rel), { recursive: true });
+          await writeFile(join(root, rel, textName), f.text.slice(0, 2 * 1024 ** 2));
+          lines.push(`[Attached: ${rel}/${textName}]`);
+        } else lines.push(`📎 ${f.name.slice(0, 120)}`);
+      } catch {
+        lines.push(`📎 ${f.name.slice(0, 120)}`);
+      }
+    }
+    return lines;
   }
 
   /**

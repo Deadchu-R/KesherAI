@@ -152,8 +152,8 @@ export function characterCard(o: Record<string, unknown>): (Omit<FoundPersona, "
   return { name: name.slice(0, 60), instructions: fill(parts.join("\n\n")).slice(0, 20_000), icon: "🎭" };
 }
 
-/** A persona file from LobeHub (an agent) or Open WebUI (exported workspace models). */
-export type PersonaFileSource = "LobeHub" | "Open WebUI" | "a character card";
+/** A persona file from LobeHub (an agent), Open WebUI (exported workspace models), LM Studio (a preset) or a character card. */
+export type PersonaFileSource = "LobeHub" | "Open WebUI" | "LM Studio" | "a character card";
 
 /**
  * Reads personas from an exported file: a LobeHub agent (`{ meta, config:
@@ -174,6 +174,9 @@ export function personasFromFile(json: unknown): { source: PersonaFileSource; pe
   // Character cards (SillyTavern, Backyard, chub.ai): V2/V3 keep the fields under `data`, V1 at the top.
   const cards = objs.map(characterCard).filter((c): c is NonNullable<typeof c> => !!c);
   if (cards.length) return { source: "a character card", personas: cards };
+  // An LM Studio preset (`{ name, operation: { fields: [{ key, value }] } }`), sent from the phone or another computer.
+  const presets = objs.map(fromLmStudioPreset).filter((p): p is FoundPersona => !!p).map(({ app: _a, ...p }) => p);
+  if (presets.length) return { source: "LM Studio", personas: presets };
   if (isLobe) {
     const personas = objs.flatMap((o) => {
       const config = (o.config ?? {}) as Record<string, unknown>;

@@ -1,29 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { unzip } from "fflate";
-import { api, isRemote } from "./api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, isRemote, withToken } from "./api";
 import { refreshLibrary } from "./library";
 import { getLocale, he$ } from "./i18n";
 import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
-const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", jan: "Jan" } as const;
-
-/** Takes the chats file out of an export's zip (only that file is read). */
-function chatsFileFromZip(file: File): Promise<string> {
-  return file.arrayBuffer().then(
-    (buf) =>
-      new Promise<string>((resolve, reject) => {
-        unzip(new Uint8Array(buf), { filter: (f) => /(^|\/)(conversations|MyActivity)\.json$/i.test(f.name) || /(gemini|bard)[^/]*\/[^/]+\.(json|html)$/i.test(f.name) }, (err, files) => {
-          if (err) return reject(err);
-          // Prefer conversations.json (ChatGPT, Claude); in a Takeout zip the Gemini folder's MyActivity.json.
-          const names = Object.keys(files).sort((a, b) => Number(/conversations/i.test(b)) - Number(/conversations/i.test(a)) || Number(/gemini|bard/i.test(b)) - Number(/gemini|bard/i.test(a)));
-          const first = names[0];
-          if (!first) return reject(new Error(L("לא מצאתי בקובץ ה-zip את conversations.json או MyActivity.json.", "The zip has no conversations.json or MyActivity.json.")));
-          resolve(new TextDecoder().decode(files[first]));
-        });
-      }),
-  );
-}
+const NAMES = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", lmstudio: "LM Studio", jan: "Jan" } as const;
 
 interface ClaudeSession { file: string; sessionId: string; title: string; cwd?: string; updatedAt: string; size: number }
 
@@ -70,6 +52,178 @@ function ClaudeCodeSessions() {
   );
 }
 
+/** What the computer found in an uploaded export (import-session.ts `ImportPreview`). */
+interface ImportPreview {
+  token: string;
+  fileName: string;
+  source: keyof typeof NAMES;
+  chats: Array<{ key: string; title: string; createdAt: string; updatedAt: string; messages: number; branches: number; files: number; have: boolean }>;
+  personas: Array<{ name: string; instructions: string; have: boolean }>;
+  from?: string;
+  to?: string;
+  broken: number;
+  geminiSplit: "day" | "gap" | "one";
+}
+
+/**
+ * Sends an export file to the computer as it is, with the progress (XHR: fetch has no upload progress).
+ *
+ * @param file - The file the user chose.
+ * @param onProgress - Percent sent.
+ * @returns The preview.
+ */
+function uploadExport(file: File, onProgress: (pct: number) => void): Promise<ImportPreview> {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", withToken("/api/import/upload"));
+    x.setRequestHeader("content-type", "application/x-kesher-import");
+    x.setRequestHeader("x-file-name", encodeURIComponent(file.name));
+    x.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    x.onload = () => {
+      let j: ImportPreview & { error?: string };
+      try {
+        j = JSON.parse(x.responseText) as ImportPreview & { error?: string };
+      } catch {
+        return reject(new Error(String(x.status)));
+      }
+      if (x.status >= 400 || j.error) reject(new Error(j.error ?? String(x.status)));
+      else resolve(j);
+    };
+    x.onerror = () => reject(new Error(L("השליחה למחשב נכשלה. בדקו את החיבור ונסו שוב.", "Sending to the computer failed. Check the connection and try again.")));
+    x.send(file);
+  });
+}
+
+const day = (iso: string) => new Date(iso).toLocaleDateString(getLocale() === "he" ? "he-IL" : undefined, { day: "numeric", month: "short", year: "numeric" });
+/** Rows drawn at first (a big export has thousands): "Show more" adds more. */
+const PAGE = 150;
+
+/**
+ * The preview of an export: counts, dates, the chats to pick (new ones picked), the personas found, and Import.
+ *
+ * @param props.preview - What the computer found.
+ * @param props.onPreview - A new preview (Gemini grouped another way).
+ * @param props.onDone - After the import, with its counts.
+ * @param props.onCancel - After the upload is dropped.
+ */
+function ImportPreviewPanel({ preview, onPreview, onDone, onCancel }: { preview: ImportPreview; onPreview: (p: ImportPreview) => void; onDone: (r: { source: keyof typeof NAMES; added: number; skipped: number; personas: number }) => void; onCancel: () => void }) {
+  const [picked, setPicked] = useState(() => new Set(preview.chats.filter((c) => !c.have).map((c) => c.key)));
+  const [personas, setPersonas] = useState(() => new Set(preview.personas.map((p, i) => (p.have ? -1 : i)).filter((i) => i >= 0)));
+  const [filter, setFilter] = useState("");
+  const [shown, setShown] = useState(PAGE);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    setPicked(new Set(preview.chats.filter((c) => !c.have).map((c) => c.key)));
+  }, [preview]);
+  const list = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? preview.chats.filter((c) => c.title.toLowerCase().includes(q)) : preview.chats;
+  }, [preview, filter]);
+  const totals = useMemo(() => preview.chats.reduce((t, c) => ({ branches: t.branches + c.branches, files: t.files + c.files, have: t.have + Number(c.have) }), { branches: 0, files: 0, have: 0 }), [preview]);
+  const from = NAMES[preview.source] ?? preview.source;
+  const toggle = (key: string) => setPicked((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+  const setAll = (keys: string[], on: boolean) => setPicked((s) => { const n = new Set(s); for (const k of keys) if (on) n.add(k); else n.delete(k); return n; });
+  const regroup = async (geminiSplit: string) => {
+    setBusy(true);
+    try {
+      const r = await api<{ preview: ImportPreview }>("/api/import/preview", { method: "POST", body: { token: preview.token, geminiSplit } });
+      onPreview(r.preview);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const go = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const all = picked.size === preview.chats.length;
+      onDone(await api("/api/import/commit", { method: "POST", body: { token: preview.token, ...(all ? {} : { keys: [...picked] }), personas: [...personas] } }));
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  };
+  const cancel = async () => {
+    await api(`/api/import/upload?token=${encodeURIComponent(preview.token)}`, { method: "DELETE" }).catch(() => undefined);
+    onCancel();
+  };
+  return (
+    <div className="import-preview stack" role="region" aria-label={L("תצוגה מקדימה של הייבוא", "Import preview")}>
+      <h3 dir="auto">{L(`מה יש בקובץ מ-${from}`, `What the ${from} file holds`)}</h3>
+      <p className="import-sum">
+        <span className="pill">{L(`${preview.chats.length} צ'אטים`, `${preview.chats.length} chats`)}</span>
+        {totals.branches > 0 && <span className="pill">⑂ {L(`${totals.branches} ענפים`, `${totals.branches} branches`)}</span>}
+        {totals.files > 0 && <span className="pill">📎 {L(`${totals.files} קבצים ותמונות`, `${totals.files} files and pictures`)}</span>}
+        {preview.from && preview.to && <span className="pill">{day(preview.from)} – {day(preview.to)}</span>}
+        {totals.have > 0 && <span className="pill">{L(`${totals.have} כבר כאן`, `${totals.have} here already`)}</span>}
+      </p>
+      <p className="muted small" dir="auto"><bdi>{preview.fileName}</bdi>{preview.broken > 0 && L(` · ${preview.broken} פריטים לא נקראו (הקובץ אולי חתוך)`, ` · ${preview.broken} items could not be read (the file may be cut off)`)}</p>
+      {preview.source === "gemini" && (
+        <label className="row wrap" style={{ gap: 8 }}>
+          <span>{L("צ'אטים בלי מזהה: איך לחלק", "Prompts with no chat id: how to group")}</span>
+          <Select value={preview.geminiSplit} disabled={busy} onChange={(e) => void regroup(e.target.value)}>
+            <option value="day">{L("שיחה לכל יום", "One chat per day")}</option>
+            <option value="one">{L("הכול בשיחה אחת", "Everything in one chat")}</option>
+            <option value="gap">{L("שיחה חדשה אחרי חצי שעה של שקט", "A new chat after 30 quiet minutes")}</option>
+          </Select>
+        </label>
+      )}
+      <div className="row wrap import-tools">
+        <input type="search" className="import-filter grow" value={filter} onChange={(e) => { setFilter(e.target.value); setShown(PAGE); }} placeholder={L("חיפוש לפי שם", "Search by name")} aria-label={L("חיפוש לפי שם", "Search by name")} dir="auto" />
+        <button type="button" className="small" onClick={() => setAll(list.map((c) => c.key), true)}>{L("בחר הכול", "Select all")}</button>
+        <button type="button" className="small" onClick={() => setAll(list.map((c) => c.key), false)}>{L("נקה", "None")}</button>
+      </div>
+      <ul className="import-list">
+        {list.slice(0, shown).map((c) => (
+          <li key={c.key}>
+            <label className="row">
+              <input type="checkbox" checked={picked.has(c.key)} onChange={() => toggle(c.key)} />
+              <span className="grow">
+                <span className="import-title" dir="auto">{c.title}</span>
+                <span className="muted small">
+                  {day(c.updatedAt)} · {L(`${c.messages} הודעות`, `${c.messages} messages`)}
+                  {c.branches > 0 && ` · ⑂ ${c.branches}`}
+                  {c.files > 0 && ` · 📎 ${c.files}`}
+                  {c.have && ` · ${L("כבר כאן", "here already")}`}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {list.length > shown && <button type="button" className="small" onClick={() => setShown(shown + PAGE)}>{L(`הצג עוד (${list.length - shown})`, `Show more (${list.length - shown})`)}</button>}
+      {preview.personas.length > 0 && (
+        <div className="stack">
+          <h4>{L("הוראות שנמצאו: להוסיף כפרסונות", "Instructions found: add as personas")}</h4>
+          <ul className="import-list">
+            {preview.personas.map((p, i) => (
+              <li key={i}>
+                <label className="row">
+                  <input type="checkbox" disabled={p.have} checked={personas.has(i)} onChange={() => setPersonas((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n; })} />
+                  <span className="grow">
+                    <span className="import-title" dir="auto">{p.name}</span>
+                    <span className="muted small" dir="auto">{p.have ? L("כבר כאן · ", "here already · ") : ""}{p.instructions.slice(0, 140)}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {err && <p className="error small">{err}</p>}
+      <div className="row wrap">
+        <button type="button" className="primary" disabled={busy || (!picked.size && !personas.size)} onClick={() => void go()}>
+          {busy ? L("מייבא…", "Importing…") : L(`ייבוא ${picked.size} צ'אטים`, `Import ${picked.size} chats`)}
+        </button>
+        <button type="button" disabled={busy} onClick={() => void cancel()}>{L("ביטול", "Cancel")}</button>
+      </div>
+    </div>
+  );
+}
+
 /** Settings → Import chats: brings chat history from ChatGPT, Claude or Gemini into KesherAI. */
 export function ImportChats() {
   const input = useRef<HTMLInputElement>(null);
@@ -94,8 +248,6 @@ export function ImportChats() {
     }
   };
 
-  // Gemini's export has no chat ids: how its prompts are grouped into chats is the user's choice.
-  const [split, setSplit] = useState<"day" | "gap" | "one">("day");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const loadCounts = () => void api<{ counts: Record<string, number> }>("/api/import/chats/counts").then((r) => setCounts(r.counts), () => undefined);
   useEffect(loadCounts, []);
@@ -114,63 +266,57 @@ export function ImportChats() {
     }
   };
 
+  // The preview of the file sent (or the one left open when the page was closed, e.g. the phone switched apps).
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [sent, setSent] = useState<number | null>(null);
+  useEffect(() => {
+    void api<{ preview: ImportPreview | null }>("/api/import/preview", { method: "POST", body: {} }).then((r) => r.preview && setPreview(r.preview), () => undefined);
+  }, []);
   const pick = async (file: File) => {
     setBusy(true);
     setResult(null);
+    setSent(0);
     try {
-      const text = /\.zip$/i.test(file.name) ? await chatsFileFromZip(file) : await file.text();
-      // Google Takeout gives My Activity as HTML unless JSON is chosen: both are read.
-      const isHtml = /^\s*<(!doctype|html)/i.test(text) || /class="outer-cell/.test(text.slice(0, 200_000));
-      let data: unknown;
-      if (!isHtml) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          throw new Error(L("הקובץ אינו קובץ ייצוא מוכר (JSON או MyActivity.html של Google).", "The file is not a known export (JSON, or Google's MyActivity.html)."));
-        }
-      }
-      const r = await api<{ source: keyof typeof NAMES; found: number; added: number; skipped: number }>("/api/import/chats", { method: "POST", body: { ...(isHtml ? { html: text } : { data }), geminiSplit: split } });
-      const from = NAMES[r.source];
-      setResult({
-        ok: true,
-        text:
-          L(`נוספו ${r.added} צ'אטים מ-${from}.`, `Added ${r.added} chats from ${from}.`) +
-          (r.skipped ? L(` ${r.skipped} כבר היו כאן.`, ` ${r.skipped} were here already.`) : "") +
-          (r.added ? L(" הם ברשימת הצ'אטים, ואפשר להמשיך כל אחד מהם עם מודל מקומי.", " They are in your chat list; you can continue any of them with a local model.") : ""),
-      });
+      // The file goes to the computer as it is (a zip of any size, from the phone too) and is read there in a stream.
+      setPreview(await uploadExport(file, setSent));
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message });
     } finally {
       setBusy(false);
+      setSent(null);
       if (input.current) input.current.value = "";
-      loadCounts();
-      void refreshLibrary();
     }
+  };
+  const done = (r: { source: keyof typeof NAMES; added: number; skipped: number; personas: number }) => {
+    const from = NAMES[r.source] ?? r.source;
+    setPreview(null);
+    setResult({
+      ok: true,
+      text:
+        L(`נוספו ${r.added} צ'אטים מ-${from}.`, `Added ${r.added} chats from ${from}.`) +
+        (r.skipped ? L(` ${r.skipped} כבר היו כאן.`, ` ${r.skipped} were here already.`) : "") +
+        (r.personas ? L(` נוספו ${r.personas} פרסונות.`, ` Added ${r.personas} personas.`) : "") +
+        (r.added ? L(" הם ברשימת הצ'אטים, מסומנים \"יובא מ-\", ואפשר לחפש בהם ולהמשיך כל אחד עם מודל מקומי.", " They are in your chat list, marked \"Imported from\"; you can search them and continue any of them with a local model.") : ""),
+    });
+    loadCounts();
+    void refreshLibrary();
   };
 
   return (
     <section className="card stack">
       <h2>{L("ייבוא צ'אטים", "Import chats")}</h2>
-      <p className="muted">{L("הבא את היסטוריית הצ'אטים שלך מ-ChatGPT, Claude, Gemini או Open WebUI. הם נשמרים כאן במחשב, ואפשר לחפש בהם ולהמשיך אותם.", "Bring your chat history from ChatGPT, Claude, Gemini or Open WebUI. The chats are kept on this computer, and you can search and continue them.")}</p>
+      <p className="muted">{L("הבא את היסטוריית הצ'אטים שלך מ-ChatGPT, Claude, Gemini, Open WebUI או LM Studio: ענפים, תמונות, קבצים וקוד נשמרים, והוראות אישיות הופכות לפרסונות. לפני הייבוא רואים מה יש בקובץ ובוחרים. הכול נשאר במחשב הזה, גם כששולחים מהטלפון.", "Bring your chat history from ChatGPT, Claude, Gemini, Open WebUI or LM Studio: branches, pictures, files and code are kept, and custom instructions become personas. You see what the file holds and pick before importing. Everything stays on this computer, also when sent from the phone.")}</p>
       <ul className="muted small">
         <li><strong>ChatGPT</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Data controls → Export data. You get an email with a zip.")}</li>
         <li><strong>Claude</strong>: {L("הגדרות ← פרטיות ← ייצוא נתונים. מגיע מייל עם קובץ zip.", "Settings → Privacy → Export data. You get an email with a zip.")}</li>
         <li><strong>Open WebUI</strong>: {L("הגדרות ← בקרת נתונים ← ייצוא צ'אטים (קובץ json).", "Settings → Data Controls → Export Chats (a json file).")}</li>
+        <li><strong>LM Studio</strong>: {L("קובץ ‎.conversation.json מתיקיית conversations של LM Studio.", "A .conversation.json file from LM Studio's conversations folder.")}</li>
         <li><strong>Gemini</strong>: {L("ב-takeout.google.com בחר רק ב-My Activity, ובתוכו Gemini Apps. אפשר להעלות את קובץ ה-zip שמתקבל, או את MyActivity.html (ברירת המחדל של Google) או MyActivity.json מתוכו.", "At takeout.google.com choose only My Activity, with Gemini Apps inside it. Upload the zip you get, or the MyActivity.html (Google's default) or MyActivity.json inside it.")}</li>
       </ul>
-      <label className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <span>{L("Gemini: איך לחלק לשיחות", "Gemini: how to group into chats")}</span>
-        <Select value={split} onChange={(e) => setSplit(e.target.value as typeof split)}>
-          <option value="day">{L("שיחה לכל יום", "One chat per day")}</option>
-          <option value="one">{L("הכול בשיחה אחת", "Everything in one chat")}</option>
-          <option value="gap">{L("שיחה חדשה אחרי חצי שעה של שקט (הרבה שיחות קטנות)", "A new chat after 30 quiet minutes (many small chats)")}</option>
-        </Select>
-      </label>
-      <p className="muted small">{L("בייצוא של Google אין סימון של שיחות, רק שאלות עם זמנים, ולכן החלוקה היא ניחוש.", "Google's export has no chat ids, only prompts with times, so the grouping is a guess.")}</p>
       <div className="row">
-        <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{busy ? L("מייבא…", "Importing…") : L("בחר קובץ zip או json", "Choose the zip or json file")}</button>
+        <button type="button" className="primary" disabled={busy} onClick={() => input.current?.click()}>{sent !== null ? L(`שולח למחשב… ${sent}%`, `Sending to the computer… ${sent}%`) : busy ? L("קורא…", "Reading…") : L("בחר קובץ zip, json או html", "Choose the zip, json or html file")}</button>
         {jan > 0 && <button type="button" disabled={busy} onClick={() => void fromJan()}>{L(`ייבוא ${jan} צ'אטים מ-Jan במחשב הזה`, `Import ${jan} chats from Jan on this computer`)}</button>}
-        <input ref={input} type="file" accept=".zip,.json,.html,.htm,application/zip,application/json,text/html" hidden onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
+        <input ref={input} type="file" accept=".zip,.json,.html,.htm,application/zip,application/json,text/html" hidden disabled={!!preview} onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
       </div>
       {(Object.keys(counts) as Array<keyof typeof NAMES>).filter((k) => counts[k]! > 0 && k in NAMES && !isRemote()).length > 0 && (
         <div className="row wrap">
@@ -179,6 +325,7 @@ export function ImportChats() {
           ))}
         </div>
       )}
+      {preview && <ImportPreviewPanel preview={preview} onPreview={setPreview} onDone={done} onCancel={() => setPreview(null)} />}
       {result && <p className={result.ok ? "pill good" : "error"} role="status">{result.text}</p>}
       <ClaudeCodeSessions />
     </section>
