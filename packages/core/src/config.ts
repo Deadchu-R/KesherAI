@@ -495,6 +495,8 @@ export const KesherConfigSchema = z.object({
   chatBar: z.record(z.string(), z.boolean()).default({}),
   /** Settings → Web: safe search, dark web sites through Tor (off by default), sites never used in any chat. */
   webFilter: z.object({ safeSearch: z.enum(["strict", "moderate", "off"]).default("moderate"), onion: z.boolean().default(false), blocked: z.array(z.string().max(200)).max(200).default([]) }).default({ safeSearch: "moderate", onion: false, blocked: [] }),
+  /** Settings > Web: the user's own free keys for Tavily and Brave Search (used first when set); never sent to a page. */
+  webKeys: z.object({ tavily: z.string().max(200).optional(), brave: z.string().max(200).optional() }).prefault({}),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z
     .object({
@@ -622,6 +624,8 @@ const unreadable = new Map<string, string>();
 function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
   const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
   for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
+  const keys = c.webKeys;
+  if (keys && typeof keys === "object") for (const k of ["tavily", "brave"]) slots.push({ obj: keys as Record<string, unknown>, key: k, slot: `webKeys:${k}` });
   for (const k of ["telegram", "figma", "github", "civitai", "hub"]) {
     const o = c[k];
     if (o && typeof o === "object") slots.push({ obj: o as Record<string, unknown>, key: "token", slot: k });

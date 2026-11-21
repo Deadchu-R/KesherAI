@@ -139,7 +139,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
-  await webSearchCheckRoutes(app);
+  await webSearchCheckRoutes(app, services);
   await storageRoutes(app, services);
   await ideRoutes(app);
   await torRoutes(app, services);

@@ -236,7 +236,7 @@ export const DEPTH = {
 
 /**
  * Searches the web with a chat's settings: only / never these sites, safe search, and how many results by depth.
- * Goes through the backends in web-search.ts (DuckDuckGo, DuckDuckGo Lite, Mojeek, Bing) until one answers.
+ * Goes through the backends in web-search.ts (the keyed Tavily and Brave when a key is set, then DuckDuckGo, Lite, Yahoo, Startpage, Mojeek, Ecosia, Bing) until one answers with results that match the query.
  *
  * @returns The results, already filtered.
  */

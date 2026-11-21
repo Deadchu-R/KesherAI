@@ -2,10 +2,12 @@ import type { WebPrefs } from "@kesher/shared";
 import { htmlToText, parseSearchResults } from "./system-tools.js";
 
 /**
- * Web search with fallbacks (no API key): DuckDuckGo's HTML page, DuckDuckGo Lite, Mojeek, then Bing's HTML page.
- * DuckDuckGo often answers a bot-check page or an empty list to a program, so each backend that errors, is
- * rate-limited, answers a bot check or finds nothing is skipped for the next, and the one that worked last is
- * tried first for {@link REMEMBER_MS}. One small parser per backend; they read the pages' known structure.
+ * Web search with fallbacks. First the optional keyed APIs (Tavily, Brave Search; only when the user entered a free
+ * key in Settings > Web), then the pages that need no key: DuckDuckGo's HTML page, DuckDuckGo Lite, Yahoo, Startpage,
+ * Mojeek, Ecosia and Bing. Engines often answer a bot-check page, an empty list, or (Bing) unrelated pages to a
+ * program, so each backend that errors, is rate-limited, answers a bot check, finds nothing or answers results that
+ * do not match the query (see {@link relevantHits}) is skipped for the next, and the one that worked last is tried
+ * first for {@link REMEMBER_MS}. One small parser per backend; they read the pages' known structure.
  */
 
 /** One search result. */
@@ -27,12 +29,35 @@ export interface SearchAsk {
 
 /** One search backend. */
 export interface SearchBackend {
-  name: "duckduckgo" | "duckduckgo-lite" | "mojeek" | "bing";
-  /** Gets the results page; throws on a network error or a failed status. */
+  name: "tavily" | "brave" | "duckduckgo" | "duckduckgo-lite" | "yahoo" | "startpage" | "mojeek" | "ecosia" | "bing";
+  /** Keyed backends only: whether the user's key is set (a backend without it is not tried). */
+  enabled?: () => boolean;
+  /** Gets the results page (or the API's JSON); throws on a network error or a failed status. */
   fetchPage: (ask: SearchAsk) => Promise<string>;
   /** Reads the page into results (empty when it has none). */
   parse: (html: string) => SearchHit[];
 }
+
+/** The user's own free keys for the keyed backends (Settings > Web). Never logged, never sent anywhere else. */
+export interface SearchKeys {
+  tavily?: string;
+  brave?: string;
+}
+
+/** Where the keys come from (the server's config); none until {@link setSearchKeys}. */
+let keysOf: () => SearchKeys | undefined = () => undefined;
+
+/**
+ * Tells the search where to read the user's keys (called once by the server; read on every search, so a changed key applies at once).
+ *
+ * @param fn - Returns the current keys.
+ */
+export function setSearchKeys(fn: () => SearchKeys | undefined): void {
+  keysOf = fn;
+}
+
+/** @returns The key for a keyed backend, or "" when none is set. */
+const keyFor = (name: "tavily" | "brave"): string => keysOf()?.[name]?.trim() ?? "";
 
 /** How long the backend that worked last is tried first. */
 export const REMEMBER_MS = 30 * 60_000;
@@ -143,6 +168,134 @@ export function parseBing(html: string): SearchHit[] {
   return out;
 }
 
+/**
+ * Generic reader for pages whose results are an anchor followed by a snippet: every anchor that matches `anchorRe`
+ * is a result, its snippet is the first `snippetRe` match before the next anchor.
+ */
+function parseByAnchors(html: string, anchorRe: RegExp, snippetRe: RegExp, hrefOf: (raw: string) => string): SearchHit[] {
+  const out: SearchHit[] = [];
+  const anchors = [...html.matchAll(anchorRe)];
+  anchors.forEach((m, i) => {
+    const url = hrefOf(attr(/^<a\b[^>]*>/i.exec(m[0])?.[0] ?? m[0], "href"));
+    if (!isPage(url)) return;
+    const heading = /<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/i.exec(m[0])?.[1];
+    const rest = html.slice(m.index! + m[0].length, anchors[i + 1]?.index ?? html.length);
+    const snippet = snippetRe.exec(rest)?.[1] ?? "";
+    out.push({ title: htmlToText(heading ?? m[0]), url, snippet: htmlToText(snippet) });
+  });
+  return out;
+}
+
+/** Yahoo wraps result links as `r.search.yahoo.com/…/RU=<encoded page>/RK=…`; this unwraps them. */
+function yahooHref(raw: string): string {
+  const href = cleanHref(raw);
+  const ru = /\/RU=([^/]+)\/R[KS]=/.exec(href)?.[1];
+  if (!ru || !/^https?:\/\/r\.search\.yahoo\.com\//i.test(href)) return href;
+  try {
+    return decodeURIComponent(ru);
+  } catch {
+    return href;
+  }
+}
+
+/**
+ * Reads Yahoo's results page (`compTitle` blocks: the link with an `<h3>`, then a `compText` block with the snippet).
+ *
+ * @param html - The page.
+ * @returns The results.
+ */
+export function parseYahoo(html: string): SearchHit[] {
+  return parseByAnchors(html, /<div\b[^>]*class=["'][^"']*\bcompTitle\b[^"']*["'][^>]*>\s*(<a\b[^>]*>[\s\S]*?<\/a>)/gi, /class=["'][^"']*\bcompText\b[^"']*["'][\s\S]*?<p\b[^>]*>([\s\S]*?)<\/p>/i, yahooHref);
+}
+
+/**
+ * Reads Startpage's results page (anchors with the `result-link` class around an `<h2>`, then a `description` paragraph).
+ *
+ * @param html - The page.
+ * @returns The results.
+ */
+export function parseStartpage(html: string): SearchHit[] {
+  return parseByAnchors(html, /<a\b[^>]*class=["'][^"']*\bresult-link\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, /<p\b[^>]*class=["'][^"']*\bdescription\b[^"']*["'][^>]*>([\s\S]*?)<\/p>/i, cleanHref);
+}
+
+/**
+ * Reads Ecosia's results page (anchors marked `result__link` or `data-test-id="result-link"`, then a description or snippet paragraph).
+ *
+ * @param html - The page.
+ * @returns The results.
+ */
+export function parseEcosia(html: string): SearchHit[] {
+  return parseByAnchors(
+    html,
+    /<a\b(?=[^>]*(?:result__link|data-test-id=["']result-link["']))[^>]*>[\s\S]*?<\/a>/gi,
+    /<(?:p|div)\b[^>]*(?:result__description|web-result__description|data-test-id=["']result-snippet["'])[^>]*>([\s\S]*?)<\/(?:p|div)>/i,
+    cleanHref,
+  );
+}
+
+/** Tavily's API answer: `{ results: [{ title, url, content }] }`. Unreadable JSON is no results. */
+export function parseTavily(json: string): SearchHit[] {
+  try {
+    const rows = (JSON.parse(json) as { results?: Array<{ title?: string; url?: string; content?: string }> }).results ?? [];
+    return rows.filter((r) => typeof r.url === "string" && isPage(r.url)).map((r) => ({ title: String(r.title ?? ""), url: r.url!, snippet: String(r.content ?? "") }));
+  } catch {
+    return [];
+  }
+}
+
+/** Brave Search API's answer: `{ web: { results: [{ title, url, description }] } }` (the description may hold `<strong>`). */
+export function parseBrave(json: string): SearchHit[] {
+  try {
+    const rows = (JSON.parse(json) as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } }).web?.results ?? [];
+    return rows.filter((r) => typeof r.url === "string" && isPage(r.url)).map((r) => ({ title: htmlToText(String(r.title ?? "")), url: r.url!, snippet: htmlToText(String(r.description ?? "")) }));
+  } catch {
+    return [];
+  }
+}
+
+/** Words too common to show that a page is about the query (English and Hebrew). */
+const STOP_WORDS = new Set(
+  ("a an and are as at be by for from how in is it of on or that the this to was what when where which who why with " +
+    "about can do does into not your you site www http https com " +
+    "של את על עם מה איך הוא היא זה זאת או גם לא כל אל מן כי יש אני הם אם לי לך עד כמו").split(" "),
+);
+
+/** @returns The meaningful lower-case words of a text (letters and digits, at least 2 long, no stop words). */
+function meaningfulWords(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+}
+
+/** @returns A page address as readable words (percent-escapes decoded when they can be). */
+function urlText(url: string): string {
+  try {
+    return decodeURIComponent(url);
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Keeps the hits that are about the query: a hit counts when its title, snippet and address together hold at least a
+ * third of the query's meaningful words (at least one; words match whole, or by prefix from 4 letters, so "plugins"
+ * matches "plugin"). Search words like `site:x` and `OR` that the search adds are ignored.
+ *
+ * @param query - The query as sent.
+ * @param hits - The hits of one page.
+ * @returns The hits that match, and whether the page as a whole is irrelevant (more than half of its hits fail, which is
+ *   what a bot page of random results looks like). A query with no meaningful words (or no hits) is never irrelevant.
+ */
+export function relevantHits(query: string, hits: SearchHit[]): { kept: SearchHit[]; irrelevant: boolean } {
+  const words = [...new Set(meaningfulWords(query.replace(/\bsite:\S+|\bOR\b/g, " ")))];
+  if (!words.length || !hits.length) return { kept: hits, irrelevant: false };
+  const need = Math.max(1, Math.ceil(words.length / 3));
+  const kept = hits.filter((h) => {
+    const tokens = meaningfulWords(`${h.title} ${h.snippet} ${urlText(h.url)}`);
+    const found = words.filter((w) => tokens.some((t) => t === w || (w.length >= 4 && t.startsWith(w)) || (t.length >= 4 && w.startsWith(t))));
+    return found.length >= need;
+  });
+  return { kept, irrelevant: kept.length * 2 < hits.length };
+}
+
 /** Gets a page; a bot check's or rate limit's status (202, 403, 429) is an error with a plain reason. */
 async function getPage(url: string, signal: AbortSignal, init: RequestInit = {}): Promise<string> {
   const res = await fetch(url, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(BACKEND_TIMEOUT_MS)]), headers: { ...BROWSER_HEADERS, ...(init.headers ?? {}) } });
@@ -151,8 +304,28 @@ async function getPage(url: string, signal: AbortSignal, init: RequestInit = {})
   return res.text();
 }
 
-/** The backends, in the order they are tried when none has worked lately. */
+/** The backends, in the order they are tried when none has worked lately (keyed ones only when a key is set). */
 export const BACKENDS: readonly SearchBackend[] = [
+  {
+    name: "tavily",
+    enabled: () => !!keyFor("tavily"),
+    fetchPage: ({ query, signal }) =>
+      getPage("https://api.tavily.com/search", signal, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json", authorization: `Bearer ${keyFor("tavily")}` },
+        body: JSON.stringify({ query, max_results: 20, search_depth: "basic" }),
+      }),
+    parse: parseTavily,
+  },
+  {
+    name: "brave",
+    enabled: () => !!keyFor("brave"),
+    fetchPage: ({ query, kp, signal }) =>
+      getPage(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=20&safesearch=${kp === "1" ? "strict" : kp === "-2" ? "off" : "moderate"}`, signal, {
+        headers: { accept: "application/json", "x-subscription-token": keyFor("brave") },
+      }),
+    parse: parseBrave,
+  },
   {
     name: "duckduckgo",
     fetchPage: ({ query, kp, signal, page }) =>
@@ -170,9 +343,24 @@ export const BACKENDS: readonly SearchBackend[] = [
     parse: (html) => parseDuckLite(html),
   },
   {
+    name: "yahoo",
+    fetchPage: ({ query, signal }) => getPage(`https://search.yahoo.com/search?p=${encodeURIComponent(query)}`, signal),
+    parse: parseYahoo,
+  },
+  {
+    name: "startpage",
+    fetchPage: ({ query, signal }) => getPage(`https://www.startpage.com/sp/search?query=${encodeURIComponent(query)}`, signal),
+    parse: parseStartpage,
+  },
+  {
     name: "mojeek",
     fetchPage: ({ query, kp, signal }) => getPage(`https://www.mojeek.com/search?q=${encodeURIComponent(query)}${kp === "1" ? "&safe=1" : ""}`, signal),
     parse: (html) => parseMojeek(html),
+  },
+  {
+    name: "ecosia",
+    fetchPage: ({ query, signal }) => getPage(`https://www.ecosia.org/search?q=${encodeURIComponent(query)}`, signal),
+    parse: parseEcosia,
   },
   {
     name: "bing",
@@ -190,23 +378,46 @@ export function resetSearchMemory(): void {
   lastGood = undefined;
 }
 
-/** @returns The backends in the order to try: the one that worked in the last 30 minutes first. */
+/**
+ * @returns The backends in the order to try: the keyed ones that have a key first, then the one that worked in the
+ *   last 30 minutes, then the rest (keyed backends without a key are left out).
+ */
 export function backendOrder(now = Date.now()): SearchBackend[] {
-  const first = lastGood && now - lastGood.at < REMEMBER_MS ? BACKENDS.find((b) => b.name === lastGood!.name) : undefined;
-  return first ? [first, ...BACKENDS.filter((b) => b !== first)] : [...BACKENDS];
+  const usable = BACKENDS.filter((b) => !b.enabled || b.enabled());
+  const keyed = usable.filter((b) => b.enabled);
+  const first = lastGood && now - lastGood.at < REMEMBER_MS ? usable.find((b) => b.name === lastGood!.name && !b.enabled) : undefined;
+  return [...keyed, ...(first ? [first] : []), ...usable.filter((b) => !b.enabled && b !== first)];
+}
+
+/** What one backend gave: every hit on the page, the ones about the query, and whether the page is irrelevant. */
+interface BackendRead {
+  all: SearchHit[];
+  kept: SearchHit[];
+  irrelevant: boolean;
+}
+
+/**
+ * Gets and reads one backend's page and checks it against the query.
+ *
+ * @throws With the reason when the backend errors, answers a bot check, or finds nothing.
+ */
+async function readBackend(b: SearchBackend, ask: SearchAsk): Promise<BackendRead> {
+  const html = await b.fetchPage(ask);
+  const all = b.parse(html);
+  if (!all.length) throw new Error(looksBlocked(html) ? "Answered a bot-check page." : "No results on the page.");
+  return { all, ...relevantHits(ask.query, all) };
 }
 
 /**
  * Runs one query on one backend.
  *
- * @returns The results.
- * @throws With the reason when the backend errors, answers a bot check, or finds nothing.
+ * @returns The results that match the query.
+ * @throws With the reason when the backend errors, answers a bot check, finds nothing, or answers unrelated results.
  */
 async function runBackend(b: SearchBackend, ask: SearchAsk): Promise<SearchHit[]> {
-  const html = await b.fetchPage(ask);
-  const hits = b.parse(html);
-  if (!hits.length) throw new Error(looksBlocked(html) ? "Answered a bot-check page." : "No results on the page.");
-  return hits;
+  const r = await readBackend(b, ask);
+  if (r.irrelevant) throw new Error(`Irrelevant results (${r.kept.length} of ${r.all.length} match the query), likely a bot page.`);
+  return r.kept;
 }
 
 /**
@@ -230,7 +441,7 @@ export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean
     } catch (e) {
       if (ask.signal.aborted) throw e;
       const why = (e as Error).message;
-      if (/^(No results|Answered a bot)/.test(why)) empty = true;
+      if (/^(No results|Answered a bot|Irrelevant)/.test(why)) empty = true;
       failures.push(`${b.name}: ${why}`);
     }
   }
@@ -243,6 +454,8 @@ export interface BackendCheck {
   backend: string;
   ok: boolean;
   count: number;
+  /** How many of the results match the query (a bot page gives results that do not). */
+  relevant?: number;
   ms: number;
   error?: string;
   /** The first results (title — address), to see that they match the query. */
@@ -258,13 +471,22 @@ export interface BackendCheck {
  */
 export async function checkBackends(query: string, signal: AbortSignal): Promise<BackendCheck[]> {
   const out: BackendCheck[] = [];
-  for (const b of BACKENDS) {
+  for (const b of BACKENDS.filter((x) => !x.enabled || x.enabled())) {
     const t = Date.now();
     try {
-      const hits = await runBackend(b, { query, kp: "-1", signal, page: 1 });
-      out.push({ backend: b.name, ok: true, count: hits.length, ms: Date.now() - t, sample: hits.slice(0, 3).map((h) => `${h.title.slice(0, 80)} — ${h.url.slice(0, 120)}`) });
+      const r = await readBackend(b, { query, kp: "-1", signal, page: 1 });
+      const shown = r.irrelevant ? r.all : r.kept;
+      out.push({
+        backend: b.name,
+        ok: !r.irrelevant,
+        count: r.all.length,
+        relevant: r.kept.length,
+        ms: Date.now() - t,
+        ...(r.irrelevant ? { error: "Irrelevant results, likely a bot page." } : {}),
+        sample: shown.slice(0, 3).map((h) => `${h.title.slice(0, 80)} — ${h.url.slice(0, 120)}`),
+      });
     } catch (e) {
-      out.push({ backend: b.name, ok: false, count: 0, ms: Date.now() - t, error: (e as Error).message });
+      out.push({ backend: b.name, ok: false, count: 0, relevant: 0, ms: Date.now() - t, error: (e as Error).message });
     }
   }
   return out;
