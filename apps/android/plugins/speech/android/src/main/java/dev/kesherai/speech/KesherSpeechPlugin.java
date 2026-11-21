@@ -269,6 +269,8 @@ public class KesherSpeechPlugin extends Plugin {
             return;
         }
         Intent i = new Intent(getContext(), LectureRecorder.class);
+        i.putExtra(LectureRecorder.EXTRA_RESUME, Boolean.TRUE.equals(call.getBoolean("resume", false)));
+        i.putExtra(LectureRecorder.EXTRA_TAG, call.getString("tag", ""));
         if (android.os.Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(i);
         else getContext().startService(i);
         JSObject o = new JSObject();
@@ -276,33 +278,69 @@ public class KesherSpeechPlugin extends Plugin {
         call.resolve(o);
     }
 
-    /** { running, startedAt, pieces }: whether a recording runs (also after the page was reloaded). */
+    /** Pauses the running recording (the notification shows it); { on: false } resumes it. */
+    @PluginMethod
+    public void recPause(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", true));
+        if (LectureRecorder.running) {
+            Intent i = new Intent(getContext(), LectureRecorder.class).setAction(on ? LectureRecorder.ACTION_PAUSE : LectureRecorder.ACTION_RESUME);
+            getContext().startService(i);
+        }
+        call.resolve();
+    }
+
+    /** The finished pieces and the gaps, as the page reads them. */
+    private static JSObject recInfo() {
+        com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
+        com.getcapacitor.JSArray gaps = new com.getcapacitor.JSArray();
+        synchronized (LectureRecorder.pieces) {
+            for (String[] p : LectureRecorder.pieces) {
+                if (p.length > 2) continue; // still being written
+                JSObject x = new JSObject();
+                x.put("file", p[0]);
+                x.put("start", Long.parseLong(p[1]));
+                list.put(x);
+            }
+            for (long[] g : LectureRecorder.gaps) {
+                JSObject x = new JSObject();
+                x.put("at", g[0]);
+                x.put("ms", g[1]);
+                x.put("system", g[2] == 1);
+                gaps.put(x);
+            }
+        }
+        JSObject o = new JSObject();
+        o.put("pieces", list);
+        o.put("gaps", gaps);
+        return o;
+    }
+
+    /**
+     * { running, paused, silenced, startedAt, recordedMs, level, tag, pieces: [{ file, start }], gaps: [{ at, ms, system }] }:
+     * the recording as it is now, also after the page was reloaded or the app was closed (then read from disk; a
+     * recording on disk that is not running can be resumed or finished).
+     */
     @PluginMethod
     public void recState(PluginCall call) {
-        JSObject o = new JSObject();
+        if (!LectureRecorder.running) LectureRecorder.restore(getContext());
+        JSObject o = recInfo();
         o.put("running", LectureRecorder.running);
+        o.put("paused", LectureRecorder.paused);
+        o.put("silenced", LectureRecorder.silenced);
         o.put("startedAt", LectureRecorder.startedAt);
-        synchronized (LectureRecorder.pieces) { o.put("pieces", LectureRecorder.pieces.size()); }
+        o.put("recordedMs", LectureRecorder.recordedMs());
+        o.put("level", LectureRecorder.level);
+        o.put("tag", LectureRecorder.tag);
         call.resolve(o);
     }
 
-    /** Stops the recording; returns its pieces: [{ file, start }] (start in seconds). */
+    /** Stops the recording; returns its pieces: [{ file, start }] (start in seconds) and its gaps. The pieces stay until recClear. */
     @PluginMethod
     public void recStop(PluginCall call) {
         new Thread(() -> {
             LectureRecorder.finishRecording(getContext());
-            com.getcapacitor.JSArray list = new com.getcapacitor.JSArray();
-            synchronized (LectureRecorder.pieces) {
-                for (String[] p : LectureRecorder.pieces) {
-                    JSObject x = new JSObject();
-                    x.put("file", p[0]);
-                    x.put("start", Long.parseLong(p[1]));
-                    list.put(x);
-                }
-            }
-            JSObject o = new JSObject();
-            o.put("pieces", list);
-            call.resolve(o);
+            LectureRecorder.restore(getContext());
+            call.resolve(recInfo());
         }).start();
     }
 

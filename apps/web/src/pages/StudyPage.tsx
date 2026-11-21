@@ -590,7 +590,7 @@ function Lectures({ courseId, info, onChange }: { courseId: string; info: Course
           const l = await call(api<StudyLecture>(`/api/study/courses/${courseId}/lectures`, { method: "POST", body: { title: L(`הרצאה ${info.lectures.length + 1}`, `Lecture ${info.lectures.length + 1}`), text: t } }));
           // The kept audio goes up after the lecture exists (its transcript is safe even if this fails).
           if (l && audio) {
-            const res = await fetch(withToken(`/api/study/courses/${courseId}/lectures/${l.id}/recording`), { method: "POST", headers: { "content-type": audio.type || "audio/webm" }, body: audio }).catch(() => undefined);
+            const res = await fetch(withToken(`/api/study/courses/${courseId}/lectures/${l.id}/recording`), { method: "POST", headers: audio.type === "audio/wav" ? { "content-type": "application/x-kesher-audio", "x-audio-type": "audio/wav" } : { "content-type": audio.type || "audio/webm" }, body: audio }).catch(() => undefined);
             if (!res?.ok) toast(L("התמלול נשמר, אבל ההקלטה לא נשמרה.", "The transcript is saved, but the recording was not."));
           }
           if (l) { onChange(); go(`#/study/${courseId}/l/${l.id}`); }

@@ -5,6 +5,8 @@ import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
 import { openWithDraft } from "../phone";
 import { openMic } from "../mic-access";
+import { nativeRec, useLongRecorder } from "../long-recorder";
+import { RecNote } from "../RecNote";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 type Row = Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number; titles?: string[] };
@@ -75,41 +77,38 @@ export function IdeasPage() {
 /** The recorder: one big button, a length (at most 30 minutes), a timer with a level meter, pause, finish. */
 function Recorder({ onDone }: { onDone: (id: string) => void }) {
   const [minutes, setMinutes] = useState(30);
-  const [state, setState] = useState<"idle" | "rec" | "paused" | "sending">("idle");
-  const [secs, setSecs] = useState(0);
+  const [sending, setSending] = useState(false);
   const [levels, setLevels] = useState<number[]>(Array(14).fill(2));
-  const [failed, setFailed] = useState<Blob | null>(null);
-  const rec = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<Blob[]>([]);
-  const tick = useRef<number>(0);
-  const stopAll = useRef<() => void>(() => undefined);
-  const secsRef = useRef(0);
+  const [failed, setFailed] = useState<{ blob: Blob; seconds: number } | null>(null);
+  // One shared recorder (long-recorder.ts): in the phone app natively, in the background, with a notification;
+  // elsewhere the page records and keeps every 5 seconds in the browser, so nothing is lost on leaving or a crash.
+  const long = useLongRecorder("ideas");
+  const mic = useRef<{ stream: MediaStream; close: () => void } | null>(null);
+  const finishing = useRef(false);
+  // A send that failed leaves the recording kept: Finish again, Resume, or Try again below.
+  const state = sending ? "sending" : failed && long.status === "finishing" ? "interrupted" : long.status;
+  const live = state === "recording" || state === "paused" || state === "silenced";
+  const liveRef = useRef(live);
+  liveRef.current = live;
 
   const send = async (blob: Blob, seconds: number) => {
-    setState("sending");
+    setSending(true);
     const res = await fetch(withToken("/api/ideas/record"), { method: "POST", headers: { "content-type": "application/x-kesher-audio", "x-audio-type": blob.type || "audio/webm", "x-seconds": String(Math.round(seconds)) }, body: blob }).catch(() => undefined);
-    setState("idle");
+    setSending(false);
     const s = res?.ok ? ((await res.json()) as IdeaSession) : undefined;
     if (!s) {
-      setFailed(blob);
+      setFailed({ blob, seconds });
       return toast(res ? ((await res.json().catch(() => ({}))) as { error?: string }).error ?? L("השליחה נכשלה.", "Sending failed.") : L("השליחה נכשלה.", "Sending failed."));
     }
     setFailed(null);
+    await long.done();
     onDone(s.id);
   };
 
-  const start = async () => {
-    let stream: MediaStream;
-    try {
-      stream = await openMic({ echoCancellation: true, noiseSuppression: true });
-    } catch (e) {
-      return toast((e as Error).message);
-    }
-    const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported?.(t)) ?? "";
-    const r = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32_000 } : undefined);
-    chunks.current = [];
-    r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
-    // A level meter, so she sees it hears her.
+  /** Opens the microphone with a level meter (the page's own recording; the phone app meters natively). */
+  const openStream = async (): Promise<MediaStream | undefined> => {
+    if (long.native) return undefined;
+    const stream = await openMic({ echoCancellation: true, noiseSuppression: true });
     const ctx = new AudioContext();
     const an = ctx.createAnalyser();
     an.fftSize = 64;
@@ -119,41 +118,55 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
       an.getByteFrequencyData(buf);
       setLevels(Array.from({ length: 14 }, (_, i) => 2 + Math.round(((buf[i + 1] ?? 0) / 255) * 26)));
     }, 120);
-    r.onstop = () => {
-      window.clearInterval(meter);
-      window.clearInterval(tick.current);
-      void ctx.close();
-      stream.getTracks().forEach((t) => t.stop());
-      void send(new Blob(chunks.current, { type: r.mimeType || type || "audio/webm" }), secsRef.current);
-    };
-    r.start(5000);
-    rec.current = r;
-    secsRef.current = 0;
-    setSecs(0);
-    setState("rec");
-    stopAll.current = () => r.state !== "inactive" && r.stop();
-    tick.current = window.setInterval(() => {
-      if (r.state !== "recording") return;
-      secsRef.current += 1;
-      setSecs(secsRef.current);
-      if (secsRef.current >= minutes * 60) r.stop();
-    }, 1000);
+    mic.current = { stream, close: () => { window.clearInterval(meter); void ctx.close(); stream.getTracks().forEach((t) => t.stop()); } };
+    return stream;
   };
-  useEffect(() => () => stopAll.current(), []);
 
-  const pause = () => {
-    const r = rec.current;
-    if (!r) return;
-    if (r.state === "recording") {
-      r.pause();
-      setState("paused");
-    } else if (r.state === "paused") {
-      r.resume();
-      setState("rec");
+  const start = async (resume = false) => {
+    let stream: MediaStream | undefined;
+    try {
+      stream = await openStream();
+      if (resume) await long.resume(stream);
+      else if (!(await long.start(stream, { minutes }))) {
+        mic.current?.close();
+        return toast(L("הקלטה אחרת (בלימודים) עדיין שמורה בטלפון. סיימו אותה קודם.", "Another recording (Study) is still kept on the phone. Finish it first."));
+      }
+    } catch (e) {
+      mic.current?.close();
+      return toast((e as Error).message);
     }
+    finishing.current = false;
   };
-  const total = minutes * 60;
-  const pct = Math.min(1, secs / total);
+
+  const finish = async () => {
+    if (finishing.current) return;
+    finishing.current = true;
+    const take = await long.finish().catch((e: Error) => (toast(e.message), undefined));
+    mic.current?.close();
+    mic.current = null;
+    if (take?.audio && take.audio.size > 1000) await send(take.audio, take.seconds);
+    else if (take) {
+      toast(L("לא הוקלט כלום.", "Nothing was recorded."));
+      await long.done();
+    }
+    finishing.current = false;
+  };
+  const finishRef = useRef(finish);
+  finishRef.current = finish;
+
+  // The chosen length (kept with the session, so a resumed one keeps it) ends the recording.
+  const limit = Number(long.pending?.meta.minutes ?? minutes) * 60;
+  useEffect(() => {
+    if (long.status === "recording" && long.secs >= limit) void finishRef.current();
+  }, [long.status, long.secs, limit]);
+  // The phone app's level: one loudness, spread over the bars.
+  useEffect(() => {
+    if (long.native) setLevels(Array.from({ length: 14 }, (_, i) => 2 + Math.round(long.level * 26 * (0.55 + 0.45 * Math.abs(Math.sin(long.secs * 1.7 + i))))));
+  }, [long.native, long.level, long.secs]);
+  // Leaving the page: the page's own recording is sent; the phone app's goes on (it is found again on return).
+  useEffect(() => () => { if (!nativeRec() && liveRef.current) void finishRef.current(); }, []);
+
+  const pct = Math.min(1, long.secs / limit);
   return (
     <section className="card ideas-rec">
       <b>{L("הקלטה", "Recording")}</b>
@@ -164,27 +177,30 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
           <b>{L("להקליט", "Record")}</b>
         </button>
       ) : (
-        <div className={`ideas-dial ${state}`} style={{ ["--p" as string]: String(pct) }}>
-          <b dir="ltr">{clock(secs)}</b>
-          <span className="muted small">{L(`מתוך ${clock(total)}`, `of ${clock(total)}`)}</span>
+        <div className={`ideas-dial ${state === "recording" ? "rec" : "paused"}`} style={{ ["--p" as string]: String(pct) }}>
+          <b dir="ltr">{clock(long.secs)}</b>
+          <span className="muted small">{L(`מתוך ${clock(limit)}`, `of ${clock(limit)}`)}</span>
         </div>
       )}
-      <div className="ideas-levels" aria-hidden="true">{levels.map((h, i) => <span key={i} style={{ height: state === "rec" ? h : 2 }} />)}</div>
+      <div className="ideas-levels" aria-hidden="true">{levels.map((h, i) => <span key={i} style={{ height: state === "recording" ? h : 2 }} />)}</div>
+      <RecNote status={long.status} native={long.native} />
       {state === "idle" && (
         <div className="ideas-mins" role="radiogroup" aria-label={L("כמה זמן", "How long")}>
           {MINUTES.map((m) => <button type="button" key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? "on" : ""} onClick={() => setMinutes(m)}>{L(`${m} דק׳`, `${m} min`)}</button>)}
         </div>
       )}
       <div className="row">
-        {(state === "rec" || state === "paused") && <button type="button" onClick={pause}>{state === "paused" ? `▶ ${L("להמשיך", "Resume")}` : `⏸ ${L("השהיה", "Pause")}`}</button>}
-        {(state === "rec" || state === "paused") && <button type="button" className="primary" onClick={() => rec.current?.stop()}>⏹ {L("לסיים ולמיין", "Finish and sort")}</button>}
-        {state === "sending" && <span className="muted">{L("שולח…", "Sending…")}</span>}
+        {live && <button type="button" onClick={() => void long.pause(state !== "paused")} disabled={state === "silenced"}>{state === "paused" ? `▶ ${L("להמשיך", "Resume")}` : `⏸ ${L("השהיה", "Pause")}`}</button>}
+        {state === "interrupted" && <button type="button" onClick={() => void start(true)}>▶ {L("להמשיך להקליט", "Resume recording")}</button>}
+        {(live || state === "interrupted") && <button type="button" className="primary" onClick={() => void finish()}>⏹ {L("לסיים ולמיין", "Finish and sort")}</button>}
+        {state === "interrupted" && <button type="button" className="ghost" onClick={() => confirm(L("למחוק את ההקלטה?", "Delete the recording?")) && void long.done()}>{L("למחוק", "Delete")}</button>}
+        {(state === "sending" || state === "finishing") && <span className="muted">{L("שולח…", "Sending…")}</span>}
       </div>
       {failed && (
         <p className="small">
           {L("ההקלטה לא נשלחה, אבל היא שמורה כאן:", "The recording was not sent, but it is kept here:")}{" "}
-          <button type="button" className="link" onClick={() => void send(failed, secsRef.current)}>{L("לנסות שוב", "Try again")}</button>{" · "}
-          <a href={URL.createObjectURL(failed)} download={`ideas-${new Date().toISOString().slice(0, 16)}.webm`}>{L("להוריד", "Download")}</a>
+          <button type="button" className="link" onClick={() => void send(failed.blob, failed.seconds)}>{L("לנסות שוב", "Try again")}</button>{" · "}
+          <a href={URL.createObjectURL(failed.blob)} download={`ideas-${new Date().toISOString().slice(0, 16)}.${failed.blob.type.includes("wav") ? "wav" : "webm"}`}>{L("להוריד", "Download")}</a>
         </p>
       )}
     </section>

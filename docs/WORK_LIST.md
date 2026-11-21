@@ -31,6 +31,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 - ✅ Load on demand (Roee 2026-11-21): chat model, embeddings and ComfyUI start only when needed and unload after their own idle time (10/5/5 min, translator 5, "keep loaded" per engine) in Settings → computer; nothing heavy at start; never in the middle of work (gpu-guard idleDue, semantic.ts, start-engines.ts). sd.cpp already per job.
 - ✅ Translator (Roee 2026-11-21, "מחולל תרגום"): translate.ts in core (loaded chat model → free Gemini flash → TranslateGemma 4B on demand); image/video/music prompts go out in English, "Prompt used" under the result; Translate page (#/translate) with one-click TranslateGemma download.
+- ✅ Recording survives leaving the app (Roee 2026-11-21, "switching to a video stops the recording"): Open mind and Study record natively in the phone app's foreground service (notification with Pause/Stop; another app taking the mic pauses and resumes by itself, the gap is marked); elsewhere 5-second chunks into IndexedDB; "Resume" / "Finish" after a stop or reload (long-recorder.ts, rec-store.ts, LectureRecorder.java). Needs a new phone app build (APK on push to main).
 
 ## Now (2026-11-19): research and code only, no new builds (Roee, 10:13)
 - ✅ **Mark it and let the model work** (FUTURE_FEATURES), in all four editors:

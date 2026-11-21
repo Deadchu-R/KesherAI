@@ -135,6 +135,19 @@ interface PwBrowser {
   close(): Promise<void>;
 }
 
+/**
+ * A fake KesherSpeech recorder (the phone app's native plugin) for a board: recState answers with the board's state,
+ * the other calls do nothing. Runs in the page before its scripts.
+ */
+const NATIVE_REC_JS = `(st) => {
+  const pieces = Array.from({ length: st.pieces }, (_, i) => ({ file: "piece-" + String(i).padStart(4, "0") + ".wav", start: i * 30 }));
+  const ok = async () => undefined;
+  const plugin = { recStart: ok, recPause: ok, recClear: ok, recRead: async () => ({ wav: "" }),
+    recStop: async () => ({ pieces, gaps: [] }),
+    recState: async () => ({ ...st, startedAt: Date.now() - st.recordedMs, pieces, gaps: [] }) };
+  window.Capacitor = { ...(window.Capacitor || {}), Plugins: { ...((window.Capacitor || {}).Plugins || {}), KesherSpeech: plugin } };
+}`;
+
 /** Runs one step before the shot. */
 async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   const T = { timeout: 15_000 };
@@ -224,6 +237,8 @@ async function shoot(browser: PwBrowser, base: string, job: DesignJob, hubBase?:
         if (a.phone) localStorage.setItem("kesher-token", "design-render");
       } catch { /* storage blocked: the page still renders */ }
     }, { locale: job.locale, phone });
+    // A background recording on the phone: the phone app's recorder plugin, answering with the board's state.
+    if (job.nativeRec) await page.addInitScript(`(${NATIVE_REC_JS})(${JSON.stringify(job.nativeRec)})`);
     if (hub) {
       if (job.hub?.push) await page.addInitScript(`window.__pushOn = true; ${HUB_PUSH_JS}`);
       else await page.addInitScript(HUB_PUSH_JS);

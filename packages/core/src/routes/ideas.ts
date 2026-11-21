@@ -86,7 +86,9 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.addContentTypeParser("application/x-kesher-audio", (_req, payload, done) => done(null, payload));
   app.post("/api/ideas/record", { bodyLimit: Number.MAX_SAFE_INTEGER }, async (req, reply) => {
     const seconds = Number(req.headers["x-seconds"] ?? 0);
-    const ext = /webm/.test(String(req.headers["x-audio-type"] ?? "")) ? "webm" : /ogg/.test(String(req.headers["x-audio-type"] ?? "")) ? "ogg" : "m4a";
+    const type = String(req.headers["x-audio-type"] ?? "");
+    // WAV: the phone app's own background recording, or several resumed parts joined.
+    const ext = /webm/.test(type) ? "webm" : /ogg/.test(type) ? "ogg" : /wav/.test(type) ? "wav" : "m4a";
     await mkdir(root, { recursive: true });
     const dir = await mkdtemp(join(root, ".rec-"));
     const file = join(dir, `audio.${ext}`);

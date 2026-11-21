@@ -73,6 +73,22 @@ const hubSeedSchema = z.object({
 export type HubSeed = z.infer<typeof hubSeedSchema>;
 
 const height = z.number().int().min(200).max(6000);
+/**
+ * The phone app's native recorder as a board's page sees it (KesherSpeech.recState), for the background recording
+ * states: running, paused by the person or by the system (another app took the microphone), or stopped and kept.
+ */
+const nativeRecSchema = z.object({
+  running: z.boolean(),
+  paused: z.boolean().default(false),
+  silenced: z.boolean().default(false),
+  recordedMs: z.number().int().min(0).max(36_000_000),
+  pieces: z.number().int().min(0).max(2000).default(0),
+  tag: z.enum(["ideas", "study"]),
+  level: z.number().int().min(0).max(100).default(40),
+});
+/** A board's native recorder (see {@link nativeRecSchema}). */
+export type DesignNativeRec = z.infer<typeof nativeRecSchema>;
+
 const boardSchema = z.object({
   id: z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,60}$/, "id: letters, digits and '-' (it becomes a file name)"),
   title: z.string().min(1).max(160),
@@ -90,6 +106,7 @@ const boardSchema = z.object({
   mocks: z.array(mockSchema).max(80).default([]),
   steps: z.array(stepSchema).max(60).default([]),
   phoneSteps: z.array(stepSchema).max(60).optional(),
+  nativeRec: nativeRecSchema.optional(),
 });
 const fileSchema = z.object({
   group: z.string().min(1).max(80),
@@ -132,6 +149,8 @@ export interface DesignJob {
   target: "app" | "hub";
   /** A hub board's starting state (times already fixed). */
   hub?: HubSeed;
+  /** The phone app's native recorder, faked for the page (phone boards of a background recording). */
+  nativeRec?: DesignNativeRec;
 }
 
 /** The element a board shoots alone at this size (`shot` is one selector, or one per size), if any. */
@@ -209,6 +228,7 @@ export function parseScenarioFile(text: string, file: string): DesignJob[] {
         now,
         target,
         ...(target === "hub" ? { hub: hubSeedSchema.parse(resolveTimes(b.hub ?? f.hub ?? {}, now)) } : {}),
+        ...(b.nativeRec ? { nativeRec: b.nativeRec } : {}),
       });
     }
   }

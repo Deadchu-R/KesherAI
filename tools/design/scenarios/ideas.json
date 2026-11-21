@@ -287,6 +287,87 @@
      "scroll": ".idea-edit"
     }
    ]
+  },
+  {
+   "id": "IdeasBgRecording",
+   "title": "מוח פתוח בטלפון: ההקלטה ממשיכה ברקע (מסך כבוי, סרטון באפליקציה אחרת), עם התראה קבועה: השהה / עצור",
+   "titleEn": "Open mind on the phone: recording goes on in the background (screen off, a video in another app), with an ongoing notification: Pause / Stop",
+   "route": "#/ideas",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 1000
+   },
+   "nativeRec": {
+    "running": true,
+    "recordedMs": 754000,
+    "pieces": 25,
+    "tag": "ideas"
+   },
+   "steps": [
+    {
+     "wait": ".ideas-rec .ideas-dial"
+    },
+    {
+     "waitMs": 1500
+    }
+   ]
+  },
+  {
+   "id": "IdeasBgSilenced",
+   "title": "מוח פתוח בטלפון: אפליקציה אחרת לקחה את המיקרופון: מושהה, ממשיך לבד כשהוא מתפנה, הפער מסומן",
+   "titleEn": "Open mind on the phone: another app took the microphone: paused, goes on by itself when it is free, the gap is marked",
+   "route": "#/ideas",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 1000
+   },
+   "nativeRec": {
+    "running": true,
+    "silenced": true,
+    "recordedMs": 754000,
+    "pieces": 25,
+    "tag": "ideas",
+    "level": 0
+   },
+   "steps": [
+    {
+     "wait": ".ideas-rec .ideas-dial"
+    },
+    {
+     "waitMs": 1500
+    }
+   ]
+  },
+  {
+   "id": "IdeasBgStopped",
+   "title": "מוח פתוח בטלפון: ההקלטה נעצרה (המערכת או \"עצור\" בהתראה): הכול שמור, להמשיך לאותה הקלטה / לסיים / למחוק",
+   "titleEn": "Open mind on the phone: the recording stopped (the system, or Stop in the notification): all kept, resume into the same recording / finish / delete",
+   "route": "#/ideas",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 1000
+   },
+   "nativeRec": {
+    "running": false,
+    "recordedMs": 754000,
+    "pieces": 25,
+    "tag": "ideas",
+    "level": 0
+   },
+   "steps": [
+    {
+     "wait": ".ideas-rec .ideas-dial"
+    },
+    {
+     "waitMs": 1500
+    }
+   ]
   }
  ]
 }

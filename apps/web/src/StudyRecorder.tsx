@@ -5,9 +5,17 @@ import { encodeWav } from "./Mic";
 import { stamp, stampSeconds } from "./study-time";
 import { busy } from "./VersionWatch";
 import { openMic } from "./mic-access";
+import { useLongRecorder } from "./long-recorder";
+import { RecNote } from "./RecNote";
+import type { RecGap } from "./rec-store";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const PIECE_SEC = 30;
+/** h:mm:ss (or mm:ss under an hour). */
+const clockOf = (secs: number) => {
+  const mm = Math.floor(secs / 60);
+  return `${Math.floor(mm / 60) ? `${Math.floor(mm / 60)}:` : ""}${String(mm % 60).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+};
 
 /**
  * Records a lecture (the microphone, and in a Zoom or Teams lesson on the computer also the computer's sound), turns
@@ -15,11 +23,16 @@ const PIECE_SEC = 30;
  * marks and the ⭐ marks) to be saved as a lecture, with the audio when she keeps it. Works on the computer and from the
  * phone through remote.
  *
+ * Nothing recorded is lost (useLongRecorder): in the phone app the phone records natively in the background (screen
+ * off, another app in front) and each finished half minute is transcribed as it comes; elsewhere the sound is kept in
+ * the browser every 5 seconds and the transcript with it, so after a reload or a crash "Resume" goes on into the same
+ * lecture, and "Finish" saves what there is.
+ *
  * @param props.onDone - Called with the transcript when the recording stops (empty when nothing was said), and the audio
  *   when it is kept.
  * @param props.onCancel - Called when the person closes it before starting.
  */
-export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: string, audio?: Blob) => void; onCancel: () => void; courseId?: string }) {
+export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: string, audio?: Blob) => void | Promise<void>; onCancel: () => void; courseId?: string }) {
   // A question during the class, answered from the transcript so far (design LiveAsk, students part 27 #8).
   const [q, setQ] = useState("");
   const [answers, setAnswers] = useState<Array<{ q: string; a?: string }>>([]);
@@ -45,22 +58,156 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
   const [translateTo, setTranslateTo] = useState<"" | "he" | "en">("");
   const [translated, setTranslated] = useState<string[]>([]);
   const paused = useRef(false);
+  // Transcribes one half minute (WAV) into a line at its minute; in order, one after another.
+  const queue = useRef(Promise.resolve());
+  const transcribe = (wav: Blob, at: number) => {
+    queue.current = queue.current.then(async () => {
+      try {
+        const res = await fetch(withToken(`/api/speech/transcribe?lang=auto`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
+        const j = (await res.json()) as { text?: string; error?: string; code?: string };
+        if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט במחשב: הגדרות ← דיבור.", "Set up speech to text on the computer first: Settings → Speech."));
+        if (!res.ok) throw new Error(j.error ?? String(res.status));
+        const t = (j.text ?? "").trim();
+        if (t) setLines((ls) => [...ls, `${stamp(at)} ${t}`]);
+        if (t && translateRef.current) {
+          // Not awaited: the next half minute's transcript does not wait for the translation.
+          void api<{ text: string }>("/api/study/translate", { method: "POST", body: { text: t, to: translateRef.current } }).then((r) => r.text && setTranslated((ts) => [...ts, `${stamp(at)} ${r.text}`]), () => undefined);
+        }
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    });
+  };
+  const translateRef = useRef(translateTo);
+  translateRef.current = translateTo;
+  // The shared recorder: native in the phone app (pieces come to onPiece), the browser's storage elsewhere.
+  const long = useLongRecorder("study", { onPiece: (wav, at) => transcribe(wav, at) });
+  const nativeMode = long.native;
+  // The transcript goes with the kept recording, so a resumed or finished-later lecture has it.
+  useEffect(() => {
+    if (state !== "idle" && state !== "finishing") long.setMeta({ lines, keep });
+  }, [lines, state]);
   const rec = useRef<{ stop: () => Promise<void>; mark: () => void; slide: (f: File) => void } | null>(null);
   const [slides, setSlides] = useState(0);
   const slideInput = useRef<HTMLInputElement>(null);
   const canSystem = typeof navigator.mediaDevices?.getDisplayMedia === "function" && !matchMedia("(pointer: coarse)").matches;
 
   useEffect(() => {
-    if (state !== "recording") return;
+    if (state !== "recording" || nativeMode) return;
     const id = setInterval(() => setSecs((x) => x + 1), 1000);
     return () => clearInterval(id);
   }, [state]);
-  useEffect(() => () => void rec.current?.stop(), []);
+  // Leaving the page saves the page's own recording; the phone app's goes on in the background and is found on return.
+  useEffect(() => () => { if (!nativeMode) void rec.current?.stop(); }, [nativeMode]);
+  // The phone app: the clock and the pause follow the native recorder (also after coming back from another app).
+  useEffect(() => {
+    if (!nativeMode) return;
+    setSecs(long.secs);
+    if (long.status === "recording" || long.status === "silenced") setState((s) => (s === "finishing" ? s : "recording"));
+    else if (long.status === "paused") setState("paused");
+    else if (long.status === "interrupted") {
+      // Stopped from the notification or by the system: the card with Resume and Finish shows.
+      rec.current = null;
+      busy.recording = false;
+      setState((s) => (s === "finishing" ? s : "idle"));
+    }
+  }, [nativeMode, long.secs, long.status]);
   // Load the speech models now, before class, so the first half minute is not slow.
   useEffect(() => void fetch(withToken("/api/speech/stt/warm"), { method: "POST" }).catch(() => undefined), []);
 
-  const start = async () => {
+  const pauseToggle = useRef<() => void>(() => undefined);
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  const secsRef = useRef(secs);
+  secsRef.current = secs;
+  const statusRef = useRef(long.status);
+  statusRef.current = long.status;
+  // Photos of slides, read on the computer while the recording goes on; each goes in at its minute.
+  const reading = useRef<Array<Promise<void>>>([]);
+  const slideN = useRef(0);
+  const readSlide = (f: File, at: number) => {
+    const n = ++slideN.current;
+    setSlides(n);
+    reading.current.push((async () => {
+      let body = L("(השקף לא נקרא)", "(the slide could not be read)");
+      try {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        const r = await api<{ text: string }>("/api/study/extract", { method: "POST", body: { name: f.name || "slide.jpg", data: btoa(bin) } });
+        if (r.text.trim()) body = r.text.trim().slice(0, 6000);
+      } catch (e) {
+        body = `${body} ${(e as Error).message}`;
+      }
+      setLines((ls) => [...ls, `${stamp(at)} 📸 ${L(`שקף ${n}`, `Slide ${n}`)}:\n${body}`]);
+    })());
+  };
+  const mark = (at: number) => setLines((ls) => [...ls, `${stamp(at)} ⭐ ${L("חשוב", "Important")}`]);
+
+  /**
+   * Hands the lecture on once everything is in: the transcript in time order (slides and the gaps where the recording
+   * was paused or stopped go in at their minute), and the audio when it is kept. Then the kept recording is removed.
+   */
+  const finishWith = async (gaps: RecGap[], audio: Blob | undefined) => {
+    await queue.current;
+    await Promise.all(reading.current);
+    const gapLines = gaps.filter((g) => g.ms >= 3000).map((g) => `${stamp(g.at / 1000)} ⏸ ${g.system ? L(`(פער של ${Math.round(g.ms / 1000)} שניות: ההקלטה נעצרה)`, `(a ${Math.round(g.ms / 1000)} s gap: the recording stopped)`) : L(`(הושהה ${Math.round(g.ms / 1000)} שניות)`, `(paused ${Math.round(g.ms / 1000)} s)`)}`);
+    const text = [...linesRef.current, ...gapLines].sort((a, b) => stampSeconds(a) - stampSeconds(b)).join("\n");
+    await onDone(text, keep && audio && audio.size > 1000 ? audio : undefined);
+    await long.done();
+  };
+
+  /** The phone app: the native recorder does the recording; the page marks, reads slides, pauses and stops it. */
+  const attachNative = () => {
+    rec.current = {
+      mark: () => mark(secsRef.current),
+      slide: (f) => readSlide(f, secsRef.current),
+      stop: async () => {
+        rec.current = null;
+        busy.recording = false;
+        setState("finishing");
+        const take = await long.finish().catch((e: Error) => (setError(e.message), undefined));
+        await finishWith(take?.gaps ?? [], take?.audio);
+      },
+    };
+    pauseToggle.current = () => void long.pause(statusRef.current !== "paused");
+    busy.recording = true;
+  };
+  // Coming back to the page while the phone app still records: the transcript so far, and the controls.
+  useEffect(() => {
+    if (!nativeMode || state !== "idle" || (long.status !== "recording" && long.status !== "paused" && long.status !== "silenced")) return;
+    setLines(((long.getMeta().lines as string[] | undefined) ?? []).slice());
+    attachNative();
+    setState(long.status === "paused" ? "paused" : "recording");
+  }, [nativeMode, long.status]);
+
+  /** Finishes a recording that stopped without the page (from its kept transcript and sound). */
+  const finishKept = async () => {
+    setLines(((long.pending?.meta.lines as string[] | undefined) ?? []).slice());
+    setState("finishing");
+    const take = await long.finish().catch((e: Error) => (setError(e.message), undefined));
+    await finishWith(take?.gaps ?? [], take?.audio);
+  };
+
+  /** Starts recording, or (resume) goes on into the recording that stopped, with its transcript and clock. */
+  const start = async (resume = false) => {
     setError("");
+    const kept = resume ? long.pending : null;
+    const base = kept?.seconds ?? 0;
+    const keptLines = ((kept?.meta.lines as string[] | undefined) ?? []).slice();
+    if (nativeMode) {
+      try {
+        if (resume) await long.resume();
+        else if (!(await long.start(undefined, { lines: [], keep }))) return setError(L("הקלטה אחרת (מוח פתוח) עדיין שמורה בטלפון. סיימו אותה קודם.", "Another recording (Open mind) is still kept on the phone. Finish it first."));
+      } catch (e) {
+        return setError((e as Error).message);
+      }
+      attachNative();
+      setLines(keptLines);
+      setSecs(base);
+      setState("recording");
+      return;
+    }
     let mic: MediaStream;
     try {
       mic = await openMic({ channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true });
@@ -89,19 +236,16 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
     const mix = ctx.createGain();
     ctx.createMediaStreamSource(mic).connect(mix);
     if (sys) ctx.createMediaStreamSource(sys).connect(mix);
-    // The kept audio: Opus in WebM at speech quality (~20 MB for 90 minutes), paused with the clock.
-    let audio: MediaRecorder | undefined;
-    const parts: Blob[] = [];
-    if (keep && canKeep) {
+    // The sound, Opus in WebM at speech quality, kept in the browser every 5 seconds (useLongRecorder) so nothing is
+    // lost; it goes to the computer at the end when she keeps it.
+    if (canKeep) {
       try {
         const dest = ctx.createMediaStreamDestination();
         mix.connect(dest);
-        const type = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/mp4"].find((t) => MediaRecorder.isTypeSupported(t));
-        audio = new MediaRecorder(dest.stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 24_000 });
-        audio.ondataavailable = (e) => e.data.size && parts.push(e.data);
-        audio.start(10_000);
+        if (resume) await long.resume(dest.stream);
+        else await long.start(dest.stream, { lines: [], keep });
       } catch {
-        audio = undefined;
+        // without MediaRecorder the transcript still goes on
       }
     }
     const node = ctx.createScriptProcessor(4096, 1, 1);
@@ -110,34 +254,17 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
     const began = Date.now();
     let pausedFor = 0;
     let pausedAt = 0;
-    const now = () => (Date.now() - began - pausedFor) / 1000;
+    const now = () => base + (Date.now() - began - pausedFor) / 1000;
     let chunks: Float32Array[] = [];
     let peak = 0;
-    let pieceAt = 0;
-    let queue = Promise.resolve();
+    let pieceAt = now();
     const flush = () => {
       const wav = chunks.length && peak > 0.015 ? encodeWav(chunks, ctx.sampleRate) : undefined;
       const at = pieceAt;
       chunks = [];
       peak = 0;
       pieceAt = now();
-      if (!wav) return;
-      queue = queue.then(async () => {
-        try {
-          const res = await fetch(withToken(`/api/speech/transcribe?lang=auto`), { method: "POST", headers: { "content-type": "audio/wav" }, body: wav });
-          const j = (await res.json()) as { text?: string; error?: string; code?: string };
-          if (j.code === "needs-setup") throw new Error(L("צריך להגדיר דיבור-לטקסט במחשב: הגדרות ← דיבור.", "Set up speech to text on the computer first: Settings → Speech."));
-          if (!res.ok) throw new Error(j.error ?? String(res.status));
-          const t = (j.text ?? "").trim();
-          if (t) setLines((ls) => [...ls, `${stamp(at)} ${t}`]);
-          if (t && translateTo) {
-            // Not awaited: the next half minute's transcript does not wait for the translation.
-            void api<{ text: string }>("/api/study/translate", { method: "POST", body: { text: t, to: translateTo } }).then((r) => r.text && setTranslated((ts) => [...ts, `${stamp(at)} ${r.text}`]), () => undefined);
-          }
-        } catch (e) {
-          setError((e as Error).message);
-        }
-      });
+      if (wav) transcribe(wav, at);
     };
     node.onaudioprocess = (e) => {
       if (paused.current) return;
@@ -146,47 +273,20 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
       for (let i = 0; i < d.length; i += 64) peak = Math.max(peak, Math.abs(d[i]!));
       if (now() - pieceAt >= PIECE_SEC) flush();
     };
-    // Photos of slides, read on the computer while the recording goes on; each goes in at its minute.
-    const reading: Array<Promise<void>> = [];
-    let slideN = 0;
     rec.current = {
-      mark: () => setLines((ls) => [...ls, `${stamp(now())} ⭐ ${L("חשוב", "Important")}`]),
-      slide: (f) => {
-        const at = now();
-        const n = ++slideN;
-        setSlides(n);
-        reading.push((async () => {
-          let body = L("(השקף לא נקרא)", "(the slide could not be read)");
-          try {
-            const bytes = new Uint8Array(await f.arrayBuffer());
-            let bin = "";
-            for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-            const r = await api<{ text: string }>("/api/study/extract", { method: "POST", body: { name: f.name || "slide.jpg", data: btoa(bin) } });
-            if (r.text.trim()) body = r.text.trim().slice(0, 6000);
-          } catch (e) {
-            body = `${body} ${(e as Error).message}`;
-          }
-          setLines((ls) => [...ls, `${stamp(at)} 📸 ${L(`שקף ${n}`, `Slide ${n}`)}:\n${body}`]);
-        })());
-      },
+      mark: () => mark(now()),
+      slide: (f) => readSlide(f, now()),
       stop: async () => {
         rec.current = null;
         busy.recording = false;
         flush();
-        const kept = audio && audio.state !== "inactive" ? new Promise<Blob>((res) => { audio!.onstop = () => res(new Blob(parts, { type: (audio!.mimeType || "audio/webm").split(";")[0] })); audio!.stop(); }) : undefined;
         node.disconnect();
+        setState("finishing");
+        const take = canKeep ? await long.finish().catch(() => undefined) : undefined;
         [mic, sys].forEach((st) => st?.getTracks().forEach((t) => t.stop()));
         void ctx.close();
         void lock?.release().catch(() => undefined);
-        setState("finishing");
-        await queue;
-        await Promise.all(reading);
-        const blob = await kept;
-        setLines((ls) => {
-          // Slides were read beside the speech: back into time order.
-          onDone([...ls].sort((a, b) => stampSeconds(a) - stampSeconds(b)).join("\n"), blob && blob.size > 1000 ? blob : undefined);
-          return ls;
-        });
+        await finishWith(take?.gaps ?? [], take?.audio);
       },
     };
     // Pausing: the clock and the recording stop together.
@@ -194,23 +294,37 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
       paused.current = !paused.current;
       if (paused.current) {
         flush();
-        if (audio?.state === "recording") audio.pause();
+        void long.pause(true).catch(() => undefined);
         pausedAt = Date.now();
         setState("paused");
       } else {
         pausedFor += Date.now() - pausedAt;
-        if (audio?.state === "paused") audio.resume();
+        void long.pause(false).catch(() => undefined);
         pieceAt = now();
         setState("recording");
       }
     };
     busy.recording = true;
-    setSecs(0);
-    setLines([]);
+    setSecs(base);
+    setLines(keptLines);
     setState("recording");
   };
-  const pauseToggle = useRef<() => void>(() => undefined);
 
+  if (state === "idle" && long.status === "interrupted" && long.pending)
+    return (
+      <section className="card study-recorder">
+        <h2>{L("הקלטה שנעצרה", "A recording that stopped")}</h2>
+        <p className="study-rec-clock" dir="ltr">{clockOf(long.pending.seconds)}</p>
+        <RecNote status="interrupted" native={nativeMode} />
+        <p className="muted small">{L(`${((long.pending.meta.lines as string[] | undefined) ?? []).length} שורות תמלול שמורות.`, `${((long.pending.meta.lines as string[] | undefined) ?? []).length} transcript lines are kept.`)}</p>
+        {error && <p className="error small">{error}</p>}
+        <div className="study-actions">
+          <button type="button" className="primary study-rec-big" onClick={() => void start(true)}>▶ {L("להמשיך להקליט", "Resume recording")}</button>
+          <button type="button" onClick={() => void finishKept()}>{L("לסיים ולשמור הרצאה", "Finish and save the lecture")}</button>
+          <button type="button" className="ghost" onClick={() => confirm(L("למחוק את ההקלטה?", "Delete the recording?")) && void long.done()}>{L("למחוק", "Delete")}</button>
+        </div>
+      </section>
+    );
   if (state === "idle")
     return (
       <section className="card study-recorder">
@@ -225,20 +339,20 @@ export function StudyRecorder({ onDone, onCancel, courseId }: { onDone: (text: s
             <option value="he">{L("לעברית", "To Hebrew")}</option>
           </select>
         </label>
-        <label className="study-check"><input type="checkbox" checked={awake} onChange={(e) => setAwake(e.target.checked)} /> {L("להשאיר את המסך דלוק (בטלפון, מסך כבוי יכול לעצור את ההקלטה)", "Keep the screen on (on a phone, a locked screen can stop the recording)")}</label>
+        {!nativeMode && <label className="study-check"><input type="checkbox" checked={awake} onChange={(e) => setAwake(e.target.checked)} /> {L("להשאיר את המסך דלוק (בטלפון, מסך כבוי יכול לעצור את ההקלטה)", "Keep the screen on (on a phone, a locked screen can stop the recording)")}</label>}
         <p className="muted small">{L("לפני שמקליטים שיעור, כדאי לוודא שהמרצה מסכים/ה.", "Before recording a class, make sure the lecturer agrees.")}</p>
         {error && <p className="error small">{error}</p>}
         <div className="study-actions">
-          <button type="button" className="primary study-rec-big" onClick={() => void start()}>{L("התחל הקלטה", "Start recording")}</button>
+          <button type="button" className="primary study-rec-big" onClick={() => void start(false)}>{L("התחל הקלטה", "Start recording")}</button>
           <button type="button" className="ghost" onClick={onCancel}>{L("ביטול", "Cancel")}</button>
         </div>
       </section>
     );
-  const mm = Math.floor(secs / 60);
   return (
     <section className="card study-recorder">
       <p className={`study-rec-state ${state === "recording" ? "on" : ""}`}>{state === "recording" ? L("● מקליט", "● Recording") : state === "paused" ? L("מושהה", "Paused") : L("מסיים את התמלול…", "Finishing the transcript…")}</p>
-      <p className="study-rec-clock" dir="ltr">{Math.floor(mm / 60) ? `${Math.floor(mm / 60)}:` : ""}{String(mm % 60).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}</p>
+      <p className="study-rec-clock" dir="ltr">{clockOf(secs)}</p>
+      <RecNote status={long.status === "silenced" ? "silenced" : state === "recording" ? "recording" : "idle"} native={nativeMode} />
       <div className="study-rec-text" dir="auto" aria-live="polite">{lines.length ? lines.slice(-6).join("\n") : L("התמלול יופיע כאן אחרי חצי הדקה הראשונה.", "The transcript shows here after the first half minute.")}</div>
       {translateTo && <div className="study-rec-text study-rec-trans" dir={translateTo === "he" ? "rtl" : "ltr"} aria-live="polite" aria-label={L("תרגום", "Translation")}>{translated.length ? translated.slice(-6).join("\n") : L("התרגום מגיע כמה שניות אחרי כל קטע.", "The translation follows a few seconds after each piece.")}</div>}
       {courseId && state !== "finishing" && (

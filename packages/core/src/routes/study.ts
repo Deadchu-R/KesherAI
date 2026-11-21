@@ -111,9 +111,23 @@ export async function studyRoutes(app: FastifyInstance, s: KesherServices): Prom
   // Kept lecture recordings: sent as audio, played back with ranges (so the player can jump to any minute).
   app.addContentTypeParser(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg"], { parseAs: "buffer", bodyLimit: 400 * 1024 * 1024 }, (_req, body, done) => done(null, body));
   app.post<L>("/api/study/courses/:id/lectures/:lid/recording", { bodyLimit: 400 * 1024 * 1024 }, async (req, reply) => {
-    const mime = String(req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
-    if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: "Send the recording as audio (WebM, Ogg, MP4 or WAV)." });
-    return st.saveRecording(req.params.id, req.params.lid, req.body, mime);
+    let mime = String(req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+    let body: unknown = req.body;
+    // A long WAV (the phone app's background recording) comes as a stream (application/x-kesher-audio, see ideas.ts),
+    // its real type in x-audio-type, read here up to the same 400 MB.
+    if (mime === "application/x-kesher-audio" && body && typeof (body as AsyncIterable<Buffer>)[Symbol.asyncIterator] === "function") {
+      mime = String(req.headers["x-audio-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+      const parts: Buffer[] = [];
+      let size = 0;
+      for await (const c of body as AsyncIterable<Buffer>) {
+        size += c.length;
+        if (size > 400 * 1024 * 1024) return reply.code(413).send({ error: "The recording is larger than 400 MB." });
+        parts.push(c);
+      }
+      body = Buffer.concat(parts);
+    }
+    if (!Buffer.isBuffer(body)) return reply.code(415).send({ error: "Send the recording as audio (WebM, Ogg, MP4 or WAV)." });
+    return st.saveRecording(req.params.id, req.params.lid, body, mime);
   });
   app.get<L>("/api/study/courses/:id/lectures/:lid/recording", async (req, reply) => {
     const f = await st.recordingFile(req.params.id, req.params.lid);

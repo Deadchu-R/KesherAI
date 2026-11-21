@@ -3434,6 +3434,9 @@ html.handheld .palette-list button { min-height: 44px; }
 .ideas-dial b { font-size: 28px; font-variant-numeric: tabular-nums; }
 .ideas-levels { display: flex; gap: 4px; align-items: flex-end; height: 30px; }
 .ideas-levels span { width: 4px; border-radius: 2px; background: var(--accent); transition: height 0.1s; }
+/* A long recording's status line (RecNote.tsx): background, paused by the system, stopped and kept. */
+.rec-note { margin: 0; max-width: 360px; line-height: 1.4; }
+.rec-note.warn { color: var(--warn, #e0a040); }
 .ideas-mins, .ideas-filters { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .ideas-filters { justify-content: flex-start; margin-bottom: 8px; }
 .ideas-mins button, .ideas-filters button { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; font-size: 13px; }
