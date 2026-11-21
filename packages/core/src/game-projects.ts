@@ -89,7 +89,16 @@ export async function findGameProjects(extra: { unity?: string[]; unrealFile?: s
   const unreal = new Set<string>();
   if (extra.unrealFile) unreal.add(dirname(extra.unrealFile));
   for (const root of [join(home, "Documents", "Unreal Projects"), join(home, "Unreal Projects"), join(home, "OneDrive", "Documents", "Unreal Projects")]) {
-    for (const d of await readdir(root, { withFileTypes: true }).catch(() => [])) if (d.isDirectory()) unreal.add(join(root, d.name));
+    for (const d of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+      if (!d.isDirectory()) continue;
+      const dir = join(root, d.name);
+      unreal.add(dir);
+      // A git clone often keeps the project one folder down (ArcadeSurvivorTiltan/ArcadeSurvivorCPP/*.uproject).
+      const files = await readdir(dir).catch(() => [] as string[]);
+      if (!files.some((f) => f.toLowerCase().endsWith(".uproject"))) {
+        for (const sub of await readdir(dir, { withFileTypes: true }).catch(() => [])) if (sub.isDirectory() && !sub.name.startsWith(".")) unreal.add(join(dir, sub.name));
+      }
+    }
   }
   for (const dir of unreal) {
     const p = await readProject(dir).catch(() => undefined);

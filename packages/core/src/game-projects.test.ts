@@ -125,3 +125,13 @@ test("the Unity project menu lists found and added projects once, marks added on
   ]);
   assert.equal(menu.find((i) => i.name === "ProjectBossRush")?.engine, "6000.0.1f1");
 });
+
+test("an Unreal git clone with the project one folder down is found", async () => {
+  const home = await mkdtemp(join(tmpdir(), "kesher-home-"));
+  const inner = join(home, "OneDrive", "Documents", "Unreal Projects", "ArcadeGit", "ArcadeCPP");
+  await mkdir(join(home, "OneDrive", "Documents", "Unreal Projects", "ArcadeGit", ".git"), { recursive: true });
+  await mkdir(inner, { recursive: true });
+  await writeFile(join(inner, "ArcadeCPP.uproject"), JSON.stringify({ EngineAssociation: "5.4" }));
+  const found = (await findGameProjects({ home })).filter((p) => p.kind === "unreal");
+  assert.deepEqual(found.map((p) => p.name), ["ArcadeCPP"]);
+});

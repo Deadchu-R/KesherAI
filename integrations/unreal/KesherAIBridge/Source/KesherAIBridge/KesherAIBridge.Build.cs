@@ -10,13 +10,10 @@ public class KesherAIBridge : ModuleRules
 
 		// A Visual Studio newer than the engine knows reports engine headers (e.g. ConcurrentLinearAllocator.h in 5.4,
 		// "'__has_feature' is not defined", C4668) as errors; the plugin cannot edit them, so undefined identifiers in
-		// #if are not diagnosed in this module. UndefinedIdentifierWarningLevel exists since UE 5.3; older engines
-		// only have the bool. UE_5_3_OR_LATER is defined by UBT for every engine from 5.3 on (5.1 and 5.2 skip it).
-#if UE_5_3_OR_LATER
-		UndefinedIdentifierWarningLevel = WarningLevel.Off;
-#else
-		bEnableUndefinedIdentifierWarnings = false;
-#endif
+		// #if are not diagnosed in this module.
+		// The setting moved between engine versions (bool before, enum after, then inside CppCompileWarningSettings),
+		// and a name that does not exist fails the whole build (found on Unreal 5.4): set whichever exists, by reflection.
+		DisableUndefinedIdentifierWarnings();
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
@@ -53,5 +50,27 @@ public class KesherAIBridge : ModuleRules
 		{
 			PrivateDependencyModuleNames.Add("LiveCoding");
 		}
+	}
+
+	/// <summary>Turns off "undefined identifier in #if" diagnostics with whichever setting this engine version has.</summary>
+	private void DisableUndefinedIdentifierWarnings()
+	{
+		const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+		object WarningOwner = this;
+		System.Reflection.PropertyInfo Settings = GetType().GetProperty("CppCompileWarningSettings", Flags);
+		if (Settings != null && Settings.GetValue(this) != null) WarningOwner = Settings.GetValue(this);
+		foreach (object Owner in new object[] { WarningOwner, this })
+		{
+			System.Reflection.PropertyInfo Level = Owner.GetType().GetProperty("UndefinedIdentifierWarningLevel", Flags);
+			if (Level != null && Level.CanWrite && Level.PropertyType.IsEnum && System.Enum.IsDefined(Level.PropertyType, "Off"))
+			{
+				Level.SetValue(Owner, System.Enum.Parse(Level.PropertyType, "Off"));
+				return;
+			}
+		}
+		System.Reflection.PropertyInfo Prop = GetType().GetProperty("bEnableUndefinedIdentifierWarnings", Flags);
+		if (Prop != null && Prop.CanWrite) { Prop.SetValue(this, false); return; }
+		System.Reflection.FieldInfo Field = GetType().GetField("bEnableUndefinedIdentifierWarnings", Flags);
+		if (Field != null) Field.SetValue(this, false);
 	}
 }
