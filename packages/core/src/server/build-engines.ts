@@ -40,6 +40,7 @@ export function buildLlamaEngine(paths: DataPaths, config: KesherConfig, modelUs
     args: config.engines.llamaServerArgs,
     parallel: config.engines.parallel,
     ...(config.engines.mtpDraft !== undefined ? { mtpDraft: config.engines.mtpDraft } : {}),
+    ...(config.engines.lookup !== undefined ? { lookup: config.engines.lookup } : {}),
     ...(config.engines.fitTargetMiB !== undefined ? { fitTargetMiB: config.engines.fitTargetMiB } : {}),
     ...(config.engines.kvType !== undefined ? { kvType: config.engines.kvType } : {}),
     // A model's own load settings (Models → ⚙), read at each load so a change needs no restart.

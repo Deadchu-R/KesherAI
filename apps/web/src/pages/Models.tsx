@@ -36,6 +36,7 @@ interface EngineStatus {
   promptTps?: number;
   slotTokens?: number;
   mtpDraft?: number;
+  lookup?: boolean;
 }
 
 /** A newer llama.cpp: shown with an Update button (it downloads only when pressed). */
@@ -115,6 +116,16 @@ function StartHere({ onChange, code }: { onChange: () => void; code?: boolean })
               {[1, 2, 3, 4, 6, 8].map((n) => <option key={n} value={n}>{n}</option>)}
               <option value="0">{L("כבוי", "Off")}</option>
             </Select>
+          </label>
+        )}
+        {engine?.installed && (
+          <label className="row parallel-pick" title={L("השרת מנחש את המילים הבאות מתוך טקסט שכבר הופיע בשיחה והמודל בודק אותן: מהיר יותר בקוד ובטקסט שחוזר על עצמו, בלי זיכרון נוסף. פועל רק במנועים חדשים, ולא כשהמודל כבר מנחש (MTP) או רואה תמונות.", "The server guesses the next words from text that already appeared in the chat and the model checks them: faster on code and repetitive text, no extra memory. Only on newer engines, and not when the model already guesses (MTP) or sees pictures.")}>
+            <input
+              type="checkbox"
+              checked={engine.lookup !== false}
+              onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { lookup: e.target.checked } }).then(setEngine, (err: Error) => setError(err.message))}
+            />
+            <span className="muted small">{L("האץ עם פענוח-חיפוש", "Speed up with lookup decoding")}</span>
           </label>
         )}
       </div>

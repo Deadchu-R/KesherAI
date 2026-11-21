@@ -65,6 +65,8 @@ export const KesherConfigSchema = z.object({
       parallel: z.number().int().min(1).max(8).default(1),
       /** Multi-token prediction: tokens guessed ahead (unset: 2; 0: off). */
       mtpDraft: z.number().int().min(0).max(16).optional(),
+      /** "Speed up with lookup decoding" (n-gram guesses from the chat itself; unset: on where the engine has it). */
+      lookup: z.boolean().optional(),
       /** Graphics memory llama.cpp leaves free when it fits a model (MiB; unset: 2048), for a game or editor on the same card. */
       fitTargetMiB: z.number().int().min(512).max(16384).optional(),
       /** The context memory's type (unset: 8 bits). Set by calibration or by hand. */

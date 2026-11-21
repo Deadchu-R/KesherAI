@@ -310,6 +310,8 @@ export interface EngineStatus {
   slotTokens?: number;
   /** Multi-token prediction's guesses ahead (the setting; unset: llama.cpp's own). */
   mtpDraft?: number;
+  /** Lookup decoding is allowed (the setting; the build may still lack it). */
+  lookup?: boolean;
 }
 
 /**
@@ -338,7 +340,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; lookup?: boolean; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
   ) {}
 
   /** @returns The engine's state. */
@@ -359,6 +361,7 @@ export class LlamaEngine {
       ...(this.promptTps !== undefined && this.proc ? { promptTps: this.promptTps } : {}),
       ...(this.slotContext() ? { slotTokens: this.slotContext() } : {}),
       ...(this.opts.mtpDraft !== undefined ? { mtpDraft: this.opts.mtpDraft } : {}),
+      lookup: this.opts.lookup !== false,
     };
   }
 
@@ -590,6 +593,48 @@ export class LlamaEngine {
     const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
     if (build < 12000 || !/qwen3\.[5-9]|qwen3-?next/i.test(basename(modelPath))) return [];
     return args.some((a) => a === "-cms" || a === "--checkpoint-min-step") ? [] : ["--checkpoint-min-step", "1024"];
+  }
+
+  /**
+   * Speed features that need no model change, added only on builds that have them and never over the user's own
+   * arguments:
+   * - `--cache-reuse 256` (b3000+): a changed part in the middle or end of the prompt is shifted in the cached
+   *   context instead of the whole prompt being read again (needs `cache_prompt`, which every request sends).
+   *   Not with a vision file: llama.cpp turns it off for pictures anyway.
+   * - `--spec-type ngram-simple` (b12000+, like multi-token prediction's flags): the server guesses the next words
+   *   from text that already appeared in the chat and the model checks them (no draft model, no extra memory).
+   *   Not when speculative decoding is already set (multi-token prediction, a draft model, the user's own).
+   *
+   * @param args - The full argument list the server will get.
+   * @param version - The build tag, e.g. `b12110`.
+   * @param opts.lookup - The "Speed up with lookup decoding" setting (default on).
+   * @param opts.vision - Whether a vision file (`--mmproj`) is used.
+   * @returns The arguments to add and a short list of the features turned on (for the log).
+   */
+  static speedArgs(args: readonly string[], version: string | undefined, opts: { lookup?: boolean; vision?: boolean } = {}): { args: string[]; features: string[] } {
+    const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
+    const add: string[] = [];
+    const features: string[] = [];
+    if (build >= 3000 && !opts.vision && !args.some((a) => a === "--cache-reuse")) {
+      add.push("--cache-reuse", "256");
+      features.push("prompt reuse");
+    }
+    const spec = args.some((a) => a.startsWith("--spec") || a === "-md" || a === "--model-draft");
+    if (build >= 12000 && opts.lookup !== false && !opts.vision && !spec) {
+      add.push("--spec-type", "ngram-simple", "--spec-draft-n-max", "16");
+      features.push("lookup decoding");
+    }
+    return { args: add, features };
+  }
+
+  /**
+   * Turns lookup decoding on or off ("Speed up with lookup decoding"); takes effect at the next load.
+   *
+   * @param on - False to turn it off; undefined for the default (on).
+   */
+  setLookup(on: boolean | undefined): void {
+    if (on === undefined) delete this.opts.lookup;
+    else this.opts.lookup = on;
   }
 
   /**
@@ -898,6 +943,14 @@ export class LlamaEngine {
   gpuSummary = "";
 
   private async start(binary: string, modelPath: string, args: string[], timeoutMs: number, env?: Record<string, string>): Promise<void> {
+    await this.startOnce(binary, modelPath, args, timeoutMs, env, true);
+  }
+
+  /**
+   * One start; with `speed`, the speed features of {@link speedArgs} are added, and if the server refuses to start
+   * and its log blames one of those flags, it starts again without them (an odd build must still work).
+   */
+  private async startOnce(binary: string, modelPath: string, args: string[], timeoutMs: number, env: Record<string, string> | undefined, speed: boolean): Promise<void> {
     await this.stop();
     // A fresh log for this load, keeping the line that says who asked for it (see note()).
     const why = this.log.filter((l) => l.startsWith("KesherAI: loading ")).slice(-1);
@@ -922,6 +975,11 @@ export class LlamaEngine {
         this.log.push(`KesherAI: ${basename(mmproj)} lets this model see pictures.`);
       }
     }
+    const vision = args.includes("--mmproj");
+    const fast = speed ? LlamaEngine.speedArgs(args, this.opts.version, { ...(this.opts.lookup !== undefined ? { lookup: this.opts.lookup } : {}), vision }) : { args: [], features: [] };
+    if (fast.features.length) this.log.push(`KesherAI: speed features on: ${fast.features.join(", ")}.`);
+    const plain = args;
+    args = [...args, ...fast.args];
     const proc = spawn(binary, ["-m", modelPath, "--host", "127.0.0.1", "--port", String(this.opts.port), "--alias", alias, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -953,6 +1011,10 @@ export class LlamaEngine {
       if (proc.exitCode !== null) {
         this.proc = undefined;
         this.modelPath = undefined;
+        if (fast.args.length && /cache-reuse|spec-type|spec-draft|ngram|invalid argument|unknown argument/i.test(this.log.slice(-8).join("\n"))) {
+          this.log.push("KesherAI: the engine refused a speed feature, starting without them.");
+          return this.startOnce(binary, modelPath, plain, timeoutMs, env, false);
+        }
         throw new Error(`llama-server stopped (code ${proc.exitCode}): ${this.log.slice(-4).join(" | ")}`);
       }
       const ok = await Promise.race([

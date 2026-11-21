@@ -368,7 +368,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
    * How many chats the engine answers at once, and multi-token prediction's guesses ahead (`mtpDraft`: a number,
    * 0 for off, null for llama.cpp's own). A running model is loaded again with them.
    */
-  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; fitTargetMiB?: number | null; kvType?: "f16" | "q8_0" | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; lookup?: boolean | null; fitTargetMiB?: number | null; kvType?: "f16" | "q8_0" | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
     const b = req.body ?? {};
     let reload = false;
     if (b.parallel !== undefined) {
@@ -385,6 +385,15 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       if (d === undefined) delete s.config.engines.mtpDraft;
       else s.config.engines.mtpDraft = d;
       s.engine.setMtpDraft(d);
+    }
+    // "Speed up with lookup decoding": true/false, null for the default (on).
+    if (b.lookup !== undefined) {
+      if (b.lookup !== null && typeof b.lookup !== "boolean") return reply.code(400).send({ error: "Lookup decoding: on or off." });
+      const on = b.lookup ?? undefined;
+      reload ||= s.config.engines.lookup !== on;
+      if (on === undefined) delete s.config.engines.lookup;
+      else s.config.engines.lookup = on;
+      s.engine.setLookup(on);
     }
     // Graphics memory to leave free (for a game or the Unreal/Unity editor on the same card); null: the default.
     if (b.fitTargetMiB !== undefined) {

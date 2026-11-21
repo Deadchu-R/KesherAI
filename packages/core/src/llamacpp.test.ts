@@ -163,3 +163,18 @@ test("slots can be saved to disk unless the user set their own folder", () => {
   assert.deepEqual(LlamaEngine.slotSaveArgs(["--jinja"], "/e"), ["--jinja", "--slot-save-path", join("/e", "slots")]);
   assert.deepEqual(LlamaEngine.slotSaveArgs(["--slot-save-path", "/mine"], "/e"), ["--slot-save-path", "/mine"]);
 });
+
+test("speedArgs: prompt reuse from b3000, lookup decoding from b12000, each only when nothing contradicts it", () => {
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110"), { args: ["--cache-reuse", "256", "--spec-type", "ngram-simple", "--spec-draft-n-max", "16"], features: ["prompt reuse", "lookup decoding"] });
+  assert.deepEqual(LlamaEngine.speedArgs([], "b5000"), { args: ["--cache-reuse", "256"], features: ["prompt reuse"] });
+  assert.deepEqual(LlamaEngine.speedArgs([], "b2000"), { args: [], features: [] });
+  assert.deepEqual(LlamaEngine.speedArgs([], undefined), { args: [], features: [] });
+});
+
+test("speedArgs: the setting, vision, multi-token prediction and the user's own arguments win", () => {
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { lookup: false }).features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { vision: true }), { args: [], features: [] });
+  assert.deepEqual(LlamaEngine.speedArgs(["--spec-type", "draft-mtp"], "b12110").features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs(["-md", "small.gguf"], "b12110").features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs(["--cache-reuse", "0"], "b12110").features, ["lookup decoding"]);
+});
