@@ -27,6 +27,7 @@ Order (from the deep research c-20261121-38, RESEARCH_LOG 2026-11-21; S first):
 - ⬜ B2 (M): Play-mode VRAM standby — when Unity/Unreal enters Play, unload the local model, reload after.
 - ⬜ Hub: verify the Run → "Starting…" fix after the hub deploy.
 - ⬜ Morning report 07:00: done / decisions taken / waiting on Roee + design doc publish.
+- ⬜ Collaborators without engines (Roee 20:31): a collaborator's KesherAI needs no Unity/Unreal/Godot at all. Only the main PC has the engine versions and plugins. Key project files (scenes/levels, scripts, data assets, pending moves) move between computers without engines; a collaborator works in the stand-ins and editors, syncs to the main PC, and the main PC applies the changes through the plugins (with Undo when the editor is open, headless when closed) and sends back the result (pictures, compile/play results). First: research how others do engine-less collaboration end to end (Unity Version Control/Plastic, Perforce + Unreal multi-user, Diversion, Anchorpoint, Godot's text scenes), then a plan board.
 - Later from the report: highlight-to-edit popover in docs (A4), night builds + phone scorecard, drive janitor, Hebrew voice → engine code.
 
 ## Agents and chat-first (Roee 19:3x; gap list RESEARCH_LOG 2026-11-20)
