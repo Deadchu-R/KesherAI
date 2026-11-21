@@ -15,7 +15,7 @@ export function spanEditRoutes(app: FastifyInstance, s: KesherServices): void {
     const model = (typeof b.model === "string" && b.model) || s.config.activeModels.chat;
     if (!model) return reply.code(409).send({ error: "Choose a chat model first (Models page)." });
     const selected = String(b.selected ?? "").slice(0, 8000);
-    const instruction = String(b.instruction ?? "").trim();
+    const instruction = String(b.instruction ?? "").trim().slice(0, 2000);
     if (!selected.trim() || !instruction) return reply.code(400).send({ error: "Select some text and say what to change." });
     const prompt = spanEditPrompt({
       kind: b.kind === "code" ? "code" : "doc",

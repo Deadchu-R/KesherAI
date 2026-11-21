@@ -34,3 +34,12 @@ test("partial transcripts use only a loaded local model; otherwise the page is t
     assert.ok(!calls.includes("full"), "a partial never runs the slow path or the cloud");
   }
 });
+
+test("a partial bigger than a short segment is refused before the engine runs", async () => {
+  const app = Fastify();
+  const { s, calls } = fake({ stt: "local", loaded: true });
+  await speechRoutes(app, s);
+  const r = await app.inject({ method: "POST", url: "/api/speech/transcribe?partial=1", headers: { "content-type": "audio/wav" }, payload: Buffer.alloc(5 * 1024 * 1024) });
+  assert.equal(r.statusCode, 413);
+  assert.deepEqual(calls, []);
+});

@@ -84,6 +84,8 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { ok: true };
   });
 
+  /** The biggest live partial (`?partial=1`) accepted: 30 s of 16-bit mono at 48 kHz, with room. */
+  const PARTIAL_MAX_BYTES = 4 * 1024 * 1024;
   // The recording arrives as raw WAV bytes.
   app.addContentTypeParser(["audio/wav", "audio/x-wav", "application/octet-stream"], { parseAs: "buffer", bodyLimit: 60 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 
@@ -99,6 +101,9 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
     const local = await s.whisper.status();
     const usesLocal = s.config.speech.stt === "local" || (s.config.speech.stt === "auto" && (local.engine && local.model || !clouds().length));
     if (req.query.partial === "1") {
+      // A partial is the open segment only (voice-stream.ts cuts at 20 s, ~2 MB at 48 kHz): anything bigger is not
+      // one, and is not worth the engine's time while the user is still talking.
+      if (wav.length > PARTIAL_MAX_BYTES) return reply.code(413).send({ error: "A partial is at most a short segment." });
       const text = usesLocal && local.engine && local.model ? await s.whisper.quick(wav, lang) : undefined;
       return text === undefined ? { text: "", partial: false } : { text, partial: true };
     }
