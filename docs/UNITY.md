@@ -9,7 +9,7 @@ It works through **Unity's own CLI** (`unity`, from unity.com) and the project's
 1. Install Unity's CLI once (free). Windows PowerShell: `irm https://unity.com/install.ps1 | iex` (macOS / Linux: `curl -fsSL https://unity.com/install.sh | bash`).
 2. On the Unity page press **Add to a project…** and pick the project folder (with `Assets/` and `Packages/`). KesherAI copies the bridge package into `Packages/com.kesherai.bridge` and runs `unity pipeline install` for the Pipeline package. Unity compiles both by itself: no Visual Studio.
 
-### Unity versions (package 0.2.12)
+### Unity versions (package 0.2.13)
 
 One package for every supported version; the parts a version lacks are left out at compile time (asmdef `versionDefines`), so it always compiles.
 

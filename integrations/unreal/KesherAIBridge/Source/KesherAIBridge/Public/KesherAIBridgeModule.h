@@ -35,10 +35,16 @@ private:
 	void Send(const TSharedRef<FJsonObject>& Message);
 	/** Tells KesherAI a Blueprint changed (compiled), so it can refresh what it shows. */
 	void OnBlueprintCompiled();
+	/** Play In Editor started or ended: tells KesherAI ({ "event": "play", "on": true|false }), plugin 0.1.29 and newer. */
+	void OnPlayStarted(const bool bIsSimulating);
+	void OnPlayEnded(const bool bIsSimulating);
+	void SendPlay(bool bOn);
 
 	TSharedPtr<IWebSocket> Socket;
 	FTSTicker::FDelegateHandle TickHandle;
 	FDelegateHandle CompiledHandle;
+	FDelegateHandle PlayStartHandle;
+	FDelegateHandle PlayEndHandle;
 	FDelegateHandle EngineReadyHandle;
 	double NextTry = 0;
 	bool bConnecting = false;

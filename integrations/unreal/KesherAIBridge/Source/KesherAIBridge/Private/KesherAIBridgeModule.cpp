@@ -28,7 +28,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
-static const TCHAR* BridgeVersion = TEXT("0.1.28");
+static const TCHAR* BridgeVersion = TEXT("0.1.29");
 
 void FKesherAIBridgeModule::StartupModule()
 {
@@ -41,6 +41,9 @@ void FKesherAIBridgeModule::StartupModule()
 	EngineReadyHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
 	{
 		if (GEditor) CompiledHandle = GEditor->OnBlueprintCompiled().AddRaw(this, &FKesherAIBridgeModule::OnBlueprintCompiled);
+		// Play In Editor: KesherAI frees the graphics card while the game plays and takes it back after.
+		PlayStartHandle = FEditorDelegates::PreBeginPIE.AddRaw(this, &FKesherAIBridgeModule::OnPlayStarted);
+		PlayEndHandle = FEditorDelegates::EndPIE.AddRaw(this, &FKesherAIBridgeModule::OnPlayEnded);
 	});
 }
 
@@ -51,6 +54,8 @@ void FKesherAIBridgeModule::ShutdownModule()
 	KesherPlay::Shutdown();
 	KesherPlayTest::Shutdown();
 	if (GEditor) GEditor->OnBlueprintCompiled().Remove(CompiledHandle);
+	FEditorDelegates::PreBeginPIE.Remove(PlayStartHandle);
+	FEditorDelegates::EndPIE.Remove(PlayEndHandle);
 	if (Socket.IsValid())
 	{
 		Socket->OnClosed().Clear();
@@ -87,6 +92,8 @@ void FKesherAIBridgeModule::Connect()
 		// For the plugin's own update: KesherAI waits for this process to end before replacing the plugin's files.
 		Hello->SetNumberField(TEXT("pid"), FPlatformProcess::GetCurrentProcessId());
 		Send(Hello);
+		// Connected while a game already plays (KesherAI was started after Play): say so.
+		if (GEditor && GEditor->PlayWorld) SendPlay(true);
 	});
 	Socket->OnConnectionError().AddLambda([this](const FString&)
 	{
@@ -118,6 +125,18 @@ void FKesherAIBridgeModule::OnBlueprintCompiled()
 	Event->SetStringField(TEXT("event"), TEXT("changed"));
 	Send(Event);
 }
+
+void FKesherAIBridgeModule::SendPlay(bool bOn)
+{
+	TSharedRef<FJsonObject> Event = MakeShared<FJsonObject>();
+	Event->SetStringField(TEXT("event"), TEXT("play"));
+	Event->SetBoolField(TEXT("on"), bOn);
+	Send(Event);
+}
+
+void FKesherAIBridgeModule::OnPlayStarted(const bool /*bIsSimulating*/) { SendPlay(true); }
+
+void FKesherAIBridgeModule::OnPlayEnded(const bool /*bIsSimulating*/) { SendPlay(false); }
 
 void FKesherAIBridgeModule::OnMessage(const FString& Text)
 {

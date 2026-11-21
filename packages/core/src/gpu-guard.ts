@@ -57,6 +57,11 @@ export interface GuardConfig {
   idleTranslator?: number;
   /** Run the engines at low priority. */
   gentle: boolean;
+  /**
+   * Free the graphics card while a game plays in Unity or Unreal (Play): the loaded models unload when it starts and
+   * load again when it ends (play-standby.ts). Undefined counts as on.
+   */
+  freeForPlay?: boolean;
   /** New local work waits while the computer's memory (RAM) use is at or above this percent; 0 = no limit. Idle models are unloaded to free it. */
   maxRamPercent: number;
   /** New local work waits while the processor is this busy (percent, averaged over a few readings); 0 = no limit. */
@@ -128,7 +133,7 @@ export function systemHold(r: SystemReading, cfg: Pick<GuardConfig, "maxRamPerce
 }
 
 /** The defaults: safe for every NVIDIA card (they slow themselves down near 90 °C). */
-export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 10, idleEmbeddings: 5, idleComfy: 5, idleTranslator: 5, gentle: false, maxRamPercent: 0, maxCpuPercent: 0, maxCpuTemp: 0 };
+export const GUARD_DEFAULTS: GuardConfig = { enabled: true, maxTemp: 83, resumeTemp: 75, unloadAfterMinutes: 10, idleEmbeddings: 5, idleComfy: 5, idleTranslator: 5, gentle: false, freeForPlay: true, maxRamPercent: 0, maxCpuPercent: 0, maxCpuTemp: 0 };
 
 /** What Settings and the status bar show. */
 export interface GuardStatus {
@@ -150,6 +155,18 @@ export interface GuardStatus {
   lastActive?: string;
   /** What was unloaded last, and when. */
   lastUnload?: { what: string; at: string };
+  /** Free-for-Play state (play-standby.ts), present while a game plays and the setting is on. */
+  standby?: StandbyStatus;
+}
+
+/** Where the "free the graphics card while the game plays" feature stands (shown in Models, the model chip and the chat). */
+export interface StandbyStatus {
+  /** `waiting`: a turn is still running, the models unload right after it; `paused`: they are unloaded, new local work waits. */
+  state: "waiting" | "paused";
+  /** Which editors are in Play. */
+  editors: Array<"unreal" | "unity">;
+  /** The engines freed for it ("chat model", "ComfyUI"…); empty while waiting. */
+  freed: string[];
 }
 
 const num = (s: string | undefined) => {
@@ -244,6 +261,12 @@ const realSmi: SmiReader = () =>
 export class GpuGuard {
   private cards: GpuReading[] = [];
   private paused = false;
+  /** New local work waits because a game plays (play-standby.ts). */
+  private playHold = false;
+  /** Set by PlayStandby: its state for {@link status}. */
+  playStatus?: () => StandbyStatus | undefined;
+  /** Called when the last local work ends, so PlayStandby can unload right after a running turn. */
+  onIdle?: () => void;
   private cooling = false;
   private sys: SystemReading = { ramUsed: 0, ramTotal: totalmem(), cpu: 0 };
   private sysHold?: string;
@@ -419,6 +442,51 @@ export class GpuGuard {
     return this.items.flatMap((i) => i.pids());
   }
 
+  /** @returns How many local requests run right now (a turn mid-answer, a picture being made). */
+  runningCount(): number {
+    return this.running;
+  }
+
+  /**
+   * Holds (or lets go of) new local work for a game in Play; unlike {@link setPaused} the user did not ask for it,
+   * so the pause button and its note stay as they were.
+   *
+   * @param on - True while the game plays.
+   */
+  holdForPlay(on: boolean): void {
+    this.playHold = on;
+    if (!on) this.release();
+  }
+
+  /**
+   * Unloads every loaded engine that is not busy, for Play.
+   *
+   * @returns The names of the engines that were unloaded.
+   */
+  async unloadLoaded(): Promise<string[]> {
+    const done: string[] = [];
+    for (const item of this.items) {
+      if (!item.loaded() || item.busy?.()) continue;
+      if (await item.unload().then(() => true, () => false)) {
+        done.push(item.name);
+        this.lastUnload = { what: item.name, at: new Date().toISOString() };
+      }
+    }
+    return done;
+  }
+
+  /**
+   * Loads engines unloaded for Play again (the ones that can come back by themselves), without waiting for a request.
+   *
+   * @param names - What {@link unloadLoaded} returned.
+   */
+  async reloadNamed(names: string[]): Promise<void> {
+    for (const item of this.items) {
+      if (!names.includes(item.name) || item.loaded() || !item.reload) continue;
+      await item.reload().catch(() => undefined);
+    }
+  }
+
   /** Unloads every loaded engine now (while nothing runs), to free the cards' memory. */
   async freeNow(): Promise<void> {
     for (const item of this.items) {
@@ -433,7 +501,7 @@ export class GpuGuard {
   }
 
   private get holding(): boolean {
-    return this.paused || this.cooling || !!this.sysHold;
+    return this.paused || this.playHold || this.cooling || !!this.sysHold;
   }
 
   /**
@@ -518,6 +586,7 @@ export class GpuGuard {
     this.running = Math.max(0, this.running - 1);
     this.lastActive = Date.now();
     this.markUsed(providerId);
+    if (this.running === 0) this.onIdle?.();
   }
 
   /** @returns What Settings shows. */
@@ -533,6 +602,7 @@ export class GpuGuard {
       running: this.running,
       lastActive: new Date(this.lastActive).toISOString(),
       ...(this.lastUnload ? { lastUnload: this.lastUnload } : {}),
+      ...(this.playStatus?.() ? { standby: this.playStatus() as StandbyStatus } : {}),
     };
   }
 }

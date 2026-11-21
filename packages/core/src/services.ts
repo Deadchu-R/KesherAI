@@ -88,6 +88,8 @@ export interface KesherServices {
   onedriveSync: DriveSync;
   /** Protects the graphics card: temperature limit, pause, unloading idle models. */
   guard: GpuGuard;
+  /** Frees the graphics card while a game plays in Unity or Unreal (set when the engines start). */
+  playStandby?: import("./play-standby.js").PlayStandby;
   /** Tor for blocked pages. */
   tor: import("./tor.js").Tor;
   /** KesherAI's fault log. */

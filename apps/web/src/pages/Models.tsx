@@ -19,6 +19,7 @@ import { CalibrateButton, FitButton } from "../FitPreview";
 import { LoadSettingsButton } from "../ModelLoadSettings";
 import { ModelFolders } from "../ModelFolders";
 import { RouterModelCard } from "../settings/AutoModelSection";
+import { standbyText, useStandby } from "../standby";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -58,6 +59,7 @@ function EngineUpdate({ onStarted }: { onStarted: (s: EngineStatus) => void }) {
 function StartHere({ onChange, code }: { onChange: () => void; code?: boolean }) {
   const [models, setModels] = useState<Recommended[]>([]);
   const [engine, setEngine] = useState<EngineStatus | null>(null);
+  const standby = useStandby();
   const [error, setError] = useState("");
   const load = () => {
     void api<Recommended[]>("/api/models/recommended").then(setModels).catch(() => undefined);
@@ -98,6 +100,7 @@ function StartHere({ onChange, code }: { onChange: () => void; code?: boolean })
         <strong>{t("engine")}</strong>
         <span className="muted">{engine?.installed ? t("engineInstalled", { version: engine.version ?? "" }) : t("engineNotInstalled")}</span>
         {engine?.running && modelName && <span className="pill good">{t("running", { model: modelName })}</span>}
+        {standby && <span className="pill play-standby-note" role="status">🎮 {standbyText(standby)}</span>}
         {engine?.running && (
           <button type="button" onClick={() => void api<EngineStatus>("/api/engines/llamacpp/stop", { method: "POST" }).then(setEngine)}>{t("stopEngine")}</button>
         )}

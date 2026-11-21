@@ -1,0 +1,112 @@
+{
+ "group": "מודלים · Models",
+ "mocks": [
+  {
+   "url": "**/api/guard",
+   "method": "GET",
+   "json": {
+    "config": {
+     "enabled": true,
+     "maxTemp": 83,
+     "resumeTemp": 75,
+     "unloadAfterMinutes": 10,
+     "idleEmbeddings": 5,
+     "idleComfy": 5,
+     "idleTranslator": 5,
+     "freeForPlay": true,
+     "gentle": false,
+     "maxRamPercent": 0,
+     "maxCpuPercent": 0,
+     "maxCpuTemp": 0
+    },
+    "cards": [
+     {
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 3090",
+      "temp": 71,
+      "util": 96,
+      "memUsed": 21474836480,
+      "memTotal": 25769803776,
+      "power": 310,
+      "powerLimit": 350
+     }
+    ],
+    "paused": false,
+    "cooling": false,
+    "system": {
+     "ramUsed": 42949672960,
+     "ramTotal": 99857989632,
+     "cpu": 38
+    },
+    "waiting": 0,
+    "running": 0,
+    "lastUnload": {
+     "what": "chat model",
+     "at": {
+      "$ago": "2m"
+     }
+    },
+    "standby": {
+     "state": "paused",
+     "editors": [
+      "unreal"
+     ],
+     "freed": [
+      "chat model",
+      "ComfyUI"
+     ]
+    }
+   }
+  },
+  {
+   "url": "**/api/engines/llamacpp",
+   "method": "GET",
+   "json": {
+    "installed": true,
+    "version": "b9000",
+    "running": false,
+    "log": []
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "PlayStandbyModels",
+   "title": "מודלים: \"מושהה בזמן Play ב-Unreal — ייטען חזרה אחרי\" (המודל ירד מהכרטיס כשהמשחק רץ)",
+   "titleEn": "Models: \"Paused for Play in Unreal — reloads after\" (the model left the card while the game plays)",
+   "route": "#/models",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 520,
+    "phone": 700
+   },
+   "steps": [
+    {
+     "wait": ".play-standby-note"
+    }
+   ]
+  },
+  {
+   "id": "PlayStandbySettings",
+   "title": "הגדרות: \"פנה את כרטיס המסך כשהמשחק רץ\" (מופעל כברירת מחדל) ליד זמני הפריקה, עם מצב ההשהיה",
+   "titleEn": "Settings: \"Free the graphics card while the game plays\" (on by default) beside the idle-unload times, with the paused state",
+   "route": "#/settings/computer",
+   "fullPage": false,
+   "height": {
+    "desktop": 900,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": ".play-standby-note"
+    },
+    {
+     "scroll": ".play-free"
+    }
+   ]
+  }
+ ]
+}

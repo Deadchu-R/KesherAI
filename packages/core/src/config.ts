@@ -331,6 +331,8 @@ export const KesherConfigSchema = z.object({
       /** The translation model's idle minutes (0 = keep it loaded). */
       idleTranslator: z.number().int().min(0).max(1440).default(5),
       gentle: z.boolean().default(false),
+      /** Free the graphics card while a game plays in Unity or Unreal (play-standby.ts); on unless false. */
+      freeForPlay: z.boolean().default(true),
       maxRamPercent: z.number().int().min(0).max(98).default(0),
       maxCpuPercent: z.number().int().min(0).max(100).default(0),
       maxCpuTemp: z.number().int().min(0).max(105).default(0),

@@ -4,7 +4,7 @@ import { isLocalRequest } from "../auth.js";
 import type { GuardConfig } from "../gpu-guard.js";
 
 /** The load-on-demand idle times (minutes per engine), which the phone may change too. */
-const IDLE_KEYS = new Set(["unloadAfterMinutes", "idleEmbeddings", "idleComfy", "idleTranslator"]);
+const IDLE_KEYS = new Set(["unloadAfterMinutes", "idleEmbeddings", "idleComfy", "idleTranslator", "freeForPlay"]);
 
 /**
  * Protecting the graphics card (Settings → Graphics cards): live readings,
@@ -31,6 +31,8 @@ export async function guardRoutes(app: FastifyInstance, s: KesherServices): Prom
     g.maxTemp = int(b.maxTemp, 60, 95) ?? g.maxTemp;
     g.resumeTemp = int(b.resumeTemp, 50, 90) ?? g.resumeTemp;
     if (g.resumeTemp > g.maxTemp - 3) g.resumeTemp = g.maxTemp - 3;
+    // Free the graphics card while the game plays: turning it off loads the models back at once (also from the phone).
+    if (typeof b.freeForPlay === "boolean") g.freeForPlay = b.freeForPlay;
     g.unloadAfterMinutes = int(b.unloadAfterMinutes, 0, 1440) ?? g.unloadAfterMinutes;
     // Load on demand: each engine's idle minutes (0 = keep it loaded).
     g.idleEmbeddings = int(b.idleEmbeddings, 0, 1440) ?? g.idleEmbeddings;
@@ -42,6 +44,7 @@ export async function guardRoutes(app: FastifyInstance, s: KesherServices): Prom
     g.maxCpuPercent = limit(b.maxCpuPercent, 40, 100, g.maxCpuPercent);
     g.maxCpuTemp = limit(b.maxCpuTemp, 60, 105, g.maxCpuTemp);
     await s.saveConfig();
+    await s.playStandby?.poke().catch(() => undefined);
     await s.guard.check().catch(() => undefined);
     return s.guard.status();
   });

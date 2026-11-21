@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getLocale, he$ } from "../i18n";
+import { loadingBackText, useStandby } from "../standby";
 import { clock, speedText, type TurnStatus, type TurnSummary } from "../turn-status";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -11,13 +12,16 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  * for the time alone. Numbers and tool names are isolated (`bdi`, `dir="ltr"`) so Hebrew text does not reorder them.
  *
  * @param props.status - What the turn does (from turnStatus).
+ * @param props.local - The chat's model runs on this computer (only then does a game's Play make it wait).
  */
-export function TurnStatusLine({ status }: { status: TurnStatus }) {
+export function TurnStatusLine({ status, local = false }: { status: TurnStatus; local?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+  // A turn sent while the models are away for a game's Play waits for them instead of failing.
+  const standby = useStandby();
   const tool = status.tool ? <bdi className="mono" dir="ltr">{status.tool}</bdi> : null;
   const step = status.step > 0 ? <>{L("שלב", "Step")} <bdi dir="ltr">{status.step}</bdi></> : null;
   const what =
@@ -25,6 +29,7 @@ export function TurnStatusLine({ status }: { status: TurnStatus }) {
     : status.kind === "question" ? L("מחכה לתשובה שלך", "Waiting for your answer")
     : status.kind === "tool" ? <>{step ?? L("מריץ", "Running")}: {tool}</>
     : status.kind === "writing" ? L("כותב", "Writing")
+    : local && standby?.state === "paused" ? loadingBackText()
     : L("חושב", "Thinking");
   const since = status.since ? Date.parse(status.since) : NaN;
   return (

@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t, he$ } from "./i18n";
 import { Select } from "./ui/Select";
+import { standbyText, type Standby } from "./standby";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Reading { index: number; name: string; temp: number; util: number; memUsed: number; memTotal: number; power?: number; powerLimit?: number }
-interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; idleEmbeddings?: number; idleComfy?: number; idleTranslator?: number; gentle: boolean; maxRamPercent?: number; maxCpuPercent?: number; maxCpuTemp?: number }
+interface GuardConfig { enabled: boolean; maxTemp: number; resumeTemp: number; unloadAfterMinutes: number; idleEmbeddings?: number; idleComfy?: number; idleTranslator?: number; freeForPlay?: boolean; gentle: boolean; maxRamPercent?: number; maxCpuPercent?: number; maxCpuTemp?: number }
 /** What `/api/guard` answers. */
 export interface GuardStatus {
   config: GuardConfig;
@@ -18,6 +19,7 @@ export interface GuardStatus {
   waiting: number;
   running: number;
   lastUnload?: { what: string; at: string };
+  standby?: Standby;
 }
 
 const gb = (b: number) => (b / 1024 ** 3).toFixed(1);
@@ -148,6 +150,12 @@ export function GuardSection() {
               </Select>
             </label>
           ))}
+          <label className="row play-free">
+            <input type="checkbox" checked={c.freeForPlay !== false} onChange={(e) => set({ freeForPlay: e.target.checked })} />
+            <span>{L("פנה את כרטיס המסך כשהמשחק רץ", "Free the graphics card while the game plays")}</span>
+          </label>
+          <p className="muted small">{L("כש-Unity או Unreal נכנסים ל-Play המודלים יורדים מהכרטיס (אף פעם לא באמצע תשובה) וחוזרים כשה-Play נגמר. דורש תוסף Unreal 0.1.29 או חבילת Unity 0.2.13.", "When Unity or Unreal goes into Play the models leave the card (never in the middle of an answer) and come back when Play ends. Needs the Unreal plugin 0.1.29 or the Unity package 0.2.13.")}</p>
+          {g.standby && <p className="small play-standby-note" role="status">🎮 {standbyText(g.standby)}</p>}
           <p className="muted small">{L("מנוע התמונות המובנה (sd.cpp) רץ רק בזמן יצירת תמונה ונסגר מיד אחריה.", "The built-in image engine (sd.cpp) runs only while it makes a picture and closes right after.")}</p>
         </fieldset>
         {!c.maxRamPercent && !c.maxCpuPercent && (

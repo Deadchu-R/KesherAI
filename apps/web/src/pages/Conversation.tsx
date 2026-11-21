@@ -1210,7 +1210,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
             <div key={`s${turn}`} className="msg streaming"><RichText text={text} /></div>
           ))}
           {/* What the turn does now (a tool, an approval, thinking) and how long it has run (turn-status.ts). */}
-          {busy && <TurnStatusLine status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} />}
+          {busy && <TurnStatusLine local={modelOptions.find((m) => m.id === conv.modelId)?.location === "local"} status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} />}
           {/* When the turn ends, the live line collapses to "Done in 0:42 · 38 tok/s" (turn-status.ts). */}
           {!busy && events.at(-1)?.type === "assistant" && (() => {
             const summary = turnSummary(events);

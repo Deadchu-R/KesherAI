@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelInfo } from "./api";
 import { refreshComputers } from "./computers";
 import { toast } from "./library";
+import { standbyText, useStandby } from "./standby";
 import { thinkingLevels, type ThinkingLevel } from "@kesher/shared";
 import { getLocale, he$, t } from "./i18n";
 
@@ -78,6 +79,9 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
   }, [open]);
 
   const current = models.find((m) => m.id === value);
+  // A local model is away while a game plays: the chip says so (a cloud model is not affected).
+  const standby = useStandby();
+  const away = standby && current?.location === "local" ? standbyText(standby) : undefined;
   // Thinking levels this model's server can apply (none: the picker is hidden).
   const levels = thinking && current ? thinkingLevels(current.providerId, current.providerModelId || current.id, current.location) : [];
   const levelName = (l: ThinkingLevel) => (l === "off" ? L("כבויה", "Off") : l === "low" ? L("נמוכה", "Low") : L("גבוהה", "High"));
@@ -107,7 +111,7 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
 
   return (
     <div className="model-menu" ref={ref}>
-      <button type="button" data-slide-menu className="model-chip" aria-haspopup="listbox" aria-expanded={open} aria-label={t("pickModel")} onClick={() => setOpen(!open)}>
+      <button type="button" data-slide-menu className="model-chip" aria-haspopup="listbox" aria-expanded={open} aria-label={t("pickModel")} {...(away ? { title: away } : {})} onClick={() => setOpen(!open)}>
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
         {auto?.on && <span className="model-chip-auto">✨ {L("אוטומטי", "Auto")} ·</span>}

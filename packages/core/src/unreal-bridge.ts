@@ -19,7 +19,7 @@ import { applyBpOps, bpNodeTemplate, COMMON_BP_ACTIONS, diffBpGraphs, mapCompile
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.28";
+export const BRIDGE_VERSION = "0.1.29";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -126,6 +126,7 @@ export class UnrealBridge {
   private info?: EditorInfo;
   private readonly waiting = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private readonly listeners = new Set<(event: string) => void>();
+  private inPlay = false;
   /** The project shown when the editor is closed: the last one that connected. */
   private lastProject?: string;
   /** Its .uproject (for the headless editor). */
@@ -320,6 +321,11 @@ export class UnrealBridge {
     return () => this.listeners.delete(fn);
   }
 
+  /** Whether the editor is in Play (PIE) now; false for a plugin older than 0.1.29, which never says. */
+  get playing(): boolean {
+    return this.inPlay;
+  }
+
   private emit(event: string): void {
     for (const fn of this.listeners) fn(event);
   }
@@ -338,6 +344,7 @@ export class UnrealBridge {
       if (this.socket !== socket) return;
       this.socket = undefined;
       this.info = undefined;
+      this.inPlay = false;
       for (const [id, w] of this.waiting) {
         clearTimeout(w.timer);
         w.reject(new Error(`The ${this.editor} disconnected.`));
@@ -348,7 +355,7 @@ export class UnrealBridge {
   }
 
   private async onMessage(socket: WebSocket, text: string): Promise<void> {
-    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; project?: string; engine?: string; bridge?: string; projectFile?: string; pid?: number };
+    let msg: { id?: string; ok?: boolean; result?: unknown; error?: string; event?: string; on?: boolean; project?: string; engine?: string; bridge?: string; projectFile?: string; pid?: number };
     try {
       msg = JSON.parse(text) as typeof msg;
     } catch {
@@ -369,6 +376,11 @@ export class UnrealBridge {
       this.emit("connected");
       void this.afterConnect().catch(() => undefined);
       return;
+    }
+    if (msg.event === "play" && socket === this.socket) {
+      // Play In Editor started or ended (plugin 0.1.29 and newer): KesherAI frees the graphics card meanwhile (play-standby.ts).
+      this.inPlay = msg.on === true;
+      return this.emit("play");
     }
     if (msg.event === "changed") {
       // A Blueprint compiled in the editor: the page reads its graph again at once (it sees the time in status).

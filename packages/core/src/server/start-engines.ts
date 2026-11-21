@@ -12,6 +12,8 @@ import type { KesherConfig } from "../config.js";
 import type { FaultLog } from "../fault-log.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import type { LlamaEngine } from "../llamacpp.js";
+import { PlayStandby } from "../play-standby.js";
+import { unityInPlay } from "../unity-play.js";
 import { closeLeftOverEngines, parseGpuApps, processParent } from "../pc-fix.js";
 import { loadModel } from "../routes/engine.js";
 import type { KesherServices } from "../services.js";
@@ -74,6 +76,7 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
     pids: () => (comfy.pid ? [comfy.pid] : []),
   });
   registry.setGate(guard);
+  wirePlayStandby(app, services, guard, config);
   // KesherAI's own engines left running (an update or a crash) are closed before the card is used, and at start.
   const closeStale = async () => {
     const closed = await closeLeftOverEngines({
@@ -101,4 +104,29 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
       .catch((err) => engine.fail(err))
       .finally(() => (startLoad = undefined));
   }
+}
+
+/**
+ * Free the graphics card while the game plays (play-standby.ts): Unreal's plugin tells Play over its WebSocket
+ * (`{event:"play", on}`), Unity's package through `Temp/KesherPlay.json`, read every 3 seconds while the setting is on.
+ */
+function wirePlayStandby(app: FastifyInstance, services: KesherServices, guard: GpuGuard, config: KesherConfig): void {
+  // No notification: Play starts and ends all the time; the state shows in Models, the model chip and the chat.
+  const standby = new PlayStandby(guard, () => config.guard.freeForPlay !== false);
+  services.playStandby = standby;
+  guard.playStatus = () => standby.status();
+  guard.onIdle = () => void standby.poke().catch(() => undefined);
+  services.unreal.on((event) => {
+    if (event === "play") void standby.setPlay("unreal", services.unreal.playing).catch(() => undefined);
+    // A closed editor is not in Play.
+    if (event === "disconnected") void standby.setPlay("unreal", false).catch(() => undefined);
+  });
+  const timer = setInterval(() => {
+    if (config.guard.freeForPlay === false && !standby.status()) return;
+    const projects = [...new Set([...config.unity.projects, ...(services.unity.activeProject ? [services.unity.activeProject] : [])])];
+    if (!projects.length) return;
+    void unityInPlay(projects).then((on) => standby.setPlay("unity", on)).catch(() => undefined);
+  }, 3000);
+  timer.unref();
+  app.addHook("onClose", async () => clearInterval(timer));
 }
