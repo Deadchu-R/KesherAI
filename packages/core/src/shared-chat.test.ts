@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
-import { canReply, ChatLive, guestLabelOf, guestMessage, guestTurnTools, REPLIES_OFF, ReplyLimit, updateReplies, type ShareReplies } from "./shared-chat.js";
+import type { AgentEvent, AgentMessage } from "@kesher/shared";
+import { canReply, ChatLive, guestLabelOf, guestMessage, guestThread, guestTurnTools, OWNER_TYPING, REPLIES_OFF, ReplyLimit, updateReplies, type ShareReplies } from "./shared-chat.js";
 import { ShareStore } from "./shares.js";
 
 const NOW = Date.parse("2026-11-21T12:00:00Z");
@@ -61,10 +62,10 @@ const tool = (name: string, gate?: AgentTool["gate"]): AgentTool => ({ spec: { n
 const info = { always: true, asked: [], plan: false, sessionId: "c" };
 
 test("guestTurnTools: none by default; with the switch every action asks the owner, no Always", async () => {
-  const tools = [tool("write_file"), tool("delegate"), tool("browser_open", async () => ({ action: "allow", reason: "" })), tool("computer_click", async () => ({ action: "deny", reason: "sensitive" }))];
+  const tools = [tool("write_file"), tool("delegate"), tool("remember"), tool("search_knowledge"), tool("kesher_list_chats"), tool("gmail_search"), tool("mcp_notion_search"), tool("browser_open", async () => ({ action: "allow", reason: "" })), tool("computer_click", async () => ({ action: "deny", reason: "sensitive" }))];
   assert.deepEqual(guestTurnTools(tools, { name: "Dana", tools: false }), []);
   const g = guestTurnTools(tools, { name: "Dana", tools: true });
-  assert.deepEqual(g.map((t) => t.spec.name), ["write_file", "browser_open", "computer_click"], "helpers are left out");
+  assert.deepEqual(g.map((t) => t.spec.name), ["write_file", "browser_open", "computer_click"], "helpers, memory, past chats, mail and connectors are left out");
   for (const t of g.slice(0, 2)) {
     const r = await t.gate!({}, {} as never, info);
     assert.equal(r.action, "ask", t.spec.name);
@@ -116,4 +117,39 @@ test("revoking: stopping the share or replies ends a guest's writing at once", a
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("guestThread: a guest's turn sends only the visible thread, then its own turn as it is", () => {
+  const events = [
+    { type: "user", text: "read my notes", seq: 1 },
+    { type: "tool_call", callId: "a", name: "read_file", input: {}, seq: 2 },
+    { type: "tool_result", callId: "a", name: "read_file", ok: true, output: "SECRET", seq: 3 },
+    { type: "assistant", turn: 1, text: "Done.", seq: 4 },
+    { type: "user", text: "[Guest: Noa]\nhi", seq: 5 },
+  ] as unknown as AgentEvent[];
+  const messages: AgentMessage[] = [
+    { role: "user", content: "read my notes\n\n---\nAttached file text: SECRET" },
+    { role: "assistant", content: "", toolCalls: [{ id: "a", name: "read_file", arguments: {} }] },
+    { role: "tool", content: "SECRET", toolCallId: "a" },
+    { role: "assistant", content: "Done." },
+    { role: "user", content: "[Guest: Noa]\nhi" },
+  ];
+  const out = guestThread(events, messages, 4, 5);
+  assert.deepEqual(out, [
+    { role: "user", content: "read my notes" },
+    { role: "assistant", content: "Done." },
+    { role: "user", content: "[Guest: Noa]\nhi" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(out), /SECRET/);
+});
+
+test("ChatLive: the owner's typing is its own, never in the guests' list, and ends when a message is sent", () => {
+  const live = new ChatLive();
+  live.beat("c", OWNER_TYPING, "", NOW);
+  live.beat("c", "g1", "Dana", NOW);
+  assert.equal(live.ownerTyping("c", NOW + 1000), true);
+  assert.deepEqual(live.typingIn("c", undefined, NOW + 1000), ["Dana"]);
+  live.see("c", { type: "user", text: "hello" });
+  assert.equal(live.ownerTyping("c", NOW + 1000), false);
+  assert.equal(live.ownerTyping("other", NOW), false);
 });

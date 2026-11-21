@@ -265,6 +265,12 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   systemPrompt: string;
   readonly events: AgentEvent[];
   readonly messages: AgentMessage[];
+  /**
+   * When set, the messages the model gets this turn instead of the stored conversation (which is never changed). A
+   * turn a guest started in a shared chat sets it, so only the chat's visible thread goes to the model. The caller
+   * clears it when the turn ends.
+   */
+  viewMessages: ((messages: readonly AgentMessage[]) => AgentMessage[]) | undefined;
   private model: ModelTurn;
   private readonly external?: ExternalAgent;
   private tools: Map<string, AgentTool>;
@@ -1018,11 +1024,30 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    * The stored conversation is never changed.
    */
   private async fitContext(signal: AbortSignal): Promise<AgentMessage[]> {
-    const out = await this.fitContextRaw(signal);
+    const out = this.viewMessages ? this.fitView(this.viewMessages(this.messages)) : await this.fitContextRaw(signal);
     // Local models drift into English after long tool runs: say the user's language again, last thing in the instructions.
     const note = languageNote([...this.messages].reverse().find((m) => m.role === "user")?.content ?? "");
     if (note && out[0]?.role === "system") out[0] = { ...out[0], content: `${out[0].content}\n\n${note}` };
     return out;
+  }
+
+  /**
+   * The system prompt and a caller's view of the conversation (viewMessages), its oldest messages left out until it
+   * fits the model's window. No summary is made: a summary would read the stored conversation.
+   *
+   * @param view - The messages to send.
+   */
+  private fitView(view: AgentMessage[]): AgentMessage[] {
+    const system: AgentMessage = { role: "system", content: this.mode === "plan" ? `${this.systemPrompt}\n\n${PLAN_NOTE}` : this.systemPrompt };
+    const budget = this.contextTokens * this.charsPerToken - this.systemPrompt.length - JSON.stringify(this.specs()).length - 2000;
+    let msgs = view;
+    // Cut at a user message, so no answer or tool result is left without what it answers.
+    while (msgs.length > 1 && sizeOf(msgs) > budget) {
+      const next = msgs.findIndex((m, i) => i > 0 && m.role === "user");
+      if (next <= 0) break;
+      msgs = msgs.slice(next);
+    }
+    return [system, ...msgs];
   }
 
   private async fitContextRaw(signal: AbortSignal): Promise<AgentMessage[]> {

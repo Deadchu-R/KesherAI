@@ -3,7 +3,7 @@ import { gateControlTools } from "./control-gate.js";
 import { ControlLog } from "./control-policy.js";
 import { localControlReviewer } from "./control-reviewer.js";
 import { guestFileTools } from "./guests.js";
-import { guestLabelOf, guestTurnNote, guestTurnTools, REMOVED } from "./shared-chat.js";
+import { guestLabelOf, guestThread, guestTurnNote, guestTurnTools, REMOVED } from "./shared-chat.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
@@ -635,11 +635,15 @@ export class ConversationManager {
     const project = c.projectId ? this.deps.library.getProject(c.projectId) : undefined;
     const persona = this.deps.personas?.get(c.personaId);
     const workspace = this.workspaceOf(c);
+    // A turn a guest's message started (shared-chat.ts): none of the owner's memory goes into the prompt (about them,
+    // what the coach learned, memory topics), and skills and the project's facts only when guests may use tools.
+    const guest = this.guestTurns.get(c.id);
+    const extra = guest && !guest.tools ? [] : [...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean), ...(c.kind === "code" && workspace ? [(await this.deps.projectFacts?.note(workspace).catch(() => undefined)) ?? ""].filter(Boolean) : [])];
     return buildSystemPrompt({
       productName: branding.productName,
       ...(workspace ? (c.kind === "code" ? { workspace } : { outputsFolder: workspace }) : {}),
       ...(project?.instructions ? { projectInstructions: project.instructions } : {}),
-      toolNotes: [...notes, ...(await this.learnedNotes(c)), ...[(await this.deps.skills?.promptSection(c.kind === "code" ? workspace : undefined)) ?? ""].filter(Boolean), ...(c.kind === "code" && workspace ? [(await this.deps.projectFacts?.note(workspace).catch(() => undefined)) ?? ""].filter(Boolean) : [])],
+      toolNotes: [...notes, ...(guest ? [] : await this.learnedNotes(c)), ...extra],
       ...(persona ? { persona: personaPrompt(persona) } : {}),
     });
   }
@@ -928,7 +932,10 @@ export class ConversationManager {
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status") return;
       // A guest's turn ends with its answer (the next message sets its own rules).
-      if (e.status === "idle" || e.status === "error") this.guestTurns.delete(id);
+      if (e.status === "idle" || e.status === "error") {
+        this.guestTurns.delete(id);
+        session.viewMessages = undefined;
+      }
       void this.noteWorking(id, e.status === "running" || e.status === "waiting");
     });
     // A chat that failed goes into the fault log (its own doctor reads it).
@@ -1377,6 +1384,13 @@ export class ConversationManager {
     const roots = [this.workspaceOf(conversation), ...session.grants].filter((x): x is string => !!x);
     const att = await readAttachments(text, roots, this.deps.readMedia ? (path) => this.deps.readMedia!(path) : undefined).catch(() => ({ images: [] as Array<{ mimeType: string; data: string }> }) as ReadAttachments);
     if (att.context) context = context ? `${context}\n\n${att.context}` : att.context;
+    // A guest's turn: the model gets only the chat's visible thread before it (shared-chat.ts guestThread), not the
+    // owner's earlier tool results, attached files' text or web results.
+    if (opts.guest) {
+      const from = session.messages.length;
+      const beforeSeq = (session.events.at(-1)?.seq ?? -1) + 1;
+      session.viewMessages = (messages) => guestThread(session.events, messages, from, beforeSeq);
+    } else session.viewMessages = undefined;
     session.send(text, context, note, steps, att.images);
   }
 

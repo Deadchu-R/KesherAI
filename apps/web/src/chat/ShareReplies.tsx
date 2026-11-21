@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -116,4 +116,28 @@ export function ShareReplies({ convId }: { convId: string }) {
       )}
     </section>
   );
+}
+
+/**
+ * Tells a shared chat's guests that the owner is typing: one beat in 3 seconds while the composer has text. Only for
+ * chats in a project (only those can have replies); when the server answers that replies are off, it stops asking for
+ * a minute, so ordinary chats cost at most one small request a minute while typing.
+ *
+ * @param convId - The chat.
+ * @param text - The composer's text now.
+ * @param enabled - Whether this chat could have replies (a chat in a project).
+ */
+export function useOwnerTyping(convId: string, text: string, enabled: boolean): void {
+  const next = useRef(0);
+  useEffect(() => {
+    next.current = 0;
+  }, [convId]);
+  useEffect(() => {
+    if (!enabled || !text.trim() || Date.now() < next.current) return;
+    next.current = Date.now() + 3000;
+    void api<{ on: boolean }>(`/api/conversations/${encodeURIComponent(convId)}/typing`, { method: "POST" }).then(
+      (r) => { if (!r.on) next.current = Date.now() + 60_000; },
+      () => { next.current = Date.now() + 60_000; },
+    );
+  }, [convId, text, enabled]);
 }

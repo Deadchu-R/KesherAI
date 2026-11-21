@@ -5,6 +5,9 @@ import { RichText } from "./RichText";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
+/** What a guest message says once the owner removed it (core shared-chat.ts REMOVED). */
+const REMOVED = "(removed by the owner)";
+
 /** One message as a guest sees it (core routes/shared-chat.ts): who wrote it, its text only. */
 interface LiveMessage { seq: number; role: "user" | "assistant"; from: string; guest: boolean; text: string }
 /** The chat live (GET /api/guest/chats/:id/live). */
@@ -14,6 +17,12 @@ interface Live {
   messages: LiveMessage[];
   writing: string;
   typing: string[];
+  /** The owner is typing. */
+  ownerTyping?: boolean;
+  /** Guest messages (already sent to this page) that the owner removed. */
+  deleted?: number[];
+  /** The chat's last message number (smaller than the page's: the owner went back, so the page reads it all again). */
+  lastSeq?: number;
   replies: { canSend: true; tools: boolean; perMinute: number } | { canSend: false; why: { he: string; en: string } };
 }
 
@@ -40,10 +49,14 @@ export function GuestLiveChat({ id, me, onLeft }: { id: string; me: string; onLe
     let quick = true;
     if (!document.hidden) {
       try {
-        const r = await api<Live>(`/api/guest/chats/${encodeURIComponent(id)}/live?after=${last.current}`);
-        setLive((old) => ({ ...r, messages: [...(old?.messages ?? []), ...r.messages] }));
-        if (r.messages.length) last.current = r.messages[r.messages.length - 1]!.seq;
-        quick = r.busy || r.typing.length > 0 || r.replies.canSend;
+        let r = await api<Live>(`/api/guest/chats/${encodeURIComponent(id)}/live?after=${last.current}`);
+        const fresh = r.lastSeq !== undefined && r.lastSeq < last.current;
+        if (fresh) r = await api<Live>(`/api/guest/chats/${encodeURIComponent(id)}/live?after=0`);
+        // Deletions show at once: a removed guest message keeps its place with a note, like on a new page.
+        const gone = new Set(r.deleted ?? []);
+        setLive((old) => ({ ...r, messages: [...(fresh ? [] : old?.messages ?? []).map((m) => (gone.has(m.seq) ? { ...m, text: REMOVED } : m)), ...r.messages] }));
+        last.current = r.messages.length ? r.messages[r.messages.length - 1]!.seq : fresh ? 0 : last.current;
+        quick = r.busy || r.typing.length > 0 || !!r.ownerTyping || r.replies.canSend;
       } catch (e) {
         setError((e as Error).message);
         quick = false;
@@ -88,7 +101,7 @@ export function GuestLiveChat({ id, me, onLeft }: { id: string; me: string; onLe
       {live.messages.map((m) => (
         <div key={m.seq} className={m.role === "user" ? `msg user${m.guest ? " from-guest" : ""}` : "msg"} dir="auto">
           <span className="guest-from" dir="auto">{who(m)}</span>
-          {m.role === "user" ? m.text : <RichText text={m.text} />}
+          {m.text === REMOVED ? <span className="muted guest-removed">{L("(הבעלים מחק את ההודעה)", REMOVED)}</span> : m.role === "user" ? m.text : <RichText text={m.text} />}
         </div>
       ))}
       {live.busy && (live.writing ? (
@@ -97,7 +110,14 @@ export function GuestLiveChat({ id, me, onLeft }: { id: string; me: string; onLe
           <RichText text={live.writing} />
         </div>
       ) : <p className="muted small" role="status">{L("עונה…", "Answering…")}</p>)}
-      {live.typing.length > 0 && <p className="muted small guest-typing" role="status">✎ {L(`${live.typing.join(", ")} מקליד…`, `${live.typing.join(", ")} typing…`)}</p>}
+      {(live.typing.length > 0 || live.ownerTyping) && (
+        <p className="muted small guest-typing" role="status" dir="auto">
+          ✎ {(() => {
+            const names = [...(live.ownerTyping ? [L("הבעלים", "The owner")] : []), ...live.typing];
+            return names.length > 1 ? L(`${names.join(", ")} מקלידים…`, `${names.join(", ")} are typing…`) : L(`${names[0]} מקליד/ה…`, `${names[0]} is typing…`);
+          })()}
+        </p>
+      )}
       {error && <p className="error small" role="alert" dir="auto">{error}</p>}
       {live.replies.canSend ? (
         <form className="row guest-compose" onSubmit={(e) => { e.preventDefault(); void send(); }}>

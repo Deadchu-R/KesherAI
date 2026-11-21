@@ -1,0 +1,593 @@
+{
+ "group": "צ'אט משותף: תגובות של אורחים",
+ "now": "2026-11-21T10:00:00Z",
+ "boards": [
+  {
+   "id": "SharedChatReplies",
+   "title": "צ'אט משותף: חלון השיתוף, \"לאפשר תגובות\" ואורחים",
+   "titleEn": "Shared chat: share sheet, Allow replies and guests",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1100
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": "p1",
+      "title": "תכנון שלב 3",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "30m"
+      },
+      "updatedAt": {
+       "$ago": "4m"
+      },
+      "messageCount": 7,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "30m"
+        },
+        "type": "user",
+        "text": "תעזור לי לתכנן את השלב השלישי במשחק הפלטפורמה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "29m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "בשמחה. הצעה לשלב 3: **מערה עם פלטפורמות נעות**, שלושה מחסומים ובוס קטן בסוף. רוצה שנתחיל מהמפה או מהאויבים?"
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "[Guest: נועה]\nאפשר להוסיף נקודת שמירה לפני הבוס?"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "כן, נקודת שמירה ממש לפני דלת הבוס תחסוך לשחקנים לחזור על כל המערה. הוספתי אותה לתכנון."
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "10m"
+        },
+        "type": "user",
+        "text": "[Guest: דני]\n(removed by the owner)"
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "user",
+        "text": "מעולה. עכשיו תכתוב רשימת אויבים לשלב"
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "assistant",
+        "turn": 3,
+        "text": "1. עטלפים שעפים בגלים\n2. עכבישים שיורדים מהתקרה\n3. בוס: נחש סלע ענק"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/share",
+     "method": "GET",
+     "json": {
+      "share": {
+       "id": "s1",
+       "path": "/s/dsgn-share",
+       "messages": 7,
+       "views": 3,
+       "expiresAt": "2026-11-28T10:00:00Z"
+      }
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/share/room",
+     "json": {
+      "project": {
+       "id": "p1",
+       "name": "משחק הפלטפורמה"
+      },
+      "replies": {
+       "on": true,
+       "until": "2026-11-22T06:00:00Z",
+       "tools": false,
+       "perMinute": 6,
+       "muted": [
+        "g2"
+       ]
+      },
+      "ended": false,
+      "guests": [
+       {
+        "id": "g1",
+        "name": "נועה",
+        "role": "edit",
+        "muted": false,
+        "typing": true,
+        "lastSeen": {
+         "$ago": "1m"
+        }
+       },
+       {
+        "id": "g2",
+        "name": "דני",
+        "role": "edit",
+        "muted": true,
+        "typing": false,
+        "lastSeen": {
+         "$ago": "9m"
+        }
+       },
+       {
+        "id": "g3",
+        "name": "עומר",
+        "role": "read",
+        "muted": false,
+        "typing": false,
+        "lastSeen": {
+         "$ago": "2h"
+        }
+       }
+      ],
+      "messages": [
+       {
+        "seq": 3,
+        "name": "נועה",
+        "text": "אפשר להוסיף נקודת שמירה לפני הבוס?",
+        "at": {
+         "$ago": "20m"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/typing",
+     "method": "POST",
+     "json": {
+      "on": true
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".bar-title"
+    },
+    {
+     "click": ".bar-title"
+    },
+    {
+     "click": "text=שיתוף…"
+    },
+    {
+     "wait": ".share-replies"
+    },
+    {
+     "click": ".share-guest-msgs summary"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "SharedChatGuestLive",
+   "title": "צ'אט משותף: האורח רואה בזמן אמת, מי מקליד (גם הבעלים) והודעה שנמחקה",
+   "titleEn": "Shared chat: the guest's live view, who is typing (the owner too), a deleted message",
+   "route": "#/join/dsgnJoinToken0123456789abcdefghijklmnop",
+   "viewports": [
+    "phone",
+    "desktop"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1200
+   },
+   "mocks": [
+    {
+     "url": "**/api/join/dsgnJoinToken0123456789abcdefghijklmnop",
+     "method": "GET",
+     "json": {
+      "project": "משחק הפלטפורמה",
+      "role": "edit"
+     }
+    },
+    {
+     "url": "**/api/join/dsgnJoinToken0123456789abcdefghijklmnop",
+     "method": "POST",
+     "json": {
+      "key": "design-guest-key"
+     }
+    },
+    {
+     "url": "**/api/guest/me",
+     "json": {
+      "name": "נועה",
+      "project": "משחק הפלטפורמה",
+      "role": "edit",
+      "left": 17,
+      "dailyLimit": 20
+     }
+    },
+    {
+     "url": "**/api/guest/chats",
+     "json": {
+      "chats": [
+       {
+        "id": "c1",
+        "title": "תכנון שלב 3",
+        "updatedAt": {
+         "$ago": "4m"
+        },
+        "mine": false
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/guest/scenes",
+     "json": {
+      "scenes": [],
+      "editor": null
+     }
+    },
+    {
+     "url": "**/api/guest/chats/c1",
+     "json": {
+      "id": "c1",
+      "title": "תכנון שלב 3",
+      "mine": false,
+      "busy": true,
+      "messages": []
+     }
+    },
+    {
+     "url": "**/api/guest/chats/c1/live*after=0",
+     "json": {
+      "id": "c1",
+      "title": "תכנון שלב 3",
+      "busy": true,
+      "writing": "1. עטלפים שעפים בגלים\n2. עכבישים שיורדים",
+      "typing": [
+       "דני"
+      ],
+      "ownerTyping": true,
+      "deleted": [
+       5
+      ],
+      "lastSeq": 6,
+      "replies": {
+       "canSend": true,
+       "tools": false,
+       "perMinute": 6
+      },
+      "messages": [
+       {
+        "seq": 1,
+        "role": "user",
+        "from": "owner",
+        "guest": false,
+        "text": "תעזור לי לתכנן את השלב השלישי במשחק הפלטפורמה"
+       },
+       {
+        "seq": 2,
+        "role": "assistant",
+        "from": "ai",
+        "guest": false,
+        "text": "בשמחה. הצעה לשלב 3: **מערה עם פלטפורמות נעות**, שלושה מחסומים ובוס קטן בסוף. רוצה שנתחיל מהמפה או מהאויבים?"
+       },
+       {
+        "seq": 3,
+        "role": "user",
+        "from": "נועה",
+        "guest": true,
+        "text": "אפשר להוסיף נקודת שמירה לפני הבוס?"
+       },
+       {
+        "seq": 4,
+        "role": "assistant",
+        "from": "ai",
+        "guest": false,
+        "text": "כן, נקודת שמירה ממש לפני דלת הבוס תחסוך לשחקנים לחזור על כל המערה. הוספתי אותה לתכנון."
+       },
+       {
+        "seq": 5,
+        "role": "user",
+        "from": "דני",
+        "guest": true,
+        "text": "(removed by the owner)"
+       },
+       {
+        "seq": 6,
+        "role": "user",
+        "from": "owner",
+        "guest": false,
+        "text": "מעולה. עכשיו תכתוב רשימת אויבים לשלב"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/guest/chats/c1/live*",
+     "json": {
+      "id": "c1",
+      "title": "תכנון שלב 3",
+      "busy": true,
+      "writing": "1. עטלפים שעפים בגלים\n2. עכבישים שיורדים",
+      "typing": [
+       "דני"
+      ],
+      "ownerTyping": true,
+      "deleted": [
+       5
+      ],
+      "lastSeq": 6,
+      "replies": {
+       "canSend": true,
+       "tools": false,
+       "perMinute": 6
+      },
+      "messages": []
+     }
+    },
+    {
+     "url": "**/api/guest/chats/c1/typing",
+     "method": "POST",
+     "json": {
+      "ok": true
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".guest-join input"
+    },
+    {
+     "fill": ".guest-join input",
+     "value": "נועה"
+    },
+    {
+     "click": ".guest-join button[type=submit]"
+    },
+    {
+     "wait": ".guest-chat"
+    },
+    {
+     "click": ".guest-chat"
+    },
+    {
+     "wait": ".guest-typing"
+    },
+    {
+     "waitMs": 600
+    }
+   ]
+  },
+  {
+   "id": "SharedChatOwnerThread",
+   "title": "צ'אט משותף: השרשור של הבעלים עם הודעות אורחים מסומנות",
+   "titleEn": "Shared chat: the owner's thread with guests' messages marked",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1100
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": "p1",
+      "title": "תכנון שלב 3",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "30m"
+      },
+      "updatedAt": {
+       "$ago": "4m"
+      },
+      "messageCount": 7,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "30m"
+        },
+        "type": "user",
+        "text": "תעזור לי לתכנן את השלב השלישי במשחק הפלטפורמה"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "29m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "בשמחה. הצעה לשלב 3: **מערה עם פלטפורמות נעות**, שלושה מחסומים ובוס קטן בסוף. רוצה שנתחיל מהמפה או מהאויבים?"
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "[Guest: נועה]\nאפשר להוסיף נקודת שמירה לפני הבוס?"
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "כן, נקודת שמירה ממש לפני דלת הבוס תחסוך לשחקנים לחזור על כל המערה. הוספתי אותה לתכנון."
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "10m"
+        },
+        "type": "user",
+        "text": "[Guest: דני]\n(removed by the owner)"
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "user",
+        "text": "מעולה. עכשיו תכתוב רשימת אויבים לשלב"
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "assistant",
+        "turn": 3,
+        "text": "1. עטלפים שעפים בגלים\n2. עכבישים שיורדים מהתקרה\n3. בוס: נחש סלע ענק"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/share",
+     "method": "GET",
+     "json": {
+      "share": {
+       "id": "s1",
+       "path": "/s/dsgn-share",
+       "messages": 7,
+       "views": 3,
+       "expiresAt": "2026-11-28T10:00:00Z"
+      }
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/share/room",
+     "json": {
+      "project": {
+       "id": "p1",
+       "name": "משחק הפלטפורמה"
+      },
+      "replies": {
+       "on": true,
+       "until": "2026-11-22T06:00:00Z",
+       "tools": false,
+       "perMinute": 6,
+       "muted": [
+        "g2"
+       ]
+      },
+      "ended": false,
+      "guests": [
+       {
+        "id": "g1",
+        "name": "נועה",
+        "role": "edit",
+        "muted": false,
+        "typing": true,
+        "lastSeen": {
+         "$ago": "1m"
+        }
+       },
+       {
+        "id": "g2",
+        "name": "דני",
+        "role": "edit",
+        "muted": true,
+        "typing": false,
+        "lastSeen": {
+         "$ago": "9m"
+        }
+       },
+       {
+        "id": "g3",
+        "name": "עומר",
+        "role": "read",
+        "muted": false,
+        "typing": false,
+        "lastSeen": {
+         "$ago": "2h"
+        }
+       }
+      ],
+      "messages": [
+       {
+        "seq": 3,
+        "name": "נועה",
+        "text": "אפשר להוסיף נקודת שמירה לפני הבוס?",
+        "at": {
+         "$ago": "20m"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/typing",
+     "method": "POST",
+     "json": {
+      "on": true
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".msg.user.from-guest"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  }
+ ]
+}

@@ -9,7 +9,7 @@ import type { KesherServices } from "../services.js";
 import { GuestQuota, guestOf } from "../guests.js";
 import { pairedDeviceIdOf } from "../request-origin.js";
 import { cleanForShare, type ShareStore } from "../shares.js";
-import { canReply, ChatLive, DENIAL_TEXT, guestLabelOf, guestMessage, REMOVED, ReplyLimit, repliesEnded, updateReplies } from "../shared-chat.js";
+import { canReply, ChatLive, DENIAL_TEXT, guestLabelOf, guestMessage, OWNER_TYPING, REMOVED, ReplyLimit, repliesEnded, updateReplies } from "../shared-chat.js";
 
 /**
  * Routes for replies in shared chats.
@@ -100,6 +100,19 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
     return r;
   });
 
+  /**
+   * The owner is typing in this chat (their composer sends one beat in a few seconds), shown to the guests. Only while
+   * replies are on; `on: false` tells the composer to stop sending for a while.
+   */
+  app.post<{ Params: { id: string } }>("/api/conversations/:id/typing", { bodyLimit: 256 }, async (req, reply) => {
+    const c = s.library.summary(req.params.id);
+    if (!c) return reply.code(404).send({ error: "No such chat." });
+    const share = await store.live(c.id);
+    if (!share?.replies?.on || repliesEnded(share, Date.now())) return { on: false };
+    live.beat(c.id, OWNER_TYPING, "");
+    return { on: true };
+  });
+
   /** Deletes a guest's message (its words become "removed by the owner" for everyone, the model too). */
   app.delete<{ Params: { id: string; seq: string } }>("/api/conversations/:id/guest-messages/:seq", async (req, reply) => {
     const ok = await s.conversations.removeGuestMessage(req.params.id, Number(req.params.seq));
@@ -127,6 +140,13 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
         const label = e.type === "user" ? guestLabelOf(e.text) : undefined;
         return { seq: e.seq, role: e.type, from: e.type === "assistant" ? "ai" : label ? label.name : "owner", guest: !!label, text: cleanForShare((label ? label.text : e.text).slice(0, 40_000)) };
       });
+    // Deletions the guest's page may already show: guest messages the owner removed, and the last message number (a
+    // smaller one than the page has means the owner went back in the chat; the page then reads it all again).
+    const deleted = opened.session.events
+      .filter((e) => e.type === "user" && guestLabelOf(e.text)?.text === REMOVED && e.seq <= after)
+      .map((e) => e.seq)
+      .slice(-200);
+    const lastSeq = opened.session.events.findLast((e) => e.type === "user" || e.type === "assistant")?.seq ?? 0;
     const share = await store.live(c.id);
     const may = canReply({ share, guest: g, chatProjectId: c.projectId, now: Date.now() });
     const busy = opened.session.info().status !== "idle" && opened.session.info().status !== "error";
@@ -138,6 +158,9 @@ export async function sharedChatRoutes(app: FastifyInstance, s: KesherServices, 
       // The answer being written: text only (approvals, questions and tool steps never come here).
       writing: busy ? cleanForShare(live.writingIn(c.id)) : "",
       typing: live.typingIn(c.id, g.id),
+      ownerTyping: live.ownerTyping(c.id),
+      deleted,
+      lastSeq,
       replies: may.ok ? { canSend: true, tools: !!share?.replies?.tools, perMinute: share?.replies?.perMinute ?? 6 } : { canSend: false, why: DENIAL_TEXT[may.why] },
     };
   });

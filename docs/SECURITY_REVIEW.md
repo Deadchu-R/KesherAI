@@ -1761,3 +1761,16 @@ share has replies on (`packages/core/src/shared-chat.ts`, `routes/shared-chat.ts
   out of guest turns. (3) `ChatLive` follows a session with one listener per server life; sessions closed and reopened
   get a new one (WeakSet), check nothing piles up. (4) Owner routes rely on the auth hook (guest keys reach only
   `/api/guest/*`); a route test covers the PUT. (5) The removed message's words stay in older saved branches/exports.
+- **Fixed (2026-11-21, after the note):**
+  - (2) A turn a guest's message started puts none of the owner's memory into the prompt: no "about you", no coach
+    notes, no memory topics (general or the project's); skills and project facts only when guests may use tools
+    (`promptFor` checks `guestTurns`). The model gets only the chat's visible thread (messages and answers as shown)
+    plus the guest's own turn (`guestThread` through `AgentSession.viewMessages`): the owner's earlier tool results,
+    attached files' text and web results stay out, and no summary of the stored conversation is made. With "guests may
+    use tools", memory, knowledge, past chats (`kesher_*`, `analyze_chat`), mail, calendar, Drive, clipboard reading,
+    helpers and every MCP connector are left out. Route test: a guest turn's requests hold none of the owner's memory
+    items, name or earlier tool results; the owner's next turn has them again.
+  - Guests see a deletion without reloading: the live poll sends `deleted` (removed guest messages the page already
+    has) and `lastSeq` (smaller than the page's: the owner went back, the page reads the chat again).
+  - Guests see when the owner is typing (`POST /api/conversations/:id/typing`, owner only, a no-op answering
+    `on: false` unless replies are on; the owner's key can never come from a guest, the beat ends when a message is sent).

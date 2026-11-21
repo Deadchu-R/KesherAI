@@ -58,6 +58,7 @@ import { HelperCard, HelperSheet, HelperSwapNotice, HelpersStrip, useHelperRuns 
 import { PlanCard, PlanSheet } from "../PlanCard";
 import { plansOf } from "../plan-view";
 import { ShareDialog } from "../chat/ShareDialog";
+import { useOwnerTyping } from "../chat/ShareReplies";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
 import { namedDocuments, splitAttachments } from "../attach-lines";
@@ -576,6 +577,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       if (r.kind === "unreal" && !r.connected) setUnrealSetup({ path: r.path, engine: r.engine ?? "" });
     },
   });
+  // A shared chat with replies: its guests see that the owner is typing (chat/ShareReplies.tsx).
+  useOwnerTyping(id, input, conv?.kind === "chat" && !!conv.projectId && !conv.incognito);
   const resume = (dismiss: boolean) => {
     setConv((c) => (c ? { ...c, interruptedAt: undefined } : c));
     void api(`/api/conversations/${id}/resume`, { method: "POST", body: { dismiss } }).catch((e: Error) => setError(e.message));
@@ -955,6 +958,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     {e.steered && <span className="steered-tag small">↪ {L("נשלחה בזמן העבודה ונכנסה לתשובה", "Sent while it worked, joined the answer")}</span>}
                     {(() => {
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
+                      // A guest message the owner deleted (core shared-chat.ts REMOVED), in the owner's language.
+                      if (GUEST_LABEL.test(e.text) && e.text.replace(GUEST_LABEL, "") === "(removed by the owner)") return <span className="muted guest-removed">{L("(ההודעה נמחקה)", "(removed by the owner)")}</span>;
                       const { body, files } = splitAttachments(e.text.replace(GUEST_LABEL, ""));
                       return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text.replace(GUEST_LABEL, "");
                     })()}
