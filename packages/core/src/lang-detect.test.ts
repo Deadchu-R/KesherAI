@@ -94,3 +94,10 @@ test("a long recording is detected per part and the times are shifted", async ()
   const s = summarizeParts(r.parts);
   assert.deepEqual(s.langs, ["he", "en"]);
 });
+
+test("looksLikeGarbage: real speech with repeated words is not garbage; a looping phrase is", async () => {
+  const { looksLikeGarbage } = await import("./lang-detect.js");
+  const speech = "אני לא רוצה שם לעצור כל הפעם ואז לכתוב להם היי שליח הזה הזה הזה הזה והזה, שאו ככה וככה וככה וככה אתם מיזה, אני לא אגידו לו נו נו נו והתקדמו הלאה הם לא הביאו לך פיצוי או משהו כסף לא פזרו שבאת זה אם הם מביאים לי כסף והיא מקשר אם הם מציעים וולד כאלית הזה אני מתקשר לכל אחד שאני רואה";
+  assert.equal(looksLikeGarbage(speech), false);
+  assert.equal(looksLikeGarbage(Array(40).fill("Gracias.").join(" ")), true);
+});

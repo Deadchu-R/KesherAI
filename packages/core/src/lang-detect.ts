@@ -175,7 +175,8 @@ export function looksLikeGarbage(text: string): boolean {
     const g = words.slice(i, i + 4).join(" ").toLowerCase();
     grams.set(g, (grams.get(g) ?? 0) + 1);
   }
-  return [...grams.values()].some((n) => n >= 4);
+  // Real speech repeats itself too ("הזה הזה הזה", "ככה וככה וככה"): only a loop that covers much of the text counts.
+  return [...grams.values()].some((n) => n >= 4 && n * 4 >= words.length * 0.4);
 }
 
 /** A 16-bit PCM WAV's layout. */
