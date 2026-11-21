@@ -29,6 +29,7 @@ import {
   type AssignTo,
   type HubCommandAction,
   type HubApproval,
+  type HubAskNote,
   type HubCryptoKey,
   type HubFrame,
   type HubInboxState,
@@ -79,6 +80,8 @@ export interface PendingApproval {
   forWhile?: boolean;
   /** When it was asked (ISO time). */
   at?: string;
+  /** When the ask ends (ISO time); otherwise 30 minutes after `at` (the life of a sealed answer). */
+  until?: string;
 }
 
 /** What the client needs from the app. */
@@ -726,12 +729,16 @@ export class HubClient {
   }
 
   /** Seals and sends a message to a device. */
-  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody, ttl?: number, waiting?: number): Promise<boolean> {
+  private async sendSealed(to: string, kind: SealedEnvelope["kind"], body: SealedBody, ttl?: number, waiting?: number, note?: HubAskNote): Promise<boolean> {
     const pub = this.senderKey(to);
     if (!pub || !this.s.deviceId) return false;
-    const env = await sealMessage({ from: this.s.deviceId, to, kind, ...(ttl ? { ttl } : {}) }, body, (await this.ownKey()).privateKey, pub);
+    const own = (await this.ownKey()).privateKey;
+    const env = await sealMessage({ from: this.s.deviceId, to, kind, ...(ttl ? { ttl } : {}) }, body, own, pub);
     // `approvals` only: the count in clear, for the hub's "N waiting for you" push (see SealedEnvelope.waiting).
     if (waiting !== undefined) env.waiting = waiting;
+    // `approvals` only: the newest ask sealed to the same phone, for its notification with buttons (the hub copies
+    // it into the push unread).
+    if (note) env.note = await sealMessage({ from: this.s.deviceId, to, kind: "ask_note", ttl: HUB_LIMITS.approvalTtl }, { type: "ask_note", ask: note, waiting: waiting ?? 1 }, own, pub);
     this.send({ t: "send", env });
     return true;
   }
@@ -923,8 +930,29 @@ export class HubClient {
     this.approvalsTo = new Set(phones.map((p) => p.id));
     if (!to.length || (!items.length && !changed)) return;
     const at = Date.now();
-    for (const p of to) await this.sendSealed(p.id, "approvals", { type: "approvals", items, at }, HUB_LIMITS.approvalTtl, Math.min(pending.length, 999));
+    const note = askNoteOf(pending, at);
+    for (const p of to) await this.sendSealed(p.id, "approvals", { type: "approvals", items, at }, HUB_LIMITS.approvalTtl, Math.min(pending.length, 999), note);
   }
+}
+
+/**
+ * The newest ask waiting on this PC, as the phone's notification shows it (with Run / Not now or Approve / Deny).
+ * Its expiry is the ask's own, or 30 minutes after it was asked (an answer lives no longer on the hub).
+ *
+ * @param pending - What waits, as the app lists it.
+ * @param now - The time now (ms), for an ask with no time.
+ * @returns The note, or undefined when nothing waits (or the newest ask has already ended).
+ */
+export function askNoteOf(pending: readonly PendingApproval[], now: number): HubAskNote | undefined {
+  const time = (s: string | undefined) => (s ? Date.parse(s) : NaN);
+  let newest: PendingApproval | undefined;
+  for (const a of pending) if (!newest || (time(a.at) || 0) >= (time(newest.at) || 0)) newest = a;
+  if (!newest) return undefined;
+  const at = Number.isFinite(time(newest.at)) ? time(newest.at) : now;
+  const until = Number.isFinite(time(newest.until)) ? time(newest.until) : at + HUB_LIMITS.approvalTtl * 1000;
+  if (until <= now) return undefined;
+  const title = (newest.kind === "run" ? newest.title.replace(/^Run in Antigravity\? /, "") : newest.title || newest.tool).slice(0, HUB_LIMITS.noteTitleChars);
+  return { requestId: newest.requestId, conversationId: newest.conversationId, kind: newest.kind ?? "tool", title, until };
 }
 
 /**

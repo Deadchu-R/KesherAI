@@ -163,6 +163,12 @@ export interface InboxSettings {
   maxMinutes: number;
   /** The model inside Antigravity (empty: Gemini's default). */
   model: string;
+  /**
+   * Ask on the phone for each step the policy is unsure about (true), or approve once per task (false, the default):
+   * the Run press approves the task, steps inside the policy go ahead, and unsure steps are refused and listed in the
+   * result for review instead of waiting for an answer (Roee, 2026-11-21).
+   */
+  askSteps?: boolean;
   allowedPaths: string[];
   forbiddenPaths: string[];
   /** Commands the agent may run without asking, and the only ones KesherAI runs as a task's check. */

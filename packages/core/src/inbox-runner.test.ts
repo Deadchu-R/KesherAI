@@ -105,7 +105,7 @@ function fakeAgy(write: Record<string, string>, seen: { prompts: number; push?: 
 async function inboxFor(repo: string, root: string, write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }, now = () => Date.now()) {
   const notes: string[] = [];
   const board = new TaskBoard(join(root, "board.json"));
-  const settings = { enabled: true, repo, branch: "kesher-inbox", dailyCap: 2 };
+  const settings = { enabled: true, repo, branch: "kesher-inbox", dailyCap: 2, askSteps: true };
   const inbox = new TaskInbox({
     settings: () => settings,
     file: join(root, "inbox.json"),

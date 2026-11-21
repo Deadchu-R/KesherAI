@@ -853,7 +853,12 @@ export class TaskInbox {
       void this.save();
       return optionFor(p, v.verdict === "allow" ? "allow" : "deny");
     }
-    if (a.why) return optionFor(p, "deny");
+    // One approval per task (the Run press): an unsure step is refused, not asked, unless the user wants step asks.
+    if (a.why || !this.s.askSteps) {
+      rec.answer = "deny";
+      void this.save();
+      return optionFor(p, "deny");
+    }
     const ms = this.d.approvalMs ?? 30 * 60_000;
     const pending: InboxApprovalAsk = { requestId: `${t.id}-${t.decisions.length}`, what: v.what, ...(p.title ? { why: p.title.slice(0, 300) } : {}), where: t.branch, rule: v.rule, until: this.now() + ms };
     t.pending = pending;

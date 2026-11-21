@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateHubKeys, openEnvelope, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
 import type { InboxTaskView } from "@kesher/shared";
-import { cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
+import { askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
 
 const settings = (): HubSettings => ({ enabled: true, url: "https://hub.example.test", reported: [], optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false } });
@@ -294,6 +294,47 @@ test("approvals: one sealed snapshot to phones when the set changes (with the wa
   assert.equal(snaps().length, 2);
   assert.equal(snaps()[1]!.waiting, 0);
   assert.deepEqual(((await openEnvelope(snaps()[1]!, phone.privateKey, pcPub)) as { items: unknown[] }).items, []);
+});
+
+test("ask notes: the newest ask (an Antigravity Run first) rides each phone's snapshot sealed to that phone; the notification's answer reaches the app as a phone's", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  const pending = [
+    { conversationId: "c1", requestId: "r1", title: "Fix the build", tool: "run_command", preview: "pnpm test", reason: "Runs a command", at: "2026-11-20T12:00:00Z" },
+    { conversationId: "task-inbox", requestId: "a1b2c3", title: "Run in Antigravity? Fix the hub status", tool: "antigravity", preview: "SECRET GOAL", reason: "One tap runs this once.", who: "Antigravity", kind: "run" as const, at: "2026-11-20T12:05:00Z", until: "2099-01-01T00:00:00Z" },
+  ];
+  const answers: Array<{ conversationId: string; requestId: string; decision: string; from?: { id: string; kind?: string } }> = [];
+  (r.client as unknown as { deps: { approvals: unknown } }).deps.approvals = {
+    pending: () => pending,
+    answer: async (conversationId: string, requestId: string, decision: string, from?: { id: string; kind?: string }) => (answers.push({ conversationId, requestId, decision, ...(from ? { from } : {}) }), true),
+  };
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence: [{ id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: false, busy: false, agents: [], optIn: {} }] }));
+  await r.client.sendApprovals();
+  const env = r.sent.filter((f) => f.t === "send").map((f) => f.env as SealedEnvelope).find((e) => e.kind === "approvals")!;
+  assert.ok(env.note && env.note.kind === "ask_note" && env.note.to === "dphone" && env.note.from === "dpc");
+  assert.ok(!JSON.stringify(env.note).includes("Fix the hub status"), "sealed");
+  const note = await openEnvelope(env.note, phone.privateKey, pcPub);
+  assert.deepEqual(note, { type: "ask_note", ask: { requestId: "a1b2c3", conversationId: "task-inbox", kind: "run", title: "Fix the hub status", until: Date.parse("2099-01-01T00:00:00Z") }, waiting: 2 });
+  // The service worker's answer (the same sealed approval_answer) goes to the app as from that phone: server.ts sends
+  // a task-inbox one to answerRun with "hub:<device>".
+  const answer = await sealMessage({ from: "dphone", to: "dpc", kind: "approval_answer" }, { type: "approval_answer", requestId: "a1b2c3", conversationId: "task-inbox", decision: "allow" }, phone.privateKey, pcPub);
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: answer }));
+  assert.deepEqual(answers, [{ conversationId: "task-inbox", requestId: "a1b2c3", decision: "allow", from: { id: "dphone", kind: "phone" } }]);
+});
+
+test("askNoteOf: the newest ask, its own expiry or 30 minutes, nothing when it ended", () => {
+  const now = Date.parse("2026-11-20T12:10:00Z");
+  const tool = { conversationId: "c1", requestId: "r1", title: "", tool: "run_command", preview: "", reason: "", at: "2026-11-20T12:00:00Z" };
+  assert.deepEqual(askNoteOf([tool], now), { requestId: "r1", conversationId: "c1", kind: "tool", title: "run_command", until: Date.parse("2026-11-20T12:30:00Z") });
+  assert.equal(askNoteOf([tool], Date.parse("2026-11-20T12:30:00Z")), undefined, "an ended ask is not shown");
+  assert.equal(askNoteOf([], now), undefined);
 });
 
 test("Run / Cancel commands: only from a paired phone; the PC answers sealed with the result", async (t) => {

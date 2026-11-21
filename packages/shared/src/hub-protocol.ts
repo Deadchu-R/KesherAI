@@ -59,6 +59,10 @@ export const HUB_LIMITS = {
   approvalsChars: 10_000,
   /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
   approvalForMaxMin: 24 * 60,
+  /** The largest `ask_note` ciphertext (it rides in a Web Push payload, at most about 4 KB in all). */
+  noteCtChars: 1500,
+  /** An `ask_note`'s title, in characters (a notification line). */
+  noteTitleChars: 80,
 } as const;
 
 /**
@@ -78,9 +82,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -110,6 +114,12 @@ export interface SealedEnvelope {
    * plain fact the hub reads, to tell the owner's phone "2 waiting for you" by Web Push when its page is closed.
    */
   waiting?: number;
+  /**
+   * `approvals` only: a small `ask_note` envelope sealed from the same PC to the same phone (the newest ask: kind,
+   * short title, request id, expiry). The hub cannot open it; it copies it into the Web Push payload, so the phone's
+   * service worker can show the ask with its two buttons while the page is closed. Never relayed on its own.
+   */
+  note?: SealedEnvelope;
 }
 
 /**
@@ -227,7 +237,22 @@ export type SealedBody =
   /** One run's activity since the last batch, with its whole current state (so the newest batch alone draws the card). */
   | { type: "agent_event"; runId: string; state: AgentRunState; events: ActivityEvent[] }
   /** A task of the PC's task inbox (Claude's `kesher-inbox` branch) as the hub page lists it: metadata, never its text. */
-  | ({ type: "inbox_task" } & HubInboxTask);
+  | ({ type: "inbox_task" } & HubInboxTask)
+  /** The newest ask, for the phone's notification with buttons (see {@link SealedEnvelope.note}); `waiting`: the whole count. */
+  | { type: "ask_note"; ask: HubAskNote; waiting: number };
+
+/**
+ * One ask as the phone's notification shows it, with the answer it needs: Run / Not now (`run`, an Antigravity Run
+ * ask) or Approve / Deny (`tool`). `until` (ms since epoch): after it the phone refuses to answer and shows "expired".
+ */
+export interface HubAskNote {
+  requestId: string;
+  conversationId: string;
+  kind: "tool" | "run";
+  /** What: the task's or the chat's short title. */
+  title: string;
+  until: number;
+}
 
 /**
  * What the owner can press for a task of a PC's task inbox from another device: `inbox-run` runs a task that waits for
@@ -415,6 +440,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   approvals: "approvals",
   command: "command",
   command_result: "command_result",
+  ask_note: "ask_note",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -494,7 +520,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -522,7 +548,25 @@ export function parseEnvelope(x: unknown): SealedEnvelope | null {
   // The waiting count of an approvals snapshot (anything else, or a bad value, is dropped, never refused).
   const w = e.waiting;
   const waiting = kind === "approvals" && typeof w === "number" && Number.isInteger(w) && w >= 0 && w <= 999 ? w : undefined;
-  return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}) };
+  const note = kind === "approvals" ? parseAskNoteEnvelope(e.note, e.from, e.to) : undefined;
+  return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}), ...(note ? { note } : {}) };
+}
+
+/**
+ * Checks the `ask_note` an `approvals` envelope carries: an `ask_note` between the same two devices, small, and with
+ * nothing nested. A bad one is dropped (the snapshot still goes; the phone then gets the count-only notification).
+ *
+ * @param x - Untrusted input.
+ * @param from - The outer envelope's sender.
+ * @param to - The outer envelope's recipient.
+ * @returns The note, or undefined.
+ */
+export function parseAskNoteEnvelope(x: unknown, from: string, to: string): SealedEnvelope | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const n = x as Record<string, unknown>;
+  if (n.kind !== "ask_note" || n.from !== from || n.to !== to || typeof n.ct !== "string" || n.ct.length > HUB_LIMITS.noteCtChars) return undefined;
+  const env = parseEnvelope({ ...n, note: undefined });
+  return env && env.kind === "ask_note" ? env : undefined;
 }
 
 /**
@@ -644,6 +688,13 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const executor = INBOX_EXECUTORS.includes(b.executor as HubInboxExecutor) ? (b.executor as HubInboxExecutor) : "claude";
       const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
       return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+    }
+    case "ask_note": {
+      const a = b.ask && typeof b.ask === "object" ? (b.ask as Record<string, unknown>) : undefined;
+      if (!a || !isHubId(a.requestId) || !isHubId(a.conversationId)) return null;
+      const until = num(a.until);
+      if (!until) return null;
+      return { type: "ask_note", ask: { requestId: a.requestId, conversationId: a.conversationId, kind: a.kind === "run" ? "run" : "tool", title: str(a.title, HUB_LIMITS.noteTitleChars).trim(), until }, waiting: Math.min(num(b.waiting), 999) };
     }
     default:
       return null;
