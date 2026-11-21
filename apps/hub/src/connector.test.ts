@@ -146,6 +146,17 @@ test("registration: only Claude's callback or Claude Code's loopback; public cli
   assert.equal(ok.data.token_endpoint_auth_method, "none");
 });
 
+test("registration: a full client table makes room from unused registrations older than ten minutes (scan 169)", () => {
+  const { hub, store, tick } = setup();
+  for (let i = 0; i < CONNECTOR.maxClients; i++) assert.ok(!("error" in hub.connector.register({ redirect_uris: [CALLBACK] })));
+  const full = hub.connector.register({ redirect_uris: [CALLBACK] });
+  assert.ok("error" in full && full.status === 429, "fresh registrations are kept while an approval may be under way");
+  tick(CONNECTOR.clientFresh + 1);
+  const ok = hub.connector.register({ redirect_uris: [CALLBACK] });
+  assert.ok(!("error" in ok), "old unused ones made room");
+  assert.equal(store.oauthClientCount(), 1);
+});
+
 test("authorization: unknown clients and foreign redirects are shown on the hub, never redirected; refusing sends access_denied", async () => {
   const { hub } = setup();
   const challenge = await pkceS256(VERIFIER);

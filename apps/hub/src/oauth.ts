@@ -27,6 +27,8 @@ export const CONNECTOR = {
   grantMax: 90 * DAY,
   /** A registered client no connection uses is deleted after this. */
   clientUnused: DAY,
+  /** When the client table is full, unused registrations older than this make room (an approval takes less). */
+  clientFresh: 10 * MIN,
   maxClients: 50,
   /** Connections at once; approving one more ends the oldest. */
   maxGrants: 10,
@@ -183,7 +185,10 @@ export class ConnectorAuth {
     if (!grants.every((g) => g === "authorization_code" || g === "refresh_token")) return oerr(400, "invalid_client_metadata", "Only authorization_code and refresh_token.");
     const t = this.now();
     this.store.pruneOauthClients(t - CONNECTOR.clientUnused);
-    if (this.store.oauthClientCount() >= CONNECTOR.maxClients) return oerr(429, "temporarily_unavailable", "Too many clients registered; try again tomorrow.");
+    // Full: registrations no connection uses and older than a few minutes go first, so strangers filling the table
+    // (registering is open) lock the owner out for minutes at most, not a day (security scan 169).
+    if (this.store.oauthClientCount() >= CONNECTOR.maxClients) this.store.pruneOauthClients(t - CONNECTOR.clientFresh);
+    if (this.store.oauthClientCount() >= CONNECTOR.maxClients) return oerr(429, "temporarily_unavailable", "Too many clients registered; try again in a few minutes.");
     const name = (typeof body.client_name === "string" ? [...body.client_name].filter((ch) => ch >= " " && ch !== "\u007f").join("").trim() : "").slice(0, 60) || "Claude";
     const client: OauthClientRow = { id: `cl_${randomB64url(16)}`, name, redirectUris: [...new Set(uris as string[])], createdAt: t };
     this.store.putOauthClient(client);
