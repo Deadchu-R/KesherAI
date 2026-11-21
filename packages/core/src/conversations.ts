@@ -677,6 +677,9 @@ export class ConversationManager {
     const user = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
     const answer = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "assistant" }> => e.type === "assistant");
     if (!user || !worthFiling(user.text) || this.filed.get(id) === user.seq) return;
+    // A guest's message in a shared chat (shared-chat.ts) is not the owner talking about themselves: filing it would
+    // let a guest write into the owner's memory, which every later prompt of the owner's reads.
+    if (guestLabelOf(user.text)) return;
     this.filed.set(id, user.seq);
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), 90_000);

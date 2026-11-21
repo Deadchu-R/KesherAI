@@ -62,10 +62,10 @@ const tool = (name: string, gate?: AgentTool["gate"]): AgentTool => ({ spec: { n
 const info = { always: true, asked: [], plan: false, sessionId: "c" };
 
 test("guestTurnTools: none by default; with the switch every action asks the owner, no Always", async () => {
-  const tools = [tool("write_file"), tool("delegate"), tool("remember"), tool("search_knowledge"), tool("kesher_list_chats"), tool("gmail_search"), tool("mcp_notion_search"), tool("browser_open", async () => ({ action: "allow", reason: "" })), tool("computer_click", async () => ({ action: "deny", reason: "sensitive" }))];
+  const tools = [tool("write_file"), tool("delegate"), tool("remember"), tool("search_knowledge"), tool("kesher_list_chats"), tool("gmail_search"), tool("mcp_notion_search"), tool("unity_play", async () => ({ action: "allow", reason: "" })), tool("run_command", async () => ({ action: "deny", reason: "dangerous" })), tool("browser_open", async () => ({ action: "allow", reason: "" })), tool("computer_click"), tool("computer_screenshot")];
   assert.deepEqual(guestTurnTools(tools, { name: "Dana", tools: false }), []);
   const g = guestTurnTools(tools, { name: "Dana", tools: true });
-  assert.deepEqual(g.map((t) => t.spec.name), ["write_file", "browser_open", "computer_click"], "helpers, memory, past chats, mail and connectors are left out");
+  assert.deepEqual(g.map((t) => t.spec.name), ["write_file", "unity_play", "run_command"], "helpers, memory, past chats, mail, connectors and browser/computer control are left out");
   for (const t of g.slice(0, 2)) {
     const r = await t.gate!({}, {} as never, info);
     assert.equal(r.action, "ask", t.spec.name);

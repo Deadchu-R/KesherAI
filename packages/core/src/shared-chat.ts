@@ -172,9 +172,11 @@ export const REMOVED = "(removed by the owner)";
 /**
  * Tools a guest's message never gets, even with "guests may use tools": helpers (they run under their own rules), and
  * everything that reads the owner's own data rather than the chat or the project: memory and knowledge, past chats,
- * mail, calendar, Drive, the clipboard, KesherAI's own state, and personal connectors (MCP servers).
+ * mail, calendar, Drive, KesherAI's own state, and personal connectors (MCP servers). Browser and computer control are
+ * left out whole: they act in the owner's own browser (signed in to their accounts) and on their screen, so even one
+ * approved screenshot or page read would show a guest what is open there.
  */
-const NEVER_FOR_GUESTS = /^(delegate|offer_install|helper_|ask_member|remember|recall|forget|search_knowledge|analyze_chat|kesher_|gmail_|calendar_|drive_|computer_clipboard_read|mcp_)/;
+const NEVER_FOR_GUESTS = /^(delegate|offer_install|helper_|ask_member|remember|recall|forget|search_knowledge|analyze_chat|kesher_|gmail_|calendar_|drive_|browser_|computer_|mcp_)/;
 
 /**
  * The thread a turn a guest started sends to the model: only what the chat shows (the messages and the answers as
