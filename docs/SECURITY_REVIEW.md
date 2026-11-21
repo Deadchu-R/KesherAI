@@ -1774,3 +1774,72 @@ share has replies on (`packages/core/src/shared-chat.ts`, `routes/shared-chat.ts
     has) and `lastSeq` (smaller than the page's: the owner went back, the page reads the chat again).
   - Guests see when the owner is typing (`POST /api/conversations/:id/typing`, owner only, a no-op answering
     `on: false` unless replies are on; the owner's key can never come from a guest, the beat ends when a message is sent).
+
+## Scan 170 (2026-11-21): shared chat with guest replies, chat import, voice mode, console mode, 0.6.415–0.6.418
+Scope: everything since scan 169 (530db7f..638c057): shared-chat.ts and its routes (replies, typing, live, mute,
+delete), guests.ts joins, the guest turn in conversations.ts (prompt, tools, thread, queue, resume, memory filing),
+chat import (import-stream/-session, chat-import, the import routes, personas), voice (voice routes, live partials,
+voice-handoff), console mode (game helper routes, ||spoilers||), /api/span-edit, memory topics and the recap,
+Hugging Face search marks, download drives and the welcome check, the ComfyUI chip route, the design renderer and
+its hub mock server; the threat note above.
+- **Fixed (high): a guest could write the owner's memory.** The filing pass after a turn read the last user message,
+  so a guest's "remember that…" in a shared chat became a memory fact, read by every later prompt of the owner's (a
+  lasting prompt injection). Guest-labelled messages are never filed (d85568e). Route test: a guest's "remember…" makes
+  no filing request.
+- **Fixed (high): owner buttons ran a guest's words with the owner's tools and memory.** "Another answer" / "Try again"
+  on a guest's message rebuilt the prompt after the guest marker had ended (full memory, every tool, auto approvals),
+  and "Send now" on a guest's queued chip made it join the owner's running turn. A regenerated guest turn now runs as
+  the guest's (no tools, visible thread only), and a guest's queued message goes first but never steers; a busy chat
+  refuses regenerate before anything changes (eb0129a). Route tests for both.
+- **Fixed (medium): browser and computer control for guests.** With "guests may use tools" they were offered behind
+  the per-action approval; one approved page read or screenshot would show a guest the owner's signed-in browser or
+  screen. `browser_*` and `computer_*` are now left out of guest turns whole (d85568e).
+- **Fixed (medium): zip bomb in chat import.** Pictures and files from an export's zip were unpacked without a size
+  limit; one entry is capped at 200 MB and one import at 8 GB, past that the entry is dropped; duplicate names
+  unpack once (0060924). Test: a 64 KB entry under a 16 KB limit is dropped, the small one kept.
+- **Fixed (low): guest names that read as someone else.** "Owner", "KesherAI", "You", "הבעלים"… are refused at join
+  (a Google name falls back to "Guest"); direction marks were already dropped by `guestName` (test added) (e593583).
+- **Fixed (low): incognito chats in a shared project** showed in the guest's list and opened for them (the live view
+  already refused them); both refuse now, and the older guest chat view cleans text like the live view (e593583).
+- **Fixed (low): Hugging Face repo ids** went into huggingface.co URL paths unchecked (`..`, `?`, `#`); `listHubFiles`
+  and `modelSummary` accept only `owner/name` or an old top-level name (b4a6d54). The host is fixed, so no SSRF.
+- **Fixed (low/perf): voice mode's live partial** accepted 60 MB like a full recording; over 4 MB is refused before the
+  engine (a partial is one open segment, cut at 20 s). `/api/span-edit`'s instruction is cut at 2,000 characters (543e0cb).
+- **Checked, fine (shared chat):** guest keys reach only `/api/guest/*` (auth.ts, `..` refused); every guest route
+  checks the key's project, the chat (in that project, not a guest's own, not incognito) and `canReply` (project,
+  share, on, not ended, "edit", not muted) in an order that tells an outsider nothing; 404s are the same for "no
+  chat" and "not yours" (no enumeration). Approvals are answered only by owner routes, so no guest can satisfy one;
+  guest gates are `ask` + `noAlways`, the reviewer skips gated tools, a tool's own gate can only deny. Prompt paths
+  of a guest turn: no memory, coach notes or topics (`promptFor`), visible thread only (`guestThread`), no web search
+  first, attachments/project/`@helper` headers neutralised (`[x:` → `(x:`), resume after a restart with no tools,
+  the voice route is owner-only and has no tools. Live/typing: text through `cleanForShare`, no approval cards, tool
+  steps or notes; typing beats 1/s, messages 2/6/12 a minute plus the daily allowance, 16 KB bodies, 4,000
+  characters. Deletion replaces the words in events and the model's copy, the live poll sends `deleted`/`lastSeq`.
+  Guest text renders as plain React text; answers through RichText (links only https or `/api/assets`).
+- **Checked, fine (rest):** import: uploads stream to disk (20 GB cap, free-space check), JSON elements ≤ 256 M
+  characters, Takeout HTML ≤ 300 MB, unpacked names are a counter plus a cleaned base name (no zip-slip), the file
+  is deleted after import, chat ids are deterministic (a second import skips); imported text renders through
+  RichText; attachment chips download only inside the chat's folder. Voice: approvals only on screen (a spoken yes
+  never approves), phone audio goes through the owner's key, one partial in flight from the page. Console mode: the
+  game helper gives out a game's name only, `/seen` and `/capture` are local only, spoilers are React buttons.
+  Memory topics and the recap: owner routes; the recap is only on the Memory page, never a notification. Downloads:
+  the drive is an id, never a path, and the destination is checked inside its folder. `/api/onboarding` from the
+  phone takes booleans and a role id pattern. `/api/comfy/live` gives state and queue only. The design renderer's
+  routes are owner-only and only with a design repo; its hub server is 127.0.0.1, traversal-checked, mocks only;
+  the hub page sources did not change (nothing mocked ships). Privacy: no email, Windows user name or personal path
+  in the new commits (tests use example.com).
+- **Open (left for the lead):**
+  - Medium: guest words in the owner's chats stay readable by the owner's later turns (past-chat search, the coach's
+    request stats, an owner-set goal's check after a guest turn). Only marked by `[Guest: …]`; a note to the model
+    when it reads guest-labelled text would soften it.
+  - Low: a regenerated guest turn always gets no tools, even when the share allows them (safe side).
+  - Low: imported personas are pre-checked in the preview; an export's instructions could carry prompt injection.
+    Unchecked by default or a "from <app>" mark would make the choice explicit.
+  - Low: `/api/guest/chats/:id/live` has no per-guest rate limit (the page asks every 1.5 s); each call walks the
+    chat's events. A small per-key limit would bound a scripted guest.
+  - Low: two guests with the same name see each other's messages as "You" (the page compares names).
+  - Low (perf): Gemini Takeout HTML up to 300 MB is joined and parsed as one string.
+  - Carried from 169: client registration slots, code reuse not revoking, hub audit row cap, browser recording
+    frames, TOCTOU on real-path checks, game-source backups never pruned, hub page unbundled.
+- Verdict: with these fixes, shared-chat replies are safe to keep on; guests reach neither the owner's memory, tools
+  outside the gate, nor the PC's browser or screen.
