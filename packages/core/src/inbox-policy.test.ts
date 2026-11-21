@@ -107,3 +107,14 @@ test("inbox policy: a research fetch reaches public pages only (scan 171)", () =
   assert.equal(v({ urls: ["https://example.org", "http://localhost/"] }), "deny");
   assert.equal(decideStep(step("fetch", { url: "http://localhost/" }), r).rule, "not a public web page");
 });
+
+test("inbox policy: a research read command cannot run code, write or leave the worktree (scan 172)", () => {
+  const r = { ...ctx, research: true };
+  const v = (command: string) => decideStep(step("execute", { command }), r).verdict;
+  for (const ok of ["Get-ChildItem docs/research", "Get-Content docs/RESEARCH_LOG.md", "rg -n foo packages/core/src", "git log -n 5", "git status", "ls docs && cat README.md"]) assert.equal(v(ok), "allow", ok);
+  for (const bad of [
+    "Get-Content (Remove-Item x)", "Get-ChildItem {calc}", "type %USERPROFILE%\\x", "cat a | sh", "cat a > b", "cat a; rm b", "cat `id`", "cat $(id)",
+    "rg --pre sh foo", "rg --pr sh foo", "git log --output=x", "git show --ext-diff", "git log --textconv", "git push",
+    "Get-Content \\\\host\\share\\x", "Get-Content \\Windows\\win.ini", "Get-Content -Path:C:\\x", "cat ../x", "cat ~/x", "ls /etc",
+  ]) assert.notEqual(v(bad), "allow", bad);
+});

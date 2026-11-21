@@ -1915,3 +1915,24 @@ Scope: `git diff 318bb5a..HEAD` (releases 0.6.420–0.6.424 and 30aff64).
   - Media prompts are translated by Gemini when no local chat model is loaded, also for an incognito chat.
   - `GET /api/translate` walks `models/translation` synchronously on each call (small folder; fine for now).
   - Carried from 170: owner thread holds guests' messages unwrapped; carried from 169 as listed there.
+
+## Scan 172 (2026-11-21): research read commands, Gemini model fallback, queue, web keys, ideas, language detection, 0.6.425–0.6.436
+
+Scope: `git diff 3ddbf92..HEAD`.
+
+- **Fixed (medium): research read commands could run code or write.** The read-only list (`RESEARCH_READ_COMMANDS`)
+  matched only the start of a command, so `Get-Content (Remove-Item x)` or `{…}` (PowerShell runs these), `%VAR%`
+  paths, `rg --pre <program>`, `git log --output=<file>` / `--ext-diff` / `--textconv`, a UNC or rooted `\path`, and
+  `-Path:C:\x` passed as "on the command list". `commandAllowed` now refuses `( ) { } %` and `\r`, a leading `\`, a
+  drive after a parameter, and those flags (and their unique abbreviations); the step then asks instead of running.
+  Test: allowed reads, and 20 abused forms.
+- **Checked, fine:** pipes, redirection, `;`, `&&` chains, backticks, `$()` and `..`/absolute paths were already
+  refused; `git` is limited to `log`, `show`, `status` (others hit DENY_COMMANDS or the list). Gemini model fallback
+  retries only on 500/502/503/504 (never on quota/billing), the key stays in the provider, not in errors. Queue:
+  each task still starts only from its own Run press. Web keys (Tavily/Brave): set only from this computer, ≤200
+  chars, no whitespace, GET says set/not set, sent only as the Authorization / X-Subscription-Token header, never
+  logged. `/api/web/search-check` is local-only. Ideas `deeper`/`reset`: session id pattern-checked (`SID`), refused
+  while analysing; recording headers `x-lang` limited to he/en, extension from a fixed list. lang-detect regexes are
+  linear (no nested quantifiers). `mic-access.ts` only asks the phone's own permission. `asksForMusic` guards are
+  plain text checks. No personal e-mail, Windows user name or personal path in the diff (only test fixtures such as
+  `tvly-secret`).

@@ -159,11 +159,14 @@ export const RESEARCH_READ_COMMANDS = ["Get-ChildItem", "Get-Content", "Select-S
  */
 function commandAllowed(command: string, allowed: string[]): boolean {
   const parts = command.split("&&").map((p) => p.trim()).filter(Boolean);
-  if (!parts.length || /[;|<>`$\n&]/.test(command.replace(/&&/g, " "))) return false;
+  // No other shell syntax: PowerShell runs `(…)` and `{…}` as code, and cmd expands `%VAR%` (scan 172).
+  if (!parts.length || /[;|<>`$\r\n&(){}%]/.test(command.replace(/&&/g, " "))) return false;
   return parts.every((p) => {
     const argv = p.split(/\s+/);
     // An allowed command still may not look outside the worktree (`ls ~`, `rg x ../..`, `C:\…`).
-    if (argv.some((w) => /^(~|\/|\.\.([\\/]|$)|[a-z]:[\\/])/i.test(w) || /[\\/]\.\.([\\/]|$)/.test(w))) return false;
+    // Also a rooted or UNC path (`\\host\share`), a drive after a parameter (`-Path:C:\x`), and flags that run a program
+    // (`rg --pre`) or write a file (`git log --output=`, `--ext-diff`, `--textconv`); unique abbreviations count too.
+    if (argv.some((w) => /^(~|\/|\\|\.\.([\\/]|$))|[a-z]:[\\/]/i.test(w) || /[\\/]\.\.([\\/]|$)/.test(w) || /^--(pr|ou|ext|textc|exec)/i.test(w))) return false;
     return allowed.some((a) => {
       const want = a.trim().split(/\s+/);
       return want.length > 0 && want.every((w, i) => argv[i] === w);
