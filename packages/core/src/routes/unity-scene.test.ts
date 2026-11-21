@@ -236,7 +236,9 @@ test("a 2D game's scene: UI laid out by anchors, prefabs expanded (nested, overr
   assert.deepEqual([ground.tilemap!.tiles, ground.tilemap!.cell, ground.tilemap!.colors[1], ground.tilemap!.sprites[0]!.path, ground.tilemap!.sprites[0]!.rect, ground.tilemap!.sort, ground.readOnly], [[-1, -2, 0, 0, 0, -2, 0, 1], [0.5, 0.5], [1, 0, 0, 1], "Assets/Art/sheet.png", [0, 0, 32, 32], [0, -10], "tilemap"]);
   // Framing: 2D, around what draws; the scale-0 sprite at x = 100 is left out.
   assert.equal(r.view, "2d");
-  assert.ok(r.bounds.max[0] < 50 && r.bounds.max[0] >= 9.1 && r.bounds.min[0] <= -9.1, JSON.stringify(r.bounds));
+  // The Screen Space canvas (1920 × 1080 pixels) is not in that box: it is a panel fitted over it, at its own scale.
+  assert.ok(r.bounds.max[0] < 50 && r.bounds.max[0] - r.bounds.min[0] < 19, JSON.stringify(r.bounds));
+  assert.ok(r.canvas && r.canvas.scale > 0 && r.canvas.scale * 1920 <= r.bounds.max[0] - r.bounds.min[0] + 1e-9, JSON.stringify(r.canvas));
   // A prefab's inner object is never queued as a move; the expanded root is.
   const move = (id: string) => ({ id, name: "x", from: { position: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }, to: { position: [1, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] } });
   const q = await app.inject({ method: "POST", url: "/api/unity/scene", payload: { project: dir, scene: "Assets/Scenes/BuildScenes/GameScene.unity", moves: [move(sword.id), move(hero.id)] } });

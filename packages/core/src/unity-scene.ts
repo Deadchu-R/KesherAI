@@ -102,8 +102,11 @@ export interface UnityUi {
   color?: [number, number, number, number];
   /** An Image's sprite or a RawImage's texture: its GUID here, its file once the route resolves it. */
   image?: string;
-  /** A TextMeshPro or Text label (rich-text tags removed). */
-  text?: { value: string; size: number; color: [number, number, number, number]; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; auto?: true };
+  /**
+   * A TextMeshPro or Text label (rich-text tags removed). `size` is in the rect's own units: canvas pixels on a canvas,
+   * and for a TextMeshPro outside any canvas (3D text) a tenth of its font size, as TMP draws it (36 → 3.6 units).
+   */
+  text?: { value: string; size: number; color: [number, number, number, number]; align: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; auto?: true; min?: number; max?: number; wrap?: false };
 }
 
 /** Unity's class ids for the components the outliner names (the Inspector's names). */
@@ -188,7 +191,7 @@ interface Tf {
   root?: { instance: string; source: string };
 }
 /** A laid-out RectTransform: its size, pivot and its pivot's place in the parent's local space. */
-interface Laid { size: V2; pivot: V2; pos: V2; order: number; canvas?: "screen" | "world"; own?: boolean }
+interface Laid { size: V2; pivot: V2; pos: V2; order: number; canvas?: "screen" | "world"; own?: boolean; /** Outside any canvas (3D text): its font size is not in canvas pixels. */ loose?: boolean }
 
 /** Reads a uGUI component (Image, RawImage, TextMeshPro, Text, CanvasScaler, a layout group) onto its GameObject. */
 function readUiComponent(body: string, script: string | undefined, go: string, out: { graphics: Map<string, Omit<UnityUi, "size" | "pivot" | "order">>; scalers: Map<string, V2>; groups: Map<string, LayoutGroup> }): void {
@@ -197,7 +200,14 @@ function readUiComponent(body: string, script: string | undefined, go: string, o
   const tmp = f("m_text") !== undefined;
   if (tmp || (f("m_Text") !== undefined && f("m_FontData") !== undefined)) {
     // TextMeshPro (m_text, alignment as flags) or the old Text (m_Text, alignment 0–8).
-    const value = (yamlScalar(body, tmp ? "m_text" : "m_Text") ?? "").replace(/<\/?[a-zA-Z#][^<>]*>/g, "").slice(0, 2000);
+    // Rich text (<color>, <size>, <sprite>, …) is removed; <br> is a line break.
+    const value = (yamlScalar(body, tmp ? "m_text" : "m_Text") ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/?[a-zA-Z#][^<>]*>/g, "").replace(/&nbsp;/g, " ").slice(0, 2000);
+    if (!value.trim()) {
+      // An empty label draws nothing.
+      const { text: _gone, ...rest } = out.graphics.get(go) ?? {};
+      if (Object.keys(rest).length) out.graphics.set(go, rest);
+      return;
+    }
     let align: "left" | "center" | "right", valign: "top" | "middle" | "bottom";
     if (tmp) {
       const old = num("m_textAlignment", 257);
@@ -211,7 +221,9 @@ function readUiComponent(body: string, script: string | undefined, go: string, o
     }
     const color = vec((tmp ? f("m_fontColor") : undefined) ?? f("m_Color"), RGBA, [1, 1, 1, 1]) as UnityUi["color"] & object;
     const size = tmp ? num("m_fontSize", 36) : num("m_FontSize", 14);
-    out.graphics.set(go, { ...out.graphics.get(go), text: { value, size, color, align, valign, ...(tmp && num("m_enableAutoSizing", 0) === 1 ? { auto: true as const } : {}) } });
+    const auto = tmp && num("m_enableAutoSizing", 0) === 1;
+    // Auto size picks the biggest size in [min, max] that fits the rect (TMP's defaults: 18 and 72).
+    out.graphics.set(go, { ...out.graphics.get(go), text: { value, size, color, align, valign, ...(auto ? { auto: true as const, min: Math.max(1, num("m_fontSizeMin", 18)), max: Math.max(1, num("m_fontSizeMax", 72)) } : {}), ...(tmp && num("m_enableWordWrapping", 1) === 0 ? { wrap: false as const } : {}) } });
   } else if ((f("m_Sprite") !== undefined && f("m_Type") !== undefined) || (f("m_Texture") !== undefined && f("m_UVRect") !== undefined)) {
     // Image (its sprite) or RawImage (its texture), tinted by m_Color.
     const pic = ref(f(f("m_Sprite") !== undefined ? "m_Sprite" : "m_Texture"))?.guid;
@@ -233,6 +245,22 @@ function readUiComponent(body: string, script: string | undefined, go: string, o
       cell: vec(f("m_CellSize"), XY, [100, 100]) as V2,
     });
   }
+}
+
+/** A TextMeshPro's font size is in points: outside a canvas (3D text) one point is a tenth of a unit. */
+export const TMP_WORLD_UNIT = 0.1;
+
+/**
+ * What an object draws, with its text sized for where it is: on a canvas the font size is in canvas pixels as
+ * saved; outside any canvas it is scaled to world units (see TMP_WORLD_UNIT).
+ *
+ * @param g - The object's image / text as read.
+ * @param loose - True when the object is outside any canvas.
+ */
+function uiGraphic(g: Omit<UnityUi, "size" | "pivot" | "order"> | undefined, loose?: boolean): Omit<UnityUi, "size" | "pivot" | "order"> {
+  if (!g?.text || !loose) return g ?? {};
+  const t = g.text;
+  return { ...g, text: { ...t, size: t.size * TMP_WORLD_UNIT, ...(t.min !== undefined ? { min: t.min * TMP_WORLD_UNIT } : {}), ...(t.max !== undefined ? { max: t.max * TMP_WORLD_UNIT } : {}) } };
 }
 
 /**
@@ -313,7 +341,7 @@ function layoutUi(transforms: Tf[], canvasOf: Map<string, number>, scalers: Map<
       const on = kids.map((k, i) => [k, rects[i]!] as const).filter(([k]) => !inactive.has(k.go));
       stack(g, p, on.map(([k]) => k), on.map(([, r]) => r));
     }
-    kids.forEach((c, i) => { laid.set(c.id, { ...rects[i]!, order: order++ }); visit(c.id); });
+    kids.forEach((c, i) => { laid.set(c.id, { ...rects[i]!, order: order++, ...(p.loose ? { loose: true } : {}) }); visit(c.id); });
   };
   const hasCanvasAbove = (t: Tf) => { for (let x = byId.get(t.parent), n = 0; x && n < 256; x = byId.get(x.parent), n++) if (canvasOf.has(x.go)) return true; return false; };
   for (const t of transforms) {
@@ -327,7 +355,7 @@ function layoutUi(transforms: Tf[], canvasOf: Map<string, number>, scalers: Map<
   // RectTransforms outside any canvas (a 3D TextMeshPro): their own place, their size from sizeDelta.
   for (const t of transforms) {
     if (!t.rect || laid.has(t.id) || byId.get(t.parent)?.rect) continue;
-    laid.set(t.id, { size: t.rect.size, pivot: t.rect.pivot, pos: [t.position[0], t.position[1]], order: order++, own: true });
+    laid.set(t.id, { size: t.rect.size, pivot: t.rect.pivot, pos: [t.position[0], t.position[1]], order: order++, own: true, loose: true });
     visit(t.id);
   }
   return laid;
@@ -483,7 +511,7 @@ export function readUnityScene(text: string, prefabs?: ReadonlyMap<string, strin
       ...(l ? { readOnly: "ui" as const } : tilemapOf.has(t.go) ? { readOnly: "tilemap" as const } : t.id.includes("~") && !t.root ? { readOnly: "prefab" as const } : {}),
       ...(looks.has(t.go) ? { look: looks.get(t.go)! } : {}),
       ...attached(t.go),
-      ...(l ? { ui: { size: l.size, pivot: l.pivot, order: l.order, ...(l.canvas ? { canvas: l.canvas } : {}), ...ui.graphics.get(t.go) } } : {}),
+      ...(l ? { ui: { size: l.size, pivot: l.pivot, order: l.order, ...(l.canvas ? { canvas: l.canvas } : {}), ...uiGraphic(ui.graphics.get(t.go), l.loose) } } : {}),
       // A Tilemap's cell size is its parent Grid's.
       ...(tilemapOf.has(t.go) ? { tilemap: { ...tilemapOf.get(t.go)!, cell: gridOf.get(transforms.find((p) => p.id === t.parent)?.go ?? "") ?? gridOf.get(t.go) ?? [1, 1], sort: tileSortOf.get(t.go) ?? [0, 0] } } : {}),
       ...(shapeOf.has(t.go) ? { shape: shapeOf.get(t.go)! } : {}),
@@ -496,6 +524,12 @@ export function readUnityScene(text: string, prefabs?: ReadonlyMap<string, strin
 export interface UnityView {
   view: "2d" | "3d";
   bounds?: { min: [number, number, number]; max: [number, number, number] };
+  /**
+   * Where a Screen Space canvas is shown when the scene also has world content: the canvas is its own panel (its
+   * pixels, never the world's units), fitted over the world box like Unity's Game view. `scale` is world units per
+   * canvas pixel, `center` the canvas middle in the world. Absent when there is no such canvas or no world content.
+   */
+  canvas?: { center: [number, number]; scale: number };
 }
 
 /** A 3 × 4 affine matrix (rows), Unity's local → parent space. */
@@ -522,6 +556,11 @@ const apply = (m: M, v: number[]) => [0, 1, 2].map((i) => m[i * 4]! * v[0]! + m[
  */
 export function sceneView(objects: readonly UnityObject[]): UnityView {
   const byId = new Map(objects.map((o) => [o.id, o]));
+  const draws = (o: UnityObject) => !!(o.ui ? o.ui.color || o.ui.image || o.ui.text : o.sprite || o.look || o.model || o.prefab || o.tilemap?.tiles.length || o.shape);
+  /** Under a Screen Space canvas: its rects are pixels on their own panel, not part of the world's extent. */
+  const onScreen = (o: UnityObject): boolean => { for (let x: UnityObject | undefined = o, n = 0; x && n < 256; x = byId.get(x.parent), n++) if (x.ui?.canvas === "screen") return true; return false; };
+  const worldDraws = objects.some((o) => !onScreen(o) && draws(o));
+  const screens = objects.filter((o) => o.ui?.canvas === "screen");
   const world = new Map<string, M | null>();
   /** The object's world matrix; null when it or a parent is off or collapsed to a scale of 0. */
   const worldOf = (o: UnityObject, depth = 0): M | null => {
@@ -541,9 +580,8 @@ export function sceneView(objects: readonly UnityObject[]): UnityView {
   const flat = twoD > threeD;
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
   const add = (p: number[]) => p.forEach((v, i) => { min[i] = Math.min(min[i]!, v); max[i] = Math.max(max[i]!, v); });
-  const draws = (o: UnityObject) => !!(o.ui ? o.ui.color || o.ui.image || o.ui.text : o.sprite || o.look || o.model || o.prefab || o.tilemap?.tiles.length || o.shape);
   for (const o of objects) {
-    if (!draws(o)) continue;
+    if (!draws(o) || (worldDraws && onScreen(o))) continue;
     const m = worldOf(o);
     if (!m) continue;
     if (o.ui) {
@@ -567,7 +605,13 @@ export function sceneView(objects: readonly UnityObject[]): UnityView {
       add(c.map((v) => v + 0.5));
     }
   }
-  return { view: flat ? "2d" : "3d", ...(Number.isFinite(min[0]) ? { bounds: { min: min as [number, number, number], max: max as [number, number, number] } } : {}) };
+  const bounds = Number.isFinite(min[0]) ? { min: min as [number, number, number], max: max as [number, number, number] } : undefined;
+  // A Screen Space canvas beside world content: fitted (aspect kept) into the world's box, at its own pixel scale.
+  const root = screens[0];
+  const canvas = root && worldDraws && bounds && root.ui!.size[0] > 0 && root.ui!.size[1] > 0
+    ? { center: [(bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2] as [number, number], scale: Math.max(1e-6, Math.min((bounds.max[0] - bounds.min[0]) / root.ui!.size[0], (bounds.max[1] - bounds.min[1]) / root.ui!.size[1])) }
+    : undefined;
+  return { view: flat ? "2d" : "3d", ...(bounds ? { bounds } : {}), ...(canvas ? { canvas } : {}) };
 }
 
 /** A move for the Unity package to apply (local position, rotation and scale of one Transform). */

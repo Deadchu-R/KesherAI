@@ -30,7 +30,7 @@ const HE = {
   inGodot: "בסצנה הפתוחה ב-Godot (Ctrl+Z אחד; שומרים שם)", movedThere: "זזו גם ב-Godot, נשארו כמו שם",
   searchPh: "🔍 חיפוש…", lock: "נעל", unlock: "שחרר", aModel: "מודל", aPicture: "תמונה", aScript: "סקריפט", aScene: "סצנה", aPlaced: "הוצב",
   toUnreal: "שמור לרמה", standInUnreal: "תחליף של רמת Unreal: מזיזים, ואז \"שמור לרמה\"", standInUnrealKept: "הרמה כפי שנקראה לאחרונה (Unreal סגור): מזיזים, ואז \"שמור לרמה\"",
-  readOnly: "ממשק וילדים של פריפאב: עורכים ב-Unity", readOnlyTile: "טיילמאפים: עורכים ב-Unity", inactiveB: "◌ כבויים", inactiveT: "הצג אובייקטים שכבויים ב-Unity",
+  readOnly: "ממשק וילדים של פריפאב: עורכים ב-Unity", readOnlyTile: "טיילמאפים: עורכים ב-Unity", inactiveB: "◌ כבויים", inactiveT: "הצג אובייקטים שכבויים ב-Unity", uiLayerB: "▣ ממשק", uiLayerT: "הצג או הסתר את שכבת הממשק (Canvas)",
   unrealMoved: "זז ב-Unreal", unrealSaved: "נשמר", unrealClash: "זזו גם ב-Unreal, נשארו כמו שם",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
   texPromptPh: "✨ טקסטורה ממילים: עץ אלון ישן, קטיפה אדומה…", texAi: "✨", texMaking: "מודל התמונות מצייר טקסטורה… (במחשב)", texDone: "הטקסטורה החדשה על החלק", needWords: "כתוב איזו טקסטורה",
@@ -544,12 +544,20 @@ const toUnity = (o) => ({ position: [o.position.x, o.position.y, -o.position.z],
 let showInactive = false;
 /** The Unity stand-in's objects that are off in Unity, shown or hidden. */
 function applyInactive() {
-  model?.traverse((o) => { if (o.userData.inactive) o.visible = showInactive; });
+  model?.traverse((o) => { if (o.userData.inactive) o.visible = showInactive && !(o.userData.uiRoot && !showUi); });
   $("inactive").classList.toggle("on", showInactive);
   $("inactive").setAttribute("aria-pressed", String(showInactive));
   renderParts();
 }
 $("inactive").onclick = () => { showInactive = !showInactive; applyInactive(); };
+// The UI layer (the scene's canvases) is on by default and can be hidden to see the game itself.
+let showUi = true;
+function applyUiLayer() {
+  model?.traverse((o) => { if (o.userData.uiRoot) o.visible = showUi && !(o.userData.inactive && !showInactive); });
+  $("uiLayer").classList.toggle("on", showUi);
+  $("uiLayer").setAttribute("aria-pressed", String(showUi));
+}
+$("uiLayer").onclick = () => { showUi = !showUi; applyUiLayer(); };
 /** Textures by picture, shared by every sprite and tile cut from it. */
 const unityTextures = new Map();
 function unityTexture(path) {
@@ -639,12 +647,13 @@ const unityColor = ([r, g, b] = [1, 1, 1]) => new THREE.Color().setRGB(r, g, b, 
 function uiNode(u) {
   const [w, h] = u.ui.size, [px, py] = u.ui.pivot;
   const geo = new THREE.PlaneGeometry(Math.max(Math.abs(w), 1e-3), Math.max(Math.abs(h), 1e-3)).translate((0.5 - px) * w, (0.5 - py) * h, 0);
-  const o = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: unityColor(u.ui.color), transparent: true, opacity: u.ui.color?.[3] ?? 1, side: THREE.DoubleSide, depthTest: false, depthWrite: false, visible: !!u.ui.color }));
+  const o = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: unityColor(u.ui.color), transparent: true, opacity: u.ui.color?.[3] ?? 1, side: THREE.DoubleSide, depthTest: false, depthWrite: false, visible: !!u.ui.color && !u.ui.image }));
   // UI draws over the 2D world (sprites and tilemaps take 1 … 99 999).
   o.renderOrder = 100000 + u.ui.order * 2;
   o.userData.uiOrder = o.renderOrder;
   if (u.ui.image) void showUiImage(o, u.ui.image);
-  if (u.ui.text?.value) o.add(uiText(u.ui.text, w, h, px, py, o.renderOrder + 1));
+  if (u.ui.text?.value.trim()) o.add(uiText(u.ui.text, w, h, px, py, o.renderOrder + 1));
+  if (u.ui.canvas) o.userData.uiRoot = true;
   return o;
 }
 /** An Image's sprite (its whole picture; a 9-sliced one is stretched), tinted by its colour. */
@@ -663,47 +672,63 @@ async function showUiImage(o, path) {
   }
 }
 /**
- * A TextMeshPro / Text label: its words wrapped in its rect at its font size and colour (auto size: shrunk to fit),
- * drawn on a canvas texture of at most 512 px a side.
+ * A TextMeshPro / Text label: its words wrapped in its rect's width at its font size (in the rect's own units, so a
+ * 36 label in a 400 × 80 rect is 36 of 80 high, whatever the world's scale) and colour. Auto size takes the biggest size
+ * between its minimum and maximum that fits the rect. Text taller than its rect overflows it as TMP does (from the top,
+ * the middle or the bottom, by its alignment). Drawn on a canvas texture sharp for its size (at most 2048 px a side).
  */
 function uiText(t, w, h, px, py, order) {
-  const W = Math.max(Math.abs(w), 8), H = Math.max(Math.abs(h), t.size * 1.3, 8);
-  const k = Math.min(2, 512 / Math.max(W, H));
-  const c = document.createElement("canvas");
-  c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
-  const ctx = c.getContext("2d");
-  ctx.direction = /[֐-׿؀-ۿ]/.test(t.value) ? "rtl" : "ltr";
+  const W = Math.max(Math.abs(w), 1e-3), H = Math.max(Math.abs(h), 1e-3);
+  const k = Math.max(1e-3, Math.min(4, 2048 / Math.max(W, H), Math.sqrt(2e6 / (W * H))));
+  const meas = document.createElement("canvas").getContext("2d");
+  meas.direction = /[֐-׿؀-ۿ]/.test(t.value) ? "rtl" : "ltr";
   const lay = (size) => {
-    ctx.font = `${size * k}px system-ui, "Segoe UI", Arial, sans-serif`;
+    meas.font = `${size * k}px system-ui, "Segoe UI", Arial, sans-serif`;
     const lines = [];
     for (const para of t.value.split("\n")) {
       let line = "";
+      if (t.wrap === false) { lines.push(para); continue; }
       for (const word of para.split(/(\s+)/)) {
         const next = line + word;
-        if (line.trim() && ctx.measureText(next).width > c.width) { lines.push(line.trimEnd()); line = word.trimStart(); } else line = next;
+        if (line.trim() && meas.measureText(next).width > W * k) { lines.push(line.trimEnd()); line = word.trimStart(); } else line = next;
       }
       lines.push(line);
     }
     return lines;
   };
+  const fits = (size, lines) => lines.length * size * 1.2 <= H && lines.every((l) => meas.measureText(l).width <= W * k);
   let size = t.size, lines = lay(size);
-  while (t.auto && size > 6 && (lines.length * size * 1.2 > H || lines.some((l) => ctx.measureText(l).width > c.width))) lines = lay((size *= 0.9));
-  const lh = size * 1.2 * k, total = lines.length * lh;
-  const top = t.valign === "top" ? 0 : t.valign === "bottom" ? c.height - total : (c.height - total) / 2;
+  if (t.auto) {
+    const lo = Math.max(t.min ?? 1e-3, 1e-3);
+    size = Math.max(t.max ?? t.size, lo);
+    lines = lay(size);
+    while (size > lo && !fits(size, lines)) lines = lay((size = Math.max(lo, size * 0.92)));
+  }
+  const lh = size * 1.2, total = lines.length * lh, tall = Math.max(H, total);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.min(2048, Math.round(W * k))); c.height = Math.max(1, Math.min(2048, Math.round(tall * k)));
+  const ctx = c.getContext("2d");
+  ctx.direction = meas.direction;
+  ctx.font = `${size * k}px system-ui, "Segoe UI", Arial, sans-serif`;
+  // The text block's top inside the canvas: the canvas is as tall as the taller of the rect and the text.
+  const top = t.valign === "top" ? 0 : t.valign === "bottom" ? tall - total : (tall - total) / 2;
   ctx.fillStyle = `rgba(${t.color.slice(0, 3).map((v) => Math.round(v * 255)).join(",")},${t.color[3] ?? 1})`;
   ctx.textBaseline = "middle";
   ctx.textAlign = t.align;
   const x = t.align === "center" ? c.width / 2 : t.align === "right" ? c.width : 0;
-  lines.forEach((l, i) => ctx.fillText(l, x, top + lh * (i + 0.5)));
+  lines.forEach((l, i) => ctx.fillText(l, x, (top + lh * (i + 0.5)) * k));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H).translate((0.5 - px) * W, (0.5 - py) * H, 0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
+  // The plane's edge meets the rect's on the side the text hangs from.
+  const rectTop = (1 - py) * H, rectBottom = -py * H;
+  const midY = t.valign === "top" ? rectTop - tall / 2 : t.valign === "bottom" ? rectBottom + tall / 2 : (rectTop + rectBottom) / 2;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, tall).translate((0.5 - px) * W, midY, 0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
   m.renderOrder = order;
   m.userData.uiOrder = order;
   m.userData.generated = true;
   return m;
 }
-function loadUnityStandIn(objects, view) {
+function loadUnityStandIn(objects, view, canvas) {
   if (model) { choose(null); model.removeFromParent(); }
   const root = new THREE.Group();
   root.name = "Scene";
@@ -744,6 +769,20 @@ function loadUnityStandIn(objects, view) {
   sorted.sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || b.z - a.z).forEach((s, i) => (s.o.userData.sortRank = 1 + i));
   // A 2D scene: sprites or UI, and no 3D meshes or models (the server says; older servers: the same rule here).
   is2dScene = view ? view === "2d" : objects.some((u) => u.ui || u.components?.includes("SpriteRenderer")) && !objects.some((u) => u.model || u.components?.includes("MeshFilter"));
+  // A Screen Space canvas is its own panel at its pixel scale, fitted over the game's box (not in world units).
+  if (canvas) {
+    for (const u of objects) {
+      const o = byId.get(u.id);
+      if (u.ui?.canvas !== "screen" || o.parent !== root) continue;
+      o.position.set(canvas.center[0], canvas.center[1], 0);
+      o.scale.setScalar(canvas.scale);
+    }
+  }
+  $("uiLayer").hidden = !objects.some((u) => u.ui?.canvas);
+  showUi = true;
+  $("uiLayer").classList.toggle("on", true);
+  $("uiLayer").setAttribute("aria-pressed", "true");
+  $("uiLayer").title = T("uiLayerT", "Show or hide the UI layer (canvases)");
   $("inactive").hidden = !objects.some((u) => u.active === false);
   $("inactive").classList.toggle("on", showInactive);
   $("inactive").title = T("inactiveT", "Show the objects that are off in Unity");
@@ -897,7 +936,7 @@ async function open() {
     if (input?.guest) enterGuest(input.guest.role);
     if (input?.unity) {
       name = input.name; $("name").textContent = name;
-      loadUnityStandIn(input.unity.objects, input.unity.view);
+      loadUnityStandIn(input.unity.objects, input.unity.view, input.unity.canvas);
       set2D(is2dScene);
       // The first view frames what is visible (the server's box: inactive and scale-0 objects left out).
       const box = unityBounds(input.unity.bounds);

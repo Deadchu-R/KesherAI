@@ -508,8 +508,8 @@
  "boards": [
   {
    "id": "UnitySceneStandInUi",
-   "title": "Unity: סצנה בלי Unity מציגה ממשק (תמונות, טקסטים, כפתורים) ומתמקדת בתוכן",
-   "titleEn": "Unity: a scene without Unity shows its UI (images, texts, buttons), framed on the content",
+   "title": "Unity: סצנה בלי Unity מציגה ממשק בגודל הנכון (קנבס משלו מעל המשחק), עם כפתור ▣ ממשק להסתרת שכבת הממשק",
+   "titleEn": "Unity: a scene without Unity shows its UI at the right size (its own canvas over the game), with a UI button to hide the UI layer",
    "route": "#/p/model-editor/editor?up=D%3A%2FGames%2FBossRush&us=Assets%2FScenes%2FMainMenu.unity",
    "viewports": [
     "desktop",
