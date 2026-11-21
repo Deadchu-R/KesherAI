@@ -28,8 +28,8 @@ test("only the KesherAI package's own compile errors are read, once each, withou
 
 test("the log's path per system, and whether a log is this project's", () => {
   assert.equal(editorLogPath("win32", { LOCALAPPDATA: "C:\\L" }, "C:\\H").replace(/\\/g, "/"), "C:/L/Unity/Editor/Editor.log");
-  assert.ok(editorLogPath("darwin", {}, "/h").endsWith("Library/Logs/Unity/Editor.log"));
-  assert.ok(editorLogPath("linux", {}, "/h").endsWith(".config/unity3d/Editor.log"));
+  assert.ok(editorLogPath("darwin", {}, "/h").replace(/\\/g, "/").endsWith("Library/Logs/Unity/Editor.log"));
+  assert.ok(editorLogPath("linux", {}, "/h").replace(/\\/g, "/").endsWith(".config/unity3d/Editor.log"));
   assert.ok(logIsFor("-projectPath\nD:\\Games\\Door\n", "d:/games/door/"));
   assert.ok(!logIsFor("-projectPath\nD:\\Games\\Other\n", "D:/Games/Door"));
 });
