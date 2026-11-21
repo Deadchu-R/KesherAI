@@ -279,7 +279,7 @@ export class ConnectorAuth {
         this.audit("mcp-revoked", old.id);
       }
       const id = `g${randomB64url(9)}`;
-      const answer = await this.issue({ id, clientId, name: client.name, createdAt: t, lastUsed: t }, undefined);
+      const answer = (await this.issue({ id, clientId, name: client.name, createdAt: t, lastUsed: t }, undefined))!;
       this.audit("mcp-connected", id);
       return answer;
     }
@@ -297,18 +297,33 @@ export class ConnectorAuth {
         this.audit("mcp-refresh-reused", g.id);
         return oerr(400, "invalid_grant", "This refresh token was already used; connect again.");
       }
-      return this.issue(g, g.refreshHash);
+      return (await this.issue(g, g.refreshHash)) ?? oerr(400, "invalid_grant", "This refresh token was just used; use the newest one.");
     }
     return oerr(400, "unsupported_grant_type", "Only authorization_code and refresh_token.");
   }
 
-  /** Makes a new access and refresh token for a connection and keeps their hashes. */
-  private async issue(g: Pick<OauthGrantRow, "id" | "clientId" | "name" | "createdAt" | "lastUsed">, prev: string | undefined): Promise<TokenAnswer> {
-    const t = this.now();
+  /**
+   * Makes a new access and refresh token for a connection and keeps their hashes.
+   *
+   * @param g - The connection.
+   * @param prev - On a refresh, the refresh token's hash being replaced. It is checked again after the hashing (which
+   *   awaits, letting another request run): two requests with the same refresh token at once get one answer, not two
+   *   live token pairs (security scan 169).
+   * @returns The tokens, or undefined when the connection changed meanwhile.
+   */
+  private async issue(g: Pick<OauthGrantRow, "id" | "clientId" | "name" | "createdAt" | "lastUsed">, prev: string | undefined): Promise<TokenAnswer | undefined> {
     const access = `kc_${randomB64url(32)}`;
     const refresh = `kr_${randomB64url(32)}`;
+    const accessHash = await sha256Hex(access);
+    const refreshHash = await sha256Hex(refresh);
+    // From here to putGrant nothing awaits, so the check and the write happen together.
+    if (prev !== undefined) {
+      const now = this.store.grantByRefresh(prev);
+      if (!now || now.id !== g.id || now.refreshHash !== prev) return undefined;
+    }
+    const t = this.now();
     const refreshExpiresAt = Math.min(t + CONNECTOR.refresh, g.createdAt + CONNECTOR.grantMax);
-    this.store.putGrant({ ...g, accessHash: await sha256Hex(access), accessExpiresAt: t + CONNECTOR.access, refreshHash: await sha256Hex(refresh), ...(prev ? { prevRefreshHash: prev } : {}), refreshExpiresAt });
+    this.store.putGrant({ ...g, accessHash, accessExpiresAt: t + CONNECTOR.access, refreshHash, ...(prev ? { prevRefreshHash: prev } : {}), refreshExpiresAt });
     return { access_token: access, token_type: "Bearer", expires_in: Math.floor(CONNECTOR.access / 1000), refresh_token: refresh, scope: CONNECTOR.scope };
   }
 

@@ -76,6 +76,8 @@ async function start(): Promise<void> {
     h("p", { class: "sm" }, L(`"${String(r.data.clientName)}" מבקש גישה למרכז שלך.`, `"${String(r.data.clientName)}" asks to use your hub.`)),
     h("div", { class: "card stack pad", style: "text-align:start" },
       h("span", { class: "sm" }, L("חוזר אל: ", "Returns to: "), h("b", { class: "mono" }, host)),
+      // Consent phishing: someone else can start a connection in their own Claude and send this link (scan 169).
+      r.data.loopback ? null : h("span", { class: "warn sm" }, L("אשרו רק אם לחצתם עכשיו בעצמכם על Connect ב-Claude. קיבלתם את הקישור ממישהו? סרבו.", "Approve only if you just pressed Connect in Claude yourself. Got this link from someone? Refuse.")),
       r.data.loopback ? h("span", { class: "warn sm" }, L("כתובת מקומית במחשב הזה (Claude Code). אשרו רק אם הפעלתם עכשיו את Claude Code.", "A local address on this computer (Claude Code). Approve only if you just started Claude Code.")) : null,
       h("span", { class: "mut sm" }, L("יוכל: לראות מכשירים, סוכנים, כמה מחכה לאישור ומזהי משימות; לשלוח משימה למחשב שמקבל משימות.", "It can: see devices, agents, how much waits for approval and task ids; send a task to a PC that takes tasks.")),
       h("span", { class: "mut sm" }, L("לא יוכל: לקרוא תוכן משימות, תוצאות או אישורים (נעולים), לשנות הגדרות או לאשר במקומך.", "It cannot: read task text, results or approvals (sealed), change settings or approve for you.")),

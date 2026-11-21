@@ -107,6 +107,7 @@ export async function connectorRoute(req: Request, hub: Hub, ipHash: string): Pr
     // DNS-rebinding guard (MCP transport spec): a browser page elsewhere never gets an answer.
     const from = req.headers.get("origin");
     if (from && from !== origin) return json({ error: "Not allowed." }, 403);
+    if (!hub.limits.take(`mcp:${ipHash}`, LIMITS.mcp)) return json({ error: "Too many requests." }, 429, { "retry-after": "30" });
     const auth = req.headers.get("authorization") ?? "";
     if (!auth.startsWith("Bearer ")) return unauthorized(origin);
     const grant = await hub.connector.verify(auth.slice(7).trim());

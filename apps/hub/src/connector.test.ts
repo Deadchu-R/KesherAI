@@ -206,6 +206,24 @@ test("tokens: the code flow gives a working access token; refresh rotates; an ol
   assert.equal((await call(hub, "POST", "/oauth/token", form({ grant_type: "client_credentials" }))).data.error, "unsupported_grant_type");
 });
 
+test("tokens: two refreshes with the same token at once give one new token pair, not two (scan 169)", async () => {
+  const { hub, store } = setup();
+  const c = await connect(hub);
+  const body = form({ grant_type: "refresh_token", refresh_token: c.refresh, client_id: c.clientId });
+  const [a, b] = await Promise.all([call(hub, "POST", "/oauth/token", body), call(hub, "POST", "/oauth/token", body)]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 400]);
+  const won = a.status === 200 ? a : b;
+  assert.equal(store.grants().length, 1, "the connection lives on");
+  assert.equal((await rpc(hub, String(won.data.access_token), "ping")).status, 200, "the answer that won is the live one");
+});
+
+test("/mcp: one caller is limited before any token lookup (scan 169)", async () => {
+  const { hub } = setup();
+  const bad = { body: "{}", headers: { authorization: "Bearer kc_wrong", "content-type": "application/json" } };
+  for (let i = 0; i < 120; i++) assert.equal((await call(hub, "POST", "/mcp", bad)).status, 401);
+  assert.equal((await call(hub, "POST", "/mcp", bad)).status, 429);
+});
+
 test("revocation: Connected apps lists the connection; Revoke and Disconnect-all stop its tokens at once", async () => {
   const { hub, tick } = setup();
   const c = await connect(hub);

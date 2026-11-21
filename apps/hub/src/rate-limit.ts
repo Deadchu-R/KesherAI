@@ -25,6 +25,8 @@ export const LIMITS = {
   syncPing: { burst: 2, perMs: 10_000 },
   /** Answers and commands from the owner's phones and the hub page to a PC (approve, Run, Cancel): 30 a minute. */
   command: { burst: 30, perMs: 60_000 },
+  /** Claude connector requests (`/mcp`) per caller IP, before the token is looked up (scan 169: no free SQL reads). */
+  mcp: { burst: 120, perMs: 60_000 },
 } as const satisfies Record<string, Limit>;
 
 /** Buckets by key ("signIn:<ip hash>", "task:<device id>"). */
