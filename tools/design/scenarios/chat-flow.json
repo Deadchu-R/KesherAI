@@ -1,0 +1,127 @@
+{
+ "group": "צ'אט",
+ "now": "2026-11-21T10:00:00Z",
+ "boards": [
+  {
+   "id": "ChatQueueSteer",
+   "title": "צ'אט: הודעות בזמן עבודה — שבבי תור (עריכה, שליחה עכשיו, מחיקה), תור/היגוי, עצירה בשני שלבים",
+   "titleEn": "Chat: messages while it works — queue chips (edit, send now, remove), Queue/Steer, two-stage Stop",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "סקריפט תנועה לשחקן",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "c1",
+       "status": "running",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [
+        {
+         "id": "q1",
+         "text": "תשתמש ב-Rigidbody ולא ב-Transform",
+         "steer": true
+        },
+        {
+         "id": "q2",
+         "text": "אחרי זה תוסיף גם קפיצה עם רווח"
+        }
+       ],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תכתוב לי סקריפט שמזיז את השחקן ב-Unity"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "t1",
+        "name": "read_file",
+        "input": {
+         "path": "Assets/Scripts/Player.cs"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "5m"
+        },
+        "type": "tool_result",
+        "callId": "t1",
+        "name": "read_file",
+        "ok": true,
+        "output": "public class Player : MonoBehaviour { }"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".queue li"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".queue li"
+    }
+   ]
+  }
+ ]
+}

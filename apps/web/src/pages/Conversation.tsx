@@ -8,7 +8,8 @@ import { createPortal } from "react-dom";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { ReportDialog } from "../ReportDialog";
 import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
-import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, Teammate, WebPrefs } from "@kesher/shared";
+import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, QueueMode, Teammate, WebPrefs } from "@kesher/shared";
+import { stopStage } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
 import { chatStatus, kTokens } from "../chat-status";
@@ -17,6 +18,7 @@ import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
 import { PromptTextarea, expandSlash, type SlashCommand } from "../SlashMenu";
 import { SideChat } from "../chat/SideChat";
+import { QueueChips, queueMode } from "../chat/QueueChips";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -101,6 +103,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   // Running media jobs' progress (tool_progress: steps and preview frames), only while the page is open.
   const [jobProgress, setJobProgress] = useState<Record<string, JobProgress>>({});
   const [input, setInput] = useState("");
+  // What a message typed while the chat works does: waits (queue) or joins the running turn (steer).
+  const [qMode, setQMode] = useState<QueueMode>(queueMode);
   // A tool's own view (MCP Apps) can put text in the message box; the person sends it.
   useEffect(() => {
     const on = (e: Event) => {
@@ -393,8 +397,9 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const versions = useMemo(() => {
     const total = new Map<number, number>();
     let user = 0;
+    // A steered message (sent during a turn, chat-queue.ts) belongs to that turn: it does not start a new one.
     for (const e of events) {
-      if (e.type === "user") {
+      if (e.type === "user" && !e.steered) {
         user = e.seq;
         total.set(user, 1);
       } else if (e.type === "regenerated" && e.ofUser === user) total.set(user, (total.get(user) ?? 1) + 1);
@@ -405,7 +410,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     user = 0;
     let seg = 0;
     for (const e of events) {
-      if (e.type === "user") {
+      if (e.type === "user" && !e.steered) {
         user = e.seq;
         seg = 0;
       } else if (e.type === "regenerated") {
@@ -413,14 +418,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
         continue;
       }
       const want = user ? (chosenVersion[user] ?? (total.get(user) ?? 1) - 1) : 0;
-      if (e.type !== "user" && user && seg !== want) continue;
+      if ((e.type !== "user" || e.steered) && user && seg !== want) continue;
       shown.push(e);
       if (e.type === "assistant" && user) {
         lastAnswerOf.set(user, e.seq);
         turnOf.set(e.seq, user);
       }
     }
-    const lastUser = [...events].reverse().find((e) => e.type === "user")?.seq ?? 0;
+    const lastUser = [...events].reverse().find((e) => e.type === "user" && !e.steered)?.seq ?? 0;
     return { shown, total, lastAnswerOf, turnOf, lastUser };
   }, [events, chosenVersion]);
   const blocks = useMemo(() => {
@@ -654,7 +659,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     setInput("");
     setError("");
     try {
-      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}`, ...(web ? { web: true } : {}) } });
+      await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text: `${text}${blueprintContext(bpPath)}`, ...(web ? { web: true } : {}), ...(busy && qMode === "steer" ? { steer: true } : {}) } });
       void refreshLibrary().catch(() => undefined);
     } catch (e) {
       setError((e as Error).message);
@@ -907,8 +912,9 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     </div>
                   </form>
                 ) : (
-                  <div key={e.seq} className="msg user" dir="auto">
+                  <div key={e.seq} className="msg user" dir="auto" data-seq={e.seq}>
                     <h2 className="sr-only">{L("ההודעה שלך", "You")}</h2>
+                    {e.steered && <span className="steered-tag small">↪ {L("נשלחה בזמן העבודה ונכנסה לתשובה", "Sent while it worked, joined the answer")}</span>}
                     {(() => {
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
                       const { body, files } = splitAttachments(e.text);
@@ -1153,23 +1159,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                 }
               }}
             />
-            {(info?.queued?.length ?? 0) > 0 && (
-              <div className="queue" aria-label={t("queueTitle")}>
-                <div className="queue-head small">
-                  <span>{info!.queuePaused ? t("queuePaused") : t("queueWaiting", { n: info!.queued.length })}</span>
-                  {info!.queuePaused && <button type="button" className="link-btn" onClick={() => void api(`/api/conversations/${id}/queue/resume`, { method: "POST" })}>{t("queueResume")}</button>}
-                </div>
-                <ol>
-                  {info!.queued.map((q, i) => (
-                    <li key={q.id}>
-                      <span className="queue-n" aria-hidden>{i + 1}</span>
-                      <span className="queue-text" dir="auto">{q.text}</span>
-                      <button type="button" className="queue-x" aria-label={t("queueRemove")} title={t("queueRemove")} onClick={() => void api(`/api/conversations/${id}/queue/${q.id}`, { method: "DELETE" }).catch(() => undefined)}>✕</button>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
+            {/* Messages typed while it works: chips to edit, send now or remove, and the Queue / Steer switch. */}
+            <QueueChips convId={id} queued={info?.queued ?? []} {...(info?.queuePaused ? { paused: true } : {})} busy={busy} typing={!!input.trim()} mode={qMode} onMode={setQMode} />
             {pluginUi.composerActions.length > 0 && (
               <div className="composer-actions">
                 {pluginUi.composerActions.map((a) => (
@@ -1218,20 +1209,32 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                 busy ? (
                   <>
                     {input.trim() && <button type="submit" className="send queue-send" aria-label={t("queueSendHint")} title={t("queueSendHint")}>↑</button>}
-                    <button
-                      type="button"
-                      className="send stop"
-                      onClick={(ev) => {
-                        // The Stop button goes away: keyboard and screen-reader focus goes back to the message box.
-                        const box = ev.currentTarget.closest(".composer")?.querySelector("textarea");
-                        box?.focus();
-                        setStopAsked(Date.now());
-                        void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
-                      }}
-                      aria-label={t("stop")}
-                    >
-                      ■
-                    </button>
+                    {(() => {
+                      // Two-stage Stop (chat-queue.ts): with messages waiting, the first press clears them and the answer goes on.
+                      const stage = stopStage(info?.queued.length ?? 0, info?.queuePaused);
+                      const label = stage === "clear" ? L("לנקות את התור (לחיצה נוספת עוצרת)", "Clear the queue (press again to stop)") : t("stop");
+                      return (
+                        <button
+                          type="button"
+                          className={`send stop${stage === "clear" ? " stop-clear" : ""}`}
+                          onClick={(ev) => {
+                            if (stage === "clear") {
+                              void api(`/api/conversations/${id}/queue`, { method: "DELETE" }).catch((e: Error) => setError(e.message));
+                              return;
+                            }
+                            // The Stop button goes away: keyboard and screen-reader focus goes back to the message box.
+                            const box = ev.currentTarget.closest(".composer")?.querySelector("textarea");
+                            box?.focus();
+                            setStopAsked(Date.now());
+                            void api(`/api/conversations/${id}/stop`, { method: "POST" }).then(() => setTimeout(() => setResync((n) => n + 1), 1500));
+                          }}
+                          aria-label={label}
+                          title={label}
+                        >
+                          {stage === "clear" ? "✕" : "■"}
+                        </button>
+                      );
+                    })()}
                   </>
                 ) : undefined
               }

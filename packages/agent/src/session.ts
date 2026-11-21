@@ -14,7 +14,9 @@ import type {
   ToolCall,
   TeamRole,
   ToolSpec,
+  QueuedMessage,
 } from "@kesher/shared";
+import { takeSteers } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
@@ -316,14 +318,34 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.loadedTools.add(name);
     this.toolRank.set(name, ++this.rankTick);
   }
-  /** Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. */
-  queued: Array<{ id: string; text: string; data?: unknown }> = [];
+  /**
+   * Messages sent while the agent was busy, in order; the owner (the conversation manager) drains it. Those marked
+   * `steer` join the running turn at its next step instead (chat-queue.ts); any left when it ends are sent as usual.
+   */
+  queued: Array<QueuedMessage & { data?: unknown }> = [];
   /** Set after Stop: the queue waits until the user sends again. */
   queuePaused = false;
 
   /** Tells listeners the queue changed (a `queue` event, not saved, followed by info). */
   queueChanged(): void {
     this.push({ type: "queue" }, false);
+  }
+
+  /**
+   * Puts the queued messages marked `steer` into the running turn: each shows as the user's message and the model
+   * reads them before its next step, as one note that the user changed course. Called between steps only.
+   *
+   * @returns How many went in.
+   */
+  injectSteers(): number {
+    const { steer, rest } = takeSteers(this.queued);
+    if (!steer.length) return 0;
+    this.queued = rest;
+    for (const m of steer) this.push({ type: "user", text: m.text, steered: true });
+    const said = steer.map((m) => m.text).join("\n\n");
+    this.messages.push({ role: "user", content: `[KesherAI] The user wrote this while you were working. Take it into account from now on (it may change what to do next):\n${said}` });
+    this.queueChanged();
+    return steer.length;
   }
   /** Pictures the tool that just ran returned, for its tool message. */
   private pendingImages?: Array<{ mimeType: string; data: string }>;
@@ -378,8 +400,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       pendingQuestions: [...this.questions.keys()],
       canUndo: this.changes.length > 0,
       grants: this.grants,
-      queued: this.queued.map(({ id, text }) => ({ id, text })),
+      queued: this.queued.map(({ id, text, steer }) => ({ id, text, ...(steer ? { steer: true } : {}) })),
       ...(this.queuePaused ? { queuePaused: true } : {}),
+      contextTokens: this.contextTokens,
     };
   }
 
@@ -487,7 +510,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
    */
   regenerate(): void {
     if (this.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
-    const user = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
+    // A steered message (sent during the turn) belongs to that turn: the turn's own message is the one answered again.
+    const user = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user" && !e.steered);
     if (!user) throw new Error("There is no message to answer again.");
     let at = -1;
     for (let i = this.messages.length - 1; i >= 0; i--) {
@@ -1218,6 +1242,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         const turn = ++this.turn;
         // Background helpers that ended since the last turn: their reports go in before the model is asked.
         if (this.inbox.length) this.messages.push({ role: "user", content: `[KesherAI] ${this.inbox.splice(0).join("\n\n")}` });
+        // Steering (chat-queue.ts): messages the user sent during this turn to change its course go in before the next step.
+        if (step > 0) this.injectSteers();
         // The last step of a helper: no tools, only the report.
         const lastStep = this.finalStepReport && step === this.maxSteps - 1;
         if (lastStep) this.messages.push({ role: "user", content: "[KesherAI] This is your last step: no more tools. Write your report now, from what you found." });

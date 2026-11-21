@@ -16,7 +16,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
+import { branding, editQueued, sendNowQueued, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
@@ -1082,7 +1082,7 @@ export class ConversationManager {
    * @param text - Message.
    * @throws Error if the conversation does not exist or is busy.
    */
-  async send(id: string, text: string, opts: { web?: boolean } = {}): Promise<{ queued?: number }> {
+  async send(id: string, text: string, opts: { web?: boolean; steer?: boolean } = {}): Promise<{ queued?: number }> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     // A new worktree's setup (npm install…) finishes before the model starts working in it.
@@ -1090,7 +1090,9 @@ export class ConversationManager {
     const { session } = opened;
     // Busy: the message waits in the queue and goes as soon as the agent is free, like in Claude.
     if (session.busy || session.queued.length) {
-      session.queued.push({ id: randomUUID(), text, data: opts });
+      // Steer mode (chat-queue.ts): it joins the running turn at its next step instead of waiting for the answer.
+      const { steer, ...data } = opts;
+      session.queued.push({ id: randomUUID(), text, data, ...(steer && session.busy ? { steer: true } : {}) });
       session.queuePaused = false;
       session.queueChanged();
       if (!session.busy) await this.drain(id);
@@ -1166,6 +1168,58 @@ export class ConversationManager {
     session.queuePaused = false;
     session.queueChanged();
     await this.drain(id);
+  }
+
+  /**
+   * Changes a queued message's text (its chip's ✎).
+   *
+   * @param id - Conversation.
+   * @param queuedId - The queued message.
+   * @param text - The new text.
+   * @returns Whether it was changed.
+   */
+  editQueued(id: string, queuedId: string, text: string): boolean {
+    const session = this.sessions.get(id);
+    const next = session ? editQueued(session.queued, queuedId, text) : undefined;
+    if (!session || !next) return false;
+    session.queued = next;
+    session.queueChanged();
+    return true;
+  }
+
+  /**
+   * "Send now" on a queued message: while the agent works it joins the running turn at its next step (steering);
+   * when the agent is free it is sent at once, before the others.
+   *
+   * @param id - Conversation.
+   * @param queuedId - The queued message.
+   * @returns Whether it was there.
+   */
+  async sendQueuedNow(id: string, queuedId: string): Promise<boolean> {
+    const session = this.sessions.get(id);
+    const next = session ? sendNowQueued(session.queued, queuedId) : undefined;
+    if (!session || !next) return false;
+    session.queued = next;
+    session.queuePaused = false;
+    session.queueChanged();
+    if (!session.busy) await this.drain(id);
+    return true;
+  }
+
+  /**
+   * Empties the queue (the first press of the two-stage Stop): the answer goes on, nothing waits after it.
+   *
+   * @param id - Conversation.
+   * @returns How many messages were removed.
+   */
+  clearQueue(id: string): number {
+    const session = this.sessions.get(id);
+    if (!session?.queued.length) return 0;
+    const n = session.queued.length;
+    session.queued = [];
+    session.queuePaused = false;
+    session.queueChanged();
+    return n;
   }
 
   /**

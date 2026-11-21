@@ -180,8 +180,8 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - 🔨 Train models from the UI: pick the kind, show what is supported, plug the result into a category (TRAINING.md) missing: kinds beyond picture LoRA and chat model
 - ✅ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini (in code: chat-import.ts, persona-import.ts, claude-code-import.ts)
 - 🔨 Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) missing: a guide for every part
-- ⬜ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8)
-- ⬜ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor)
+- ✅ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8) (in code: chat-queue.ts, chat/QueueChips.tsx)
+- ✅ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor) (in code: session.ts injectSteers)
 - ⬜ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude)
 - ⬜ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT)
 - ⬜ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio)

@@ -247,7 +247,8 @@ export interface HelperPlanRef {
  */
 export type AgentEvent = EventBase &
   (
-    | { type: "user"; text: string }
+    /** `steered`: sent while the agent worked and put into that turn at its next step (chat-queue.ts). */
+    | { type: "user"; text: string; steered?: boolean }
     | { type: "assistant_delta"; turn: number; text: string }
     | { type: "assistant"; turn: number; text: string; /** The model's own words, when the model team's translator put them into the user's language. */ original?: string }
     | { type: "tool_call"; callId: string; name: string; input: Record<string, unknown> }
@@ -400,9 +401,11 @@ export interface AgentSessionInfo {
   /** Folders or files outside the workspace this conversation was given access to. */
   grants: string[];
   /** Messages waiting their turn: sent one by one as soon as the agent is free. */
-  queued: Array<{ id: string; text: string }>;
+  queued: Array<{ id: string; text: string; steer?: boolean }>;
   /** Whether the queue waits (after Stop) until the user sends again. */
   queuePaused?: boolean;
+  /** Tokens the model can read (its context window as the session uses it), for the composer's context ring. */
+  contextTokens?: number;
 }
 
 /**

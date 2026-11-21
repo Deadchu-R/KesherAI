@@ -730,7 +730,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 .queue ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .queue li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--raised); border: 1px dashed var(--border-strong); font-size: 13.5px; }
 .queue-n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: var(--panel-2); color: var(--muted); flex: none; }
-.queue-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.queue-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+.queue li.steer { border-style: solid; border-color: var(--accent); }
+.queue-tag { display: inline-block; margin-inline-end: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; background: var(--panel-2); color: var(--accent); }
+.queue-edit { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.queue-edit textarea { width: 100%; resize: vertical; }
+.queue-edit .row { display: flex; gap: 6px; justify-content: flex-end; }
+.queue-head { flex-wrap: wrap; gap: 6px; }
+.queue-mode button { padding: 2px 10px; font-size: 12px; min-height: 28px; }
+.send.stop.stop-clear { font-size: 14px; }
 .queue-x { width: 26px; height: 26px; padding: 0; border: 0; border-radius: calc(8px * var(--r-scale, 1)); background: transparent; color: var(--muted); flex: none; }
 .queue-x:hover { background: var(--panel-2); color: var(--text); }
 .send.queue-send { background: var(--raised); color: var(--text); border: 1px dashed var(--border-strong); margin-inline-end: 6px; }
@@ -4464,3 +4472,5 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .hub-file .pill { white-space: nowrap; }
 .hub-drive { align-items: flex-start; gap: 8px; }
 .hub-drive-dir { display: block; overflow-wrap: anywhere; }
+/* A message sent while the chat worked and put into that turn (chat-queue.ts, steer). */
+.steered-tag { display: block; color: var(--muted); margin-bottom: 4px; }

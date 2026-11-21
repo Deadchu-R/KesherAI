@@ -51,3 +51,4 @@ export * from "./work-list.js";
 export * from "./task-inbox.js";
 export * from "./diff-review.js";
 export * from "./scene-diff.js";
+export * from "./chat-queue.js";

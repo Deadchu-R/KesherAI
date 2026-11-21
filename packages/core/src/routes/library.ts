@@ -455,18 +455,33 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     return { ok: true };
   });
 
+  /** Empties the queue (the first press of the two-stage Stop; the answer goes on). */
+  app.delete<{ Params: { id: string } }>("/api/conversations/:id/queue", async (req) => ({ removed: s.conversations.clearQueue(req.params.id) }));
+
+  /** Changes a queued message's text. */
+  app.patch<{ Params: { id: string; qid: string }; Body: { text?: unknown } }>("/api/conversations/:id/queue/:qid", async (req, reply) => {
+    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    if (!text.trim()) return reply.code(400).send({ error: "Empty message" });
+    return s.conversations.editQueued(req.params.id, req.params.qid, text) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" });
+  });
+
+  /** "Send now": joins the running turn at its next step (or goes at once when the chat is free). */
+  app.post<{ Params: { id: string; qid: string } }>("/api/conversations/:id/queue/:qid/now", async (req, reply) =>
+    (await s.conversations.sendQueuedNow(req.params.id, req.params.qid)) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" }),
+  );
+
   /** Removes a message from the queue (it was sent while the agent was busy). */
   app.delete<{ Params: { id: string; qid: string } }>("/api/conversations/:id/queue/:qid", async (req, reply) =>
     s.conversations.unqueue(req.params.id, req.params.qid) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" }),
   );
 
-  app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean; steer?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
     const typed = req.body?.text?.trim();
     if (!typed) return reply.code(400).send({ error: "Empty message" });
     // A Game Helper chat: the picture taken when its key was pressed goes with the question.
     const text = `${takeGameShot(req.params.id)}${typed}`;
     try {
-      const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true });
+      const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true, ...(req.body?.steer === true ? { steer: true } : {}) });
       // Written on the phone: its answer notifies the phone even when it is short.
       if (!isLocalRequest(req)) s.notifier.messageFromPhone(req.params.id);
       return { ok: true, ...r };

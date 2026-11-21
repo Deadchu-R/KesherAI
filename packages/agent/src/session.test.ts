@@ -947,3 +947,29 @@ test("model size per turn: a simple message goes to the small model with no tool
   await ask("hello");
   assert.equal(seen.length, 1, "an empty small answer goes to the main model");
 });
+
+test("steering: a queued message marked steer joins the running turn at its next step", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  await writeFile(join(workspace, "a.txt"), "hello");
+  const seen: Array<Parameters<ModelTurn>[0]> = [];
+  const box: { session?: AgentSession } = {};
+  const model: ModelTurn = async (req) => {
+    seen.push(structuredClone(req));
+    if (seen.length === 1) {
+      // The user sends two messages while the first step works: one steers, one waits for the answer.
+      box.session!.queued.push({ id: "q1", text: "use b.txt instead", steer: true }, { id: "q2", text: "then summarise" });
+      return { text: "", toolCalls: [{ id: "c1", name: "read_file", arguments: { path: "a.txt" } }] };
+    }
+    return { text: "done", toolCalls: [] };
+  };
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+  box.session = session;
+  session.send("read a.txt");
+  await waitFor(session, (e) => e.type === "status" && e.status === "idle");
+  const second = JSON.stringify(seen[1]!.messages);
+  assert.match(second, /use b\.txt instead/);
+  assert.doesNotMatch(second, /then summarise/);
+  assert.deepEqual(session.queued.map((q) => q.id), ["q2"], "the waiting message stays for after the answer");
+  const users = session.events.filter((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
+  assert.deepEqual(users.map((u) => [u.text, !!u.steered]), [["read a.txt", false], ["use b.txt instead", true]]);
+});
