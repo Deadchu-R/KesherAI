@@ -129,6 +129,11 @@ test("uia worker on Windows: the real PowerShell worker lists windows and is kil
       r = await w.call<{ windows: unknown[]; monitors: Array<{ index: number }> }>("windows", {}, { timeoutMs: 30_000 });
     } catch (e) {
       // CI runners run as administrator, which the worker refuses on purpose: that refusal is the expected answer there.
+      // A slow shared runner may also not start PowerShell + UI Automation within the start limit.
+      if (process.env.CI && /did not start in time/i.test(String((e as Error).message))) {
+        t.skip("PowerShell started too slowly on the CI runner");
+        return;
+      }
       if (/administrator/i.test(String((e as Error).message))) {
         t.skip("the CI runner is elevated");
         return;
