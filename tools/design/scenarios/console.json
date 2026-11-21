@@ -1,0 +1,166 @@
+{
+ "group": "מצב קונסולה · Console mode",
+ "mocks": [
+  {
+   "url": "**/api/conversations",
+   "method": "GET",
+   "json": [
+    {
+     "id": "c1",
+     "kind": "chat",
+     "title": "תוכנית לבוס השני ב-Hades II",
+     "updatedAt": {
+      "$ago": "20m"
+     }
+    },
+    {
+     "id": "c2",
+     "kind": "chat",
+     "title": "כרזה למשחק הפלטפורמה",
+     "updatedAt": {
+      "$ago": "2h"
+     }
+    }
+   ]
+  },
+  {
+   "url": "**/api/game-helper/open",
+   "method": "POST",
+   "json": {
+    "chatId": "g1",
+    "game": "Hades II"
+   }
+  },
+  {
+   "url": "**/api/game-helper/g1",
+   "method": "GET",
+   "json": {
+    "waiting": null
+   }
+  },
+  {
+   "url": "**/api/conversations/g1",
+   "method": "GET",
+   "json": {
+    "id": "g1",
+    "projectId": null,
+    "title": "🎮 Hades II",
+    "kind": "chat",
+    "modelId": "qwen3-vl-8b",
+    "createdAt": {
+     "$ago": "2h"
+    },
+    "updatedAt": {
+     "$ago": "1m"
+    },
+    "messageCount": 2,
+    "session": {
+     "id": "g1",
+     "status": "idle",
+     "modelId": "qwen3-vl-8b",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "2m"
+      },
+      "type": "user",
+      "text": "חפש מדריך ל-Hades II למקום שבו אני נמצא וסכם את הצעדים בקצרה, עם מקורות."
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "1m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "**ארבע הדרכים לבוס השני (Scylla):**\n1. לבחור ברכה של ארטמיס לפגיעה קריטית.\n2. לפגוע קודם בזמרות שמשני הצדדים.\n3. החולשה שלה: ||כשהיא שרה סולו, היא נשארת במקום ואפשר לתקוף מאחור||.\n4. אחרי הניצחון: ||ההדרן פותח את הדרך לאזור הבא||."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/g1/helpers",
+   "json": {
+    "runs": []
+   }
+  },
+  {
+   "url": "**/api/conversations/g1/events*",
+   "json": null
+  }
+ ],
+ "boards": [
+  {
+   "id": "ConsoleHome",
+   "title": "מצב קונסולה: הבית (1280×800, ROG Ally / Steam Deck)",
+   "titleEn": "Console mode: home (1280×800)",
+   "route": "#/console",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "steps": [
+    {
+     "wait": ".console-resume"
+    }
+   ]
+  },
+  {
+   "id": "ConsoleHome1080",
+   "title": "מצב קונסולה: הבית (1920×1080 ב-150%, ROG Xbox Ally X)",
+   "titleEn": "Console mode: home (1920×1080 at 150%)",
+   "route": "#/console",
+   "viewports": [
+    "desktop"
+   ],
+   "height": {
+    "desktop": 720
+   },
+   "steps": [
+    {
+     "wait": ".console-resume"
+    }
+   ]
+  },
+  {
+   "id": "ConsoleGame",
+   "title": "מצב קונסולה: עוזר משחק",
+   "titleEn": "Console mode: game helper",
+   "route": "#/console/game",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "steps": [
+    {
+     "wait": ".console-ask"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "ConsoleHomeEn",
+   "title": "מצב קונסולה: הבית באנגלית (1280×800)",
+   "titleEn": "Console mode: home in English",
+   "route": "#/console",
+   "locale": "en",
+   "viewports": [
+    "desktop"
+   ],
+   "steps": [
+    {
+     "wait": ".console-resume"
+    }
+   ]
+  }
+ ]
+}

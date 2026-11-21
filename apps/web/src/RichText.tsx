@@ -37,17 +37,22 @@ export function texText(tex: string): string {
     .replace(/_\{?([0-9inx]+)\}?/g, (m, d: string) => ([...d].every((c) => SUB[c]) ? [...d].map((c) => SUB[c]).join("") : m));
 }
 
-/** Inline Markdown: **bold**, *italic*, ~~struck~~, `code`, $math$, [links](https://…), pictures and bare https links. */
+/**
+ * Inline Markdown: **bold**, *italic*, ~~struck~~, `code`, $math$, [links](https://…), pictures, bare https links, and
+ * ||spoilers|| (Discord's mark; the game helper's guides hide story and solutions this way). A spoiler's bars touch its
+ * text, so "a || b" in prose stays as it is.
+ */
 function inline(text: string, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\((?:https?:\/\/|\/api\/assets\/)[^)\s]+\)|\$[^$\s\d][^$\n]*?[=^_\\][^$\n]*?\$|https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?]|\*[^*\s][^*]*\*)/g;
+  const re = /(\|\|[^|\s](?:[^|\n]*[^|\s])?\|\||\*\*[^*]+\*\*|`[^`]+`|~~[^~]+~~|!\[[^\]]*\]\([^)\s]+\)|\[[^\]]+\]\((?:https?:\/\/|\/api\/assets\/)[^)\s]+\)|\$[^$\s\d][^$\n]*?[=^_\\][^$\n]*?\$|https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?]|\*[^*\s][^*]*\*)/g;
   let last = 0;
   let i = 0;
   for (const m of text.matchAll(re)) {
     if (m.index! > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const k = `${key}-${i++}`;
-    if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
+    if (tok.startsWith("||")) out.push(<Spoiler key={k} text={tok.slice(2, -2)} />);
+    else if (tok.startsWith("**")) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
     else if (tok.startsWith("`")) out.push(<code key={k} className="inline-code">{tok.slice(1, -1)}</code>);
     else if (tok.startsWith("~~")) out.push(<s key={k}>{tok.slice(2, -2)}</s>);
     else if (tok.startsWith("$")) out.push(<MathView key={k} tex={tok.slice(1, -1)} fallback={texText(tok.slice(1, -1))} />);
@@ -65,6 +70,17 @@ function inline(text: string, key: string): React.ReactNode[] {
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
+}
+
+/** A hidden spoiler: a button that shows its text when pressed (A on the controller, a tap, a click). */
+function Spoiler({ text }: { text: string }) {
+  const [shown, setShown] = useState(false);
+  if (shown) return <span className="spoiler-open">{inline(text, "sp")}</span>;
+  return (
+    <button type="button" className="spoiler" onClick={() => setShown(true)} aria-label={L("ספוילר: להצגה", "Spoiler: show")}>
+      {L("ספוילר · להצגה", "Spoiler · show")}
+    </button>
+  );
 }
 
 /** A table row's cells ("| a | b |" or "a | b"); a "\\|" stays in its cell. */

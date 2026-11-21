@@ -4,7 +4,8 @@
  * - D-pad or left stick: move between buttons, links and fields (to the nearest one in that direction);
  * - A: press · B: back (closes a menu or dialog, otherwise the previous page) · X: right-click (more options);
  * - Y: search and commands (the palette) · LB / RB: previous / next page of the menu;
- * - Menu (≡): open or close the side menu · View (⧉): to the chat box;
+ * - Menu (≡): open or close the side menu · View (⧉): to the chat box (both on release);
+ * - View + Menu held together: console mode on or off (console-mode.ts, as Steam's button chords);
  * - right stick: scroll · LT / RT: a page up / down;
  * - right stick pressed (R3): the microphone (speak the message instead of typing it; press again to finish);
  * - left stick pressed (L3): stop (the answer being written, or the reading aloud).
@@ -12,6 +13,7 @@
  * keyboard work as before, and the controller's look (a bold focus ring, the button hints) shows only after it is used.
  */
 import { openPadKeyboard, padKeyboardButton, padKeyboardOpen } from "./pad-keyboard";
+import { COMBO_IDLE, comboStep, type ComboState } from "./console-mode";
 
 const A = 0, B = 1, X = 2, Y = 3, LB = 4, RB = 5, LT = 6, RT = 7, VIEW = 8, MENU = 9, L3 = 10, R3 = 11, UP = 12, DOWN = 13, LEFT = 14, RIGHT = 15;
 const FIRST_REPEAT = 380;
@@ -25,7 +27,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([t
  * page, a dialog. Arrows move within the area first and cross to the next one only at its edge (found on Roee's ROG
  * Ally: one press jumped to "unrelated things" in another part of the screen).
  */
-const AREAS = '[role="dialog"], .palette, .sidebar, .appbar, .phone-tabs, .script-side, .game-head, .game-asks, .game-chat, main, .main';
+const AREAS = '[role="dialog"], .palette, .sidebar, .appbar, .phone-tabs, .script-side, .game-head, .game-asks, .game-chat, .console-head, .console-asks, main, .main';
 
 /** The last control chosen in each area (coming back to an area returns there, as Steam and the Xbox app do). */
 const lastIn = new WeakMap<Element, HTMLElement>();
@@ -254,8 +256,9 @@ function press(): void {
   if (!el || el === document.body) return move("down");
   if (typing(el)) {
     // A field other than the chat box (search, settings, names): the controller's own keyboard. The chat box keeps A
-    // as send (its microphone is R3).
-    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.closest(".composer") && !el.readOnly) {
+    // as send (its microphone is R3), except an empty one in console mode, where the keyboard is how to write.
+    const field = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+    if (field && !el.readOnly && (!el.closest(".composer") || (!!el.closest(".console") && !el.value.trim()))) {
       openPadKeyboard(el);
       return;
     }
@@ -351,6 +354,9 @@ export function startGamepad(): void {
   keyboardNav();
   if (typeof navigator.getGamepads !== "function") return;
   const held = new Map<number, { since: number; last: number }>();
+  // View and Menu act when let go, unless they were held together (the console mode chord).
+  let combo: ComboState = COMBO_IDLE;
+  const wasDown = { view: false, menu: false };
   let frame = 0;
   const off = () => setActive(false);
   window.addEventListener("pointerdown", off, true);
@@ -399,24 +405,37 @@ export function startGamepad(): void {
       act(LEFT, true, () => padKeyboardButton("left"));
       act(RIGHT, true, () => padKeyboardButton("right"));
       for (const [i, name] of [[A, "A"], [B, "B"], [X, "X"], [Y, "Y"], [LB, "LB"], [RB, "RB"], [MENU, "MENU"]] as Array<[number, string]>) act(i, i === X, () => padKeyboardButton(name));
+      // Menu (Enter) there must not also open the side menu when it is let go after the keyboard closed.
+      combo = { ...COMBO_IDLE, used: true };
       frame = requestAnimationFrame(loop);
       return;
     }
-    act(UP, true, () => canvasTakes({ action: "dir", dir: "up" }) || move("up"));
-    act(DOWN, true, () => canvasTakes({ action: "dir", dir: "down" }) || move("down"));
-    act(LEFT, true, () => canvasTakes({ action: "dir", dir: "left" }) || move("left"));
-    act(RIGHT, true, () => canvasTakes({ action: "dir", dir: "right" }) || move("right"));
+    // The console home's tile grid takes the directions first (pageTakes "UP" …), then the graph, then the page.
+    act(UP, true, () => pageTakes("UP") || canvasTakes({ action: "dir", dir: "up" }) || move("up"));
+    act(DOWN, true, () => pageTakes("DOWN") || canvasTakes({ action: "dir", dir: "down" }) || move("down"));
+    act(LEFT, true, () => pageTakes("LEFT") || canvasTakes({ action: "dir", dir: "left" }) || move("left"));
+    act(RIGHT, true, () => pageTakes("RIGHT") || canvasTakes({ action: "dir", dir: "right" }) || move("right"));
     act(A, false, press);
     act(B, false, () => pageTakes("B") || canvasTakes({ action: "back" }) || ((document.activeElement as HTMLElement | null)?.closest?.(".ue-frame") ? move("down") : back()));
     act(X, false, () => pageTakes("X") || context());
     act(Y, false, () => pageTakes("Y") || window.dispatchEvent(new Event("kesher:palette")));
     act(LB, false, () => pageTakes("LB") || page(-1));
     act(RB, false, () => pageTakes("RB") || page(1));
-    act(MENU, false, () => window.dispatchEvent(new Event("kesher:sidebar")));
-    act(VIEW, false, () => {
+    const viewDown = down(VIEW);
+    const menuDown = down(MENU);
+    const usedBefore = combo.used;
+    const step = comboStep(combo, viewDown, menuDown, t);
+    combo = step;
+    if (step.toggle) window.dispatchEvent(new Event("kesher:console"));
+    if (viewDown || menuDown) used = true;
+    // Let go alone (not part of the chord): its own action.
+    if (wasDown.menu && !menuDown && !usedBefore) window.dispatchEvent(new Event("kesher:sidebar"));
+    if (wasDown.view && !viewDown && !usedBefore) {
       const box = document.querySelector<HTMLElement>("main textarea, main input[type='text']");
       if (box) focus(box);
-    });
+    }
+    wasDown.view = viewDown;
+    wasDown.menu = menuDown;
     // Writing without a keyboard: R3 is the chat box's microphone (dictation), L3 stops the answer or the voice.
     act(R3, false, () => document.querySelector<HTMLElement>("main .box-bar .chip.mic")?.click());
     act(L3, false, () => document.querySelector<HTMLElement>("main .send.stop, button.stop-speaking")?.click());

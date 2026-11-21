@@ -52,6 +52,7 @@ import { StudyPage } from "./pages/StudyPage";
 import { AvatarFeed } from "./pages/AvatarCamera";
 import { PadHints } from "./PadHints";
 import { GameHelper } from "./pages/GameHelper";
+import { ConsoleMode } from "./pages/ConsoleMode";
 import { TextHelper } from "./pages/TextHelper";
 import { Dictate } from "./pages/Dictate";
 
@@ -386,6 +387,8 @@ export function App() {
 
   // The Game Helper's window over a game: only the helper, no menus.
   if (hash.startsWith("#/game/")) return <GameHelper hash={hash} />;
+  // Console mode (a handheld or a TV): its own full-screen home and game helper, no menus.
+  if (hash === "#/console" || hash.startsWith("#/console/")) return <ConsoleMode hash={hash} />;
   if (hash.startsWith("#/text/")) return <TextHelper hash={hash} />;
   if (hash === "#/dictate") return <Dictate />;
   // The screen lens: the frozen screen (its own window) or a chosen picture, nothing else on the page.

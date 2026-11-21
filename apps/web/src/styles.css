@@ -2501,6 +2501,29 @@ html.handheld .palette-list button { min-height: 44px; }
 .game-ask { display: flex; align-items: center; gap: 10px; min-height: 52px; font-size: 16px; text-align: start; }
 .game-ask .pad-btn { min-width: 30px; height: 30px; border-radius: 15px; font-size: 14px; }
 .game-chat { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border); }
+/* Console mode (pages/ConsoleMode.tsx): full screen, big tiles for a handheld or a TV, no animations (battery). Sizes
+   in rem/vmin so 1280×800 and 1920×1080 at 150% both fill the screen; two columns on a phone in remote. */
+.console { display: flex; flex-direction: column; gap: clamp(10px, 2.2vmin, 24px); min-height: 100vh; min-height: 100dvh; padding: clamp(12px, 3vmin, 40px) clamp(12px, 4vmin, 56px) 0; background: var(--bg); box-sizing: border-box; }
+.console *, .console *::before, .console *::after { transition: none !important; animation: none !important; }
+.console :focus-visible { outline: 4px solid var(--accent); outline-offset: 4px; }
+.console-head { align-items: center; gap: 12px; }
+.console-title { font-size: clamp(20px, 3.6vmin, 34px); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-leave, .console-back { min-height: 48px; min-width: 48px; font-size: 16px; }
+.console-grid { display: grid; gap: clamp(10px, 2.2vmin, 22px); align-content: start; }
+.console-resume { grid-column: 1 / -1; display: flex; align-items: center; gap: 18px; min-height: clamp(84px, 15vmin, 150px); padding: 0 clamp(16px, 3vmin, 32px); border-radius: 16px; border: 1px solid var(--border); background: var(--accent-soft); color: inherit; text-decoration: none; }
+.console-resume-text { display: grid; gap: 4px; min-width: 0; }
+.console-resume-title { font-size: clamp(18px, 3.2vmin, 30px); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: clamp(110px, 21vmin, 220px); border-radius: 16px; font-size: clamp(16px, 2.8vmin, 26px); font-weight: 600; }
+.console-hints { position: sticky; bottom: 0; margin-top: auto; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 26px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--bg); font-size: 16px; }
+.console-hints .pad-btn { min-width: 30px; height: 30px; border-radius: 15px; font-size: 14px; }
+.console-game .console-asks { flex-wrap: wrap; gap: 10px; align-items: center; }
+.console-ask { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 0 18px; font-size: clamp(15px, 2.4vmin, 22px); }
+.console-ask .pad-btn { min-width: 30px; height: 30px; border-radius: 15px; font-size: 14px; }
+.console-shot { height: 56px; border-radius: 8px; border: 1px solid var(--border); }
+.console-chat { flex: 1; min-height: 40vh; }
+.console-offer { position: fixed; z-index: 80; inset-inline: 12px; bottom: 70px; max-width: 520px; margin-inline: auto; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel, var(--bg)); box-shadow: 0 6px 24px rgb(0 0 0 / 0.3); }
+.console-offer p { margin: 0 0 10px; }
+.spoiler { padding: 0 8px; min-height: 0; border-radius: 6px; font-size: 0.9em; background: var(--border); }
 .phone-numbers { margin: 0; display: grid; gap: 2px; }
 .phone-numbers > div { gap: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .phone-numbers dd { margin: 0; font-variant-numeric: tabular-nums; }

@@ -29,6 +29,26 @@ export function takeGameShot(chatId: string): string {
   return `[Attached: ${f}]\n`;
 }
 
+/** The last game seen in front (by the key, or console mode's look when KesherAI loses the focus), kept in memory. */
+let lastGame: { game: string; at: number } | undefined;
+/** How long the last game seen still counts as "the game being played" (a session's break). */
+const LAST_GAME_MS = 6 * 3600_000;
+
+/**
+ * The game being played: the one in front, else the last one seen in the past hours (console mode is in front of it).
+ *
+ * @param front - The game in front now ("" when the window is not a game).
+ * @param now - The time in ms.
+ * @returns The game's name, or "".
+ */
+export function currentGame(front: string, now = Date.now()): string {
+  if (front) {
+    lastGame = { game: front, at: now };
+    return front;
+  }
+  return lastGame && now - lastGame.at < LAST_GAME_MS ? lastGame.game : "";
+}
+
 /** Programs in front that are not games (the helper then names the window, not "a game"). */
 const NOT_GAMES = /^(explorer|kesherai|electron|chrome|msedge|firefox|opera|opera_gx|brave|vivaldi|arc|zen|claude|chatgpt|code|cursor|antigravity|windsurf|devenv|rider64|idea64|unity|unity hub|unrealeditor|epicgameslauncher|steam|steamwebhelper|galaxyclient|eadesktop|battle\.net|discord|slack|teams|ms-teams|whatsapp|telegram|spotify|obs64|obs|notepad|notepad\+\+|winword|excel|powerpnt|outlook|olk|acrobat|photoshop|blender|powershell|pwsh|windowsterminal|cmd|taskmgr|systemsettings|applicationframehost|armourycrate|lockapp|searchhost|shellexperiencehost|startmenuexperiencehost)$/i;
 
@@ -58,13 +78,14 @@ export async function gameRoutes(app: FastifyInstance, s: KesherServices): Promi
   const mapFile = join(s.paths.root, "game-helper.json");
   const readMap = async (): Promise<Record<string, string>> => JSON.parse(await readFile(mapFile, "utf8").catch(() => "{}")) as Record<string, string>;
 
-  /** The key was pressed: the game in front, its picture, and its chat (made the first time). Only from this computer. */
-  app.post("/api/game-helper/capture", async (req, reply) => {
-    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only from this computer." });
+  /** The game in front (its window's name only: game memory is never read), or "" when the window is not a game. */
+  const frontGame = async (): Promise<{ app: string; title: string; game: string }> => {
     const front = await foregroundWindow().catch(() => ({ app: "", title: "" }));
     const isGame = !!front.app && !NOT_GAMES.test(front.app);
-    const game = isGame ? gameName(front.app, front.title) : "";
-    const shot = isGame ? await s.screen?.shot().catch(() => undefined) : undefined;
+    return { ...front, game: isGame ? gameName(front.app, front.title) : "" };
+  };
+  /** The chat kept for one game ("" for the general one), made the first time. */
+  const chatFor = async (game: string) => {
     const key = (game || "general").toLowerCase();
     const map = await readMap();
     let chat = map[key] ? await s.library.getConversation(map[key]!) : undefined;
@@ -73,6 +94,36 @@ export async function gameRoutes(app: FastifyInstance, s: KesherServices): Promi
       map[key] = chat.id;
       await writeFile(mapFile, JSON.stringify(map, null, 2));
     }
+    return chat;
+  };
+
+  /**
+   * Console mode's game helper: the game in front and its chat (made the first time), without a picture, so it works
+   * from the phone too. Only a game's name is given out, never the title of another window (a browser tab, a mail).
+   */
+  app.post("/api/game-helper/open", async () => {
+    const game = currentGame((await frontGame()).game);
+    const chat = await chatFor(game);
+    return { chatId: chat.id, game };
+  });
+
+  /**
+   * Console mode looks once when KesherAI loses the focus (the player went back to the game), so the helper knows the
+   * game later. Only from this computer; answers the game's name only.
+   */
+  app.post("/api/game-helper/seen", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only from this computer." });
+    return { game: currentGame((await frontGame()).game) };
+  });
+
+  /** The key was pressed: the game in front, its picture, and its chat (made the first time). Only from this computer. */
+  app.post("/api/game-helper/capture", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only from this computer." });
+    const front = await frontGame();
+    const game = front.game;
+    currentGame(game);
+    const shot = game ? await s.screen?.shot().catch(() => undefined) : undefined;
+    const chat = await chatFor(game);
     let file: string | undefined;
     if (shot) {
       const dir = s.conversations.workspaceOf(chat);

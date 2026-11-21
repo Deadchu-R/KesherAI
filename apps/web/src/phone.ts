@@ -49,6 +49,17 @@ export function openWithDraft(id: string, draft: string): void {
   setTimeout(() => dispatchEvent(new CustomEvent("kesher-opening", { detail: id })), 50);
 }
 
+/**
+ * Opens a conversation in voice mode (console mode's Voice tile, as the phone widget's voice button).
+ *
+ * @param id - The conversation.
+ */
+export function openWithVoice(id: string): void {
+  setOpening(id, { voice: true });
+  location.hash = `#/c/${id}`;
+  setTimeout(() => dispatchEvent(new CustomEvent("kesher-opening", { detail: id })), 50);
+}
+
 function setOpening(id: string, o: Opening): void {
   try {
     sessionStorage.setItem(`${OPENING}:${id}`, JSON.stringify(o));
