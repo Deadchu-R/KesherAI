@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { searchTopics, type FactRef } from "@kesher/shared";
 import { askText } from "../ui/askText";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -8,13 +9,16 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Fact { text: string; at: string; source: "you" | "auto" }
 interface Topic { id: string; title: string; project?: string; facts: Fact[]; updatedAt: string }
-interface Memory { topics: Topic[]; paused: boolean; auto: boolean; isolated: string[]; projects: Record<string, string> }
+interface Memory { topics: Topic[]; paused: boolean; auto: boolean; recap: boolean; isolated: string[]; projects: Record<string, string>; recapItems: FactRef[] }
 interface Coach { notes: string[]; learn: boolean }
 
 /**
  * What KesherAI remembers about you, like Claude's memory: topics (general, and each project's own), filed after
  * a chat's answer or when you say "remember"; edit and delete each fact; pause; reset; a project can keep to its
- * own memory. The coach's notes on how you work stay below.
+ * own memory. Topics can be searched, renamed, merged and deleted, and a fact moved to another topic (same scope:
+ * general or the same project; shared/memory-topics.ts). The opt-in monthly recap card ("what I learned about you
+ * this month") lists the newest facts with Remove; it shows only here, never in a notification. The coach's notes
+ * on how you work stay below.
  */
 export function MemoryPage() {
   const [m, setM] = useState<Memory | null>(null);
@@ -24,6 +28,7 @@ export function MemoryPage() {
   const [where, setWhere] = useState("");
   const [editing, setEditing] = useState<{ topic: string; i: number; text: string } | null>(null);
   const [importText, setImportText] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const load = () => {
     void api<Memory>("/api/memory").then(setM, () => undefined);
     void api<Coach>("/api/coach/profile").then(setCoach, () => undefined);
@@ -43,16 +48,49 @@ export function MemoryPage() {
       setText("");
       return r;
     });
-  const groups: Array<{ key: string; title: string; topics: Topic[] }> = [
-    { key: "", title: L("כללי", "General"), topics: m.topics.filter((t) => !t.project) },
+  // The search keeps each fact's own index, so Edit, Move and Delete still name the right one.
+  const found = searchTopics(m.topics, q);
+  const groups: Array<{ key: string; title: string; topics: Array<{ topic: Topic; indices: number[] }> }> = [
+    { key: "", title: L("כללי", "General"), topics: found.filter((r) => !r.topic.project) },
     ...Object.entries(m.projects)
-      .map(([id, name]) => ({ key: id, title: L(`פרויקט: ${name}`, `Project: ${name}`), topics: m.topics.filter((t) => t.project === id) }))
+      .map(([id, name]) => ({ key: id, title: L(`פרויקט: ${name}`, `Project: ${name}`), topics: found.filter((r) => r.topic.project === id) }))
       .filter((g) => g.topics.length),
   ];
+  /** The other topics a topic's facts may join (the same scope: general, or the same project). */
+  const peers = (t: Topic) => m.topics.filter((x) => x.id !== t.id && (x.project ?? "") === (t.project ?? ""));
+  const removeFact = (topicId: string, i: number) => void call(() => api<Memory>(`/api/memory/topics/${topicId}/facts/${i}`, { method: "PUT", body: { text: "" } }));
+  const move = (t: Topic, i: number, to: string) => {
+    if (!to) return;
+    if (to === "+") {
+      void askText(L("שם הנושא החדש:", "New topic name:"), "").then((title) => { if (title?.trim()) void call(() => api<Memory>(`/api/memory/topics/${t.id}/facts/${i}/move`, { method: "POST", body: { title } })); });
+    } else void call(() => api<Memory>(`/api/memory/topics/${t.id}/facts/${i}/move`, { method: "POST", body: { to } }));
+  };
+  const merge = (t: Topic, into: string) => {
+    const target = m.topics.find((x) => x.id === into);
+    if (target && confirm(L(`לאחד את "${t.title}" לתוך "${target.title}"?`, `Merge "${t.title}" into "${target.title}"?`))) void call(() => api<Memory>(`/api/memory/topics/${t.id}/merge`, { method: "POST", body: { into } }));
+  };
 
   return (
     <div className="page memory-page">
       <h1>{L("זיכרון", "Memory")}</h1>
+      {m.recapItems.length > 0 && (
+        <section className="card stack memory-recap" aria-label={L("סיכום חודשי", "Monthly recap")}>
+          <div className="row">
+            <h2 className="grow">{L("מה למדתי עליך החודש", "What I learned about you this month")}</h2>
+            <button type="button" className="ghost" onClick={() => void call(() => api<Memory>("/api/memory/recap/dismiss", { method: "POST" }))}>{L("הבנתי", "Got it")}</button>
+          </div>
+          <p className="muted small">{L("משהו לא נכון או לא רצוי? הסירו אותו כאן.", "Anything wrong or unwanted? Remove it here.")}</p>
+          <ul className="memory-list">
+            {m.recapItems.map((r) => (
+              <li key={`${r.topicId}-${r.index}-${r.text}`} className="row">
+                <span className="grow" dir="auto">{r.text}</span>
+                <span className="muted small" dir="auto">{r.project ? `${m.projects[r.project] ?? ""} · ` : ""}{r.title}</span>
+                <button type="button" className="link-btn" onClick={() => removeFact(r.topicId, r.index)}>{L("הסר", "Remove")}</button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="muted">
         {L(
           "מה ש-KesherAI זוכר עליך, לפי נושאים. אחרי תשובה בצ'אט הוא שומר לבד דברים שאמרת על עצמך (לא ניחושים שלו), או כשאתה אומר \"תזכור ש…\". לכל פרויקט זיכרון משלו. הכול נשמר רק במחשב הזה. סיסמאות, מפתחות ומספרי כרטיס/חשבון/ת\"ז לא נשמרים אף פעם.",
@@ -74,6 +112,10 @@ export function MemoryPage() {
             {L("ללמוד גם איך אני עובד (המאמן)", "Also learn how I work (the coach)")}
           </label>
         )}
+        <label className="check">
+          <input type="checkbox" checked={m.recap} onChange={(e) => void call(() => api<Memory>("/api/memory/settings", { method: "PUT", body: { recap: e.target.checked } }))} />
+          {L("סיכום חודשי: מה למדתי עליך החודש (רק בעמוד הזה, לא בהתראות)", "Monthly recap: what I learned about you this month (on this page only, never in notifications)")}
+        </label>
         <p className="muted small">{L("צ'אט בלי זיכרון: בצ'אט חדש לחצו על 👻 — הוא לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש.", "A chat without memory: in a new chat press 👻 — it neither reads nor files memory, and stays out of search.")}</p>
       </section>
 
@@ -115,6 +157,10 @@ export function MemoryPage() {
       </section>
 
       {m.topics.length === 0 && <p className="muted">{L("עוד אין כלום בזיכרון.", "Nothing in memory yet.")}</p>}
+      {m.topics.length > 0 && (
+        <input type="search" className="memory-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={L("חיפוש בזיכרון…", "Search memory…")} aria-label={L("חיפוש בזיכרון", "Search memory")} dir="auto" />
+      )}
+      {m.topics.length > 0 && q.trim() && !found.length && <p className="muted">{L("לא נמצא כלום.", "Nothing found.")}</p>}
       {groups.map((g) =>
         g.topics.length ? (
           <section key={g.key || "general"} className="stack memory-group">
@@ -127,15 +173,21 @@ export function MemoryPage() {
                 </label>
               )}
             </div>
-            {g.topics.map((t) => (
+            {g.topics.map(({ topic: t, indices }) => (
               <article key={t.id} className="card stack memory-topic">
-                <div className="row">
+                <div className="row memory-topic-bar">
                   <h3 className="grow" dir="auto">{t.title}</h3>
                   <button type="button" className="link-btn" onClick={() => void askText(L("שם הנושא:", "Topic name:"), t.title).then((v) => { if (v?.trim()) void call(() => api<Memory>(`/api/memory/topics/${t.id}`, { method: "PUT", body: { title: v } })); })}>{L("שינוי שם", "Rename")}</button>
                   <button type="button" className="link-btn" onClick={() => confirm(L(`למחוק את הנושא "${t.title}"?`, `Delete the topic "${t.title}"?`)) && void call(() => api<Memory>(`/api/memory/topics/${t.id}`, { method: "DELETE" }))}>{L("מחק נושא", "Delete topic")}</button>
+                  {peers(t).length > 0 && (
+                    <select value="" onChange={(e) => merge(t, e.target.value)} aria-label={L("איחוד עם נושא אחר", "Merge into another topic")}>
+                      <option value="">{L("איחוד לתוך…", "Merge into…")}</option>
+                      {peers(t).map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+                    </select>
+                  )}
                 </div>
                 <ul className="memory-list">
-                  {t.facts.map((f, i) => (
+                  {indices.map((i) => ({ f: t.facts[i]!, i })).map(({ f, i }) => (
                     <li key={`${i}-${f.text}`} className="row">
                       {editing?.topic === t.id && editing.i === i ? (
                         <form className="row grow" onSubmit={(e) => { e.preventDefault(); void call(() => api<Memory>(`/api/memory/topics/${t.id}/facts/${i}`, { method: "PUT", body: { text: editing.text } })).then(() => setEditing(null)); }}>
@@ -148,7 +200,12 @@ export function MemoryPage() {
                           <span className="grow" dir="auto">{f.text}</span>
                           <span className="muted small" title={new Date(f.at).toLocaleString()}>{f.source === "auto" ? L("נשמר לבד", "filed") : L("ממך", "from you")}</span>
                           <button type="button" className="link-btn" onClick={() => setEditing({ topic: t.id, i, text: f.text })}>{L("ערוך", "Edit")}</button>
-                          <button type="button" className="link-btn" onClick={() => void call(() => api<Memory>(`/api/memory/topics/${t.id}/facts/${i}`, { method: "PUT", body: { text: "" } }))}>{L("מחק", "Delete")}</button>
+                          <select className="memory-move" value="" onChange={(e) => move(t, i, e.target.value)} aria-label={L("העברה לנושא אחר", "Move to another topic")}>
+                            <option value="">{L("העבר…", "Move…")}</option>
+                            {peers(t).map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+                            <option value="+">{L("+ נושא חדש…", "+ New topic…")}</option>
+                          </select>
+                          <button type="button" className="link-btn" onClick={() => removeFact(t.id, i)}>{L("מחק", "Delete")}</button>
                         </>
                       )}
                     </li>

@@ -8,9 +8,12 @@
  *   general memory unless the project switched that off.
  * - Pause: memory is neither used nor filled, and what is kept stays. Reset: everything is deleted.
  * - Never kept: passwords, keys, card, account and ID numbers (checked on every write).
+ * - Topics can be merged and facts moved between them (shared/memory-topics.ts). The monthly recap ("what I learned
+ *   about you this month") is opt-in and shows only on the Memory page, never in a notification.
  */
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { mergeTopics, monthKey, monthlyRecap, moveFact, type FactRef } from "@kesher/shared";
 
 /** One remembered fact and where it came from. */
 export interface MemoryFact {
@@ -38,6 +41,10 @@ export interface MemoryData {
   auto: boolean;
   /** Projects whose chats do not read the general memory. */
   isolated: string[];
+  /** The monthly recap card on the Memory page (opt-in, off by default). */
+  recap: boolean;
+  /** The month ("YYYY-MM") whose recap card was dismissed. */
+  recapSeen?: string;
 }
 
 const MAX_TOPICS = 60;
@@ -63,9 +70,9 @@ export class MemoryStore {
     if (this.cache) return this.cache;
     try {
       const d = JSON.parse(await readFile(this.file, "utf8")) as Partial<MemoryData>;
-      this.cache = { topics: Array.isArray(d.topics) ? d.topics : [], paused: !!d.paused, auto: d.auto !== false, isolated: Array.isArray(d.isolated) ? d.isolated : [] };
+      this.cache = { topics: Array.isArray(d.topics) ? d.topics : [], paused: !!d.paused, auto: d.auto !== false, isolated: Array.isArray(d.isolated) ? d.isolated : [], recap: d.recap === true, ...(typeof d.recapSeen === "string" ? { recapSeen: d.recapSeen } : {}) };
     } catch {
-      this.cache = { topics: [], paused: false, auto: true, isolated: [] };
+      this.cache = { topics: [], paused: false, auto: true, isolated: [], recap: false };
     }
     return this.cache;
   }
@@ -79,11 +86,12 @@ export class MemoryStore {
     return this.writes;
   }
 
-  /** Changes settings (pause, auto filing, a project's isolation). */
-  async settings(p: { paused?: boolean; auto?: boolean; isolate?: { project: string; on: boolean } }): Promise<MemoryData> {
+  /** Changes settings (pause, auto filing, a project's isolation, the monthly recap). */
+  async settings(p: { paused?: boolean; auto?: boolean; recap?: boolean; isolate?: { project: string; on: boolean } }): Promise<MemoryData> {
     const d = await this.data();
     if (p.paused !== undefined) d.paused = p.paused;
     if (p.auto !== undefined) d.auto = p.auto;
+    if (p.recap !== undefined) d.recap = p.recap;
     if (p.isolate) d.isolated = p.isolate.on ? [...new Set([...d.isolated, p.isolate.project])] : d.isolated.filter((x) => x !== p.isolate!.project);
     await this.save();
     return d;
@@ -162,6 +170,43 @@ export class MemoryStore {
       const t = d.topics.find((x) => x.id === topicId);
       if (t && title.trim()) t.title = title.trim().slice(0, 60);
     }
+    await this.save();
+    return d;
+  }
+
+  /** Merges one topic into another of the same scope (general, or the same project). */
+  async mergeTopic(fromId: string, intoId: string): Promise<MemoryData> {
+    const d = await this.data();
+    mergeTopics(d.topics, fromId, intoId);
+    await this.save();
+    return d;
+  }
+
+  /** Moves one fact to another topic of the same scope: an existing one (`toId`) or a new one by `title`. */
+  async moveFact(topicId: string, index: number, to: { toId: string } | { title: string }): Promise<MemoryData> {
+    const d = await this.data();
+    moveFact(d.topics, topicId, index, to, randomUUID);
+    if (d.topics.length > MAX_TOPICS) d.topics.splice(0, d.topics.length - MAX_TOPICS);
+    await this.save();
+    return d;
+  }
+
+  /**
+   * The monthly recap card's facts: those filed in the last 30 days, while the recap is on, memory is not paused and
+   * this month's card was not dismissed; otherwise empty.
+   *
+   * @param now - The time now (tests pass a fixed one).
+   */
+  async recap(now = new Date()): Promise<FactRef[]> {
+    const d = await this.data();
+    if (!d.recap || d.paused || d.recapSeen === monthKey(now)) return [];
+    return monthlyRecap(d.topics, now);
+  }
+
+  /** Hides this month's recap card (it comes back next month). */
+  async dismissRecap(now = new Date()): Promise<MemoryData> {
+    const d = await this.data();
+    d.recapSeen = monthKey(now);
     await this.save();
     return d;
   }

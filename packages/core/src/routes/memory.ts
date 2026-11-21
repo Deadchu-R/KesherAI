@@ -9,15 +9,17 @@ export async function memoryRoutes(app: FastifyInstance, s: KesherServices): Pro
   const view = async () => {
     const d = await s.memory.data();
     const projects = Object.fromEntries(s.library.listProjects().map((p) => [p.id, p.name]));
-    return { ...d, projects };
+    // The recap card's facts (opt-in): only here, on the Memory page; never sent as a notification.
+    return { ...d, projects, recapItems: await s.memory.recap() };
   };
   app.get("/api/memory", view);
 
-  app.put<{ Body: { paused?: boolean; auto?: boolean; isolate?: { project?: string; on?: boolean } } }>("/api/memory/settings", async (req) => {
+  app.put<{ Body: { paused?: boolean; auto?: boolean; recap?: boolean; isolate?: { project?: string; on?: boolean } } }>("/api/memory/settings", async (req) => {
     const b = req.body ?? {};
     await s.memory.settings({
       ...(typeof b.paused === "boolean" ? { paused: b.paused } : {}),
       ...(typeof b.auto === "boolean" ? { auto: b.auto } : {}),
+      ...(typeof b.recap === "boolean" ? { recap: b.recap } : {}),
       ...(b.isolate && typeof b.isolate.project === "string" ? { isolate: { project: b.isolate.project, on: b.isolate.on === true } } : {}),
     });
     return view();
@@ -51,6 +53,33 @@ export async function memoryRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
   app.delete<{ Params: { topic: string } }>("/api/memory/topics/:topic", async (req) => {
     await s.memory.editTopic(req.params.topic);
+    return view();
+  });
+
+  /** Merge this topic into another (`into`: its id); both in the same scope. */
+  app.post<{ Params: { topic: string }; Body: { into?: string } }>("/api/memory/topics/:topic/merge", async (req, reply) => {
+    try {
+      await s.memory.mergeTopic(req.params.topic, String(req.body?.into ?? ""));
+      return view();
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Move one fact to another topic: `to` (a topic's id) or `title` (a new or existing topic by name). */
+  app.post<{ Params: { topic: string; index: string }; Body: { to?: string; title?: string } }>("/api/memory/topics/:topic/facts/:index/move", async (req, reply) => {
+    try {
+      const b = req.body ?? {};
+      await s.memory.moveFact(req.params.topic, Number(req.params.index), typeof b.to === "string" && b.to ? { toId: b.to } : { title: String(b.title ?? "") });
+      return view();
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  /** Hides this month's recap card. */
+  app.post("/api/memory/recap/dismiss", async () => {
+    await s.memory.dismissRecap();
     return view();
   });
 

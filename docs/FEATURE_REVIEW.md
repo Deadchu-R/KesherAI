@@ -81,7 +81,7 @@ sharing `chat/ShareDialog.tsx`, `routes/shares.ts`, guests (`GuestApp.tsx`, `rou
 - ✅ S: Turn duration and status line ("waiting for approval", "running tool") under the busy answer. (turn-status.ts)
 - M: Shared chat mode "Allow replies" for guests, with sender names, live streaming and typing indicator.
 - L: Realtime voice hand-off with a small local voice model, approvals routed to the screen.
-- M: Memory topics view and an opt-in monthly recap card.
+- ✅ M: Memory topics view and an opt-in monthly recap card. (memory-topics.ts, MemoryPage.tsx)
 - ✅ S: Command palette lists chats and projects; `/archive`; day separators in long chats. (chat-archive.ts, pages/ArchivedPage.tsx)
 
 ### Sources

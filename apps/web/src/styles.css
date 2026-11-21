@@ -4514,3 +4514,12 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .span-edit-diff.code { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; }
 .span-edit-diff del { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); text-decoration: line-through; }
 .span-edit-diff ins { color: var(--good); background: color-mix(in srgb, var(--good) 16%, transparent); text-decoration: none; }
+/* Memory topics (MemoryPage.tsx): search, merge and move, and the opt-in monthly recap card. */
+.memory-search { width: 100%; margin-top: 12px; }
+.memory-topic-bar { flex-wrap: wrap; gap: 6px 10px; }
+.memory-topic-bar h3 { min-width: min(100%, 9em); overflow-wrap: anywhere; }
+.memory-topic-bar select, .memory-move { max-width: 140px; font-size: 13px; padding-block: 2px; }
+.memory-page .memory-list li { flex-wrap: wrap; }
+.memory-page .memory-list li > .grow { min-width: min(100%, 180px); overflow-wrap: anywhere; }
+.memory-recap { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+.memory-recap h2 { margin: 0; }

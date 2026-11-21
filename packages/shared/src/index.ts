@@ -54,3 +54,4 @@ export * from "./scene-diff.js";
 export * from "./chat-queue.js";
 export * from "./thinking.js";
 export * from "./span-edit.js";
+export * from "./memory-topics.js";

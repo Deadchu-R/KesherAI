@@ -1,0 +1,206 @@
+{
+ "group": "זיכרון: נושאים וסיכום חודשי",
+ "mocks": [
+  {
+   "url": "**/api/memory",
+   "method": "GET",
+   "json": {
+    "topics": [
+     {
+      "id": "t1",
+      "title": "עבודה",
+      "facts": [
+       {
+        "text": "מפתח משחקים ב-Unreal",
+        "at": {
+         "$ago": "40d"
+        },
+        "source": "you"
+       },
+       {
+        "text": "עובד על מערכות UI",
+        "at": {
+         "$ago": "12d"
+        },
+        "source": "auto"
+       },
+       {
+        "text": "מחפש משרת Unity או Unreal",
+        "at": {
+         "$ago": "3d"
+        },
+        "source": "you"
+       }
+      ],
+      "updatedAt": {
+       "$ago": "3d"
+      }
+     },
+     {
+      "id": "t2",
+      "title": "קריירה",
+      "facts": [
+       {
+        "text": "למד עיצוב משחקים שלוש שנים",
+        "at": {
+         "$ago": "50d"
+        },
+        "source": "you"
+       }
+      ],
+      "updatedAt": {
+       "$ago": "50d"
+      }
+     },
+     {
+      "id": "t3",
+      "title": "העדפות",
+      "facts": [
+       {
+        "text": "מעדיף תשובות קצרות בעברית",
+        "at": {
+         "$ago": "6d"
+        },
+        "source": "auto"
+       },
+       {
+        "text": "עובד בעיקר מהטלפון באמצע השבוע",
+        "at": {
+         "$ago": "2d"
+        },
+        "source": "auto"
+       }
+      ],
+      "updatedAt": {
+       "$ago": "2d"
+      }
+     },
+     {
+      "id": "t4",
+      "title": "הערות",
+      "project": "p1",
+      "facts": [
+       {
+        "text": "הפרויקט כתוב ב-TypeScript עם pnpm",
+        "at": {
+         "$ago": "9d"
+        },
+        "source": "you"
+       }
+      ],
+      "updatedAt": {
+       "$ago": "9d"
+      }
+     }
+    ],
+    "paused": false,
+    "auto": true,
+    "recap": true,
+    "isolated": [],
+    "projects": {
+     "p1": "KesherAI"
+    },
+    "recapItems": [
+     {
+      "topicId": "t3",
+      "title": "העדפות",
+      "index": 1,
+      "text": "עובד בעיקר מהטלפון באמצע השבוע",
+      "at": {
+       "$ago": "2d"
+      }
+     },
+     {
+      "topicId": "t1",
+      "title": "עבודה",
+      "index": 2,
+      "text": "מחפש משרת Unity או Unreal",
+      "at": {
+       "$ago": "3d"
+      }
+     },
+     {
+      "topicId": "t3",
+      "title": "העדפות",
+      "index": 0,
+      "text": "מעדיף תשובות קצרות בעברית",
+      "at": {
+       "$ago": "6d"
+      }
+     },
+     {
+      "topicId": "t4",
+      "title": "הערות",
+      "index": 0,
+      "text": "הפרויקט כתוב ב-TypeScript עם pnpm",
+      "at": {
+       "$ago": "9d"
+      },
+      "project": "p1"
+     },
+     {
+      "topicId": "t1",
+      "title": "עבודה",
+      "index": 1,
+      "text": "עובד על מערכות UI",
+      "at": {
+       "$ago": "12d"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/coach/profile",
+   "json": {
+    "notes": [],
+    "learn": false
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "MemoryTopicsRecap",
+   "title": "זיכרון: סיכום חודשי (לבחירה) עם הסרה לכל פרט, ונושאים עם איחוד והעברה",
+   "titleEn": "Memory: opt-in monthly recap with Remove, topics with merge and move",
+   "route": "#/memory",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1500,
+    "phone": 2300
+   },
+   "steps": [
+    {
+     "wait": ".memory-recap"
+    }
+   ]
+  },
+  {
+   "id": "MemoryTopicsSearch",
+   "title": "זיכרון: חיפוש בנושאים ובפרטים",
+   "titleEn": "Memory: search across topics and facts",
+   "route": "#/memory",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 1900
+   },
+   "steps": [
+    {
+     "wait": ".memory-search"
+    },
+    {
+     "fill": ".memory-search",
+     "value": "Unreal"
+    },
+    {
+     "scroll": ".memory-search"
+    }
+   ]
+  }
+ ]
+}

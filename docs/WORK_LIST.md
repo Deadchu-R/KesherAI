@@ -189,7 +189,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor) (in code: turn-status.ts, chat/TurnStatusLine.tsx)
 - ⬜ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12)
 - ⬜ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI)
-- ⬜ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude)
+- ✅ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude) (in code: shared/memory-topics.ts, memory-store.ts, pages/MemoryPage.tsx: search, merge, move, recap with Remove)
 - ✅ Command palette lists chats and projects; /archive instead of delete; day separators in long chats (LM Studio) (in code: chat-archive.ts, pages/ArchivedPage.tsx, CommandPalette.tsx)
 
 ## Backlog: Game engines
