@@ -17,6 +17,7 @@ import {
   keyFingerprint,
   openEnvelope,
   parseDeviceFrame,
+  parseEnvelope,
   randomB64url,
   sealMessage,
   sha256Hex,
@@ -684,7 +685,8 @@ export class Hub {
     // the PC's board or the hub page.
     if (env.to === "hub" && (env.kind === "progress" || env.kind === "result")) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: false });
     if (env.to === "hub") return this.cloud(from, env, refuse);
-    if (env.kind === "cloud" || env.kind === "cloud_started") return refuse("not-allowed", env.id);
+    // An ask note only rides inside an `approvals` envelope (into the Web Push payload), never on its own.
+    if (env.kind === "cloud" || env.kind === "cloud_started" || env.kind === "ask_note") return refuse("not-allowed", env.id);
     const to = this.store.device(env.to);
     if (!to || to.id === from.id) return refuse("no-recipient", env.id);
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
@@ -699,15 +701,40 @@ export class Hub {
       if (!this.limits.take(`command:${from.id}`, LIMITS.command)) return refuse("rate-limited", env.id);
     }
     const t = this.now();
-    const added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(env), createdAt: t });
+    // The note is for the push only: the queued and delivered envelope goes without it.
+    const { note, ...plain } = env;
+    const added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(plain), createdAt: t });
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
-    const online = this.sockets.send(to.id, { t: "deliver", env });
+    const online = this.sockets.send(to.id, { t: "deliver", env: plain });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
     if (env.kind !== "progress" && env.kind !== "inbox_task" && env.kind !== "approvals" && env.kind !== "command_result") this.audit(`relay-${env.kind}`, { deviceId: from.id });
     if (env.kind === "approvals" && env.waiting !== undefined) {
       this.noteWaiting(from.id, env.waiting);
-      await this.notifyWaiting(to.id, env.waiting, online);
+      await this.notifyWaiting(to.id, env.waiting, online, note);
     }
+  }
+
+  /**
+   * One approval answer from a phone's service worker (the notification's Approve / Deny or Run / Not now, with the
+   * hub page closed and so no socket): the same checks and relay as a socket `send`, for this one kind only. The
+   * envelope is sealed and signed by the device itself (the hub cannot read or forge it); the PC checks the device.
+   *
+   * @param bearer - The device's token.
+   * @param body - `{env}`: the sealed `approval_answer`.
+   * @returns Whether it was queued for a PC that is off, or why it was refused.
+   */
+  async answerByHttp(bearer: string | undefined, body: unknown): Promise<{ ok: true; queued: boolean } | HubError> {
+    const d = await this.deviceForToken(bearer);
+    if (!d) return fail(401, "Unknown device.");
+    if (d.kind !== "phone") return fail(403, "Only a phone or a hub page answers approvals.");
+    if (this.paused) return fail(503, "The hub is paused.");
+    if (!this.limits.take(`message:${d.id}`, LIMITS.message)) return fail(429, "rate-limited");
+    const env = parseEnvelope(body && typeof body === "object" ? (body as { env?: unknown }).env : undefined);
+    if (!env || env.kind !== "approval_answer" || env.from !== d.id) return fail(400, "bad-frame");
+    let refused: HubRefusal | undefined;
+    await this.relay(d, env, (code) => void (refused = code));
+    if (refused) return fail(refused === "rate-limited" ? 429 : refused === "no-recipient" ? 404 : 403, refused);
+    return { ok: true, queued: !this.sockets.isOnline(env.to) };
   }
 
   // ---- Web Push ("N waiting for you" on a phone whose page is closed) ----
@@ -762,7 +789,7 @@ export class Hub {
    * the count grew past what it last saw or was told: one push, at most one per {@link PUSH.gapMs} (sooner ones
    * collapse into the notification already shown). A subscription the push service calls gone (404, 410) is dropped.
    */
-  private async notifyWaiting(deviceId: string, n: number, online: boolean): Promise<void> {
+  private async notifyWaiting(deviceId: string, n: number, online: boolean, note?: SealedEnvelope): Promise<void> {
     const sub = this.pushSub(deviceId);
     const vapid = this.deps.config.vapid;
     if (!sub || !vapid) return;
@@ -775,7 +802,7 @@ export class Hub {
     if (t - sub.last < PUSH.gapMs) return;
     save({ ...sub, count: n, last: t });
     try {
-      const status = await sendPush(sub, n, vapid, { fetch: this.deps.fetchPush ?? fetch.bind(globalThis), now: t });
+      const status = await sendPush(sub, n, vapid, { fetch: this.deps.fetchPush ?? fetch.bind(globalThis), now: t }, note);
       if (status === 404 || status === 410) {
         this.store.setSetting(pushKey(deviceId), undefined);
         this.audit("push-gone", { deviceId });

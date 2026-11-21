@@ -7,6 +7,8 @@ import { webPushEncrypt } from "../../../packages/core/src/phone-push.js";
 import { fromB64url, generateHubKeys, sealMessage, toB64url, type HubKeyPair, type SealedBody } from "../../../packages/shared/src/hub.js";
 import { Hub, isHubError, type DeviceSockets } from "./hub.js";
 import { MemoryStore } from "./store.js";
+import { answerAsk, notificationForPush, type AskData, type AskIo } from "../page/ask-note.js";
+import { openEnvelope } from "../../../packages/shared/src/hub.js";
 import { cleanPushSub, encryptPush, PUSH, pushText, vapidAuth, vapidFromEnv, type VapidKeys } from "./web-push.js";
 
 /** A browser's push keys (as `PushSubscription.toJSON().keys`), with its private key for decrypting in the test. */
@@ -178,7 +180,7 @@ test("hub push: kept per phone, pushed when the count grows on a closed page, at
   assert.equal(h.topic, PUSH.topic);
   assert.equal(h.urgency, "high");
   assert.match(h.authorization!, /^vapid t=.+, k=/);
-  assert.deepEqual(JSON.parse(decrypt(calls[0]!.init.body as Uint8Array, b)), { title: "KesherAI", body: "2 waiting for you", n: 2, tag: PUSH.tag, url: PUSH.url });
+  assert.deepEqual(JSON.parse(decrypt(calls[0]!.init.body as Uint8Array, b)), { title: "KesherAI", body: "2 waiting for you", n: 2, tag: PUSH.tag, url: PUSH.url, lang: "en" });
 
   await send(3);
   assert.equal(calls.length, 1, "within 30 s: collapsed into the shown notification");
@@ -224,4 +226,94 @@ test("hub push: off when the hub has no VAPID keys", async () => {
   const b = browser();
   const r = await hub.pushSubscribe(phone.token, { endpoint: FCM, keys: { p256dh: b.p256dh, auth: b.auth } });
   assert.ok(isHubError(r) && r.status === 503);
+});
+
+test("ask with buttons, end to end: the PC's sealed note rides the push unread; the phone opens it, answers once, sealed, through /api/answer", async () => {
+  const { hub, sockets, calls, pair } = await setup();
+  const pc = await pair("pc");
+  const phone = await pair("phone");
+  sockets.on.add(pc.id);
+  const b = browser();
+  assert.deepEqual(await hub.pushSubscribe(phone.token, { endpoint: FCM, keys: { p256dh: b.p256dh, auth: b.auth }, lang: "he" }), { ok: true });
+  const until = 1_000_000 + 30 * 60_000;
+  const ask = { requestId: "a1b2c3d4e5f6a1b2c3d4e5f6", conversationId: "task-inbox", kind: "run" as const, title: "Fix the hub status", until };
+  const env = await sealMessage({ from: pc.id, to: phone.id, kind: "approvals" }, snap, pc.keys.privateKey, phone.keys.publicKey);
+  const note = await sealMessage({ from: pc.id, to: phone.id, kind: "ask_note" }, { type: "ask_note", ask, waiting: 2 }, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: { ...env, waiting: 2, note } }));
+  assert.equal(calls.length, 1);
+  const payloadText = decrypt(calls[0]!.init.body as Uint8Array, b);
+  assert.ok(!payloadText.includes("Fix the hub status") && !payloadText.includes(ask.requestId), "the hub cannot read the ask");
+  const payload = JSON.parse(payloadText) as Record<string, unknown>;
+  assert.equal(payload.lang, "he");
+
+  // The phone's service worker: its own key and the PC's key from IndexedDB.
+  const kv = new Map<string, unknown>([["device", { deviceId: phone.id, token: phone.token, privateKey: phone.keys.privateKey }], ["pcKeys", { [pc.id]: { publicKey: pc.keys.publicKey, name: "Home PC" } }]]);
+  let now = 1_000_000;
+  const posted: unknown[] = [];
+  const io: AskIo = {
+    get: async <T>(k: string) => kv.get(k) as T | undefined,
+    put: async (k, v) => void kv.set(k, v),
+    now: () => now,
+    fetch: (async (url: string, init: RequestInit) => {
+      assert.equal(url, "/api/answer");
+      const body = JSON.parse(String(init.body)) as unknown;
+      posted.push(body);
+      const r = await hub.answerByHttp(String((init.headers as Record<string, string>).authorization).replace(/^Bearer /, ""), body);
+      return new Response(JSON.stringify(r), { status: isHubError(r) ? r.status : 200 });
+    }) as typeof fetch,
+  };
+  const shown = await notificationForPush(payload, io);
+  assert.equal(shown.title, "✦ להריץ ב-Antigravity?");
+  assert.deepEqual(shown.options.actions?.map((a) => a.action), ["allow", "deny"]);
+  assert.equal(shown.options.actions?.[0]?.title, "▶ הפעל");
+  assert.equal(shown.options.dir, "rtl");
+  assert.match(shown.options.body, /Fix the hub status\n🖥 Home PC · עד .+ · ועוד 1 מחכים/);
+  assert.equal(shown.options.data.url, `/#waiting=${ask.requestId}`);
+
+  // Run: one sealed answer reaches the PC (queued while it is off), from this phone; a second tap sends nothing.
+  sockets.on.delete(pc.id);
+  assert.equal(await answerAsk(shown.options.data, "allow", io), "sent");
+  assert.equal(await answerAsk(shown.options.data, "allow", io), "answered");
+  assert.equal(posted.length, 1);
+  const sent = (posted[0] as { env: Parameters<typeof openEnvelope>[0] }).env;
+  assert.deepEqual(await openEnvelope(sent, pc.keys.privateKey, phone.keys.publicKey), { type: "approval_answer", requestId: ask.requestId, conversationId: "task-inbox", decision: "allow" });
+  // The same push again (a replay) shows the count only: that ask was answered here.
+  assert.equal((await notificationForPush(payload, io)).options.actions, undefined);
+
+  // After the ask's time: refused here, and the notification says it expired.
+  const late: AskData = { ...shown.options.data, ask: { ...shown.options.data.ask!, requestId: "other-ask" } };
+  now = until;
+  assert.equal(await answerAsk(late, "allow", io), "expired");
+  assert.equal(posted.length, 1);
+  assert.equal((await notificationForPush(payload, { ...io, get: async <T>(k: string) => (k === "answered" ? undefined : (kv.get(k) as T | undefined)) })).title, "⌛ הבקשה פגה");
+});
+
+test("/api/answer and notes: only a phone's own approval_answer; a note never relays alone; a bad note is dropped, the count still pushes", async () => {
+  const { hub, sockets, calls, pair } = await setup();
+  const pc = await pair("pc");
+  const phone = await pair("phone");
+  sockets.on.add(pc.id);
+  const answer: SealedBody = { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "deny" };
+  const ok = await sealMessage({ from: phone.id, to: pc.id, kind: "approval_answer" }, answer, phone.keys.privateKey, pc.keys.publicKey);
+  assert.deepEqual(await hub.answerByHttp(phone.token, { env: ok }), { ok: true, queued: false });
+  assert.ok(isHubError(await hub.answerByHttp("kh_wrong", { env: ok })), "a device token is needed");
+  const fromPc = await sealMessage({ from: pc.id, to: phone.id, kind: "approval_answer" }, answer, pc.keys.privateKey, phone.keys.publicKey);
+  assert.ok(isHubError(await hub.answerByHttp(pc.token, { env: fromPc })), "a PC cannot answer");
+  const spoof = await sealMessage({ from: pc.id, to: pc.id, kind: "approval_answer" }, answer, phone.keys.privateKey, pc.keys.publicKey);
+  assert.ok(isHubError(await hub.answerByHttp(phone.token, { env: spoof })), "the sender must be the token's device");
+  const cmd = await sealMessage({ from: phone.id, to: pc.id, kind: "command" }, { type: "command", commandId: "x1", action: "inbox-run", taskId: "t1" }, phone.keys.privateKey, pc.keys.publicKey);
+  assert.ok(isHubError(await hub.answerByHttp(phone.token, { env: cmd })), "approval answers only");
+
+  // A note on its own is refused; a note between other devices is dropped from the snapshot.
+  const b = browser();
+  assert.deepEqual(await hub.pushSubscribe(phone.token, { endpoint: FCM, keys: { p256dh: b.p256dh, auth: b.auth }, lang: "en" }), { ok: true });
+  const ask = { requestId: "r2", conversationId: "c1", kind: "tool" as const, title: "Run a command", until: 9e12 };
+  const lone = await sealMessage({ from: pc.id, to: phone.id, kind: "ask_note" }, { type: "ask_note", ask, waiting: 1 }, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: lone }));
+  assert.equal(calls.length, 0);
+  const env = await sealMessage({ from: pc.id, to: phone.id, kind: "approvals" }, snap, pc.keys.privateKey, phone.keys.publicKey);
+  const wrong = await sealMessage({ from: pc.id, to: pc.id, kind: "ask_note" }, { type: "ask_note", ask, waiting: 1 }, pc.keys.privateKey, phone.keys.publicKey);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "send", env: { ...env, waiting: 1, note: wrong } }));
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(decrypt(calls[0]!.init.body as Uint8Array, b)), { title: "KesherAI", body: "1 waiting for you", n: 1, tag: PUSH.tag, url: PUSH.url, lang: "en" });
 });

@@ -57,6 +57,10 @@ export const HUB_LIMITS = {
     approvalsChars: 10_000,
     /** The longest "Allow for a while" from the hub page, in minutes (a day, as on the PC's own card). */
     approvalForMaxMin: 24 * 60,
+    /** The largest `ask_note` ciphertext (it rides in a Web Push payload, at most about 4 KB in all). */
+    noteCtChars: 1500,
+    /** An `ask_note`'s title, in characters (a notification line). */
+    noteTitleChars: 80,
 };
 /**
  * The device kind a pairing request asks for (anything unknown is a PC, as before the kind existed).
@@ -67,7 +71,7 @@ export const HUB_LIMITS = {
 export function cleanDeviceKind(x) {
     return x === "phone" || x === "claude-chat" ? x : "pc";
 }
-const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result"];
+const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note"];
 /** The opt-in a new PC starts with. */
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
@@ -128,6 +132,7 @@ export const BODY_FOR_KIND = {
     approvals: "approvals",
     command: "command",
     command_result: "command_result",
+    ask_note: "ask_note",
 };
 const ID = /^[\w-]{1,64}$/;
 const B64URL = /^[A-Za-z0-9_-]+$/;
@@ -205,7 +210,7 @@ export function cleanAgents(x, reportLinks) {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind, asked) {
-    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+    const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
     const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
     return Math.max(60, Math.min(max, n));
 }
@@ -238,7 +243,26 @@ export function parseEnvelope(x) {
     // The waiting count of an approvals snapshot (anything else, or a bad value, is dropped, never refused).
     const w = e.waiting;
     const waiting = kind === "approvals" && typeof w === "number" && Number.isInteger(w) && w >= 0 && w <= 999 ? w : undefined;
-    return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}) };
+    const note = kind === "approvals" ? parseAskNoteEnvelope(e.note, e.from, e.to) : undefined;
+    return { v: HUB_PROTOCOL, id: e.id, from: e.from, to: e.to, kind, ttl: ttlFor(kind, e.ttl), iv: e.iv, ct: e.ct, ...(waiting !== undefined ? { waiting } : {}), ...(note ? { note } : {}) };
+}
+/**
+ * Checks the `ask_note` an `approvals` envelope carries: an `ask_note` between the same two devices, small, and with
+ * nothing nested. A bad one is dropped (the snapshot still goes; the phone then gets the count-only notification).
+ *
+ * @param x - Untrusted input.
+ * @param from - The outer envelope's sender.
+ * @param to - The outer envelope's recipient.
+ * @returns The note, or undefined.
+ */
+export function parseAskNoteEnvelope(x, from, to) {
+    if (!x || typeof x !== "object")
+        return undefined;
+    const n = x;
+    if (n.kind !== "ask_note" || n.from !== from || n.to !== to || typeof n.ct !== "string" || n.ct.length > HUB_LIMITS.noteCtChars)
+        return undefined;
+    const env = parseEnvelope({ ...n, note: undefined });
+    return env && env.kind === "ask_note" ? env : undefined;
 }
 /**
  * Reads one device frame from a socket message.
@@ -379,6 +403,15 @@ export function parseSealedBody(x, kind) {
             const executor = INBOX_EXECUTORS.includes(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
             return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+        }
+        case "ask_note": {
+            const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;
+            if (!a || !isHubId(a.requestId) || !isHubId(a.conversationId))
+                return null;
+            const until = num(a.until);
+            if (!until)
+                return null;
+            return { type: "ask_note", ask: { requestId: a.requestId, conversationId: a.conversationId, kind: a.kind === "run" ? "run" : "tool", title: str(a.title, HUB_LIMITS.noteTitleChars).trim(), until }, waiting: Math.min(num(b.waiting), 999) };
         }
         default:
             return null;

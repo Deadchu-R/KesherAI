@@ -240,6 +240,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Backup update source without GitHub (updates from the user's own computers); keep GitHub too (in code: updates-peer.test.ts)
 - ⬜ The phone app does not get the PC's update or notes when only the PC updated not built
 - ⬜ Phone app redesign in the same design line; phone health screen; settings button while connected not built
+- ✅ Phone approvals from the notification (2026-11-21): the hub's push shows the newest ask with two buttons — "▶ הפעל / לא עכשיו" for an Antigravity Run ask, "✓ אשר / דחה" for any other approval; a button sends the answer sealed from the phone to the PC (one answer, refused after expiry); a tap opens the ask's card. The PC seals the ask to the phone; the hub sees only the count. 👤 Roee: after the release, open the hub web app on the phone once (it loads the new service worker and the PCs' keys); notifications stay on, no re-subscribe. iPhone: no buttons, only the tap.
 - 🔨 Notifications like any app, no ntfy and no cost, opening the right page (37a0a1b 6f91127 hub Web Push) missing: ntfy still used on the PC
 - ⬜ A computer about to sleep tells the others; faster device discovery with status not built
 - ⬜ Found computers shared by every chat; disconnect and switch computer from the menu not built

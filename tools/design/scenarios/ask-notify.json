@@ -1,0 +1,117 @@
+{
+ "group": "האב · Hub",
+ "target": "hub",
+ "now": "2026-11-21T09:00:00Z",
+ "boards": [
+  {
+   "id": "PhoneAskNotify",
+   "title": "התראה בטלפון עם כפתורים: הפעל / לא עכשיו (Antigravity), אשר / דחה, נשלח, פגה",
+   "route": "/design/ask-notify",
+   "hub": {},
+   "height": {
+    "desktop": 1050,
+    "phone": 1150
+   },
+   "steps": [
+    {
+     "wait": ".n"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/design/ask-notify",
+     "body": "<!DOCTYPE html><html lang=\"he\" dir=\"rtl\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(160deg,#1c2433,#0d0f14);font-family:Roboto,system-ui,sans-serif;color:#e8eaed;display:flex;justify-content:center}\n.shade{width:100%;max-width:420px;padding:18px 12px 30px}.clock{font-size:44px;font-weight:300;margin:6px 6px 2px}.date{color:#aab;font-size:14px;margin:0 6px 16px}\n.lbl{font-size:12px;color:#9aa3b5;margin:16px 8px 6px}.n{background:#2b2f38;border-radius:22px;padding:14px 16px 12px;margin-bottom:8px}\n.hd{display:flex;align-items:center;gap:8px;font-size:12px;color:#b9c0cf}.ic{width:20px;height:20px;border-radius:50%;background:#a5b4ff;color:#111;display:grid;place-items:center;font-size:11px;font-weight:700}\n.t{font-weight:600;font-size:15px;margin:8px 0 2px}.b{font-size:14px;color:#c9cdd6;line-height:1.45;white-space:pre-line}\n.acts{display:flex;gap:8px;margin-top:10px}.a{flex:1;text-align:center;background:#3a3f4b;border-radius:999px;padding:9px 0;font-size:14px;font-weight:600;color:#dfe3ff}.a.p{background:#a5b4ff;color:#111}\n.note{font-size:12px;color:#9aa3b5;margin:4px 8px 0}</style></head><body><div class=\"shade\">\n<div class=\"clock\">09:00</div><div class=\"date\">שבת, 21 בנובמבר</div>\n<div class=\"lbl\">משימה מתיבת המשימות: להריץ ב-Antigravity (הפעל / לא עכשיו)</div>\n<div class=\"n\"><div class=\"hd\"><span class=\"ic\">K</span>KesherAI · עכשיו</div><div class=\"t\">✦ להריץ ב-Antigravity?</div><div class=\"b\">לתקן את מצב החיבור במרכז\n🖥 PC-Studio · עד 09:30 · ועוד 1 מחכים</div><div class=\"acts\"><div class=\"a p\">▶ הפעל</div><div class=\"a\">לא עכשיו</div></div></div>\n<div class=\"lbl\">כל בקשת אישור אחרת (אשר / דחה)</div>\n<div class=\"n\"><div class=\"hd\"><span class=\"ic\">K</span>KesherAI · עכשיו</div><div class=\"t\">💬 מחכה לאישור שלך</div><div class=\"b\">run_command · pnpm test בצ׳אט \"תיקון הבנייה\"\n🖥 PC-Studio · עד 09:28</div><div class=\"acts\"><div class=\"a p\">✓ אשר</div><div class=\"a\">דחה</div></div></div>\n<div class=\"lbl\">אחרי הקשה על כפתור: נשלח נעול למחשב (נסגר לבד אחרי רגע)</div>\n<div class=\"n\"><div class=\"hd\"><span class=\"ic\">K</span>KesherAI · עכשיו</div><div class=\"t\">✓ נשלח למחשב</div><div class=\"b\">▶ הפעל · לתקן את מצב החיבור במרכז</div></div>\n<div class=\"lbl\">הבקשה פגה (אחרי 30 דקות): בלי כפתורים, הקשה פותחת את KesherAI</div>\n<div class=\"n\"><div class=\"hd\"><span class=\"ic\">K</span>KesherAI · לפני 31 דק׳</div><div class=\"t\">⌛ הבקשה פגה</div><div class=\"b\">לתקן את מצב החיבור במרכז\nפתחו את KesherAI כדי לבקש שוב</div></div>\n<div class=\"lbl\">לא נשלח (אין רשת או המרכז סירב)</div>\n<div class=\"n\"><div class=\"hd\"><span class=\"ic\">K</span>KesherAI · עכשיו</div><div class=\"t\">לא נשלח</div><div class=\"b\">לתקן את מצב החיבור במרכז\nהקישו כדי לפתוח את KesherAI ולענות משם</div></div>\n<div class=\"note\">הקשה על גוף ההתראה פותחת את המרכז בכרטיס של אותה בקשה. ב-iPhone אין כפתורים בהתראה: רק הקשה. המרכז רואה רק את המספר; התוכן נעול למכשיר הזה.</div>\n</div></body></html>",
+     "contentType": "text/html; charset=utf-8"
+    }
+   ]
+  },
+  {
+   "id": "HubAskCard",
+   "title": "ענן Kesher: הקשה על ההתראה פותחת את \"מחכה לך\" בכרטיס של הבקשה (מסומן)",
+   "route": "/#waiting=a1b2c3d4e5f6",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "push": true,
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-c-1121-02",
+      "state": {
+       "title": "לתקן את מצב החיבור במרכז",
+       "source": "inbox",
+       "state": "waiting",
+       "step": 0,
+       "of": 0,
+       "waiting": {
+        "reason": "run-press",
+        "requestId": "a1b2c3d4e5f6",
+        "conversationId": "task-inbox",
+        "summary": "להריץ פעם אחת ב-Antigravity (נשארו 4 היום)"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "לתקן את מצב החיבור במרכז",
+        "source": "inbox"
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "in-t8",
+      "state": {
+       "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+       "source": "inbox",
+       "state": "waiting",
+       "step": 1,
+       "of": 3,
+       "waiting": {
+        "reason": "approval",
+        "requestId": "r1",
+        "conversationId": "c1",
+        "summary": "למחוק 14 קבצים ישנים מתיקיית ההורדות"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+        "source": "inbox"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 3,
+        "label": "list_dir"
+       },
+       {
+        "type": "tool",
+        "name": "list_dir",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".wentry.hl"
+    }
+   ]
+  }
+ ]
+}

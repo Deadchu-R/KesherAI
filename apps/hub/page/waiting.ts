@@ -99,15 +99,35 @@ function entry(v: WaitingView, e: WaitingEntry): HTMLElement {
   const icon = a ? (a.kind === "run" ? "✦" : a.who ? "🤖" : "💬") : c!.state.waiting?.reason === "run-press" ? "✦" : "🤖";
   const who = a ? (a.kind === "run" ? L("להריץ ב-Antigravity?", "Run in Antigravity?") : a.who ? L(`סוכן משנה: ${a.who}`, `Sub-agent: ${a.who}`) : L("הסוכן של הצ׳אט", "The chat's agent")) : L("סוכן", "Agent");
   const why = a ? a.reason : (c!.state.waiting?.summary ?? "");
-  return h(
+  const reqId = a ? a.requestId : c?.state.waiting?.requestId;
+  const shown = reqId ? fromNotification(reqId) : false;
+  const el = h(
     "div",
-    { class: "acard wait wentry", role: "group", "aria-label": what },
+    { class: `acard wait wentry${shown ? " hl" : ""}`, role: "group", "aria-label": what },
     h("div", { class: "row" }, h("span", { "aria-hidden": "true" }, icon), h("b", { class: "grow ell1", dir: "auto" }, what), a && a.kind === "tool" ? h("span", { class: "chip mono" }, a.tool) : null),
     h("div", { class: "row wrap mut xs" }, h("span", null, who), h("span", null, `🖥 ${e.pc.name}`), a?.at ? h("span", null, when(a.at)) : null),
     why ? h("div", { class: "sm warn wrapl", dir: "auto" }, why) : null,
     a?.preview ? h("pre", { class: "xs mono wprev", dir: "ltr" }, a.preview) : null,
     buttons(v, e),
   );
+  if (shown && scrolledFor !== location.hash) {
+    scrolledFor = location.hash;
+    setTimeout(() => el.scrollIntoView({ block: "center" }), 0);
+  }
+  return el;
+}
+
+/** The address a notification's tap opened ("#waiting=<requestId>") that was already scrolled to. */
+let scrolledFor = "";
+
+/**
+ * Whether the page was opened by a tap on this ask's notification (`/#waiting=<requestId>`, ask-note.ts).
+ *
+ * @param requestId - The ask.
+ * @returns True for the ask the notification showed.
+ */
+function fromNotification(requestId: string): boolean {
+  return location.hash === `#waiting=${encodeURIComponent(requestId)}`;
 }
 
 /**

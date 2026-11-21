@@ -7,7 +7,7 @@
  * What the push service and the hub see: a count. Never what waits, where, or why (that stays sealed to the phone).
  * The message itself is encrypted to the phone's browser, so the push service sees only ciphertext.
  */
-import { fromB64url, toB64url } from "../../../packages/shared/src/hub.js";
+import { fromB64url, toB64url, type SealedEnvelope } from "../../../packages/shared/src/hub.js";
 
 /** One browser's push subscription, as `PushSubscription.toJSON()` gives it, plus the page's language. */
 export interface PushSub {
@@ -201,10 +201,13 @@ export function pushText(n: number, lang: "he" | "en"): { title: string; body: s
  * @param n - How many wait.
  * @param v - The hub's VAPID keys.
  * @param o - The fetch to use and the time.
+ * @param note - The PC's sealed `ask_note` for this phone, copied in unread (optional).
  * @returns The push service's status (201 sent; 404 or 410: the subscription is gone).
  */
-export async function sendPush(sub: PushSub, n: number, v: VapidKeys, o: { fetch: typeof fetch; now: number }): Promise<number> {
-  const payload = JSON.stringify({ ...pushText(n, sub.lang), n, tag: PUSH.tag, url: PUSH.url });
+export async function sendPush(sub: PushSub, n: number, v: VapidKeys, o: { fetch: typeof fetch; now: number }, note?: SealedEnvelope): Promise<number> {
+  // `note`: the newest ask sealed by the PC to this phone (the hub cannot open it); the service worker opens it and
+  // shows the ask with two buttons. `lang` picks the service worker's words. Without a note: the count only.
+  const payload = JSON.stringify({ ...pushText(n, sub.lang), n, tag: PUSH.tag, url: PUSH.url, lang: sub.lang, ...(note ? { note } : {}) });
   const body = await encryptPush(enc.encode(payload), sub.p256dh, sub.auth);
   const r = await o.fetch(sub.endpoint, {
     method: "POST",

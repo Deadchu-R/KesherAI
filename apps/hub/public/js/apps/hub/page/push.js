@@ -36,7 +36,8 @@ export async function startPush(v) {
     if (!("serviceWorker" in navigator))
         return void ((push.state = "unsupported"), v.render());
     try {
-        await navigator.serviceWorker.register("/sw.js");
+        // The module service worker shows asks with buttons (ask-note.ts); a browser that cannot run one gets the count-only one.
+        await navigator.serviceWorker.register("/sw.js", { type: "module" }).catch(() => navigator.serviceWorker.register("/sw-basic.js"));
         const reg = await registration();
         for (const n of await reg.getNotifications({ tag: TAG }))
             n.close();
@@ -124,7 +125,7 @@ function howTo(v) {
 export function notifySection(v) {
     const s = push.state;
     const title = h("h3", null, L("התראות", "Notifications"));
-    const what = h("span", { class: "mut xs" }, L("כשמשהו במחשב מחכה לאישור או להרצה, והדף סגור: \"KesherAI: 2 מחכים לך\". רק המספר, בלי תוכן. לחיצה פותחת את \"מחכים לך\".", "When something on a PC waits for an approval or a Run, with this page closed: \"KesherAI: 2 waiting for you\". Only the count, no content. A tap opens \"Waiting for you\"."));
+    const what = h("span", { class: "mut xs" }, L("כשמשהו במחשב מחכה לאישור או להרצה, והדף סגור: ההתראה מראה את הבקשה עם שני כפתורים (הפעל / לא עכשיו, או אשר / דחה). המחשב נועל אותה למכשיר הזה, והמרכז רואה רק את המספר. לחיצה על ההתראה פותחת את הבקשה. אחרי עדכון: פתחו את הדף פעם אחת.", "When something on a PC waits for an approval or a Run, with this page closed: the notification shows the ask with two buttons (Run / Not now, or Approve / Deny). The PC seals it to this device; the hub sees only the count. A tap opens the ask. After an update, open this page once."));
     let body;
     if (!v.device.paired)
         body = h("span", { class: "mut sm" }, L("קודם חברו את המכשיר הזה (לשונית חיבור).", "Pair this device first (the Pair tab)."));

@@ -7,6 +7,7 @@
  */
 import { generateHubKeys, keyFingerprint, openEnvelope, randomB64url, ReplayGuard, sealMessage, type HubCryptoKey } from "../../../packages/shared/src/hub-crypto.js";
 import { dropLocalPush } from "./push.js";
+import { get, put, type PcKeys } from "./kv.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubCommandAction, type HubExecutor, type HubInboxTask, type HubFrame, type HubIfOffline, type HubPresence, type HubRefusal, type SealedEnvelope } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
@@ -73,53 +74,9 @@ const INBOX_LABEL: Record<HubInboxTask["state"], { he: string; en: string }> = {
   failed: { he: "נכשל", en: "Failed" },
 };
 
-// ---- IndexedDB (one key-value store; structured clone keeps the CryptoKey usable but not exportable) ----
-
-const DB = "kesher-hub";
-let dbp: Promise<IDBDatabase> | undefined;
-
-/** Opens the page's database. */
-function db(): Promise<IDBDatabase> {
-  dbp ??= new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("kv");
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
-  return dbp;
-}
-
-/**
- * Reads one value of the page's database.
- *
- * @param key - The key.
- * @returns The value, or undefined.
- */
-export async function get<T>(key: string): Promise<T | undefined> {
-  const d = await db();
-  return new Promise((resolve, reject) => {
-    const r = d.transaction("kv").objectStore("kv").get(key);
-    r.onsuccess = () => resolve(r.result as T | undefined);
-    r.onerror = () => reject(r.error);
-  });
-}
-
-/**
- * Writes (or, with undefined, deletes) one value of the page's database.
- *
- * @param key - The key.
- * @param value - The value (structured clone), or undefined to delete it.
- */
-export async function put(key: string, value: unknown): Promise<void> {
-  const d = await db();
-  return new Promise((resolve, reject) => {
-    const tx = d.transaction("kv", "readwrite");
-    if (value === undefined) tx.objectStore("kv").delete(key);
-    else tx.objectStore("kv").put(value, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
+// IndexedDB: the page's one key-value store (kv.ts, shared with the service worker, which reads the device's key to
+// answer from a notification).
+export { get, put } from "./kv.js";
 
 /**
  * A POST to this hub (same origin, so the browser sends `Origin` for the CSRF check).
@@ -150,6 +107,8 @@ const REFUSAL: Record<HubRefusal, { he: string; en: string }> = {
 /** The browser's device: identity, socket, presence and tasks. One per page. */
 export class HubDevice {
   private ident?: Identity;
+  /** The PC keys last written for the service worker (see keepPcKeys). */
+  private pcKeysText = "";
   private ws?: WebSocket;
   private retry = 0;
   private retryTimer?: number;
@@ -325,6 +284,8 @@ export class HubDevice {
     this.agentSeq = 0;
     await put("device", undefined).catch(() => undefined);
     await put("tasks", undefined).catch(() => undefined);
+    await put("pcKeys", undefined).catch(() => undefined);
+    this.pcKeysText = "";
     this.changed();
   }
 
@@ -404,6 +365,7 @@ export class HubDevice {
         this.connected = true;
         this.paused = f.paused;
         this.presence = f.presence;
+        void this.keepPcKeys();
         if (this.ident && f.hubKey && f.hubKey !== this.ident.hubKey) {
           this.ident.hubKey = f.hubKey;
           await put("device", this.ident).catch(() => undefined);
@@ -413,6 +375,7 @@ export class HubDevice {
         return this.flushOutbox();
       case "presence":
         this.presence = f.presence;
+        void this.keepPcKeys();
         return this.changed();
       case "pause":
         this.paused = f.paused;
@@ -564,6 +527,18 @@ export class HubDevice {
     this.agentActions.set(`${c.deviceId}/${c.runId}`, action);
     this.changed();
     return true;
+  }
+
+  /**
+   * Keeps the paired PCs' public keys and names for the service worker (kv `pcKeys`), so a notification's ask can be
+   * opened and answered with the page closed. The same keys the page itself uses from presence; written only on change.
+   */
+  private async keepPcKeys(): Promise<void> {
+    const keys: PcKeys = Object.fromEntries(this.presence.filter((d) => d.kind === "pc").map((d) => [d.id, { publicKey: d.publicKey, name: d.name }]));
+    const text = JSON.stringify(keys);
+    if (text === this.pcKeysText) return;
+    this.pcKeysText = text;
+    await put("pcKeys", keys).catch(() => undefined);
   }
 
   /** A sealed message for this browser: a PC's progress or result, or the hub's "Claude cloud started". */

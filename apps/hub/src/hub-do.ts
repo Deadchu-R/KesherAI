@@ -6,6 +6,7 @@
  * - Open (rate limited): `POST /api/signin`, `POST /api/pair/start`, `POST /api/pair/poll`.
  * - Device token (Bearer): `POST /api/ticket`, `POST /api/rotate`, `GET /api/agents?since=…` (activity catch-up),
  *   `POST /api/push/subscribe` `{endpoint, keys, lang}` and `POST /api/push/unsubscribe` (this device's notifications).
+ *   `POST /api/answer` `{env}`: one sealed `approval_answer` from a phone's notification (its service worker).
  *   Socket: `GET /ws/device?ticket=…`.
  * - Signed-in owner (session cookie + same Origin for changes): `GET /api/state`, `POST /api/signout`,
  *   `POST /api/pair/check`, `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
@@ -117,6 +118,7 @@ export class HubObject {
     if (req.method === "POST" && path === "/api/ticket") return answer(await this.hub.issueTicket(bearer(req)));
     if (req.method === "POST" && path === "/api/rotate") return answer(await this.hub.rotateToken(bearer(req)));
     if (req.method === "POST" && path === "/api/push/subscribe") return answer(await this.hub.pushSubscribe(bearer(req), await readJson(req)));
+    if (req.method === "POST" && path === "/api/answer") return answer(await this.hub.answerByHttp(bearer(req), await readJson(req)));
     if (req.method === "POST" && path === "/api/push/unsubscribe") return answer(await this.hub.pushUnsubscribe(bearer(req)));
     if (req.method === "GET" && path === "/api/agents") return answer(await this.hub.agentsSince(bearer(req), url.searchParams.get("since")));
 
