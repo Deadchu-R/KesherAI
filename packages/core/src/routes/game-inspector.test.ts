@@ -9,6 +9,7 @@ import { UnityCli } from "../unity-cli.js";
 import { UnrealBridge } from "../unreal-bridge.js";
 import { GameCheckpoints } from "../game-checkpoints.js";
 import type { KesherServices } from "../services.js";
+import { canSymlink } from "../test-utils.js";
 
 const PREFAB = `%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
@@ -51,9 +52,11 @@ test("Inspector: a prefab's values with Unity closed, a change queued, synced af
     assert.equal((await app.inject({ url: `/api/games/inspect?${q("../secret.prefab")}` })).statusCode, 400);
     assert.equal((await app.inject({ url: `/api/games/inspect?${q("Assets/Crate.prefab.meta")}` })).statusCode, 400);
     // Scan 168: a prefab that is a link out of the project is neither read nor queued.
-    await writeFile(join(home, "outside.prefab"), "%YAML 1.1\n");
-    await symlink(join(home, "outside.prefab"), join(project, "Assets", "Linked.prefab"));
-    assert.equal((await app.inject({ url: `/api/games/inspect?${q("Assets/Linked.prefab")}` })).statusCode, 400);
+    if (await canSymlink()) {
+      await writeFile(join(home, "outside.prefab"), "%YAML 1.1\n");
+      await symlink(join(home, "outside.prefab"), join(project, "Assets", "Linked.prefab"));
+      assert.equal((await app.inject({ url: `/api/games/inspect?${q("Assets/Linked.prefab")}` })).statusCode, 400);
+    }
     const body = (to: string, from = "1", name = "m_Mass") => ({ engine: "unity", project, path: "Assets/Crate.prefab", target: "540", name, from, to });
     assert.equal((await app.inject({ method: "POST", url: "/api/games/inspect/value", payload: body("heavy") })).statusCode, 400);
     assert.equal((await app.inject({ method: "POST", url: "/api/games/inspect/value", payload: body("5", "2") })).statusCode, 409);

@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { guestEngineProjects, guestPathPrivate, guestProjectFolder } from "./guest-scenes.js";
+import { canSymlink } from "./test-utils.js";
 
 async function shared() {
   const root = await mkdtemp(join(tmpdir(), "kesher-guest-scenes-"));
@@ -19,7 +20,7 @@ async function shared() {
   // A project outside the shared folder, and a link to it from inside.
   await mkdir(join(root, "private"));
   await writeFile(join(root, "private", "project.godot"), "");
-  await symlink(join(root, "private"), join(ws, "escape"));
+  if (await canSymlink()) await symlink(join(root, "private"), join(ws, "escape"));
   return { root, ws };
 }
 

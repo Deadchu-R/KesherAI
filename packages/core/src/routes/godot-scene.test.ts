@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { godotSceneRoutes } from "./godot-scene.js";
 import type { GodotBridge } from "../godot-bridge.js";
+import { canSymlink, NO_SYMLINK } from "../test-utils.js";
 
 const SCENE = `[gd_scene format=3]\n\n[node name="Level" type="Node3D"]\n\n[node name="Crate" type="Node3D" parent="."]\ntransform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -1)\n`;
 
@@ -57,7 +58,7 @@ test("it moved in Godot meanwhile: a conflict, unless she keeps hers; Godot open
   await live.app.close();
 });
 
-test("a link inside the project that leads outside is refused", async () => {
+test("a link inside the project that leads outside is refused", { skip: !(await canSymlink()) && NO_SYMLINK }, async () => {
   const { symlink } = await import("node:fs/promises");
   const { app, dir } = await setup();
   const outside = await mkdtemp(join(tmpdir(), "out-"));

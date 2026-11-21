@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { canSymlink, NO_SYMLINK } from "./test-utils.js";
 import { GameCheckpoints, insideProject, pruneList, realInside, type GameCheckpoint } from "./game-checkpoints.js";
 
 const meta = (project: string, group: string) => ({ engine: "unity" as const, project, name: "Demo", source: "chat" as const, label: "make the door open", group });
@@ -93,7 +94,7 @@ test("a chat turn's engine writes share one checkpoint; reads and unnamed writes
   }
 });
 
-test("a link put in the project is never copied, read or written through (scan 168)", async () => {
+test("a link put in the project is never copied, read or written through (scan 168)", { skip: !(await canSymlink()) && NO_SYMLINK }, async () => {
   const root = await mkdtemp(join(tmpdir(), "kesher-gcp-"));
   try {
     const project = join(root, "Demo");

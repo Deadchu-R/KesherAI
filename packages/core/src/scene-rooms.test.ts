@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { canSymlink } from "./test-utils.js";
 import { BeatLimit, MAX_GUESTS, MAX_MEMBERS, roomKey, SceneRooms } from "./scene-rooms.js";
 
 test("each member sees the others with their own colour, camera and selection; checked and bounded", () => {
@@ -94,15 +95,16 @@ test("beats: two a second each, apart for each guest", () => {
 });
 
 test("a room's key is the same however the folder is written (project.godot, a link), and differs by scene", async () => {
+  const links = await canSymlink();
   const root = await mkdtemp(join(tmpdir(), "kesher-rooms-"));
   const dir = join(root, "game");
   await mkdir(dir);
   await writeFile(join(dir, "project.godot"), "");
-  await symlink(dir, join(root, "link"));
+  if (links) await symlink(dir, join(root, "link"));
   const k = await roomKey(`godot|${dir}|res://a.tscn`);
   assert.equal(await roomKey(`godot|${join(dir, "project.godot")}|res://a.tscn`), k);
   assert.equal(await roomKey(`godot|${dir}/|res://a.tscn`), k);
-  assert.equal(await roomKey(`godot|${join(root, "link")}|res://a.tscn`), k);
+  if (links) assert.equal(await roomKey(`godot|${join(root, "link")}|res://a.tscn`), k);
   assert.notEqual(await roomKey(`godot|${dir}|res://b.tscn`), k);
   assert.match(await roomKey("unreal||/Game/Map"), /^[0-9a-f]{32}$/);
 });
