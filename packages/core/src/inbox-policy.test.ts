@@ -93,3 +93,17 @@ test("inbox policy: a research task may read public pages (fetch); a code task m
   assert.equal(decideStep(step("execute", { command: "curl -O https://x.example/a.zip" }), { ...ctx, research: true }).verdict, "deny");
   assert.equal(decideStep(step("fetch", { url: "https://x.example/billing" }, "Open billing"), { ...ctx, research: true }).rule, "no-payment");
 });
+
+test("inbox policy: a research fetch reaches public pages only (scan 171)", () => {
+  const r = { ...ctx, research: true };
+  const v = (raw: unknown, title = "Read") => decideStep(step("fetch", raw, title), r).verdict;
+  assert.equal(v({ url: "https://example.org/a" }), "allow");
+  assert.equal(v({ query: "best open-source image editors 2026" }, "Search the web"), "allow");
+  assert.equal(v({ url: "example.org/page" }), "allow");
+  for (const url of ["http://localhost:4317/api/config", "http://127.0.0.1:8188/history", "http://2130706433/", "http://192.168.1.1/", "http://10.0.0.5/", "http://169.254.169.254/latest/meta-data", "http://[::1]:4317/", "file:///etc/passwd", "ftp://example.org/x", "http://router.local/", "http://nas.lan/", "http://kesher/"]) {
+    assert.equal(v({ url }), "deny", url);
+  }
+  assert.equal(v({}, "Fetch http://127.0.0.1:4317/api/memory"), "deny");
+  assert.equal(v({ urls: ["https://example.org", "http://localhost/"] }), "deny");
+  assert.equal(decideStep(step("fetch", { url: "http://localhost/" }), r).rule, "not a public web page");
+});

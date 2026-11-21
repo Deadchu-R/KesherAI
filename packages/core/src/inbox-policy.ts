@@ -1,6 +1,8 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import ignore from "ignore";
 import type { AcpPermission } from "./acp.js";
+import { isLocalSite } from "./control-policy.js";
+import { publicSite } from "./site-icon.js";
 
 /**
  * The task inbox's rules for an agent's steps and for the work it returns (docs/RESEARCH_LOG.md, "A task inbox",
@@ -80,6 +82,43 @@ function fieldsOf(raw: string | undefined): { command?: string; paths: string[] 
 }
 
 /**
+ * Whether every address a fetch step names is a public http(s) page (a web search with no address passes). Addresses
+ * are read from the step's input (`url`, `uri`, `href`, or any value with a scheme) and its title.
+ *
+ * @param p - The fetch step.
+ * @returns False when any address is local, private, or not http(s).
+ */
+export function fetchTargetsPublic(p: AcpPermission): boolean {
+  const found: string[] = [];
+  const scheme = /^[a-z][a-z0-9+.-]*:/i;
+  const walk = (x: unknown, key = "", depth = 0) => {
+    if (depth > 4 || x == null) return;
+    if (typeof x === "string") {
+      if (/^(url|uri|href|link|address)s?$/i.test(key) || scheme.test(x.trim())) found.push(x.trim());
+      return;
+    }
+    if (Array.isArray(x)) x.slice(0, 30).forEach((y) => walk(y, key, depth + 1));
+    else if (typeof x === "object") for (const [k, y] of Object.entries(x as Record<string, unknown>).slice(0, 40)) walk(y, k, depth + 1);
+  };
+  try {
+    walk(p.rawInput ? JSON.parse(p.rawInput) : undefined);
+  } catch {
+    // Not JSON: only the title is checked.
+  }
+  for (const m of (p.title ?? "").matchAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi)) found.push(m[0]);
+  return found.every((raw) => {
+    // A bare host ("example.org/page") is read as https.
+    const address = scheme.test(raw) && !/^[\w.-]+:\d/.test(raw) ? raw : `https://${raw}`;
+    try {
+      const u = publicSite(address);
+      return !isLocalSite(u.hostname) && !/\.(internal|lan|home|intranet|corp)$/i.test(u.hostname);
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
  * A path relative to the worktree, or undefined when it is outside it.
  *
  * @param worktree - The task's worktree.
@@ -156,7 +195,12 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     return commandAllowed(command, ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
-  if (kind === "fetch") return ctx.research ? { verdict: "allow", rule: "research: reading a public page", what: label(p.title || "fetch") } : { verdict: "deny", rule: "no network", what: label(p.title || "fetch") };
+  if (kind === "fetch") {
+    if (!ctx.research) return { verdict: "deny", rule: "no network", what: label(p.title || "fetch") };
+    // Public web pages only: never this computer or the home network (KesherAI's own API, ComfyUI, the router), nor
+    // file:// or other schemes (scan 171: a page read during research could name such an address).
+    return fetchTargetsPublic(p) ? { verdict: "allow", rule: "research: reading a public page", what: label(p.title || "fetch") } : { verdict: "deny", rule: "not a public web page", what: label(p.title || "fetch") };
+  }
 
   const rel = paths.map((x) => insideWorktree(ctx.worktree, x));
   const shown = label(`${kind || "step"} ${rel.map((r, i) => r ?? paths[i]).join(", ") || p.title}`);

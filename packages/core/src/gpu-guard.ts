@@ -392,7 +392,10 @@ export class GpuGuard {
     // Load on demand: each engine is unloaded after its own idle time (Settings → load on demand), whether or not the
     // temperature guard is on.
     for (const item of this.idleDue()) {
-      if (!item.loaded()) continue;
+      // Checked again right before each unload: the unload before it took time, and work may have started meanwhile
+      // (scan 171: never unload under a job that began after the list was made).
+      if (this.running > 0 || this.waiting > 0) break;
+      if (!item.loaded() || item.busy?.()) continue;
       await item.unload().catch(() => undefined);
       this.lastUnload = { what: item.name, at: new Date().toISOString() };
       // Still running after its unload (ComfyUI with its editor open keeps the program, only its models are freed):

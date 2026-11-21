@@ -186,3 +186,16 @@ test("othersBusy: the card working hard with none of our work running means anot
   await g.check();
   assert.equal(g.othersBusy(), false);
 });
+
+test("load on demand: work that starts while an earlier engine unloads keeps the next one loaded (scan 171)", async () => {
+  const cfg: GuardConfig = { ...GUARD_DEFAULTS, enabled: false };
+  const guard = new GpuGuard(() => cfg, async () => { throw new Error("no nvidia-smi"); });
+  const state = { comfy: true, embed: true };
+  let embedBusy = false;
+  // ComfyUI's unload is slow; a search starts meanwhile (the embedder turns busy).
+  guard.add({ name: "ComfyUI", providers: ["comfyui"], loaded: () => state.comfy, unload: async () => { embedBusy = true; state.comfy = false; }, pids: () => [], idleMinutes: () => 5 });
+  guard.add({ name: "search by meaning", providers: ["llamacpp-embed"], loaded: () => state.embed, unload: async () => void (state.embed = false), pids: () => [], idleMinutes: () => 5, busy: () => embedBusy });
+  ago(guard, 6 * 60_000);
+  await guard.check();
+  assert.deepEqual(state, { comfy: false, embed: true });
+});

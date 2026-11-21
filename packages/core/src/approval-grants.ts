@@ -110,7 +110,11 @@ export function grantFor(r: GrantRequest, o: { choice: GrantChoice; conversation
   if (o.choice === "once" || alwaysAsks(r)) return undefined;
   const choice: GrantChoice = r.helper && o.choice === "revoke" ? "chat" : o.choice;
   const target = targetOf(r.name, r.input, r.scope);
-  const command = o.command?.trim().slice(0, 200);
+  // A command grant is a start of the command asked about (as whole words), never another command (scan 171: the
+  // card sends it, so a changed client could otherwise keep a rule for a command nobody saw).
+  const asked = typeof r.input?.command === "string" ? r.input.command.trim().replace(/\s+/g, " ") : undefined;
+  let command = o.command?.trim().replace(/\s+/g, " ").slice(0, 200);
+  if (command && asked !== undefined && !(asked === command || asked.startsWith(`${command} `))) command = asked.slice(0, 200);
   return {
     tool: grantTool(r),
     scope: choice === "revoke" ? "everywhere" : "conversation",

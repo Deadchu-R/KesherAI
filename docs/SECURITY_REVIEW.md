@@ -1854,3 +1854,64 @@ its hub mock server; the threat note above.
     frames, TOCTOU on real-path checks, game-source backups never pruned, hub page unbundled.
 - Verdict: with these fixes, shared-chat replies are safe to keep on; guests reach neither the owner's memory, tools
   outside the gate, nor the PC's browser or screen.
+
+## Scan 171 (2026-11-21): phone approvals from the notification, research tasks, engine plugins, translator, load on demand, 0.6.420–0.6.424
+
+Scope: `git diff 318bb5a..HEAD` (releases 0.6.420–0.6.424 and 30aff64).
+
+- **Fixed (medium): research fetch could reach this computer.** A research task's fetch steps were allowed for any
+  address, so a page read during research could steer Antigravity to `http://127.0.0.1:<port>/api/…`, ComfyUI, the
+  router, cloud metadata (169.254.169.254) or `file://`. Fetch steps now pass only when every address in the step's
+  input and title is a public http(s) page (`fetchTargetsPublic` in inbox-policy.ts: `publicSite` + `isLocalSite`,
+  `.internal/.lan/.home/.corp` refused, decimal IPs normalised by URL); a web search with no address still passes.
+  Test: localhost, 127.0.0.1, `2130706433`, 10/8, 192.168/16, metadata, `[::1]`, `file:`, `ftp:`, `.local`, `.lan`,
+  a dotless name, an address in the title, one bad address in a list.
+- **Fixed (medium/perf): Unity scene reader memory.** The streaming reader kept every line of the kept classes
+  whole, so a MonoBehaviour with a big serialized field (one line of hundreds of MB) was held in memory. A kept line
+  is cut at 16 K characters and more than 64 M kept characters is refused with 413 (`readSceneText`). Test.
+- **Fixed (medium/perf): the translation model downloaded twice.** A second press of Download (double tap, or phone
+  and PC) queued a second 2.5 GB job writing the same `.part` file; it now joins the running job
+  (`downloadTranslationModel`). Test.
+- **Fixed (low): load on demand unload race.** The guard listed idle engines once and then awaited each unload; work
+  that started meanwhile (a search during ComfyUI's slow stop) could see its engine stopped. Running/waiting work and
+  `busy()` are checked again before each unload. Test.
+- **Fixed (low): command grants.** "For this chat / 1 hour / Until I revoke" kept the command start the card sent;
+  a changed client could keep a rule for a command nobody saw. It must be a whole-word start of the asked command,
+  else the asked command itself is kept (`grantFor`). Test.
+- **Checked, fine (phone approvals from the notification):** the `ask_note` is sealed PC → phone with the envelope's
+  id/from/to/kind as AES-GCM AAD, nested only inside an `approvals` envelope between the same two devices, ≤ 1,500
+  characters of ciphertext, never relayed alone (refused), stripped before queueing/delivery, so the hub copies it
+  into the push unread and cannot read or forge it. The service worker opens it with the non-extractable device key
+  from IndexedDB and the PC key the page stored from presence; anything else falls back to the count. Notification
+  text is plain text (no HTML; title ≤ 80, body ≤ 200, tag pattern-checked, taps stay on the hub's own paths). A
+  button seals an `approval_answer` from the device; `POST /api/answer` takes the device token, phone kind only, the
+  message rate limit, `approval_answer` only, `from` = the token's device, and the normal relay (envelope-id dedupe).
+  The PC opens it with the sender's key, drops replays (`ReplayGuard`), accepts phone devices only, and an ask is used
+  up on its first answer (`answerRun`/`answerMessage` delete or settle it; expiry checked on the PC, not just the
+  phone). The phone also refuses after `until` and remembers the last 50 answered asks.
+- **Checked, fine (task inbox):** the no-payment guard runs before every other rule (titles only for file edits);
+  `askSteps` defaults off, so unsure Antigravity steps are refused and listed, never waiting on a phone; fetch is
+  denied for code tasks; a research task's allowed paths are forced to its one report file, no check command,
+  `max_files` 1; `executor: gemini` only with `kind: research`. The Gemini pump runs one task at a time, on sync and
+  on add only (no poll of its own), one automatic retry after a quota/503 stop, never a loop. `TaskInbox.add`'s
+  extra paths are only `integrations/<engine>/<name>/**` (no `..`, at most 2) and come only from `convertTask`
+  (version pattern-checked; project name and compiler errors cut and stripped of newlines and user paths).
+- **Checked, fine (rest):** Unreal "Install in all projects" works on the found projects list only (never a path from
+  the request), one install at a time, unsupported engines skipped. Unity scenes: `..` refused, real path must stay in
+  the project, 512 MB file cap, 20 s read and 8 s looks budgets, folder walk capped (50,000 folders, link loops
+  skipped), .meta index cached a minute. Translator: 20,000 characters, no tools in its model turn, so a prompt
+  injected into a media prompt changes only that prompt's text. Load on demand: idle times are integers 0–1440
+  (zod and the route), the phone may change only the idle times, no command or path comes from config; nothing
+  unloads while guarded work runs or waits, ComfyUI's own editor keeps it while active. Android: CAMERA and
+  MODIFY_AUDIO_SETTINGS asked at use (camera optional feature). Hub notifications: snapshots go only on change or to a
+  newly online phone; pushes at most one per gap. Privacy: no email, Windows user name or personal path in the diff.
+- **Open (low, left for the lead):**
+  - A research fetch to a public name that resolves to a private address (DNS rebinding, e.g. `*.nip.io`) is not
+    caught: the policy decides on the text, before the agent resolves it.
+  - The payment guard also refuses research fetches whose address or title says "billing" or "subscription"
+    (competitors' pricing pages): safe, but research on pricing may come back thinner.
+  - The service worker trusts the PC keys the page stored from presence (the same trust the page has; a hub that
+    lied about presence could show a fake ask, whose answer would go to its own key, not the PC).
+  - Media prompts are translated by Gemini when no local chat model is loaded, also for an incognito chat.
+  - `GET /api/translate` walks `models/translation` synchronously on each call (small folder; fine for now).
+  - Carried from 170: owner thread holds guests' messages unwrapped; carried from 169 as listed there.

@@ -125,5 +125,11 @@ test("a big scene is streamed: baked data dropped, binary refused with a clear m
   assert.equal(bin.statusCode, 415);
   assert.match(bin.json().error, /Force Text/);
   await assert.rejects(readSceneText(join(dir, "Assets", "Big.unity"), -1), /took too long/);
+  // Scan 171: a kept class with a huge serialized line is cut, and too much kept text is refused (never held whole).
+  const blob = `--- !u!114 &7\nMonoBehaviour:\n  m_Name: Data\n  _bytes: ${"ab".repeat(100_000)}\n`;
+  const dir2 = await fixture({ "Assets/Blob.unity": `${SCENE}${blob}` });
+  const cut = await readSceneText(join(dir2, "Assets", "Blob.unity"));
+  assert.ok(cut.length < 40_000, "a long kept line is cut");
+  await assert.rejects(readSceneText(join(dir2, "Assets", "Blob.unity"), 20_000, 1000), (e: Error & { statusCode?: number }) => e.statusCode === 413);
   await app.close();
 });

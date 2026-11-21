@@ -232,6 +232,10 @@ export const MAX_SCENE_BYTES = 512 * 1024 * 1024;
 const READ_MS = 20_000;
 /** How long finding the models and pictures behind the objects may take (after that the scene shows boxes). */
 const LOOKS_MS = 8_000;
+/** The most text kept from one scene (scan 171: kept classes can carry big serialized data, e.g. a script's arrays). */
+export const MAX_KEPT_CHARS = 64 * 1024 * 1024;
+/** A kept line longer than this is cut (names, positions and references are short; long lines are data blobs). */
+const MAX_LINE_CHARS = 16 * 1024;
 /** The classes the stand-in reads (readUnityScene); every other document keeps only its first line. */
 const KEEP = new Set(["1", "4", "224", "33", "114", "212", "1001"]);
 
@@ -242,21 +246,32 @@ const KEEP = new Set(["1", "4", "224", "33", "114", "212", "1001"]);
  *
  * @param file - The .unity file.
  * @param budgetMs - The time allowed.
- * @returns The kept text, for readUnityScene.
- * @throws Error with statusCode 415 for a binary scene, 504 when it took too long.
+ * @param maxKept - The most characters kept (past it: 413).
+ * @returns The kept text, for readUnityScene (a kept line over 16 K characters is cut).
+ * @throws Error with statusCode 415 for a binary scene, 413 when too much is kept, 504 when it took too long.
  */
-export async function readSceneText(file: string, budgetMs = READ_MS): Promise<string> {
+export async function readSceneText(file: string, budgetMs = READ_MS, maxKept = MAX_KEPT_CHARS): Promise<string> {
   if (!/^%YAML/.test(await head(file, 16))) throw err(415, "This scene is saved in binary. In Unity: Edit → Project Settings → Editor → Asset Serialization: Force Text, then save the scene.");
   const until = Date.now() + budgetMs;
   const parts: string[] = [];
   let keep = true;
   const lines = createInterface({ input: createReadStream(file, { encoding: "utf8", highWaterMark: 1 << 20 }), crlfDelay: Infinity });
   let n = 0;
+  let size = 0;
   for await (const line of lines) {
     if (line.startsWith("--- !u!")) {
       keep = KEEP.has(/^--- !u!(\d+)/.exec(line)?.[1] ?? "");
       parts.push(line);
-    } else if (keep) parts.push(line);
+      size += line.length;
+    } else if (keep) {
+      const cut = line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) : line;
+      parts.push(cut);
+      size += cut.length;
+    }
+    if (size > maxKept) {
+      lines.close();
+      throw err(413, "This scene holds too much object data to read here. Open it in Unity.");
+    }
     if ((++n & 0xfff) === 0 && Date.now() > until) {
       lines.close();
       throw err(504, "Reading this scene took too long (it is very big). Try a smaller scene, or open it in Unity.");

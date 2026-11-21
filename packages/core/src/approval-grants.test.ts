@@ -113,3 +113,12 @@ test("withGrant replaces the same grant and drops ended ones; activeGrants lists
   const active = activeGrants([...list, ended, helper], NOW);
   assert.deepEqual(active.map((g) => [g.index, g.kind, g.leftMs]), [[0, "chat", 60_000], [2, "helper", undefined]]);
 });
+
+test("a command grant is a start of the command asked about, never another one (scan 171)", () => {
+  const r = { name: "run_command", input: { command: "pnpm  -s test" }, reason: "Runs a command." };
+  const o = { choice: "chat" as const, conversationId: "c1", now: 0 };
+  assert.equal(grantFor(r, { ...o, command: "pnpm" })?.command, "pnpm");
+  assert.equal(grantFor(r, { ...o, command: "pnpm -s test" })?.command, "pnpm -s test");
+  assert.equal(grantFor(r, { ...o, command: "rm" })?.command, "pnpm -s test");
+  assert.equal(grantFor(r, { ...o, command: "pn" })?.command, "pnpm -s test");
+});

@@ -61,6 +61,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Paint an existing model (🖌 in the 3D editor): four views drawn by words (SD 1.5 + ControlNet depth) and baked onto
   it, with ComfyUI's own nodes; its geometry half ran in a real ComfyUI in the workspace.
 - ✅ Security scan 166: nothing to fix.
+- ✅ Security scan 171 (0.6.420–0.6.424): research fetch kept off this computer and the home network, Unity scene reader memory cap, one translation-model download, unload re-check, command grants tied to the asked command; lows in SECURITY_REVIEW.md.
 
 - ✅ A study guide for a student friend (Roee, 11:50): a doc from installing to every study tool, only the study
   parts, with 17 real screenshots (desktop and phone) from 0.6.400 on a demo course.
@@ -286,7 +287,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ Plugin store with install from the app; clear plugin and fork docs for developers not built
 - ⬜ Fully modular parts; no single provider needed; less dependence on Ollama and LM Studio over time not built
 - ⬜ Automated test system per version: it works and has no security holes not built
-- 🔨 Full security review and performance pass after every 5 builds (running rule) (460279e scan 168) missing: next scan after 5 builds (scans 169 79c3dbc and 170 b606675 done after 460279e; next scan after 5 more builds)
+- 🔨 Full security review and performance pass after every 5 builds (running rule) (460279e scan 168) missing: next scan after 5 builds (scans 169 79c3dbc, 170 b606675 and 171 done after 460279e; next scan after 5 more builds)
 - 🔨 Hardware limits in the UI: RAM and CPU caps, CPU temperature (gpu-guard.ts) missing: RAM and CPU caps, CPU temperature
 - 🔨 Reset to defaults and a reinstall option checked on every platform (ResetSection.tsx) missing: reinstall check on every platform
 - ✅ Project index: faster search over assets, scripts and Blueprints for big projects (bcbe818 5c302ab e7c3278)

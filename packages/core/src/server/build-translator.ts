@@ -83,14 +83,19 @@ export function buildTranslator(p: { registry: ProviderRegistry; engine: LlamaEn
  * @param p.downloads - The download manager.
  * @param p.modelsDir - The models folder.
  * @param p.token - The user's Hugging Face token, if set.
+ * @param p.list - Lists the repository's files (tests pass their own; default Hugging Face).
  * @returns The file's path and the download job's id (none when it was already there).
  */
-export async function downloadTranslationModel(p: { downloads: DownloadManager; modelsDir: string; token?: string | undefined }): Promise<{ path: string; jobId?: string }> {
-  const files = await listHubFiles(TRANSLATION_MODEL.repo, { ...(p.token ? { token: p.token } : {}) });
+export async function downloadTranslationModel(p: { downloads: Pick<DownloadManager, "list" | "enqueue">; modelsDir: string; token?: string | undefined; list?: typeof listHubFiles }): Promise<{ path: string; jobId?: string }> {
+  const files = await (p.list ?? listHubFiles)(TRANSLATION_MODEL.repo, { ...(p.token ? { token: p.token } : {}) });
   const file = files.find((f) => TRANSLATION_MODEL.pattern.test(f.path)) ?? files.find((f) => TRANSLATION_MODEL.fallback.test(f.path));
   if (!file) throw new Error(`No model file in ${TRANSLATION_MODEL.repo}.`);
   const dest = join(p.modelsDir, TRANSLATION_DIR, TRANSLATION_MODEL.repo, file.path);
   if (existsSync(dest)) return { path: dest };
+  // A second press (a double tap, or the phone and the PC) joins the running download: two jobs would write the same
+  // .part file and fetch 2.5 GB twice (scan 171).
+  const running = p.downloads.list().find((j) => j.dest === dest && (j.status === "queued" || j.status === "downloading" || j.status === "verifying"));
+  if (running) return { path: dest, jobId: running.id };
   const job = p.downloads.enqueue({ url: file.url, dest, size: file.size, ...(file.sha256 ? { sha256: file.sha256 } : {}), label: `${TRANSLATION_MODEL.name} · translation` });
   return { path: dest, jobId: job.id };
 }
