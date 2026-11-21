@@ -69,6 +69,21 @@ import { LineIcon } from "../ui/Glyph";
 /** The first line of a guest's message in a shared chat (core shared-chat.ts guestMessage). */
 const GUEST_LABEL = /^\[Guest: ([^\]\n]{1,40})\]\n/;
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/** "Auto"'s reasons (strength ids, packages/core/src/model-router.ts), in the user's language. */
+const ROUTE_WHY: Record<string, [string, string]> = {
+  tools: ["כלים", "tools"],
+  hebrew: ["כתיבה בעברית", "Hebrew writing"],
+  code: ["קוד", "code"],
+  research: ["מחקר ברשת", "web research"],
+  vision: ["תמונה", "a picture"],
+  fast: ["תשובה קצרה", "a short answer"],
+  general: ["רגיל", "general"],
+};
+/** @returns The reason on "Auto"'s line for a strength id. */
+const routeWhy = (why: string) => { const w = ROUTE_WHY[why] ?? ROUTE_WHY.general!; return L(w[0], w[1]); };
+/** @returns A model's name for "Auto"'s line, without the file's quantization ("Qwen3.6-27B-Q4_K_M" → "Qwen3.6-27B"). */
+const routeName = (id: string) => shortModelName(id).replace(/[-_.](?:UD[-_])?(?:I?Q\d\w*|F16|BF16|F32)$/i, "");
 /** The apps a chat can be imported from, by name (Settings › Accounts, backup and data › Import chats). */
 const IMPORT_NAMES: Record<string, string> = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", openwebui: "Open WebUI", lmstudio: "LM Studio", jan: "Jan", "claude-code": "Claude Code" };
 
@@ -712,7 +727,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       (e: Error) => setError(e.message),
     );
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean>; thinking: ThinkingLevel | null }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean>; thinking: ThinkingLevel | null; auto: boolean }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
     const { personaId, web: webPrefs, thinking, ...rest } = body;
     const next = { ...conv, ...rest };
@@ -1126,6 +1141,9 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                 );
               case "note":
                 return <p key={e.seq} className="muted note">{e.text}</p>;
+              case "routed":
+                // "Auto" picked the model for the reply below, and why (model-router.ts); with loadSec it is loading.
+                return <p key={e.seq} className="muted note routed-line"><span aria-hidden="true">✨ </span><span dir="ltr">{routeName(e.modelId)}</span> — {routeWhy(e.why)}{e.loadSec ? ` · ${L(`טוען את המודל (כ-${e.loadSec} שניות)`, `loading the model (about ${e.loadSec} s)`)}` : ""}</p>;
               case "checkpoint":
                 return (
                   <div key={e.seq} className="checkpoint-line">
@@ -1276,7 +1294,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
               onWeb={setWeb}
               {...(voicePart ? { onDictate: (txt: string) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt)) } : {})}
               {...(conv.kind === "chat" ? { persona: { value: conv.personaId, onChange: (p: { id: string } | null) => void patch({ personaId: p?.id ?? null }) } } : {})}
-              model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid }), thinking: { ...(conv.thinking ? { value: conv.thinking } : {}), onChange: (level) => void patch({ thinking: level }) } }}
+              model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid, ...(conv.auto ? { auto: false } : {}) }), ...(conv.kind === "chat" ? { auto: { on: !!conv.auto, onChange: (on: boolean) => void patch({ auto: on }) } } : {}), thinking: { ...(conv.thinking ? { value: conv.thinking } : {}), onChange: (level) => void patch({ thinking: level }) } }}
               mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
               modeInMenu={conv.kind !== "code"}
               extra={

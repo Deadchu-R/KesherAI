@@ -71,6 +71,8 @@ export interface Conversation {
   title: string;
   kind: ConversationKind;
   modelId: string;
+  /** "Auto" (model-router.ts): per message a router picks which of the user's models answers; `modelId` is the last pick. */
+  auto?: boolean;
   mode: PermissionMode;
   /** For code conversations: the folder. Falls back to the project's. */
   workspace?: string;

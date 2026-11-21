@@ -18,6 +18,7 @@ import { ChatsAtOnce } from "../ChatsAtOnce";
 import { CalibrateButton, FitButton } from "../FitPreview";
 import { LoadSettingsButton } from "../ModelLoadSettings";
 import { ModelFolders } from "../ModelFolders";
+import { RouterModelCard } from "../settings/AutoModelSection";
 
 interface Recommended {
   id: string; name: string; repo: string; sizeGb: number; goodForCode: boolean; downloaded: boolean;
@@ -397,6 +398,8 @@ export function ModelsPage() {
       </header>
 
       <LoadedNow local={local} />
+      {/* "Auto"'s small router model, recommended beside the big one (one click, never by itself). */}
+      <RouterModelCard />
       <nav className="tabs" role="tablist" aria-label={t("models")}>
         {groups.map((g) => (
           <button key={g.id} type="button" role="tab" aria-selected={group.id === g.id} className={group.id === g.id ? "on" : ""} onClick={() => setTab(g.kinds[0]!)}>

@@ -523,6 +523,23 @@ html, body { overflow-x: hidden; }
 .where-tag.local { color: var(--good); }
 .model-group button { display: flex; justify-content: space-between; align-items: center; height: auto; padding: 7px 10px; border: 0; border-radius: calc(8px * var(--r-scale, 1)); background: transparent; font-size: 13.5px; text-align: start; }
 .model-group button:hover, .model-group button.on { background: var(--raised); }
+/* "Auto" (model-router.ts): first in the model menu, on the chip, and the reason line above a reply. */
+.model-pop-list .model-auto-opt { display: flex; align-items: center; gap: 8px; height: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(8px * var(--r-scale, 1)); background: transparent; font-size: 13.5px; text-align: start; }
+.model-pop-list .model-auto-opt:hover, .model-pop-list .model-auto-opt.on { background: var(--raised); }
+.model-auto-hint { display: block; margin-top: 2px; }
+.model-chip-auto { flex: none; white-space: nowrap; }
+.routed-line { font-size: 12px; margin: 6px 0 2px; }
+/* Settings › Models › Auto: chips wrap on a 390 px phone. */
+.auto-block { display: flex; flex-direction: column; gap: 6px; }
+.auto-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.auto-chip { height: 28px; padding: 0 10px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12.5px; background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }
+.auto-chip.small { height: 26px; font-size: 12px; padding: 0 8px; }
+.auto-chip.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: var(--accent); color: var(--text); }
+.auto-model-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); }
+.auto-model-head { gap: 8px; min-width: 0; }
+.auto-model-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.router-card { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--panel-2); border: 1px solid var(--border); }
+.router-card .row { flex-wrap: wrap; gap: 8px; }
 .model-pop-foot { font-size: 12.5px; padding: 6px 8px 2px; color: var(--accent); text-decoration: none; border-top: 1px solid var(--border); }
 
 .image-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 2px 0; }

@@ -698,6 +698,17 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.push({ type: "helper_usage", ...u });
   }
 
+  /**
+   * Shows which model "Auto" picked for the coming reply, and why (a grey line above it).
+   *
+   * @param modelId - The picked model.
+   * @param why - A strength id (model-router.ts) or `general`.
+   * @param loadSec - With a swap of the big local model: about how long the load takes.
+   */
+  routed(modelId: string, why: string, loadSec?: number): void {
+    this.push({ type: "routed", modelId, why, ...(loadSec ? { loadSec } : {}) });
+  }
+
   /** Adds a short note to the conversation (shown in grey). */
   note(text: string): void {
     this.push({ type: "note", text });

@@ -186,6 +186,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     engineSlotTokens: () => (worker ? mainSlot() : engine.slotContext()),
     // Routing by meaning: a tiny call to the model the engine has loaded (never in a self-work worker: not its engine).
     routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath, slots: () => engine.slots(), parallelChats: () => engine.parallelChats() })),
+    // "Auto": the router's tiny call goes to the small model beside the main one when one is loaded.
+    besideAsk: () => (worker ? undefined : sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })).asker()),
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
     ...(translator ? { translator } : {}),

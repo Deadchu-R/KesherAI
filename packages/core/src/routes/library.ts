@@ -1,3 +1,4 @@
+import { STRENGTH_LABELS, STRENGTHS, type Strength } from "../model-router.js";
 import type { FastifyInstance } from "fastify";
 import { takeGameShot } from "./game.js";
 import { cloudFolders } from "../cloud-folders.js";
@@ -377,7 +378,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   /** A session's worktree: its branch and what deleting the session would lose there. */
   app.get<{ Params: { id: string } }>("/api/conversations/:id/worktree", async (req) => (await s.conversations.worktreeWorkOf(req.params.id)) ?? null);
 
-  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean; incognito?: boolean; environment?: string } }>(
+  app.post<{ Body: { projectId?: string | null; kind?: ConversationKind; modelId?: string; mode?: PermissionMode; workspace?: string; personaId?: string; worktree?: boolean; incognito?: boolean; environment?: string; auto?: boolean } }>(
     "/api/conversations",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -392,6 +393,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
           ...(b.personaId ? { personaId: b.personaId } : {}),
           ...(b.worktree === true && b.kind === "code" ? { worktree: true } : {}),
           ...(b.incognito === true ? { incognito: true } : {}),
+          ...(typeof b.auto === "boolean" ? { auto: b.auto } : {}),
           ...(typeof b.environment === "string" && b.kind === "code" ? { environment: b.environment.slice(0, 40) } : {}),
         });
         const { messages: _m, events: _e, ...summary } = c;
@@ -447,7 +449,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown; toolsOff?: unknown; thinking?: unknown; archived?: unknown } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown; toolsOff?: unknown; thinking?: unknown; archived?: unknown; auto?: unknown } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -465,9 +467,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       // The thinking level (thinking.ts; null = the model's default) and archive (true/false) are checked here.
       if (b.thinking !== undefined && b.thinking !== null && !THINKING_LEVELS.includes(b.thinking as ThinkingLevel)) return reply.code(400).send({ error: "thinking is off, low, high or null." });
       if (b.archived !== undefined && typeof b.archived !== "boolean") return reply.code(400).send({ error: "archived is true or false." });
+      if (b.auto !== undefined && typeof b.auto !== "boolean") return reply.code(400).send({ error: "auto is true or false." });
       const rest = Object.fromEntries((["title", "modelId", "mode", "projectId", "team", "group", "personaId"] as const).filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as Partial<Pick<typeof b, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "personaId">>;
       if (rest.title !== undefined && typeof rest.title !== "string") return reply.code(400).send({ error: "title must be text" });
-      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}), ...(toolsOff ? { toolsOff: [...new Set(toolsOff)] } : {}), ...(b.thinking !== undefined ? { thinking: b.thinking as ThinkingLevel | null } : {}), ...(typeof b.archived === "boolean" ? { archived: b.archived } : {}) });
+      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}), ...(toolsOff ? { toolsOff: [...new Set(toolsOff)] } : {}), ...(b.thinking !== undefined ? { thinking: b.thinking as ThinkingLevel | null } : {}), ...(typeof b.archived === "boolean" ? { archived: b.archived } : {}), ...(typeof b.auto === "boolean" ? { auto: b.auto } : {}) });
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;
       return summary;
@@ -955,6 +958,31 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (typeof req.body?.smallTurns === "boolean") s.config.smallTurns = req.body.smallTurns;
     await s.saveConfig();
     return team();
+  });
+  // Settings › Models › Auto (model-router.ts): new chats on Auto, each model's strengths, the kinds allowed to the cloud.
+  const autoState = async () => ({ ...s.config.autoRoute, models: await s.conversations.autoModels(), labels: STRENGTH_LABELS });
+  app.get("/api/model-router", async () => autoState());
+  app.put<{ Body: { defaultAuto?: unknown; cloudKinds?: unknown; strengths?: { modelId?: unknown; list?: unknown } } }>("/api/model-router", async (req, reply) => {
+    const b = req.body ?? {};
+    const known = (x: unknown): x is Strength[] => Array.isArray(x) && x.length <= STRENGTHS.length && x.every((k) => (STRENGTHS as readonly unknown[]).includes(k));
+    if (b.defaultAuto !== undefined) {
+      if (typeof b.defaultAuto !== "boolean") return reply.code(400).send({ error: "defaultAuto is true or false." });
+      s.config.autoRoute.defaultAuto = b.defaultAuto;
+    }
+    if (b.cloudKinds !== undefined) {
+      if (!known(b.cloudKinds)) return reply.code(400).send({ error: "cloudKinds is a list of strengths." });
+      s.config.autoRoute.cloudKinds = [...new Set(b.cloudKinds)];
+    }
+    // One model's strengths; list null puts its family's defaults back.
+    if (b.strengths !== undefined) {
+      const id = b.strengths.modelId;
+      if (typeof id !== "string" || !id || id.length > 300) return reply.code(400).send({ error: "Name the model." });
+      if (b.strengths.list === null) delete s.config.autoRoute.strengths[id];
+      else if (known(b.strengths.list)) s.config.autoRoute.strengths[id] = STRENGTHS.filter((k) => (b.strengths!.list as Strength[]).includes(k));
+      else return reply.code(400).send({ error: "list is a list of strengths, or null." });
+    }
+    await s.saveConfig();
+    return autoState();
   });
   // Settings › Approvals: the grants still in force, with the agent kind and the time left (desktop and phone).
   app.get("/api/permissions/active", async () => activeGrants(s.config.permissions, Date.now()));

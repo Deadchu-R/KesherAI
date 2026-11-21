@@ -138,3 +138,20 @@ export function pickSetup<M extends { id: string; goodForCode: boolean; rating: 
   const code = chat?.goodForCode ? undefined : pick(models.filter((m) => m.goodForCode));
   return { ...(chat ? { chat: chat.id } : {}), ...(code ? { code: code.id } : {}) };
 }
+
+/**
+ * The small model recommended for "Auto"'s router (Settings › Models › Auto, RESEARCH_LOG "'Auto' model per message"):
+ * loaded beside the big chat model, it answers one tiny JSON question per message (what the message needs). Not in the
+ * "Start here" list: it is never a chat's own model.
+ */
+export const ROUTER_MODEL: RecommendedModel = {
+  id: "qwen3.5-2b-router",
+  name: "Qwen3.5 2B",
+  category: "chat",
+  repo: "unsloth/Qwen3.5-2B-GGUF",
+  filePattern: "Q4_K_M\\.gguf$",
+  sizeGb: 1.3,
+  memoryGb: 2,
+  goodForCode: false,
+  note: { en: "A small, fast router: picks the right model for each message, beside the big one.", he: "נתב קטן ומהיר: בוחר את המודל המתאים לכל הודעה, ליד המודל הגדול." },
+};

@@ -4,7 +4,7 @@ import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { RECOMMENDED_MODELS, checkLoadSettings, suggestModel, type ModelLoadSettings, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
+import { RECOMMENDED_MODELS, ROUTER_MODEL, checkLoadSettings, suggestModel, type ModelLoadSettings, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload, type LoadKind, type LoadReason } from "../llamacpp.js";
@@ -146,6 +146,40 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post("/api/engines/beside/stop", async () => {
     await side().stop();
     return side().status();
+  });
+
+  // "Auto"'s router model (Settings › Models › Auto): recommended, never downloaded by itself; one click downloads it
+  // (when it is not on the computer yet) and loads it beside the main model.
+  let routerJob: { phase: "downloading" | "loading" | "error"; message?: string } | undefined;
+  const routerState = async () => {
+    const copy = matchRecommended(await modelsOnComputer(s), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern);
+    const b = side().status();
+    return { model: { name: ROUTER_MODEL.name, sizeGb: ROUTER_MODEL.sizeGb, note: ROUTER_MODEL.note }, downloaded: !!copy, beside: b.running && b.modelId ? b.modelId : null, ...(routerJob ? { job: routerJob } : {}) };
+  };
+  app.get("/api/model-router/router", async () => routerState());
+  app.post("/api/model-router/router/setup", async (_req, reply) => {
+    if (routerJob && routerJob.phase !== "error") return reply.code(409).send({ error: "Already setting it up." });
+    if (!s.engine.status().binaryPath) return reply.code(409).send({ error: "Install the engine first (Models → Chat)." });
+    routerJob = { phase: "downloading" };
+    void (async () => {
+      let path = matchRecommended(await modelsOnComputer(s, true), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern)?.path;
+      if (!path) {
+        const files = await listHubFiles(ROUTER_MODEL.repo, { ...(s.config.huggingFaceToken ? { token: s.config.huggingFaceToken } : {}) });
+        const file = files.find((f) => new RegExp(ROUTER_MODEL.filePattern, "i").test(f.path));
+        if (!file) throw new Error(`No file matching ${ROUTER_MODEL.filePattern} in ${ROUTER_MODEL.repo}`);
+        path = join(s.paths.models, "chat", ROUTER_MODEL.repo, file.path);
+        if (!existsSync(path)) {
+          const job = s.downloads.enqueue({ url: file.url, dest: path, size: file.size, ...(file.sha256 ? { sha256: file.sha256 } : {}), label: `${ROUTER_MODEL.name} · ${file.path}` });
+          await waitForDownload(s.downloads, job.id);
+        }
+      }
+      routerJob = { phase: "loading" };
+      await side().load(path);
+      routerJob = undefined;
+    })().catch((err: Error) => {
+      routerJob = { phase: "error", message: err.message };
+    });
+    return reply.code(202).send(await routerState());
   });
 
   app.get("/api/engines/llamacpp", async () => ({ ...s.engine.status(), fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, lastModel: s.config.engines.lastModel ? basename(s.config.engines.lastModel) : null }));

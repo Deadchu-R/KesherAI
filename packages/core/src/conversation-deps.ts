@@ -100,6 +100,8 @@ export interface ConversationDeps {
   skills?: SkillStore;
   /** The built-in engine's JSON call for the tool router (tool-router.ts), or undefined while no model is loaded. */
   routeAsk?(): import("./tool-router.js").AskJson | undefined;
+  /** The small model loaded beside the main one as a JSON call (side-engine.ts), for Auto's router; undefined when none. */
+  besideAsk?(): import("./tool-router.js").AskJson | undefined;
   /** The context each chat gets on KesherAI's own engine, as it reported it (2 chats at once share it). */
   engineSlotTokens?(): number | undefined;
   /** Facts learned per project from its chats' failing commands (project-facts.ts). */

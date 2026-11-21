@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { ProviderRegistry } from "@kesher/providers";
 import { LlamaEngine, freePort } from "./llamacpp.js";
+import { engineAsk, type AskJson } from "./tool-router.js";
 
 /** The provider id of the second model (ids look like `llamacpp-beside/Gemma-4-E4B`). */
 export const SIDE_PROVIDER = "llamacpp-beside";
@@ -52,6 +53,16 @@ export class SideEngine {
     this.deps.registry.remove(SIDE_PROVIDER);
     this.deps.registry.add({ id: SIDE_PROVIDER, type: "openai-compatible", name: "KesherAI engine, beside (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey, options: { llamaCpp: { slots: () => this.engine?.slots() ?? 0 } } });
     return SideEngine.idOf(modelPath);
+  }
+
+  /**
+   * The model beside the main one as a JSON call (Auto's router asks it what a message needs, model-router.ts).
+   *
+   * @returns The call, or undefined while no model is loaded beside.
+   */
+  asker(): AskJson | undefined {
+    const e = this.engine;
+    return e ? engineAsk({ baseUrl: () => e.baseUrl, apiKey: e.apiKey, ready: () => e.status().running && !!e.status().modelPath }) : undefined;
   }
 
   /** Unloads it (frees its memory) and stops offering it. */

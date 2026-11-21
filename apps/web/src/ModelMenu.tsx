@@ -46,8 +46,10 @@ export function shortModelName(id: string): string {
  * @param props.onChange - Called with the chosen model id.
  * @param props.thinking - The chat's thinking level and its setter (null = the model's default); the picker shows
  *   only for local reasoning models (thinking.ts).
+ * @param props.auto - "Auto" (model-router.ts): whether it is on and its setter; the menu offers it first, and the
+ *   chip shows "Auto · the last pick". Choosing a model turns it off (the page sends both).
  */
-export function ModelMenu({ models, value, onChange, thinking }: { models: ModelInfo[]; value: string; onChange: (id: string) => void; thinking?: { value?: ThinkingLevel; onChange: (level: ThinkingLevel | null) => void } }) {
+export function ModelMenu({ models, value, onChange, thinking, auto }: { models: ModelInfo[]; value: string; onChange: (id: string) => void; thinking?: { value?: ThinkingLevel; onChange: (level: ThinkingLevel | null) => void }; auto?: { on: boolean; onChange: (on: boolean) => void } }) {
   const [open, setOpen] = useState(false);
   const [finding, setFinding] = useState(false);
   const [findLine, setFindLine] = useState("");
@@ -108,6 +110,7 @@ export function ModelMenu({ models, value, onChange, thinking }: { models: Model
       <button type="button" data-slide-menu className="model-chip" aria-haspopup="listbox" aria-expanded={open} aria-label={t("pickModel")} onClick={() => setOpen(!open)}>
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
+        {auto?.on && <span className="model-chip-auto">✨ {L("אוטומטי", "Auto")} ·</span>}
         <span className="model-chip-name" title={value || undefined}>{current?.name ?? (value ? shortModelName(value) : t("defaultModel"))}</span>
         {levels.length > 0 && thinking?.value && levels.includes(thinking.value) && <span className="model-chip-think" title={L("רמת חשיבה", "Thinking level")}>· {levelName(thinking.value)}</span>}
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
@@ -137,6 +140,12 @@ export function ModelMenu({ models, value, onChange, thinking }: { models: Model
           )}
           <input autoFocus placeholder={t("searchModels")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("searchModels")} />
           <div className="model-pop-list">
+            {auto && !q.trim() && (
+              <button type="button" role="option" aria-selected={auto.on} className={`model-auto-opt${auto.on ? " on" : ""}`} onClick={() => { setOpen(false); if (!auto.on) auto.onChange(true); }}>
+                <span className="grow">✨ {L("אוטומטי", "Auto")}<span className="muted small model-auto-hint">{L("בוחר את המודל המתאים לכל הודעה", "Picks the right model for each message")}</span></span>
+                {auto.on && <span aria-hidden="true">✓</span>}
+              </button>
+            )}
             {groups.length === 0 && <p className="muted small">{t("noModelsMatch")}</p>}
             {groups.map((g) => (
               <div key={g.key} className="model-group" role="group" aria-label={g.label}>
@@ -149,15 +158,15 @@ export function ModelMenu({ models, value, onChange, thinking }: { models: Model
                     key={m.id}
                     type="button"
                     role="option"
-                    aria-selected={m.id === value}
-                    className={m.id === value ? "on" : ""}
+                    aria-selected={m.id === value && !auto?.on}
+                    className={m.id === value && !auto?.on ? "on" : ""}
                     onClick={() => {
                       setOpen(false);
-                      if (m.id !== value) onChange(m.id);
+                      if (m.id !== value || auto?.on) onChange(m.id);
                     }}
                   >
                     <span dir="ltr">{m.name}</span>
-                    {m.id === value && <span aria-hidden="true">✓</span>}
+                    {m.id === value && !auto?.on && <span aria-hidden="true">✓</span>}
                   </button>
                 ))}
               </div>

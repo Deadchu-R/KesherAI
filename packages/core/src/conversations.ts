@@ -32,7 +32,7 @@ import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
 import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
-import { intentNote, isSimpleTurn, missingNote, musicNote, SEARCH_TOOLS, ToolRouter } from "./tool-router.js";
+import { intentNote, isSimpleTurn, missingNote, musicNote, SEARCH_TOOLS, ToolRouter, type Route } from "./tool-router.js";
 import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
@@ -47,6 +47,7 @@ import type { ConversationDeps } from "./conversation-deps.js";
 import { lookTools, mediaTools } from "./chat-tools-media.js";
 import { isButtonTool, quickActionNames, quickActionProblem, quickTool, type QuickServices } from "./chat-quick-actions.js";
 import { settingsTool } from "./chat-tools-settings.js";
+import { AutoModel } from "./auto-model.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
@@ -69,6 +70,8 @@ export interface NewConversation {
   worktree?: boolean;
   /** No memory read or filed, left out of search. */
   incognito?: boolean;
+  /** Start on "Auto" (model-router.ts); unset: Settings › Models' default when no model is given. */
+  auto?: boolean;
   /** A named environment (its id) instead of the folder's. */
   environment?: string;
 }
@@ -138,6 +141,14 @@ export class ConversationManager {
   private readonly sessions = new Map<string, AgentSession>();
   /** Routing by meaning (tool-router.ts): words, and a tiny call to the built-in engine when it runs. */
   private readonly router = new ToolRouter({ ask: () => this.deps.routeAsk?.() });
+  /** "Auto" as a chat model (auto-model.ts): per message, which of the user's models answers. */
+  private readonly auto = new AutoModel({
+    registry: () => this.deps.registry,
+    settings: () => this.deps.config.autoRoute,
+    engine: () => this.deps.helperEngine,
+    besideAsk: () => this.deps.besideAsk?.(),
+    mainAsk: () => this.deps.routeAsk?.(),
+  });
   /** The services the inline action buttons' own tools use (upscaler, background remover); set by the server. */
   quickServices: QuickServices = {};
   /** Whether an installable (installables.ts) is installed; set by its routes (routes/installables.ts). */
@@ -782,6 +793,8 @@ export class ConversationManager {
       ...(folder ? { envFolder: folder } : {}),
       ...(opts.environment && this.namedEnvironment(opts.environment) ? { envId: opts.environment } : {}),
       ...(opts.incognito ? { incognito: true } : {}),
+      // "Auto" (Settings › Models): a new chat with no model of its own starts on it.
+      ...((opts.auto ?? (!opts.modelId && !persona?.modelId && this.deps.config.autoRoute.defaultAuto)) && opts.kind === "chat" ? { auto: true } : {}),
       messages: [],
       events: [],
       createdAt: now,
@@ -910,6 +923,8 @@ export class ConversationManager {
       // Routing by meaning (tool-router.ts): the tools a message points at, and a note when what it needs is not installed.
       route: async (text, signal) => {
         const r = await this.router.route(text, this.sessions.get(id)?.toolNames() ?? [], this.deps.library.summary(id)?.toolsOff ?? [], !!toolSearch()?.length, signal);
+        // "Auto": the router picks this message's model first (a swap of the big local model when clearly better).
+        if (this.deps.library.summary(id)?.auto && (this.deps.library.summary(id)?.kind ?? conversation.kind) === "chat") await this.autoRoute(id, text, r, signal).catch(() => undefined);
         const missing = missingNote(r.missing);
         const note = [missing, intentNote(r.intent, r.tools), musicNote(r.music, r.tools)].filter(Boolean).join("\n") || undefined;
         // Model size per turn: a simple message on a local chat goes to the small model loaded beside the main one.
@@ -1434,18 +1449,55 @@ export class ConversationManager {
   }
 
   /**
+   * "Auto" for one message (auto-model.ts): picks the model, shows the reason line above the reply, loads the picked
+   * local model first when it is not the loaded one (never while another chat is using the engine), and switches the
+   * chat's model for this and the next messages.
+   *
+   * @param id - The chat.
+   * @param text - The user's message.
+   * @param r - The tool router's answer for it.
+   * @param signal - The user's Stop.
+   */
+  private async autoRoute(id: string, text: string, r: Route, signal: AbortSignal): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    const users = session.messages.filter((m) => m.role === "user");
+    const recent = users.at(-2)?.content;
+    const sum = this.deps.library.summary(id);
+    const { pick, row } = await this.auto.pick(
+      id,
+      { text, groups: r.groups, ...(r.music ? { music: true } : {}), simple: isSimpleTurn(text, r.groups), image: !!users.at(-1)?.images?.length, ...(recent ? { recent } : {}), current: session.modelId, noCloud: !!sum?.incognito },
+      signal,
+    );
+    let modelId = pick.modelId;
+    if (pick.swap && row?.path) {
+      // Another chat is answering on the engine now: no swap under it; this message stays on the loaded model.
+      if (Object.keys(this.activity()).some((other) => other !== id)) return session.routed(session.modelId, "general");
+      session.routed(modelId, pick.why, pick.loadSec);
+      modelId = await this.auto.load(row.path, sum?.title ?? "chat");
+    } else session.routed(modelId, pick.why);
+    if (modelId !== session.modelId) await this.update(id, { modelId });
+  }
+
+  /**
    * Changes a conversation's title, model, mode or project.
    *
    * @param id - Conversation id.
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar" | "toolsOff">> & { personaId?: string | null; thinking?: ThinkingLevel | null; archived?: boolean }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar" | "toolsOff">> & { personaId?: string | null; thinking?: ThinkingLevel | null; archived?: boolean; auto?: boolean }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
-    const { personaId, thinking, archived, ...rest } = patch;
+    const { personaId, thinking, archived, auto, ...rest } = patch;
     let next: Conversation = { ...conversation, ...rest };
+    // "Auto" on or off; off (the user picked a model) also forgets the choice kept for the task.
+    if (auto !== undefined) {
+      const { auto: _old, ...without } = next;
+      next = auto ? { ...without, auto: true } : without;
+      if (!auto) this.auto.forget(id);
+    }
     // Unset fields are taken off, not saved as null/false: the model's own thinking default, a chat not archived.
     if (thinking !== undefined) {
       const { thinking: _t, ...without } = next;
@@ -1840,6 +1892,11 @@ export class ConversationManager {
       for (const e of s.events) if (e.type === "approval_request" && e.control && pending.has(e.requestId)) out.push({ conversationId: id, title: titles.get(id) ?? "", ev: e });
     }
     return out.sort((a, b) => a.ev.at.localeCompare(b.ev.at));
+  }
+
+  /** The models "Auto" may pick, with their strengths (Settings › Models › Auto). */
+  autoModels(): ReturnType<AutoModel["models"]> {
+    return this.auto.models();
   }
 
   /** @returns Which conversations are working or waiting. */

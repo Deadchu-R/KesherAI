@@ -278,6 +278,17 @@ export const KesherConfigSchema = z.object({
   /** Model size per turn: simple messages go to a smaller model loaded beside the main one. On unless false. */
   smallTurns: z.boolean().optional(),
   /**
+   * "Auto" as a chat model (model-router.ts): new chats start on Auto, each model's strengths as the user set them
+   * (unset: from its family), and the kinds of message that may go to a cloud model.
+   */
+  autoRoute: z
+    .object({
+      defaultAuto: z.boolean().default(false),
+      strengths: z.record(z.string().max(300), z.array(z.enum(["tools", "hebrew", "code", "research", "vision", "fast"])).max(6)).default({}),
+      cloudKinds: z.array(z.enum(["tools", "hebrew", "code", "research", "vision", "fast"])).max(6).default(["research"]),
+    })
+    .prefault({}),
+  /**
    * The user's own sidebar shortcuts (any page of the app, or a web address), the same on every device. Checked in
    * routes/shortcuts.ts: a page `#/…` or an http(s) address, never a script.
    */

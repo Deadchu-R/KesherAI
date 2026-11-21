@@ -351,6 +351,11 @@ export type AgentEvent = EventBase &
     | { type: "status"; status: AgentStatus; message?: string }
     | { type: "note"; text: string }
     /**
+     * "Auto" picked the model for the reply that follows (model-router.ts): its id, why (a strength id or `general`),
+     * and with `loadSec` the big local model is being swapped for it (about that many seconds).
+     */
+    | { type: "routed"; modelId: string; why: string; loadSec?: number }
+    /**
      * The user pinned (or unpinned) one tool result: a pinned result is always sent to the model in full, never
      * pruned to its summary line (packages/agent/src/budget.ts).
      */
