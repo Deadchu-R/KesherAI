@@ -23,6 +23,7 @@ import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup } from "./board.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
+import { dismissPc, reviewPcs } from "./pc-updated.js";
 import { clearShown, notifySection, startPush } from "./push.js";
 import { connectorSection } from "./connector.js";
 import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
@@ -436,12 +437,37 @@ async function sendDraft() {
 }
 /** The task text box. */
 const draftBox = (rows) => h("textarea", { class: "inp area", rows, maxlength: 8000, "aria-label": L("מה לעשות", "What to do"), placeholder: L("מה לעשות? למשל: \"תבדוק למה הבנייה של אנדרואיד נכשלה\"", "What to do? For example: \"Find out why the Android build failed\""), value: app.draft, oninput: (e) => { app.draft = e.target.value; } });
+/** The version each PC had when this browser last looked (local to this browser; per device). */
+function readSeen() {
+    try {
+        const v = JSON.parse(localStorage.getItem("kh-pc-seen") ?? "{}");
+        return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    }
+    catch {
+        return {};
+    }
+}
+/** One-time cards "The PC was updated to X", for a PC that reports a newer version than this browser saw. */
+function updatedCards() {
+    const seen = readSeen();
+    const r = reviewPcs(devices(), seen);
+    if (JSON.stringify(r.seen) !== JSON.stringify(seen)) {
+        try {
+            localStorage.setItem("kh-pc-seen", JSON.stringify(r.seen));
+        }
+        catch { /* storage off: no memory, no card */ }
+    }
+    return r.updated.map((pc) => h("section", { class: "card pad stack", role: "status" }, h("div", { class: "row" }, h("b", { class: "grow" }, L(`המחשב ${pc.name} עודכן ל-${pc.version}`, `${pc.name} was updated to ${pc.version}`)), h("button", { type: "button", class: "btn sm-btn", "aria-label": L("סגירה", "Close"), onclick: () => { try {
+            localStorage.setItem("kh-pc-seen", JSON.stringify(dismissPc(readSeen(), pc)));
+        }
+        catch { /* none */ } render(); } }, "✕")), h("span", { class: "mut sm" }, L(`היה ${pc.from}. מה חדש: באפליקציה שמחוברת למחשב, בעמוד העדכונים.`, `It was ${pc.from}. What's new: in the app connected to that PC, on its Updates page.`))));
+}
 /** The dashboard (HubDashboard / PhoneHubDashboard). */
 function dashboard() {
     const on = devices().filter((d) => d.online).length;
     const off = devices().length - on;
     const open = allTasks().filter(isOpen);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), waitingSection(waitingView), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), ...updatedCards(), waitingSection(waitingView), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
 }
 /** The devices tab (HubDevices). */
 function devicesTab() {

@@ -9,6 +9,7 @@
  */
 import { cleanAgentLabel } from "./agent-label.js";
 import { parseAssignTo } from "./task-assign.js";
+import { cleanAwayNote } from "./device-status.js";
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1;
 /** Size and time limits shared by both sides. */
@@ -298,6 +299,8 @@ export function parseDeviceFrame(raw) {
             const optIn = x.optIn === undefined ? undefined : cleanOptIn(x.optIn);
             return { t: "beat", busy: x.busy === true, ...(optIn ? { optIn } : {}), agents: cleanAgents(x.agents, optIn?.reportLinks ?? true) };
         }
+        case "away":
+            return x.state === "asleep" || x.state === "awake" ? { t: "away", state: x.state, note: cleanAwayNote(x.note) } : null;
         case "send": {
             const env = parseEnvelope(x.env);
             return env ? { t: "send", env } : null;
