@@ -16,6 +16,7 @@ import { DesignAssistant } from "./DesignAssistant";
 import { UpdateButton } from "./UpdateButton";
 import { SidebarEdit } from "./SidebarEdit";
 import { PhoneSettings } from "./PhoneSettings";
+import { ComputersDialog } from "./ComputersMenu";
 
 /**
  * The bar across the top of the window, laid out like Claude's: on the
@@ -65,6 +66,8 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
   const [menu, setMenu] = useState(false);
   // The menu's ✏ (the phone has no sidebar on screen, so the edit list opens as a dialog).
   const [editMenu, setEditMenu] = useState(false);
+  // The Computers menu (one list for every chat: switch, disconnect).
+  const [computers, setComputers] = useState(false);
   const app = useAppMenu();
   const { simple } = useParts();
   const [host, setHost] = useState("");
@@ -118,6 +121,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           {canChooseView() && viewChoice() !== "auto" && <MenuItem icon="🖱" onSelect={() => setViewChoice("auto")}>{getLocale() === "he" ? "לפי העכבר (אוטומטי)" : "By the mouse (automatic)"}</MenuItem>}
           <MenuItem icon="⟳" href="#/updates">{t("checkUpdates")}</MenuItem>
           <MenuItem icon="↻" onSelect={() => void reconnect({ restart: true })}>{t("restartComputerApp")}</MenuItem>
+          <MenuItem icon="💻" onSelect={() => setComputers(true)}>{getLocale() === "he" ? "מחשבים" : "Computers"}</MenuItem>
           {appHome() && <MenuItem icon="⇄" href={`${appHome()!.replace(/\/$/, "")}/?switch=1`}>{t("switchComputer")}</MenuItem>}
           {desktop()?.connectComputer && !isRemote() && <MenuItem icon="🔗" href="#/settings/phone">{getLocale() === "he" ? "התחבר למחשב אחר" : "Connect to another computer"}</MenuItem>}
           {(appHome() || isRemote()) && <MenuItem icon="⏏" danger onSelect={() => { if (confirm(t("disconnectSure"))) disconnectComputer(); }}>{t("disconnectComputer")}</MenuItem>}
@@ -175,6 +179,7 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
         <ComputerHub online={online} status={status} icon={Icon.computer} />
       </div>
       {editMenu && <EditMenuDialog onClose={() => setEditMenu(false)} />}
+      {computers && <ComputersDialog onClose={() => setComputers(false)} />}
     </header>
   );
 }

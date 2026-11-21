@@ -3,6 +3,7 @@ import { loadReasonText, type LoadReason } from "./load-reason";
 import { api, isRemote } from "./api";
 import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
+import { ComputersPanel } from "./ComputersMenu";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -169,13 +170,10 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
     const bridge = desktop();
     const loadOthers = async () => {
       if (!bridge || isRemote()) return;
-      const [mine, linked] = await Promise.all([
-        api<{ devices: Array<{ id: string; name: string; online: boolean; me: boolean }> }>("/api/devices").catch(() => ({ devices: [] })),
-        bridge.computers?.().catch(() => []) ?? Promise.resolve([]),
-      ]);
+      // My devices are in the Computers list below (ComputersPanel); these are the ones connected with a link.
+      const linked = await (bridge.computers?.().catch(() => []) ?? Promise.resolve([]));
       if (!alive) return;
       setOthers([
-        ...mine.devices.filter((d) => !d.me && bridge.openDevice).map((d) => ({ key: `d:${d.id}`, name: d.name, online: d.online, open: () => bridge.openDevice!(d.id) })),
         ...linked.filter(() => !!bridge.openComputer).map((c) => ({ key: `c:${c.origin}`, name: c.name, online: true, open: () => bridge.openComputer!(c.origin) })),
       ]);
     };
@@ -249,6 +247,11 @@ export function ComputerHub({ online, status, icon }: { online: boolean | null; 
               ))}
             </div>
           )}
+          {/* The same list as the Computers menu: every computer found, its state, use for all chats, switch. */}
+          <div className="hub-others">
+            <span className="muted small">{L("מחשבים", "Computers")}</span>
+            <ComputersPanel />
+          </div>
           {desktop() && !isRemote() && !others.length && (
             <p className="muted small"><a href="#/settings">{L("לחבר מחשב נוסף: הגדרות ← החיבורים", "Connect another computer: Settings → Connections")}</a></p>
           )}

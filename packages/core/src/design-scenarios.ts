@@ -52,6 +52,8 @@ const stepSchema = z.union([
   z.object({ top: selector }).strict(),
   // Selects the element's text (as a user's drag or the phone's handles would), for boards of a selection's tools.
   z.object({ select: selector }).strict(),
+  // Sets one localStorage value and reloads, for a board that starts from what the browser remembers (a version seen).
+  z.object({ local: z.object({ key: z.string().regex(/^[\w.-]{1,60}$/), value: z.string().max(200) }).strict() }).strict(),
 ]);
 /**
  * What a hub board (`"target": "hub"`) starts from: whether the owner is signed in (and the fields of `/api/state` to

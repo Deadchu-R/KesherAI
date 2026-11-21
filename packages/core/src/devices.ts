@@ -44,6 +44,8 @@ export interface DeviceView {
   url?: string;
   models: number;
   lastSeen: string;
+  /** The KesherAI version it reported when it last synced. */
+  version?: string;
   providerId?: string;
   /** It said it is going to sleep or shutting down (when). */
   asleepSince?: string;
@@ -508,7 +510,7 @@ export class Devices {
 
   /** Finds a working address for another computer and adds its models here. */
   private async useDevice(x: DeviceEntry): Promise<DeviceView> {
-    const view: DeviceView = { id: x.id, name: x.name, platform: x.platform, ...(x.gpu ? { gpu: x.gpu } : {}), me: x.id === this.id, online: false, models: 0, lastSeen: x.updatedAt };
+    const view: DeviceView = { id: x.id, name: x.name, platform: x.platform, ...(x.gpu ? { gpu: x.gpu } : {}), me: x.id === this.id, online: false, models: 0, lastSeen: x.updatedAt, ...(x.version ? { version: x.version } : {}) };
     if (view.me) return { ...view, online: true };
     const providerId = `device-${x.id.slice(0, 8)}`;
     // A computer that said it went to sleep stays away until it says it is back (or a check later finds it).

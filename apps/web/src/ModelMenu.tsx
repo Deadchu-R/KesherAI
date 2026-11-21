@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelInfo } from "./api";
 import { refreshComputers } from "./computers";
+import { ACTIVE_COMPUTER_EVENT, activeComputer, startComputer } from "./active-computer";
 import { toast } from "./library";
 import { standbyText, useStandby } from "./standby";
 import { thinkingLevels, type ThinkingLevel } from "@kesher/shared";
@@ -90,10 +91,17 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
   const devices = useMemo(() => [...new Set(models.map((m) => m.providerId).filter((p) => p.startsWith("device-")))], [models]);
   const onDevice = current?.providerId.startsWith("device-") ? current.providerId : "";
   // Which computer runs the chat: this one ("") or one of My devices.
-  const [where, setWhere] = useState<string>(onDevice);
+  // It starts on the chat's own computer, else on the app-wide one (the Computers menu), else this one.
+  const [active, setActive] = useState(activeComputer);
   useEffect(() => {
-    if (open) setWhere(onDevice);
-  }, [open]);
+    const sync = () => setActive(activeComputer());
+    addEventListener(ACTIVE_COMPUTER_EVENT, sync);
+    return () => removeEventListener(ACTIVE_COMPUTER_EVENT, sync);
+  }, []);
+  const [where, setWhere] = useState<string>(startComputer(onDevice, active, devices));
+  useEffect(() => {
+    if (open) setWhere(startComputer(onDevice, active, devices));
+  }, [open, active]);
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const map = new Map<string, Group>();

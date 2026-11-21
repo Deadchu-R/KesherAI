@@ -1,0 +1,153 @@
+{
+  "group": "מחשבים · Computers",
+  "mocks": [
+    {
+      "url": "**/api/version",
+      "method": "GET",
+      "json": {
+        "version": "0.6.442",
+        "commit": "a1b2c3d"
+      }
+    },
+    {
+      "url": "**/api/updates/history",
+      "method": "GET",
+      "json": {
+        "releases": [
+          {
+            "version": "0.6.442",
+            "notes": [
+              "הטלפון מראה מה חדש כשהמחשב מתעדכן",
+              "תפריט מחשבים אחד למעבר וניתוק"
+            ]
+          },
+          {
+            "version": "0.6.441",
+            "notes": [
+              "הערות עדכון בעברית גם בטלפון"
+            ]
+          },
+          {
+            "version": "0.6.440",
+            "notes": [
+              "חיפוש מחשבים מהיר יותר",
+              "תיקון בדיקת מודלים במחשב שני"
+            ]
+          },
+          {
+            "version": "0.6.439",
+            "notes": [
+              "לא אמור להופיע"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "url": "**/api/devices",
+      "method": "GET",
+      "json": {
+        "connected": true,
+        "share": true,
+        "syncSettings": false,
+        "me": {
+          "id": "d-home",
+          "name": "PC-Haifa"
+        },
+        "running": false,
+        "step": null,
+        "checking": [],
+        "lastRun": null,
+        "error": null,
+        "devices": [
+          {
+            "id": "d-home",
+            "name": "PC-Haifa",
+            "platform": "win32",
+            "me": true,
+            "online": true,
+            "models": 4,
+            "lastSeen": {
+              "$ago": "1m"
+            },
+            "version": "0.6.442"
+          },
+          {
+            "id": "d-lap",
+            "name": "Laptop-TLV",
+            "platform": "win32",
+            "me": false,
+            "online": true,
+            "models": 2,
+            "lastSeen": {
+              "$ago": "2m"
+            },
+            "version": "0.6.441",
+            "providerId": "device-lap"
+          },
+          {
+            "id": "d-old",
+            "name": "Studio",
+            "platform": "linux",
+            "me": false,
+            "online": false,
+            "models": 0,
+            "lastSeen": {
+              "$ago": "5h"
+            },
+            "version": "0.6.430"
+          }
+        ]
+      }
+    }
+  ],
+  "boards": [
+    {
+      "id": "PcUpdatedCard",
+      "title": "טלפון מחובר: כרטיס חד-פעמי \"המחשב עודכן ל-…\" עם מה חדש מכל הגרסאות מאז שהטלפון ראה, ושורה אם גם אפליקציית הטלפון מחכה לעדכון",
+      "titleEn": "Phone connected: a one-time \"The PC was updated to …\" card with what is new in every version since the phone last saw one",
+      "route": "#/",
+      "viewports": [
+        "phone",
+        "desktop"
+      ],
+      "height": {
+        "desktop": 700,
+        "phone": 900
+      },
+      "steps": [
+        {
+          "local": {
+            "key": "kesherai-seen-version",
+            "value": "0.6.439"
+          }
+        },
+        {
+          "wait": ".updated-card"
+        }
+      ]
+    },
+    {
+      "id": "ComputersMenu",
+      "title": "תפריט מחשבים אחד לכל האפליקציה: מחוברים וזמינים, נראה לאחרונה, גרסה, \"השתמש בכל הצ'אטים\", מעבר וניתוק",
+      "titleEn": "One Computers menu for the whole app: state, last seen, version, use for all chats, switch and disconnect",
+      "route": "#/",
+      "viewports": [
+        "phone",
+        "desktop"
+      ],
+      "height": {
+        "desktop": 900,
+        "phone": 1000
+      },
+      "steps": [
+        {
+          "click": ".bar-status"
+        },
+        {
+          "wait": ".pcs-row"
+        }
+      ]
+    }
+  ]
+}

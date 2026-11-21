@@ -834,6 +834,11 @@
     // A computer tab in the side menu: open that saved computer (its addresses in turn).
     const use = new URLSearchParams(location.search).get("use");
     if (use !== null && /^\d{1,2}$/.test(use) && loadComputers()[Number(use)]) return connectComputer(loadComputers()[Number(use)]);
+    // The interface's Computers menu asks for a computer by its name (it does not see this list's order).
+    if (use && !/^\d{1,2}$/.test(use)) {
+      const byName = loadComputers().find((c) => (c.name || "").toLowerCase() === use.toLowerCase());
+      if (byName) return connectComputer(byName);
+    }
     // "Continue on the computer" from a phone chat: open the saved computer at that chat.
     const openAt = new URLSearchParams(location.search).get("open");
     if (openAt && /^#\/c\/[\w-]{8,64}$/.test(openAt) && (recent || saved)) {

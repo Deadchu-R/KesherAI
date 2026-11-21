@@ -284,12 +284,12 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 
 ## Backlog: Devices, hub and phone
 - ✅ Backup update source without GitHub (updates from the user's own computers); keep GitHub too (in code: updates-peer.test.ts)
-- ⬜ The phone app does not get the PC's update or notes when only the PC updated not built
+- ✅ The phone (remote and hub page) gets a one-time "The PC was updated to X" card with the notes of every version since it last saw one, and a line when the phone app itself is behind (UpdatedCard.tsx, updated-notes.ts, hub page pc-updated.ts; the hub card has no notes: its content policy blocks GitHub)
 - ⬜ Phone app redesign in the same design line; phone health screen; settings button while connected not built
 - ✅ Phone approvals from the notification (2026-11-21): the hub's push shows the newest ask with two buttons — "▶ הפעל / לא עכשיו" for an Antigravity Run ask, "✓ אשר / דחה" for any other approval; a button sends the answer sealed from the phone to the PC (one answer, refused after expiry); a tap opens the ask's card. The PC seals the ask to the phone; the hub sees only the count. 👤 Roee: after the release, open the hub web app on the phone once (it loads the new service worker and the PCs' keys); notifications stay on, no re-subscribe. iPhone: no buttons, only the tap.
 - 🔨 Notifications like any app, no ntfy and no cost, opening the right page (37a0a1b 6f91127 hub Web Push) missing: ntfy still used on the PC
 - ⬜ A computer about to sleep tells the others; faster device discovery with status not built
-- ⬜ Found computers shared by every chat; disconnect and switch computer from the menu not built
+- ✅ One Computers menu for the whole app (app menu and the top bar's computer panel, phone too): state, last seen, version, use for all chats, switch, disconnect (ComputersMenu.tsx, active-computer.ts)
 - ✅ Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds (2e9a75f agents) (4c47834)
 - ✅ Telegram bot with approval buttons (packages/core/src/telegram.ts)
 - ✅ Remote desktop with a PIN, computer load view with Terminate, computer tabs (FUTURE_FEATURES)

@@ -23,6 +23,7 @@ import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup, type BoardView } from "./board.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
+import { dismissPc, reviewPcs, type SeenVersions } from "./pc-updated.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
 import { connectorSection, type ConnectionView } from "./connector.js";
 import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
@@ -567,6 +568,33 @@ async function sendDraft(): Promise<void> {
 const draftBox = (rows: number) =>
   h("textarea", { class: "inp area", rows, maxlength: 8000, "aria-label": L("מה לעשות", "What to do"), placeholder: L("מה לעשות? למשל: \"תבדוק למה הבנייה של אנדרואיד נכשלה\"", "What to do? For example: \"Find out why the Android build failed\""), value: app.draft, oninput: (e) => { app.draft = (e.target as HTMLTextAreaElement).value; } });
 
+/** The version each PC had when this browser last looked (local to this browser; per device). */
+function readSeen(): SeenVersions {
+  try {
+    const v = JSON.parse(localStorage.getItem("kh-pc-seen") ?? "{}") as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as SeenVersions) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** One-time cards "The PC was updated to X", for a PC that reports a newer version than this browser saw. */
+function updatedCards(): HTMLElement[] {
+  const seen = readSeen();
+  const r = reviewPcs(devices(), seen);
+  if (JSON.stringify(r.seen) !== JSON.stringify(seen)) {
+    try { localStorage.setItem("kh-pc-seen", JSON.stringify(r.seen)); } catch { /* storage off: no memory, no card */ }
+  }
+  return r.updated.map((pc) =>
+    h(
+      "section",
+      { class: "card pad stack", role: "status" },
+      h("div", { class: "row" }, h("b", { class: "grow" }, L(`המחשב ${pc.name} עודכן ל-${pc.version}`, `${pc.name} was updated to ${pc.version}`)), h("button", { type: "button", class: "btn sm-btn", "aria-label": L("סגירה", "Close"), onclick: () => { try { localStorage.setItem("kh-pc-seen", JSON.stringify(dismissPc(readSeen(), pc))); } catch { /* none */ } render(); } }, "✕")),
+      h("span", { class: "mut sm" }, L(`היה ${pc.from}. מה חדש: באפליקציה שמחוברת למחשב, בעמוד העדכונים.`, `It was ${pc.from}. What's new: in the app connected to that PC, on its Updates page.`)),
+    ),
+  );
+}
+
 /** The dashboard (HubDashboard / PhoneHubDashboard). */
 function dashboard(): HTMLElement {
   const on = devices().filter((d) => d.online).length;
@@ -577,6 +605,7 @@ function dashboard(): HTMLElement {
     { class: "page" },
     h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))),
     relay(),
+    ...updatedCards(),
     waitingSection(waitingView),
     h(
       "div",

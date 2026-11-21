@@ -154,6 +154,10 @@ async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   if ("click" in s) await page.locator(s.click).first().click({ ...(s.optional ? { timeout: 2500 } : T), ...(s.force ? { force: true } : {}) }).catch((e: unknown) => { if (!s.optional) throw e; });
   else if ("wait" in s) await page.locator(s.wait).first().waitFor(T);
   else if ("waitMs" in s) await page.waitForTimeout(s.waitMs);
+  else if ("local" in s) {
+    await page.evaluate(`localStorage.setItem(${JSON.stringify(s.local.key)}, ${JSON.stringify(s.local.value)}); location.reload()`);
+    await page.waitForTimeout(1200);
+  }
   else if ("fill" in s) await page.locator(s.fill).first().fill(s.value, T);
   else if ("hover" in s) await page.locator(s.hover).first().hover(T);
   else if ("scroll" in s) await page.locator(s.scroll).first().scrollIntoViewIfNeeded(T);
