@@ -1,0 +1,171 @@
+{
+ "group": "עורכים · Editors",
+ "now": "2026-11-22T10:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c1/files/download*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#b9824f\"/><stop offset=\"1\" stop-color=\"#6b4423\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><g stroke=\"#4d2f16\" stroke-width=\"3\" opacity=\".5\"><path d=\"M0 96H512M0 192H512M0 288H512M0 384H512\"/></g></svg>",
+   "contentType": "image/svg+xml"
+  }
+ ],
+ "boards": [
+  {
+   "id": "EditorsEditInVideo",
+   "title": "עורך הווידאו: תפריט \"ערוך ב…\" עם \"ערוך סאונד בעורך הסאונד\" (חוזר אל ציר הזמן)",
+   "titleEn": "Video editor: the \"Edit in…\" menu with \"Edit audio in the sound editor\" (comes back into the timeline)",
+   "route": "#/p/video-editor/editor?c=c1&f=shared%2Fclip.mp4",
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    }
+   ]
+  },
+  {
+   "id": "EditorsEditInModel",
+   "title": "עורך התלת ממד: תפריט \"ערוך ב…\" עם \"ערוך טקסטורה בעורך התמונות\" (החלק שנבחר, חוזר לחומר שלו)",
+   "titleEn": "3D editor: the \"Edit in…\" menu with \"Edit texture in the picture editor\" (the chosen part, back into its material)",
+   "route": "#/p/model-editor/editor",
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    }
+   ]
+  },
+  {
+   "id": "EditorsEditInImage",
+   "title": "עורך התמונות: \"ערוך ב…\" עם \"צור מודל תלת ממד מזה\" (מופיע רק כשיש כלי תמונה-לתלת-ממד במחשב)",
+   "titleEn": "Picture editor: \"Edit in…\" with \"Make a 3D model from this\" (shown only when a picture-to-3D tool exists on the computer)",
+   "route": "#/p/image-editor/editor?c=c1&f=shared%2Fwood.png",
+   "mocks": [
+    {
+     "url": "**/api/comfy-ui/flows",
+     "json": [
+      {
+       "id": "3d-trellis2",
+       "installed": true,
+       "allowed": true,
+       "ready": true,
+       "downloading": false,
+       "missingGb": 0
+      }
+     ]
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn:visible"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #editIn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    }
+   ]
+  },
+  {
+   "id": "EditorsReturnChip",
+   "title": "עורך התמונות שנפתח מעורך התלת ממד: שבב \"חזרה לעורך התלת ממד\" בפינה, וגם \"חזרה למודל\" שמחזיר את התוצאה",
+   "titleEn": "Picture editor opened from the 3D editor: the \"Return to the 3D editor\" chip in the corner, next to \"Back to the 3D model\" which brings the result",
+   "route": "#/p/image-editor/editor?c=c1&f=shared%2Fwood.png&ret=shared%2Fchair-working.glb&retp=model-editor&slot=Seat%3Amap",
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".return-chip"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #toBack:visible"
+    }
+   ]
+  },
+  {
+   "id": "EditorsInstallOffer",
+   "title": "עורך שחסר: \"חזרה לעורך התלת ממד\" כשהוא לא מותקן פותח את חלון ההתקנה, ואחרי ההתקנה הפעולה ממשיכה",
+   "titleEn": "A missing editor: \"Return to the 3D editor\" while it is not installed opens the Install window; the action goes on after installing",
+   "route": "#/p/image-editor/editor?c=c1&f=shared%2Fwood.png&ret=shared%2Fchair-working.glb&retp=model-editor&slot=Seat%3Amap",
+   "mocks": [
+    {
+     "url": "**/api/parts",
+     "json": {
+      "simple": false,
+      "parts": [
+       {
+        "id": "model-editor",
+        "pages": [],
+        "icon": "🧊",
+        "downloadGb": 0,
+        "plugin": "model-editor",
+        "title": {
+         "en": "3D editor",
+         "he": "עורך תלת ממד"
+        },
+        "description": {
+         "en": "",
+         "he": ""
+        },
+        "on": false
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/installables/model-editor",
+     "json": {
+      "id": "model-editor",
+      "he": "עורך תלת ממד",
+      "en": "3D editor",
+      "aboutHe": "חלקים, חומרים ומידות של מודל תלת ממד בסגנון Blender.",
+      "aboutEn": "Parts, materials and measurements of a 3D model, after Blender.",
+      "sizeGb": 0,
+      "where": "D:/KesherAI/plugins",
+      "changeHref": "#/parts",
+      "ready": false,
+      "busy": false
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".return-chip"
+    },
+    {
+     "click": ".return-chip"
+    },
+    {
+     "wait": ".install-dialog"
+    }
+   ]
+  }
+ ]
+}

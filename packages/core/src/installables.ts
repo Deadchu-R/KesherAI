@@ -13,7 +13,7 @@ import type { AgentTool } from "@kesher/agent";
  * Where an installable is saved: the models folder, the engines folder (which moves to the heavy-data drive), or the
  * vision models' folder (on the heavy-data drive too, vision-service.ts).
  */
-export type InstallFolder = "models" | "engines" | "vision";
+export type InstallFolder = "models" | "engines" | "vision" | "plugins";
 
 /** What the Install window shows about one thing, before any live state. */
 export interface InstallableInfo {
@@ -36,6 +36,11 @@ export const INSTALLABLES: readonly InstallableInfo[] = [
   { id: "text-to-speech", he: "הקראה בקול", en: "Text to speech", aboutHe: "Kokoro: מקריא טקסט בקול טבעי.", aboutEn: "Kokoro: reads text aloud in a natural voice.", folder: "engines" },
   { id: "vision-model", he: "מודל ראייה למחשב ולדפדפן", en: "Computer & browser vision model", aboutHe: "Qwen3-VL 8B: מוצא כפתורים ואייקונים בצילום מסך כשאין להם שם (משחקים, Unity, קנבס).", aboutEn: "Qwen3-VL 8B: finds buttons and icons on a screenshot when they have no name (games, Unity, canvases).", folder: "vision" },
   { id: "vision-model-uitars", he: "UI-TARS (ראייה למחשב)", en: "UI-TARS (computer vision)", aboutHe: "UI-TARS-1.5 7B: מודל שאומן למצוא דברים על המסך; דעה שנייה לבדיקת מודלי הראייה.", aboutEn: "UI-TARS-1.5 7B: trained to find things on screens; a second opinion for the vision test.", folder: "vision" },
+  // The editors (plugins/*-editor): each is a part of its own; "Edit in…" offers the one that is missing (editor-handoff.ts).
+  { id: "image-editor", he: "עורך תמונות", en: "Image editor", aboutHe: "עורך שכבות בסגנון פוטושופ: מסכות, כלים עם AI והחזרת התוצאה לעורך שממנו באת.", aboutEn: "A layered editor after Photoshop: masks, AI tools, and the result goes back to the editor you came from.", folder: "plugins" },
+  { id: "video-editor", he: "עורך וידאו", en: "Video editor", aboutHe: "ציר זמן בסגנון CapCut: פיצול, קיצוץ וייצוא חזרה לצ'אט.", aboutEn: "A timeline after CapCut: split, trim and export back to the chat.", folder: "plugins" },
+  { id: "sound-editor", he: "עורך סאונד", en: "Sound editor", aboutHe: "גל קול בסגנון Audition: חיתוך, דהייה, עוצמה ותמלול.", aboutEn: "A waveform after Audition: cut, fade, volume and the transcript.", folder: "plugins" },
+  { id: "model-editor", he: "עורך תלת ממד", en: "3D editor", aboutHe: "חלקים, חומרים ומידות של מודל תלת ממד בסגנון Blender.", aboutEn: "Parts, materials and measurements of a 3D model, after Blender.", folder: "plugins" },
   { id: "ffmpeg", he: "FFmpeg", en: "FFmpeg", aboutHe: "קורא וממיר קבצי שמע ווידאו.", aboutEn: "Reads and converts audio and video files.", folder: "engines" },
 ];
 

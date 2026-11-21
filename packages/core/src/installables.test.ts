@@ -44,3 +44,25 @@ test("the Install window's facts, and the chat continues by itself once it is in
   assert.equal(await s.conversations.installReady!("text-to-speech"), true);
   await app.close();
 });
+
+test("the editors are installables: installed means the part is on, installing turns it on, nothing to download", async () => {
+  const config = { parts: { "sound-editor": false } as Record<string, boolean>, plugins: {} as Record<string, { enabled: boolean }>, activeModels: {} };
+  const s = {
+    config,
+    paths: { models: "/data/models", engines: "/data/engines", plugins: "/data/plugins" },
+    saveConfig: async () => undefined,
+    plugins: { reload: async () => undefined },
+    comfy: { stop: async () => undefined },
+    library: { summary: () => undefined },
+    conversations: {},
+  } as unknown as KesherServices;
+  const app = Fastify();
+  await installableRoutes(app, s);
+  const v = (await app.inject({ method: "GET", url: "/api/installables/sound-editor" })).json() as { ready: boolean; sizeGb: number; where: string; changeHref: string; en: string };
+  assert.deepEqual([v.ready, v.sizeGb, v.where, v.changeHref], [false, 0, "/data/plugins", "#/parts"]);
+  const r = await app.inject({ method: "POST", url: "/api/installables/sound-editor/install", payload: {} });
+  assert.equal(r.statusCode, 202);
+  assert.equal(config.parts["sound-editor"], undefined, "the part is on");
+  assert.notEqual(config.plugins["sound-editor"]?.enabled, false, "its plugin is not disabled");
+  assert.equal(((await app.inject({ method: "GET", url: "/api/installables/sound-editor" })).json() as { ready: boolean }).ready, true);
+});

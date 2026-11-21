@@ -7,7 +7,8 @@ import { INSTALLABLES, type InstallableInfo } from "../installables.js";
 import { ensureImageModel, ensureVideoModel, imageModelPick, videoStatus } from "../sdcpp.js";
 import { ensureFfmpeg, ffmpegInstalled } from "../ffmpeg.js";
 import { ensureEngine } from "./engine.js";
-import { VISION_MODELS } from "@kesher/shared";
+import { PARTS, VISION_MODELS, partOn } from "@kesher/shared";
+import { apply as applyParts } from "./parts.js";
 import { visionServiceOf } from "../vision-service.js";
 
 /** One installable's live side: is it here, is it installing, how big, and how to install it with the app's own installer. */
@@ -101,6 +102,23 @@ function liveOf(s: KesherServices): Record<string, Live> {
         },
       ]),
     ),
+    // The editors are parts with an official plugin: "installed" is the part being on, installing turns it on (no download).
+    ...Object.fromEntries(
+      PARTS.filter((p) => p.plugin).map((p): [string, Live] => [
+        p.id,
+        {
+          ready: async () => partOn(s.config.parts, p.id) && s.config.plugins[p.plugin!]?.enabled !== false,
+          busy: async () => false,
+          sizeGb: async () => 0,
+          start: async () => {
+            const { [p.id]: _gone, ...rest } = s.config.parts;
+            s.config.parts = rest;
+            await s.saveConfig();
+            await applyParts(s, [p.id], []);
+          },
+        },
+      ]),
+    ),
     ffmpeg: {
       ready: () => ffmpegInstalled(s.paths.engines),
       busy: async () => ffmpegBusy,
@@ -146,8 +164,8 @@ export async function installableRoutes(app: FastifyInstance, s: KesherServices)
       ...info,
       ...(sizeGb !== undefined ? { sizeGb: Math.round(sizeGb * 10) / 10 } : {}),
       ...(l.approx ? { approx: true } : {}),
-      where: info.folder === "vision" ? (visionServiceOf(s.config)?.dir() ?? s.paths.models) : info.folder === "models" ? s.paths.models : s.paths.engines,
-      changeHref: info.folder === "models" ? "#/models" : "#/settings/computer",
+      where: info.folder === "plugins" ? s.paths.plugins : info.folder === "vision" ? (visionServiceOf(s.config)?.dir() ?? s.paths.models) : info.folder === "models" ? s.paths.models : s.paths.engines,
+      changeHref: info.folder === "models" ? "#/models" : info.folder === "plugins" ? "#/parts" : "#/settings/computer",
       ready,
       busy: busy && !ready,
     };

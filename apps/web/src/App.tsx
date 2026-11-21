@@ -34,6 +34,7 @@ import { useAppMenu } from "./AppMenu";
 import { ToolIcon } from "./ToolIcon";
 import { useAppearance } from "./appearance";
 import { HOME_SECTIONS, type PermissionMode } from "@kesher/shared";
+import { InstallWindowHost } from "./InstallWindow";
 import { createConversation, refreshLibrary, toast, useLibrary, useToast } from "./library";
 import { useModels } from "./useModels";
 import { PairPrompt } from "./PairPrompt";
@@ -431,6 +432,7 @@ export function App() {
         <PageBoundary page={hash}><Suspense fallback={<div className="page-loading" aria-busy="true" />}>{page}</Suspense></PageBoundary>
       </main>
       {message && <div className="toast" role="status">{message}</div>}
+      <InstallWindowHost />
       <ComputerBanner hidden={hash === "#/watch"} />
       <ApprovalsPill hidden={hash === "#/watch" || hash === "#/inbox" || hash.startsWith("#/c/")} />
       <ModelPickerHost />

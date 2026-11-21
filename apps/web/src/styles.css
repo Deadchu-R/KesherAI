@@ -625,7 +625,10 @@ html, body { overflow-x: hidden; }
 
 /* ---------- plugins and mods ---------- */
 .plugin-frame { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
-.plugin-page { flex: 1; min-height: calc(100vh - var(--bar-h)); display: flex; }
+.plugin-page { flex: 1; min-height: calc(100vh - var(--bar-h)); display: flex; position: relative; }
+/* "Return to <editor>" (editor-handoff.ts): a small pill at the page's lower corner, clear of the editors' own bars; 44 px tall to tap. */
+.return-chip { position: absolute; z-index: 30; inset-inline-start: 12px; bottom: 12px; min-height: 44px; max-width: calc(100% - 24px); padding: 0 16px; border-radius: 22px; border: 1px solid var(--border-strong); background: var(--panel-2); color: var(--text); font-size: 14px; box-shadow: 0 6px 18px #0007; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.return-chip:hover, .return-chip:focus-visible { border-color: var(--accent); }
 .plugin-panel { margin: 0 24px 8px; height: 42vh; border: 1px solid var(--border); border-radius: calc(14px * var(--r-scale, 1)); overflow: hidden; }
 .composer-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 6px; }
 .chip-text { height: 28px; padding: 0 10px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12.5px; background: transparent; color: var(--text-2); border: 1px solid var(--border-strong); }

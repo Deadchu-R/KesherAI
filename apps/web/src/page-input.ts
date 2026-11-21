@@ -1,3 +1,5 @@
+import { EDITOR_FILES, SLOT, isEditor } from "./editor-handoff";
+
 /** What a page was opened with: the file, and the hand-off between editors when there is one. */
 export interface PageInput {
   conversationId: string;
@@ -14,13 +16,7 @@ export interface PageInput {
   guide?: string;
 }
 
-const KINDS: Record<string, RegExp> = {
-  "image-editor": /\.(png|jpe?g|webp|gif|bmp)$/i,
-  "video-editor": /\.(mp4|webm|mov|m4v|mkv)$/i,
-  "sound-editor": /\.(mp3|wav|m4a|ogg|flac|aac|opus)$/i,
-  "model-editor": /\.(glb|gltf)$/i,
-};
-const SLOT = /^[\p{L}\p{N}_:.\- ]{1,80}$/u;
+const KINDS: Readonly<Record<string, RegExp | undefined>> = EDITOR_FILES;
 
 /**
  * The chat file a page was opened with (`?c=<chat>&f=<file>`): a picture for a page that declared `image`, a video for
@@ -47,7 +43,7 @@ export function pageInput(query: string, uses: readonly string[] | undefined): P
   const slot = q.get("slot") ?? "";
   const back = q.get("back");
   const g = q.get("g");
-  const handoff = !!(retp && ret && KINDS[retp]?.test(ret) && SLOT.test(slot));
+  const handoff = !!(retp && isEditor(retp) && ret && KINDS[retp]?.test(ret) && SLOT.test(slot));
   return {
     conversationId: c,
     path: f,

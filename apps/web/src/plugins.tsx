@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { refreshParts, setParts } from "./parts";
+import { refreshParts } from "./parts";
 import type { GodotSceneInput, PageInput, UnitySceneInput, UnrealLevelInput } from "./page-input";
 import { api, withToken } from "./api";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
+import { requestInstall } from "./InstallWindow";
+import { backHref, checkRequest, isEditor, openHref, runHandoff, ticketOf, type Capabilities, type EditorId, type HandoffDeps, type OpenRequest } from "./editor-handoff";
 
 /** A file as a `data:` URL, the form plugin pages get pictures and sound in. */
 /**
@@ -28,11 +30,12 @@ function fromDataUrl(given: unknown): Promise<Response> {
 
 /**
  * Each editor is a part of its own (asked 2026-11-18): when one editor needs another (the video editor's sound into the
- * sound editor), the other may be off. This offers to turn it on, says what it is and its size, and waits for the
- * plugin to load.
+ * sound editor), the other may be off. This shows the Install window (what it is, its size and where it is saved),
+ * installs it on the computer (from the phone too) and waits for the plugin to load, so the caller can go on with the
+ * same action.
  *
- * @param part - The part's id (packages/shared/src/parts.ts).
- * @param why - What she was doing, for the question.
+ * @param part - The part's id (packages/shared/src/parts.ts; an editor's id is its plugin id).
+ * @param why - What she was doing, for the window.
  * @returns Whether it is on now.
  */
 export async function offerPart(part: string, why: string): Promise<boolean> {
@@ -40,14 +43,11 @@ export async function offerPart(part: string, why: string): Promise<boolean> {
   const it = parts.find((x) => x.id === part);
   if (!it) return false;
   if (it.on) return true;
-  const he = getLocale() === "he";
-  const title = he ? it.title.he : it.title.en;
-  const size = it.downloadGb ? (he ? ` (הורדה של ${it.downloadGb} GB)` : ` (a ${it.downloadGb} GB download)`) : he ? " (בלי הורדה)" : " (nothing to download)";
-  if (!confirm(he ? `${why}: צריך את ${title}, חלק נפרד של KesherAI${size}. להפעיל אותו עכשיו?` : `${why} needs the ${title}, a separate part of KesherAI${size}. Turn it on now?`)) return false;
-  await setParts({ parts: { [part]: true } });
+  if (!(await requestInstall(part, why))) return false;
+  await refreshParts();
   for (let i = 0; i < 20; i++) {
     await refreshPluginUi();
-    if (cache.pages.some((pg) => pg.pluginId === part)) return true;
+    if (!it.plugin || cache.pages.some((pg) => pg.pluginId === it.plugin)) return true;
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
@@ -60,6 +60,42 @@ function dataUrl(blob: Blob): Promise<string> {
     r.onerror = () => reject(r.error);
     r.readAsDataURL(blob);
   });
+}
+
+/** The hand-off's hooks in the app: parts, the Install window, and the address bar (editor-handoff.ts). */
+const handoffDeps: HandoffDeps = {
+  installed: async (id) => (await refreshParts()).some((x) => x.id === id && x.on),
+  offerInstall: (id, why) => offerPart(id, why),
+  go: (href) => {
+    location.hash = href;
+  },
+};
+
+/**
+ * Saves a file a page handed over (a `data:` URL) in a chat's folder, for the editors' hand-off.
+ *
+ * @param chat - The chat's id.
+ * @param data - The file as a `data:` URL.
+ * @param name - Its name (at most 120 characters; the server makes it unique).
+ * @returns Its path in the chat (`shared/<name>`).
+ * @throws Error when it is empty, over 300 MB, or the server refuses it.
+ */
+async function saveInChat(chat: string, data: unknown, name: string): Promise<string> {
+  const bytes = await fromDataUrl(data).then((x) => x.blob());
+  if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The file is empty or larger than 300 MB.");
+  const up = await fetch(withToken(`/api/conversations/${encodeURIComponent(chat)}/files?name=${encodeURIComponent(name.slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+  if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
+  return `shared/${((await up.json()) as { name: string }).name}`;
+}
+
+/**
+ * Which optional tools the "Edit in…" menus can use on this computer. In remote the same question goes to the PC.
+ *
+ * @returns `image3d`: a picture-to-3D flow is listed, ComfyUI is installed and business mode lets it run.
+ */
+export async function editorCapabilities(): Promise<Capabilities> {
+  const flows = await api<Array<{ id: string; installed?: boolean; allowed?: boolean }>>("/api/comfy-ui/flows").catch(() => []);
+  return { image3d: flows.some((f) => f.id.startsWith("3d-") && f.installed === true && f.allowed === true) };
 }
 
 /** What active plugins add to the interface (from `/api/plugins/ui`). */
@@ -315,40 +351,53 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         // file this page will reopen, `slot` = where the result goes in it).
         case "editor.handoff": {
           if (!input) throw new Error("This page was not opened from a chat.");
+          if (!isEditor(pluginId)) throw new Error("Only an editor hands off.");
           const to = String(p.to ?? "");
-          if (!/^(image|video|sound|model)-editor$/.test(to) || to === pluginId) throw new Error("Hand off to another editor.");
           const slot = String(p.slot ?? "");
-          if (!/^[\p{L}\p{N}_:.\- ]{1,80}$/u.test(slot)) throw new Error("A short slot name.");
-          const c = encodeURIComponent(input.conversationId);
-          const save = async (data: unknown, name: string) => {
-            const bytes = await fromDataUrl(data).then((x) => x.blob());
-            if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The file is empty or larger than 300 MB.");
-            const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(name.slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
-            if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
-            return `shared/${((await up.json()) as { name: string }).name}`;
-          };
+          const c = input.conversationId;
+          const save = (data: unknown, name: string) => saveInChat(c, data, name);
           // This page's own state goes along as a working copy, so coming back finds it as it was left.
           const ret = typeof p.working === "string" ? await save(p.working, String(p.workingName ?? input.path.split("/").pop())) : input.path;
           const file = await save(p.data, String(p.name ?? "file"));
           const guide = typeof p.guide === "string" ? await save(p.guide, String(p.guideName ?? "guide.png")) : undefined;
-          const label = getLocale() === "he" ? "כדי לערוך את זה" : "Editing this";
-          if (!(await offerPart(to, label))) return false;
-          location.hash = `#/p/${to}/editor?c=${c}&f=${encodeURIComponent(file)}&ret=${encodeURIComponent(ret)}&retp=${pluginId}&slot=${encodeURIComponent(slot)}${guide ? `&g=${encodeURIComponent(guide)}` : ""}`;
-          return true;
+          const req: OpenRequest = { from: pluginId, to: to as EditorId, chat: c, file, ret, slot, ...(guide ? { guide } : {}) };
+          const bad = checkRequest(req);
+          if (bad) throw new Error(bad);
+          return (await runHandoff(handoffDeps, req.to, openHref(req), getLocale() === "he" ? "כדי לערוך את זה" : "Editing this")) === "opened";
         }
         // Back from a hand-off: the result into the chat's folder, and the editor it came from opened again with it.
         case "editor.handBack": {
-          if (!input?.returnTo) throw new Error("This page was not opened from another editor.");
-          const c = encodeURIComponent(input.conversationId);
-          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
-          if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The file is empty or larger than 300 MB.");
-          const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(String(p.name ?? "edited.png").slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
-          if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
-          const { name } = (await up.json()) as { name: string };
-          const { plugin, path, slot } = input.returnTo;
-          if (!(await offerPart(plugin, getLocale() === "he" ? "כדי לחזור" : "Going back"))) return false;
-          location.hash = `#/p/${plugin}/editor?c=${c}&f=${encodeURIComponent(path)}&back=${encodeURIComponent(`shared/${name}`)}&slot=${encodeURIComponent(slot)}`;
-          return true;
+          const ticket = ticketOf(input);
+          if (!input || !ticket) throw new Error("This page was not opened from another editor.");
+          const path = await saveInChat(input.conversationId, p.data, String(p.name ?? "edited.png"));
+          return (await runHandoff(handoffDeps, ticket.plugin, backHref(input.conversationId, ticket, path), getLocale() === "he" ? "כדי לחזור" : "Going back")) === "opened";
+        }
+        // Which "Edit in…" entries exist on this computer: the picture-to-3D one only when a 3D tool is here (hidden otherwise).
+        case "editor.capabilities":
+          return editorCapabilities();
+        // "Make a 3D model from this" (the picture editor): the picture into the chat's folder, the model made from it
+        // (the chat's make_3d; the first time its download is asked first), the 3D editor opened on it with the way back.
+        case "editor.make3d": {
+          need("image");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          if (!(await editorCapabilities()).image3d) throw new Error("No picture-to-3D tool is set up on this computer (the Nodes page).");
+          const he = getLocale() === "he";
+          const picture = await saveInChat(input.conversationId, p.data, String(p.name ?? "picture.png"));
+          const post = (download: boolean) => fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/model3d`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ image: picture, download, colours: p.colours !== false }) });
+          let res = await post(false);
+          let body = (await res.json().catch(() => ({}))) as { path?: string; error?: string; needGb?: number; downloading?: boolean };
+          if (res.status === 409 && body.needGb) {
+            if (!confirm(he ? `מודל התלת ממד עדיין לא במחשב. להוריד עכשיו? (${body.needGb} GB)` : `The 3D model is not on this computer yet. Download it now? (${body.needGb} GB)`)) return { cancelled: true };
+            res = await post(true);
+            body = (await res.json().catch(() => ({}))) as typeof body;
+          }
+          if (body.downloading || res.status === 202) return { downloading: true };
+          if (!res.ok || !body.path) throw new Error(body.error ?? String(res.status));
+          const req: OpenRequest = { from: "image-editor", to: "model-editor", chat: input.conversationId, file: body.path, ret: picture, slot: "make3d" };
+          const bad = checkRequest(req);
+          if (bad) throw new Error(bad);
+          const out = await runHandoff(handoffDeps, "model-editor", openHref(req), he ? "כדי לפתוח את המודל" : "Opening the model");
+          return { path: body.path, opened: out === "opened" };
         }
         // The parts engine (P3-SAM) for the 3D editor: its state; setting it up (asks first: a few GB); splitting a mesh.
         case "model.parts.status":
@@ -444,25 +493,21 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "video.openSound": {
           need("video");
           if (!input) throw new Error("This page was not opened from a chat.");
-          if (!(await offerPart("sound-editor", getLocale() === "he" ? "כדי לשנות את הסאונד" : "Changing the sound"))) return { offered: false };
           const c = encodeURIComponent(input.conversationId);
           const { path } = await api<{ path: string }>(`/api/conversations/${c}/files/sound`, { method: "POST", body: { path: input.path } });
-          location.hash = `#/p/sound-editor/editor?c=${c}&f=${encodeURIComponent(path)}&ret=${encodeURIComponent(input.path)}`;
+          // The sound editor knows the video only by `ret` (no `retp`): its "Back to the video" is sound.backToVideo.
+          const href = `#/p/sound-editor/editor?c=${c}&f=${encodeURIComponent(path)}&ret=${encodeURIComponent(input.path)}`;
+          // Installs the sound editor first when it is missing (the Install window), then opens it there.
+          if ((await runHandoff(handoffDeps, "sound-editor", href, getLocale() === "he" ? "כדי לשנות את הסאונד" : "Changing the sound")) !== "opened") return { offered: false };
           return { path };
         }
         // Back from the sound editor to the video it came from, with the new sound (a WAV data URL) for it.
         case "sound.backToVideo": {
           need("sound");
-          if (!input?.returnVideo) throw new Error("This sound did not come from a video.");
-          const bytes = await fromDataUrl(p.data).then((x) => x.blob());
-          if (!bytes.size || bytes.size > 300 * 1024 * 1024) throw new Error("The sound is empty or larger than 300 MB.");
-          const c = encodeURIComponent(input.conversationId);
-          const up = await fetch(withToken(`/api/conversations/${c}/files?name=${encodeURIComponent(String(p.name ?? "sound-edited.wav").slice(0, 120))}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
-          if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? String(up.status));
-          const { name } = (await up.json()) as { name: string };
-          if (!(await offerPart("video-editor", getLocale() === "he" ? "כדי לחזור לווידאו" : "Going back to the video"))) return false;
-          location.hash = `#/p/video-editor/editor?c=${c}&f=${encodeURIComponent(input.returnVideo)}&a=${encodeURIComponent(`shared/${name}`)}`;
-          return true;
+          const ticket = ticketOf(input);
+          if (!input || !ticket || ticket.plugin !== "video-editor") throw new Error("This sound did not come from a video.");
+          const path = await saveInChat(input.conversationId, p.data, String(p.name ?? "sound-edited.wav"));
+          return (await runHandoff(handoffDeps, "video-editor", backHref(input.conversationId, ticket, path), getLocale() === "he" ? "כדי לחזור לווידאו" : "Going back to the video")) === "opened";
         }
         // What is said in the video the page was opened with, in pieces with their times (whisper on the computer).
         case "video.transcript":

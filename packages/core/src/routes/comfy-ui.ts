@@ -63,8 +63,13 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
   });
 
   /** Ready-made flows (music, 3D) with whether their models are here. */
+  // `installed` and `allowed` (ComfyUI is here and business mode lets it run) tell the editors whether a tool such as
+  // picture-to-3D exists on this computer (editor-handoff.ts: "Make a 3D model from this" is hidden without it).
   app.get("/api/comfy-ui/flows", async () =>
-    readyFlows().map(({ flow: _f, checkpoints: _c, ...f }) => ({ ...f, ...flowState({ ...f, flow: {}, checkpoints: {} }, s.paths.models, s.downloads) })),
+    readyFlows().map(({ flow: _f, checkpoints: _c, ...f }) => {
+      const st = s.conversations.flows?.state(f.id);
+      return { ...f, ...flowState({ ...f, flow: {}, checkpoints: {} }, s.paths.models, s.downloads), installed: st?.installed ?? false, allowed: st?.allowed ?? false };
+    }),
   );
 
   /** Downloads a ready-made flow's models (follow them in the downloads circle). */

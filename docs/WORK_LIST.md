@@ -300,7 +300,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ 3D editor to Blender, Max and Maya level: all modifiers, rigging, animation (research first) not built
 - ⬜ Sound editor with instruments, hum or whistle to instrument, mixing and effects at DAW level not built
 - ⬜ Video editor to a pro level: keyframes, colour, titles, audio ducking not built
-- ⬜ Editors call each other and offer to install a missing one not built
+- ✅ Editors call each other ("Edit in…": texture to the picture editor, audio to the sound editor, picture to 3D when a tool exists) and offer to install a missing one, with a Return chip (apps/web/src/editor-handoff.ts, InstallWindow.tsx; board group "Editors")
 - 🔨 Figma integration with careful security; share and collaborate like Figma (stages 2-3) (figma-umg.ts) missing: share and collaborate, stages 2-3
 - ✅ Picture, video, sound and 3D editors opened from chat results as tabs, with Send to the chat (plugins/*-editor)
 - ✅ Camera avatar page and lip-sync (apps/web/src/pages/AvatarCamera.tsx, packages/core/src/lipsync.ts)

@@ -9,6 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
+    editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", make3d: "צור מודל תלת ממד מזה", make3dHint: "חפץ אחד, במחשב שלך", making3d: "יוצר את מודל התלת ממד… (כמה דקות, במחשב שלך)", model3dDownloading: "מודל התלת ממד בהורדה (עיגול ההורדות); נסה שוב כשיסתיים.",
     new: "חדש…", open: "פתח תמונה…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
     aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", aiExpand: "⤢ הרחבה ב-AI", expandAll: "‎+25% מכל הצדדים", expandSame: "התמונה כבר בצורה הזאת", hExpand: "הרחבה", expandLayer: "הקצוות שהורחבו", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
@@ -1569,6 +1570,7 @@
     const input = await kesher.call("editor.input").catch(() => null);
     if (!input?.data) return;
     fromChat = input;
+    void showEditIn();
     const img = await loadImage(input.data);
     docName = input.name.replace(/\.[^.]+$/, "") || "picture";
     $("docTab").textContent = input.name;
@@ -1597,6 +1599,34 @@
     } else {
       $("toChat").hidden = false;
       msg(T("fromChat", "Opened from the chat"));
+    }
+  }
+  /**
+   * "Edit in…" (the editors' hand-off, editor-handoff.ts): only entries whose tool exists on this computer are shown;
+   * "Make a 3D model from this" needs a picture-to-3D flow, so without one the whole button stays hidden.
+   */
+  async function showEditIn() {
+    const caps = await kesher.call("editor.capabilities").catch(() => ({}));
+    if (!caps.image3d) return;
+    $("editIn").hidden = false;
+    $("editIn").onclick = async () => {
+      const am = await import("./add-media.js");
+      am.setHebrew(he);
+      am.openMenu($("editIn"), T("editInT", "Opens the other editor; \"Return to…\" there brings you back"), [
+        { icon: "🧊", label: T("make3d", "Make a 3D model from this"), hint: T("make3dHint", "one object, on your computer"), run: () => void make3d() },
+      ]);
+    };
+  }
+  /** The picture as it is now, turned into a 3D model that opens in the 3D editor, with "Return to the picture editor" there. */
+  async function make3d() {
+    busy(T("making3d", "Making the 3D model… (several minutes, on your computer)"));
+    try {
+      const r = await kesher.call("editor.make3d", { name: `${docName}-for-3d.png`, data: flatten().toDataURL("image/png") });
+      if (r?.downloading) msg(T("model3dDownloading", "The 3D model is downloading (see the downloads circle); try again when it is done."));
+    } catch (e) {
+      msg(e.message, true);
+    } finally {
+      busy("");
     }
   }
   $("toBack").onclick = async () => {

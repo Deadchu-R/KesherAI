@@ -9,6 +9,7 @@
 
   // ---------- words (English / Hebrew) ----------
   const HE = {
+    editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editAudio: "ערוך סאונד בעורך הסאונד", editAudioHint: "חוזר אל ציר הזמן",
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiContinue: "המשך את השוט הזה (הפריים האחרון שלו בתנועה, דרך הצ׳אט; נכנס אחריו)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
@@ -622,6 +623,15 @@
   const editKey = () => `edit:${source?.path ?? ""}`;
   /** The edit is kept while she is in the sound editor, so coming back finds it as it was. */
   const saveEdit = () => kesher.call("storage.set", { key: editKey(), value: { clips, media: media.slice(1).map(({ path, kind, duration, name }) => ({ path, kind, duration, name })), texts, at: Date.now() } }).catch(() => undefined);
+  /** "Edit in…" (editor-handoff.ts): the video's audio goes to the sound editor (installed first when it is missing). */
+  async function editInMenu(anchor) {
+    const am = await import("./add-media.js");
+    am.setHebrew(he);
+    am.openMenu(anchor, T("editInT", "Opens the other editor; \"Return to…\" there brings you back"), [
+      { icon: "🎚", label: T("editAudio", "Edit audio in the sound editor"), hint: T("editAudioHint", "comes back into the timeline"), run: () => void openSound() },
+    ]);
+  }
+  $("editIn").onclick = () => void editInMenu($("editIn"));
   async function openSound() {
     if (!source) return;
     play(false);

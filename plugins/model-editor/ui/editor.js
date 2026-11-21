@@ -16,6 +16,7 @@ import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } fr
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
+  editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editTex: "ערוך טקסטורה בעורך התמונות", editTexHint: "החלק שנבחר, וחוזר לחומר שלו",
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", follow: "לעקוב אחרי", unfollow: "להפסיק לעקוב", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
@@ -345,6 +346,7 @@ document.addEventListener("visibilitychange", () => {
 function enterGuest(role) {
   guestRole = role === "edit" ? "edit" : "read";
   document.body.classList.add("guest");
+  $("editIn").hidden = true; // a guest cannot hand the shared model to another editor
 }
 
 // ---------- a Godot scene without Godot (SceneStandIn board): a stand-in of its nodes, moved here, saved back ----------
@@ -1327,6 +1329,10 @@ function showTexture() {
   $("texDerive").hidden = kind() === "map";
 }
 $("texKind").onchange = showTexture;
+/** "Edit in…" (editor-handoff.ts): the chosen part's texture goes to the picture editor (installed first when missing). */
+$("editIn").onclick = () => openMenu($("editIn"), T("editInT", "Opens the other editor; \"Return to…\" there brings you back"), [
+  { icon: "🖌", label: T("editTex", "Edit texture in the picture editor"), hint: T("editTexHint", "the chosen part, comes back to its material"), run: () => void editTexture(false) },
+]);
 async function editTexture(fresh) {
   const mesh = meshOfChosen();
   if (!mesh) return msg(T("needMesh", "Choose a part with a shape"), true);

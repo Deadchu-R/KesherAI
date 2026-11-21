@@ -203,8 +203,14 @@ export async function partsRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
 }
 
-/** Stops what turned-off parts run, and starts the downloads turned-on parts need. */
-async function apply(s: KesherServices, on: string[], off: string[]): Promise<void> {
+/**
+ * Stops what turned-off parts run, and starts the downloads turned-on parts need.
+ *
+ * @param s - Services.
+ * @param on - Part ids turned on (their official plugin is enabled).
+ * @param off - Part ids turned off.
+ */
+export async function apply(s: KesherServices, on: string[], off: string[]): Promise<void> {
   const plugin = async (id: string, enabled: boolean) => {
     const prev = s.config.plugins[id];
     if ((prev?.enabled ?? true) === enabled) return;

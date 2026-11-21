@@ -6,7 +6,7 @@ import { getLocale, he$ } from "../i18n";
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** What the server says about one installable (routes/installables.ts InstallView). */
-interface InstallView {
+export interface InstallView {
   id: string;
   he: string;
   en: string;
@@ -60,7 +60,7 @@ export function InstallOffer({ id, why, convId }: { id: string; why?: string; co
       setState("error");
     }
   };
-  const size = info?.sizeGb !== undefined ? `${info.approx ? "~" : ""}${info.sizeGb < 1 ? `${Math.max(1, Math.round(info.sizeGb * 1024))} MB` : `${info.sizeGb} GB`}` : L("יוצג בהורדות", "shown in Downloads");
+  const size = installSize(info);
   return (
     <div className={`memory-chip install-offer${info?.ready ? " undone" : ""}`} role="status">
       <span aria-hidden>📦</span>
@@ -69,33 +69,84 @@ export function InstallOffer({ id, why, convId }: { id: string; why?: string; co
         {why && !info?.ready && <span className="muted"> · {why}</span>}
       </span>
       {!info?.ready && !installing && <button type="button" className="primary small" onClick={() => setOpen(true)}>{L("להתקנה", "Install")}</button>}
-      {open && createPortal(
-        <div className="dialog-backdrop on-top" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
-          <div className="dialog card stack install-dialog" role="dialog" aria-modal="true" aria-label={L("התקנה", "Install")} onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
-            <h3 dir="auto">{L(`להתקין את ${name}?`, `Install ${name}?`)}</h3>
-            {info ? (
-              <dl className="install-facts">
-                <dt>{L("מה זה", "What it is")}</dt>
-                <dd dir="auto">{getLocale() === "he" ? he$(info.aboutHe) : info.aboutEn}</dd>
-                <dt>{L("גודל", "Size")}</dt>
-                <dd dir="ltr">{size}</dd>
-                <dt>{L("נשמר ב", "Saved in")}</dt>
-                <dd>
-                  <code dir="ltr" className="install-where">{info.where}</code>{" "}
-                  <a className="chip-text" href={info.changeHref} onClick={() => setOpen(false)}>{L("שינוי", "Change")}</a>
-                </dd>
-              </dl>
-            ) : <p className="muted">…</p>}
-            <p className="muted small">{L("ההתקנה רצה במחשב, גם כשלוחצים מהטלפון. כשתסתיים, הצ'אט ימשיך לבד.", "It installs on the computer, also when pressed on the phone. When it is done, the chat goes on by itself.")}</p>
-            {error && <p className="danger small" dir="auto">{error}</p>}
-            <div className="row wrap">
-              <button type="button" className="primary" disabled={!info || state === "starting"} onClick={() => void install()}>{state === "starting" ? L("מתחיל…", "Starting…") : L("התקנה", "Install")}</button>
-              <button type="button" onClick={() => setOpen(false)}>{L("ביטול", "Cancel")}</button>
-            </div>
-          </div>
-        </div>,
-        document.body,
+      {open && (
+        <InstallDialog
+          info={info}
+          name={name}
+          size={size}
+          starting={state === "starting"}
+          error={error}
+          onInstall={() => void install()}
+          onCancel={() => setOpen(false)}
+          onNavigate={() => setOpen(false)}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * The size the Install window shows.
+ *
+ * @param info - What the server says about the installable.
+ * @returns "~1.2 GB", "120 MB", "nothing to download" (editors), or "shown in Downloads" when the installer does not say.
+ */
+export function installSize(info: InstallView | null): string {
+  if (info?.sizeGb === undefined) return L("יוצג בהורדות", "shown in Downloads");
+  if (info.sizeGb === 0) return L("בלי הורדה", "nothing to download");
+  return `${info.approx ? "~" : ""}${info.sizeGb < 1 ? `${Math.max(1, Math.round(info.sizeGb * 1024))} MB` : `${info.sizeGb} GB`}`;
+}
+
+/**
+ * The Install window: what it is, its size and where it is saved, with Install / Cancel. Shared by the chat's Install
+ * button and by the editors' "Edit in…" when the other editor is missing (InstallWindow.tsx). Works on a 390 px phone.
+ *
+ * @param props.info - What the server says about it (null while loading).
+ * @param props.name - Its name in the current language.
+ * @param props.size - The size line ({@link installSize}).
+ * @param props.starting - The Install press is being sent.
+ * @param props.error - An error to show.
+ * @param props.why - What the person was doing (the editors' hand-off), shown as a line.
+ * @param props.note - The line under the facts (what happens after installing).
+ */
+export function InstallDialog({ info, name, size, starting, error, why, note, onInstall, onCancel, onNavigate }: {
+  info: InstallView | null;
+  name: string;
+  size: string;
+  starting: boolean;
+  error: string;
+  why?: string;
+  note?: string;
+  onInstall: () => void;
+  onCancel: () => void;
+  onNavigate: () => void;
+}) {
+  return createPortal(
+    <div className="dialog-backdrop on-top" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="dialog card stack install-dialog" role="dialog" aria-modal="true" aria-label={L("התקנה", "Install")} onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+        <h3 dir="auto">{L(`להתקין את ${name}?`, `Install ${name}?`)}</h3>
+        {why && <p className="muted small" dir="auto">{why}</p>}
+        {info ? (
+          <dl className="install-facts">
+            <dt>{L("מה זה", "What it is")}</dt>
+            <dd dir="auto">{getLocale() === "he" ? he$(info.aboutHe) : info.aboutEn}</dd>
+            <dt>{L("גודל", "Size")}</dt>
+            <dd dir="ltr">{size}</dd>
+            <dt>{L("נשמר ב", "Saved in")}</dt>
+            <dd>
+              <code dir="ltr" className="install-where">{info.where}</code>{" "}
+              <a className="chip-text" href={info.changeHref} onClick={onNavigate}>{L("שינוי", "Change")}</a>
+            </dd>
+          </dl>
+        ) : <p className="muted">…</p>}
+        <p className="muted small">{note ?? L("ההתקנה רצה במחשב, גם כשלוחצים מהטלפון. כשתסתיים, הצ'אט ימשיך לבד.", "It installs on the computer, also when pressed on the phone. When it is done, the chat goes on by itself.")}</p>
+        {error && <p className="danger small" dir="auto">{error}</p>}
+        <div className="row wrap">
+          <button type="button" className="primary" disabled={!info || starting} onClick={onInstall}>{starting ? L("מתחיל…", "Starting…") : L("התקנה", "Install")}</button>
+          <button type="button" onClick={onCancel}>{L("ביטול", "Cancel")}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
