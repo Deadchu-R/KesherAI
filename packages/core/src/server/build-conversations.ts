@@ -36,6 +36,7 @@ import { existsSync, statSync } from "node:fs";
 import { readFile as readFileFs } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssetStore } from "../assets.js";
+import type { PdfRenderer } from "../doc-export.js";
 import type { HelperEngine } from "../chat-helpers.js";
 import type { BrowserBridge } from "../browser-bridge.js";
 import type { CanvasStore } from "../canvas.js";
@@ -85,6 +86,8 @@ export interface ConversationParts {
   registry: ProviderRegistry;
   library: Library;
   assets: AssetStore;
+  /** The desktop app's PDF printer (ServerOptions.renderPdf), for the document tool's export. */
+  renderPdf?: PdfRenderer;
   plugins: PluginHost;
   config: KesherConfig;
   paths: DataPaths;
@@ -132,7 +135,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine, translator } = p;
+  const { renderPdf, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine, translator } = p;
   /** Starts ComfyUI when nothing answers at its address. */
   const comfyUp = async () => {
     if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
@@ -323,7 +326,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
     // None in an incognito chat: a timer is written to disk (scan 65).
     // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
-    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? ""), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),
+    canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? "", { assets, ...(renderPdf ? { renderPdf } : {}) }), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),
     // A deep research's report: a new document of the chat (none in an incognito chat).
     writeReport: async (convId, title, body) => {
       if (library.summary(convId)?.incognito) return undefined;

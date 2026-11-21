@@ -253,6 +253,24 @@ export async function searchWeb(query: string, prefs: import("@kesher/shared").W
     .slice(0, depth.results);
 }
 
+/** The most words a search query may have: a query is a few key words, not the user's whole sentence. */
+export const MAX_QUERY_WORDS = 12;
+/** A command to the assistant ("create me a picture", "תיצור לי שיר"), which is never a search. */
+const COMMAND_START = /^(?:(?:please|pls)\s+)?(?:create|make|write|generate|draw|compose|design|build|produce)(?!\p{L})|^(?:תיצור|צור|תעשה|עשה|תכתוב|כתוב|תצייר|צייר|תכין|הכן|תבנה|בנה|תלחין|תחבר)(?![א-ת])/iu;
+/** What a rejected query is told. */
+export const SHORT_QUERY_MESSAGE = "Write a short search query of the key words, or skip searching if it isn't needed.";
+
+/**
+ * Whether a web_search query is a real search: at most {@link MAX_QUERY_WORDS} words and not a command to create something.
+ *
+ * @param q - The query the model wrote.
+ * @returns True when it can be searched.
+ */
+export function isSearchQuery(q: string): boolean {
+  const t = q.trim();
+  return t.split(/\s+/).filter(Boolean).length <= MAX_QUERY_WORDS && !COMMAND_START.test(t);
+}
+
 export const webSearchTool: AgentTool = {
   risk: "read",
   spec: {
@@ -263,6 +281,7 @@ export const webSearchTool: AgentTool = {
   async run(input, ctx) {
     const q = String(input.query ?? "").trim();
     if (!q) throw new Error("Give a search query.");
+    if (!isSearchQuery(q)) throw new Error(SHORT_QUERY_MESSAGE);
     let engine = "";
     const results = await searchWeb(q, ctx.web, ctx.signal, (n) => void (engine = n));
     if (!results.length) return { output: ctx.web?.only?.length ? `No results on ${ctx.web.only.join(", ")} (this chat searches only there).` : "No results." };

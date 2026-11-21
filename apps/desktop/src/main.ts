@@ -75,6 +75,8 @@ async function startCore(): Promise<string> {
     lipsyncScript: join(app.isPackaged ? process.resourcesPath : join(root, "tools"), "lipsync", "kesher_lipsync.py"),
     virtualCamera: virtualCamera(app.isPackaged ? process.resourcesPath : join(root, "apps/desktop"), () => `http://127.0.0.1:${server?.services.config.port ?? branding.defaultPort}/#/avatar-feed`),
     pluginRoots: [join(root, "plugins")],
+    // The chat's document tool exports a PDF by printing the document's page (renderPdf below).
+    renderPdf: (html) => renderPdf(html),
     ...(await googleClient()),
     // "My day" takes its pictures with Electron's own screen capture (antivirus programs block a script doing it).
     focusApp: () => showWindow(),
@@ -959,6 +961,24 @@ ipcMain.handle("kesher:startup", (event, on: unknown) => {
   if (typeof on === "boolean" && fromApp(event)) app.setLoginItemSettings({ openAtLogin: on, args: ["--headless"] });
   return app.getLoginItemSettings({ args: ["--headless"] }).openAtLogin;
 });
+
+/**
+ * Prints a print-ready HTML page to PDF bytes in a hidden window with no scripts (the document tool's "export").
+ *
+ * @param html - The page (the document's text is the user's or the model's, so nothing in it runs).
+ * @returns The PDF, or undefined when printing failed.
+ */
+async function renderPdf(html: string): Promise<Uint8Array | undefined> {
+  const page = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true } });
+  try {
+    await page.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    return await page.webContents.printToPDF({ printBackground: true, pageSize: "A4", margins: { marginType: "default" } });
+  } catch {
+    return undefined;
+  } finally {
+    page.destroy();
+  }
+}
 
 /** Saves a chat as a PDF: its print-ready page, printed in a hidden window. */
 ipcMain.handle("kesher:chat-pdf", async (event, id: unknown) => {

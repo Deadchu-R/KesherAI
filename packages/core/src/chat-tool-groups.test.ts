@@ -55,3 +55,9 @@ test("switches in the + menu take a group's tools and a connector's tools out", 
   assert.deepEqual(left, ["read_file", "browser_open", "mcp_notion_find"]);
   assert.equal(withoutOff(tools, [], (s) => s), tools);
 });
+
+test("asksToCreate: a pure create request needs no search; a lookup or a link makes it a search again", async () => {
+  const { asksToCreate } = await import("./chat-tool-groups.js");
+  for (const t of ["תיצור לי תמונה של חתול", "תיצור לי שיר על הקיץ", "תכתוב לי מסמך על חוסמי בטא", "write me a python script that sorts files", "create a logo for my game", "make a song about Hollow Knight"]) assert.equal(asksToCreate(t), true, t);
+  for (const t of ["חפש באינטרנט מה זה Hollow Knight ותכתוב מסמך", "write a report on the latest AI news", "create a summary of https://example.com/a", "מה השעה", "what is a prefab"]) assert.equal(asksToCreate(t), false, t);
+});

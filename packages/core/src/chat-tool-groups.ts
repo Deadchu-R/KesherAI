@@ -120,6 +120,25 @@ export function asksForMusic(text: string): boolean {
   return MUSIC_WORDS.test(text) && !PICTURE_WORDS.test(text);
 }
 
+/** A request to make something: Hebrew command forms ("תיצור", "תכתוב", "תצייר") and English verbs. */
+const CREATE_VERBS = /(?<![א-ת])(?:ת|ל)?(?:יצור|צור|עשה|כתוב|צייר|הכן|בנה|חבר|לחן)(?![א-ת])|(?<![א-ת])(?:תיצור|תעשה|תכתוב|תצייר|תכין|תבנה|תחבר|תלחין)(?![א-ת])|\b(?:create|make|write|generate|draw|compose|design|build|produce|draft)\b/iu;
+/** What is made: a picture, a song, a document or text, code. */
+const CREATE_OBJECTS = new RegExp(`${PICTURE_WORDS.source}|${MUSIC_WORDS.source}|מסמך|דוח|דו"ח|מצגת|מכתב|סיפור|מדריך|קורות חיים|חיבור|קוד|סקריפט|תוכנית|משחק|\\b(?:documents?|reports?|essays?|letters?|guides?|stor(?:y|ies)|poems?|resume|slides?|code|scripts?|programs?|games?|functions?)\\b`, "iu");
+/** A request to look something up or check a fact: then a search is wanted. */
+const LOOKUP_WORDS = /חפש|תחפש|חיפוש|בדוק|תבדוק|לבדוק|אמת\b|עובדות|מקור|עדכני|חדשות|באינטרנט|ברשת|תחקור|מחקר|https?:\/\/|\b(?:search|look\s?up|google|verify|fact[- ]?check|latest|news|current|up[- ]to[- ]date|find out|research|online|sources?)\b/iu;
+
+/**
+ * Whether a message only asks to make something (a picture, a song, a document, code) and does not ask to look
+ * anything up: web_search is then neither offered nor needed (a local model searched the web with the whole sentence
+ * of "תיצור לי תמונה…"). A message that asks to search, check a fact, or holds a link is not a pure create request.
+ *
+ * @param text - The user's message.
+ * @returns True for a pure create request.
+ */
+export function asksToCreate(text: string): boolean {
+  return CREATE_VERBS.test(text) && CREATE_OBJECTS.test(text) && !LOOKUP_WORDS.test(text);
+}
+
 /**
  * The groups a message points at by its words (cheap, no model): Hebrew stems anywhere in a word, English words at a
  * word's start.

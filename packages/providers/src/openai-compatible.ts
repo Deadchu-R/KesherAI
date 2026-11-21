@@ -209,6 +209,8 @@ export class OpenAICompatibleProvider implements Provider {
     let text = "";
     const calls = new Map<number, { id: string; name: string; args: string }>();
     let usage: ProviderToolChatResult["usage"];
+    // The server stopped at max_tokens (finish_reason "length"): the answer or a tool call in it is cut off.
+    let truncated = false;
     for await (const data of readSSE(res.body)) {
       if (data === "[DONE]") break;
       const chunk = JSON.parse(data) as UsageReport & {
@@ -217,11 +219,13 @@ export class OpenAICompatibleProvider implements Provider {
             content?: string | null;
             tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
           };
+          finish_reason?: string | null;
         }>;
         error?: { message?: string };
       };
       if (chunk.error) throw new Error(chunk.error.message ?? "Model server error");
       const delta = chunk.choices?.[0]?.delta;
+      if (chunk.choices?.[0]?.finish_reason === "length") truncated = true;
       if (delta?.content) {
         text += delta.content;
         onText?.(delta.content);
@@ -243,9 +247,9 @@ export class OpenAICompatibleProvider implements Provider {
     // A local model that wrote its call as text (Qwen3-Coder XML, Hermes JSON): run it rather than ending the turn.
     if (!toolCalls.length && request.tools?.length) {
       const found = textToolCalls(text);
-      if (found.calls.length) return { text: found.text, toolCalls: found.calls, ...(usage ? { usage } : {}) };
+      if (found.calls.length) return { text: found.text, toolCalls: found.calls, ...(truncated ? { truncated } : {}), ...(usage ? { usage } : {}) };
     }
-    return { text, toolCalls, ...(usage ? { usage } : {}) };
+    return { text, toolCalls, ...(truncated ? { truncated } : {}), ...(usage ? { usage } : {}) };
   }
 }
 

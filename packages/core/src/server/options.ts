@@ -38,6 +38,8 @@ export interface KesherServerOptions {
   lipsyncScript?: string;
   /** The avatar camera without OBS (the Windows desktop app: softcam). */
   virtualCamera?: VirtualCamera;
+  /** Prints a document's page to PDF bytes (the desktop app, in a hidden window); without it the document tool cannot export a PDF. */
+  renderPdf?: import("../doc-export.js").PdfRenderer;
   /** Shows a notification on this computer (desktop app); returns false when the window is in front. */
   notify?: (n: Note) => boolean | Promise<boolean>;
   /** Keys at rest (S2): the system's protection for connection keys and tokens in config.json (Electron safeStorage). */

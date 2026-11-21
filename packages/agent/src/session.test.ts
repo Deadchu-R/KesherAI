@@ -989,3 +989,21 @@ test("steering: a queued message marked steer joins the running turn at its next
   const users = session.events.filter((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user");
   assert.deepEqual(users.map((u) => [u.text, !!u.steered]), [["read a.txt", false], ["use b.txt instead", true]]);
 });
+
+test("a turn cut off at the token limit gets one nudge to answer briefly, and its broken tool call does not run", async () => {
+  const seen: Array<Parameters<ModelTurn>[0]> = [];
+  let n = 0;
+  const model: ModelTurn = async (req) => {
+    seen.push(structuredClone(req));
+    if (n++ === 0) return { text: "thinking without end", toolCalls: [{ id: "c1", name: "write_file", arguments: { path: "x" } }], truncated: true };
+    return { text: "Short answer.", toolCalls: [] };
+  };
+  const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-"));
+  const session = new AgentSession({ id: "s", modelId: "m", model, mode: "auto", workspace, tools: [...CODE_TOOLS], systemPrompt: "sys" });
+  session.send("hello");
+  await waitFor(session, (e) => e.type === "assistant" && e.text === "Short answer.");
+  assert.equal(seen.length, 2);
+  assert.match(seen[1]!.messages.at(-1)!.content, /ran out of room/);
+  assert.equal(session.events.some((e) => e.type === "tool_call"), false);
+  assert.equal(session.events.filter((e) => e.type === "note" && /ran out of room/.test(e.text)).length, 1);
+});

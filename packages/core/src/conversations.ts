@@ -32,7 +32,7 @@ import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
 import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
-import { intentNote, isSimpleTurn, missingNote, musicNote, ToolRouter } from "./tool-router.js";
+import { intentNote, isSimpleTurn, missingNote, musicNote, SEARCH_TOOLS, ToolRouter } from "./tool-router.js";
 import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
 import { analyzeChatTool } from "./chat-stats.js";
 import { taskBoardTool } from "./task-board-tool.js";
@@ -916,8 +916,10 @@ export class ConversationManager {
         const kind = this.deps.library.summary(id)?.kind ?? conversation.kind;
         const small = this.deps.config.smallTurns !== false && kind !== "code" && toolSearch() && isSimpleTurn(text, r.groups) ? this.deps.smallModel?.() : undefined;
         const main = this.deps.library.summary(id)?.modelId ?? conversation.modelId;
-        return { tools: missing ? [...r.tools, OFFER_INSTALL_TOOL] : r.tools, ...(note ? { note } : {}), ...(small && small !== main ? { small: { modelId: small, model: modelTurnFor(this.deps.registry, small, undefined, "other") } } : {}) };
+        return { tools: missing ? [...r.tools, OFFER_INSTALL_TOOL] : r.tools, ...(r.noSearch ? { hide: SEARCH_TOOLS } : {}), ...(note ? { note } : {}), ...(small && small !== main ? { small: { modelId: small, model: modelTurnFor(this.deps.registry, small, undefined, "other") } } : {}) };
       },
+      // A link to a file id the app does not have is taken out of the answer (agent/answer-links.ts).
+      assetExists: async (assetId) => !!(await this.deps.assets.get(assetId).catch(() => undefined)),
       // The model team's translator: a final answer written in another language than the user's is put into theirs.
       polishAnswer: async (answer, userText, signal) => {
         const pick = this.deps.config.translator ?? "main";

@@ -88,6 +88,8 @@ export interface ProviderToolChatResult {
   text: string;
   toolCalls: ToolCall[];
   usage?: ProviderUsage;
+  /** The server stopped at the token limit (`finish_reason: "length"`): the text or a tool call in it is cut off. */
+  truncated?: boolean;
 }
 
 /** Input to {@link Provider.chat}. The model is the provider's own id. */

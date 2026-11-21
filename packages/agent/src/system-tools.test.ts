@@ -46,3 +46,16 @@ test("web_fetch: .onion only when allowed in Settings, and only through Tor", as
   const r = await webFetchTool.run({ url: "http://abcdefghijklmnop.onion/" }, { ...ctx, web: { onion: true }, viaTor: async (url) => ({ url, status: 200, type: "text/html", body: "<p>hidden</p>" }) });
   assert.match(r.output, /\.onion site, opened through Tor[\s\S]*hidden/);
 });
+
+test("web_search: a long sentence or a command to create something is not a query", async () => {
+  const { isSearchQuery, SHORT_QUERY_MESSAGE, webSearchTool } = await import("./system-tools.js");
+  assert.equal(isSearchQuery("hollow knight soundtrack composer"), true);
+  assert.equal(isSearchQuery("מזג אוויר בחיפה מחר"), true);
+  assert.equal(isSearchQuery("תיצור לי שיר על האביב"), false);
+  assert.equal(isSearchQuery("תצייר לי תמונה של חתול"), false);
+  assert.equal(isSearchQuery("create a picture of a cat"), false);
+  assert.equal(isSearchQuery("Make me a song about Hollow Knight"), false);
+  assert.equal(isSearchQuery("one two three four five six seven eight nine ten eleven twelve"), true);
+  assert.equal(isSearchQuery("one two three four five six seven eight nine ten eleven twelve thirteen"), false);
+  await assert.rejects(webSearchTool.run({ query: "תיצור לי תמונה של הר בשקיעה עם אגם" }, {} as never), new RegExp(SHORT_QUERY_MESSAGE.slice(0, 30)));
+});

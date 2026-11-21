@@ -14,6 +14,9 @@ const EXTENSIONS: Record<string, string> = {
   "audio/ogg": "ogg",
   "model/gltf-binary": "glb",
   "text/plain": "txt",
+  "text/markdown": "md",
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
 };
 
 /**

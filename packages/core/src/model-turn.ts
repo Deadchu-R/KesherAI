@@ -8,6 +8,13 @@ import { type ModelTurn } from "@kesher/agent";
 import { OTHER_SCRIPTS_BIAS, thinkingLevels, type ThinkingLevel } from "@kesher/shared";
 import type { ProviderRegistry, SlotKind } from "@kesher/providers";
 
+/**
+ * The most tokens one turn of a local (llama.cpp) model may write, reasoning included. A thinking model once wrote
+ * 15,306 tokens of reasoning before one tool call; at this limit the turn ends and the session asks for a brief
+ * answer (`truncated`, session.ts). Cloud models keep their own limits.
+ */
+export const LOCAL_TURN_MAX_TOKENS = 8192;
+
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
 
 /**
@@ -90,7 +97,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       // Only for a local model the menu offers levels for (a cloud model or an unknown family is left as it is).
       const level = thinkingOf?.();
       const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: LOCAL_TURN_MAX_TOKENS } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

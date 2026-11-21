@@ -13,7 +13,7 @@
  * model, a video model), so it offers the Install button (offer_install) instead of a workaround.
  */
 import { llamaCppFields } from "@kesher/providers";
-import { asksForMusic, CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
+import { asksForMusic, asksToCreate, CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
 
 /**
  * Asks a model for JSON held to a schema.
@@ -38,7 +38,12 @@ export interface Route {
   intent?: FlowIntent;
   /** The message asks for a song or music (see {@link asksForMusic}). */
   music?: boolean;
+  /** The message only asks to make something (see {@link asksToCreate}): web_search is held back for it. */
+  noSearch?: boolean;
 }
+
+/** The tools held back from a model for a pure create request: it needs no search, and a weak model would use it. */
+export const SEARCH_TOOLS = ["web_search", "deep_research"] as const;
 
 /** A request that one of KesherAI's one-request flows answers. */
 export type FlowIntent = "pbr" | "sprite";
@@ -168,10 +173,12 @@ export class ToolRouter {
     const intent = flowIntent(text);
     // A flow request routes to its tools by itself (the Unity tools too when it names the selection or Unity).
     const music = asksForMusic(text);
+    // A song, a picture, a document or code to make, with no lookup asked for: no web search (even in the groups by words).
+    const noSearch = music || asksToCreate(text);
     const wanted = [...(intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : []), ...(music ? ["audio"] : [])];
     // A song is not a web search or a picture: the groups a weak model would grab instead stay out (a local model
     // searched for the song's name and drew covers; make_music was never called).
-    const picked = (await this.groups(text, useModel, signal)).filter((g) => !music || (g !== "images" && g !== "web"));
+    const picked = (await this.groups(text, useModel, signal)).filter((g) => !music || (g !== "images" && g !== "web")).filter((g) => !noSearch || g !== "web");
     const groups = [...new Set([...picked, ...wanted])].filter((g) => !off.includes(g));
     const tools = available.filter((n) => { const g = groupOfTool(n); return !!g && groups.includes(g); }).sort();
     const missing = groups.flatMap((id) => {
@@ -181,7 +188,7 @@ export class ToolRouter {
     // Music comes from ComfyUI (ACE-Step): without make_music the install is offered, even when speech tools exist.
     const noMusic = music && groups.includes("audio") && !available.includes("make_music");
     if (noMusic) missing.push({ group: "audio", needs: "comfyui" });
-    return { groups, tools, missing, ...(intent ? { intent } : {}), ...(music ? { music } : {}) };
+    return { groups, tools, missing, ...(intent ? { intent } : {}), ...(music ? { music } : {}), ...(noSearch ? { noSearch } : {}) };
   }
 }
 

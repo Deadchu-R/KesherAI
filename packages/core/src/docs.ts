@@ -9,6 +9,8 @@ import { keepVersion, versionNumber } from "./versions.js";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
+import type { AssetStore } from "./assets.js";
+import { exportDoc, parseDocFormat, type PdfRenderer } from "./doc-export.js";
 
 const ID = /^[\w-]{1,80}$/;
 const MAX = 2 * 1024 * 1024;
@@ -197,8 +199,10 @@ export function docStoreFor(dir: string): DocStore {
  * @param store - The documents.
  * @param convId - The chat.
  * @param title - The chat's title.
+ * @param files - Where "export" keeps the file it makes (the assets) and the PDF printer (the desktop app's); without
+ *   the assets the action is not offered.
  */
-export function docTools(store: DocStore, convId: string, title: () => string): AgentTool[] {
+export function docTools(store: DocStore, convId: string, title: () => string, files?: { assets: Pick<AssetStore, "save">; renderPdf?: PdfRenderer }): AgentTool[] {
   const id = `chat-${convId}`;
   const own = async (t?: string, other?: unknown) => {
     // A document opened in KesherAI (its "✨ ask" sends its id), or else this chat's own.
@@ -215,11 +219,12 @@ export function docTools(store: DocStore, convId: string, title: () => string): 
       spec: {
         name: "document",
         description:
-          "This chat's document, which the user sees and edits in KesherAI (no Word needed): use it when the user wants a document, summary, report, essay outline, letter or notes to keep. Markdown: # headings, lists, > quotes, tables, code. action 'read' returns it. 'write' replaces it all (title, body). 'append' adds text at the end. 'section' replaces the section under a heading (heading: its text; body: the new section, including its heading line); a heading not found is added at the end. Write in the user's language. Read first when the user may have edited it. id: another document's id (when the user names one, as in #/docs/<id>); leave it out for this chat's own.",
+          "This chat's document, which the user sees and edits in KesherAI (no Word needed): use it when the user wants a document, summary, report, essay outline, letter or notes to keep. Markdown: # headings, lists, > quotes, tables, code. action 'read' returns it. action 'export' saves the document as a real file in format pdf, docx (Word) or md and returns its link: use it when the user wants a PDF or Word file, then give them that link exactly as returned; never say it is a PDF unless 'export' with format pdf succeeded. 'write' replaces it all (title, body). 'append' adds text at the end. 'section' replaces the section under a heading (heading: its text; body: the new section, including its heading line); a heading not found is added at the end. Write in the user's language, the language of this conversation, unless they ask for another: never ask which language to use. Read first when the user may have edited it. id: another document's id (when the user names one, as in #/docs/<id>); leave it out for this chat's own.",
         inputSchema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["read", "write", "append", "section"] },
+            action: { type: "string", enum: ["read", "write", "append", "section", ...(files ? ["export"] : [])] },
+            format: { type: "string", enum: ["pdf", "docx", "md"], description: "For action 'export'." },
             id: { type: "string" },
             title: { type: "string" },
             body: { type: "string" },
@@ -232,6 +237,14 @@ export function docTools(store: DocStore, convId: string, title: () => string): 
         const action = String(input.action ?? "read");
         const d = await own(typeof input.title === "string" ? input.title : undefined, input.id);
         if (action === "read") return { output: `# ${d.title}\n\n${d.body || "(empty)"}` };
+        if (action === "export") {
+          if (!files) throw new Error("Exporting is not available here.");
+          const format = parseDocFormat(input.format);
+          if (!format) throw new Error("Give the format: pdf, docx or md.");
+          const made = await exportDoc(d, format, files.renderPdf);
+          const asset = await files.assets.save(made.data, made.mimeType, { meta: { fileName: made.fileName, docId: d.id } });
+          return { output: `Saved ${made.fileName} (${format === "docx" ? "Word" : format.toUpperCase()}, ${Math.max(1, Math.round(made.data.length / 1024))} KB): [${made.fileName}](/api/assets/${asset.id}). Give the user this link exactly as written.` };
+        }
         const body = typeof input.body === "string" ? input.body.replace(/\r/g, "") : "";
         if (!body.trim()) throw new Error("Give the text (body).");
         const saved = await store.update(d.id, (x) => {
@@ -244,7 +257,7 @@ export function docTools(store: DocStore, convId: string, title: () => string): 
             x.body = at ? `${x.body.slice(0, at.start)}${body.trimEnd()}\n\n${x.body.slice(at.end)}`.replace(/\n{3,}/g, "\n\n").trimEnd() : `${x.body.trimEnd()}\n\n${body}`;
           } else throw new Error(`Unknown action "${action}".`);
         }, true);
-        return { output: `Saved v${versionNumber(saved)} (${saved.body.split(/\s+/).filter(Boolean).length} words). The user sees it at #/docs/${saved.id}.` };
+        return { output: `Saved v${versionNumber(saved)} (${saved.body.split(/\s+/).filter(Boolean).length} words). The user sees it at #/docs/${saved.id}. This saved the document in KesherAI only: it is not a PDF or Word file (use action 'export' for that).` };
       },
     },
   ];

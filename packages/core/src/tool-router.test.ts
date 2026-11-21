@@ -19,8 +19,8 @@ test("the engine's pick adds to the words, is cached per message, and is skipped
     return '{"groups": ["web", "nonsense"]}';
   };
   const r = new ToolRouter({ ask: () => ask });
-  assert.deepEqual((await r.route("מה קרה היום בעולם? תצייר משהו", available, [], true)).tools, ["generate_image", "web_search"]);
-  await r.route("מה קרה היום בעולם? תצייר משהו", available, [], true);
+  assert.deepEqual((await r.route("חפש מה קרה היום בעולם ותצייר משהו", available, [], true)).tools, ["generate_image", "web_search"]);
+  await r.route("חפש מה קרה היום בעולם ותצייר משהו", available, [], true);
   assert.equal(calls, 1);
   await r.route("something else", available, [], false);
   assert.equal(calls, 1);
@@ -109,4 +109,16 @@ test("a song request goes to make_music: no web search or pictures, Hebrew and E
   assert.deepEqual(none.missing, [{ group: "audio", needs: "comfyui" }]);
   assert.match(musicNote(none.music, none.tools)!, /not available[\s\S]*offer_install[\s\S]*do not draw/);
   assert.equal(musicNote(undefined, tools), undefined);
+});
+
+test("a pure create request holds web_search back; asking to look something up keeps it", async () => {
+  const r = new ToolRouter();
+  const create = await r.route("תיצור לי תמונה של חתול", available, [], true);
+  assert.equal(create.noSearch, true);
+  assert.equal(create.tools.includes("web_search"), false);
+  const song = await r.route("תכתוב לי שיר על האביב", available, [], true);
+  assert.equal(song.noSearch, true);
+  const look = await r.route("חפש באינטרנט תמונות של חתולים ותצייר אחת", available, [], true);
+  assert.equal(look.noSearch, undefined);
+  assert.equal(look.tools.includes("web_search"), true);
 });

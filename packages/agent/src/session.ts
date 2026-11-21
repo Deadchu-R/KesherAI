@@ -29,6 +29,7 @@ const PLAN_NOTE =
 import { stat } from "node:fs/promises";
 import { resolve as resolvePath } from "node:path";
 import { displayPath } from "./workspace.js";
+import { neutralizeLinks } from "./answer-links.js";
 
 /**
  * Tool specs sorted by name (a copy), so the tool list sent to the model does not depend on the order tools were
@@ -46,7 +47,7 @@ export type ModelTurn = (
   request: { messages: AgentMessage[]; tools: ToolSpec[] },
   signal: AbortSignal,
   onText: (delta: string) => void,
-) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }>;
+) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number }; truncated?: boolean }>;
 
 /**
  * A local server (llama.cpp) refusing the model's whole answer because a tool call in it was not in the model's own
@@ -97,6 +98,8 @@ export interface AgentSessionOptions {
    * answered in another one or mixed alphabets. Undefined leaves the answer as it is.
    */
   polishAnswer?: (answer: string, userText: string, signal: AbortSignal) => Promise<string | undefined>;
+  /** Whether a stored file exists, so a link to a made-up file id is taken out of the answer (answer-links.ts). */
+  assetExists?: (id: string) => boolean | Promise<boolean>;
   modelId: string;
   model: ModelTurn;
   /** Set for a conversation run by an outside agent: `model` and the tools are then not used. */
@@ -165,7 +168,7 @@ export interface AgentSessionOptions {
    * tiny model call) are loaded, and `note` (e.g. "an image model is not installed") goes to the model with it.
    * Read once per message; a failure or no answer leaves the message as it was.
    */
-  route?: (text: string, signal: AbortSignal) => Promise<{ tools: readonly string[]; note?: string; /** A smaller model for a simple turn (see SMALL_TURN_CHARS). */ small?: { modelId: string; model: ModelTurn } } | undefined>;
+  route?: (text: string, signal: AbortSignal) => Promise<{ tools: readonly string[]; note?: string; /** Tools held back for this message (a pure create request needs no web search). */ hide?: readonly string[]; /** A smaller model for a simple turn (see SMALL_TURN_CHARS). */ small?: { modelId: string; model: ModelTurn } } | undefined>;
   /**
    * Keeps each run's files from before it (for "Undo all" on its receipt, after a restart too). Without it they are
    * kept in memory only.
@@ -291,6 +294,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private statusValue: AgentStatus = "idle";
   private readonly reviewerOf?: () => Reviewer | undefined;
   private readonly polishAnswer?: AgentSessionOptions["polishAnswer"];
+  private readonly assetExists?: AgentSessionOptions["assetExists"];
   private abort?: AbortController;
   private turn = 0;
   private readonly approvals = new Map<string, (d: { decision: ApprovalDecision; feedback?: string }) => void>();
@@ -313,6 +317,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly toolSearch?: () => readonly string[] | undefined;
   private readonly toolCap?: () => number | undefined;
   private readonly route?: AgentSessionOptions["route"];
+  /** Tools not offered for the current message (the router's `hide`). */
+  private hidden = new Set<string>();
   /** The message waiting for the router (set by send, routed at the start of the run). */
   private routeText?: string;
   /** How many times each changing action ran for the current message (the loop guard). */
@@ -386,6 +392,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.isAlwaysAllowed = opts.isAlwaysAllowed;
     this.reviewerOf = opts.reviewer;
     this.polishAnswer = opts.polishAnswer;
+    this.assetExists = opts.assetExists;
     this.onAlwaysScope = opts.onAlwaysScope;
     this.helperName = opts.helperName;
     this.envOf = opts.env;
@@ -1165,6 +1172,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.routeText = undefined;
     if (text === undefined || !this.route) return;
     const r = await this.route(text, signal).catch(() => undefined);
+    this.hidden = new Set(r?.hide ?? []);
     if (!r) return;
     // The router's first pick ranks highest (loaded last).
     for (const name of [...r.tools].reverse()) if (this.tools.has(name)) this.loadTool(name);
@@ -1177,7 +1185,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     if (this.toolsUnsupported) return [];
     // By name, not by the order tools were registered (MCP servers and plugins connect in any order), so the tool
     // list, which sits at the top of the prompt, stays the same from turn to turn and the engine keeps its cache.
-    const all = sortSpecs([...this.tools.values()].map((t) => t.spec));
+    const all = sortSpecs([...this.tools.values()].map((t) => t.spec).filter((t) => !this.hidden.has(t.name)));
     const core = this.toolSearch?.();
     const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
     if (!core?.length) return [...base, ...all];
@@ -1262,6 +1270,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.setStatus("running");
     try {
       let nudges = 0;
+      // A turn cut off at the token limit gets one nudge to answer briefly (see `truncated` below).
+      let cutNudged = false;
       let reviews = 0;
       const team = this.team?.() ?? [];
       const planner = team.find((m) => m.role === "planner");
@@ -1336,7 +1346,18 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
           } else throw err;
         }
         this.recordUsage(quick && small ? small.modelId : this.modelId, "main", conversation, result, firstAt ? { waitMs: firstAt - askedAt, writeMs: Date.now() - firstAt } : undefined);
+        // The turn hit the token limit (a thinking model that reasoned without end): its tool call, if any, is cut
+        // off. Ask once for a brief answer or the next step instead of running a broken call.
+        if (result.truncated && !cutNudged && !abort.signal.aborted) {
+          cutNudged = true;
+          this.push({ type: "note", text: "The model ran out of room while thinking; it was asked to answer briefly." });
+          if (result.text.trim()) this.messages.push({ role: "assistant", content: result.text });
+          this.messages.push({ role: "user", content: "[KesherAI] You ran out of room while thinking. Do not think any more: answer briefly now, or make the next tool call with short arguments." });
+          continue;
+        }
         let shown = result.text;
+        // The final answer without links the app cannot open (invented players and file addresses).
+        if (result.toolCalls.length === 0 && shown) shown = await neutralizeLinks(shown, this.assetExists);
         // The final answer (no more tool calls) in the user's language, when the model wrote it in another one.
         if (result.toolCalls.length === 0 && shown.trim() && this.polishAnswer && !abort.signal.aborted) {
           const asked = [...this.messages].reverse().find((m) => m.role === "user");
