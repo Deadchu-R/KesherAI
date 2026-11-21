@@ -10,7 +10,7 @@ import { dropLocalPush } from "./push.js";
 import { get, put } from "./kv.js";
 import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger } from "../../../packages/shared/src/hub-protocol.js";
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
-import { applyAgentBatch } from "../../../packages/shared/src/hub-agents.js";
+import { applyAgentBatch, RUN_STARTING_MS, runStarting } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel } from "../../../packages/shared/src/agent-label.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
@@ -609,6 +609,17 @@ export class HubDevice {
         const waits = t.inbox ? t.status === "waiting-run" : !!t.drive?.only && t.executor === "pc-antigravity" && t.status === "waiting";
         return waits && this.connected && this.commandTargets(t).length > 0;
     }
+    /**
+     * Whether a task's Run was just tapped and the PC has not reported it yet: its card shows "Starting…" (no Run, so
+     * it cannot be sent twice) until the task is running, queued or failed, the PC refuses it, or 60 s pass.
+     *
+     * @param t - The task.
+     * @returns True while "Starting…" is shown.
+     */
+    runStarting(t) {
+        const a = this.taskActions.get(t.taskId);
+        return !!a && a.action === "inbox-run" && runStarting(a.at, this.canRun(t), Date.now(), a.result?.ok === false);
+    }
     /** The PCs that are on (a work-list item is sent to one of them). */
     onlinePcs() {
         return this.presence.filter((d) => d.kind === "pc" && d.online);
@@ -673,8 +684,12 @@ export class HubDevice {
             if (this.sendFrame({ t: "send", env }))
                 sent++;
         }
-        if (sent)
-            this.taskActions.set(t.taskId, { action, commandId, left: sent });
+        if (sent) {
+            this.taskActions.set(t.taskId, { action, commandId, left: sent, at: Date.now() });
+            // "Starting…" ends by itself after RUN_STARTING_MS even when no report comes: draw the card again then.
+            if (action === "inbox-run")
+                setTimeout(() => this.changed(), RUN_STARTING_MS + 200);
+        }
         this.changed();
         return sent > 0;
     }
