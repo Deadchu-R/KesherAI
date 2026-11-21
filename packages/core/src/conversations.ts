@@ -1223,6 +1223,9 @@ export class ConversationManager {
     const session = this.sessions.get(id);
     const next = session ? sendNowQueued(session.queued, queuedId) : undefined;
     if (!session || !next) return false;
+    // A guest's message (shared-chat.ts) goes first but never joins the running turn: that turn's tools and memory
+    // may be the owner's. It waits for its own turn, under the guest's rules.
+    if ((next[0]!.data as { guest?: unknown } | undefined)?.guest) next[0] = { ...next[0]!, steer: false };
     session.queued = next;
     session.queuePaused = false;
     session.queueChanged();
@@ -1630,10 +1633,31 @@ export class ConversationManager {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
+    // Checked first: a running turn's rules (a guest's, say) must not be changed by a button that then fails.
+    if (session.busy) throw new Error("The agent is still working. Wait for it, or press Stop.");
+    // "Another answer" or "Try again" on a guest's message (shared-chat.ts) is still the guest's turn: no tools, none of
+    // the owner's memory, only the chat's visible thread. Without this the owner's button would run the guest's words
+    // with the owner's tools and memory.
+    const user = [...session.events].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user" && !e.steered);
+    const guest = user ? guestLabelOf(user.text) : undefined;
+    if (guest && user) {
+      this.guestTurns.set(id, { name: guest.name, tools: false });
+      const from = session.messages.findLastIndex((m) => m.role === "user" && typeof m.content === "string" && m.content.startsWith(user.text));
+      session.viewMessages = (messages) => guestThread(session.events, messages, Math.max(0, from), user.seq);
+    } else {
+      this.guestTurns.delete(id);
+      session.viewMessages = undefined;
+    }
     const { tools, notes } = this.toolsFor(conversation.kind, conversation.id);
     session.setTools(tools);
     session.systemPrompt = await this.promptFor(conversation, notes);
-    session.regenerate();
+    try {
+      session.regenerate();
+    } catch (err) {
+      this.guestTurns.delete(id);
+      session.viewMessages = undefined;
+      throw err;
+    }
   }
 
   /**

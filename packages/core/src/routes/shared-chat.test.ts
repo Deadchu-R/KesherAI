@@ -151,6 +151,11 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
         seen.push(JSON.stringify(req));
         const last = req.messages.at(-1) as AgentMessage;
         if (last.role === "user" && /read the note/.test(last.content)) return { text: "", toolCalls: [{ id: `r${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
+        // A slow owner task with a step, so a queued message could join it.
+        if (last.role === "user" && /slow task/.test(last.content)) {
+          await new Promise((r) => setTimeout(r, 400));
+          return { text: "", toolCalls: [{ id: `s${Date.now()}`, name: "read_file", arguments: { path: "note.txt" } }] };
+        }
         const text = last.role === "tool" ? "Read it." : `You said: ${String(last.content).slice(0, 80)}`;
         onText?.(text);
         return { text, toolCalls: [] };
@@ -201,6 +206,30 @@ test("allow replies: a guest's turn sends the model none of the owner's memory, 
     // The visible thread is there: the owner's words and the answer they saw.
     assert.match(guestTurn, /please read the note/);
     assert.match(guestTurn, /Read it\./);
+
+    // "Another answer" on the guest's message, pressed by the owner, is still the guest's turn: no memory, no tools.
+    seen.length = 0;
+    assert.equal((await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/regenerate` })).statusCode, 200);
+    await until(async () => (seen.length && ((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { status: string } }).session.status === "idle" ? true : undefined));
+    const again = seen.join("\n");
+    for (const secret of ["MEMORY-FACT-SECRET", "PROJECT-MEMORY-SECRET", "Avital", "TOOL-RESULT-SECRET"]) assert.doesNotMatch(again, new RegExp(secret), `${secret} stays out of a regenerated guest turn`);
+    assert.doesNotMatch(again, /"name":"(write_file|read_file|run_command)"/, "a regenerated guest turn has no tools");
+
+    // "Send now" on a guest's queued message, pressed by the owner while their own turn runs, does not let it join
+    // that turn (with the owner's memory and tools): it goes next, as its own guest turn.
+    await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/messages`, payload: { text: "a slow task" } });
+    const queued = await app.inject({ method: "POST", url: `/api/guest/chats/${chat.id}/reply`, payload: { text: "STEER-ATTEMPT" }, remoteAddress: away.remoteAddress, headers: { host: "kesher.example", authorization: `Bearer ${key}` } });
+    assert.ok((queued.json() as { queued?: number }).queued, "queued while the owner's turn runs");
+    const q = ((await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { queued: Array<{ id: string }> } }).session.queued[0]!;
+    seen.length = 0;
+    assert.equal((await app.inject({ method: "POST", url: `/api/conversations/${chat.id}/queue/${q.id}/now` })).statusCode, 200);
+    await until(async () => {
+      const v = (await app.inject({ url: `/api/conversations/${chat.id}` })).json() as { session: { status: string; queued: unknown[] } };
+      return v.session.status === "idle" && !v.session.queued.length && seen.some((x) => x.includes("STEER-ATTEMPT")) ? true : undefined;
+    });
+    const withGuest = seen.filter((x) => x.includes("STEER-ATTEMPT"));
+    assert.ok(withGuest.length > 0);
+    for (const x of withGuest) assert.doesNotMatch(x, /MEMORY-FACT-SECRET/, "the guest's words never ride in the owner's turn");
 
     // The owner's next turn has their memory again.
     seen.length = 0;
