@@ -19,6 +19,9 @@ so a new chat starts from a few small files.
 helper agents running at any time.** Every other helper job goes through KesherAI's task inbox instead: the local model
 (self-work) on his PC or Antigravity. Group small tasks into one helper rather than one helper per task, prefer Sonnet,
 keep Opus for complex or security code, give each helper a small focused task, and do small fixes yourself.
+**Actively hand work to the PC agents too (Roee, 2026-11-21):** when planning, split the work and keep the task inbox
+stocked for KesherAI's local model (small, precise tasks) and Antigravity (research, larger isolated tasks), check what
+they finish, and review it before it ships. Don't let the PC agents sit idle while Claude helpers do everything.
 0. Helper agents: launch them as general-purpose agents with the `model` named in .claude/agents/kesher-research.md
    (sonnet), kesher-build.md (opus) and kesher-lookup.md (haiku), telling each to read that file and docs/AGENT_BRIEF.md
    first (LEAD_GUIDE "How the work runs").
