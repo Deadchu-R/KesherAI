@@ -1,0 +1,318 @@
+{
+ "group": "צ'אט",
+ "now": "2026-11-21T10:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c2/helpers",
+   "json": {
+    "runs": [],
+    "agents": []
+   }
+  },
+  {
+   "url": "**/api/conversations/c2/quick-actions",
+   "json": {
+    "names": [
+     "generate_image",
+     "make_pbr_texture",
+     "remove_background",
+     "unity_create_pbr_material",
+     "unity_import_sprite",
+     "upscale_image"
+    ]
+   }
+  },
+  {
+   "url": "**/api/engines/image/progress",
+   "json": {}
+  },
+  {
+   "url": "**/api/assets/0f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#ff7a59\"/><stop offset=\"1\" stop-color=\"#7a3cff\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">fox v1</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/1f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2bb3a3\"/><stop offset=\"1\" stop-color=\"#1d3b8f\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">fox v2</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/2f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#8080ff\"/><stop offset=\"1\" stop-color=\"#8080ff\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">normal</text></svg>",
+   "contentType": "image/svg+xml"
+  },
+  {
+   "url": "**/api/assets/3f8fad5b-d9cb-469f-a165-70867728950e*",
+   "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"512\" height=\"512\" viewBox=\"0 0 512 512\"><defs><linearGradient id=\"g\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#777\"/><stop offset=\"1\" stop-color=\"#bbb\"/></linearGradient></defs><rect width=\"512\" height=\"512\" fill=\"url(#g)\"/><circle cx=\"256\" cy=\"230\" r=\"120\" fill=\"#ffffff22\"/><text x=\"256\" y=\"440\" font-size=\"40\" text-anchor=\"middle\" fill=\"#fff\" font-family=\"sans-serif\">roughness</text></svg>",
+   "contentType": "image/svg+xml"
+  }
+ ],
+ "boards": [
+  {
+   "id": "ChatPbrFlow",
+   "title": "צ'אט: בקשה אחת לטקסטורת PBR שחוזרת, עם החלה על האובייקט הנבחר ב-Unity, שמירה כחומר ו-4 וריאציות",
+   "titleEn": "Chat: one request to a tileable PBR texture, applied to the selected Unity object",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "טקסטורת קיר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 4,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "user",
+        "text": "תעשה לי טקסטורת קיר לבנים שחוזרת ותשים על האובייקט שבחרתי ב-Unity"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "tool_call",
+        "callId": "p1",
+        "name": "make_pbr_texture",
+        "input": {
+         "prompt": "old red brick wall, white mortar, slightly weathered"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "tool_result",
+        "callId": "p1",
+        "name": "make_pbr_texture",
+        "ok": true,
+        "output": "Made 1 PBR texture set(s) \"Old Red Brick\" with juggernautXL.safetensors; the user sees the maps.\nSet 1: albedo=0f8fad5b-d9cb-469f-a165-70867728950e normal=2f8fad5b-d9cb-469f-a165-70867728950e roughness=3f8fad5b-d9cb-469f-a165-70867728950e ao=1f8fad5b-d9cb-469f-a165-70867728950e height=3f8fad5b-d9cb-469f-a165-70867728950e (1024x1024, seam fixed, seam 1.04)",
+        "assetIds": [
+         "0f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הטקסטורה מוכנה וחוזרת בלי תפר. אפשר להחיל אותה על האובייקט שבחרת ב-Unity בכפתור שמתחת, לשמור כחומר או לבקש 4 וריאציות."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".quick-actions"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
+  },
+  {
+   "id": "ChatPbrProgress",
+   "title": "צ'אט: התקדמות טקסטורת PBR בבועה (בדיקת תפר, תיקון, מפות)",
+   "titleEn": "Chat: PBR texture progress in the bubble (seam check, fix, maps)",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "טקסטורת קיר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c2",
+       "status": "running",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "user",
+        "text": "תעשה לי טקסטורת קיר לבנים שחוזרת ותשים על האובייקט שבחרתי ב-Unity"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "tool_call",
+        "callId": "p1",
+        "name": "make_pbr_texture",
+        "input": {
+         "prompt": "old red brick wall, white mortar, slightly weathered"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "body": "data: {\"type\": \"tool_progress\", \"callId\": \"p1\", \"progress\": {\"phase\": \"fixing seam\", \"step\": 14, \"steps\": 25}}\n\n",
+     "contentType": "text/event-stream"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".job-progress"
+    }
+   ]
+  },
+  {
+   "id": "ChatUiSprite",
+   "title": "צ'אט: ספרייט ל-UI (יצירה, הסרת רקע, ייבוא ל-Unity)",
+   "titleEn": "Chat: a UI sprite (generate, remove background, import to Unity)",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "טקסטורת קיר",
+      "kind": "chat",
+      "modelId": "qwen3",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 4,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "qwen3",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "user",
+        "text": "תעשה אייקון של מטבע זהב למשחק"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "tool_call",
+        "callId": "s1",
+        "name": "make_ui_sprite",
+        "input": {
+         "prompt": "golden coin game icon, flat cartoon style"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "tool_result",
+        "callId": "s1",
+        "name": "make_ui_sprite",
+        "ok": true,
+        "output": "Made the sprite 1f8fad5b-d9cb-469f-a165-70867728950e (a 1024x1024 cut-out PNG with a clear background).",
+        "assetIds": [
+         "1f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "הספרייט מוכן עם רקע שקוף. \"ייבוא ל-Unity\" מכניס אותו כ-Sprite."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".quick-actions"
+    }
+   ]
+  }
+ ]
+}

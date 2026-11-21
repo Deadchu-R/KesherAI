@@ -39,6 +39,9 @@ function phaseText(phase: string | undefined): string {
     case "decoding": return L("מסיים", "Finishing");
     case "upscaling": return L("מגדיל", "Upscaling");
     case "cutting out": return L("מסיר רקע", "Removing the background");
+    case "seam check": return L("בודק שהטקסטורה חוזרת בלי תפר", "Checking that it tiles");
+    case "fixing seam": return L("מתקן את התפר", "Fixing the seam");
+    case "maps": return L("מכין מפות נורמל, חספוס ו-AO", "Making normal, roughness and AO maps");
     default: return phase ?? L("מתחיל", "Starting");
   }
 }

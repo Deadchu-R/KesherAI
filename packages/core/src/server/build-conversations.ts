@@ -129,6 +129,39 @@ export interface ConversationParts {
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
   const { taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine } = p;
+  /** Starts ComfyUI when nothing answers at its address. */
+  const comfyUp = async () => {
+    if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
+    if (comfy.status().running) return;
+    const up = await fetch(`${comfy.status().url}/system_stats`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
+    if (!up) await comfy.start();
+  };
+  /** The files ComfyUI lists in one of its model folders. */
+  const comfyList = (folder: string) => fetch(`${comfy.status().url}/models/${folder}`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
+  /**
+   * Runs a ComfyUI graph as a VRAM-heavy job (the ready flows and KesherAI's own graphs): ComfyUI started when needed,
+   * the chat model parked, the GPU guard held, and the card freed after.
+   */
+  const runComfyGraph = async (
+    build: (upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>, list: (folder: string) => Promise<string[]>) => Promise<Record<string, { class_type: string; inputs: Record<string, unknown> }>>,
+    signal: AbortSignal,
+    onProgress?: (p: JobProgress) => void,
+  ) => {
+    await comfyUp();
+    const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
+    const graph = await build((data, name, subfolder) => provider.uploadImage(data, name, subfolder), comfyList);
+    // A VRAM-heavy job: the chat model steps aside with its cache saved to disk (slot-park.ts).
+    await parkChatFor({ running: () => engine.status().running, busy: () => guard.status().running > 0, short: () => vramShort(guard.status().cards), park: () => engine.parkSlot(0), stop: (why) => engine.stop(why) });
+    await guard.before("comfyui", signal);
+    try {
+      return await provider.runFlow(graph, signal, undefined, onProgress);
+    } finally {
+      guard.after();
+      // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
+      // shared 24 GB and the chat model answered in minutes, not seconds). The next song loads what it needs.
+      if (engine.status().running) void fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+    }
+  };
   return new ConversationManager({
     board: taskBoard,
     registry,
@@ -235,28 +268,24 @@ export function buildConversations(p: ConversationParts): ConversationManager {
         await setupFlow(flow, paths.models, downloads);
       },
       run: async (id: string, edit: (flow: Record<string, { class_type: string; inputs: Record<string, unknown> }>, upload: (data: Uint8Array, name: string, subfolder?: string) => Promise<string>) => Promise<void> | void, signal: AbortSignal, onProgress?: (p: JobProgress) => void) => {
-        if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
         const flow = readyFlows().find((f) => f.id === id)!;
-        if (!comfy.status().running) {
-          const up = await fetch(`${comfy.status().url}/system_stats`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false);
-          if (!up) await comfy.start();
-        }
-        const list = (folder: string) => fetch(`${comfy.status().url}/models/${folder}`).then((r) => (r.ok ? (r.json() as Promise<string[]>) : []), () => [] as string[]);
-        const graph = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
-        const provider = new ComfyUIProvider({ id: "comfyui-flows", type: "comfyui", name: "ComfyUI", baseUrl: comfy.status().url, location: "local" });
-        await edit(graph, (data, name, subfolder) => provider.uploadImage(data, name, subfolder));
-        // A VRAM-heavy job: the chat model steps aside with its cache saved to disk (slot-park.ts).
-        await parkChatFor({ running: () => engine.status().running, busy: () => guard.status().running > 0, short: () => vramShort(guard.status().cards), park: () => engine.parkSlot(0), stop: (why) => engine.stop(why) });
-        await guard.before("comfyui", signal);
-        try {
-          return await provider.runFlow(graph, signal, undefined, onProgress);
-        } finally {
-          guard.after();
-          // A chat model is loaded too: ComfyUI gives the card back at once (found on the PC: after a song, both
-          // shared 24 GB and the chat model answered in minutes, not seconds). The next song loads what it needs.
-          if (engine.status().running) void fetch(`${comfy.status().url}/free`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ unload_models: true, free_memory: true }), signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
-        }
+        return runComfyGraph(async (upload, list) => {
+          const graph = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
+          await edit(graph, upload);
+          return graph;
+        }, signal, onProgress);
       },
+    },
+    // Graphs KesherAI builds itself (pbr-flow.ts): the tileable PBR texture and its seam fix.
+    comfyGraph: {
+      state: () => ({ installed: comfy.status().installed, allowed: registry.permitted("comfyui") }),
+      nodes: async (signal: AbortSignal) => {
+        await comfyUp();
+        const info = await fetch(`${comfy.status().url}/object_info`, { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) }).then((r) => (r.ok ? (r.json() as Promise<Record<string, unknown>>) : {}));
+        return new Set(Object.keys(info));
+      },
+      checkpoints: () => comfyList("checkpoints"),
+      run: (build, signal, onProgress) => runComfyGraph(async (upload) => build((data, name) => upload(data, name)), signal, onProgress),
     },
     video: {
       // A video model from a connection (ComfyUI's Wan) when that is the active one, else the built-in engine.

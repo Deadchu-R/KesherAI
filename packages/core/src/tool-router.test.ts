@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineAsk, isSimpleTurn, missingNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
+import { engineAsk, flowIntent, intentNote, isSimpleTurn, missingNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
 
 const available = ["browser_open", "document", "generate_image", "read_file", "unity_scene", "web_search"];
 
@@ -72,4 +72,25 @@ test("the router's engine call is pinned to the other slot when the engine has o
   assert.equal(bodies[0]!.id_slot, 2);
   assert.equal(bodies[1]!.id_slot, undefined, "one slot: llama.cpp picks");
   assert.equal(bodies[1]!.cache_prompt, true);
+});
+
+test("a tileable texture or a sprite picks its flow by itself (Hebrew and English), with Unity when it names the selection", async () => {
+  assert.equal(flowIntent("make a tileable wall texture"), "pbr");
+  assert.equal(flowIntent("תעשה לי טקסטורת קיר שחוזרת"), "pbr");
+  assert.equal(flowIntent("a seamless wood floor material"), "pbr");
+  assert.equal(flowIntent("a sprite of a stone with a moss texture"), "sprite");
+  assert.equal(flowIntent("תעשה אייקון של מטבע למשחק"), "sprite");
+  assert.equal(flowIntent("תצייר לי חתול"), undefined);
+  const tools = ["generate_image", "make_pbr_texture", "make_ui_sprite", "unity_create_pbr_material", "unity_import_sprite", "unity_scene"];
+  const r = new ToolRouter();
+  const pbr = await r.route("תעשה טקסטורת לבנים ותשים על האובייקט שבחרתי", tools, [], true);
+  assert.equal(pbr.intent, "pbr");
+  assert.ok(pbr.tools.includes("make_pbr_texture") && pbr.tools.includes("unity_create_pbr_material"));
+  assert.match(intentNote(pbr.intent, pbr.tools)!, /call make_pbr_texture[\s\S]*not generate_image[\s\S]*apply_to \["selection"\]/);
+  const plain = await r.route("make a tileable wall texture", tools, [], true);
+  assert.ok(!plain.tools.includes("unity_scene"));
+  assert.doesNotMatch(intentNote(plain.intent, plain.tools)!, /unity/);
+  assert.equal(intentNote("pbr", ["generate_image"]), undefined, "no note without the tool");
+  assert.match(intentNote("sprite", ["make_ui_sprite", "unity_import_sprite"])!, /make_ui_sprite[\s\S]*unity_import_sprite/);
+  assert.deepEqual((await r.route("make a tileable wall texture", tools, ["images"], true)).tools, [], "a group turned off stays off");
 });

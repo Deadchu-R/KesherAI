@@ -5,9 +5,12 @@
  */
 import { randomInt } from "node:crypto";
 import { type AgentTool } from "@kesher/agent";
+import { ComfyUIProvider } from "@kesher/providers";
 import { type JobProgress, APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, cleanAppearance, type Appearance } from "@kesher/shared";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import type { ConversationDeps } from "./conversation-deps.js";
+import type { QuickServices } from "./chat-quick-actions.js";
+import { PBR_NOTE, pbrTools } from "./pbr-tools.js";
 
 /** Told to the model when the image model is not ready, so it waits instead of improvising. */
 const WAIT_NOTE =
@@ -22,9 +25,10 @@ export const IMAGE_SUPPORT_FILE = /(^|[\\/])(vae|text_encoders?|clip|clip_vision
  * pattern once their providers exist.
  *
  * @param deps - The manager's services.
+ * @param quick - The chat buttons' services (the background remover, for make_ui_sprite).
  * @returns Tools and one line per tool for the system prompt.
  */
-export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes: string[] } {
+export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = () => ({})): { tools: AgentTool[]; notes: string[] } {
   const tools: AgentTool[] = [];
   const notes: string[] = [];
   const usable = (id: string | undefined): id is string => {
@@ -131,6 +135,27 @@ export function mediaTools(deps: ConversationDeps): { tools: AgentTool[]; notes:
     });
   }
   tools.push(...flowTools(deps, notes));
+  // One request to a tileable PBR set or a UI sprite (pbr-tools.ts).
+  const textures = pbrTools({
+    ...(deps.comfyGraph && deps.config.parts?.nodes !== false && on("images") ? { comfy: deps.comfyGraph } : {}),
+    assets: deps.assets,
+    activeCheckpoint: () => {
+      const id = deps.config.activeModels.image;
+      try {
+        const r = id ? deps.registry.resolve(id) : undefined;
+        return r && r.provider instanceof ComfyUIProvider ? r.providerModelId : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    ...(tools.find((t) => t.spec.name === "generate_image") ? { generate: tools.find((t) => t.spec.name === "generate_image")! } : {}),
+    removeBackground: () => {
+      const q = quick();
+      return q.removeBackground ? { remove: q.removeBackground, ready: () => q.removeBackgroundReady?.() ?? true } : undefined;
+    },
+  });
+  if (textures.length) notes.push(PBR_NOTE);
+  tools.push(...textures);
   tools.push(...lookTools(deps, notes));
   return { tools, notes };
 }

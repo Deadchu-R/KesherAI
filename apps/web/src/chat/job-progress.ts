@@ -5,7 +5,7 @@
 import type { JobProgress } from "@kesher/shared";
 
 /** Tools whose step is a media job (a picture, video, sound or 3D model), shown with the job's progress and Cancel. */
-export const MEDIA_JOB = /^(generate_image|generate_video|make_music|make_sound|animate_picture|make_3d|upscale_image|remove_background)$/;
+export const MEDIA_JOB = /^(generate_image|generate_video|make_music|make_sound|animate_picture|make_3d|upscale_image|remove_background|make_pbr_texture|make_ui_sprite)$/;
 
 /**
  * Merges a `tool_progress` update into what is known of the job: its step and phase, and the newest preview frame

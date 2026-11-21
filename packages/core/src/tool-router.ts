@@ -34,6 +34,50 @@ export interface Route {
   tools: string[];
   /** Groups the message needs whose tools are missing, with what installs them. */
   missing: Array<{ group: string; needs: string }>;
+  /** A ready flow the message asks for by itself (a tileable PBR texture, a UI sprite), see {@link flowIntent}. */
+  intent?: FlowIntent;
+}
+
+/** A request that one of KesherAI's one-request flows answers. */
+export type FlowIntent = "pbr" | "sprite";
+
+const SPRITE_WORDS = /\b(sprites?|ui icons?|game icons?|app icons?|hud icons?|button art|inventory icons?|icon for (?:my|the|a) (?:game|ui|app|button))\b|ספרייט|אייקון|סמל(?:ים)? למשחק|כפתור(?:ים)? למשחק/i;
+const PBR_WORDS = /\b(pbr|tileable|tiling|seamless|textures?|albedo|normal map)\b|טקסטור|חומר\s*pbr|בלי תפר/i;
+/** Words that point at the object selected in a game engine (the Unity tools come along). */
+const SELECTED_WORDS = /\b(selected|selection|unity)\b|נבחר|מסומן|שבחרתי|יוניטי/i;
+
+/**
+ * Which one-request flow a message asks for, by its words, Hebrew and English: "make a tileable wall texture" and
+ * "תעשה לי טקסטורת קיר שחוזרת" are a PBR texture; "a sprite / UI icon for my game" is a sprite (a sprite wins when
+ * both match: "a sprite with a stone texture").
+ *
+ * @param text - The user's message.
+ * @returns The flow, or undefined.
+ */
+export function flowIntent(text: string): FlowIntent | undefined {
+  if (SPRITE_WORDS.test(text)) return "sprite";
+  if (PBR_WORDS.test(text)) return "pbr";
+  return undefined;
+}
+
+/**
+ * The line the model reads when the message asks for a one-request flow whose tool the chat has, so it picks that
+ * tool by itself instead of generate_image.
+ *
+ * @param intent - From {@link flowIntent}.
+ * @param tools - The tools routed for this message.
+ * @returns The line, or undefined.
+ */
+export function intentNote(intent: FlowIntent | undefined, tools: readonly string[]): string | undefined {
+  if (intent === "pbr" && tools.includes("make_pbr_texture")) {
+    const unity = tools.includes("unity_create_pbr_material") ? " If they want it on the object selected in Unity, then call unity_create_pbr_material with its albedo, normal, roughness and ao ids and apply_to [\"selection\"]." : "";
+    return `[KesherAI] This asks for a texture or material: call make_pbr_texture (a seamless albedo with normal, roughness, AO and height maps), not generate_image.${unity}`;
+  }
+  if (intent === "sprite" && tools.includes("make_ui_sprite")) {
+    const unity = tools.includes("unity_import_sprite") ? " If they want it in Unity, then call unity_import_sprite with its picture id." : "";
+    return `[KesherAI] This asks for a 2D game or UI sprite: call make_ui_sprite (the picture with its background removed), not generate_image.${unity}`;
+  }
+  return undefined;
 }
 
 const SYSTEM = `You route a user's request to tool groups. Answer with JSON only: {"groups": [...]} with 0 to 3 ids from the list, the ones the request needs, most needed first. Requests may be in Hebrew or English. Groups:\n${CHAT_TOOL_GROUPS.map((g) => `- ${g.id}: ${g.about}`).join("\n")}`;
@@ -105,13 +149,16 @@ export class ToolRouter {
    * @returns The groups, their tools here, and what is missing.
    */
   async route(text: string, available: readonly string[], off: readonly string[], useModel: boolean, signal?: AbortSignal): Promise<Route> {
-    const groups = (await this.groups(text, useModel, signal)).filter((g) => !off.includes(g));
+    const intent = flowIntent(text);
+    // A flow request routes to its tools by itself (the Unity tools too when it names the selection or Unity).
+    const wanted = intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : [];
+    const groups = [...new Set([...(await this.groups(text, useModel, signal)), ...wanted])].filter((g) => !off.includes(g));
     const tools = available.filter((n) => { const g = groupOfTool(n); return !!g && groups.includes(g); }).sort();
     const missing = groups.flatMap((id) => {
       const g = CHAT_TOOL_GROUPS.find((x) => x.id === id);
       return g?.needs && !available.some((n) => g.tools.test(n)) ? [{ group: id, needs: g.needs }] : [];
     });
-    return { groups, tools, missing };
+    return { groups, tools, missing, ...(intent ? { intent } : {}) };
   }
 }
 

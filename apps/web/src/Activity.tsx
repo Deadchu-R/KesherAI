@@ -56,6 +56,8 @@ export function stepLabel(step: Step): string {
     generate_image: "stepImage",
     make_music: "stepMusic",
     make_3d: "stepModel3d",
+    make_pbr_texture: "stepTexture",
+    make_ui_sprite: "stepSprite",
     request_access: "stepAccess",
     unreal_write_source: "stepWrite",
     unity_write_script: "stepWrite",
@@ -146,7 +148,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   const run = next?.type === "receipt" ? next.run : undefined;
   const lastEngine = [...steps].reverse().find((s) => s.result?.ok && /^(unity|unreal|godot)_/.test(s.call.name));
   const stepButtons = live ? [] : steps.flatMap((s) => {
-    const all = stepActions(s, run);
+    const all = stepActions(s, run, can);
     // Engine buttons once per group (on its last engine step), not under every read.
     const list = s === lastEngine ? all : all.filter((a) => a.id !== "engine" && a.id !== "undo");
     return list.length ? [{ key: s.call.callId, list }] : [];

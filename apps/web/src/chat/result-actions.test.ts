@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { directResults, imageActions, pbrMaps, playerActions, stepActions, type ActionStep } from "./result-actions.js";
+import { directResults, imageActions, pbrActions, pbrMaps, pbrSets, playerActions, stepActions, type ActionStep } from "./result-actions.js";
 
 const A = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const B = "1f8fad5b-d9cb-469f-a165-70867728950e";
@@ -44,4 +44,28 @@ test("a button's own results are found among the chat's events", () => {
   assert.deepEqual(r.done.map((e) => e.callId), ["direct-1"]);
   assert.deepEqual(r.running, ["direct-2"]);
   assert.deepEqual(directResults(ev, 3, "generate_image").done, []);
+});
+
+test("a made PBR set: canvas, Apply to selected in Unity, Save as material, 4 variations", () => {
+  const id = (n: number) => `${n}f8fad5b-d9cb-469f-a165-70867728950e`;
+  const output = `Made 1 PBR texture set(s) "Old Brick" with x.safetensors; the user sees the maps.\nSet 1: albedo=${id(0)} normal=${id(1)} roughness=${id(2)} ao=${id(3)} height=${id(4)} (1024x1024, seam fixed, seam 1.02)`;
+  const step: ActionStep = { call: { callId: "p1", name: "make_pbr_texture", input: { prompt: "old brick wall" } }, result: { ok: true, output, assetIds: [id(0)] } };
+  assert.deepEqual(pbrSets(step), [{ albedo: id(0), normal: id(1), roughness: id(2), ao: id(3), height: id(4) }]);
+  const all = pbrActions(step, ["make_pbr_texture", "unity_create_pbr_material"]);
+  assert.deepEqual(all.map((a) => a.id), ["pbr", "apply", "material", "variations"]);
+  assert.deepEqual(all[1]!.do, { tool: "unity_create_pbr_material", input: { name: "Old Brick", maps: { albedo: id(0), normal: id(1), roughness: id(2), ao: id(3) }, apply_to: ["selection"] } });
+  assert.equal("apply_to" in (all[2]!.do as { input: object }).input, false);
+  assert.deepEqual(all[3]!.do, { tool: "make_pbr_texture", input: { prompt: "old brick wall", name: "Old Brick", count: 4 } });
+  // Without Unity: only the canvas (and variations when it can run).
+  assert.deepEqual(pbrActions(step, []).map((a) => a.id), ["pbr"]);
+  assert.deepEqual(stepActions(step, undefined, ["unity_create_pbr_material"]).map((a) => a.id), ["pbr", "apply", "material"]);
+  // Several sets: numbered canvas and Apply buttons, one Variations.
+  const two = { ...step, result: { ...step.result!, output: `${output}\nSet 2: albedo=${id(5)} normal=${id(6)} (1024x1024, checked, seam 1.1)` } };
+  assert.deepEqual(pbrActions(two, ["make_pbr_texture", "unity_create_pbr_material"]).map((a) => a.id), ["pbr 1", "apply 1", "pbr 2", "apply 2", "variations"]);
+  assert.deepEqual(pbrSets({ ...step, result: { ...step.result!, ok: false } }), []);
+});
+
+test("a PBR set's albedo has no sprite or texture buttons of its own", () => {
+  const step: ActionStep = { call: { callId: "p1", name: "make_pbr_texture", input: { prompt: "x" } }, result: { ok: true, output: "" } };
+  assert.deepEqual(imageActions("0f8fad5b-d9cb-469f-a165-70867728950e", step, ["unity_import_sprite", "unity_create_pbr_material", "remove_background"]).map((a) => a.id), ["canvas", "nobg"]);
 });

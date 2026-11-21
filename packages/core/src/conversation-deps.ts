@@ -56,6 +56,8 @@ export interface ConversationDeps {
       onProgress?: (p: import("@kesher/shared").JobProgress) => void,
     ): Promise<Array<{ data: Uint8Array; mimeType: string; filename: string }>>;
   };
+  /** ComfyUI for graphs KesherAI builds itself (pbr-flow.ts: the tileable PBR texture). */
+  comfyGraph?: import("./pbr-flow.js").ComfyGraphRunner;
   /** Unity's CLI: the chat's Unity tools (when the CLI is installed). */
   unity?: UnityCli;
   /** The task board shared with Claude (self-work). */

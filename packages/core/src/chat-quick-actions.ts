@@ -1,7 +1,7 @@
 /**
  * The chat's inline action buttons under a result (design ChatQuickActions, like the one-tap chips of ComfyUI
  * frontends and ChatGPT's image actions): Upscale, 4 variations, Remove background, Import to Unity, Use as texture,
- * Transcribe. A button runs one tool directly with inputs it already knows (AgentSession.runDirect), so no model turn
+ * Transcribe, and under a PBR set Apply to selected in Unity, Save as material and 4 variations. A button runs one tool directly with inputs it already knows (AgentSession.runDirect), so no model turn
  * and no tokens; the tool's approval rules still apply. Only the tools listed here can be run this way.
  */
 import { type AgentTool } from "@kesher/agent";
@@ -20,7 +20,7 @@ export interface QuickServices {
 }
 
 /** Tools the model has too, which a button may run with known inputs. */
-const SESSION_TOOLS = new Set(["generate_image", "transcribe_audio", "unity_import_sprite", "unity_create_pbr_material"]);
+const SESSION_TOOLS = new Set(["generate_image", "transcribe_audio", "unity_import_sprite", "unity_create_pbr_material", "make_pbr_texture"]);
 /** Tools only the buttons have (not in the model's list, so they cost no prompt tokens). */
 const BUTTON_TOOLS = new Set(["upscale_image", "remove_background"]);
 const ASSET_ID = /^[0-9a-f-]{36}$/;
@@ -39,7 +39,13 @@ export function quickActionProblem(name: string, input: unknown): string | undef
   const i = input as Record<string, unknown>;
   if (BUTTON_TOOLS.has(name) && !(typeof i.asset === "string" && ASSET_ID.test(i.asset))) return "Give the picture's asset id.";
   if (name === "unity_import_sprite" && !(typeof i.file === "string" && ASSET_ID.test(i.file))) return "Give the picture's asset id.";
-  if (name === "generate_image" && !(typeof i.prompt === "string" && i.prompt.trim())) return "Give the prompt.";
+  if ((name === "generate_image" || name === "make_pbr_texture") && !(typeof i.prompt === "string" && i.prompt.trim())) return "Give the prompt.";
+  if (name === "unity_create_pbr_material") {
+    // A button only passes library pictures of a set it showed, and only ever puts it on the selection.
+    const maps = i.maps;
+    if (!maps || typeof maps !== "object" || Array.isArray(maps) || !Object.values(maps).length || !Object.values(maps).every((v) => typeof v === "string" && ASSET_ID.test(v))) return "Give the maps as library picture ids.";
+    if (i.apply_to !== undefined && !(Array.isArray(i.apply_to) && i.apply_to.length === 1 && i.apply_to[0] === "selection")) return "A button only puts the material on the selected objects.";
+  }
   return undefined;
 }
 
