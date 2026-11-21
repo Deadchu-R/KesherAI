@@ -59,6 +59,7 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
 - Usage credits: he may spend credits already loaded, never reload or buy more; stop when they run out.
 
 ## The design doc (artifact https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U)
+- **Every night (Roee 2026-11-21): two design-doc updates — one at 21:00 and one at 07:00** (with the morning report). Schedule both as reminders into the running chat each evening (send_later), and send him the link after each.
 - Every new or changed screen goes in before the build, in the interface's own style, desktop (1280) and phone (390);
   real Playwright screenshots of the built screen are preferred over mockups. No approval needed; open the doc for him
   after each publish.
