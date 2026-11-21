@@ -50,8 +50,8 @@ test("convertTask: a copy's folder only, the errors cut and without user paths, 
 });
 
 test("install in all projects: already current is skipped, an old engine is offered conversion, the rest queued", () => {
-  assert.equal(batchStateOf({ engine: "5.4", plugin: "0.1.27" }, "0.1.27"), "skipped");
-  assert.equal(batchStateOf({ engine: "4.27", plugin: null }, "0.1.27"), "unsupported");
-  assert.equal(batchStateOf({ engine: "5.8", plugin: "0.1.20" }, "0.1.27"), "queued");
-  assert.equal(batchStateOf({ plugin: null }, "0.1.27"), "queued");
+  assert.equal(batchStateOf({ engine: "5.4", plugin: "0.1.28" }, "0.1.28"), "skipped");
+  assert.equal(batchStateOf({ engine: "4.27", plugin: null }, "0.1.28"), "unsupported");
+  assert.equal(batchStateOf({ engine: "5.8", plugin: "0.1.20" }, "0.1.28"), "queued");
+  assert.equal(batchStateOf({ plugin: null }, "0.1.28"), "queued");
 });

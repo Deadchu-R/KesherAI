@@ -8,6 +8,16 @@ public class KesherAIBridge : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// A Visual Studio newer than the engine knows reports engine headers (e.g. ConcurrentLinearAllocator.h in 5.4,
+		// "'__has_feature' is not defined", C4668) as errors; the plugin cannot edit them, so undefined identifiers in
+		// #if are not diagnosed in this module. UndefinedIdentifierWarningLevel exists since UE 5.3; older engines
+		// only have the bool. UE_5_3_OR_LATER is defined by UBT for every engine from 5.3 on (5.1 and 5.2 skip it).
+#if UE_5_3_OR_LATER
+		UndefinedIdentifierWarningLevel = WarningLevel.Off;
+#else
+		bEnableUndefinedIdentifierWarnings = false;
+#endif
+
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",

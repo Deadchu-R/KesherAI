@@ -19,7 +19,7 @@ import { applyBpOps, bpNodeTemplate, COMMON_BP_ACTIONS, diffBpGraphs, mapCompile
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.27";
+export const BRIDGE_VERSION = "0.1.28";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {

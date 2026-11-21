@@ -39,6 +39,8 @@ export interface InstallJob {
   message?: string;
   /** The compiler's own errors when the plugin did not build (for "Convert with AI"). */
   errors?: string[];
+  /** True when the failure was the plugin's build (not the copy into the project): the same engine would fail again. */
+  buildFailed?: boolean;
 }
 
 /** One project in "Install in all projects". */
@@ -59,6 +61,94 @@ export interface BatchItem {
 export interface BatchJob {
   running: boolean;
   items: BatchItem[];
+}
+
+/** What {@link prepareBuildFolder} needs from the file system (replaced in tests). */
+export interface BuildFolderDeps {
+  /** Deletes a folder tree (rejects when a file in it is locked). */
+  remove: (path: string) => Promise<void>;
+  exists: (path: string) => boolean;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const realBuildFolderDeps: BuildFolderDeps = {
+  remove: (path) => rm(path, { recursive: true, force: true }),
+  exists: existsSync,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+};
+
+/**
+ * Clears the folder a plugin build is about to write to. After a failed build a dotnet/UBT process can still hold a
+ * file in it (`EPERM … HostProjectModuleRules.dll`), so deleting is tried a few times with a short wait; if it stays
+ * locked, the build goes into a fresh sibling folder (`<name>-b2`, `-b3`, …) instead of failing at once.
+ *
+ * @param root - The engine-and-plugin-version folder, e.g. `…/_built/5.4-0.1.28` (the plugin is built inside it).
+ * @param tries - How many times to try deleting it (default 5).
+ * @param waitMs - The wait between two tries in ms (default 2000).
+ * @param deps - File system access (replaced in tests).
+ * @returns The root to build into: the given one, or the first free sibling.
+ * @throws Error when no sibling could be cleared either.
+ */
+export async function prepareBuildFolder(
+  root: string,
+  tries = 5,
+  waitMs = 2000,
+  deps: BuildFolderDeps = realBuildFolderDeps,
+): Promise<string> {
+  const clear = async (path: string): Promise<boolean> => {
+    for (let i = 0; i < tries; i++) {
+      try {
+        await deps.remove(path);
+        return true;
+      } catch {
+        if (i < tries - 1) await deps.sleep(waitMs);
+      }
+    }
+    return false;
+  };
+  if (await clear(root)) return root;
+  for (let n = 2; n <= 9; n++) {
+    const sibling = `${root}-b${n}`;
+    // A leftover sibling from an earlier locked build is cleared the same way; a clean name needs nothing.
+    if (!deps.exists(sibling) || (await clear(sibling))) return sibling;
+  }
+  throw new Error(`The build folder is locked by another process (${root}). Close Unreal and any running build tools, then try again.`);
+}
+
+/**
+ * Runs the queued items of "Install in all projects" one after another. A plugin BUILD that failed for an engine
+ * version is remembered for the batch, so the other projects on that engine show the same message once, without
+ * building again (and without the same compile errors being produced again and again).
+ *
+ * @param items - The batch's items; "queued" ones are run and updated in place.
+ * @param installOne - Installs one project and resolves with its finished job (undefined: none).
+ */
+export async function runBatchItems(
+  items: BatchItem[],
+  installOne: (path: string) => Promise<InstallJob | undefined>,
+): Promise<void> {
+  /** Engine version -> the first error of its failed build. */
+  const failedBuilds = new Map<string, string>();
+  for (const item of items) {
+    if (item.state !== "queued") continue;
+    const known = item.engine ? failedBuilds.get(item.engine) : undefined;
+    if (known !== undefined) {
+      item.state = "failed";
+      item.message = `Build failed for ${item.engine}: ${known}`;
+      continue;
+    }
+    item.state = "installing";
+    try {
+      const job = await installOne(item.path);
+      item.state = job?.state === "done" ? "done" : "failed";
+      if (job?.message) item.message = job.message.split("\n")[0];
+      if (job?.errors?.length) item.errors = job.errors;
+      if (job?.buildFailed) failedBuilds.set(job.engine, job.errors?.[0] ?? job.message?.split("\n")[0] ?? "unknown error");
+    } catch (err) {
+      item.state = (err as { unsupported?: unknown }).unsupported ? "unsupported" : "failed";
+      item.message = (err as Error).message;
+    }
+  }
 }
 
 /**
@@ -465,24 +555,13 @@ export class BridgeInstaller {
     });
     const batch: BatchJob = { running: true, items };
     this.batch = batch;
-    void (async () => {
-      for (const item of items) {
-        if (item.state !== "queued") continue;
-        item.state = "installing";
-        try {
-          await this.install(item.path);
-          await this.running;
-          const job = this.job;
-          item.state = job?.state === "done" ? "done" : "failed";
-          if (job?.message) item.message = job.message.split("\n")[0];
-          if (job?.errors?.length) item.errors = job.errors;
-        } catch (err) {
-          item.state = (err as { unsupported?: unknown }).unsupported ? "unsupported" : "failed";
-          item.message = (err as Error).message;
-        }
-      }
+    void runBatchItems(items, async (path) => {
+      await this.install(path);
+      await this.running;
+      return this.job;
+    }).finally(() => {
       batch.running = false;
-    })();
+    });
     return batch;
   }
 
@@ -495,13 +574,13 @@ export class BridgeInstaller {
     const version = JSON.parse(
       await readFile(join(source, "KesherAIBridge.uplugin"), "utf8"),
     ) as { VersionName?: string };
-    const built = join(
-      this.dir,
-      `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}`,
-      "KesherAIBridge",
-    );
-    if (!existsSync(join(built, "Binaries"))) {
-      await rm(built, { recursive: true, force: true });
+    const root = join(this.dir, `${engine.version.replace(/[^\w.-]/g, "_")}-${version.VersionName ?? "0"}`);
+    // A build kept earlier is used as it is; a fallback sibling (`-b2`…) from a locked folder counts too.
+    let built = [root, ...[2, 3, 4, 5, 6, 7, 8, 9].map((n) => `${root}-b${n}`)]
+      .map((r) => join(r, "KesherAIBridge"))
+      .find((b) => existsSync(join(b, "Binaries")));
+    if (!built) {
+      built = join(await prepareBuildFolder(root), "KesherAIBridge");
       await mkdir(dirname(built), { recursive: true });
       const uat = join(
         engine.path,
@@ -538,6 +617,7 @@ export class BridgeInstaller {
         // The compiler's own errors first (the log shown is only its end); "Visual Studio" alone is in every log.
         const errors = [...new Set(text.split("\n").filter((l) => /\berror [A-Z]+\d+:|: fatal error|\): error/.test(l)).map((l) => l.replace(/^.*[\\/](Source[\\/])/, "$1")))].slice(0, 8);
         if (errors.length) job.errors = errors;
+        job.buildFailed = true;
         throw new Error(
           errors.length
             ? `The plugin did not compile for Unreal ${engine.version}:\n${errors.join("\n")}`

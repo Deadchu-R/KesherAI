@@ -8,7 +8,7 @@
     "projects": [],
     "queued": 0,
     "offline": true,
-    "latestBridge": "0.1.27",
+    "latestBridge": "0.1.28",
     "download": "https://example.invalid/kesher-unreal"
    }
   },
@@ -53,7 +53,7 @@
        "path": "C:/Projects/DoorGame",
        "engine": "5.6",
        "state": "skipped",
-       "message": "Already 0.1.27"
+       "message": "Already 0.1.28"
       },
       {
        "name": "Racer",
@@ -76,7 +76,7 @@
   {
    "url": "**/api/unreal/projects",
    "json": {
-    "latest": "0.1.27",
+    "latest": "0.1.28",
     "projects": [
      {
       "name": "SpaceShooter",
@@ -94,7 +94,7 @@
       "name": "DoorGame",
       "path": "C:/Projects/DoorGame",
       "engine": "5.6",
-      "plugin": "0.1.27",
+      "plugin": "0.1.28",
       "open": false,
       "support": {
        "supported": true,
