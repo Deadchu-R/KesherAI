@@ -213,6 +213,21 @@ function rateLimited(res: Response): string {
 const summaries = new Map<string, string>();
 
 /**
+ * Whether a string is a Hugging Face repo id (`owner/name`, or an old top-level `name`). Repo ids go into URL paths
+ * and folder names, so anything else (`..`, `?`, `#`, `@`, slashes beyond one) is refused before a request is made.
+ *
+ * @param repo - What the page or a tool sent.
+ */
+export function isHubRepo(repo: string): boolean {
+  return /^(?:[A-Za-z0-9][\w.-]{0,95}\/)?[A-Za-z0-9][\w.-]{0,95}$/.test(repo) && !/(^|\/)\.\.?(\/|$)|\.\./.test(repo);
+}
+
+/** Throws for a string that is not a repo id ({@link isHubRepo}). */
+function checkRepo(repo: string): void {
+  if (!isHubRepo(repo)) throw new Error(`Not a Hugging Face repo id: ${repo.slice(0, 80)}`);
+}
+
+/**
  * A short description of a model from its model card (README.md): the
  * first paragraphs of text, without the metadata block, headings, images,
  * badges, links and tables.
@@ -222,6 +237,7 @@ const summaries = new Map<string, string>();
  * @returns Up to about 600 characters, or an empty string if the card has no text.
  */
 export async function modelSummary(repo: string, opts: { token?: string; signal?: AbortSignal } = {}): Promise<string> {
+  checkRepo(repo);
   const cached = summaries.get(repo);
   if (cached !== undefined) return cached;
   const res = await fetch(`${HF}/${repo}/raw/main/README.md`, { headers: authHeaders(opts.token), signal: opts.signal });
@@ -269,6 +285,7 @@ export async function listHubFiles(
   repo: string,
   opts: { revision?: string; token?: string; signal?: AbortSignal } = {},
 ): Promise<HubFile[]> {
+  checkRepo(repo);
   const revision = opts.revision ?? "main";
   return cached(`tree\n${repo}\n${revision}\n${!!opts.token}`, () => listHubFilesUncached(repo, revision, opts));
 }
