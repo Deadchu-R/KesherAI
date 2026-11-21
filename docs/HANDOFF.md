@@ -15,6 +15,10 @@ so a new chat starts from a few small files.
 5. Update WORK_LIST ("Now" section) and this file's "State" below.
 
 ## First steps in the new chat (the new chat's Claude)
+**HARD LIMIT (Roee, 2026-11-21, after one night of ~66 Claude helpers ate 41% of his weekly usage): at most 2 Claude
+helper agents running at any time.** Every other helper job goes through KesherAI's task inbox instead: the local model
+(self-work) on his PC or Antigravity. Group small tasks into one helper rather than one helper per task, prefer Sonnet,
+keep Opus for complex or security code, give each helper a small focused task, and do small fixes yourself.
 0. Helper agents: launch them as general-purpose agents with the `model` named in .claude/agents/kesher-research.md
    (sonnet), kesher-build.md (opus) and kesher-lookup.md (haiku), telling each to read that file and docs/AGENT_BRIEF.md
    first (LEAD_GUIDE "How the work runs").
@@ -35,6 +39,7 @@ so a new chat starts from a few small files.
 ## How Roee wants the work done (full list also in Claude's memory, which every chat sees)
 - Hebrew only, one answer. After each task a ✅/⬜/👤 report that ends with what is next, then start it (no waiting).
   A short update on every task switch. The work list is docs/WORK_LIST.md; tell him what changed, in text.
+- At most 2 Claude helpers at a time (see the hard limit above); the rest go to the local model or Antigravity via KesherAI.
 - Tokens first: agents per LEAD_GUIDE (Opus builds, Sonnet research/docs, Haiku lookups), small tasks to the task inbox
   (local model / Antigravity), short reads and reports, little browser work. Remind him to /compact after each build;
   a new chat every 1–2 weeks with this file.
