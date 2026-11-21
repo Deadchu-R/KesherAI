@@ -39,8 +39,9 @@ export interface LevelRead {
   partitioned?: boolean;
 }
 
-const LEVEL = /^\/Game\/[\w/ .-]{1,300}$/;
-const ASSET = /^\/(Game|Engine)\/[\w/ .-]{1,300}$/;
+/** Package paths; a `..` part is refused (the level's path also names folders read under Content; scan 169). */
+const LEVEL = /^\/Game\/(?!(.*\/)?\.\.(\/|$))[\w/ .-]{1,300}$/;
+const ASSET = /^\/(Game|Engine)\/(?!(.*\/)?\.\.(\/|$))[\w/ .-]{1,300}$/;
 const SLOT = /^[\w .-]{1,80}$/;
 const MAX_LINES = 400;
 /** Level sub-objects that are not actors the user placed. */

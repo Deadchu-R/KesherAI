@@ -90,4 +90,6 @@ test("apply_material refuses paths outside /Game and /Engine", async () => {
   const [, apply] = unrealLevelTools({ bridge: fakeBridge(true, []), projectDir: () => undefined });
   assert.match((await apply!.run({ level: "C:/x", actor: "A", material: "/Game/M" }, ctx)).output, /^level is/);
   assert.match((await apply!.run({ level: "/Game/A", actor: "A", material: "/Script/../M" }, ctx)).output, /^material is/);
+  assert.match((await apply!.run({ level: "/Game/../../Secret", actor: "A", material: "/Game/M" }, ctx)).output, /^level is/, "no .. part (scan 169)");
+  assert.match((await apply!.run({ level: "/Game/A", actor: "A", material: "/Game/x/../../M" }, ctx)).output, /^material is/);
 });

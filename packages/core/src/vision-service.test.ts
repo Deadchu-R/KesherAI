@@ -19,6 +19,10 @@ test("pickHubFile and savedName pick the catalog's files and save projectors as 
   assert.equal(pickHubFile(tf, tars.filePattern)?.path, "UI-TARS-1.5-7B-q4_k_m.gguf");
   assert.equal(pickHubFile(tf, tars.mmprojPattern)?.path, "UI-TARS-1.5-7B-q8_0.mmproj");
   assert.equal(savedName("UI-TARS-1.5-7B-q8_0.mmproj", true), "mmproj-UI-TARS-1.5-7B-q8_0.gguf");
+  // A repository name never leaves the model's folder (security scan 169).
+  assert.equal(savedName("..\\..\\AppData\\evil.gguf", false), "evil.gguf");
+  assert.equal(savedName("sub/..", false), "model.gguf");
+  assert.equal(savedName("a b:c.gguf", false), "a_b_c.gguf");
   assert.equal(savedName("sub/mmproj-x-F16.gguf", true), "mmproj-x-F16.gguf");
   assert.equal(savedName("sub/model.gguf", false), "model.gguf");
 });

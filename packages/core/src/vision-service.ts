@@ -67,7 +67,9 @@ export function pickHubFile(files: readonly HubFile[], pattern: string): HubFile
  * @param mmproj - Whether it is the projector.
  */
 export function savedName(path: string, mmproj: boolean): string {
-  const base = path.split("/").pop() ?? path;
+  // The last part on either separator, with only safe characters: the repository names the file, and a name with a
+  // backslash or `..` must never leave the model's folder on Windows (security scan 169).
+  const base = (path.split(/[\\/]/).pop() ?? "").replace(/[^\w.+-]/g, "_").replace(/^\.+/, "") || "model.gguf";
   if (!mmproj) return base;
   const stem = base.replace(/\.(gguf|mmproj)$/i, "");
   return /^mmproj/i.test(stem) ? `${stem}.gguf` : `mmproj-${stem}.gguf`;
