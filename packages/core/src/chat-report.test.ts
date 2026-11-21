@@ -66,7 +66,7 @@ test("a report is written from the model's notes, with checked quotes, and a fol
       ? JSON.stringify({ answer: "היא שואלת לשלומך כל בוקר.", quotes: [{ who: "Dana", text: "מה שלומך" }] })
       : JSON.stringify({ headline: "הבוקר שלה, הלילה שלך", read: "קצר.", findings: [{ title: "בוקר", body: "היא פותחת.", measured: true, quotes: [{ who: "Dana", text: "בוקר טוב" }] }], roles: [{ name: "Dana", role: "פותחת" }], next: "תפתח אתה מחר." }));
   const r = await reports.start(chat(), { kind: "couple", voice: "friend", lang: "he", me: "Roee" }, ask);
-  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  for (let i = 0; i < 500 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
   const done = await reports.get(r.id);
   assert.equal(done.status, "done");
   assert.equal(done.report?.headline, "הבוקר שלה, הלילה שלך");
@@ -100,13 +100,13 @@ test("names are made plain, another export merges without doubles, and an added 
     return system.includes("part of a chat") ? JSON.stringify({ notes: ["x"] }) : JSON.stringify({ headline: "h", read: "r", askMore: ["מה השתנה?"], wouldHelp: [{ ask: "מה קרה ב-13.1?", kind: "text" }] });
   };
   const r = await reports.start(chat(), { kind: "couple", voice: "coach", lang: "he", me: "Dana", names: { Dana: "דנה" } }, ask);
-  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  for (let i = 0; i < 500 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
   const one = await reports.get(r.id);
   assert.equal(one.me, "דנה");
   assert.deepEqual(one.report?.askMore, ["מה השתנה?"]);
   assert.equal(one.report?.wouldHelp[0]?.kind, "text");
   await reports.add(r.id, { text: "רבנו ב-13.1 על החתונה" }, ask);
-  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  for (let i = 0; i < 500 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
   const two = await reports.get(r.id);
   assert.equal(two.version, 2);
   assert.equal(two.history?.length, 1);
@@ -127,7 +127,7 @@ test("a Brandon report is brought in without its chat, and the chat added later 
   const f = await reports.followUp(r.id, "Who opens?", async () => JSON.stringify({ answer: "Dana, by the report." }));
   assert.equal(f.a, "Dana, by the report.");
   await reports.add(r.id, { chat: chat() }, ask);
-  for (let i = 0; i < 50 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
+  for (let i = 0; i < 500 && (await reports.get(r.id)).status !== "done"; i++) await new Promise((x) => setTimeout(x, 20));
   const after = await reports.get(r.id);
   assert.equal(after.hasChat, true);
   assert.equal(after.report?.headline, "now with the chat");

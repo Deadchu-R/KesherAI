@@ -417,7 +417,9 @@ export class SdEngine {
     await walk(other);
     for (let i = out.length - 1; i >= before; i--) {
       const m = out[i]!;
-      if (!/qwen[-_ ]?image|flux|sdxl|sd[-_]?xl|stable[-_]?diffusion|sd[-_]?1\.?5|z[-_]?image/i.test(m.path)) out.splice(i, 1);
+      // The path inside models/other only: the folder above can hold anything ("kesher-sd-XL…" matched "sd-xl").
+      const inside = relative(other, m.path).split(sep).join("/");
+      if (!/qwen[-_ ]?image|flux|sdxl|sd[-_]?xl|stable[-_]?diffusion|sd[-_]?1\.?5|z[-_]?image/i.test(inside)) out.splice(i, 1);
       else m.rel = `other/${relative(other, m.path).split(sep).join("/")}`;
     }
     return out;
