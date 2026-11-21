@@ -88,8 +88,11 @@ test("Unreal levels: a project without the plugin answers from the files at once
   mkdirSync(join(dir, "Content", "UI"), { recursive: true });
   writeFileSync(join(dir, "OnlyUi.uproject"), "{}");
   writeFileSync(join(dir, "Content", "UI", "WBP_Hud.uasset"), "");
+  // os.homedir() reads HOME on Linux/macOS and USERPROFILE on Windows.
   const was = process.env.HOME;
+  const wasProfile = process.env.USERPROFILE;
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   try {
     const b = new UnrealBridge(mkdtempSync(join(tmpdir(), "ul-b-")));
     let asked = 0;
@@ -102,5 +105,6 @@ test("Unreal levels: a project without the plugin answers from the files at once
     await app.close();
   } finally {
     if (was === undefined) delete process.env.HOME; else process.env.HOME = was;
+    if (wasProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = wasProfile;
   }
 });
