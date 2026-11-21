@@ -404,6 +404,12 @@ export function flowTools(deps: ConversationDeps, notes: string[]): AgentTool[] 
       },
     },
     run: async (input, ctx) => {
+        // A weak model sometimes calls it with no words for a song that should be sung: send it back to write them.
+        const lyr = String(input.lyrics ?? "").trim();
+        const instrumental = /instrumental|ללא מילים|בלי מילים|כלי בלבד|רק מוזיקה/i.test(`${lyr} ${ctx.lastUser ?? ""} ${String(input.tags ?? "")}`);
+        if (!instrumental && lyr.replace(/\[[^\]]*\]/g, "").trim().length < 40) {
+          return { output: "Not made yet: a sung song needs its full lyrics. First write the complete lyrics in the user's language (Hebrew in Hebrew letters unless asked otherwise) with [Verse], [Chorus] and [Bridge] markers, show them to the user in your answer, then call make_music again with them in `lyrics`. For music without singing, put [Instrumental] in lyrics." };
+        }
       const id = musicFlow();
       const blocked = gate(id, input.download);
       if (blocked) return { output: blocked };
