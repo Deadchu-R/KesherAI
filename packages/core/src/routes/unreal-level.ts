@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { findGameProjects } from "../game-projects.js";
+import { JobQueue, withBusy } from "../busy.js";
 import type { UnrealBridge } from "../unreal-bridge.js";
 
 /**
@@ -66,6 +67,10 @@ export async function levelsOnDisk(projectDir: string): Promise<string[]> {
 
 /** The plugin's descriptor inside a project: its absence means the editor cannot list levels, so do not start one. */
 const hasPlugin = (dir: string): boolean => existsSync(join(dir, "Plugins", "KesherAIBridge", "KesherAIBridge.uplugin"));
+/** The note the health answer carries while a level is read (the app shows it instead of "not answering"). */
+const READING = { en: "Reading the level in the background", he: "קורא את הרמה ברקע" };
+/** A level's meshes are asked for by the hundred: four at a time, the rest wait (each may start a headless editor). */
+const meshQueue = new JobQueue(4);
 const MESH = /^\/(Game|Engine)\/[\w ./-]{1,300}$/;
 const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }, e: unknown) => {
   const m = (e as Error).message;
@@ -82,9 +87,12 @@ const fail = (reply: { code: (n: number) => { send: (b: unknown) => unknown } },
  */
 export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): Promise<void> {
   // A project chosen from the menu: only one found on this computer (from the phone too), as its .uproject.
+  // The scan of the disk is kept for 30 s: a level asks for hundreds of meshes, each naming its project.
+  let scan: { at: number; list: Promise<Awaited<ReturnType<typeof findGameProjects>>> } | undefined;
   const projectFile = async (project: unknown): Promise<string | undefined | null> => {
     if (!project) return undefined;
-    const found = (await findGameProjects({ ...(b.projectFile ? { unrealFile: b.projectFile } : {}) })).find((p) => p.kind === "unreal" && p.path.toLowerCase() === String(project).toLowerCase());
+    if (!scan || Date.now() - scan.at > 30_000) scan = { at: Date.now(), list: findGameProjects({ ...(b.projectFile ? { unrealFile: b.projectFile } : {}) }) };
+    const found = (await scan.list).find((p) => p.kind === "unreal" && p.path.toLowerCase() === String(project).toLowerCase());
     return found ? join(found.path, `${found.name}.uproject`) : null;
   };
   const bad = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(403).send({ error: "Choose one of the Unreal projects found on the computer." });
@@ -120,7 +128,7 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
     const pf = await projectFile(req.query.project);
     if (pf === null) return bad(reply);
     try {
-      return await b.standIn("level", path, pf);
+      return await withBusy(READING, () => b.standIn("level", path, pf));
     } catch (e) {
       return fail(reply, e);
     }
@@ -132,7 +140,7 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
     const pf = await projectFile(req.query.project);
     if (pf === null) return bad(reply);
     try {
-      return await b.standIn("level_mesh", path, pf);
+      return await meshQueue.run(`${pf ?? ""}|${path}`, () => withBusy(READING, () => b.standIn("level_mesh", path, pf)));
     } catch (e) {
       return fail(reply, e);
     }

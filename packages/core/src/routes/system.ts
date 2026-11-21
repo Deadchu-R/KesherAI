@@ -8,6 +8,7 @@ import { hostname, networkInterfaces } from "node:os";
 import type { KesherServices } from "../services.js";
 import { Tailscale } from "../tailscale.js";
 import { isLocalRequest } from "../auth.js";
+import { currentBusy } from "../busy.js";
 
 /** Left by Terminate in the data folder: the next start loads no model and starts no ComfyUI (once). */
 export const TERMINATED_FILE = "terminated";
@@ -36,6 +37,8 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
 
   app.get("/api/health", async () => ({
     ok: true,
+    // A long job (reading an Unreal level) can make the server slow: the app says so instead of "not answering".
+    ...(currentBusy() ? { busy: currentBusy()!.en, busyHe: currentBusy()!.he } : {}),
     version: CORE_VERSION,
     build: await s.updater.version(),
     productName: branding.productName,

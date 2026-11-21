@@ -12,6 +12,29 @@ import { backHref, checkRequest, isEditor, openHref, runHandoff, ticketOf, type 
  * A file a plugin page handed over: only a `data:` URL is read, never an address, which would be fetched with this
  * app's rights (security review, scan 145).
  */
+/** How many Unreal mesh shapes are asked for at once (a level has hundreds; the computer reads them four at a time). */
+const MESH_AT_ONCE = 4;
+let meshActive = 0;
+const meshWaiting: Array<() => void> = [];
+
+/**
+ * Runs one mesh request when one of the four places is free, so a big level does not send hundreds at once.
+ *
+ * @param job - The request.
+ * @returns Its answer.
+ */
+async function meshSlot<T>(job: () => Promise<T>): Promise<T> {
+  if (meshActive >= MESH_AT_ONCE) await new Promise<void>((go) => meshWaiting.push(go));
+  else meshActive++;
+  try {
+    return await job();
+  } finally {
+    const next = meshWaiting.shift();
+    if (next) next();
+    else meshActive--;
+  }
+}
+
 function fromDataUrl(given: unknown): Promise<Response> {
   const url = String(given ?? "");
   const m = /^data:([^,;]*)((?:;[^,;]*)*?)(;base64)?,/.exec(url);
@@ -462,7 +485,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
         case "standin.asset": {
           need("model");
           // An Unreal mesh's shape: its triangles as JSON (corners in cm, base64 float32).
-          if (unreal) return api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}${unreal.project ? `&project=${encodeURIComponent(unreal.project)}` : ""}`);
+          if (unreal) return meshSlot(() => api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}${unreal.project ? `&project=${encodeURIComponent(unreal.project)}` : ""}`));
           if (!godot && !unity) throw new Error("This page was not opened with a game scene.");
           const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)!.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));

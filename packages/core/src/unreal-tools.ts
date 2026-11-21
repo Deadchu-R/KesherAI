@@ -1,7 +1,7 @@
 import { spawn, execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { constants, homedir, setPriority } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
@@ -58,9 +58,10 @@ export const UNREAL_NOTE =
 
 type Run = { code: number; out: string };
 /** Runs a program with arguments (no shell) and collects its output; the log file gets everything. */
-export function runProgram(file: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; log?: string }): Promise<Run> {
+export function runProgram(file: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number; log?: string; lowPriority?: boolean }): Promise<Run> {
   return new Promise((res) => {
     let out = "";
+    // Unreal logs thousands of lines: the tail is trimmed only when it doubles, not copied on every chunk.
     // Node on Windows will not start a .bat/.cmd directly (spawn EINVAL since the 2024 fix): run it through cmd.exe,
     // each argument quoted. Arguments with quotes or cmd's special characters are refused rather than escaped.
     const bat = process.platform === "win32" && /\.(bat|cmd)$/i.test(file);
@@ -71,9 +72,18 @@ export function runProgram(file: string, args: string[], opts: { cwd?: string; e
     const child = bat
       ? spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `"${[file, ...args].map((a) => `"${a}"`).join(" ")}"`], { cwd: opts.cwd, env: opts.env ?? process.env, windowsHide: true, windowsVerbatimArguments: true })
       : spawn(file, args, { cwd: opts.cwd, env: opts.env ?? process.env, windowsHide: true });
+    // A heavy child (a headless editor) runs below normal priority, so it cannot starve this server's own answers.
+    if (opts.lowPriority && child.pid) {
+      try {
+        setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL);
+      } catch {
+        /* not allowed here: it runs at normal priority */
+      }
+    }
     const add = (b: Buffer) => {
       const s = b.toString("utf8");
-      out = (out + s).slice(-400_000);
+      out += s;
+      if (out.length > 800_000) out = out.slice(-400_000);
       if (opts.log) void appendFile(opts.log, s).catch(() => undefined);
     };
     child.stdout.on("data", add);
@@ -85,7 +95,7 @@ export function runProgram(file: string, args: string[], opts: { cwd?: string; e
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      res({ code: code ?? -1, out });
+      res({ code: code ?? -1, out: out.slice(-400_000) });
     });
   });
 }

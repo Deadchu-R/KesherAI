@@ -164,16 +164,19 @@ async function startCore(): Promise<string> {
 function watchCore(url: string): void {
   if (server || process.env.KESHER_DEV_URL) return;
   let misses = 0;
+  // The server said it is busy with a long job (reading an Unreal level): it answers slowly, not never.
+  let busy = false;
   const timer = setInterval(() => {
-    void fetch(`${url}/api/health`, { signal: AbortSignal.timeout(3000) }).then(
-      (r) => {
+    void fetch(`${url}/api/health`, { signal: AbortSignal.timeout(busy ? 20_000 : 3000) }).then(
+      async (r) => {
         misses = r.ok ? 0 : misses + 1;
+        busy = r.ok && !!((await r.json().catch(() => null)) as { busy?: string } | null)?.busy;
       },
       () => {
         misses++;
       },
     ).then(async () => {
-      if (misses < 2 || server) return;
+      if (misses < (busy ? 6 : 2) || server) return;
       clearInterval(timer);
       try {
         const own = await startCore();

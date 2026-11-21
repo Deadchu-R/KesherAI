@@ -13,20 +13,29 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 export function PcDrop() {
   const home = appHome();
   const [down, setDown] = useState(false);
+  // What the computer says it is busy with (reading a level takes the processor): shown instead of "not answering".
+  const [busy, setBusy] = useState<string | null>(null);
   const kept = useRef<Handoff | null>(null);
   useEffect(() => {
     if (!home) return;
     let misses = 0;
+    let wasBusy = false;
     const tick = async () => {
       if (document.hidden) return;
       try {
-        await api("/api/health", { signal: AbortSignal.timeout(5000) });
+        // A busy computer answers slowly: wait longer, and count more misses, before saying it is gone.
+        const h = await api<{ busy?: string; busyHe?: string }>("/api/health", { signal: AbortSignal.timeout(wasBusy ? 20_000 : 5000) });
+        wasBusy = !!h.busy;
+        setBusy(h.busy ? L(h.busyHe ?? h.busy, h.busy) : null);
         misses = 0;
         setDown(false);
         const id = /^#\/c\/([\w-]{8,64})/.exec(location.hash)?.[1];
         kept.current = id ? await api<Handoff>(`/api/conversations/${id}/handoff`).catch(() => kept.current) : null;
       } catch {
-        if (++misses >= 2) setDown(true);
+        if (++misses >= (wasBusy ? 6 : 2)) {
+          setDown(true);
+          setBusy(null);
+        }
       }
     };
     void tick();
@@ -43,6 +52,7 @@ export function PcDrop() {
     const sub = notify?.addListener?.("openPhone", go);
     return () => void sub?.then((x) => x.remove());
   }, [home]);
+  if (home && busy && !down) return <div className="pc-drop" role="status"><span>{L("המחשב עסוק: ", "The computer is busy: ")}{busy}…</span></div>;
   if (!home || !down) return null;
   return (
     <div className="pc-drop" role="alert">
