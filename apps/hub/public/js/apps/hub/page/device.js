@@ -618,7 +618,7 @@ export class HubDevice {
      */
     runStarting(t) {
         const a = this.taskActions.get(t.taskId);
-        return !!a && a.action === "inbox-run" && runStarting(a.at, this.canRun(t), Date.now(), a.result?.ok === false);
+        return !!a && a.action === "inbox-run" && runStarting(a.at, this.canRun(t), Date.now(), a.result?.ok === false, a.result?.ok === true);
     }
     /** The PCs that are on (a work-list item is sent to one of them). */
     onlinePcs() {
@@ -788,6 +788,10 @@ export class HubDevice {
         else if (task.inbox && task.inbox.at > r.at) {
             return;
         }
+        // The PC's report replaces its earlier "Started on the PC." answer: the card follows the report from here on.
+        const sent = this.taskActions.get(r.taskId);
+        if (sent?.action === "inbox-run" && sent.result?.ok)
+            this.taskActions.delete(r.taskId);
         task.title = r.title;
         task.status = status;
         task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at, ...(r.estSteps ? { estSteps: r.estSteps } : {}), ...(r.steps ? { steps: r.steps } : {}), ...(r.retryAt ? { retryAt: r.retryAt } : {}) };

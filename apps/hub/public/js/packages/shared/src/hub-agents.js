@@ -77,6 +77,8 @@ export function sortedCards(cards, now) {
 export const RUN_WAIT_CANCEL_MS = 7 * 24 * 3600 * 1000;
 /** How long a card shows "Starting…" after a Run tap when the PC's next report does not come (ms). */
 export const RUN_STARTING_MS = 60_000;
+/** How long a card keeps "Starting…" after the PC answered "Started" while its next report has not come (ms). */
+export const RUN_ACCEPTED_MS = 10 * 60_000;
 /**
  * Whether a task whose Run was just tapped still shows "Starting…" (disabled) instead of Run: from the tap until the
  * PC's next report moves the task out of "waiting for Run" (running, queued, failed), or {@link RUN_STARTING_MS} pass.
@@ -86,10 +88,14 @@ export const RUN_STARTING_MS = 60_000;
  * @param stillWaiting - Whether the task still waits for Run in the latest report.
  * @param now - Now (ms).
  * @param refused - Whether the PC answered that it did not start the task.
+ * @param accepted - Whether the PC answered that it started or queued the task: the card is not "waiting for Run"
+ *   any more, whatever the older report says, until the PC's next report (or {@link RUN_ACCEPTED_MS}).
  * @returns True while "Starting…" is shown.
  */
-export function runStarting(tappedAt, stillWaiting, now, refused = false) {
-    return tappedAt !== undefined && stillWaiting && !refused && now - tappedAt >= 0 && now - tappedAt < RUN_STARTING_MS;
+export function runStarting(tappedAt, stillWaiting, now, refused = false, accepted = false) {
+    if (tappedAt === undefined || !stillWaiting || refused || now < tappedAt)
+        return false;
+    return now - tappedAt < (accepted ? RUN_ACCEPTED_MS : RUN_STARTING_MS);
 }
 /**
  * Whether the task behind an Antigravity run is waiting for the owner's Run, and how. A run whose ask expired is not

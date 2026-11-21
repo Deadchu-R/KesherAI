@@ -178,7 +178,8 @@ function statusTag(t) {
         case "outbox":
             return h("span", { class: "tag t-wait" }, L("⇡ ממתין לשליחה", "⇡ Waiting to send"));
         case "waiting":
-            return h("span", { class: "tag t-wait" }, t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
+            // A local-model task waits on the board until the PC's local agent takes it.
+            return h("span", { class: "tag t-wait" }, t.inbox?.executor === "local" ? L("ממתין לסוכן המקומי", "Waiting for the local agent") : t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
         case "waiting-run":
             return h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
         case "deferred":
@@ -210,7 +211,7 @@ function routeChip(t) {
         if (ex === "gemini")
             return h("span", { class: "ex ex-gem", title: t.toName }, L("✧ Gemini (חינמי)", "✧ Gemini (free)"));
         // An executor this page does not know yet (a newer PC) is shown as written.
-        const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מודל מקומי", "Local model") : ex;
+        const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מקומי", "Local") : ex;
         return h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${name}`);
     }
     return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
@@ -523,6 +524,7 @@ const GROUPS = [
     ["agents", "🤖", "סוכנים", "Agents"],
     ["agy", "✦", "Antigravity", "Antigravity"],
     ["gemini", "✧", "Gemini (חינמי)", "Gemini (free)"],
+    ["local", "◆", "מקומי", "Local"],
     ["pc", "🖥", "מחשב", "PC"],
     ["claude", "✷", "Claude", "Claude"],
 ];
@@ -533,6 +535,9 @@ function groupOf(t) {
         return "agy";
     if (ex === "gemini")
         return "gemini";
+    // The PC's local agent (self-work): its own group, so the task is found by who runs it.
+    if (ex === "local")
+        return "local";
     if (ex === "claude" || (!ex && t.route === "claude-cloud"))
         return "claude";
     return "pc";
@@ -554,7 +559,7 @@ function agentRow(c) {
             agentsView.setOpen(key); } }, h("span", { class: "c-st" }, tag), h("div", { class: "grow min0" }, h("b", { class: "w5 ell1", dir: "auto" }, c.state.title), c.state.label && isGoing(c) ? h("div", { class: "sm sub wrapl", dir: "auto" }, L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`)) : c.state.summary ? h("div", { class: "sm sub wrapl", dir: "auto" }, c.state.summary) : null), h("span", { class: "c-rt" }, h("span", { class: "ex ex-loc" }, `🖥 ${pc?.name ?? "PC"}`)), h("span", { class: "c-when mut sm" }, when(c.state.startedAt || c.at)), h("span", { class: "c-act" }, rw ? runWaitActions(device, c, rw) ?? h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›")) : h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›"))));
 }
 /**
- * The task list in groups: Agents (the PCs' agent runs), Antigravity, PC and Claude, each with a head and a count;
+ * The task list in groups: Agents (the PCs' agent runs), Antigravity, Gemini, Local, PC and Claude, each with a head and a count;
  * an empty group is left out.
  *
  * @param list - The tasks that fit the filter and the search.
