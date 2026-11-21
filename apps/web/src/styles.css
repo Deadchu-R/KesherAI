@@ -4481,3 +4481,12 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .model-think { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0 2px 4px; }
 .model-think .segmented button { padding: 4px 10px; font-size: 12.5px; min-height: 30px; }
 .model-chip-think { flex: none; color: var(--muted); font-size: 12px; }
+/* The composer's context ring (chat/ContextRing.tsx). */
+.ctx-ring-wrap { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.ctx-ring { display: inline-flex; align-items: center; gap: 3px; min-height: 32px; padding: 0 6px; border: 0; background: transparent; color: var(--muted); border-radius: 999px; }
+.ctx-ring.high { color: var(--warn); }
+.ctx-ring.full { color: var(--bad); }
+.ctx-ring-pct { font-size: 11.5px; }
+.ctx-compact { font-size: 12px; min-height: 30px; }
+.ctx-pop { position: absolute; bottom: calc(100% + 8px); inset-inline-end: 0; z-index: 30; width: min(280px, 80vw); display: grid; gap: 8px; padding: 10px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: calc(12px * var(--r-scale, 1)); box-shadow: 0 12px 32px rgb(0 0 0 / .45); }
+@media (max-width: 760px) { .ctx-pop { position: fixed; inset-inline: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: auto; z-index: 1000; } }

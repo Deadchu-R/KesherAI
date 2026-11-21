@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chatStatus, kTokens } from "./chat-status.js";
+import { COMPACT_AT, chatStatus, contextShare, kTokens } from "./chat-status.js";
 
 test("/status adds the tokens and takes the context from the last main call", () => {
   const s = chatStatus([
@@ -13,4 +13,12 @@ test("/status adds the tokens and takes the context from the last main call", ()
   assert.equal(kTokens(950), "950");
   assert.equal(kTokens(12_345), "12.3K");
   assert.equal(kTokens(250_000), "250K");
+});
+
+test("contextShare: the ring's fill, capped at full, unknown before the first call", () => {
+  assert.equal(contextShare(8192, 32768), 0.25);
+  assert.equal(contextShare(40000, 32768), 1);
+  assert.equal(contextShare(0, 32768), undefined);
+  assert.equal(contextShare(1000, undefined), undefined);
+  assert.ok(contextShare(27000, 32768)! >= COMPACT_AT, "compact is offered from 80%");
 });

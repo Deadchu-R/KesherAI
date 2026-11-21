@@ -423,6 +423,126 @@
      "wait": ".model-think"
     }
    ]
+  },
+  {
+   "id": "ChatContextRing",
+   "title": "צ'אט: טבעת הקשר בתיבת ההודעה — מ-80% מוצע לדחוס (סיכום החלק המוקדם, תוצאות נעוצות נשמרות)",
+   "titleEn": "Chat: context ring in the composer; from 80% Compact is offered (older turns summarised, pins kept)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 800,
+    "phone": 900
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "סריקת באגים",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "30m"
+        },
+        "type": "user",
+        "text": "תעבור על כל הסקריפטים בפרויקט ותמצא באגים"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "29m"
+        },
+        "type": "usage",
+        "modelId": "llamacpp/Qwen3.8-27B-Q4",
+        "role": "main",
+        "input": 27300,
+        "output": 900
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "29m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מצאתי 4 בעיות: …"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ctx-ring"
+    },
+    {
+     "click": ".ctx-ring"
+    },
+    {
+     "wait": ".ctx-pop"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".ctx-ring"
+    },
+    {
+     "click": ".ctx-ring",
+     "force": true
+    },
+    {
+     "wait": ".ctx-pop"
+    }
+   ]
   }
  ]
 }

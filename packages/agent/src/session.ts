@@ -20,7 +20,7 @@ import { takeSteers } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedOutputs, pruneToolOutputs } from "./budget.js";
+import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
@@ -1045,7 +1045,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // "/compact": the user asked for the earlier part as a summary; it stays in use while the rest fits.
     const pinned = [...this.events].reverse().find((e): e is Extract<AgentEvent, { type: "compacted" }> => e.type === "compacted");
     if (pinned?.manual && pinned.upTo <= msgs.length && sizeOf(msgs.slice(pinned.upTo)) <= budget) {
-      return [{ role: "system", content: `${system.content}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${pinned.summary}` }, ...msgs.slice(pinned.upTo)];
+      // Results the user pinned in the summarised part stay in full after the summary (budget.ts pinnedBefore).
+      const pins = pinnedBefore(this.messages.slice(0, pinned.upTo), pinnedOutputs(this.events), Math.max(2000, Math.floor(budget * 0.2)));
+      return [{ role: "system", content: `${system.content}\n\nSummary of the earlier part of this conversation (the user still sees all of it):\n${pinned.summary}${pins ? `\n\n${pins}` : ""}` }, ...msgs.slice(pinned.upTo)];
     }
     if (sizeOf(msgs) <= budget) return [system, ...msgs];
     // A long run inside one message (self-work, a big task) cannot be cut at a user message: shorten all but the last

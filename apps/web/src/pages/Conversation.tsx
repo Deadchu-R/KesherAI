@@ -12,7 +12,7 @@ import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, Mo
 import { stopStage } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
-import { chatStatus, kTokens } from "../chat-status";
+import { chatStatus, contextShare, kTokens } from "../chat-status";
 import { useModels } from "../useModels";
 import { RichText } from "../RichText";
 import { ContextPanel } from "../ContextPanel";
@@ -20,6 +20,7 @@ import { PromptTextarea, expandSlash, type SlashCommand } from "../SlashMenu";
 import { SideChat } from "../chat/SideChat";
 import { QueueChips, queueMode } from "../chat/QueueChips";
 import { messageVersions, openVersion, takeVersionScroll } from "../branch-versions";
+import { ContextRing } from "../chat/ContextRing";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -391,6 +392,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   const tokensByAnswer = useMemo(() => answerTokens(events), [events]);
   /** Tool results the user pinned (always sent to the model in full). */
   const pinnedResults = useMemo(() => pinnedCalls(events), [events]);
+  /** The last main call's prompt size: the composer's context ring. */
+  const ctxUsed = useMemo(() => chatStatus(events).context, [events]);
   const sources = useMemo(() => answerSources(events), [events]);
 
   const byCall = useMemo(() => {
@@ -621,11 +624,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
         const seq = events.at(-1)?.seq;
         if (seq) await branchAt(seq);
       } else if (name === "compact") {
-        toast(L("מסכם את החלק המוקדם…", "Summarising the earlier part…"));
-        await api<{ summary: string }>(`/api/conversations/${id}/compact`, { method: "POST" }).then(
-          () => toast(L("סוכם. המודל קורא עכשיו את הסיכום ואת ההודעה האחרונה; כל השיחה נשארת כאן.", "Done. The model now reads the summary and the last message; the whole chat stays here.")),
-          (e: Error) => setError(e.message),
-        );
+        await compactNow();
       } else {
         const options = modelOptions.filter((m) => !m.id.startsWith("agent/"));
         const q = arg.toLowerCase();
@@ -673,6 +672,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       setError((e as Error).message);
       setInput(text);
     }
+  };
+  /** "/compact" and the context ring's Compact: the earlier part becomes a summary the model reads (pins stay). */
+  const compactNow = async () => {
+    toast(L("מסכם את החלק המוקדם…", "Summarising the earlier part…"));
+    await api<{ summary: string }>(`/api/conversations/${id}/compact`, { method: "POST" }).then(
+      () => toast(L("סוכם. המודל קורא עכשיו את הסיכום ואת ההודעה האחרונה; כל השיחה נשארת כאן.", "Done. The model now reads the summary and the last message; the whole chat stays here.")),
+      (e: Error) => setError(e.message),
+    );
   };
   const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean>; thinking: ThinkingLevel | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
@@ -1222,6 +1229,11 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                       (a chat adds a project from the + menu). ComfyUI's state and queue in every chat. */}
                   <UnityChip onlyWhenInUse={conv.kind !== "code"} onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
                   <ComfyChip />
+                  {(() => {
+                    // How full the model's context was at its last call (chat-status.ts); Compact is offered from 80%.
+                    const share = contextShare(ctxUsed, info?.contextTokens);
+                    return share !== undefined && info?.contextTokens ? <ContextRing share={share} used={ctxUsed} window={info.contextTokens} busy={busy} onCompact={() => void compactNow()} /> : null;
+                  })()}
                   {voicePart && (
                     <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
                       <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>

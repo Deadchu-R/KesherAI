@@ -117,6 +117,28 @@ export function pinnedOutputs(events: ReadonlyArray<{ type: string; callId?: str
   return pinned;
 }
 
+/**
+ * The pinned tool results in the part of a conversation a summary replaces ("/compact" or the context ring's
+ * Compact): pinning means "always sent in full", so they go on after the summary instead of being dropped.
+ *
+ * @param messages - The conversation part the summary replaces.
+ * @param pinned - Pinned call ids (from {@link pinnedOutputs}).
+ * @param maxChars - The most characters to keep in all (the newest pins are kept first).
+ * @returns A block to add after the summary, or "" when nothing pinned is there.
+ */
+export function pinnedBefore(messages: readonly AgentMessage[], pinned: ReadonlySet<string>, maxChars = 24_000): string {
+  const parts: string[] = [];
+  let room = maxChars;
+  for (let i = messages.length - 1; i >= 0 && room > 0; i--) {
+    const m = messages[i]!;
+    if (m.role !== "tool" || !m.toolCallId || !pinned.has(m.toolCallId)) continue;
+    const text = `[${m.toolName ?? "tool"} ${m.toolCallId}]\n${m.content.slice(0, room)}`;
+    parts.unshift(text);
+    room -= text.length;
+  }
+  return parts.length ? `Pinned tool results (the user pinned them; they stay in full):\n${parts.join("\n\n")}` : "";
+}
+
 /** Tool instructions sent in full per turn when nothing else is set (Settings → Models → the model team). */
 export const DEFAULT_TOOL_CAP = 24;
 

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentMessage } from "@kesher/shared";
-import { PRUNED_MARK, capTools, isTurnStart, openToolOutput, pinnedOutputs, pruneToolOutputs, summaryLine } from "./budget.js";
+import { PRUNED_MARK, capTools, isTurnStart, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs, summaryLine } from "./budget.js";
 
 const long = (tag: string) => `${tag} first line\n${"x".repeat(2000)}`;
 /** A turn: the user's message, one tool call and its result, an answer. */
@@ -89,5 +89,25 @@ describe("capTools", () => {
     const r = capTools(tools, { core: ["a", "b", "c", "x"], rank: new Map([["z", 2]]), since: 1, cap: 2 });
     assert.equal(r.keep.length, 4);
     assert.ok(r.keep.some((t) => t.name === "z"), "the newest load still ranks first");
+  });
+});
+
+describe("pinnedBefore", () => {
+  const msgs: AgentMessage[] = [
+    { role: "user", content: "read both" },
+    { role: "tool", toolCallId: "a", toolName: "read_file", content: "AAA" },
+    { role: "tool", toolCallId: "b", toolName: "read_file", content: "BBB" },
+  ];
+  test("keeps the pinned results of the summarised part, in order", () => {
+    const out = pinnedBefore(msgs, new Set(["a", "b"]));
+    assert.match(out, /\[read_file a\]\nAAA[\s\S]*\[read_file b\]\nBBB/);
+  });
+  test("nothing pinned there: empty", () => {
+    assert.equal(pinnedBefore(msgs, new Set(["z"])), "");
+  });
+  test("over the limit the newest pin is kept first", () => {
+    const out = pinnedBefore(msgs, new Set(["a", "b"]), 16);
+    assert.match(out, /BBB/);
+    assert.doesNotMatch(out, /AAA/);
   });
 });
