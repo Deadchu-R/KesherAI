@@ -1,3 +1,4 @@
+import { looksLikeGarbage } from "./lang-detect.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
@@ -141,6 +142,31 @@ export class Ideas {
     return { ...next, progress: { stage: "splitting", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level } };
   }
 
+  /**
+   * "Start over": the ideas found so far are dropped and the transcript is read again from level 1, in the
+   * transcript's own language (Hebrew when it is mostly Hebrew).
+   *
+   * @param id - The session.
+   * @returns The session, now being analysed.
+   */
+  async reset(id: string): Promise<IdeaSession> {
+    const s = await this.get(id);
+    if (s.status === "transcribing" || s.status === "sorting") throw Object.assign(new Error("It is still being analysed."), { statusCode: 409 });
+    if (!s.transcript?.trim()) throw Object.assign(new Error("There is no transcript to read again."), { statusCode: 400 });
+    if (looksLikeGarbage(s.transcript)) {
+      // A looping transcript ("Gracias. Gracias. …") was silence or noise: nothing to analyse.
+      const empty: IdeaSession = { ...s, status: "error", ideas: [], error: "No speech was found in the recording." };
+      for (const k of ["deeperError", "depth", "summary"] as const) delete (empty as Partial<IdeaSession>)[k];
+      await this.save(empty);
+      return empty;
+    }
+    const next: IdeaSession = { ...s, status: "sorting", ideas: [] };
+    for (const k of ["error", "deeperError", "depth", "summary"] as const) delete (next as Partial<IdeaSession>)[k];
+    await this.save(next);
+    void this.process(id).catch(() => undefined);
+    return { ...next, progress: { stage: "splitting", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level: 1 } };
+  }
+
   /** Runs a session: transcribe, pull out and sort, check "tried before". Errors are kept on the session. */
   async process(id: string, file?: string, level = 1, lang?: string): Promise<IdeaSession> {
     let s = await this.get(id);
@@ -159,7 +185,8 @@ export class Ideas {
         await this.save(s);
       }
       this.mark(id, { stage: "splitting", found: { ideas: 0, tasks: 0, questions: 0 } });
-      if (!s.transcript?.trim()) throw new Error("No speech was found in the recording.");
+      // Silence or noise comes back from whisper as one phrase looping ("Gracias. Gracias. …"): no speech, no ideas from it.
+      if (!s.transcript?.trim() || (file && looksLikeGarbage(s.transcript))) throw new Error("No speech was found in the recording.");
       const projects = this.deps.projects().slice(0, 80);
       const { ideas: found, summary } = await this.extract(id, s.transcript, projects, level, before);
       this.mark(id, { stage: "writing", found: countIdeas([...before, ...found]), checked: { done: 0, of: found.length } });

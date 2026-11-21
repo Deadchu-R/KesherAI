@@ -78,6 +78,7 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   app.get<S>("/api/ideas/:id", async (req) => ideas.get(req.params.id));
   /** "Analyse again": one level deeper, keeping what was found before (progress comes with the session). */
   app.post<S>("/api/ideas/:id/deeper", async (req) => ideas.deeper(req.params.id));
+  app.post<S>("/api/ideas/:id/reset", async (req) => ideas.reset(req.params.id));
   app.delete<S>("/api/ideas/:id", async (req) => {
     await ideas.remove(req.params.id);
     return { ok: true };
