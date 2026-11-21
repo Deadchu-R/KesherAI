@@ -106,18 +106,36 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
         const provider = p.registry.get("gemini");
         if (!provider) throw new Error("No Gemini connection.");
         const models = await provider.listModels(signal);
-        // Google keeps listing retired models (Gemini 2.5 answers 404 since Oct 2026): prefer the "flash-latest" alias,
-        // then the newest numbered Flash.
-        const flash = models.filter((m) => m.category === "chat" && /flash/i.test(m.providerModelId) && !/lite|image|tts|live|preview|exp/i.test(m.providerModelId));
-        const ver = (id: string) => Number(/gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? 0);
-        const pick = flash.find((m) => /flash-latest$/i.test(m.providerModelId)) ?? flash.sort((x, y) => ver(y.providerModelId) - ver(x.providerModelId))[0] ?? models.find((m) => m.category === "chat");
-        if (!pick) throw new Error("The Gemini connection lists no chat model.");
+        // Google keeps listing retired models (Gemini 2.5 answers 404 since Oct 2026), and the free tier's busiest model
+        // often answers 503 "overloaded": try, in order, flash-latest, the newest numbered Flash, flash-lite-latest and the
+        // largest Gemma, moving on only when Google says it is busy (a quota or billing error stops at once).
+        const chat = models.filter((m) => m.category === "chat" && !/image|tts|live|preview|exp|embed/i.test(m.providerModelId));
+        const ver = (id: string) => Number(/(?:gemini|gemma)-(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? 0);
+        const size = (id: string) => Number(/(\d+)b(?:-|$)/i.exec(id)?.[1] ?? 0);
+        const flash = chat.filter((m) => /flash/i.test(m.providerModelId) && !/lite/i.test(m.providerModelId));
+        const order = [
+          flash.find((m) => /flash-latest$/i.test(m.providerModelId)),
+          [...flash].sort((x, y) => ver(y.providerModelId) - ver(x.providerModelId))[0],
+          chat.find((m) => /flash-lite-latest$/i.test(m.providerModelId)),
+          [...chat.filter((m) => /gemma/i.test(m.providerModelId))].sort((x, y) => ver(y.providerModelId) - ver(x.providerModelId) || size(y.providerModelId) - size(x.providerModelId))[0],
+          chat[0],
+        ].filter((m, i, all): m is NonNullable<typeof m> => !!m && all.findIndex((x) => x?.id === m.id) === i);
+        if (!order.length) throw new Error("The Gemini connection lists no chat model.");
         const prefs = withFilter(undefined, p.config.webFilter, false);
-        return researchReport(question, {
-          model: modelTurnFor(p.registry, pick.id, undefined, "helper"),
-          search: (q, sig) => searchWeb(q, prefs, sig),
-          read: async (url, sig) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output,
-        }, signal);
+        let last: Error | undefined;
+        for (const pick of order) {
+          try {
+            return await researchReport(question, {
+              model: modelTurnFor(p.registry, pick.id, undefined, "helper"),
+              search: (q, sig) => searchWeb(q, prefs, sig),
+              read: async (url, sig) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output,
+            }, signal);
+          } catch (e) {
+            last = e as Error;
+            if (signal.aborted || !/\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test(last.message)) throw last;
+          }
+        }
+        throw last ?? new Error("Gemini is busy.");
       },
     },
     board: p.board,
