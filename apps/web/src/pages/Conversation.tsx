@@ -748,7 +748,12 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       {attachments.elements}
       {voice && (
         <VoiceMode
+          chatId={id}
           busy={busy}
+          approvals={info?.pendingApprovals ?? []}
+          approvalCards={events
+            .filter((e): e is Ev<"approval_request"> => e.type === "approval_request" && !!info?.pendingApprovals.includes(e.requestId))
+            .map((e) => (e.control ? <ControlApproval key={e.seq} convId={id} ev={e} pending /> : <ApprovalCard key={e.seq} convId={id} ev={e} pending />))}
           {...(lastAnswer ? { answer: { seq: lastAnswer.seq, text: lastAnswer.text } } : {})}
           onSend={async (text) => {
             await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text } });

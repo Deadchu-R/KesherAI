@@ -755,6 +755,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 @media (prefers-reduced-motion: reduce) { .voice-orb { animation: none !important; transition: none; } }
 .voice-status { font-size: 18px; margin: 0; }
 .voice-heard { max-width: min(560px, 100%); margin: 0; }
+/* Voice hand-off (VoiceMode.tsx): mode switch, the background job line, approval cards answered on screen. */
+.voice-mode { overflow-y: auto; }
+.voice-modes { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+.voice-modes button { height: 34px; padding: 0 12px; }
+.voice-orb.ptt { cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.voice-orb.ptt.held { filter: none; outline: 3px solid var(--accent); outline-offset: 4px; }
+.voice-orb.job-approval { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn, #e0b341) 70%, transparent); }
+.voice-said { max-width: min(560px, 100%); margin: 0; }
+.voice-job { max-width: min(560px, 100%); margin: 0; }
+.voice-job.warn { color: var(--warn, #e0b341); font-weight: 600; }
+.voice-approvals { width: min(560px, 100%); text-align: start; display: grid; gap: 8px; }
+.voice-model { margin: 0; }
+@media (max-width: 480px) { .voice-mode { justify-content: flex-start; padding-top: 24px; } .voice-orb { width: 120px; height: 120px; } }
 .mic-time { font-size: 12px; font-variant-numeric: tabular-nums; }
 a.btn { display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: var(--radius-sm); text-decoration: none; }
 a.btn.primary { background: var(--accent); color: var(--accent-ink); }

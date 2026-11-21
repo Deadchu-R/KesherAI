@@ -285,6 +285,33 @@ export class ChatHelpers {
   }
 
   /**
+   * The small local model for voice mode's quick spoken replies (shared/voice-handoff.ts): the lookup helper's choice
+   * when it runs beside the chat's model (loaded on first use) or is another local model, or the chat's own model when
+   * that is already small and local. Never a swap and never a cloud model: the voice loop stays on this computer.
+   *
+   * @param id - The chat.
+   * @returns The model id and its short name, or undefined: voice mode then sends every turn to the chat's model.
+   */
+  async voiceModel(id: string): Promise<{ modelId: string; label: string } | undefined> {
+    const lead = this.host.leadModel(id) ?? this.host.deps.config.activeModels.chat ?? "";
+    const i = await this.inputs(lead);
+    const pick = pickHelperModel({ kind: "lookup", choice: this.host.deps.config.helpers.models.lookup, vramGiB: i.vramGiB, lead: i.lead, local: i.local, cloud: [] });
+    if (pick.how === "id") return i.cloud(pick.modelId) ? undefined : { modelId: pick.modelId, label: shortModelName(pick.modelId) };
+    if (pick.how === "beside") {
+      const eng = this.host.deps.helperEngine;
+      if (!eng) return undefined;
+      const modelId = await this.besideLock(async () => {
+        const b = eng.beside();
+        return b.path === pick.path && b.modelId ? b.modelId : eng.loadBeside(pick.path);
+      });
+      return { modelId, label: pick.name };
+    }
+    // The chat's model itself, when it is a small file on this computer (the same bound as the "small" tier).
+    if (pick.how === "inherit" && i.lead.path && (i.lead.sizeGiB ?? Infinity) <= Math.max(3, i.vramGiB * 0.25)) return { modelId: lead, label: shortModelName(lead) };
+    return undefined;
+  }
+
+  /**
    * Asks "Run this in Antigravity?" before each message to it (wired to the task inbox, server.ts): the same ask on
    * the PC, the phone and the hub, one ask per message, counted against the same daily limit. Unset: nothing is sent.
    */
