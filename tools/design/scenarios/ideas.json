@@ -1,0 +1,292 @@
+{
+ "group": "מוח פתוח · Open mind",
+ "now": "2026-11-21T10:00:00Z",
+ "mocks": [
+  {
+   "url": "**/api/ideas*",
+   "json": {
+    "sessions": [
+     {
+      "id": "s1",
+      "t": {
+       "$agoMs": "3h"
+      },
+      "seconds": 1260,
+      "status": "done",
+      "count": 6,
+      "good": 2,
+      "titles": [
+       "בוס שלומד את הדפוס של השחקן",
+       "Fix the shader cache stutter in Unreal",
+       "האם כדאי להוציא את המשחק ל-Switch 2?"
+      ]
+     },
+     {
+      "id": "s0",
+      "t": {
+       "$agoMs": "26h"
+      },
+      "seconds": 600,
+      "status": "done",
+      "count": 4,
+      "good": 1,
+      "titles": [
+       "מערכת שמירה אוטומטית",
+       "Controller rumble ideas"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/ideas/s1",
+   "json": {
+    "id": "s1",
+    "t": {
+     "$agoMs": "3h"
+    },
+    "seconds": 1260,
+    "status": "done",
+    "transcript": "אוקיי אז אני יושב פה ופשוט חושב. מה אם הבוס יזכור איפה אני תמיד קופץ ופשוט יחכה לי שם. the water still hitches on first load, I need to look at PSO caching. אולי בסוף נוציא את זה גם לקונסולה, לא יודע כמה זה עולה. a tiny devlog, one line a day, from the commits. אני חייב לשלוח כבר את קורות החיים.",
+    "ideas": [
+     {
+      "id": "i1",
+      "kind": "idea",
+      "title": "בוס שלומד את הדפוס של השחקן",
+      "prompt": "תכנן בוס למשחק הפלטפורמה שמשנה את סדר ההתקפות לפי מה שהשחקן עשה ב-30 השניות האחרונות: מה צריך לעקוב אחריו, איך מאזנים, ואיך בודקים שזה לא מרגיש לא הוגן.",
+      "quote": "מה אם הבוס יזכור איפה אני תמיד קופץ ופשוט יחכה לי שם",
+      "next": "לכתוב דף אחד: אילו שלושה דברים הבוס עוקב אחריהם",
+      "verdict": "good",
+      "why": "ברור, ניתן לבנייה ב-Blueprint, ומבדל את המשחק.",
+      "projects": [
+       "משחק הפלטפורמה"
+      ],
+      "audience": "שחקנים של פלטפורמרים",
+      "category": "feature",
+      "tried": "no"
+     },
+     {
+      "id": "i2",
+      "kind": "task",
+      "title": "Fix the shader cache stutter in Unreal",
+      "prompt": "Find why the first load of the toon water material stutters and list the project settings that precompile shaders.",
+      "quote": "the water still hitches on first load, I need to look at PSO caching",
+      "next": "Open Project Settings > PSO and record a cache",
+      "verdict": "good",
+      "why": "Concrete and measurable.",
+      "projects": [
+       "משחק הפלטפורמה"
+      ],
+      "audience": "אני",
+      "category": "technical",
+      "tried": "yes",
+      "triedNote": "דיברת על זה בצ'אט לפני שבועיים.",
+      "triedIn": [
+       {
+        "conversationId": "c9",
+        "title": "Shader for toon water in Unreal"
+       }
+      ]
+     },
+     {
+      "id": "i3",
+      "kind": "question",
+      "title": "האם כדאי להוציא את המשחק ל-Switch 2?",
+      "prompt": "מה נדרש כדי להוציא משחק Unreal קטן ל-Switch 2 כמפתח יחיד: רישוי, עלויות וזמן.",
+      "quote": "אולי בסוף נוציא את זה גם לקונסולה, לא יודע כמה זה עולה",
+      "next": "לחפש את תנאי תוכנית המפתחים",
+      "verdict": "maybe",
+      "why": "תלוי בהצלחה של הגרסה למחשב.",
+      "projects": [],
+      "audience": "אני",
+      "category": "business",
+      "tried": "no"
+     },
+     {
+      "id": "i4",
+      "kind": "idea",
+      "title": "Daily one-line devlog",
+      "prompt": "Draft a format for a one-line daily devlog posted to the portfolio site, with a script that collects the day's commits.",
+      "quote": "a tiny devlog, one line a day, from the commits",
+      "next": "Write the script for the commit list",
+      "verdict": "maybe",
+      "why": "Small, but keeps momentum visible.",
+      "projects": [],
+      "audience": "visitors of the portfolio",
+      "category": "content",
+      "tried": "no"
+     },
+     {
+      "id": "i5",
+      "kind": "task",
+      "title": "לשלוח קורות חיים לשתי חברות",
+      "prompt": "עדכן את קורות החיים עם הפרויקט האחרון ותכין מכתב קצר לשתי משרות Unity.",
+      "quote": "אני חייב לשלוח כבר את קורות החיים",
+      "next": "לעדכן את הקובץ ולבחור שתי משרות",
+      "verdict": "good",
+      "why": "דחוף וקטן.",
+      "projects": [],
+      "audience": "אני",
+      "category": "personal",
+      "tried": "no",
+      "task": "t1"
+     },
+     {
+      "id": "i6",
+      "kind": "idea",
+      "title": "משחק על ניהול מזג אוויר",
+      "prompt": "רעיון למשחק קטן שבו מנהלים מזג אוויר של כפר.",
+      "verdict": "weak",
+      "why": "עמום, בלי הוק ברור.",
+      "projects": [],
+      "audience": "",
+      "tried": "no"
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "IdeasHome",
+   "title": "מוח פתוח: כפתור הקלטה גדול (עד 30 דק׳), סשנים קודמים וחיפוש",
+   "titleEn": "Open mind: the big record button (up to 30 min), earlier sessions and search",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".ideas-big"
+    },
+    {
+     "wait": ".ideas-session-row"
+    }
+   ]
+  },
+  {
+   "id": "IdeasSearch",
+   "title": "מוח פתוח: חיפוש בתמלולים וברעיונות",
+   "titleEn": "Open mind: search across transcripts and ideas",
+   "route": "#/ideas",
+   "viewports": [
+    "phone"
+   ],
+   "height": {
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas*q=*",
+     "json": {
+      "sessions": [
+       {
+        "id": "s1",
+        "t": {
+         "$agoMs": "3h"
+        },
+        "seconds": 1260,
+        "status": "done",
+        "count": 6,
+        "good": 2,
+        "titles": [
+         "בוס שלומד את הדפוס של השחקן",
+         "Fix the shader cache stutter in Unreal",
+         "האם כדאי להוציא את המשחק ל-Switch 2?"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-search"
+    },
+    {
+     "fill": ".ideas-search",
+     "value": "Unreal"
+    },
+    {
+     "waitMs": 600
+    }
+   ]
+  },
+  {
+   "id": "IdeasReview",
+   "title": "מוח פתוח: סינון לפי סוג, פריט עם ארבע דרכים להמשיך, ושורת האיחוד אחרי בחירה",
+   "titleEn": "Open mind: kind filters, an item with four ways on, and the merge bar after choosing",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1500,
+    "phone": 2600
+   },
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-list .idea"
+    },
+    {
+     "click": ".ideas-list .idea:nth-child(1) input[type=checkbox]"
+    },
+    {
+     "click": ".ideas-list .idea:nth-child(4) input[type=checkbox]"
+    },
+    {
+     "wait": ".ideas-mergebar"
+    },
+    {
+     "top": ".ideas-session"
+    }
+   ]
+  },
+  {
+   "id": "IdeasEdit",
+   "title": "מוח פתוח: עריכת פריט (כותרת, סוג, המילים שלך, פרומפט והצעד הבא)",
+   "titleEn": "Open mind: editing an item (title, kind, your words, prompt, next step)",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1100,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-list .idea"
+    },
+    {
+     "click": ".ideas-list .idea:nth-child(1) .idea-review button"
+    },
+    {
+     "wait": ".idea-edit"
+    },
+    {
+     "scroll": ".idea-edit"
+    }
+   ]
+  }
+ ]
+}

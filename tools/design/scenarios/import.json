@@ -86,6 +86,11 @@
        "name": "ChatGPT custom instructions",
        "instructions": "I am a game developer. Answer in Hebrew, short, with code examples in C++ or C#.",
        "have": false
+      },
+      {
+       "name": "Claude project: Platformer notes",
+       "instructions": "Always reply in short Hebrew sentences and keep Unreal Blueprint names in English.",
+       "have": false
       }
      ],
      "from": {
@@ -158,6 +163,28 @@
     },
     {
      "scroll": ".import-preview"
+    }
+   ]
+  },
+  {
+   "id": "ImportPersonas",
+   "title": "ייבוא צ'אטים: הוראות שנמצאו מגיעות לא מסומנות, עם השורה \"קראו לפני שמסמנים\"",
+   "titleEn": "Import chats: instructions found start unticked, with \"Read before ticking\"",
+   "route": "#/settings/accounts",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 900,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": ".import-preview"
+    },
+    {
+     "scroll": ".import-preview h4:last-of-type"
     }
    ]
   }

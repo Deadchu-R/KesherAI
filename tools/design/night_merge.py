@@ -21,7 +21,7 @@ import shutil
 
 from PIL import Image  # Pillow: reads the pictures inside the boards
 
-AREA_ORDER = ["סוכנים", "צ'אט", "דפדפן ומחשב", "משחקים", "מודלים", "פתיחה", "זיכרון", "קול", "האב", "עיצוב"]
+AREA_ORDER = ["סוכנים", "צ'אט", "דפדפן ומחשב", "משחקים", "מודלים", "פתיחה", "זיכרון", "מוח פתוח", "ייבוא", "מצב קונסולה", "קול", "האב", "עיצוב"]
 # Scenario groups that belong to an area named differently (group text starts with the key -> area title).
 AREA_ALIAS = {"שיחה קולית": "קול · Voice"}
 ROW_W = 7600       # a row of new boards wraps after this width
