@@ -186,7 +186,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT) (in code: branch-versions.ts; regenerated answers already had them)
 - ✅ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio) (in code: thinking.ts, ModelMenu.tsx)
 - ✅ Context ring in the composer from the last call's prompt size; offer /compact near the limit (in code: chat/ContextRing.tsx, budget.ts pinnedBefore)
-- ⬜ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor)
+- ✅ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor) (in code: turn-status.ts, chat/TurnStatusLine.tsx)
 - ⬜ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12)
 - ⬜ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI)
 - ⬜ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude)

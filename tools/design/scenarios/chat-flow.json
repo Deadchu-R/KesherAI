@@ -543,6 +543,106 @@
      "wait": ".ctx-pop"
     }
    ]
+  },
+  {
+   "id": "ChatTurnStatus",
+   "title": "צ'אט: שורת מצב מתחת לתשובה שרצה — מה קורה עכשיו (מריץ כלי, מחכה לאישור, חושב) וכמה זמן",
+   "titleEn": "Chat: status line under a busy answer — what it does now (running a tool, waiting for approval, thinking) and for how long",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 700,
+    "phone": 800
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תיקון בדיקות",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "running",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "user",
+        "text": "תריץ את הבדיקות ותתקן מה שנכשל"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "50s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "t1",
+        "name": "run_command",
+        "input": {
+         "command": "pnpm test"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".turn-status"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".turn-status"
+    }
+   ]
   }
  ]
 }

@@ -4490,3 +4490,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .ctx-compact { font-size: 12px; min-height: 30px; }
 .ctx-pop { position: absolute; bottom: calc(100% + 8px); inset-inline-end: 0; z-index: 30; width: min(280px, 80vw); display: grid; gap: 8px; padding: 10px; background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: calc(12px * var(--r-scale, 1)); box-shadow: 0 12px 32px rgb(0 0 0 / .45); }
 @media (max-width: 760px) { .ctx-pop { position: fixed; inset-inline: 8px; bottom: max(8px, env(safe-area-inset-bottom)); width: auto; z-index: 1000; } }
+/* The status line under a busy answer (chat/TurnStatusLine.tsx). */
+.turn-status { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.turn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: turn-pulse 1.2s ease-in-out infinite; flex: none; }
+.turn-status.approval .turn-dot, .turn-status.question .turn-dot { background: var(--warn); animation: none; }
+.turn-time { font-variant-numeric: tabular-nums; }
+@keyframes turn-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .turn-dot { animation: none; } }

@@ -21,6 +21,8 @@ import { SideChat } from "../chat/SideChat";
 import { QueueChips, queueMode } from "../chat/QueueChips";
 import { messageVersions, openVersion, takeVersionScroll } from "../branch-versions";
 import { ContextRing } from "../chat/ContextRing";
+import { TurnStatusLine } from "../chat/TurnStatusLine";
+import { turnStatus } from "../turn-status";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
@@ -1118,9 +1120,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
           {Object.entries(streaming).map(([turn, text]) => (
             <div key={`s${turn}`} className="msg streaming"><RichText text={text} /></div>
           ))}
-          {busy && (
-            <p className="muted status-line">{info?.status === "waiting" ? t("waitingForYou") : t("working")}</p>
-          )}
+          {/* What the turn does now (a tool, an approval, thinking) and how long it has run (turn-status.ts). */}
+          {busy && <TurnStatusLine status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} />}
           {busy && stalled && (
             <div className="card row resume-card" role="status">
               <span className="grow small">{L("נראה שהצ'אט נתקע — לא הגיע ממנו כלום כבר שתי דקות.", "This chat looks stuck: nothing has come from it for two minutes.")}</span>

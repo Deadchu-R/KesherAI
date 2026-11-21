@@ -78,7 +78,7 @@ sharing `chat/ShareDialog.tsx`, `routes/shares.ts`, guests (`GuestApp.tsx`, `rou
 - ✅ S: Version arrows on a message whose branches exist (reuse `branchOf`, switch in place). (branch-versions.ts)
 - ✅ S: Thinking picker in the model menu for reasoning models (maps to chat template flags / reasoning effort). (thinking.ts)
 - ✅ S: Context ring in the composer from `chat-status.ts`; at 80% offer `/compact`. (chat/ContextRing.tsx)
-- S: Turn duration and status line ("waiting for approval", "running tool") under the busy answer.
+- ✅ S: Turn duration and status line ("waiting for approval", "running tool") under the busy answer. (turn-status.ts)
 - M: Shared chat mode "Allow replies" for guests, with sender names, live streaming and typing indicator.
 - L: Realtime voice hand-off with a small local voice model, approvals routed to the screen.
 - M: Memory topics view and an opt-in monthly recap card.
