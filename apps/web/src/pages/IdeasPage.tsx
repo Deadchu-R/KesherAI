@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Idea, IdeaKind, IdeaSession, IdeaVerdict } from "@kesher/shared";
+import type { Idea, IdeaKind, IdeaProgress, IdeaSession, IdeaStage, IdeaVerdict } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
@@ -23,6 +23,8 @@ const KIND: Record<IdeaKind, [string, string]> = {
 };
 /** Recording lengths in minutes; 30 is the longest a dump may run. */
 const MINUTES = [5, 10, 15, 30];
+/** The server's two plain-English failures, in the page's language (anything else is shown as it came). */
+const errorText = (e?: string) => (/^No speech was found/.test(e ?? "") ? L("לא נמצא דיבור בהקלטה. נסו להקליט קרוב יותר למיקרופון.", "No speech was found in the recording. Try recording closer to the microphone.") : /^No ideas were found/.test(e ?? "") ? L("לא נמצאו רעיונות במה שנאמר.", "No ideas were found in what was said.") : e);
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
@@ -78,6 +80,7 @@ export function IdeasPage() {
 function Recorder({ onDone }: { onDone: (id: string) => void }) {
   const [minutes, setMinutes] = useState(30);
   const [sending, setSending] = useState(false);
+  const [sendMb, setSendMb] = useState(0);
   const [levels, setLevels] = useState<number[]>(Array(14).fill(2));
   const [failed, setFailed] = useState<{ blob: Blob; seconds: number } | null>(null);
   // One shared recorder (long-recorder.ts): in the phone app natively, in the background, with a notification;
@@ -92,6 +95,7 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
   liveRef.current = live;
 
   const send = async (blob: Blob, seconds: number) => {
+    setSendMb(Math.max(0.1, Math.round(blob.size / 1e5) / 10));
     setSending(true);
     const res = await fetch(withToken("/api/ideas/record"), { method: "POST", headers: { "content-type": "application/x-kesher-audio", "x-audio-type": blob.type || "audio/webm", "x-seconds": String(Math.round(seconds)) }, body: blob }).catch(() => undefined);
     setSending(false);
@@ -194,7 +198,7 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
         {state === "interrupted" && <button type="button" onClick={() => void start(true)}>▶ {L("להמשיך להקליט", "Resume recording")}</button>}
         {(live || state === "interrupted") && <button type="button" className="primary" onClick={() => void finish()}>⏹ {L("לסיים ולמיין", "Finish and sort")}</button>}
         {state === "interrupted" && <button type="button" className="ghost" onClick={() => confirm(L("למחוק את ההקלטה?", "Delete the recording?")) && void long.done()}>{L("למחוק", "Delete")}</button>}
-        {(state === "sending" || state === "finishing") && <span className="muted">{L("שולח…", "Sending…")}</span>}
+        {(state === "sending" || state === "finishing") && <span className="muted">{state === "sending" && sendMb ? L(`שולח ${sendMb} MB למחשב…`, `Sending ${sendMb} MB to the computer…`) : L("שולח…", "Sending…")}</span>}
       </div>
       {failed && (
         <p className="small">
@@ -306,12 +310,14 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
         <button type="button" className="link" onClick={onBack}>‹ {L("כל הסשנים", "All sessions")}</button>
         <b>{new Date(s.t).toLocaleString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}{s.seconds ? ` · ${Math.round(s.seconds / 60)} ${L("דקות", "min")}` : ""}</b>
         <span className="grow" />
+        {(s.status === "done" || s.status === "error") && !!s.transcript && <button type="button" title={L("קורא את התמלול שוב, כל פעם לעומק גדול יותר; הרעיונות שכבר יש נשמרים", "Reads the transcript again, a level deeper each time; the ideas you have are kept")} onClick={() => void act("/deeper", "POST")}>🔎 {L("פענוח שוב", "Analyse again")} · {L("עומק", "depth")} {(s.depth ?? 1) + 1}</button>}
         {s.status === "done" && <button type="button" className={s.researchAll ? "" : "primary"} onClick={() => void all()}>{s.researchAll ? `⏹ ${L("לעצור את המחקר ברצף", "Stop researching")}` : `🔬 ${L("מחקר על הכל ברצף", "Research all in a row")}`} ({researched}/{s.ideas.length})</button>}
         <button type="button" className="icon-btn" title={L("מחיקת הסשן", "Delete the session")} aria-label={L("מחיקת הסשן", "Delete the session")} onClick={async () => { if (confirm(L("למחוק את הסשן? צ'אטי המחקר, ההערות והמשימות נשארים.", "Delete the session? Research chats, notes and tasks stay."))) { await api(`/api/ideas/${id}`, { method: "DELETE" }); onBack(); } }}>🗑</button>
       </div>
-      {s.status === "transcribing" && <p className="muted">⏳ {L("מתמלל את ההקלטה במחשב… (הקלטה ארוכה לוקחת כמה דקות)", "Transcribing the recording on the computer… (a long one takes a few minutes)")}</p>}
-      {s.status === "sorting" && <p className="muted">⏳ {L("מפריד לרעיונות, משימות ושאלות…", "Splitting into ideas, tasks and questions…")}</p>}
-      {s.status === "error" && <p className="error">{s.error}</p>}
+      {(s.status === "transcribing" || s.status === "sorting") && <AnalysisProgress s={s} />}
+      {s.deeperError && <p className="error">{L("הפענוח העמוק יותר נכשל; הרעיונות הקודמים נשמרו: ", "The deeper pass failed; your earlier ideas are kept: ")}{errorText(s.deeperError)}</p>}
+      {s.status === "error" && <p className="error">{errorText(s.error)}</p>}
+      {s.status === "done" && s.summary && <p className="ideas-summary" role="note">💭 {L("לא נמצאו רעיונות ברורים, אז זה מה שדובר וכמה כיוונים אפשריים (מסומנים כהסקה):", "No clear ideas came out, so here is what was talked about and a few possible directions (marked as inferred):")} <span className="muted">{s.summary}</span></p>}
       {s.status === "done" && (
         <>
           <div className="ideas-filters" role="tablist">
@@ -356,6 +362,67 @@ type Act = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown, d
  * One idea, task or question: her words, the prompt, the next step; the four ways on (chat, deep research, task inbox,
  * note in Knowledge) and her review (choose for merging, edit, split, delete).
  */
+const STAGES: Array<[IdeaStage, string, string, string, string]> = [
+  ["transcribing", "מתמלל את ההקלטה", "Transcribing the recording", "מקשיב לכל מילה, בלי למהר.", "Listening to every word, no rush."],
+  ["splitting", "מפריד לרעיונות, משימות ושאלות", "Splitting into ideas, tasks and questions", "מסדר את המחשבות שלך בקבוצות.", "Sorting your thoughts into groups."],
+  ["writing", "בודק מה כבר ניסית וכותב צעדים הבאים", "Checking what you tried and writing next steps", "כמעט שם: נותן לכל רעיון צעד ראשון.", "Almost there: giving each idea a first step."],
+];
+const mins = (sec: number) => (sec < 90 ? L("פחות מדקה", "under a minute") : L(`כ-${Math.round(sec / 60)} דק׳`, `about ${Math.round(sec / 60)} min`));
+
+/**
+ * What an analysis has done so far (design IdeaProgress): the steps ticked as they finish, the current one with what
+ * it found (minutes read, "3 ideas so far · last: …"), the time it has taken and a rough time left. The state comes
+ * from the server with each poll of the session, so it is right after leaving and coming back, and the seconds are
+ * counted from the server's clock (a phone's clock may differ).
+ */
+function AnalysisProgress({ s }: { s: IdeaSession }) {
+  const p: IdeaProgress | undefined = s.progress;
+  const [tick, setTick] = useState(0);
+  const seen = useRef({ at: Date.now(), p });
+  if (seen.current.p !== p) seen.current = { at: Date.now(), p };
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  void tick;
+  const stage: IdeaStage = p?.stage ?? (s.status === "transcribing" ? "transcribing" : "splitting");
+  const fromSpeech = s.status === "transcribing" || stage === "transcribing" || !!p?.audioSeconds;
+  const shown = STAGES.filter(([k]) => fromSpeech || k !== "transcribing");
+  const at = shown.findIndex(([k]) => k === stage);
+  // Seconds since the analysis (and this stage) began, by the server's clock plus what passed here since the poll.
+  const since = (t?: number) => (p?.now && t ? Math.max(0, (p.now - t + (Date.now() - seen.current.at)) / 1000) : 0);
+  const elapsed = since(p?.startedAt);
+  const inStage = since(p?.stageAt);
+  const audio = p?.audioSeconds ?? 0;
+  const expected = p?.expectedSeconds ?? 0;
+  const read = audio && expected ? Math.min(audio * 0.95, audio * (inStage / expected)) : 0;
+  const left = stage === "transcribing" ? (expected ? Math.max(30, expected - inStage) + 60 : 0) : stage === "splitting" ? 90 : 20;
+  const f = p?.found;
+  const so = f ? f.ideas + f.tasks + f.questions : 0;
+  const counts = f && so ? [f.ideas ? L(`${f.ideas} רעיונות`, `${f.ideas} ideas`) : "", f.tasks ? L(`${f.tasks} משימות`, `${f.tasks} tasks`) : "", f.questions ? L(`${f.questions} שאלות`, `${f.questions} questions`) : ""].filter(Boolean).join(" · ") : "";
+  const detail = (k: IdeaStage) => {
+    if (k === "transcribing" && read) return L(`בערך ${Math.floor(read / 60)} מתוך ${Math.round(audio / 60)} דקות הוקראו`, `about ${Math.floor(read / 60)} of ${Math.round(audio / 60)} minutes read`);
+    if (k === "splitting" && p?.part && p.part.of > 1 && !counts) return L(`חלק ${p.part.done + 1} מתוך ${p.part.of}`, `part ${p.part.done + 1} of ${p.part.of}`);
+    if (k === "splitting" && counts) return `${p?.part && p.part.of > 1 ? L(`חלק ${p.part.done + 1}/${p.part.of} · `, `part ${p.part.done + 1}/${p.part.of} · `) : ""}${counts}${f?.last ? L(` · אחרון: "${f.last}"`, ` · last: "${f.last}"`) : ""}`;
+    if (k === "writing" && p?.checked) return L(`${p.checked.done} מתוך ${p.checked.of} נבדקו`, `${p.checked.done} of ${p.checked.of} checked`);
+    return "";
+  };
+  const line = STAGES[Math.max(0, STAGES.findIndex(([k]) => k === stage))]!;
+  return (
+    <div className="ideas-progress stack" aria-live="polite">
+      <h3>{L("חושב על מה שאמרת…", "Thinking through what you said…")}{(p?.level ?? 1) > 1 && <span className="idea-tag">{L("עומק", "depth")} {p?.level}</span>}</h3>
+      <p className="muted">{L(line[3], line[4])}</p>
+      <ol className="cr-steps">
+        {shown.map(([k, he, en], i) => {
+          const state = i < at ? "done" : i === at ? "now" : "next";
+          return <li key={k} className={state}><span aria-hidden>{state === "done" ? "✓" : state === "now" ? "⏳" : "○"}</span> <span>{L(he, en)}{state === "now" && detail(k) ? ` · ${detail(k)}` : ""}</span>{state === "now" && <span className="sr-only">{L(" (עכשיו)", " (now)")}</span>}</li>;
+        })}
+      </ol>
+      <span className="muted small">{p ? `${L("עברו", "Elapsed")} ${clock(elapsed)}${left ? ` · ${L("נשאר", "left")} ${mins(left)}` : ""} · ` : ""}{L("אפשר לצאת ולחזור; זה ממשיך במחשב.", "You can leave and come back; it carries on on the computer.")}</span>
+    </div>
+  );
+}
+
 function IdeaCard({ idea: i, picked, onPick, act, onResearch, onChat, lang }: { idea: Idea; picked: boolean; onPick: (on: boolean) => void; act: Act; onResearch: () => void; onChat: () => void; lang: string }) {
   const [mode, setMode] = useState<"view" | "edit" | "split">("view");
   const [draft, setDraft] = useState({ title: i.title, prompt: i.prompt, quote: i.quote ?? "", next: i.next ?? "", kind: i.kind ?? "idea" });
@@ -374,6 +441,7 @@ function IdeaCard({ idea: i, picked, onPick, act, onResearch, onChat, lang }: { 
         <b dir="auto" className="idea-title">{i.title}</b>
         <span className="idea-tag">{L(...KIND[kind])}</span>
         <span className={`idea-tag ${VERDICT[i.verdict][2]}`} title={i.why}>{L(VERDICT[i.verdict][0], VERDICT[i.verdict][1])}</span>
+        {i.inferred && <span className="idea-tag" title={L("לא נאמר במפורש: הסקה ממה שאמרת", "Not said outright: inferred from what you said")}>💡 {L("הסקה", "Inferred")}</span>}
         {i.tried === "yes" ? <span className="idea-tag tried" title={i.triedNote}>↺ {L("ניסית בעבר", "Tried before")}</span> : <span className="idea-tag">✦ {L("חדש", "New")}</span>}
       </div>
       {mode === "edit" ? (

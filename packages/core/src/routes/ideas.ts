@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Ideas } from "../ideas.js";
 import { modelTurnFor } from "../model-turn.js";
+import { pickFlash } from "../translate.js";
 import { toWav, transcribeWith } from "../speech-tools.js";
 import { ensureFfmpeg } from "../ffmpeg.js";
 import type { KesherServices } from "../services.js";
@@ -21,10 +22,12 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
   /** Where "Save as a note" writes: one Markdown file per idea, read by the "Open mind notes" knowledge base. */
   const notesDir = join(s.paths.root, "ideas-notes");
   const ideas = new Ideas(root, {
-    ask: async (system, user, signal) => {
-      const id = s.config.activeModels.chat;
+    ask: async (system, user, signal, onText, strong) => {
+      // A stronger model for the deeper passes: the user's free Gemini connection when there is one, else the chat model.
+      const flash = strong ? await s.registry.get("gemini")?.listModels(AbortSignal.timeout(10_000)).then(pickFlash, () => undefined) : undefined;
+      const id = flash ?? s.config.activeModels.chat;
       if (!id) throw Object.assign(new Error("Choose a chat model first (Models page)."), { statusCode: 409 });
-      return (await modelTurnFor(s.registry, id)({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(30 * 60_000), () => undefined)).text;
+      return (await modelTurnFor(s.registry, id)({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal ?? AbortSignal.timeout(30 * 60_000), onText ?? (() => undefined))).text;
     },
     transcribe: async (file) => {
       const ffmpeg = () => ensureFfmpeg({ dir: s.paths.engines, downloads: s.downloads });
@@ -71,6 +74,8 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
 
   app.get<{ Querystring: { q?: string } }>("/api/ideas", async (req) => ({ sessions: await ideas.list(String(req.query?.q ?? "").slice(0, 200)) }));
   app.get<S>("/api/ideas/:id", async (req) => ideas.get(req.params.id));
+  /** "Analyse again": one level deeper, keeping what was found before (progress comes with the session). */
+  app.post<S>("/api/ideas/:id/deeper", async (req) => ideas.deeper(req.params.id));
   app.delete<S>("/api/ideas/:id", async (req) => {
     await ideas.remove(req.params.id);
     return { ok: true };

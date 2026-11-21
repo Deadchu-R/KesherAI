@@ -368,6 +368,315 @@
      "waitMs": 1500
     }
    ]
+  },
+  {
+   "id": "IdeasProgressListen",
+   "title": "מוח פתוח: ההמתנה אחרי ההקלטה, שלב התמלול (דקות שהוקראו, זמן שעבר, זמן שנותר)",
+   "titleEn": "Open mind: the wait after recording, transcribing (minutes read, time elapsed, time left)",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s2",
+     "json": {
+      "id": "s2",
+      "t": {
+       "$agoMs": "4m"
+      },
+      "seconds": 1260,
+      "status": "transcribing",
+      "ideas": [],
+      "progress": {
+       "stage": "transcribing",
+       "startedAt": {
+        "$agoMs": "2m"
+       },
+       "stageAt": {
+        "$agoMs": "2m"
+       },
+       "now": {
+        "$agoMs": "0s"
+       },
+       "audioSeconds": 1260,
+       "expectedSeconds": 300
+      }
+     }
+    },
+    {
+     "url": "**/api/ideas*",
+     "json": {
+      "sessions": [
+       {
+        "id": "s2",
+        "t": {
+         "$agoMs": "4m"
+        },
+        "seconds": 1260,
+        "status": "transcribing",
+        "count": 0,
+        "good": 0,
+        "titles": []
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-progress"
+    }
+   ]
+  },
+  {
+   "id": "IdeasProgressSplit",
+   "title": "מוח פתוח: ההמתנה, הפרדה לרעיונות (כמה נמצאו עד עכשיו והאחרון)",
+   "titleEn": "Open mind: the wait, splitting (how many found so far and the latest)",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s2",
+     "json": {
+      "id": "s2",
+      "t": {
+       "$agoMs": "4m"
+      },
+      "seconds": 1260,
+      "status": "sorting",
+      "ideas": [],
+      "progress": {
+       "stage": "splitting",
+       "startedAt": {
+        "$agoMs": "6m"
+       },
+       "stageAt": {
+        "$agoMs": "40s"
+       },
+       "now": {
+        "$agoMs": "0s"
+       },
+       "audioSeconds": 1260,
+       "expectedSeconds": 300,
+       "found": {
+        "ideas": 3,
+        "tasks": 1,
+        "questions": 1,
+        "last": "משחק קופים בפיקסל ארט"
+       }
+      }
+     }
+    },
+    {
+     "url": "**/api/ideas*",
+     "json": {
+      "sessions": [
+       {
+        "id": "s2",
+        "t": {
+         "$agoMs": "4m"
+        },
+        "seconds": 1260,
+        "status": "sorting",
+        "count": 0,
+        "good": 0,
+        "titles": []
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-progress"
+    }
+   ]
+  },
+  {
+   "id": "IdeasProgressWrite",
+   "title": "מוח פתוח: ההמתנה, בדיקת מה כבר ניסית וכתיבת צעדים הבאים",
+   "titleEn": "Open mind: the wait, checking what you tried and writing next steps",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s2",
+     "json": {
+      "id": "s2",
+      "t": {
+       "$agoMs": "4m"
+      },
+      "seconds": 1260,
+      "status": "sorting",
+      "ideas": [],
+      "progress": {
+       "stage": "writing",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "stageAt": {
+        "$agoMs": "15s"
+       },
+       "now": {
+        "$agoMs": "0s"
+       },
+       "audioSeconds": 1260,
+       "expectedSeconds": 300,
+       "found": {
+        "ideas": 4,
+        "tasks": 2,
+        "questions": 1,
+        "last": "Send the CV"
+       },
+       "checked": {
+        "done": 4,
+        "of": 7
+       }
+      }
+     }
+    },
+    {
+     "url": "**/api/ideas*",
+     "json": {
+      "sessions": [
+       {
+        "id": "s2",
+        "t": {
+         "$agoMs": "4m"
+        },
+        "seconds": 1260,
+        "status": "sorting",
+        "count": 0,
+        "good": 0,
+        "titles": []
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-progress"
+    }
+   ]
+  },
+  {
+   "id": "IdeasProgressDeeper",
+   "title": "מוח פתוח: \"פענוח שוב · עומק 3\" בזמן ריצה (חלק 2 מתוך 4, כמה נמצאו)",
+   "titleEn": "Open mind: \"Analyse again · depth 3\" while it runs (part 2 of 4, how many found)",
+   "route": "#/ideas",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/ideas/s2",
+     "json": {
+      "id": "s2",
+      "t": {
+       "$agoMs": "4m"
+      },
+      "seconds": 0,
+      "status": "sorting",
+      "ideas": [],
+      "progress": {
+       "stage": "splitting",
+       "startedAt": {
+        "$agoMs": "6m"
+       },
+       "stageAt": {
+        "$agoMs": "40s"
+       },
+       "now": {
+        "$agoMs": "0s"
+       },
+       "found": {
+        "ideas": 3,
+        "tasks": 1,
+        "questions": 1,
+        "last": "משחק קופים בפיקסל ארט"
+       },
+       "level": 3,
+       "part": {
+        "done": 1,
+        "of": 4
+       }
+      }
+     }
+    },
+    {
+     "url": "**/api/ideas*",
+     "json": {
+      "sessions": [
+       {
+        "id": "s2",
+        "t": {
+         "$agoMs": "4m"
+        },
+        "seconds": 1260,
+        "status": "sorting",
+        "count": 0,
+        "good": 0,
+        "titles": []
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".ideas-session-row"
+    },
+    {
+     "click": ".ideas-session-row"
+    },
+    {
+     "wait": ".ideas-progress"
+    }
+   ]
   }
  ]
 }

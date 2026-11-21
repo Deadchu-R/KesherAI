@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
-import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, editIdea, ideaNote, ideaQuery, ideaTask, jsonIn, mergeIdeas, mostlyHebrew, researchPrompt, sessionMatches, splitIdea, type Idea, type IdeaSession } from "@kesher/shared";
+import { CHALLENGE_PROMPT, CREATIVE_PROMPT, IDEAS_PROMPT, SUMMARY_PROMPT, TRIED_PROMPT, fallbackDirections, splitTranscript, cleanIdeas, editIdea, ideaNote, ideaQuery, ideaTask, jsonIn, mergeIdeas, mostlyHebrew, researchPrompt, sessionMatches, splitIdea, peekIdeas, type Idea, type IdeaFound, type IdeaProgress, type IdeaSession } from "@kesher/shared";
 
 /** What the ideas need from the rest of KesherAI (fakes in the tests). */
 export interface IdeasDeps {
-  /** The chat model: a system and a user message in, its text out. */
-  ask: (system: string, user: string, signal?: AbortSignal) => Promise<string>;
+  /** The chat model: a system and a user message in, its text out (`onText` gets each piece as it is written; `strong` asks for a stronger model when there is one). */
+  ask: (system: string, user: string, signal?: AbortSignal, onText?: (delta: string) => void, strong?: boolean) => Promise<string>;
   /** A recording's speech as text. */
   transcribe: (file: string) => Promise<string>;
   /** Her project names. */
@@ -24,6 +24,13 @@ export interface IdeasDeps {
   addTask: (task: { title: string; goal: string; acceptance?: string }) => Promise<string>;
 }
 
+/** Ideas, tasks and questions in a finished list (the same counts `peekIdeas` gives while it is written). */
+function countIdeas(ideas: Idea[]): IdeaFound {
+  const n = (k: string) => ideas.filter((i) => (i.kind ?? "idea") === k).length;
+  const last = ideas[ideas.length - 1]?.title;
+  return { ideas: n("idea"), tasks: n("task"), questions: n("question"), ...(last ? { last } : {}) };
+}
+
 const SID = /^[\w-]{1,64}$/;
 
 /**
@@ -33,6 +40,10 @@ const SID = /^[\w-]{1,64}$/;
  */
 export class Ideas {
   private running = new Set<string>();
+  /** Live progress of the analyses under way (memory only: a restart ends them anyway). */
+  private live = new Map<string, IdeaProgress>();
+  /** How many seconds reading one second of speech took last time (a guess for the first time: 0.25). */
+  private speed = 0.25;
 
   /**
    * @param dir - Where sessions are kept.
@@ -70,13 +81,24 @@ export class Ideas {
     const raw = await readFile(this.file(id), "utf8").catch(() => {
       throw Object.assign(new Error("No such session."), { statusCode: 404 });
     });
-    return JSON.parse(raw) as IdeaSession;
+    const s = JSON.parse(raw) as IdeaSession;
+    const progress = this.live.get(id);
+    if (progress && (s.status === "transcribing" || s.status === "sorting")) s.progress = { ...progress, now: Date.now() };
+    return s;
+  }
+
+  /** Changes the live progress of a session (and starts a new stage's clock when the stage changes). */
+  private mark(id: string, p: Partial<IdeaProgress> & { stage: IdeaProgress["stage"] }): void {
+    const old = this.live.get(id);
+    const now = Date.now();
+    this.live.set(id, { startedAt: old?.startedAt ?? now, ...old, ...p, stageAt: old?.stage === p.stage ? old.stageAt : now });
   }
 
   private async save(s: IdeaSession): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     const tmp = `${this.file(s.id)}.${randomUUID()}.tmp`;
-    await writeFile(tmp, JSON.stringify(s, null, 1));
+    const { progress: _live, ...onDisk } = s;
+    await writeFile(tmp, JSON.stringify(onDisk, null, 1));
     await replaceFile(tmp, this.file(s.id));
   }
 
@@ -97,41 +119,142 @@ export class Ideas {
     return s;
   }
 
+  /**
+   * "Analyse again": one level deeper than the last time (2 creative, 3 small parts with a stronger model, 4+ the
+   * model challenges the earlier result). The ideas found before are kept; only new ones are added. Runs in the
+   * background like the first pass, with the same live progress.
+   *
+   * @param id - The session.
+   * @returns The session, now being analysed.
+   */
+  async deeper(id: string): Promise<IdeaSession> {
+    const s = await this.get(id);
+    if (s.status === "transcribing" || s.status === "sorting") throw Object.assign(new Error("It is still being analysed."), { statusCode: 409 });
+    if (!s.transcript?.trim()) throw Object.assign(new Error("There is no transcript to read again."), { statusCode: 400 });
+    const level = (s.depth ?? 1) + 1;
+    const next: IdeaSession = { ...s, status: "sorting" };
+    delete next.error;
+    delete next.deeperError;
+    await this.save(next);
+    void this.process(id, undefined, level).catch(() => undefined);
+    return { ...next, progress: { stage: "splitting", startedAt: Date.now(), stageAt: Date.now(), now: Date.now(), level } };
+  }
+
   /** Runs a session: transcribe, pull out and sort, check "tried before". Errors are kept on the session. */
-  async process(id: string, file?: string): Promise<IdeaSession> {
+  async process(id: string, file?: string, level = 1): Promise<IdeaSession> {
     let s = await this.get(id);
+    const before = level > 1 ? s.ideas : [];
+    this.live.set(id, { stage: file ? "transcribing" : "splitting", startedAt: Date.now(), stageAt: Date.now(), level });
     try {
       if (file) {
+        const audio = s.seconds;
+        this.mark(id, { stage: "transcribing", ...(audio ? { audioSeconds: audio, expectedSeconds: Math.max(5, Math.round(audio * this.speed)) } : {}) });
+        const began = Date.now();
         const text = await this.deps.transcribe(file).finally(() => rm(file, { force: true }));
+        // Remember how fast this computer reads speech, for the next guess.
+        if (audio >= 30) this.speed = Math.min(2, Math.max(0.02, (Date.now() - began) / 1000 / audio));
         s = { ...(await this.get(id)), transcript: text.slice(0, 400_000), status: "sorting" };
         await this.save(s);
       }
+      this.mark(id, { stage: "splitting", found: { ideas: 0, tasks: 0, questions: 0 } });
       if (!s.transcript?.trim()) throw new Error("No speech was found in the recording.");
       const projects = this.deps.projects().slice(0, 80);
-      // They spoke Hebrew: everything is written in Hebrew (small local models drift to English), checked and asked again once.
-      const he = mostlyHebrew(s.transcript);
-      const lang = he ? "\nLANGUAGE: they spoke Hebrew. Write title, prompt, why, audience and category IN HEBREW." : "";
-      const user = `THEIR PROJECTS: ${projects.length ? projects.join(" | ") : "(none)"}${lang}\n\nTRANSCRIPT:\n<<<\n${s.transcript.slice(0, 120_000)}\n>>>`;
-      let ideas = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, user)), projects, () => randomUUID(), s.transcript);
-      if (he && ideas.length && ideas.filter((i) => !mostlyHebrew(`${i.title} ${i.prompt}`)).length > ideas.length / 2) {
-        const again = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, `${user}\n\nYour last answer was in English. Answer again with every text field in Hebrew.`).catch(() => "")), projects, () => randomUUID(), s.transcript);
-        if (again.length) ideas = again;
-      }
-      if (!ideas.length) throw new Error("No ideas were found in what was said.");
-      await this.markTried(ideas);
-      s = { ...(await this.get(id)), ideas, status: "done" };
+      const { ideas: found, summary } = await this.extract(id, s.transcript, projects, level, before);
+      this.mark(id, { stage: "writing", found: countIdeas([...before, ...found]), checked: { done: 0, of: found.length } });
+      await this.markTried(found, (done) => this.mark(id, { stage: "writing", checked: { done, of: found.length } }));
+      this.live.delete(id);
+      // Earlier ideas stay (she may have edited them); the new ones come after.
+      s = { ...(await this.get(id)), ideas: [...before, ...found], status: "done", depth: Math.max(level, s.depth ?? 1) };
+      if (summary && !before.length) s.summary = summary;
+      else delete s.summary;
       delete s.error;
+      delete s.deeperError;
       await this.save(s);
       return s;
     } catch (e) {
-      s = { ...(await this.get(id)), status: "error", error: (e as Error).message.slice(0, 300) };
+      this.live.delete(id);
+      const msg = (e as Error).message.slice(0, 300);
+      // A deeper pass that fails leaves what was found before: the session stays "done" with the reason beside it.
+      s = before.length ? { ...(await this.get(id)), ideas: before, status: "done", deeperError: msg } : { ...(await this.get(id)), status: "error", error: msg };
       await this.save(s);
       return s;
     }
   }
 
+  /**
+   * Pulls the ideas out of a transcript, working harder when it finds little: the transcript is read in parts (so
+   * nothing is skipped), a second, more creative pass runs when the first found fewer than three, and when there is
+   * still nothing a summary with possible directions is asked for, then made locally. Never returns an empty list.
+   *
+   * @param id - The session (its live progress is updated).
+   * @param transcript - What was said.
+   * @param projects - Her project names.
+   * @returns The ideas, and a summary when they are only possible directions.
+   */
+  private async extract(id: string, transcript: string, projects: string[], level = 1, existing: Idea[] = []): Promise<{ ideas: Idea[]; summary?: string }> {
+    // Depth 3 reads smaller parts so every sentence gets attention.
+    const parts = splitTranscript(transcript.slice(0, 400_000), level === 3 ? 2500 : 12_000);
+    const all: Idea[] = [];
+    const seen = new Set(existing.map((i) => i.title.toLowerCase()));
+    const add = (more: Idea[], inferred = false) => {
+      for (const i of more) {
+        const key = i.title.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        all.push(inferred ? { ...i, inferred: true } : i);
+      }
+    };
+    const pass = async (prompt: string, forced: boolean, strong = false, withFound = false) => {
+      for (const [n, part] of parts.entries()) {
+        const base = countIdeas(all);
+        this.mark(id, { stage: "splitting", part: { done: n, of: parts.length }, found: base });
+        let written = "";
+        // The challenge pass is told what is already found, so it adds instead of repeating.
+        const extra = withFound ? `\n\nALREADY FOUND:\n${[...existing, ...all].map((i) => `- ${i.title}`).join("\n")}` : "";
+        const found = await this.pull(prompt, part, projects, transcript, extra, strong, (d) => {
+          written += d;
+          const now = peekIdeas(written);
+          this.mark(id, { stage: "splitting", found: { ideas: base.ideas + now.ideas, tasks: base.tasks + now.tasks, questions: base.questions + now.questions, ...(now.last ?? base.last ? { last: now.last ?? base.last } : {}) } });
+        });
+        add(found, forced);
+      }
+    };
+    if (level === 1) {
+      await pass(IDEAS_PROMPT, false);
+      if (all.length < 3) await pass(CREATIVE_PROMPT, true);
+    } else if (level === 2) await pass(CREATIVE_PROMPT, true);
+    else if (level === 3) {
+      await pass(IDEAS_PROMPT, false, true);
+      await pass(CREATIVE_PROMPT, true, true);
+    } else await pass(CHALLENGE_PROMPT, false, true, true);
+    if (all.length || existing.length) return { ideas: all };
+    // Still nothing: a summary with possible directions from the model, then from the text itself.
+    this.mark(id, { stage: "splitting", found: { ideas: 0, tasks: 0, questions: 0 } });
+    const raw = jsonIn(await this.deps.ask(SUMMARY_PROMPT, `TRANSCRIPT:\n<<<\n${transcript.slice(0, 12_000)}\n>>>`).catch(() => "")) as { summary?: unknown; directions?: unknown } | null;
+    const directions = cleanIdeas(raw && typeof raw === "object" ? raw.directions : [], projects, () => randomUUID(), transcript).map((i) => ({ ...i, inferred: true }));
+    const text = raw && typeof raw === "object" && typeof raw.summary === "string" ? raw.summary.trim().slice(0, 600) : "";
+    if (directions.length) return { ideas: directions, summary: text || transcript.replace(/\s+/g, " ").trim().slice(0, 300) };
+    const local = fallbackDirections(transcript, () => randomUUID());
+    if (!local.ideas.length) throw new Error("No speech was found in the recording.");
+    return { ideas: local.ideas, summary: text || local.summary };
+  }
+
+  /** One model call over one part of the transcript: its ideas, asked again in Hebrew when they spoke Hebrew and it drifted. */
+  private async pull(prompt: string, part: string, projects: string[], transcript: string, extra: string, strong: boolean, onText: (d: string) => void): Promise<Idea[]> {
+    // They spoke Hebrew: everything is written in Hebrew (small local models drift to English), checked and asked again once.
+    const he = mostlyHebrew(part);
+    const lang = he ? "\nLANGUAGE: they spoke Hebrew. Write title, prompt, why, audience and category IN HEBREW." : "";
+    const user = `THEIR PROJECTS: ${projects.length ? projects.join(" | ") : "(none)"}${lang}\n\nTRANSCRIPT:\n<<<\n${part}\n>>>${extra}`;
+    let ideas = cleanIdeas(jsonIn(await this.deps.ask(prompt, user, undefined, onText, strong)), projects, () => randomUUID(), transcript);
+    if (he && ideas.length && ideas.filter((i) => !mostlyHebrew(`${i.title} ${i.prompt}`)).length > ideas.length / 2) {
+      const again = cleanIdeas(jsonIn(await this.deps.ask(prompt, `${user}\n\nYour last answer was in English. Answer again with every text field in Hebrew.`, undefined, undefined, strong).catch(() => "")), projects, () => randomUUID(), transcript);
+      if (again.length) ideas = again;
+    }
+    return ideas;
+  }
+
   /** "Tried before": her past chats that match each idea, judged by the model in one go. */
-  private async markTried(ideas: Idea[]): Promise<void> {
+  private async markTried(ideas: Idea[], onChecked: (done: number) => void = () => undefined): Promise<void> {
     const found: Array<{ i: number; hits: Array<{ id: string; title: string; snippet: string }> }> = [];
     for (const [i, idea] of ideas.entries()) {
       // Only strong matches go to the model (a few shared words match almost any chat).
@@ -139,6 +262,7 @@ export class Ideas {
       const top = all[0]?.score ?? 0;
       const hits = all.filter((h) => h.score > 0 && h.score >= top * 0.6).slice(0, 3);
       if (hits.length) found.push({ i, hits });
+      onChecked(i + 1);
     }
     if (!found.length) return;
     const user = found.map(({ i, hits }) => `IDEA ${i}: ${ideas[i]!.title} — ${ideas[i]!.prompt.slice(0, 300)}\n${hits.map((h) => `  [chat "${h.title}"] ${h.snippet.slice(0, 400)}`).join("\n")}`).join("\n\n");

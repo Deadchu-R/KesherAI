@@ -3471,6 +3471,11 @@ html.handheld .palette-list button { min-height: 44px; }
 .ideas-search { width: 100%; margin-bottom: 8px; }
 .ideas-session-row { flex-wrap: wrap; }
 .ideas-session-titles { flex-basis: 100%; color: var(--muted); overflow-wrap: anywhere; }
+.ideas-progress { border-radius: 20px; padding: 18px 20px; border: 1px solid var(--border); background: linear-gradient(160deg, rgba(255, 122, 122, 0.10), transparent 65%), var(--panel); margin: 12px 0; }
+.ideas-progress h3 { margin: 0; font-size: 18px; font-weight: 800; }
+.ideas-progress p { margin: 0; line-height: 1.6; }
+.ideas-progress .cr-steps li { overflow-wrap: anywhere; }
+.ideas-progress .cr-steps li.now { color: var(--text); }
 .ideas-mergebar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid var(--accent); background: var(--panel); }
 .idea.picked { outline: 1px solid var(--accent); }
 .idea-title { overflow-wrap: anywhere; min-width: 0; }
