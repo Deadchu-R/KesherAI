@@ -582,6 +582,11 @@ export class TaskInbox {
         status = "deferred-quota";
         if (!t.autoRetried) t.retryAt = q.until;
         t.note = `The free Gemini limit was reached; ${t.autoRetried ? "run it again later." : `it tries once more after ${new Date(q.until).toISOString()}.`}`;
+      } else if (!stop.signal.aborted && /\b(500|502|503|504)\b|UNAVAILABLE|overloaded|try again later/i.test(msg)) {
+        // Google busy (the free tier answers 503 "overloaded" at peak hours): not a failure, wait and try once more.
+        status = "deferred-quota";
+        if (!t.autoRetried) t.retryAt = this.now() + 15 * 60_000;
+        t.note = `Gemini is busy right now (${/\b(5\d\d)\b/.exec(msg)?.[1] ?? "busy"}); ${t.autoRetried ? "run it again later." : "it tries once more in 15 minutes."}`;
       } else {
         status = "failed";
         t.note = stop.signal.aborted ? `Stopped at the ${t.maxMinutes}-minute limit or by you.` : `The research failed: ${msg.slice(0, 300)}`;

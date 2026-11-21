@@ -433,3 +433,34 @@ test("inbox: a Gemini limit or billing error defers the task to the reset; one a
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("inbox: Gemini busy (503 overloaded) waits 15 minutes and tries once more, then succeeds", async () => {
+  const { root, repo } = await setup({ "r-20261121-03": RESEARCH_TASK("r-20261121-03") });
+  let now = 1_000_000;
+  let calls = 0;
+  let fail: string | undefined = "POST …/chat/completions → 503 Service Unavailable: The model is overloaded. Please try again later.";
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async () => ({ code: 1, out: "not in tests" }),
+    startAgent: () => Promise.reject(new Error("no")),
+    notify: () => undefined,
+    busy: async () => ({ free: true, reasons: [] }),
+    now: () => now,
+    research: { ready: () => true, run: async () => (calls++, fail ? Promise.reject(new Error(fail)) : "# R\n\nok") },
+  });
+  try {
+    await inbox.sync();
+    await inbox.idle();
+    let t = await inbox.task("r-20261121-03");
+    assert.deepEqual([t.status, calls, t.retryAt], ["deferred-quota", 1, 1_000_000 + 15 * 60_000]);
+    now += 16 * 60_000;
+    fail = undefined;
+    await inbox.pumpGemini();
+    t = await inbox.task("r-20261121-03");
+    assert.deepEqual([t.status, calls], ["done", 2]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
