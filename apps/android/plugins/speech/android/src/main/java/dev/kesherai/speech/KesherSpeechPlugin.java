@@ -36,7 +36,7 @@ import java.util.UUID;
  * speech). Used by the microphone button, reading answers aloud, and the
  * hands-free conversation mode.
  */
-@CapacitorPlugin(name = "KesherSpeech", permissions = { @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }) })
+@CapacitorPlugin(name = "KesherSpeech", permissions = { @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }), @Permission(alias = "camera", strings = { Manifest.permission.CAMERA }) })
 public class KesherSpeechPlugin extends Plugin {
     private SpeechRecognizer recognizer;
     private PluginCall listening;

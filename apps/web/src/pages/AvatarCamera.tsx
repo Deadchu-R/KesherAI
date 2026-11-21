@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { openCamera as openCameraStream } from "../mic-access";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -46,9 +47,9 @@ export function AvatarCamera() {
   const openCamera = async () => {
     if (cam.current) return cam.current;
     try {
-      cam.current = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 }, audio: false });
-    } catch {
-      toast(L("אין גישה למצלמה. בדקי שהיא מחוברת ושאישרת גישה.", "No access to the camera. Check it is connected and allowed."));
+      cam.current = await openCameraStream({ width: 1280, height: 720, frameRate: 30 });
+    } catch (e) {
+      toast((e as Error).message);
       return null;
     }
     if (live.current) live.current.srcObject = cam.current;
@@ -364,7 +365,7 @@ export function AvatarFeed() {
     if (mode !== "live") return;
     let stream: MediaStream | undefined;
     let off = false;
-    void navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false }).then((s) => {
+    void openCameraStream({ width: 1280, height: 720 }).then((s) => {
       if (off) return s.getTracks().forEach((t) => t.stop());
       stream = s;
       if (live.current) live.current.srcObject = s;
