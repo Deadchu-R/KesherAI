@@ -305,8 +305,8 @@ button.on { border-color: var(--accent); }
 .activity > details > summary:hover { color: var(--text); }
 /* Triangle like Claude's: points to where text runs when closed, down when open. */
 .chev { width: 0; height: 0; border-block: 4.5px solid transparent; border-inline-start: 6px solid currentColor; transition: transform .15s; }
-.activity > details[open] .chev { transform: rotate(90deg); }
-[dir="rtl"] .activity > details[open] .chev { transform: rotate(-90deg); }
+.activity > details[open] > summary .chev { transform: rotate(90deg); }
+[dir="rtl"] .activity > details[open] > summary .chev { transform: rotate(-90deg); }
 .steps { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--border); border-radius: calc(10px * var(--r-scale, 1)); overflow: hidden; }
 .steps > li { border-bottom: 1px solid var(--border); }
 .steps > li:last-child { border-bottom: 0; }
@@ -315,6 +315,28 @@ button.on { border-color: var(--accent); }
 .tool-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .steps li.fail .tool-state { color: #f87171; }
 .steps li.ok .tool-state { color: var(--accent); }
+/* Tool cards: icon + name + main parameter + live state (docs/research/c-20261121-38.md). */
+.tool-card > summary { flex-wrap: wrap; row-gap: 2px; }
+.tool-icon { font-size: 15px; line-height: 1; flex: none; }
+.tool-card .tool-label { font-weight: 600; flex: none; max-width: 100%; }
+.tool-card .tool-pinned { order: 1; }
+.tool-param { order: 2; flex: 1 1 8ch; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12.5px; font-family: ui-monospace, monospace; unicode-bidi: isolate; }
+.tool-card .tool-state { order: 1; display: inline-flex; align-items: center; gap: 6px; margin-inline-start: auto; }
+.tool-card .tool-state .spinner { width: 12px; height: 12px; }
+.tool-err { order: 3; flex: 1 1 100%; min-width: 0; color: var(--bad, #e5534b); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-start: 23px; }
+.tool-hits { margin: 6px 0 0; padding-inline-start: 22px; display: grid; gap: 4px; font-size: 13.5px; }
+.tool-hits li { overflow-wrap: anywhere; }
+.tool-hits li bdi { margin-inline-start: 8px; }
+.tool-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tool-raw > summary { cursor: pointer; padding: 4px 0; }
+.tool-run > summary { padding: 9px 12px; }
+.steps .tool-run { border: 0; }
+.tool-run-list { list-style: none; margin: 0; padding: 0 0 0 0; border-top: 1px solid var(--border); }
+.tool-run-list > li { border-bottom: 1px solid var(--border); padding-inline-start: 14px; }
+.tool-run-list > li:last-child { border-bottom: 0; }
+.tool-run[open] > summary .chev { transform: rotate(90deg); }
+[dir="rtl"] .tool-run[open] > summary .chev { transform: rotate(-90deg); }
+@media (max-width: 760px) { .tool-param { flex-basis: 100%; padding-inline-start: 23px; } .tool-card .tool-label { flex: 1 1 auto; } }
 .activity-now { margin: 0; font-size: 13px; color: var(--muted); padding-inline-start: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .activity-fails { margin: 2px 0 0; padding-inline-start: 24px; list-style: none; font-size: 12.5px; color: var(--bad, #e5534b); }
 .activity-fails li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -9,7 +9,8 @@ import { imageActions, playerActions, stepActions } from "./chat/result-actions"
 import type { AgentEvent } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { desktop } from "./library";
-import { t, type StringKey } from "./i18n";
+import { getLocale, t, type StringKey } from "./i18n";
+import { callDuration, formatDuration, groupCalls, groupTitle, maskSecrets, toolInfo, type ToolRun } from "./chat/tool-cards";
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
@@ -75,7 +76,7 @@ export function stepLabel(step: Step): string {
     computer_screenshot: "stepScreenshot",
     unity_screenshot: "stepScreenshot",
   };
-  const what = arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image", "target", "package", "actor", "level") || (n === "list_files" ? t("theFolder") : "");
+  const what = maskSecrets(arg(step, "path", "command", "entry", "name", "query", "url", "pattern", "prompt", "reason", "tags", "image", "target", "package", "actor", "level")) || (n === "list_files" ? t("theFolder") : "");
   const key = keyFor[n] ?? (COMPUTER.test(n) ? "stepComputer" : undefined);
   if (key === "stepComputer") return t(key, { what: n.replace(/^(computer|browser)_/, "").replace(/_/g, " ") });
   return key ? t(key, { what }) : `${n}${what ? `: ${what}` : ""}`;
@@ -172,9 +173,13 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
           <span className="chev" aria-hidden />
         </summary>
         <ol className="steps">
-          {steps.map((s) => (
-            <li key={s.call.callId} className={!s.result ? "pending" : s.result.ok ? "ok" : "fail"}>
-              {renderStep(s)}
+          {groupCalls(steps).map((run) => run.steps.length === 1 ? (
+            <li key={run.steps[0]!.call.callId} className={!run.steps[0]!.result ? "pending" : run.steps[0]!.result!.ok ? "ok" : "fail"}>
+              {renderStep(run.steps[0]!)}
+            </li>
+          ) : (
+            <li key={run.steps[0]!.call.callId} className="tool-run-item">
+              <ToolRunCard run={run} renderStep={renderStep} />
             </li>
           ))}
         </ol>
@@ -262,6 +267,37 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Several consecutive calls of one tool as one card ("3 web searches"): the header shows the state of the whole
+ * run (spinner while any runs, failures counted) and the total time; open it for each call's own card.
+ */
+function ToolRunCard({ run, renderStep }: { run: ToolRun<Step>; renderStep: (s: Step) => React.ReactNode }) {
+  const he = getLocale() === "he";
+  const running = run.steps.some((s) => !s.result);
+  const failed = run.steps.filter((s) => s.result && !s.result.ok).length;
+  const first = run.steps[0]!;
+  const last = run.steps.at(-1)!;
+  // From the first call to the last result (or now, while one still runs); a clock tick is not needed for a group line.
+  const ms = callDuration(first.call, running ? undefined : last.result, Date.now());
+  return (
+    <details className={`tool tool-card tool-run ${running ? "pending" : failed ? "fail" : "ok"}`}>
+      <summary>
+        <span className="tool-icon" aria-hidden>{toolInfo(run.name).icon}</span>
+        <span className="tool-label" dir="auto">{groupTitle(run.name, run.steps.length, he)}</span>
+        <span className="tool-state">
+          {running ? <span className="spinner" aria-hidden /> : <span aria-hidden>{failed ? "✕" : "✓"}</span>}
+          {failed > 0 && <span className="pill bad">{t("stepsFailed", { n: failed })}</span>}
+          {ms !== undefined && <bdi className="tool-time muted small" dir="ltr">{formatDuration(ms)}</bdi>}
+        </span>
+        <span className="chev" aria-hidden />
+      </summary>
+      <ol className="tool-run-list">
+        {run.steps.map((s) => <li key={s.call.callId} className={!s.result ? "pending" : s.result.ok ? "ok" : "fail"}>{renderStep(s)}</li>)}
+      </ol>
+    </details>
   );
 }
 

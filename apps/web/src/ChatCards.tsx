@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { explainCommand, parseScenePreview } from "@kesher/shared";
 import { api, withToken } from "./api";
-import { stepLabel } from "./Activity";
+import { callDuration, errorLine, formatDuration, paramSummary, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
+import { FileChips } from "./MediaView";
+import { mediaKindOf } from "./chat/chat-inline";
 import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { RichText } from "./RichText";
@@ -87,12 +89,24 @@ export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call
     );
   }
   const state = !result ? "pending" : result.ok ? "ok" : "fail";
+  const he = getLocale() === "he";
+  const info = toolInfo(call.name);
+  const param = paramSummary(call.input);
+  const hits = call.name === "web_search" && result?.ok ? searchHits(result.output) : [];
+  const out = result && !result.diff && !hits.length ? prettyOutput(result.output) : "";
   const card = (
-    <details className={`tool ${state}`}>
+    <details className={`tool tool-card ${state}`}>
       <summary>
-        <span className="tool-state" aria-hidden>{state === "pending" ? "…" : state === "ok" ? "✓" : "✕"}</span>
-        <span className="tool-label" dir="auto">{stepLabel({ call, ...(result ? { result } : {}) })}</span>
+        <span className="tool-icon" aria-hidden>{info.icon}</span>
+        <span className="tool-label" dir="auto">{toolLabel(call.name, he)}</span>
+        {/* Names and parameters are code, a query or a path: isolated so Hebrew text does not reorder them. */}
+        {param && <bdi className="tool-param" dir="ltr">{param}</bdi>}
+        <span className="tool-state" aria-label={state === "pending" ? L("רץ", "Running") : state === "ok" ? L("הסתיים", "Done") : L("נכשל", "Failed")}>
+          {state === "pending" ? <span className="spinner" aria-hidden /> : <span aria-hidden>{state === "ok" ? "✓" : "✕"}</span>}
+          <ToolClock call={call} result={result} />
+        </span>
         {pinned && <span className="tool-pinned" title={L("נעוץ: המודל מקבל את התוצאה במלואה", "Pinned: the model gets this result in full")}>📌</span>}
+        {result && !result.ok && <span className="tool-err" dir="auto">{errorLine(result.output)}</span>}
       </summary>
       {result && convId && <PinResult convId={convId} callId={call.callId} pinned={!!pinned} />}
       {result?.diff && <Diff diff={result.diff} />}
@@ -107,7 +121,30 @@ export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call
           ))}
         </div>
       )}
-      {result && !result.diff && <pre className="code" dir="ltr">{result.output}</pre>}
+      {/* Search hits: a list of titles that open the page. */}
+      {hits.length > 0 && (
+        <ol className="tool-hits">
+          {hits.map((h) => (
+            <li key={h.url}>
+              <a href={h.url} target="_blank" rel="noreferrer noopener" dir="auto">{h.title}</a>
+              <bdi className="muted small" dir="ltr">{hostOf(h.url)}</bdi>
+            </li>
+          ))}
+        </ol>
+      )}
+      {/* Files the step made: chips (download, Drive, editor). */}
+      {!!result?.files?.length && convId && (
+        <div className="tool-files">
+          {result.files.map((f) => <FileChips key={f} file={{ convId, path: f }} name={f.split("/").pop() ?? f} kind={mediaKindOf(null, f)} convId={convId} />)}
+        </div>
+      )}
+      {/* Anything else: the result as formatted JSON or text; long ones fold. */}
+      {out && (out.length > 600 ? (
+        <details className="tool-raw">
+          <summary className="muted small">{L("התוצאה המלאה", "Full result")} · <bdi dir="ltr">{out.length}</bdi></summary>
+          <pre className="code" dir="ltr">{out}</pre>
+        </details>
+      ) : <pre className="code" dir="ltr">{out}</pre>)}
     </details>
   );
   // MCP Apps: the tool's own view, open under the step (text it sends goes into the message box).
@@ -118,6 +155,30 @@ export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call
       <McpAppView app={result.app} onMessage={composeText} />
     </>
   );
+}
+
+/** The host of a link ("docs.unity3d.com"), or the text itself when it is not a URL. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * The time on a tool card: counts up every second while the call runs, then shows how long it took. Its own clock,
+ * so the chat around it does not render again for the time alone.
+ */
+export function ToolClock({ call, result }: { call: Ev<"tool_call">; result?: Ev<"tool_result"> | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (result) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [result]);
+  const ms = callDuration(call, result, now);
+  return ms === undefined ? null : <bdi className="tool-time muted small" dir="ltr">{formatDuration(ms)}</bdi>;
 }
 
 /**
