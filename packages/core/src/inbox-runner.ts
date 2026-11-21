@@ -121,6 +121,8 @@ export class TaskInbox {
   private saved: Saved = { tasks: [], today: { date: "", used: 0 } };
   private loaded = false;
   private active?: Active;
+  /** Tasks the user pressed Run on while another ran: each starts, in order, when the one before ends (one press each). */
+  private queue: Array<{ id: string; how: { here: boolean } | { approvedBy: string } }> = [];
   private timer?: ReturnType<typeof setInterval>;
   /** Asks for one message to Antigravity from a chat's agent (kept in memory: a restart drops them, nothing runs). */
   private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
@@ -625,12 +627,30 @@ export class TaskInbox {
    *
    * @param t - The task.
    */
-  private cannotRun(t: InboxTaskView): { msg: string; code: number } | undefined {
+  /** Starts the next task the user already pressed Run on, if any (a stopped or limited one is skipped with its reason). */
+  private async runNext(): Promise<void> {
+    while (this.queue.length && !this.active) {
+      const next = this.queue.shift()!;
+      try {
+        await this.run(next.id, next.how);
+        return;
+      } catch (e) {
+        const t = this.saved.tasks.find((x) => x.id === next.id);
+        if (t) {
+          t.note = `Not started from the queue: ${(e as Error).message}`;
+          await this.save();
+        }
+      }
+    }
+  }
+
+  /** @param ignoreActive - For a press that will wait in the queue: everything but "another task is running". */
+  private cannotRun(t: InboxTaskView, ignoreActive = false): { msg: string; code: number } | undefined {
     const s = this.s;
     if (!s.enabled) return { msg: "The inbox is off (Settings > Task inbox).", code: 409 };
     if (s.paused) return { msg: "The inbox is paused.", code: 409 };
     if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
-    if (this.active) return { msg: "Another task is running. One at a time.", code: 409 };
+    if (this.active && !ignoreActive) return { msg: "Another task is running. One at a time.", code: 409 };
     if (!RUNNABLE.has(t.status)) return { msg: "This task cannot be run now.", code: 409 };
     if (this.saved.quota && this.saved.quota.until > this.now()) return { msg: `Antigravity's quota ran out; it can run again at ${new Date(this.saved.quota.until).toISOString()}.`, code: 429 };
     if (this.today().used >= s.dailyCap) return { msg: `Today's limit of ${s.dailyCap} Antigravity tasks is reached (Settings > Task inbox).`, code: 429 };
@@ -767,6 +787,17 @@ export class TaskInbox {
     const t = this.find(id);
     // Google's terms for a personal plan: every message to Antigravity comes from the user's own press.
     if ("here" in how ? !how.here : !how.approvedBy) throw fail("On the phone, Run answers the PC's ask: tap Run on its card.", 403);
+    // Another task is running: this press is kept and the task starts by itself when that one ends (each task still
+    // runs only from the user's own press; nothing runs that was not pressed).
+    if (this.active && this.active.id !== id && !this.queue.some((q) => q.id === id)) {
+      const wait = this.cannotRun(t, true);
+      if (wait) throw fail(wait.msg, wait.code);
+      this.queue.push({ id, how });
+      delete t.runAsk;
+      t.note = `Queued: starts by itself after the task now running (${this.queue.length} in line).`;
+      await this.save();
+      return t;
+    }
     const no = this.cannotRun(t);
     if (no) throw fail(no.msg, no.code);
     delete t.runAsk;
@@ -798,6 +829,7 @@ export class TaskInbox {
     void this.work(t, active, wt.path, wt.base, repo).finally(() => {
       this.active = undefined;
       end();
+      void this.runNext();
     });
     return t;
   }
