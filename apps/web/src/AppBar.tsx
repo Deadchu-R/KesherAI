@@ -113,7 +113,8 @@ export function AppBar({ hash, online, sidebarOpen, onSidebar, onLocale }: { has
           ))}
           <MenuSeparator />
           <MenuItem icon="✏" onSelect={() => setEditMenu(true)}>{getLocale() === "he" ? "עריכת התפריט" : "Edit the menu"}</MenuItem>
-          <MenuItem icon="⚙" href="#/settings">{t("settings")}</MenuItem>
+          <MenuItem icon="⚙" href="#/settings">{appHome() || isRemote() ? (getLocale() === "he" ? "הגדרות המחשב" : "PC settings") : t("settings")}</MenuItem>
+          {(appHome() || isRemote()) && <MenuItem icon="❤" href="#/health">{getLocale() === "he" ? "בריאות" : "Health"}</MenuItem>}
           <MenuSeparator />
           <MenuItem icon="🌐" onSelect={() => { setLocale(getLocale() === "he" ? "en" : "he"); onLocale(); }}>{t("language")}</MenuItem>
           {/* A phone: the computer's layout (on by itself while a mouse is connected), or back to the phone's. */}

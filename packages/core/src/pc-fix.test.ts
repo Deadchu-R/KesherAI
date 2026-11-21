@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, utimesSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fixActions, runFixes, type FixContext } from "./pc-fix.js";
+import { fixActions, liveUse, runFixes, type FixContext } from "./pc-fix.js";
 
 // Each setup writes ~150 MB of model files: all removed at the end (they filled the disk before).
 const roots: string[] = [];
@@ -108,4 +108,14 @@ test("pc fix: before the card is used, KesherAI's own engine programs left runni
   killed.length = 0;
   await closeLeftOverEngines({ gpuApps: async () => apps, ownPids: [], kill: (p) => void killed.push(p), parentOf: async () => undefined });
   assert.deepEqual(killed, []);
+});
+
+test("liveUse: file names only, biggest first, own engine marked, capped at 8", () => {
+  const apps = Array.from({ length: 10 }, (_, i) => ({ pid: i + 1, name: `C:\\Users\\someone\\bin\\app${i}.exe`, bytes: i * 100 }));
+  const u = liveUse("/home/someone/models/qwen.gguf", apps, [10]);
+  assert.equal(u.model, "qwen.gguf");
+  assert.equal(u.gpuApps.length, 8);
+  assert.deepEqual(u.gpuApps[0], { pid: 10, name: "app9.exe", bytes: 900, own: true });
+  assert.ok(u.gpuApps.every((a) => !/[\\/]/.test(a.name)));
+  assert.deepEqual(liveUse(undefined, [], []), { gpuApps: [] });
 });

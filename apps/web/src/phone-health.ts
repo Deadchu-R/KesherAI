@@ -6,6 +6,28 @@ export function batteryWear(p: { batteryNowFullMah?: number; batteryDesignMah?: 
   return Math.min(100, Math.round((p.batteryNowFullMah / p.batteryDesignMah) * 100));
 }
 
+/** What the browser's `navigator.connection` reports (all optional; not every WebView has it). */
+export interface ConnectionLike { type?: string; effectiveType?: string; downlink?: number; saveData?: boolean }
+
+/** The phone's network, shaped for the Health page. */
+export interface PhoneNetwork { kind: "wifi" | "cellular" | "ethernet" | "offline" | "unknown"; speed?: string; saveData: boolean }
+
+/**
+ * The phone's network type from `navigator.connection` (cheap: no permission, no native call).
+ *
+ * @param c - `navigator.connection`, if there is one.
+ * @param online - `navigator.onLine`.
+ */
+export function phoneNetwork(c: ConnectionLike | undefined, online = true): PhoneNetwork {
+  const saveData = !!c?.saveData;
+  if (!online) return { kind: "offline", saveData };
+  const kind = c?.type === "wifi" || c?.type === "cellular" || c?.type === "ethernet" ? c.type : "unknown";
+  // WebView often hides the type but gives the speed class ("4g"); a speed class alone means mobile data is likely.
+  const speed = c?.effectiveType && /^(slow-2g|2g|3g|4g)$/.test(c.effectiveType) ? c.effectiveType.toUpperCase() : undefined;
+  const mbps = typeof c?.downlink === "number" && c.downlink > 0 && c.downlink < 10_000 ? `${Math.round(c.downlink * 10) / 10} Mbps` : undefined;
+  return { kind, ...(speed || mbps ? { speed: [speed, mbps].filter(Boolean).join(" · ") } : {}), saveData };
+}
+
 /** Days since the phone's security update ("2026-08-05"), or undefined. */
 export function patchAgeDays(patch: string | undefined, now = Date.now()): number | undefined {
   const t = patch ? Date.parse(patch) : NaN;

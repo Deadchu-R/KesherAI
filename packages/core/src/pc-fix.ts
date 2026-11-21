@@ -55,6 +55,30 @@ export function parseGpuApps(out: string): GpuApp[] {
     .map((p) => ({ pid: Number(p[0]), name: p.slice(1, -1).join(","), bytes: (Number(p[p.length - 1]) || 0) * 1024 * 1024 }));
 }
 
+/** What is using the graphics card and the model KesherAI holds in memory, for the Health page (phone too). */
+export interface LiveUse {
+  /** The loaded model's file name (never its folder), if any. */
+  model?: string;
+  /** The programs on the card, biggest first (at most 8); `own` is KesherAI's engine. */
+  gpuApps: Array<{ pid: number; name: string; bytes: number; own: boolean }>;
+}
+
+/**
+ * Shapes the live use for the page: file names only (no personal paths), biggest first, capped.
+ *
+ * @param loadedModel - The engine's loaded model path, if any.
+ * @param apps - The programs on the card.
+ * @param ownPids - The process ids that belong to KesherAI.
+ */
+export function liveUse(loadedModel: string | undefined, apps: GpuApp[], ownPids: Iterable<number>): LiveUse {
+  const own = new Set(ownPids);
+  const base = (p: string) => p.split(/[\\/]/).pop() ?? p;
+  return {
+    ...(loadedModel ? { model: base(loadedModel) } : {}),
+    gpuApps: [...apps].sort((a, b) => b.bytes - a.bytes).slice(0, 8).map((a) => ({ pid: a.pid, name: base(a.name), bytes: a.bytes, own: own.has(a.pid) })),
+  };
+}
+
 /**
  * Closes KesherAI's own engine programs left running (llama-server, sd-server, whisper-server) by themselves, before a
  * model is used (Roee: "close them before you use the card again"). Not ComfyUI's Python: a new KesherAI may be using

@@ -1,4 +1,4 @@
-import { addSample, batteryWear, chargingHabits, patchAgeDays, phoneItems as phoneRules, type PhoneReading, type PhoneSample } from "../phone-health";
+import { addSample, batteryWear, chargingHabits, patchAgeDays, phoneItems as phoneRules, phoneNetwork, type ConnectionLike, type PhoneReading, type PhoneSample } from "../phone-health";
 import { useEffect, useState } from "react";
 import { api, appHome } from "../api";
 import { getLocale, he$ } from "../i18n";
@@ -9,6 +9,7 @@ import { FixDialog } from "../FixDialog";
 import { StorageSection } from "../StorageSection";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+const PHONE_VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
 const GB = 1024 ** 3;
 const gb = (b: number) => (b >= 10 * GB ? Math.round(b / GB) : Math.round((b / GB) * 10) / 10);
 
@@ -25,6 +26,7 @@ interface Reading {
   gpus: Array<{ name: string; temp: number; memUsedBytes: number; memTotalBytes: number }>;
   uptimeHours: number;
 }
+interface Live { model?: string; gpuApps: Array<{ pid: number; name: string; bytes: number; own: boolean }> }
 interface Item { level: "ok" | "warn" | "bad"; title: string; fix: string }
 
 
@@ -53,7 +55,7 @@ function Meter({ label, used, total, note }: { label: string; used: number; tota
  * reads; every fix is a step the user takes. Works from the phone too (it shows the computer).
  */
 export function HealthPage() {
-  const [data, setData] = useState<{ reading: Reading; items: Item[] } | null>(null);
+  const [data, setData] = useState<{ reading: Reading; items: Item[]; live?: Live } | null>(null);
   const [busy, setBusy] = useState(false);
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -61,14 +63,18 @@ export function HealthPage() {
   const [fixing, setFixing] = useState(false);
   const [phone, setPhone] = useState<PhoneReading | null>(null);
   const [samples, setSamples] = useState<PhoneSample[]>([]);
+  const [appVersion, setAppVersion] = useState("");
   const [faults, setFaults] = useState<Array<{ at: string; kind: string; where: string; message: string }>>([]);
   const load = (fresh = false) => {
     setBusy(true);
-    void api<{ reading: Reading; items: Item[] }>(`/api/pc-health?lang=${getLocale()}${fresh ? "&fresh=1" : ""}`)
+    void api<{ reading: Reading; items: Item[]; live?: Live }>(`/api/pc-health?lang=${getLocale()}${fresh ? "&fresh=1" : ""}`)
       .then(setData, (e: Error) => toast(e.message))
       .finally(() => setBusy(false));
     void api<typeof faults>("/api/faults").then(setFaults, () => undefined);
     // In the phone app: the phone's own health too (Android's APIs, through the app).
+    // The phone app's own version (the Android app's updater knows it; nothing is shown in a browser).
+    const updater = (window as unknown as { Capacitor?: { Plugins?: { KesherUpdater?: { check?: (o: { url: string }) => Promise<{ currentName?: string }> } } } }).Capacitor?.Plugins?.KesherUpdater;
+    void updater?.check?.({ url: PHONE_VERSION_URL }).then((i) => setAppVersion(i.currentName ?? ""), () => undefined);
     void phonePlugin()?.health?.().then((p) => {
       setPhone(p);
       // Kept on the phone (this device only) for the charging habits over days.
@@ -149,6 +155,19 @@ export function HealthPage() {
           )}
         </section>
       )}
+      {device === "pc" && tab === "overview" && data?.live && (data.live.model || data.live.gpuApps.length > 0) && (
+        <section className="card stack">
+          <h2>{L("מודל וכרטיס המסך עכשיו", "Model and graphics card now")}</h2>
+          {data.live.model && <p className="small">{L("מודל בזיכרון:", "Model in memory:")} <bdi dir="ltr">{data.live.model}</bdi></p>}
+          <ul className="health-folders">
+            {data.live.gpuApps.map((a) => (
+              <li key={a.pid} className="row small"><span className="grow" dir="ltr">{a.name}{a.own ? " · KesherAI" : ""}</span><span dir="ltr">{a.bytes >= GB ? `${gb(a.bytes)} GB` : `${Math.round(a.bytes / 1024 ** 2)} MB`}</span></li>
+            ))}
+          </ul>
+          {/* The same "Fix it for me" as on the computer: it lists what is safe and asks before doing anything. */}
+          <button type="button" style={{ alignSelf: "start" }} onClick={() => setFixing(true)}>{L("שחרר זיכרון…", "Free memory…")}</button>
+        </section>
+      )}
       {device === "pc" && tab === "storage" && <StorageSection />}
       {device === "phone" && phone && (
         <section className="card stack">
@@ -168,7 +187,7 @@ export function HealthPage() {
           {phone.storageTotal ? <Meter label={L("אחסון", "Storage")} used={phone.storageTotal - (phone.storageFree ?? 0)} total={phone.storageTotal} note={L(`\u2066${gb(phone.storageFree ?? 0)} GB\u2069 פנויים`, `${gb(phone.storageFree ?? 0)} GB free`)} /> : null}
           {phone.ramTotal ? <Meter label={L("זיכרון", "Memory")} used={phone.ramTotal - (phone.ramFree ?? 0)} total={phone.ramTotal} note={`${gb(phone.ramTotal - (phone.ramFree ?? 0))} / ${gb(phone.ramTotal)} GB`} /> : null}
           {phone.batteryPercent !== undefined && phone.batteryPercent >= 0 && <p className="small">{L(`סוללה: \u2066${phone.batteryPercent}%\u2069${phone.charging ? " (בטעינה)" : ""} · \u2066${phone.batteryTempC}°C\u2069`, `Battery: ${phone.batteryPercent}%${phone.charging ? " (charging)" : ""} · ${phone.batteryTempC}°C`)}</p>}
-          <PhoneNumbers p={phone} />
+          <PhoneNumbers p={phone} appVersion={appVersion} />
           <PhoneHabits list={samples} />
         </section>
       )}
@@ -214,7 +233,9 @@ export function HealthPage() {
 }
 
 /** The phone's battery and system numbers (what Samsung's and Pixel's battery pages show). */
-function PhoneNumbers({ p }: { p: PhoneReading }) {
+function PhoneNumbers({ p, appVersion }: { p: PhoneReading; appVersion: string }) {
+  const net = phoneNetwork((navigator as unknown as { connection?: ConnectionLike }).connection, navigator.onLine);
+  const kinds = { wifi: "Wi-Fi", cellular: L("רשת סלולרית", "Mobile data"), ethernet: L("כבל", "Wired"), offline: L("אין רשת", "Offline"), unknown: L("לא ידוע", "Unknown") };
   const wear = batteryWear(p);
   const age = patchAgeDays(p.securityPatch);
   const thermal = [L("רגיל", "normal"), L("קל", "light"), L("בינוני", "moderate"), L("חמור", "severe"), L("קריטי", "critical"), L("חירום", "emergency"), L("כיבוי", "shutdown")];
@@ -227,6 +248,8 @@ function PhoneNumbers({ p }: { p: PhoneReading }) {
     ...(p.uptimeHours !== undefined ? [[L("מאז הפעלה מחדש", "Since restart"), p.uptimeHours >= 48 ? L(`${Math.floor(p.uptimeHours / 24)} ימים`, `${Math.floor(p.uptimeHours / 24)} days`) : L(`${p.uptimeHours} שעות`, `${p.uptimeHours} hours`)] as [string, string]] : []),
     ...(p.securityPatch ? [[L("עדכון אבטחה", "Security update"), `${p.securityPatch}${age !== undefined ? L(` (לפני ${age} ימים)`, ` (${age} days ago)`) : ""}`] as [string, string]] : []),
     ...(p.android ? [["Android", p.android] as [string, string]] : []),
+    [L("רשת", "Network"), `${kinds[net.kind]}${net.speed ? ` · ${net.speed}` : ""}${net.saveData ? L(" · חיסכון בנתונים", " · data saver") : ""}`],
+    ...(appVersion ? [[L("גרסת האפליקציה", "App version"), appVersion] as [string, string]] : []),
   ];
   if (!rows.length) return null;
   return (

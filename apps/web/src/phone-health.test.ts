@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { batteryWear, patchAgeDays, phoneItems } from "./phone-health.js";
+import { batteryWear, patchAgeDays, phoneItems, phoneNetwork } from "./phone-health.js";
 
 test("the battery's wear and the security update's age", () => {
   assert.equal(batteryWear({ batteryNowFullMah: 4100, batteryDesignMah: 5000 }), 82);
@@ -36,4 +36,12 @@ test("phone rules: wear, cycles, hot full charge, uptime, old patch, and 'fine' 
   assert.deepEqual(titles({ securityPatch: "2026-07-01" }), ["warn: The phone's security update is old"]);
   assert.deepEqual(titles({ securityPatch: "2026-03-01" }), ["bad: The phone's security update is 8 months old"]);
   assert.equal(phoneItems({ batteryCycles: 900 }, true, now)[0]!.title.includes("מחזורי טעינה"), true);
+});
+
+test("phoneNetwork: type, speed class, offline, and nothing known", () => {
+  assert.deepEqual(phoneNetwork({ type: "wifi", effectiveType: "4g", downlink: 23.456 }), { kind: "wifi", speed: "4G · 23.5 Mbps", saveData: false });
+  assert.deepEqual(phoneNetwork({ type: "cellular", saveData: true }), { kind: "cellular", saveData: true });
+  assert.deepEqual(phoneNetwork({ type: "wifi" }, false), { kind: "offline", saveData: false });
+  assert.deepEqual(phoneNetwork(undefined), { kind: "unknown", saveData: false });
+  assert.equal(phoneNetwork({ downlink: -1, effectiveType: "x" }).speed, undefined);
 });

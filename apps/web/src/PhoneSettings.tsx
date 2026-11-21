@@ -120,8 +120,13 @@ export function PhoneSettings({ onLocale }: { onLocale: () => void }) {
             <strong className="grow">{L("הגדרות הטלפון", "Phone settings")}</strong>
             <button type="button" className="icon-btn" aria-label={L("סגור", "Close")} onClick={close}>✕</button>
           </div>
-          <p className="muted small phone-set-note">{L("מה שכאן שייך למכשיר הזה בלבד. הגדרות המחשב נמצאות ב\"הגדרות\".", "What is here belongs to this device only. The computer's settings are under \"Settings\".")}</p>
+          <p className="muted small phone-set-note">{L("מה שכאן שייך למכשיר הזה בלבד. הגדרות המחשב נמצאות ב\"הגדרות המחשב\".", "What is here belongs to this device only. The computer's settings are under \"PC settings\".")}</p>
           <p className="phone-set-line" dir="auto">🟢 {L("מחובר אל", "Connected to")} <strong>{host || location.hostname}</strong> <span className="muted small" dir="ltr">{location.host}</span></p>
+          {/* Two kinds of settings, kept apart: this phone's (here) and the computer's (one tap away, named). */}
+          <div className="phone-set-group">
+            <a className="button" href="#/settings" onClick={close}>🖥 {L("הגדרות המחשב (PC settings)", "PC settings (the computer's)")}</a>
+            <a className="button" href="#/health" onClick={close}>❤ {L("בריאות המחשב והטלפון", "PC and phone health")}</a>
+          </div>
           <div className="phone-set-group">
             <div className="side-edit-title">{L("התראות", "Notifications")}</div>
             <PhoneNotifications inApp={!!home} />

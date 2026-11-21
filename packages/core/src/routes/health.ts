@@ -9,7 +9,7 @@ import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthDigest, healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
-import { fixActions, parseGpuApps, processParent, runFixes, type FixContext } from "../pc-fix.js";
+import { fixActions, liveUse, parseGpuApps, processParent, runFixes, type FixContext } from "../pc-fix.js";
 
 /**
  * The Health page: the computer's reading and what to do (fixed rules), and on request the chat model's short
@@ -48,9 +48,17 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
   setTimeout(() => void check(), 10 * 60_000).unref();
   setInterval(() => void check(), 6 * 3_600_000).unref();
 
+  // The programs on the graphics card (NVIDIA only; empty elsewhere).
+  const gpuApps = () =>
+    new Promise<ReturnType<typeof parseGpuApps>>((done) =>
+      execFile("nvidia-smi", ["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], { windowsHide: true, timeout: 8000 }, (err, out) => done(err ? [] : parseGpuApps(String(out)))),
+    );
+
   app.get<{ Querystring: { lang?: string; fresh?: string } }>("/api/pc-health", async (req) => {
     const r = await read(req.query.fresh === "1");
-    return { reading: r, items: healthItems(r, req.query.lang === "he") };
+    // The loaded model and what is on the card are live (not part of the cached reading); the phone shows them too.
+    const live = liveUse(s.engine.status().modelPath, await gpuApps(), s.guard.ownPids());
+    return { reading: r, items: healthItems(r, req.query.lang === "he"), live };
   });
 
   // "Fix it for me": what KesherAI can safely do itself, then the chosen ones (ids only; looked up again here).
@@ -69,10 +77,7 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
       ownPids: s.guard.ownPids(),
       parentOf: processParent,
       enginesDir: s.paths.engines,
-      gpuApps: () =>
-        new Promise((done) =>
-          execFile("nvidia-smi", ["--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], { windowsHide: true, timeout: 8000 }, (err, out) => done(err ? [] : parseGpuApps(String(out)))),
-        ),
+      gpuApps,
       unload: async () => {
         await s.engine.stop();
       },

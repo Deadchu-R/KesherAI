@@ -99,6 +99,80 @@
           }
         ]
       }
+    },
+    {
+      "url": "**/api/pc-health?*",
+      "method": "GET",
+      "json": {
+        "reading": {
+          "at": "2026-11-21T20:00:00Z",
+          "platform": "win32",
+          "drives": [
+            {
+              "name": "C:",
+              "freeBytes": 128849018880,
+              "totalBytes": 511101108224
+            }
+          ],
+          "kesher": [],
+          "windowsOld": false,
+          "restartPending": false,
+          "startup": [],
+          "ram": {
+            "usedBytes": 22548578304,
+            "totalBytes": 34359738368
+          },
+          "cpu": {
+            "percent": 14,
+            "temp": 52
+          },
+          "gpus": [
+            {
+              "name": "NVIDIA RTX 4070",
+              "temp": 61,
+              "memUsedBytes": 10093173145,
+              "memTotalBytes": 12884901888
+            }
+          ],
+          "uptimeHours": 30
+        },
+        "items": [
+          {
+            "level": "warn",
+            "title": "כרטיס המסך כמעט מלא",
+            "fix": "אפשר לשחרר זיכרון: \"שחרר זיכרון\" למטה."
+          }
+        ],
+        "live": {
+          "model": "qwen3-14b-q4.gguf",
+          "gpuApps": [
+            {
+              "pid": 4120,
+              "name": "llama-server.exe",
+              "bytes": 8589934592,
+              "own": true
+            },
+            {
+              "pid": 988,
+              "name": "chrome.exe",
+              "bytes": 629145600,
+              "own": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "**/api/faults",
+      "method": "GET",
+      "json": []
+    },
+    {
+      "url": "**/api/remote/links",
+      "method": "GET",
+      "json": {
+        "name": "PC-Haifa"
+      }
     }
   ],
   "boards": [
@@ -146,6 +220,55 @@
         },
         {
           "wait": ".pcs-row"
+        }
+      ]
+    },
+    {
+      "id": "PhoneHealth",
+      "title": "טלפון מחובר: מסך בריאות של המחשב (כרטיס המסך, המודל בזיכרון, מה תופס אותו, כפתור שחרר זיכרון) ובו גם בריאות הטלפון: סוללה, אחסון, רשת וגרסה",
+      "titleEn": "Phone connected: a Health screen for the PC (graphics card, loaded model, what uses it, Free memory) and the phone's own: battery, storage, network, version",
+      "route": "#/health",
+      "viewports": [
+        "phone"
+      ],
+      "height": {
+        "phone": 1300
+      },
+      "steps": [
+        {
+          "local": {
+            "key": "kesher-token",
+            "value": "design"
+          }
+        },
+        {
+          "wait": ".health-score"
+        }
+      ]
+    },
+    {
+      "id": "PhoneSettingsSplit",
+      "title": "טלפון מחובר: כפתור הגדרות הטלפון בסרגל העליון, ובו \"הגדרות המחשב\" ו\"בריאות\" כקישורים נפרדים מהגדרות המכשיר (התראות, שפה, מראה, איזה מחשב)",
+      "titleEn": "Phone connected: the Phone settings button in the top bar, with \"PC settings\" and Health kept apart from this device's own settings",
+      "route": "#/",
+      "viewports": [
+        "phone"
+      ],
+      "height": {
+        "phone": 1000
+      },
+      "steps": [
+        {
+          "local": {
+            "key": "kesher-token",
+            "value": "design"
+          }
+        },
+        {
+          "click": ".phone-settings-btn"
+        },
+        {
+          "wait": ".phone-set-note"
         }
       ]
     }
