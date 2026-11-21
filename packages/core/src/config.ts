@@ -477,6 +477,8 @@ export const KesherConfigSchema = z.object({
   downloadLimitMBps: z.number().min(0).default(0),
   /** How many downloads run at the same time (the rest wait in the queue, which the Downloads page can reorder). */
   maxConcurrentDownloads: z.number().int().min(1).max(6).default(2),
+  /** Parts per big download (1 GB or more, when the server allows ranges); 1 turns parallel parts off. */
+  downloadParts: z.number().int().min(1).max(8).default(4),
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */

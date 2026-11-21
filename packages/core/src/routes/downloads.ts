@@ -434,6 +434,17 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     return { max: v };
   });
 
+  /** How many parts a big download (1 GB or more) is split into (1 to 8; 1 turns it off). */
+  app.get("/api/downloads/parts", async () => ({ parts: s.config.downloadParts }));
+  app.put<{ Body: { parts?: number } }>("/api/downloads/parts", async (req, reply) => {
+    const v = Number(req.body?.parts);
+    if (!Number.isInteger(v) || v < 1 || v > 8) return reply.code(400).send({ error: "A whole number from 1 to 8." });
+    s.config.downloadParts = v;
+    s.downloads.parts = v;
+    await s.saveConfig();
+    return { parts: v };
+  });
+
   /** The drives downloads go to, with free space (ids and sizes only, no paths). */
   app.get("/api/downloads/drives", async () => (await driveChoices(s, "model.gguf")).map(({ id, freeGb, totalGb }) => ({ id, ...(freeGb !== undefined ? { freeGb } : {}), ...(totalGb !== undefined ? { totalGb } : {}) })));
 

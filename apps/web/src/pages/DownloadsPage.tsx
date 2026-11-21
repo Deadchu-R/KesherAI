@@ -54,6 +54,7 @@ export function DownloadsPage() {
   const all = useDownloads();
   const [drives, setDrives] = useState<Drive[]>([]);
   const [max, setMax] = useState(2);
+  const [parts, setParts] = useState(4);
   const [problem, setProblem] = useState("");
   const [dragId, setDragId] = useState<string | undefined>();
   const { running, queued, paused, finished, failed } = groupDownloads(all);
@@ -64,6 +65,7 @@ export function DownloadsPage() {
   useEffect(() => {
     loadDrives();
     void api<{ max: number }>("/api/downloads/concurrency").then((r) => setMax(r.max)).catch(() => undefined);
+    void api<{ parts: number }>("/api/downloads/parts").then((r) => setParts(r.parts)).catch(() => undefined);
     // Free space changes as files land: look again every half minute.
     const timer = setInterval(loadDrives, 30_000);
     return () => clearInterval(timer);
@@ -84,6 +86,11 @@ export function DownloadsPage() {
   const changeMax = (n: number) => {
     setMax(n);
     void act("concurrency", { max: n }, "PUT");
+  };
+
+  const changeParts = (n: number) => {
+    setParts(n);
+    void act("parts", { parts: n }, "PUT");
   };
 
   const driveName = (id: Drive["id"]) => (id === "heavy" ? L("כונן הנתונים הכבדים", "Heavy-data drive") : L("תיקיית ההורדות", "Download folder"));
@@ -120,6 +127,10 @@ export function DownloadsPage() {
         <label className="row small">
           <span className="grow">{L("כמה הורדות במקביל", "Downloads at the same time")}</span>
           <Select value={max} onChange={(e) => changeMax(Number(e.target.value))}>{[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}</Select>
+        </label>
+        <label className="row small">
+          <span className="grow">{L("חלקים בכל הורדה (קבצים מ-1 GB)", "Parts per download (files from 1 GB)")}</span>
+          <Select value={parts} onChange={(e) => changeParts(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n === 1 ? L("1 (כבוי)", "1 (off)") : n}</option>)}</Select>
         </label>
         {problem && <span className="error small">{problem}</span>}
       </section>

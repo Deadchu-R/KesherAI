@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, stat, statfs, unlink } from "node:fs/promises";
+import { mkdir, open, rename, stat, statfs, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { PARALLEL_MIN_BYTES, Pacer, RangesRefused, downloadParts, loadParts, partsFilePath, planParts, probeRanges, removeParts, saveParts } from "./parallel.js";
 import { RateMeter, classifyDownloadError, secondsLeft, type DownloadErrorKind } from "./progress.js";
 
 /** Lifecycle of a download. */
@@ -98,6 +99,18 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
 
   /** Bytes per second all downloads may use together (0: no limit), so the internet stays usable. */
   limit = 0;
+
+  /**
+   * Parts per big download (1 turns parallel parts off; at most 8). A file of {@link parallelMinBytes} or more is
+   * split into this many ranges fetched at once, when the server allows ranges.
+   */
+  parts = 4;
+
+  /** The size from which a file is downloaded in parts (1 GB; tests lower it). */
+  parallelMinBytes = PARALLEL_MIN_BYTES;
+
+  /** The first wait before a failed part is tried again; it doubles each time (tests shorten it). */
+  partBackoffMs = 1000;
 
   /** @param concurrency - How many downloads run at the same time. */
   constructor(private concurrency = 1) {
@@ -207,7 +220,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     const entry = this.jobs.get(id);
     if (!entry) return undefined;
     if (entry.job.status === "failed" || entry.job.status === "cancelled" || entry.job.status === "paused") {
-      await unlink(`${entry.req.dest}.part`).catch(() => undefined);
+      await removeParts(`${entry.req.dest}.part`);
       delete entry.job.error;
       delete entry.job.errorKind;
       this.update(entry.job, { status: "queued", speed: 0, received: 0 });
@@ -324,41 +337,20 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     let diskFull = false;
     try {
       await mkdir(dirname(req.dest), { recursive: true });
-      const existing = await stat(part).then((s) => s.size).catch(() => 0);
-      const headers: Record<string, string> = { ...req.headers, ...(existing > 0 ? { range: `bytes=${existing}-` } : {}) };
+      const room = (need: number): Promise<void> => this.ensureRoom(dirname(req.dest), need, () => {
+        diskFull = true;
+        ctrl.abort();
+      });
       delete job.etaSeconds;
       delete job.verified;
-      this.update(job, { received: existing });
 
-      const res = await fetchRetrying(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-
-      // 206 = the server honoured the Range header; anything else restarts from zero.
-      const resumed = res.status === 206 && existing > 0;
-      const start = resumed ? existing : 0;
-      const length = Number(res.headers.get("content-length") ?? NaN);
-      if (job.total === undefined && Number.isFinite(length)) job.total = start + length;
-      this.update(job, { received: start });
-      // Enough room on the disk? Stop now with a clear message instead of failing near the end.
-      const need = (job.total ?? 0) - start;
-      if (need > 0) {
-        const free = await freeSpace(dirname(req.dest));
-        // A margin of up to 256 MB (as much as the file itself for small ones: the tests' tiny downloads failed on a
-        // full disk because of the fixed margin).
-        if (free !== undefined && free < need + Math.min(256 * 1024 ** 2, need)) {
-          diskFull = true;
-          ctrl.abort();
-          throw new Error(`Not enough disk space: this needs ${gb(need)}, and only ${gb(free)} is free on that drive. Free up space or choose another models folder, then press Retry.`);
-        }
-      }
-
+      // Speed and time left: the bytes of one stream, or of all parts together.
       const meter = new RateMeter();
       let windowBytes = 0;
       let windowStart = Date.now();
-      const body = Readable.fromWeb(res.body as import("node:stream/web").ReadableStream<Uint8Array>);
-      body.on("data", (chunk: Buffer) => {
-        job.received += chunk.length;
-        windowBytes += chunk.length;
+      const onBytes = (n: number) => {
+        job.received += n;
+        windowBytes += n;
         const elapsed = Date.now() - windowStart;
         if (elapsed >= 1000) {
           const speed = meter.add(windowBytes, elapsed);
@@ -368,25 +360,42 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
           windowBytes = 0;
           windowStart = Date.now();
         }
-      });
-      // The speed limit: wait before taking more when ahead of it (checked per chunk, so a change applies at once).
-      let tStart = Date.now();
-      let tBytes = 0;
-      const throttle = new Transform({
-        transform: (chunk: Buffer, _enc, done) => {
-          const limit = this.limit / Math.max(1, this.active);
-          if (!limit) return done(null, chunk);
-          tBytes += chunk.length;
-          const ahead = (tBytes / limit) * 1000 - (Date.now() - tStart);
-          if (Date.now() - tStart > 10_000) {
-            tStart = Date.now();
-            tBytes = 0;
-          }
-          if (ahead > 5) setTimeout(() => done(null, chunk), Math.min(ahead, 5000));
-          else done(null, chunk);
-        },
-      });
-      await pipeline(body, throttle, createWriteStream(part, { flags: resumed ? "a" : "w" }));
+      };
+      // The speed limit is shared by the whole job (one stream or all its parts).
+      const pacer = new Pacer();
+      const currentLimit = () => this.limit / Math.max(1, this.active);
+
+      const viaParts = await this.runParts(entry, part, ctrl, room, onBytes, currentLimit);
+      if (viaParts === "stopped") return;
+      if (viaParts === "single") {
+        const existing = await stat(part).then((s) => s.size).catch(() => 0);
+        const headers: Record<string, string> = { ...req.headers, ...(existing > 0 ? { range: `bytes=${existing}-` } : {}) };
+        this.update(job, { received: existing });
+
+        const res = await fetchRetrying(req.url, { headers, signal: entry.abort.signal, redirect: "follow" });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+
+        // 206 = the server honoured the Range header; anything else restarts from zero.
+        const resumed = res.status === 206 && existing > 0;
+        const start = resumed ? existing : 0;
+        const length = Number(res.headers.get("content-length") ?? NaN);
+        if (job.total === undefined && Number.isFinite(length)) job.total = start + length;
+        this.update(job, { received: start });
+        // Enough room on the disk? Stop now with a clear message instead of failing near the end.
+        await room((job.total ?? 0) - start);
+
+        const body = Readable.fromWeb(res.body as import("node:stream/web").ReadableStream<Uint8Array>);
+        body.on("data", (chunk: Buffer) => onBytes(chunk.length));
+        // The speed limit: wait before taking more when ahead of it (checked per chunk, so a change applies at once).
+        const throttle = new Transform({
+          transform: (chunk: Buffer, _enc, done) => {
+            const wait = pacer.delay(chunk.length, currentLimit());
+            if (wait > 0) setTimeout(() => done(null, chunk), wait);
+            else done(null, chunk);
+          },
+        });
+        await pipeline(body, throttle, createWriteStream(part, { flags: resumed ? "a" : "w" }));
+      }
 
       if (req.sha256) {
         delete job.etaSeconds;
@@ -399,11 +408,12 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
           this.update(job, { verified: bytes });
         });
         if (actual.toLowerCase() !== req.sha256.toLowerCase()) {
-          await unlink(part).catch(() => undefined);
+          await removeParts(part);
           throw new Error(`SHA-256 mismatch: expected ${req.sha256}, got ${actual}`);
         }
       }
       await rename(part, req.dest);
+      await unlink(partsFilePath(part)).catch(() => undefined);
       delete job.etaSeconds;
       delete job.verified;
       this.update(job, { status: "done", speed: 0, received: job.total ?? job.received });
@@ -417,6 +427,83 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       delete job.verified;
       this.update(job, { status: "failed", speed: 0, error: reason, errorKind: classifyDownloadError(`${reason} ${e.code ?? ""}`.trim()) });
     }
+  }
+
+  /**
+   * Fails with a clear message when the drive cannot hold `need` more bytes (plus a margin).
+   *
+   * @param dir - Folder the file goes to.
+   * @param need - Bytes still to download.
+   * @param onFull - Called just before the error is thrown (the caller marks the job and stops its requests).
+   */
+  private async ensureRoom(dir: string, need: number, onFull: () => void): Promise<void> {
+    if (!(need > 0)) return;
+    const free = await freeSpace(dir);
+    // A margin of up to 256 MB (as much as the file itself for small ones: the tests' tiny downloads failed on a
+    // full disk because of the fixed margin).
+    if (free !== undefined && free < need + Math.min(256 * 1024 ** 2, need)) {
+      onFull();
+      throw new Error(`Not enough disk space: this needs ${gb(need)}, and only ${gb(free)} is free on that drive. Free up space or choose another models folder, then press Retry.`);
+    }
+  }
+
+  /**
+   * Downloads a big file in parallel range parts, when that applies: the setting allows it (or an earlier run left
+   * saved parts), the file is big enough, and the server answers a range request with `206`. The parts are written
+   * into one preallocated `.part` file (no joining step, no second copy on the disk, one file handle per part and
+   * nothing to rename on Windows), and their offsets are saved beside it so each part resumes alone.
+   *
+   * @returns `"done"` when the whole file is in the `.part` file, `"stopped"` after a pause or cancel (progress is
+   * saved), `"single"` when the caller should download in one stream (no ranges, too small, or the setting is 1).
+   */
+  private async runParts(
+    entry: { job: DownloadJob; req: DownloadRequest },
+    part: string,
+    ctrl: AbortController,
+    room: (need: number) => Promise<void>,
+    onBytes: (n: number) => void,
+    limit: () => number,
+  ): Promise<"done" | "stopped" | "single"> {
+    const { job, req } = entry;
+    const existing = await stat(part).then((s) => s.size).catch(() => 0);
+    const hasJson = await stat(partsFilePath(part)).then(() => true, () => false);
+    // Saved parts from an earlier run always win over the setting: the file on disk is already laid out in parts.
+    let state = hasJson ? await loadParts(part, job.total ?? existing) : undefined;
+    if (hasJson && !state) {
+      await removeParts(part);
+      this.update(job, { received: 0 });
+    } else if (!state) {
+      // A single-stream `.part` from before is finished the old way; small files and the setting 1 stay single too.
+      if (this.parts < 2 || existing > 0) return "single";
+      if (job.total !== undefined && job.total < this.parallelMinBytes) return "single";
+      const total = await probeRanges(req.url, { headers: req.headers, signal: ctrl.signal }, fetchRetrying);
+      if (total === undefined || total < this.parallelMinBytes) return "single";
+      job.total = total;
+      await room(total);
+      state = { size: total, parts: planParts(total, Math.min(8, Math.floor(this.parts))) };
+      // The saved parts first, then the file: a crash in between leaves no full-size empty file that looks finished.
+      await saveParts(part, state);
+      const fh = await open(part, "w");
+      try {
+        await fh.truncate(total);
+      } finally {
+        await fh.close();
+      }
+    }
+    if (!state) return "single";
+    job.total = state.size;
+    const have = state.parts.reduce((n, p) => n + p.done, 0);
+    this.update(job, { received: have });
+    try {
+      await downloadParts({ url: req.url, headers: req.headers, file: part, state, signal: ctrl.signal, onBytes, limit, backoffMs: this.partBackoffMs });
+    } catch (err) {
+      if (!(err instanceof RangesRefused)) throw err;
+      // A redirect target that refuses ranges: forget the parts and take the whole file in one stream.
+      await removeParts(part);
+      this.update(job, { received: 0 });
+      return "single";
+    }
+    return ctrl.signal.aborted ? "stopped" : "done";
   }
 }
 
