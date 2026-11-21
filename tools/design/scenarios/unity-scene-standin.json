@@ -1,0 +1,532 @@
+{
+ "group": "משחקים · Games",
+ "mocks": [
+  {
+   "url": "**/api/unity/scene?*",
+   "json": {
+    "objects": [
+     {
+      "id": "2",
+      "name": "Canvas",
+      "parent": "0",
+      "position": [
+       0,
+       0,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       0.01,
+       0.01,
+       0.01
+      ],
+      "readOnly": "ui",
+      "components": [
+       "Canvas",
+       "script:0cd44c1031e13a943bb63640046fad76"
+      ],
+      "ui": {
+       "size": [
+        1920,
+        1080
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 0,
+       "canvas": "screen"
+      }
+     },
+     {
+      "id": "11",
+      "name": "Background",
+      "parent": "2",
+      "position": [
+       0,
+       0,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:fe87c0e1cc204ed48ad3b37840f39efc"
+      ],
+      "ui": {
+       "size": [
+        1920,
+        1080
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 1,
+       "color": [
+        0.09,
+        0.1,
+        0.2,
+        1
+       ]
+      }
+     },
+     {
+      "id": "21",
+      "name": "Title",
+      "parent": "2",
+      "position": [
+       0,
+       420,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:f4688fdb7df04437aeb418b961361dc5"
+      ],
+      "ui": {
+       "size": [
+        1200,
+        160
+       ],
+       "pivot": [
+        0.5,
+        1
+       ],
+       "order": 2,
+       "text": {
+        "value": "Project Boss Rush",
+        "size": 110,
+        "color": [
+         1,
+         0.78,
+         0.25,
+         1
+        ],
+        "align": "center",
+        "valign": "middle"
+       }
+      }
+     },
+     {
+      "id": "31",
+      "name": "Menu",
+      "parent": "2",
+      "position": [
+       0,
+       -80,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:59f8146938fff824cb5fd77236b75775"
+      ],
+      "ui": {
+       "size": [
+        520,
+        460
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 3
+      }
+     },
+     {
+      "id": "41",
+      "name": "PlayButton",
+      "parent": "31",
+      "position": [
+       0,
+       170,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:fe87c0e1cc204ed48ad3b37840f39efc"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 4,
+       "color": [
+        0.85,
+        0.3,
+        0.25,
+        1
+       ]
+      }
+     },
+     {
+      "id": "46",
+      "name": "Text (TMP)",
+      "parent": "41",
+      "position": [
+       0,
+       0,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:f4688fdb7df04437aeb418b961361dc5"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 5,
+       "text": {
+        "value": "שחק · Play",
+        "size": 48,
+        "color": [
+         1,
+         1,
+         1,
+         1
+        ],
+        "align": "center",
+        "valign": "middle"
+       }
+      }
+     },
+     {
+      "id": "51",
+      "name": "SettingsButton",
+      "parent": "31",
+      "position": [
+       0,
+       20,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:fe87c0e1cc204ed48ad3b37840f39efc"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 6,
+       "color": [
+        0.25,
+        0.32,
+        0.55,
+        1
+       ]
+      }
+     },
+     {
+      "id": "56",
+      "name": "Text (TMP)",
+      "parent": "51",
+      "position": [
+       0,
+       0,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:f4688fdb7df04437aeb418b961361dc5"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 7,
+       "text": {
+        "value": "הגדרות · Settings",
+        "size": 48,
+        "color": [
+         1,
+         1,
+         1,
+         1
+        ],
+        "align": "center",
+        "valign": "middle"
+       }
+      }
+     },
+     {
+      "id": "61",
+      "name": "QuitButton",
+      "parent": "31",
+      "position": [
+       0,
+       -130,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:fe87c0e1cc204ed48ad3b37840f39efc"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 8,
+       "color": [
+        0.25,
+        0.32,
+        0.55,
+        1
+       ]
+      }
+     },
+     {
+      "id": "66",
+      "name": "Text (TMP)",
+      "parent": "61",
+      "position": [
+       0,
+       0,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:f4688fdb7df04437aeb418b961361dc5"
+      ],
+      "ui": {
+       "size": [
+        520,
+        120
+       ],
+       "pivot": [
+        0.5,
+        0.5
+       ],
+       "order": 9,
+       "text": {
+        "value": "יציאה · Quit",
+        "size": 48,
+        "color": [
+         1,
+         1,
+         1,
+         1
+        ],
+        "align": "center",
+        "valign": "middle"
+       }
+      }
+     },
+     {
+      "id": "71",
+      "name": "Version",
+      "parent": "2",
+      "position": [
+       930,
+       -510,
+       0
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ],
+      "scale": [
+       1,
+       1,
+       1
+      ],
+      "readOnly": "ui",
+      "components": [
+       "script:f4688fdb7df04437aeb418b961361dc5"
+      ],
+      "ui": {
+       "size": [
+        300,
+        50
+       ],
+       "pivot": [
+        1,
+        0
+       ],
+       "order": 10,
+       "text": {
+        "value": "v0.3",
+        "size": 32,
+        "color": [
+         1,
+         1,
+         1,
+         0.5
+        ],
+        "align": "center",
+        "valign": "middle"
+       }
+      }
+     }
+    ],
+    "view": "2d",
+    "bounds": {
+     "min": [
+      -9.6,
+      -5.4,
+      0
+     ],
+     "max": [
+      9.6,
+      5.4,
+      0
+     ]
+    },
+    "mtime": 0
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "UnitySceneStandInUi",
+   "title": "Unity: סצנה בלי Unity מציגה ממשק (תמונות, טקסטים, כפתורים) ומתמקדת בתוכן",
+   "titleEn": "Unity: a scene without Unity shows its UI (images, texts, buttons), framed on the content",
+   "route": "#/p/model-editor/editor?up=D%3A%2FGames%2FBossRush&us=Assets%2FScenes%2FMainMenu.unity",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": "iframe"
+    },
+    {
+     "waitMs": 3000
+    }
+   ]
+  }
+ ]
+}

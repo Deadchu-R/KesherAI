@@ -4,7 +4,8 @@ import { createReadStream, existsSync } from "node:fs";
 import { mkdir, open, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join, relative, resolve, sep } from "node:path";
-import { mergeMoves, readUnityScene, type UnityMove, type UnityObject } from "../unity-scene.js";
+import { mergeMoves, readUnityScene, sceneView, type UnityMove, type UnityObject, type UnitySpriteRect, type UnityView } from "../unity-scene.js";
+import { PREFAB_DEPTH, prefabSources } from "../unity-prefabs.js";
 
 /**
  * A Unity scene without Unity (SceneStandIn board): its scenes listed, one read for the stand-in, and the moves made in
@@ -37,17 +38,22 @@ async function pool<T>(items: readonly T[], n: number, fn: (x: T) => Promise<voi
   }));
 }
 
-/** The first bytes of a file (a .meta's guid is on its second line). */
-async function head(file: string, bytes = 400): Promise<string> {
+/** The first bytes of a file, raw (a PNG's size is in its first 24). */
+async function headBytes(file: string, bytes: number): Promise<Buffer> {
   const h = await open(file, "r").catch(() => undefined);
-  if (!h) return "";
+  if (!h) return Buffer.alloc(0);
   try {
     const buf = Buffer.alloc(bytes);
     const { bytesRead } = await h.read(buf, 0, bytes, 0);
-    return buf.toString("utf8", 0, bytesRead);
+    return buf.subarray(0, bytesRead);
   } finally {
     await h.close();
   }
+}
+
+/** The first bytes of a file as text (a .meta's guid is on its second line). */
+async function head(file: string, bytes = 400): Promise<string> {
+  return (await headBytes(file, bytes)).toString("utf8");
 }
 
 /**
@@ -126,6 +132,53 @@ function packageAssets(dir: string): Promise<Map<string, string>> {
   return packageCache.get(dir)!;
 }
 
+/** A sprite's pivot by its alignment (Center, TopLeft, Top, TopRight, Left, Right, BottomLeft, Bottom, BottomRight). */
+const ALIGN: Array<[number, number]> = [[0.5, 0.5], [0, 1], [0.5, 1], [1, 1], [0, 0.5], [1, 0.5], [0, 0], [0.5, 0], [1, 0]];
+const pivotOf = (alignment: number, custom: number[]): [number, number] => (alignment === 9 ? [custom[0] ?? 0.5, custom[1] ?? 0.5] : ALIGN[alignment] ?? [0.5, 0.5]);
+const xy = (s: string | undefined) => [Number(/x: (-?[\d.e+-]+)/.exec(s ?? "")?.[1] ?? 0.5), Number(/y: (-?[\d.e+-]+)/.exec(s ?? "")?.[1] ?? 0.5)];
+
+/**
+ * A picture's sprites from its .meta: pixels per unit, the single sprite (its pivot; its rect from the PNG's size) and
+ * a sheet's sprites (Sprite Mode: Multiple) by file id: internalID (2019.3+), or the old name tables.
+ *
+ * @param dir - The project.
+ * @param file - The picture ("Assets/….png").
+ * @returns fileID → the sprite's rect, pivot and pixels per unit (the single sprite under "21300000").
+ */
+async function spritesOf(dir: string, file: string): Promise<Map<string, UnitySpriteRect>> {
+  const out = new Map<string, UnitySpriteRect>();
+  const metaFile = join(dir, `${file}.meta`);
+  if (((await stat(metaFile).catch(() => undefined))?.size ?? Infinity) > 8 * 1024 * 1024) return out;
+  const meta = await readFile(metaFile, "utf8").catch(() => "");
+  const ppu = Number(/spritePixelsToUnits: ([\d.]+)/.exec(meta)?.[1] ?? 100) || 100;
+  // The PNG's own size (its IHDR): the single sprite is the whole picture.
+  const png = /\.png$/i.test(file) ? await headBytes(join(dir, file), 32) : undefined;
+  const whole = png && png.length >= 24 && png.toString("latin1", 12, 16) === "IHDR" ? [png.readUInt32BE(16), png.readUInt32BE(20)] : undefined;
+  out.set("21300000", { ppu, pivot: pivotOf(Number(/spriteAlignment: (\d+)/.exec(meta)?.[1] ?? 0), xy(/spritePivot: (\{[^}]*\})/.exec(meta)?.[1])), ...(whole ? { rect: [0, 0, whole[0]!, whole[1]!] as [number, number, number, number] } : {}) });
+  const sheet = meta.split(/^\s*spriteSheet:\s*$/m)[1] ?? "";
+  const byName = new Map<string, UnitySpriteRect>();
+  for (const chunk of sheet.split(/^\s*- serializedVersion: \d+\s*\n(?=\s*name: )/m).slice(1, 5001)) {
+    const name = /^\s*name: (.*)$/m.exec(chunk)?.[1]?.trim();
+    const r = /rect:\s*\n(?:\s*serializedVersion: \d+\s*\n)?\s*x: (-?[\d.]+)\s*\n\s*y: (-?[\d.]+)\s*\n\s*width: ([\d.]+)\s*\n\s*height: ([\d.]+)/.exec(chunk);
+    if (!name || !r) continue;
+    const sprite: UnitySpriteRect = { ppu, rect: [Number(r[1]), Number(r[2]), Number(r[3]), Number(r[4])], pivot: pivotOf(Number(/^\s*alignment: (\d+)/m.exec(chunk)?.[1] ?? 0), xy(/^\s*pivot: (\{[^}]*\})/m.exec(chunk)?.[1])) };
+    byName.set(name, sprite);
+    const id = /^\s*internalID: (-?\d+)/m.exec(chunk)?.[1];
+    if (id && id !== "0") out.set(id, sprite);
+  }
+  // Older projects name a sheet's sprites by file id in fileIDToRecycleName or internalIDToNameTable.
+  for (const m of meta.matchAll(/^\s+(213\d{5}): (.+)$/gm)) if (byName.has(m[2]!.trim())) out.set(m[1]!, byName.get(m[2]!.trim())!);
+  for (const m of meta.matchAll(/- first:\s*\n\s*213: (-?\d+)\s*\n\s*second: (.+)/g)) if (byName.has(m[2]!.trim())) out.set(m[1]!, byName.get(m[2]!.trim())!);
+  return out;
+}
+
+/** The project's sorting layers (ProjectSettings/TagManager.asset): uniqueID → its place in the list (the draw order). */
+async function sortingLayers(dir: string): Promise<Map<number, number>> {
+  const text = await readFile(join(dir, "ProjectSettings", "TagManager.asset"), "utf8").catch(() => "");
+  const ids = [...(text.split(/^\s*m_SortingLayers:\s*$/m)[1] ?? "").matchAll(/^\s*uniqueID: (-?\d+)/gm)].map((m) => Number(m[1]));
+  return new Map(ids.map((id, i) => [id, i]));
+}
+
 /**
  * The model each object shows: a mesh's file, a placed model itself, or for a placed prefab the first mesh in it.
  *
@@ -133,7 +186,7 @@ function packageAssets(dir: string): Promise<Map<string, string>> {
  * @param objects - The scene's objects (changed in place).
  */
 async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> {
-  const guids = new Set(objects.flatMap((o) => [...(o.look && "guid" in o.look ? [o.look.guid] : []), ...(o.sprite ? [o.sprite] : []), ...(o.components ?? []).filter((c) => c.startsWith("script:")).map((c) => c.slice(7))]));
+  const guids = new Set(objects.flatMap((o) => [...(o.look && "guid" in o.look ? [o.look.guid] : []), ...(o.sprite ? [o.sprite] : []), ...(o.ui?.image ? [o.ui.image] : []), ...(o.tilemap?.sprites ?? []).flatMap((t) => (t.guid ? [t.guid] : [])), ...(o.components ?? []).filter((c) => c.startsWith("script:")).map((c) => c.slice(7))]));
   const files = await assetsOf(dir, guids);
   // Prefabs: their first mesh (a built-in one, or a model), one level deep.
   const inPrefab = new Map<string, UnityObject["look"]>();
@@ -149,10 +202,32 @@ async function resolveLooks(dir: string, objects: UnityObject[]): Promise<void> 
     } else if (mesh) inPrefab.set(g, { guid: mesh[2]! });
   }
   const more = await assetsOf(dir, new Set([...inPrefab.values()].flatMap((l) => (l && "guid" in l ? [l.guid] : []))));
+  // 2D: each picture's sprites (rects and pivots from its .meta), read once per picture; the sorting layers' order.
+  const sheets = new Map<string, Promise<Map<string, UnitySpriteRect>>>();
+  const spriteIn = async (file: string, fileID: string) => {
+    if (!sheets.has(file)) sheets.set(file, spritesOf(dir, file));
+    const all = await sheets.get(file)!;
+    return all.get(fileID) ?? all.get("21300000") ?? {};
+  };
+  const layers = await sortingLayers(dir);
   for (const o of objects) {
     // Scripts by their file's name (as the Inspector shows them), a sprite by its picture's file.
     if (o.components) o.components = o.components.map((c) => (c.startsWith("script:") ? (files.get(c.slice(7))?.split("/").pop() ?? "Script") : c));
     if (o.sprite) { const f = files.get(o.sprite); if (f && /\.(png|jpe?g|webp)$/i.test(f)) o.sprite = f; else delete o.sprite; }
+    if (o.spriteInfo) {
+      if (o.sprite) Object.assign(o.spriteInfo, await spriteIn(o.sprite, o.spriteInfo.fileID));
+      o.spriteInfo.sort[0] = layers.get(o.spriteInfo.sort[0]) ?? 0;
+    }
+    if (o.tilemap) {
+      for (const t of o.tilemap.sprites) {
+        const f = t.guid ? files.get(t.guid) : undefined;
+        delete t.guid;
+        if (f && /\.(png|jpe?g|webp)$/i.test(f)) Object.assign(t, { path: f }, await spriteIn(f, t.fileID));
+      }
+      o.tilemap.sort[0] = layers.get(o.tilemap.sort[0]) ?? 0;
+    }
+    // A UI Image's sprite: its picture (a sliced or packed sprite shows its whole picture).
+    if (o.ui?.image) { const f = files.get(o.ui.image); if (f && /\.(png|jpe?g|webp)$/i.test(f)) o.ui.image = f; else delete o.ui.image; }
     if (!o.look || !("guid" in o.look)) continue;
     const g = o.look.guid;
     const f = files.get(g);
@@ -237,11 +312,11 @@ export const MAX_KEPT_CHARS = 64 * 1024 * 1024;
 /** A kept line longer than this is cut (names, positions and references are short; long lines are data blobs). */
 const MAX_LINE_CHARS = 16 * 1024;
 /** The classes the stand-in reads (readUnityScene); every other document keeps only its first line. */
-const KEEP = new Set(["1", "4", "224", "33", "114", "212", "1001"]);
+const KEEP = new Set(["1", "4", "224", "33", "114", "212", "223", "1001", "156049354", "483693784", "1839735485"]);
 
 /**
  * Reads a scene file as a stream, keeping only the documents the stand-in uses (GameObjects, Transforms, mesh
- * filters, scripts, sprites, placed prefabs) and the first line of the rest: a scene with baked meshes, terrain or
+ * filters, scripts, sprites, canvases, grids and tilemaps, placed prefabs) and the first line of the rest: a scene with baked meshes, terrain or
  * lighting data shrinks to a small part, and is never held whole.
  *
  * @param file - The .unity file.
@@ -280,31 +355,76 @@ export async function readSceneText(file: string, budgetMs = READ_MS, maxKept = 
   return parts.join("\n");
 }
 
+/** The time allowed to read the prefabs a scene places (past it: the ones read so far are expanded). */
+const PREFABS_MS = 6_000;
+/** The most prefab files read for one scene, the biggest one read, and all their kept text together. */
+const MAX_PREFABS = 600;
+const MAX_PREFAB_BYTES = 20 * 1024 * 1024;
+const MAX_PREFAB_CHARS = 96 * 1024 * 1024;
+
 /**
- * One scene's objects for the stand-in (their looks resolved to models and built-in shapes), read only. Streamed,
- * with a size and a time guard; when finding the models takes too long the objects come without them (`partial`).
+ * The prefabs a scene places, and the prefabs inside those (up to PREFAB_DEPTH levels), as text: found through their
+ * .meta files and streamed like a scene (only the documents the stand-in uses). Fills `out` as it goes, so a caller
+ * that stops waiting still has the ones read.
+ *
+ * @param dir - The project.
+ * @param text - The scene's kept text.
+ * @param out - Prefab GUID → its kept text (filled in).
+ * @param until - When to stop (Date.now() time).
+ */
+async function readPrefabs(dir: string, text: string, out: Map<string, string>, until: number): Promise<void> {
+  let wanted = new Set(prefabSources(text));
+  let kept = 0;
+  for (let depth = 0; depth < PREFAB_DEPTH && wanted.size && Date.now() < until; depth++) {
+    const files = [...(await assetsOf(dir, wanted))].filter(([g, f]) => /\.prefab$/i.test(f) && !out.has(g));
+    const next = new Set<string>();
+    await pool(files, 8, async ([g, f]) => {
+      if (out.size >= MAX_PREFABS || kept > MAX_PREFAB_CHARS || Date.now() > until) return;
+      const size = (await stat(join(dir, f)).catch(() => undefined))?.size ?? Infinity;
+      if (size > MAX_PREFAB_BYTES) return;
+      const t = await readSceneText(join(dir, f), Math.max(1, until - Date.now()), MAX_PREFAB_BYTES).catch(() => "");
+      if (!t) return;
+      out.set(g, t);
+      kept += t.length;
+      for (const s of prefabSources(t)) if (!out.has(s)) next.add(s);
+    });
+    wanted = next;
+  }
+}
+
+/**
+ * One scene's objects for the stand-in (their looks resolved to models and built-in shapes; placed prefabs expanded
+ * into their objects; UI laid out), read only. Streamed, with a size and a time guard; when finding the models takes
+ * too long the objects come without them (`partial`), and prefabs not read in time stay one box each.
  *
  * @param project - The project's folder.
  * @param scene - "Assets/….unity" (or "Packages/….unity") inside it.
  * @returns The objects and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big, 415
  *   binary, 504 too slow).
  */
-export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number; partial?: boolean; note?: string }> {
+export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number; partial?: boolean; note?: string } & UnityView> {
   const { dir, file } = await paths(project, scene);
   const st = await stat(file!).catch(() => undefined);
   if (!st?.isFile()) throw err(404, "No such scene.");
   if (st.size > MAX_SCENE_BYTES) throw err(413, `The scene is too big to read here (${Math.round(st.size / 1048576)} MB; up to ${MAX_SCENE_BYTES / 1048576} MB).`);
-  const objects = readUnityScene(await readSceneText(file!));
+  const text = await readSceneText(file!);
+  // The placed prefabs' files, for as long as PREFABS_MS allows (a huge project's index can take longer: then the
+  // prefabs read by then are expanded and the others stay boxes).
+  const prefabs = new Map<string, string>();
+  let wait: NodeJS.Timeout | undefined;
+  const read = await Promise.race([readPrefabs(dir, text, prefabs, Date.now() + PREFABS_MS).then(() => "ok" as const), new Promise<"late">((r) => { wait = setTimeout(() => r("late"), PREFABS_MS + 500); })]);
+  clearTimeout(wait);
+  const objects = readUnityScene(text, new Map(prefabs));
   let timer: NodeJS.Timeout | undefined;
   const late = new Promise<"late">((r) => { timer = setTimeout(() => r("late"), LOOKS_MS); });
   const done = await Promise.race([resolveLooks(dir, objects).then(() => "ok" as const), late]);
   clearTimeout(timer);
   if (done === "late") {
     // resolveLooks may still be changing the objects: hand out copies without the unresolved parts.
-    const plain = objects.map((o) => { const { look, sprite, components, ...rest } = o; return { ...rest, ...(look && "builtin" in look ? { look } : {}), ...(components ? { components: components.map((c) => (c.startsWith("script:") ? "Script" : c)) } : {}), ...(sprite && !/^[0-9a-f]{32}$/.test(sprite) ? { sprite } : {}) }; });
-    return { objects: plain, mtime: st.mtimeMs, partial: true, note: "The models are still being found (a big project): the objects show as boxes for now. Open the scene again in a minute." };
+    const plain = objects.map((o) => { const { look, sprite, components, ui, ...rest } = o; const { image, ...face } = ui ?? ({} as NonNullable<typeof ui>); return { ...rest, ...(look && "builtin" in look ? { look } : {}), ...(components ? { components: components.map((c) => (c.startsWith("script:") ? "Script" : c)) } : {}), ...(sprite && !/^[0-9a-f]{32}$/.test(sprite) ? { sprite } : {}), ...(ui ? { ui: { ...face, ...(image && !/^[0-9a-f]{32}$/.test(image) ? { image } : {}) } } : {}) }; });
+    return { objects: plain, ...sceneView(plain), mtime: st.mtimeMs, partial: true, note: "The models are still being found (a big project): the objects show as boxes for now. Open the scene again in a minute." };
   }
-  return { objects, mtime: st.mtimeMs };
+  return { objects, ...sceneView(objects), mtime: st.mtimeMs, ...(read === "late" ? { partial: true, note: "Some prefabs were not read in time (a big project): they show as boxes for now. Open the scene again in a minute." } : {}) };
 }
 
 /**

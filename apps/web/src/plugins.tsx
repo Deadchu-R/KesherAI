@@ -157,9 +157,9 @@ async function guestCall(g: GuestSceneInput, pluginId: string, uses: string[], m
     case "info":
       return { pluginId, locale: getLocale(), conversationId: null, uses, apiVersion: 3, guest: g.role };
     case "editor.input": {
-      const r = await api<{ nodes?: unknown[]; objects?: unknown[] }>(`/api/guest/scene?${q}`);
+      const r = await api<{ nodes?: unknown[]; objects?: unknown[]; view?: string; bounds?: unknown }>(`/api/guest/scene?${q}`);
       const name = g.scene.split("/").pop();
-      return { ...(g.engine === "godot" ? { godot: { scene: g.scene, nodes: r.nodes ?? [] } } : { unity: { scene: g.scene, objects: r.objects ?? [] } }), name, guest: { role: g.role } };
+      return { ...(g.engine === "godot" ? { godot: { scene: g.scene, nodes: r.nodes ?? [] } } : { unity: { scene: g.scene, objects: r.objects ?? [], view: r.view, bounds: r.bounds } }), name, guest: { role: g.role } };
     }
     case "standin.asset": {
       const res = await fetch(withToken(`/api/guest/scene/asset?${q}&path=${encodeURIComponent(String(p.path ?? ""))}`));
@@ -241,8 +241,9 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           // A Unity scene without Unity: its objects (from the scene's YAML).
           if (unity && !input) {
             need("model");
-            const r = await api<{ objects: unknown[] }>(`/api/unity/scene?project=${encodeURIComponent(unity.project)}&scene=${encodeURIComponent(unity.scene)}`);
-            return { unity: { scene: unity.scene, objects: r.objects }, name: unity.scene.split("/").pop() };
+            // view / bounds: where to look first (2D on a UI-only scene, framed on what is visible).
+            const r = await api<{ objects: unknown[]; view?: string; bounds?: unknown }>(`/api/unity/scene?project=${encodeURIComponent(unity.project)}&scene=${encodeURIComponent(unity.scene)}`);
+            return { unity: { scene: unity.scene, objects: r.objects, view: r.view, bounds: r.bounds }, name: unity.scene.split("/").pop() };
           }
           // An Unreal level without Unreal: its actors, through the Bridge plugin (kept, so it opens with Unreal closed).
           if (unreal && !input) {

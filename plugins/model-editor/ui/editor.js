@@ -30,6 +30,7 @@ const HE = {
   inGodot: "בסצנה הפתוחה ב-Godot (Ctrl+Z אחד; שומרים שם)", movedThere: "זזו גם ב-Godot, נשארו כמו שם",
   searchPh: "🔍 חיפוש…", lock: "נעל", unlock: "שחרר", aModel: "מודל", aPicture: "תמונה", aScript: "סקריפט", aScene: "סצנה", aPlaced: "הוצב",
   toUnreal: "שמור לרמה", standInUnreal: "תחליף של רמת Unreal: מזיזים, ואז \"שמור לרמה\"", standInUnrealKept: "הרמה כפי שנקראה לאחרונה (Unreal סגור): מזיזים, ואז \"שמור לרמה\"",
+  readOnly: "ממשק וילדים של פריפאב: עורכים ב-Unity", readOnlyTile: "טיילמאפים: עורכים ב-Unity", inactiveB: "◌ כבויים", inactiveT: "הצג אובייקטים שכבויים ב-Unity",
   unrealMoved: "זז ב-Unreal", unrealSaved: "נשמר", unrealClash: "זזו גם ב-Unreal, נשארו כמו שם",
   pickFaces: "🎯 בחירה בלחיצה", angle: "זווית", separate: "הפרד", pickHint: "לחץ על המודל: הבחירה מתפשטת עד פינה חדה. Shift מוסיף.", picked: (n) => `נבחרו ${n} משולשים`, separated: "הבחירה הפכה לחלק משלה",
   texPromptPh: "✨ טקסטורה ממילים: עץ אלון ישן, קטיפה אדומה…", texAi: "✨", texMaking: "מודל התמונות מצייר טקסטורה… (במחשב)", texDone: "הטקסטורה החדשה על החלק", needWords: "כתוב איזו טקסטורה",
@@ -154,17 +155,39 @@ function setQuad(on) {
 })();
 
 // ---------- open ----------
-function frame(obj) {
-  const box = new THREE.Box3().setFromObject(obj);
+/**
+ * The box around what is visible and drawn: hidden objects, invisible stand-in holders and anything under a scale of 0
+ * (Unity's collapsed objects) are left out; when nothing is left, the whole object's box.
+ */
+function contentBox(obj) {
+  const box = new THREE.Box3();
+  obj.updateWorldMatrix(true, true);
+  const walk = (o) => {
+    if (!o.visible || o.scale.x === 0 || o.scale.y === 0 || o.scale.z === 0) return;
+    if ((o.isMesh || o.isLine) && o.geometry && !(Array.isArray(o.material) ? false : o.material?.visible === false)) {
+      // An instanced mesh (a Tilemap's cells): the box of all its instances.
+      if (o.isInstancedMesh) { if (!o.boundingBox) o.computeBoundingBox(); box.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld)); }
+      else { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); }
+    }
+    o.children.forEach(walk);
+  };
+  walk(obj);
+  return box.isEmpty() ? new THREE.Box3().setFromObject(obj) : box;
+}
+function frame(obj, given) {
+  const box = given ?? contentBox(obj);
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3()).length() || 1, center = box.getCenter(new THREE.Vector3());
   controls.target.copy(center);
   // 2D: straight on, from far with a narrow lens, so it reads as flat (as the engines' 2D views).
   // The 2D grid sits under the scene (Godot's origin is a corner, not the middle), the 3D one at the origin.
   grid.position.set(flat2d ? Math.round(center.x) : 0, flat2d ? Math.round(center.y) : 0, flat2d ? -0.01 : 0);
-  if (flat2d) camera.position.copy(center).add(new THREE.Vector3(0, 0, (size * 0.7) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))));
+  // 2D: the box fits the view (its width or its height, whichever is tighter), as an orthographic camera fits it.
+  const s3 = box.getSize(new THREE.Vector3()), tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const dist = Math.max(s3.y / 2 / tan, s3.x / 2 / (tan * (camera.aspect || 1)), 0.05) * 1.1 + s3.z / 2;
+  if (flat2d) camera.position.copy(center).add(new THREE.Vector3(0, 0, dist));
   else camera.position.copy(center).add(new THREE.Vector3(0.6, 0.45, 0.8).multiplyScalar(size * 1.2));
-  camera.near = size / 200; camera.far = size * 50; camera.updateProjectionMatrix();
+  camera.near = size / 200; camera.far = Math.max(size * 50, flat2d ? dist * 4 : 0); camera.updateProjectionMatrix();
 }
 // ---------- 2D and 3D (the engines' 2D view: flat, straight on, pan and zoom only) ----------
 let flat2d = false;
@@ -517,33 +540,213 @@ $("toGodot").onclick = async () => {
 // Unity: x right, y up, z forward (left-handed); here z points back: z and the quaternion's x and y change sign.
 const fromUnity = (p, q) => ({ p: new THREE.Vector3(p[0], p[1], -p[2]), q: new THREE.Quaternion(-q[0], -q[1], q[2], q[3]) });
 const toUnity = (o) => ({ position: [o.position.x, o.position.y, -o.position.z], rotation: [-o.quaternion.x, -o.quaternion.y, o.quaternion.z, o.quaternion.w], scale: [o.scale.x, o.scale.y, o.scale.z] });
-function loadUnityStandIn(objects) {
+// Off in Unity (m_IsActive 0): hidden unless "Inactive" is on (Unity's Scene view hides them too).
+let showInactive = false;
+/** The Unity stand-in's objects that are off in Unity, shown or hidden. */
+function applyInactive() {
+  model?.traverse((o) => { if (o.userData.inactive) o.visible = showInactive; });
+  $("inactive").classList.toggle("on", showInactive);
+  $("inactive").setAttribute("aria-pressed", String(showInactive));
+  renderParts();
+}
+$("inactive").onclick = () => { showInactive = !showInactive; applyInactive(); };
+/** Textures by picture, shared by every sprite and tile cut from it. */
+const unityTextures = new Map();
+function unityTexture(path) {
+  if (!unityTextures.has(path)) {
+    unityTextures.set(path, kesher.call("standin.asset", { path }).then(async (bytes) => {
+      const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+      try {
+        const tex = await new THREE.TextureLoader().loadAsync(url);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.magFilter = THREE.NearestFilter; // pixel art stays sharp
+        return tex;
+      } finally { URL.revokeObjectURL(url); }
+    }));
+  }
+  return unityTextures.get(path);
+}
+/** A flat quad for one sprite of a picture: its rect's size in units around its pivot, its UVs on that rect. */
+function spriteGeo(tex, s, size) {
+  const W = tex.image.width, H = tex.image.height;
+  const [x, y, w, h] = s.rect ?? [0, 0, W, H];
+  const ppu = s.ppu || 100;
+  const [sw, sh] = size ?? [w / ppu, h / ppu];
+  const [px, py] = s.pivot ?? [0.5, 0.5];
+  const g = new THREE.PlaneGeometry(sw, sh).translate((0.5 - px) * sw, (0.5 - py) * sh, 0);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, (x + uv.getX(i) * w) / W, (y + uv.getY(i) * h) / H);
+  return g;
+}
+/**
+ * A SpriteRenderer: its sprite cut from the picture by the .meta's rect (a sheet's sprite), at its pixels per unit and
+ * pivot (a sliced / tiled one at its drawn size), tinted, flipped, drawn in its sorting order.
+ */
+async function showUnitySprite(o, path, s) {
+  try {
+    const tex = await unityTexture(path);
+    const m = new THREE.Mesh(spriteGeo(tex, s, s.size), new THREE.MeshBasicMaterial({ map: tex, color: unityColor(s.color), opacity: s.color?.[3] ?? 1, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    m.scale.set(s.flip?.[0] ? -1 : 1, s.flip?.[1] ? -1 : 1, 1);
+    m.renderOrder = o.userData.sortRank ?? 1;
+    m.userData.generated = true;
+    o.material = new THREE.MeshBasicMaterial({ visible: false });
+    o.add(m);
+  } catch (e) {
+    msg(`${path}: ${e.message}`, true);
+  }
+}
+/** A Tilemap's cells: one instanced quad per sprite, each cell at its grid place (anchor in the cell), tinted. Read only. */
+async function showTilemap(o, t) {
+  o.material = new THREE.MeshBasicMaterial({ visible: false });
+  const cells = new Map();
+  for (let i = 0; i < t.tiles.length; i += 4) { const k = t.tiles[i + 2]; if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i); }
+  for (const [k, list] of cells) {
+    const s = t.sprites[k];
+    if (!s?.path) continue;
+    try {
+      const tex = await unityTexture(s.path);
+      const im = new THREE.InstancedMesh(spriteGeo(tex, s), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }), list.length);
+      const at = new THREE.Matrix4();
+      list.forEach((i, n) => {
+        at.makeTranslation((t.tiles[i] + t.anchor[0]) * t.cell[0], (t.tiles[i + 1] + t.anchor[1]) * t.cell[1], 0);
+        im.setMatrixAt(n, at);
+        im.setColorAt(n, unityColor(t.colors[t.tiles[i + 3]] ?? [1, 1, 1]));
+      });
+      im.computeBoundingBox();
+      im.computeBoundingSphere();
+      im.renderOrder = o.userData.sortRank ?? 1;
+      im.userData.generated = true;
+      o.add(im);
+    } catch (e) {
+      msg(`${s.path}: ${e.message}`, true);
+    }
+  }
+  stats();
+}
+/** A SpriteShape: its spline's outline (the filled shape is made by Unity). */
+function shapeLine(sh) {
+  const pts = sh.points.map(([x, y]) => new THREE.Vector3(x, y, 0));
+  const line = new (sh.closed ? THREE.LineLoop : THREE.Line)(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x7ee08a }));
+  line.userData.generated = true;
+  return line;
+}
+/** Unity's colours are sRGB (0–1). */
+const unityColor = ([r, g, b] = [1, 1, 1]) => new THREE.Color().setRGB(r, g, b, THREE.SRGBColorSpace);
+/**
+ * A uGUI object (RectTransform): a flat rect of its size around its pivot, drawn in the Hierarchy's order over the
+ * scene (as a Screen Space canvas draws). An Image shows its colour and sprite; a text is drawn on a canvas texture.
+ */
+function uiNode(u) {
+  const [w, h] = u.ui.size, [px, py] = u.ui.pivot;
+  const geo = new THREE.PlaneGeometry(Math.max(Math.abs(w), 1e-3), Math.max(Math.abs(h), 1e-3)).translate((0.5 - px) * w, (0.5 - py) * h, 0);
+  const o = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: unityColor(u.ui.color), transparent: true, opacity: u.ui.color?.[3] ?? 1, side: THREE.DoubleSide, depthTest: false, depthWrite: false, visible: !!u.ui.color }));
+  // UI draws over the 2D world (sprites and tilemaps take 1 … 99 999).
+  o.renderOrder = 100000 + u.ui.order * 2;
+  o.userData.uiOrder = o.renderOrder;
+  if (u.ui.image) void showUiImage(o, u.ui.image);
+  if (u.ui.text?.value) o.add(uiText(u.ui.text, w, h, px, py, o.renderOrder + 1));
+  return o;
+}
+/** An Image's sprite (its whole picture; a 9-sliced one is stretched), tinted by its colour. */
+async function showUiImage(o, path) {
+  try {
+    const bytes = await kesher.call("standin.asset", { path });
+    const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+    const tex = await new THREE.TextureLoader().loadAsync(url);
+    URL.revokeObjectURL(url);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    o.material.map = tex;
+    o.material.visible = true;
+    o.material.needsUpdate = true;
+  } catch (e) {
+    msg(`${path}: ${e.message}`, true);
+  }
+}
+/**
+ * A TextMeshPro / Text label: its words wrapped in its rect at its font size and colour (auto size: shrunk to fit),
+ * drawn on a canvas texture of at most 512 px a side.
+ */
+function uiText(t, w, h, px, py, order) {
+  const W = Math.max(Math.abs(w), 8), H = Math.max(Math.abs(h), t.size * 1.3, 8);
+  const k = Math.min(2, 512 / Math.max(W, H));
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
+  const ctx = c.getContext("2d");
+  ctx.direction = /[֐-׿؀-ۿ]/.test(t.value) ? "rtl" : "ltr";
+  const lay = (size) => {
+    ctx.font = `${size * k}px system-ui, "Segoe UI", Arial, sans-serif`;
+    const lines = [];
+    for (const para of t.value.split("\n")) {
+      let line = "";
+      for (const word of para.split(/(\s+)/)) {
+        const next = line + word;
+        if (line.trim() && ctx.measureText(next).width > c.width) { lines.push(line.trimEnd()); line = word.trimStart(); } else line = next;
+      }
+      lines.push(line);
+    }
+    return lines;
+  };
+  let size = t.size, lines = lay(size);
+  while (t.auto && size > 6 && (lines.length * size * 1.2 > H || lines.some((l) => ctx.measureText(l).width > c.width))) lines = lay((size *= 0.9));
+  const lh = size * 1.2 * k, total = lines.length * lh;
+  const top = t.valign === "top" ? 0 : t.valign === "bottom" ? c.height - total : (c.height - total) / 2;
+  ctx.fillStyle = `rgba(${t.color.slice(0, 3).map((v) => Math.round(v * 255)).join(",")},${t.color[3] ?? 1})`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = t.align;
+  const x = t.align === "center" ? c.width / 2 : t.align === "right" ? c.width : 0;
+  lines.forEach((l, i) => ctx.fillText(l, x, top + lh * (i + 0.5)));
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, H).translate((0.5 - px) * W, (0.5 - py) * H, 0), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false }));
+  m.renderOrder = order;
+  m.userData.uiOrder = order;
+  m.userData.generated = true;
+  return m;
+}
+function loadUnityStandIn(objects, view) {
   if (model) { choose(null); model.removeFromParent(); }
   const root = new THREE.Group();
   root.name = "Scene";
   const byId = new Map();
   const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true, opacity: 0.85 });
   // Unity's built-in meshes at their sizes (a cylinder and a capsule are 2 high, a plane 10 × 10, a quad faces you).
+  const sorted = [];
   const builtin = { cube: () => new THREE.BoxGeometry(1, 1, 1), sphere: () => new THREE.SphereGeometry(0.5, 24, 12), cylinder: () => new THREE.CylinderGeometry(0.5, 0.5, 2, 24), capsule: () => new THREE.CapsuleGeometry(0.5, 1, 6, 16), plane: () => new THREE.PlaneGeometry(10, 10).rotateX(-Math.PI / 2), quad: () => new THREE.PlaneGeometry(1, 1) };
   for (const u of objects) {
-    const real = u.look?.builtin && builtin[u.look.builtin]?.();
-    const geo = real ?? (u.model ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15));
-    const o = new THREE.Mesh(geo, real ? new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8, side: u.look.builtin === "quad" || u.look.builtin === "plane" ? THREE.DoubleSide : THREE.FrontSide }) : mat(u.prefab ? 0xb48cff : /light/i.test(u.name) ? 0xffd25a : /camera/i.test(u.name) ? 0x6aa8ff : 0x8a8e99));
+    let o;
+    if (u.ui) o = uiNode(u);
+    else {
+      const real = u.look?.builtin && builtin[u.look.builtin]?.();
+      const geo = real ?? (u.model ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15));
+      o = new THREE.Mesh(geo, real ? new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8, side: u.look.builtin === "quad" || u.look.builtin === "plane" ? THREE.DoubleSide : THREE.FrontSide }) : mat(u.prefab ? 0xb48cff : /light/i.test(u.name) ? 0xffd25a : /camera/i.test(u.name) ? 0x6aa8ff : 0x8a8e99));
+    }
     o.name = u.name;
     const { p, q } = fromUnity(u.position, u.rotation);
     o.position.copy(p); o.quaternion.copy(q); o.scale.set(...u.scale);
     o.userData.unity = { id: u.id, name: u.name, from: { position: u.position, rotation: u.rotation, scale: u.scale } };
+    // UI (laid out by anchors) and a placed prefab's inner objects are not moved from here (their moves would be wrong).
+    if (u.readOnly) o.userData.readOnly = u.readOnly;
+    if (u.active === false) { o.userData.inactive = true; o.visible = showInactive; }
     byId.set(u.id, o);
     if (u.model) void showModel(o, u.model, true);
-    if (u.sprite) void showSprite(o, u.sprite, 100);
+    if (u.sprite && u.spriteInfo) void showUnitySprite(o, u.sprite, u.spriteInfo);
+    else if (u.sprite) void showSprite(o, u.sprite, 100);
+    if (u.tilemap) void showTilemap(o, u.tilemap);
+    if (u.shape) o.add(shapeLine(u.shape));
+    if (u.spriteInfo || u.tilemap) sorted.push({ o, sort: u.tilemap?.sort ?? u.spriteInfo.sort, z: u.position[2] });
     // The outliner: Unity's Inspector, its components in order (a script by its file's name).
     o.userData.icon = iconOf(u.components?.find((c) => c !== "Transform" && c !== "MeshFilter" && c !== "MeshRenderer") ?? (u.model || u.look ? "Mesh" : ""));
-    o.userData.attached = [["↔", "Transform", ""], ...(u.components ?? []).map((c) => [iconOf(c), c, c === "MeshFilter" && u.look?.builtin ? u.look.builtin : ""]), ...(u.model ? [["🔷", u.model.split("/").pop(), u.prefab ? T("aPlaced", "placed") : ""]] : [])];
+    o.userData.attached = [["↔", u.ui ? "RectTransform" : "Transform", u.ui ? u.ui.size.map((v) => Math.round(v)).join(" × ") : ""], ...(u.components ?? []).map((c) => [iconOf(c), c, c === "MeshFilter" && u.look?.builtin ? u.look.builtin : ""]), ...(u.model ? [["🔷", u.model.split("/").pop(), u.prefab ? T("aPlaced", "placed") : ""]] : []), ...(u.ui?.text?.value ? [["🔤", u.ui.text.value.slice(0, 60), ""]] : [])];
   }
   // Parents after all are made (the file need not list a parent first).
   for (const u of objects) (byId.get(u.parent) ?? root).add(byId.get(u.id));
-  // A 2D scene: sprites, and no 3D meshes or models.
-  is2dScene = objects.some((u) => u.components?.includes("SpriteRenderer")) && !objects.some((u) => u.model || u.components?.includes("MeshFilter"));
+  // 2D draw order: sorting layer, then order in layer, then farther (Unity's larger z) first; not by depth.
+  sorted.sort((a, b) => a.sort[0] - b.sort[0] || a.sort[1] - b.sort[1] || b.z - a.z).forEach((s, i) => (s.o.userData.sortRank = 1 + i));
+  // A 2D scene: sprites or UI, and no 3D meshes or models (the server says; older servers: the same rule here).
+  is2dScene = view ? view === "2d" : objects.some((u) => u.ui || u.components?.includes("SpriteRenderer")) && !objects.some((u) => u.model || u.components?.includes("MeshFilter"));
+  $("inactive").hidden = !objects.some((u) => u.active === false);
+  $("inactive").classList.toggle("on", showInactive);
+  $("inactive").title = T("inactiveT", "Show the objects that are off in Unity");
   model = root; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   meshes = [];
@@ -554,6 +757,11 @@ function loadUnityStandIn(objects) {
   $("toChat").hidden = true;
   $("toGodot").onclick = saveUnity;
   msg(T("standInUnity", "A stand-in of the Unity scene: move things, then \"Save for Unity\"; Unity takes them in when the scene is open"));
+}
+/** The box the server found around what is visible (Unity's space), in ours: the first view frames it. */
+function unityBounds(b) {
+  if (!b?.min || !b?.max) return null;
+  return new THREE.Box3(new THREE.Vector3(b.min[0], b.min[1], -b.max[2]), new THREE.Vector3(b.max[0], b.max[1], -b.min[2]));
 }
 // ---------- an Unreal level without Unreal ----------
 // Unreal: centimetres, Z up, left-handed; three.js: metres, Y up, right-handed. Swapping Y and Z does both turns, and
@@ -668,7 +876,8 @@ async function saveUnity() {
   const moves = [];
   model?.traverse((o) => {
     const u = o.userData.unity;
-    if (!u) return;
+    // UI and a prefab's inner objects are never queued (their YAML is not a plain Transform move).
+    if (!u || o.userData.readOnly) return;
     const to = toUnity(o);
     const moved = to.position.some((x, i) => Math.abs(x - u.from.position[i]) > 1e-4) || to.scale.some((x, i) => Math.abs(x - u.from.scale[i]) > 1e-4) || new THREE.Quaternion(...to.rotation).angleTo(new THREE.Quaternion(...u.from.rotation)) > 2e-3;
     if (moved) moves.push({ id: u.id, name: u.name, from: u.from, to });
@@ -686,7 +895,15 @@ async function open() {
   try {
     const input = await kesher.call("editor.input");
     if (input?.guest) enterGuest(input.guest.role);
-    if (input?.unity) { name = input.name; $("name").textContent = name; loadUnityStandIn(input.unity.objects); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
+    if (input?.unity) {
+      name = input.name; $("name").textContent = name;
+      loadUnityStandIn(input.unity.objects, input.unity.view);
+      set2D(is2dScene);
+      // The first view frames what is visible (the server's box: inactive and scale-0 objects left out).
+      const box = unityBounds(input.unity.bounds);
+      if (box) frame(model, box);
+      $("dims").hidden = false; stats(); startTogether(); return;
+    }
     if (input?.unreal) { name = input.name; $("name").textContent = name; loadUnrealStandIn(input.unreal); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
     if (input?.godot) { name = input.name; $("name").textContent = name; loadStandIn(input.godot.nodes); set2D(is2dScene); $("dims").hidden = false; stats(); startTogether(); return; }
     if (!input?.bytes) return;
@@ -752,7 +969,13 @@ function renderParts() {
     lock.textContent = obj.userData.locked ? "🔒" : "🔓";
     lock.title = obj.userData.locked ? T("unlock", "Unlock") : T("lock", "Lock");
     lock.onclick = (e) => { e.stopPropagation(); obj.userData.locked = !obj.userData.locked; if (obj.userData.locked && chosen === obj) gizmo.detach(); renderParts(); };
-    li.append(tw, ic, n, eye, ...(obj.userData.icon !== undefined ? [lock] : []));
+    // UI and a prefab's inner objects: a fixed lock (they are edited in Unity).
+    const ro = document.createElement("span");
+    ro.className = "ro";
+    ro.textContent = "🔒";
+    ro.title = obj.userData.readOnly === "tilemap" ? T("readOnlyTile", "Tilemaps: edit in Unity") : T("readOnly", "UI and prefab children: edit in Unity");
+    ro.setAttribute("aria-label", ro.title);
+    li.append(tw, ic, n, eye, ...(obj.userData.readOnly ? [ro] : obj.userData.icon !== undefined ? [lock] : []));
     li.onclick = () => choose(obj);
     // A double-click frames it (Blender's and Unity's outliner).
     li.ondblclick = () => { choose(obj); frame(obj); };
@@ -777,7 +1000,8 @@ function choose(obj) {
   // The chosen object is outlined by a box (Blender's orange outline, simply) and gets the gizmo.
   glow = new THREE.BoxHelper(chosen, 0xffa040);
   scene.add(glow);
-  if (!chosen.userData.locked && !guestRole) gizmo.attach(chosen);
+  if (!chosen.userData.locked && !chosen.userData.readOnly && !guestRole) gizmo.attach(chosen);
+  if (chosen.userData.readOnly) msg(chosen.userData.readOnly === "tilemap" ? T("readOnlyTile", "Tilemaps: edit in Unity") : T("readOnly", "UI and prefab children: edit in Unity"));
   const mesh = chosen.isMesh ? chosen : chosen.getObjectByProperty("isMesh", true);
   const m = mesh && matOf(mesh);
   if (m?.color) $("color").value = `#${m.color.getHexString()}`;
@@ -803,7 +1027,7 @@ function showChannels() {
 }
 document.querySelectorAll("[data-ch]").forEach((inp) => {
   inp.onchange = () => {
-    if (!chosen) return;
+    if (!chosen || chosen.userData.readOnly) return showChannels();
     const v = Number(inp.value);
     if (!Number.isFinite(v)) return showChannels();
     remember();
@@ -845,7 +1069,10 @@ renderer.domElement.addEventListener("pointerdown", (e) => (down = [e.clientX, e
 renderer.domElement.addEventListener("pointerup", (e) => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4 || !model || gizmo.dragging || gizmo.axis) return;
   const ray = rayAt(e);
-  const hit = ray.intersectObjects(meshes.filter((p) => p.mesh.visible && (!picking || !isGenerated(p.mesh))).map((p) => p.mesh), false)[0];
+  const hits = ray.intersectObjects(meshes.filter((p) => p.mesh.visible && (!picking || !isGenerated(p.mesh))).map((p) => p.mesh), false);
+  // UI draws over the scene in its own order: the topmost drawn UI rect under the pointer wins.
+  const ui = hits.filter((h) => h.object.userData.uiOrder !== undefined && h.object.material?.visible !== false);
+  const hit = picking || !ui.length ? hits[0] : ui.reduce((a, b) => (b.object.userData.uiOrder > a.object.userData.uiOrder ? b : a));
   if (picking) { if (hit && hit.faceIndex !== undefined) pickAt(hit.object, hit.faceIndex, e.shiftKey); else { picked = null; showPicked(); } return; }
   let o = hit?.object ?? null;
   while (o && o.parent && (o.userData.generated || o.parent.userData.generated)) o = o.parent;
