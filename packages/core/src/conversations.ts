@@ -17,7 +17,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, editQueued, sendNowQueued, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
+import { branding, editQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
@@ -1099,7 +1099,7 @@ export class ConversationManager {
    * @param text - Message.
    * @throws Error if the conversation does not exist or is busy.
    */
-  async send(id: string, text: string, opts: { web?: boolean; steer?: boolean; guest?: { name: string; tools: boolean } } = {}): Promise<{ queued?: number }> {
+  async send(id: string, text: string, opts: { web?: boolean; steer?: boolean; voice?: boolean; guest?: { name: string; tools: boolean } } = {}): Promise<{ queued?: number }> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     // A new worktree's setup (npm install…) finishes before the model starts working in it.
@@ -1168,7 +1168,7 @@ export class ConversationManager {
     const next = session.queued.shift();
     if (!next) return;
     session.queueChanged();
-    await this.sendNow(id, next.text, (next.data as { web?: boolean; guest?: { name: string; tools: boolean } }) ?? {}).catch((err: Error) => {
+    await this.sendNow(id, next.text, (next.data as { web?: boolean; voice?: boolean; guest?: { name: string; tools: boolean } }) ?? {}).catch((err: Error) => {
       session.queued.unshift(next);
       session.queueChanged();
       console.warn(`[queue] ${id}: ${err.message}`);
@@ -1288,7 +1288,7 @@ export class ConversationManager {
     session.systemPrompt = await this.promptFor(conversation, notes);
   }
 
-  private async sendNow(id: string, text: string, opts: { web?: boolean; guest?: { name: string; tools: boolean } }): Promise<void> {
+  private async sendNow(id: string, text: string, opts: { web?: boolean; voice?: boolean; guest?: { name: string; tools: boolean } }): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
@@ -1331,7 +1331,9 @@ export class ConversationManager {
     // "@name" (the composer's helper mention): the user chose that helper for this, so the model is told to hand it over.
     const named = /(?:^|\s)@([\p{L}\p{N}_.-]{2,60})/u.exec(text)?.[1];
     const helper = named ? this.helperAgents(id).find((a) => a.name.toLowerCase() === named.toLowerCase()) ?? (["lookup", "research", "build"].includes(named.toLowerCase()) ? { name: named.toLowerCase() } : undefined) : undefined;
-    if (helper) context = `(The user named the helper "${helper.name}": hand this task to it with delegate${["lookup", "research", "build"].includes(helper.name) ? `, type "${helper.name}"` : `, agent "${helper.name}"`}, giving it everything it needs.)`;
+    // A voice turn with no small voice model (voice mode reads this answer aloud as it is written): short and speakable.
+    if (opts.voice) context = VOICE_BRIEF;
+    if (helper) context = `${context ? `${context}\n\n` : ""}(The user named the helper "${helper.name}": hand this task to it with delegate${["lookup", "research", "build"].includes(helper.name) ? `, type "${helper.name}"` : `, agent "${helper.name}"`}, giving it everything it needs.)`;
     // "[Unity project: Name — C:\path]" (Unity page → Open in chat): that project, already on the user's list, is opened
     // to the chat's file tools too, so list_files/read_file see it like the unity_* tools do.
     const unityHeader = /^\s*\[Unity project: [^\]\n]*? — ([^\]\n]+)\]/.exec(text);

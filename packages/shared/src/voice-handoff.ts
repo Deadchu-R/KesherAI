@@ -8,6 +8,8 @@
  * share it: the state machine returns effects as data and the page carries them out.
  */
 
+import { nextSentences } from "./voice-stream.js";
+
 /** Latency targets for one voice turn, in milliseconds (measured from the end of the user's speech). */
 export const VOICE_TARGETS = {
   /** End of speech detected (silence after the last word). */
@@ -26,6 +28,9 @@ export const VOICE_TARGETS = {
 
 /** Longest spoken reply, in characters (about two short sentences). */
 export const VOICE_REPLY_MAX = 280;
+
+/** Without a small model, the main model's answer is said sentence by sentence up to about this many characters. */
+export const VOICE_LIVE_MAX = 700;
 
 /** What the voice loop is doing. */
 export type VoicePhase = "ready" | "hearing" | "transcribing" | "replying" | "speaking";
@@ -51,6 +56,11 @@ export interface VoiceState {
   lastSeq: number;
   /** What the user said last (sent on to the main model if the voice model fails). */
   heard: string;
+  /** A direct answer said as it is written: how far its text was read, and how many characters were said. */
+  liveFrom: number;
+  liveSaid: number;
+  /** The user stopped the direct answer (barge-in) or it got too long: the rest is not said. */
+  hushed: boolean;
 }
 
 /** Something that happened, from the microphone, the speech engines, the voice model or the chat. */
@@ -71,6 +81,8 @@ export type VoiceEvent =
   | { type: "bargeIn" }
   /** The approval requests waiting in the chat now. */
   | { type: "approvals"; ids: string[] }
+  /** The main model's answer as it is written (all the text so far); said sentence by sentence in a direct job. */
+  | { type: "answerText"; text: string }
   /** The main model finished a turn (not busy any more) with this answer. */
   | { type: "mainAnswer"; seq: number; text: string }
   /** The spoken summary of a finished job. */
@@ -83,8 +95,11 @@ export type VoiceEffect =
   | { do: "transcribe" }
   /** Ask the small voice model (`working`: a job is still running, so it can say so). */
   | { do: "ask"; text: string; working: boolean }
-  /** Send a message to the chat (the main model works on it as a normal turn, visible on screen). */
-  | { do: "handoff"; text: string }
+  /**
+   * Send a message to the chat (the main model works on it as a normal turn, visible on screen). `brief`: a direct
+   * voice turn (no small model), so the main model is asked to answer short and speakable ({@link VOICE_BRIEF}).
+   */
+  | { do: "handoff"; text: string; brief?: true }
   /** Turn a finished answer into one or two spoken sentences. */
   | { do: "summarize"; text: string; direct: boolean };
 
@@ -94,7 +109,15 @@ export const VOICE_LINES = {
   done: { he: "זה מוכן.", en: "It's done." },
   approval: { he: "מחכה לאישור שלך על המסך.", en: "Waiting for your approval on screen." },
   approvalByVoice: { he: "אישורים נותנים רק על המסך. הוא מחכה שם.", en: "Approvals are only given on screen. It's waiting there." },
+  rest: { he: "את השאר אפשר לקרוא על המסך.", en: "The rest is on screen." },
 } as const;
+
+/**
+ * The hint added (hidden, for that turn only) to a voice turn the main model answers itself because there is no
+ * small voice model: the answer is read aloud as it is written, so its first sentence should carry the point.
+ */
+export const VOICE_BRIEF =
+  "(Voice conversation: the user hears this answer read aloud as you write it. Start with the answer itself in one short sentence, then at most a few more short spoken sentences. No tables, headings or long lists; if code or long details are needed, put them after the spoken part, they stay on screen.)";
 
 /**
  * A fresh voice loop.
@@ -104,7 +127,7 @@ export const VOICE_LINES = {
  * @param o.lastSeq - The latest answer already in the chat (not read aloud).
  */
 export function voiceStart(o: { he: boolean; fallback: boolean; lastSeq: number }): VoiceState {
-  return { he: o.he, phase: "ready", job: "none", direct: false, fallback: o.fallback, announced: [], queue: [], lastSeq: o.lastSeq, heard: "" };
+  return { he: o.he, phase: "ready", job: "none", direct: false, fallback: o.fallback, announced: [], queue: [], lastSeq: o.lastSeq, heard: "", liveFrom: 0, liveSaid: 0, hushed: false };
 }
 
 const line = (s: VoiceState, k: keyof typeof VOICE_LINES) => VOICE_LINES[k][s.he ? "he" : "en"];
@@ -129,8 +152,34 @@ function free(s: VoiceState, fx: VoiceEffect[]): VoiceState {
 
 /** Sends the words to the main model as a job. */
 function handoff(s: VoiceState, text: string, direct: boolean, fx: VoiceEffect[]): VoiceState {
-  fx.push({ do: "handoff", text });
-  return { ...s, job: s.job === "approval" ? "approval" : "running", direct };
+  fx.push({ do: "handoff", text, ...(direct ? { brief: true as const } : {}) });
+  return { ...s, job: s.job === "approval" ? "approval" : "running", direct, liveFrom: 0, liveSaid: 0, hushed: false };
+}
+
+/**
+ * Says the next sentences of a direct answer (as it is written, or its end once done), each as its own line so the
+ * first starts early; while the loop waits for the answer it speaks at once. Past {@link VOICE_LIVE_MAX} it says that
+ * the rest is on screen and stops.
+ */
+function sayLive(s: VoiceState, text: string, final: boolean, fx: VoiceEffect[]): VoiceState {
+  if (s.hushed) return s;
+  const r = nextSentences(text, s.liveFrom, final, s.he);
+  let n: VoiceState = { ...s, liveFrom: r.next };
+  for (const sentence of r.sentences) {
+    if (n.liveSaid > 0 && n.liveSaid + sentence.length > VOICE_LIVE_MAX) {
+      n = say({ ...n, hushed: true, phase: n.phase === "replying" ? "ready" : n.phase }, line(s, "rest"), fx);
+      break;
+    }
+    n = { ...n, liveSaid: n.liveSaid + sentence.length };
+    n = say(n.phase === "replying" ? { ...n, phase: "ready" } : n, sentence, fx);
+  }
+  return n;
+}
+
+/** Speech over the voice: stop now, drop the waiting lines and the rest of a direct answer. */
+function bargeIn(s: VoiceState, fx: VoiceEffect[]): VoiceState {
+  fx.push({ do: "stopSpeaking" });
+  return { ...s, queue: [], hushed: s.hushed || (s.direct && s.job !== "none") };
 }
 
 /**
@@ -150,8 +199,7 @@ export function voiceStep(s: VoiceState, e: VoiceEvent): { state: VoiceState; ef
   let n = s;
   switch (e.type) {
     case "speechStart":
-      if (s.phase === "speaking") fx.push({ do: "stopSpeaking" });
-      n = { ...s, phase: "hearing" };
+      n = { ...(s.phase === "speaking" ? bargeIn(s, fx) : s), phase: "hearing" };
       break;
     case "speechEnd":
       if (s.phase !== "hearing") break;
@@ -205,8 +253,8 @@ export function voiceStep(s: VoiceState, e: VoiceEvent): { state: VoiceState; ef
       break;
     case "bargeIn":
       if (s.phase === "speaking") {
-        fx.push({ do: "stopSpeaking" });
-        n = { ...s, phase: s.direct && s.job !== "none" ? "replying" : "ready", queue: [] };
+        n = bargeIn(s, fx);
+        n = { ...n, phase: n.direct && n.job !== "none" ? "replying" : "ready" };
       }
       break;
     case "approvals": {
@@ -221,12 +269,22 @@ export function voiceStep(s: VoiceState, e: VoiceEvent): { state: VoiceState; ef
       }
       break;
     }
+    case "answerText":
+      if (s.direct && s.job !== "none") n = sayLive(s, e.text, false, fx);
+      break;
     case "mainAnswer":
       if (e.seq <= s.lastSeq) break;
       n = { ...s, lastSeq: e.seq };
       if (s.job === "none") break;
-      fx.push({ do: "summarize", text: e.text, direct: s.direct });
-      n = { ...n, job: "none", direct: false, ...(s.phase === "replying" && s.direct ? { phase: "ready" as const } : {}) };
+      if (s.direct) {
+        // No small model: the answer is said sentence by sentence (what was not said while it was written).
+        n = { ...n, job: "none", direct: false, ...(s.phase === "replying" ? { phase: "ready" as const } : {}) };
+        n = sayLive(n, e.text, true, fx);
+        n = { ...n, liveFrom: 0, liveSaid: 0, hushed: false };
+        break;
+      }
+      fx.push({ do: "summarize", text: e.text, direct: false });
+      n = { ...n, job: "none", direct: false };
       break;
     case "summary":
       n = say(s, e.text, fx);

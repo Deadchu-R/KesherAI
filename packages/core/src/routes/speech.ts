@@ -87,13 +87,21 @@ export async function speechRoutes(app: FastifyInstance, s: KesherServices): Pro
   // The recording arrives as raw WAV bytes.
   app.addContentTypeParser(["audio/wav", "audio/x-wav", "application/octet-stream"], { parseAs: "buffer", bodyLimit: 60 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 
-  /** Turns a WAV recording into text: `POST` the bytes as `audio/wav`, `?lang=he` optional. */
-  app.post<{ Querystring: { lang?: string } }>("/api/speech/transcribe", async (req, reply) => {
+  /**
+   * Turns a WAV recording into text: `POST` the bytes as `audio/wav`, `?lang=he` optional. `?partial=1` (voice mode's
+   * live words while the user talks): only through a loaded local model, never the cloud or the slower program;
+   * `{ partial: false }` when it cannot, so the page stops asking.
+   */
+  app.post<{ Querystring: { lang?: string; partial?: string } }>("/api/speech/transcribe", async (req, reply) => {
     const wav = req.body as Buffer;
     if (!Buffer.isBuffer(wav) || wav.length < 1000) return reply.code(400).send({ error: "Send a WAV recording as audio/wav." });
     const lang = req.query.lang ?? s.config.speech.language;
     const local = await s.whisper.status();
     const usesLocal = s.config.speech.stt === "local" || (s.config.speech.stt === "auto" && (local.engine && local.model || !clouds().length));
+    if (req.query.partial === "1") {
+      const text = usesLocal && local.engine && local.model ? await s.whisper.quick(wav, lang) : undefined;
+      return text === undefined ? { text: "", partial: false } : { text, partial: true };
+    }
     if (usesLocal && (!local.engine || !local.model)) return reply.code(409).send({ error: "needs-setup", code: "needs-setup", ...local });
     try {
       return await transcribeWith({ whisper: s.whisper, speech: () => s.config.speech, providers: () => s.config.providers }, wav, ".wav", lang);

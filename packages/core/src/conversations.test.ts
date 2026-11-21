@@ -625,3 +625,23 @@ test("web filter: blocked sites join the chat's own, safe search, .onion only wi
   assert.deepEqual(withFilter({ never: ["a.com"], depth: "deep" }, { safeSearch: "off", onion: true, blocked: ["b.com", "a.com"] }, true), { never: ["a.com", "b.com"], depth: "deep", safeSearch: "off", onion: true });
   assert.equal(withFilter(undefined, { safeSearch: "moderate", onion: true, blocked: [] }, false)?.onion, undefined, "no Tor, no .onion");
 });
+
+test("a voice turn without a small voice model asks the main model for a short spoken answer (that turn only)", async () => {
+  const { server } = await setup();
+  try {
+    const c = (await server.app.inject({ method: "POST", url: "/api/conversations", payload: { kind: "chat", modelId: "fake/m" } })).json() as { id: string };
+    const answers = async (n: number) =>
+      until(async () => {
+        const d = (await server.app.inject({ method: "GET", url: `/api/conversations/${c.id}` })).json() as { events: Array<{ type: string; text?: string }>; session: { status: string } };
+        const a = d.events.filter((e) => e.type === "assistant");
+        return a.length === n && d.session.status === "idle" ? a.map((e) => e.text ?? "") : undefined;
+      });
+    await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "what time is it", voice: true } });
+    // The scripted model repeats what it got: the hint went with the message, hidden from the chat's own line.
+    assert.match((await answers(1))[0]!, /Voice conversation: the user hears this answer read aloud/);
+    await server.app.inject({ method: "POST", url: `/api/conversations/${c.id}/messages`, payload: { text: "and now typed" } });
+    assert.doesNotMatch((await answers(2))[1]!, /Voice conversation/);
+  } finally {
+    await server.close();
+  }
+});

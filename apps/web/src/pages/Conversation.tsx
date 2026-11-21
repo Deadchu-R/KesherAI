@@ -755,8 +755,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
             .filter((e): e is Ev<"approval_request"> => e.type === "approval_request" && !!info?.pendingApprovals.includes(e.requestId))
             .map((e) => (e.control ? <ControlApproval key={e.seq} convId={id} ev={e} pending /> : <ApprovalCard key={e.seq} convId={id} ev={e} pending />))}
           {...(lastAnswer ? { answer: { seq: lastAnswer.seq, text: lastAnswer.text } } : {})}
-          onSend={async (text) => {
-            await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text } });
+          live={Object.values(streaming).at(-1) ?? ""}
+          onSend={async (text, brief) => {
+            // brief: a voice turn the main model answers itself (no small voice model), asked to answer short.
+            await api(`/api/conversations/${id}/messages`, { method: "POST", body: { text, ...(brief ? { voice: true } : {}) } });
           }}
           onClose={() => setVoice(false)}
         />

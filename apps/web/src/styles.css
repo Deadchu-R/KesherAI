@@ -755,6 +755,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { box-shadow: 
 @media (prefers-reduced-motion: reduce) { .voice-orb { animation: none !important; transition: none; } }
 .voice-status { font-size: 18px; margin: 0; }
 .voice-heard { max-width: min(560px, 100%); margin: 0; }
+.voice-heard.live { font-style: italic; opacity: 0.75; overflow-wrap: anywhere; }
 /* Voice hand-off (VoiceMode.tsx): mode switch, the background job line, approval cards answered on screen. */
 .voice-mode { overflow-y: auto; }
 .voice-modes { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; }

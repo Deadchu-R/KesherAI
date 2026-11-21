@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isApprovalWords, parseVoiceReply, shortSpoken, VOICE_LINES, VOICE_TARGETS, voiceStart, voiceStep, type VoiceEvent, type VoiceState } from "./voice-handoff.js";
+import { isApprovalWords, parseVoiceReply, shortSpoken, VOICE_BRIEF, VOICE_LINES, VOICE_LIVE_MAX, VOICE_TARGETS, voiceStart, voiceStep, type VoiceEvent, type VoiceState } from "./voice-handoff.js";
 
 /** Runs events in order, collecting every effect. */
 function run(s: VoiceState, events: VoiceEvent[]) {
@@ -77,18 +77,63 @@ test("approval routing: announced once, on screen; a spoken yes never approves",
   assert.equal(s.job, "running");
 });
 
-test("fallback: without a voice model the main model answers, read shortened, without 'It's done'", () => {
+test("fallback: without a voice model the main model answers with a brevity hint, said sentence by sentence", () => {
   let { s, fx } = run(voiceStart({ he: true, fallback: true, lastSeq: 0 }), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "מה השעה בטוקיו?" }]);
-  assert.deepEqual(fx.at(-1), { do: "handoff", text: "מה השעה בטוקיו?" });
+  assert.deepEqual(fx.at(-1), { do: "handoff", text: "מה השעה בטוקיו?", brief: true });
   assert.equal(s.phase, "replying");
-  ({ s, fx } = run(s, [{ type: "mainAnswer", seq: 3, text: "עכשיו 22:00 בטוקיו." }]));
-  assert.deepEqual(fx, [{ do: "summarize", text: "עכשיו 22:00 בטוקיו.", direct: true }]);
+  ({ s, fx } = run(s, [{ type: "mainAnswer", seq: 3, text: "עכשיו 22:00 בטוקיו. זה ערב." }]));
+  assert.deepEqual(fx, [{ do: "say", text: "עכשיו 22:00 בטוקיו." }]);
+  assert.deepEqual(s.queue, ["זה ערב."]);
+  assert.equal(s.job, "none");
+  ({ s, fx } = run(s, [{ type: "spoken" }, { type: "spoken" }]));
+  assert.deepEqual(fx, [{ do: "say", text: "זה ערב." }]);
   assert.equal(s.phase, "ready");
+});
+
+test("live: a direct answer is said as it is written, its end once done, and nothing twice", () => {
+  let { s, fx } = run(voiceStart({ he: false, fallback: true, lastSeq: 0 }), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "explain it" }]);
+  ({ s, fx } = run(s, [{ type: "answerText", text: "It is a cache" }, { type: "answerText", text: "It is a cache. It keeps" }]));
+  assert.deepEqual(fx, [{ do: "say", text: "It is a cache." }]);
+  ({ s, fx } = run(s, [{ type: "answerText", text: "It is a cache. It keeps results. So" }, { type: "spoken" }]));
+  assert.deepEqual(fx, [{ do: "say", text: "It keeps results." }]);
+  // Between sentences it waits for the rest of the answer (and listens).
+  ({ s, fx } = run(s, [{ type: "spoken" }]));
+  assert.equal(s.phase, "replying");
+  ({ s, fx } = run(s, [{ type: "mainAnswer", seq: 1, text: "It is a cache. It keeps results. So it is fast." }]));
+  assert.deepEqual(fx, [{ do: "say", text: "So it is fast." }]);
+  assert.equal(s.job, "none");
+});
+
+test("live: barge-in stops the queue at once and the rest of that answer is not said", () => {
+  let { s, fx } = run(voiceStart({ he: false, fallback: true, lastSeq: 0 }), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "tell me" }, { type: "answerText", text: "One. Two. Three. " }]);
+  assert.deepEqual(s.queue, ["Two.", "Three."]);
+  ({ s, fx } = run(s, [{ type: "speechStart" }]));
+  assert.deepEqual(fx, [{ do: "stopSpeaking" }]);
+  assert.deepEqual(s.queue, []);
+  ({ s, fx } = run(s, [{ type: "answerText", text: "One. Two. Three. Four. " }, { type: "mainAnswer", seq: 1, text: "One. Two. Three. Four. Five." }]));
+  assert.ok(!fx.some((f) => f.do === "say"), "nothing more of the stopped answer");
+  assert.equal(s.hushed, false, "the next answer is said again");
+});
+
+test("live: a long answer stops at the limit and says the rest is on screen", () => {
+  const long = Array.from({ length: 40 }, (_, i) => `Sentence number ${i} is here.`).join(" ");
+  let { s } = run(voiceStart({ he: false, fallback: true, lastSeq: 0 }), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "list" }]);
+  const r = run(s, [{ type: "mainAnswer", seq: 1, text: long }]);
+  s = r.s;
+  const said = [...r.fx.filter((f) => f.do === "say").map((f) => (f as { text: string }).text), ...s.queue];
+  assert.equal(said.at(-1), VOICE_LINES.rest.en);
+  assert.ok(said.slice(0, -1).join(" ").length <= VOICE_LIVE_MAX + 40);
+});
+
+test("the brevity hint is only for direct turns", () => {
+  const { fx } = run(en(), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "fix it" }, { type: "reply", say: "", handoff: "Fix it" }]);
+  assert.deepEqual(fx.find((f) => f.do === "handoff"), { do: "handoff", text: "Fix it" });
+  assert.match(VOICE_BRIEF, /read aloud/);
 });
 
 test("a failing voice model switches to the fallback and sends what was heard", () => {
   const { s, fx } = run(en(), [{ type: "speechStart" }, { type: "speechEnd", seconds: 1 }, { type: "transcript", text: "plan my week" }, { type: "noVoiceModel" }]);
-  assert.deepEqual(fx.at(-1), { do: "handoff", text: "plan my week" });
+  assert.deepEqual(fx.at(-1), { do: "handoff", text: "plan my week", brief: true });
   assert.ok(s.fallback && s.direct);
 });
 

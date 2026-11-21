@@ -392,6 +392,19 @@ export class WhisperEngine {
   }
 
   /**
+   * A quick transcript through a loaded model only (voice mode's live words while the user talks): never the slower
+   * one-off program, so a partial costs a fraction of a second or nothing.
+   *
+   * @param wav - A WAV file (16 kHz mono).
+   * @param language - "auto" or a language code.
+   * @returns The text, or undefined when no model is loaded or can be (then the page shows no live words).
+   */
+  async quick(wav: Buffer, language = "auto"): Promise<string | undefined> {
+    const text = await this.fast(wav, language).catch(() => undefined);
+    return text === undefined ? undefined : cleanTranscript(text);
+  }
+
+  /**
    * Turns speech into text pieces with their times (seconds from the start).
    *
    * @param wav - A WAV file.

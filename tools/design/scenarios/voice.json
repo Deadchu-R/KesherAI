@@ -219,8 +219,8 @@
   },
   {
    "id": "VoiceFallbackPtt",
-   "title": "שיחה קולית בלחיצה ודיבור, בלי מודל קול קטן: המודל הראשי עונה ומוקרא בקצרה",
-   "titleEn": "Voice, push to talk, no small voice model: the main model answers, read shorter",
+   "title": "שיחה קולית בלחיצה ודיבור, בלי מודל קול קטן: המודל הראשי מתבקש לענות בקצרה, והתשובה מוקראת משפט אחר משפט בזמן שהיא נכתבת",
+   "titleEn": "Voice, push to talk, no small voice model: the main model is asked to be brief, and its answer is said sentence by sentence as it is written",
    "route": "#/c/c8",
    "viewports": [
     "desktop",

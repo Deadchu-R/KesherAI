@@ -479,13 +479,13 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     s.conversations.unqueue(req.params.id, req.params.qid) ? { ok: true } : reply.code(404).send({ error: "Not in the queue" }),
   );
 
-  app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean; steer?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { text?: string; web?: boolean; steer?: boolean; voice?: boolean } }>("/api/conversations/:id/messages", async (req, reply) => {
     const typed = req.body?.text?.trim();
     if (!typed) return reply.code(400).send({ error: "Empty message" });
     // A Game Helper chat: the picture taken when its key was pressed goes with the question.
     const text = `${takeGameShot(req.params.id)}${typed}`;
     try {
-      const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true, ...(req.body?.steer === true ? { steer: true } : {}) });
+      const r = await s.conversations.send(req.params.id, text, { web: req.body?.web === true, ...(req.body?.steer === true ? { steer: true } : {}), ...(req.body?.voice === true ? { voice: true } : {}) });
       // Written on the phone: its answer notifies the phone even when it is short.
       if (!isLocalRequest(req)) s.notifier.messageFromPhone(req.params.id);
       return { ok: true, ...r };
