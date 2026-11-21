@@ -1,0 +1,104 @@
+{
+ "group": "צ'אט",
+ "now": "2026-11-20T10:00:00Z",
+ "boards": [
+  {
+   "id": "ChatComfyChip",
+   "title": "צ'אט: שבב ComfyUI בכל צ'אט (מצב ותור, הפעלה ועצירה)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "תיקון מסך ההתחברות",
+      "kind": "code",
+      "modelId": "qwen3-coder",
+      "mode": "ask",
+      "workspace": "D:/Games/Platformer",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "qwen3-coder",
+       "mode": "ask",
+       "workspace": "D:/Games/Platformer",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "20m"
+        },
+        "type": "user",
+        "text": "תתקן את מסך ההתחברות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "19m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מה לעשות?"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": true,
+      "up": true,
+      "managed": true,
+      "running": 1,
+      "pending": 2
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".comfy-chip > button"
+    },
+    {
+     "click": ".comfy-chip > button"
+    },
+    {
+     "wait": "text=עצור את ComfyUI"
+    }
+   ],
+   "titleEn": "Chat: the ComfyUI chip in every chat (state, queue, start and stop)",
+   "viewports": [
+    "desktop",
+    "phone"
+   ]
+  }
+ ]
+}

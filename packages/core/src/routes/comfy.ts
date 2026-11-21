@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { readComfyLive } from "../comfy-live.js";
 
 /**
  * Managed ComfyUI: status, install (downloads; started by the user),
@@ -21,6 +22,8 @@ export async function comfyRoutes(app: FastifyInstance, s: KesherServices): Prom
   };
   const view = () => ({ ...s.comfy.status(), autoStart: s.config.comfyui.autoStart, port: s.config.comfyui.port, ownFolder: s.config.comfyui.folder ?? null });
   app.get("/api/comfy", async () => view());
+  // The chip under every chat box: up or not and the queue, without the log or the folder (cheap to ask often).
+  app.get("/api/comfy/live", async () => readComfyLive(s.comfy.status()));
   app.post("/api/comfy/install", async () => {
     void s.comfy.install().catch(() => undefined);
     return view();

@@ -22,6 +22,7 @@ import { shortModelName } from "../ModelMenu";
 import { CoachPanel } from "../CoachPanel";
 import { useWebSearch } from "../WebToggle";
 import { UnityChip } from "../UnityChip";
+import { ComfyChip } from "../ComfyChip";
 import { VoiceMode } from "../VoiceMode";
 import { useParts } from "../parts";
 import { takeOpening } from "../phone";
@@ -1202,8 +1203,10 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                 <>
                   {/* Web search's own settings (depth, sites) only while web search is on, or this chat changed them: one ⚙ less otherwise. */}
                   {(web || !!conv.web) && <WebPrefsChip value={conv.web} onChange={(w) => void patch({ web: w })} />}
-                  {/* Unity's project chip in code sessions; a chat adds a project from the + menu (one place each). */}
-                  {conv.kind === "code" && <UnityChip onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />}
+                  {/* Unity's project chip: always in code sessions; in a plain chat once a project is chosen or the Editor is open
+                      (a chat adds a project from the + menu). ComfyUI's state and queue in every chat. */}
+                  <UnityChip onlyWhenInUse={conv.kind !== "code"} onUse={(txt) => setInput((v) => (v.trim() ? v : txt))} />
+                  <ComfyChip />
                   {voicePart && (
                     <button type="button" className="chip voice-chip" title={t("voiceMode")} aria-label={t("voiceMode")} onClick={() => setVoice(true)}>
                       <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5v3M5 4v8M8 2v12M11 4.5v7M14 6.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>

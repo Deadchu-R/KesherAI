@@ -12,8 +12,11 @@ const base = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
  * Unity's CLI). Pick one of the projects, add a folder, or make a new one;
  * the chat's Unity tools then work on it. Shown only when Unity's CLI is
  * installed.
+ *
+ * @param onUse - Puts a starting line in the box after a project is chosen.
+ * @param onlyWhenInUse - A plain chat: shown only once a project is chosen or the Editor is open.
  */
-export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
+export function UnityChip({ onUse, onlyWhenInUse }: { onUse?: (text: string) => void; onlyWhenInUse?: boolean }) {
   const [st, setSt] = useState<{ cli: boolean; projects: string[]; active?: string; connected: boolean; packages?: { pipeline: boolean; bridge: boolean } } | null>(null);
   const [installing, setInstalling] = useState(false);
   const [open, setOpen] = useState(false);
@@ -29,8 +32,9 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
   }, [open]);
   // "Unity is reloading…" while a chat's command waits for the Editor (a cheap in-memory check, every 3 s while shown).
   const [reloading, setReloading] = useState(false);
+  const shown = !!st?.cli && (!onlyWhenInUse || !!st.active || st.connected);
   useEffect(() => {
-    if (!st?.cli) return;
+    if (!shown) return;
     const check = () => {
       if (document.hidden) return;
       void api<{ reloading: boolean }>("/api/unity/reloading").then((r) => setReloading((was) => {
@@ -40,8 +44,8 @@ export function UnityChip({ onUse }: { onUse?: (text: string) => void }) {
     };
     const t = setInterval(check, 3000);
     return () => clearInterval(t);
-  }, [st?.cli]);
-  if (!st?.cli) return null;
+  }, [shown]);
+  if (!st || !shown) return null;
   const choose = (project: string) =>
     void api("/api/unity/project", { method: "PUT", body: { project } }).then(() => {
       load();

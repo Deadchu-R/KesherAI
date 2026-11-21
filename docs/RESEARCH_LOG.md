@@ -4360,3 +4360,9 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Gauntlet:** runs built games and editor sessions on devices as test sessions (RunUAT RunUnreal), for long soak, performance and device runs. Left for later (phone builds); our runs are short PIE sessions. Source: [Gauntlet overview](https://dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-overview-in-unreal-engine).
 - **Unreal MCP (5.9 docs):** lists runtime toolsets incl. Input, Console, Scene Capture and Widget Finder, but documents no PIE or automation-test toolset and does not describe the Input tools' arguments. Decision: our own bridge commands (`play_test*`), the MCP stays for editor edits. Source: [Unreal MCP in Unreal Editor](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-mcp-in-unreal-editor).
 - **Stopped at:** done (built in packages/core/src/play-test.ts, KesherPlayTest.cpp, engine/PlayTests.tsx).
+
+## 2026-11-21: ComfyUI and Unity status chips in every chat (competitor note)
+- **ComfyUI's own app / SwarmUI**: a queue badge (running + waiting) and a backend dot in the top bar; SwarmUI also offers start/restart of the backend from the same place. Taken: dot + job count, start/stop from the chip.
+- **Claude / ChatGPT composers**: connectors and tools are shown as chips beside the box only when they are in use. Taken: Unity's chip shows in a plain chat only once a project is chosen or the Editor is open; ComfyUI's only when installed or answering.
+- **Unity MCP servers (2025-26)**: a status line in the Editor, not in the chat. KesherAI's difference: both chips live in every chat, also on the phone, polled cheaply (one `/queue` call every 5 s, none while hidden).
+- **Stopped at:** done (built in core/comfy-live.ts, web/ComfyChip.tsx, UnityChip.tsx).
