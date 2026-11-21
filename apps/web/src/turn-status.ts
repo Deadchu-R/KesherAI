@@ -6,7 +6,7 @@
 /** What this reads of the chat's events. */
 type Ev = {
   type: string; at?: string; seq?: number; callId?: string; name?: string; steered?: boolean; requestId?: string;
-  role?: string; output?: number; writeMs?: number;
+  role?: string; output?: number | string; writeMs?: number;
 };
 
 /** What a busy turn is doing. */
@@ -33,7 +33,7 @@ export function turnSpeed(turn: readonly Ev[]): number | undefined {
   let tokens = 0;
   let ms = 0;
   for (const e of turn) {
-    if (e.type !== "usage" || e.role !== "main" || !e.output || !e.writeMs) continue;
+    if (e.type !== "usage" || e.role !== "main" || typeof e.output !== "number" || !e.output || !e.writeMs) continue;
     tokens += e.output;
     ms += e.writeMs;
   }
