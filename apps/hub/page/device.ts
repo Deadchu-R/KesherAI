@@ -33,7 +33,7 @@ export interface PendingPair {
 }
 
 /** Where a task is. */
-export type TaskStatus = "outbox" | "sent" | "waiting" | "waiting-run" | "running" | "done" | "partial" | "failed" | "blocked" | "cancelled";
+export type TaskStatus = "outbox" | "sent" | "waiting" | "waiting-run" | "deferred" | "running" | "done" | "partial" | "failed" | "blocked" | "cancelled";
 
 /** One task this browser sent; kept only here. */
 export interface PageTask {
@@ -59,7 +59,7 @@ export interface PageTask {
    * A task of a PC's task inbox (Claude's `kesher-inbox` branch), reported by that PC: who wrote it, who runs it,
    * the PC, and its live agent run while it has one. Not sent from here, so it cannot be resent or cancelled here.
    */
-  inbox?: { from: HubInboxTask["from"]; executor: HubInboxTask["executor"]; deviceId: string; runId?: string; at: number };
+  inbox?: { from: HubInboxTask["from"]; executor: HubInboxTask["executor"]; deviceId: string; runId?: string; at: number; estSteps?: number; steps?: number; retryAt?: number };
   /** Where Google Drive has this task (drive-view.ts sets it on the rows it shows; never saved here). */
   drive?: DriveMark;
 }
@@ -68,6 +68,7 @@ export interface PageTask {
 const INBOX_LABEL: Record<HubInboxTask["state"], { he: string; en: string }> = {
   waiting: { he: "ממתין", en: "Waiting" },
   "waiting-run": { he: "ממתין ל\"הפעל\"", en: "Waiting for Run" },
+  deferred: { he: "נדחה: מכסה", en: "Deferred: quota" },
   running: { he: "רץ", en: "Running" },
   done: { he: "הסתיים", en: "Done" },
   partial: { he: "הסתיים חלקית", en: "Partly done" },
@@ -754,14 +755,14 @@ export class HubDevice {
     let task = this.tasks.find((t) => t.inbox?.deviceId === from && t.taskId === r.taskId);
     const label = INBOX_LABEL[r.state];
     if (!task) {
-      task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
+      task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" || r.executor === "gemini" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
       this.tasks.unshift(task);
     } else if (task.inbox && task.inbox.at > r.at) {
       return;
     }
     task.title = r.title;
     task.status = status;
-    task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at };
+    task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at, ...(r.estSteps ? { estSteps: r.estSteps } : {}), ...(r.steps ? { steps: r.steps } : {}), ...(r.retryAt ? { retryAt: r.retryAt } : {}) };
     if (r.result) task.line = r.result;
     else delete task.line;
     if (r.branch) task.branch = r.branch;

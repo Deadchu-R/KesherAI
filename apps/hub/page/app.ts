@@ -20,6 +20,7 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
+import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
 import { connectorSection, type ConnectionView } from "./connector.js";
@@ -209,6 +210,9 @@ function statusTag(t: PageTask): HTMLElement {
       return h("span", { class: "tag t-wait" }, t.inbox ? L("ממתין", "Waiting") : L("מחכה למחשב", "Waiting for the PC"));
     case "waiting-run":
       return h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
+    case "deferred":
+      // The free Gemini key's quota ran out: it tries once more by itself at the reset time.
+      return h("span", { class: "tag t-ask" }, L("⏸ נדחה: מכסה", "⏸ Deferred: quota"), t.inbox?.retryAt ? ` · ${L("עד", "until")} ${when(t.inbox.retryAt)}` : "");
     case "partial":
       return h("span", { class: "tag t-ask" }, L("◐ חלקי", "◐ Partial"));
     case "sent":
@@ -231,9 +235,25 @@ function routeChip(t: PageTask): HTMLElement {
   if (t.inbox) {
     const ex = t.inbox.executor;
     // The executor only (the column is narrow); the PC's name is in the tooltip and the task's detail.
-    return ex === "claude" ? h("span", { class: "ex ex-opus" }, "✷ Claude") : h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${ex === "antigravity" ? "✦ Antigravity" : L("מודל מקומי", "Local model")}`);
+    if (ex === "claude") return h("span", { class: "ex ex-opus" }, "✷ Claude");
+    if (ex === "gemini") return h("span", { class: "ex ex-gem", title: t.toName }, L("✧ Gemini (חינמי)", "✧ Gemini (free)"));
+    // An executor this page does not know yet (a newer PC) is shown as written.
+    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מודל מקומי", "Local model") : ex;
+    return h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${name}`);
   }
   return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);
+}
+
+/**
+ * The step line of an inbox task: "~N steps" from the estimate made when it was queued, and "step X of ~N" while it runs
+ * (the count keeps going past the estimate: "step 14, estimate was ~11").
+ */
+function stepsLine(t: PageTask): string | null {
+  const est = t.inbox?.estSteps;
+  if (!est) return null;
+  const done = t.inbox?.steps ?? 0;
+  if (t.status === "running" && done > 0) return done > est ? L(`צעד ${done} (הערכה ~${est})`, `step ${done} (estimate ~${est})`) : L(`צעד ${done} מתוך ~${est}`, `step ${done} of ~${est}`);
+  return L(`~${est} צעדים`, `~${est} steps`);
 }
 
 const isOpen = (t: PageTask) => !HubDevice.expired(t) && ["outbox", "waiting", "waiting-run", "sent", "running"].includes(t.status);
@@ -712,10 +732,11 @@ function runButtons(t: PageTask): HTMLElement | null {
 }
 
 /** The task list's groups, in this order. */
-type TaskGroup = "agents" | "agy" | "pc" | "claude";
+type TaskGroup = "agents" | "agy" | "gemini" | "pc" | "claude";
 const GROUPS: Array<[TaskGroup, string, string, string]> = [
   ["agents", "🤖", "סוכנים", "Agents"],
   ["agy", "✦", "Antigravity", "Antigravity"],
+  ["gemini", "✧", "Gemini (חינמי)", "Gemini (free)"],
   ["pc", "🖥", "מחשב", "PC"],
   ["claude", "✷", "Claude", "Claude"],
 ];
@@ -724,6 +745,7 @@ const GROUPS: Array<[TaskGroup, string, string, string]> = [
 function groupOf(t: PageTask): Exclude<TaskGroup, "agents"> {
   const ex = t.inbox?.executor;
   if (ex === "antigravity" || (!ex && t.executor === "pc-antigravity")) return "agy";
+  if (ex === "gemini") return "gemini";
   if (ex === "claude" || (!ex && t.route === "claude-cloud")) return "claude";
   return "pc";
 }
@@ -798,7 +820,7 @@ function taskRow(t: PageTask): HTMLElement {
     "div",
     { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") { app.openTask = t.taskId; render(); } } },
     h("span", { class: "c-st" }, statusTag(t)),
-    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
+    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
     h("span", { class: "c-rt" }, routeChip(t)),
     h("span", { class: "c-when mut sm" }, when(t.createdAt)),
     h("span", { class: "c-act" }, action),
@@ -810,10 +832,10 @@ function taskDetail(t: PageTask): HTMLElement {
   return h(
     "section",
     { class: `card pad stack${t.status === "done" ? " done-card" : ""}` },
-    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
+    h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, stepsLine(t) ? h("span", { class: "chip steps" }, stepsLine(t)) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
     t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""),
     t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null,
-    t.inbox || t.drive ? assignBox({ device, render, taskId: t.taskId, pcs: device.assignTargets(t), current: t.inbox ? (t.inbox.executor === "claude" ? "claude" : t.inbox.executor) : undefined }) : null,
+    t.inbox || t.drive ? assignBox({ device, render, taskId: t.taskId, pcs: device.assignTargets(t), current: t.inbox ? assignOfExecutor(t.inbox.executor === "claude" ? "opus" : t.inbox.executor) : undefined }) : null,
     h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")),
   );
 }

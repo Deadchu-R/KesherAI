@@ -400,9 +400,10 @@ export function parseSealedBody(x, kind) {
             const state = INBOX_STATES.includes(b.state) ? b.state : null;
             if (!title || !state)
                 return null;
-            const executor = INBOX_EXECUTORS.includes(b.executor) ? b.executor : "claude";
+            // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
+            const executor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
         }
         case "ask_note": {
             const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;
@@ -417,8 +418,7 @@ export function parseSealedBody(x, kind) {
             return null;
     }
 }
-const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
-const INBOX_EXECUTORS = ["local", "antigravity", "claude"];
+const INBOX_STATES = ["waiting", "waiting-run", "running", "done", "failed", "partial", "deferred"];
 const SOURCES = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS = ["read", "edit", "create", "delete"];

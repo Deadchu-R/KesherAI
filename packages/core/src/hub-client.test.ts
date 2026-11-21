@@ -201,9 +201,23 @@ test("connection problems: unreachable retries, a refused PC must pair again", a
 
 const inboxTask = (over: Partial<InboxTaskView>): InboxTaskView => ({ id: "c-1120-01", title: "Fix the hub status", executor: "auto", risk: "low", from: "claude", base: "origin/main", allowedPaths: [], forbiddenPaths: [], check: "", maxMinutes: 30, maxFiles: 15, goal: "SECRET GOAL TEXT", status: "waiting", runBy: "antigravity", branch: "agy/c-1120-01-fix", ...over });
 
+test("a free-Gemini task keeps its own executor; a quota deferral carries the reset time, a running task its steps", () => {
+  const g = inboxTask({ runBy: "gemini", kind: "research", acceptance: "- a\n- b", branch: "gemini/x" });
+  assert.equal(hubInboxTask(g, 1)!.executor, "gemini");
+  assert.equal(hubInboxTask(g, 1)!.estSteps, 5);
+  const d = hubInboxTask({ ...g, status: "deferred-quota", retryAt: 99, note: "Quota reached." }, 1)!;
+  assert.equal(d.state, "deferred");
+  assert.equal(d.retryAt, 99);
+  assert.equal(d.result, "Quota reached.");
+  // Antigravity's deferral keeps the old state, so an older page still lists it.
+  assert.equal(hubInboxTask(inboxTask({ status: "deferred-quota" }), 1)!.state, "waiting-run");
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1, steps: 4 }), 1)!.steps, 4);
+  assert.equal(hubInboxTask({ ...g, status: "done", startedAt: 1, summary: "Report." }, 1)!.result, "Report.");
+});
+
 test("inbox tasks map to the hub's states and executors, metadata only", () => {
   const w = hubInboxTask(inboxTask({}), 1)!;
-  assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", runId: "in-c-1120-01", at: 1 });
+  assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", estSteps: 3 + 15 + 1, runId: "in-c-1120-01", at: 1 });
   assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1 }), 1)!.branch, "agy/c-1120-01-fix");
   const done = hubInboxTask(inboxTask({ status: "done", startedAt: 1, summary: "Fixed the dot.\nAll checks pass." }), 1)!;
   assert.equal(done.state, "done");

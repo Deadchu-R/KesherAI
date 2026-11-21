@@ -307,6 +307,135 @@
    ]
   },
   {
+   "id": "HubGeminiSteps",
+   "title": "ענן Kesher: משימות — Gemini (חינמי) עם צ׳יפ משלו, הערכת צעדים \"~N צעדים\" ו\"צעד X מתוך ~N\" בזמן ריצה, דחייה עד איפוס המכסה",
+   "route": "#tasks",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "מחקר: השוואת עורכי תמונה עם AI",
+      "status": "deferred",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "estSteps": 5,
+       "at": {
+        "$agoMs": "5m"
+       },
+       "retryAt": {
+        "$inMs": "95m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "line": "המכסה של מפתח Gemini נגמרה; ינסה שוב מעצמו אחרי האיפוס."
+     },
+     {
+      "title": "מחקר: איך מתחרים עושים ייצוא וידאו",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "estSteps": 7,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      }
+     },
+     {
+      "title": "מחקר: ניהול מודלים מקומיים",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "estSteps": 5,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "line": "דוח: שלוש גישות עיקריות, והמלצה לשמור הורדה אחת לכל מודל."
+     },
+     {
+      "title": "לתקן את כפתור ההורדה",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 12,
+       "at": {
+        "$agoMs": "5m"
+       },
+       "steps": 4,
+       "runId": "in-t9"
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      }
+     },
+     {
+      "title": "לסדר את תיקיית ההורדות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 9,
+       "at": {
+        "$agoMs": "5m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "40m"
+      }
+     }
+    ]
+   },
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".trow"
+    }
+   ]
+  },
+  {
    "id": "HubAgentsNamed",
    "title": "ענן Kesher: סוכנים — שם והערה משלך על כל סוכן",
    "route": "#agents",

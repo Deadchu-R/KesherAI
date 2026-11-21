@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { agentDoing, assignOfExecutor, INBOX_GIT_MISSING, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -15,6 +15,18 @@ import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
 import { AssignPicker } from "../AssignPicker";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/**
+ * The step line: "~N steps" from the estimate made when the task was queued (no model call), "step X of ~N" while it
+ * runs. The count keeps going past the estimate. The free-Gemini route runs as one call, so it has no live count.
+ */
+function stepsText(t: InboxTaskView): string | null {
+  if (t.status === "skipped" || t.status === "declined") return null;
+  const est = estimateTaskSteps(t);
+  const done = t.steps ?? 0;
+  if (t.status === "running" && done > 0) return done > est ? L(`צעד ${done} (הערכה ~${est})`, `step ${done} (estimate ~${est})`) : L(`צעד ${done} מתוך ~${est}`, `step ${done} of ~${est}`);
+  return L(`~${est} צעדים`, `~${est} steps`);
+}
 
 /** A status's chip: its words and colour. */
 function statusChip(t: InboxTaskView): { text: string; cls: string } {
@@ -32,7 +44,9 @@ function statusChip(t: InboxTaskView): { text: string; cls: string } {
     skipped: ["דולג", "Skipped", ""],
   };
   const [he, en, cls] = m[t.status];
-  return { text: L(he, en), cls };
+  // A free-Gemini task deferred by its quota tries once more by itself at the reset: show when.
+  const until = t.status === "deferred-quota" && t.retryAt ? ` · ${L("עד", "until")} ${new Date(t.retryAt).toLocaleString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : "";
+  return { text: L(he, en) + until, cls };
 }
 
 /** The executor's chip. */
@@ -281,6 +295,7 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
         {t.label?.name && <div className="small muted alab-sub" dir="auto">{t.title}</div>}
         {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}</div>
+        {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
       </div>
       <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span></span>
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>
@@ -373,6 +388,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         <button type="button" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>✎ {t.label?.name || t.label?.note ? L("ערוך שם והערה", "Edit name & note") : L("שם והערה", "Name & note")}</button>
         <span className={`tinbox-ex ${ex.cls}`}>{ex.text}{t.modelUsed ? ` · ${t.modelUsed}` : ""}</span>
         <span className={`tinbox-st ${st.cls}`}>{st.text}{minutes !== undefined ? ` · ${minutes} ${L("דק׳", "min")}` : ""}</span>
+        {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} />}

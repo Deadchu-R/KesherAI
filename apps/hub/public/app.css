@@ -42,6 +42,7 @@ h3 { margin: 0; font-size: 15px; }
 button.chip { cursor: pointer; min-height: 30px; }
 .chip-on { background: #2e2e3a; color: var(--text); border-color: #3a3a48; }
 .chip.opus { border-color: #6a4a2a; color: #f3b98a; }
+.chip.steps { padding: 1px 8px; font-size: 11.5px; color: #a9bdff; border-color: #3d4f86; }
 .chip.src { border-color: #6a4a2a; color: #f3b98a; padding: 1px 8px; font-size: 11.5px; }
 .tline { gap: 6px; }
 .why { color: var(--warn); margin-top: 2px; }
@@ -65,7 +66,7 @@ button.chip { cursor: pointer; min-height: 30px; }
 .t-run { background: #262a45; color: #c3cbff; } .t-ok { background: #1f2a24; color: var(--ok); } .t-bad { background: #3a2224; color: #ff9a9a; }
 .t-off { background: #26262a; color: #a9a9b0; } .t-wait { background: #2a2520; color: var(--warn); } .t-ask { background: #3a2f1c; color: #ffc96b; }
 .ex { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 9px; border-radius: 7px; border: 1px solid #33333a; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.ex-loc { border-color: #2f5a44; color: #8fdcb0; } .ex-opus { border-color: #6a4a2a; color: #f3b98a; }
+.ex-gem { border-color: #3d4f86; color: #a9bdff; } .ex-loc { border-color: #2f5a44; color: #8fdcb0; } .ex-opus { border-color: #6a4a2a; color: #f3b98a; }
 .spin { width: 9px; height: 9px; border-radius: 50%; border: 2px solid #a5b4ff55; border-top-color: var(--acc); display: inline-block; flex: none; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

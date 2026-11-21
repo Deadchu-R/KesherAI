@@ -330,10 +330,14 @@ export function cleanApproval(x: unknown): HubApproval | null {
 }
 
 /** Where a task-inbox task stands, as the hub page shows it. */
-export type HubInboxState = "waiting" | "waiting-run" | "running" | "done" | "failed" | "partial";
+export type HubInboxState = "waiting" | "waiting-run" | "running" | "done" | "failed" | "partial" | "deferred";
 
-/** Who runs a task-inbox task: the PC's local model (self-work), Antigravity on the PC, or Claude (its Opus agent). */
-export type HubInboxExecutor = "local" | "antigravity" | "claude";
+/**
+ * Who runs a task-inbox task: the PC's local model (self-work), Antigravity on the PC, Claude (its Opus agent) or the
+ * free Gemini key (small research, by itself). A newer PC may report a name this build does not know: it is kept as
+ * written (a short lowercase word) and shown as-is, so an old page never drops or mislabels the task.
+ */
+export type HubInboxExecutor = "local" | "antigravity" | "claude" | "gemini" | (string & Record<never, never>);
 
 /** A task-inbox task's metadata, sealed by the PC to the owner's phones and the hub page. */
 export interface HubInboxTask {
@@ -348,6 +352,12 @@ export interface HubInboxTask {
   branch?: string;
   /** A short result: the agent's report or why it failed (at most 300 characters). */
   result?: string;
+  /** The step estimate made when the task was queued ("~N steps"; `estimateTaskSteps` in task-steps.ts). */
+  estSteps?: number;
+  /** The steps the agent has taken so far while it runs ("step X of ~N"). */
+  steps?: number;
+  /** `deferred` only: when the quota resets and the task may try once more (ms since epoch). */
+  retryAt?: number;
   /** The live agent run (the Agents tab's card), while it has one. */
   runId?: string;
   /** When this state was reported (ms since epoch). */
@@ -685,9 +695,10 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const title = str(b.title, HUB_LIMITS.titleChars).trim();
       const state = INBOX_STATES.includes(b.state as HubInboxState) ? (b.state as HubInboxState) : null;
       if (!title || !state) return null;
-      const executor = INBOX_EXECUTORS.includes(b.executor as HubInboxExecutor) ? (b.executor as HubInboxExecutor) : "claude";
+      // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
+      const executor: HubInboxExecutor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
       const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
     }
     case "ask_note": {
       const a = b.ask && typeof b.ask === "object" ? (b.ask as Record<string, unknown>) : undefined;
@@ -701,8 +712,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
   }
 }
 
-const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "running", "done", "failed", "partial"];
-const INBOX_EXECUTORS: readonly HubInboxExecutor[] = ["local", "antigravity", "claude"];
+const INBOX_STATES: readonly HubInboxState[] = ["waiting", "waiting-run", "running", "done", "failed", "partial", "deferred"];
 const SOURCES: readonly AgentSource[] = ["chat-helper", "inbox", "antigravity", "claude-cloud", "claude-chat"];
 const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "waiting", "done", "failed", "cancelled"];
 const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];

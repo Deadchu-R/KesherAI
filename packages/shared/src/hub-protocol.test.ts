@@ -101,3 +101,14 @@ test("approvals: a snapshot fits one sealed message; an answer's minutes are for
   assert.deepEqual(ans({ decision: "deny", forMinutes: 60 }), { type: "approval_answer", requestId: "r1", conversationId: "c1", decision: "deny" });
   assert.equal(ttlFor("approvals", 7 * 24 * 3600), HUB_LIMITS.approvalTtl);
 });
+
+test("inbox_task: the gemini executor, the deferred state with its reset time, step counts; unknown executors stay as written", () => {
+  const base = { type: "inbox_task", taskId: "c-1121-01", title: "Compare tools", state: "deferred", executor: "gemini", from: "claude", at: 5 };
+  assert.deepEqual(parseSealedBody({ ...base, estSteps: 7, steps: 3, retryAt: 1_700_000_000_000, result: "Quota reached." }, "inbox_task"), { ...base, result: "Quota reached.", estSteps: 7, steps: 3, retryAt: 1_700_000_000_000 });
+  // retryAt only means something while deferred.
+  assert.equal((parseSealedBody({ ...base, state: "running", retryAt: 9 }, "inbox_task") as { retryAt?: number }).retryAt, undefined);
+  // A newer PC's executor is kept as written; an odd one falls back to "claude".
+  assert.equal((parseSealedBody({ ...base, executor: "mistral" }, "inbox_task") as { executor: string }).executor, "mistral");
+  assert.equal((parseSealedBody({ ...base, executor: "<b>x" }, "inbox_task") as { executor: string }).executor, "claude");
+  assert.equal(parseSealedBody({ ...base, state: "unknown-state" }, "inbox_task"), null);
+});

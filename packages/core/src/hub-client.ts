@@ -13,6 +13,7 @@ import { hostname } from "node:os";
 import WebSocket from "ws";
 import {
   cleanOptIn,
+  estimateTaskSteps,
   exportPrivateJwk,
   fitApprovals,
   HUB_LIMITS,
@@ -174,6 +175,7 @@ const INBOX_REPORTED = 40;
 const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
   waiting: "waiting",
   queued: "waiting",
+  // A free-Gemini task deferred by its quota is mapped to "deferred" in hubInboxTask; Antigravity's waits for Run.
   "deferred-quota": "waiting-run",
   running: "running",
   "needs-approval": "running",
@@ -197,6 +199,9 @@ export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | unde
   let state = INBOX_STATE[t.status];
   // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
   if (state === "waiting" && t.runBy === "antigravity") state = "waiting-run";
+  // Only the Gemini route has its own "deferred" state (it retries by itself at the reset); other routes keep the old
+  // mapping so a page that does not know it yet still lists the task.
+  if (t.status === "deferred-quota" && t.runBy === "gemini") state = "deferred";
   const ended = state === "done" || state === "partial" || state === "failed";
   const result = (ended ? (t.status === "skipped" ? "Skipped." : t.status === "declined" ? t.note : (t.summary ?? t.note)) : t.status === "needs-approval" ? "Waits for an approval on the PC or the phone." : t.note)?.replace(/\s+/g, " ").trim().slice(0, 300);
   const going = t.runBy === "antigravity" && (state === "running" || state === "waiting-run");
@@ -204,12 +209,14 @@ export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | unde
     taskId: t.id,
     title: (t.title || t.id).slice(0, 200),
     state,
-    // The hub knows three executors; free-Gemini research runs by itself on this PC, so it shows as "local" (no Run wait).
-    executor: t.runBy === "opus" ? "claude" : t.runBy === "gemini" ? "local" : t.runBy,
+    executor: t.runBy === "opus" ? "claude" : t.runBy,
     from: t.from === "roee" || t.from === "self-work" ? t.from : "claude",
     // The branch shows once there is work on it (a started or ended run), never a planned name.
     ...(t.branch && (t.startedAt || ended) && t.status !== "declined" ? { branch: t.branch } : {}),
     ...(result ? { result } : {}),
+    estSteps: estimateTaskSteps(t),
+    ...(state === "running" && t.steps ? { steps: t.steps } : {}),
+    ...(state === "deferred" && t.retryAt ? { retryAt: t.retryAt } : {}),
     ...(going ? { runId: inboxRunId(t.id) } : {}),
     at: now,
   };

@@ -16,6 +16,7 @@ import { sameLabel } from "../../../packages/shared/src/agent-label.js";
 const INBOX_LABEL = {
     waiting: { he: "ממתין", en: "Waiting" },
     "waiting-run": { he: "ממתין ל\"הפעל\"", en: "Waiting for Run" },
+    deferred: { he: "נדחה: מכסה", en: "Deferred: quota" },
     running: { he: "רץ", en: "Running" },
     done: { he: "הסתיים", en: "Done" },
     partial: { he: "הסתיים חלקית", en: "Partly done" },
@@ -723,7 +724,7 @@ export class HubDevice {
         let task = this.tasks.find((t) => t.inbox?.deviceId === from && t.taskId === r.taskId);
         const label = INBOX_LABEL[r.state];
         if (!task) {
-            task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
+            task = { taskId: r.taskId, title: r.title, spec: "", executor: r.executor === "claude" ? "claude-cloud" : r.executor === "local" || r.executor === "gemini" ? "pc-local" : "pc-antigravity", ifOffline: "wait", route: r.executor === "claude" ? "claude-cloud" : "pc", to: from, toName: pc?.name ?? "PC", createdAt: r.at || Date.now(), status, history: [] };
             this.tasks.unshift(task);
         }
         else if (task.inbox && task.inbox.at > r.at) {
@@ -731,7 +732,7 @@ export class HubDevice {
         }
         task.title = r.title;
         task.status = status;
-        task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at };
+        task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at, ...(r.estSteps ? { estSteps: r.estSteps } : {}), ...(r.steps ? { steps: r.steps } : {}), ...(r.retryAt ? { retryAt: r.retryAt } : {}) };
         if (r.result)
             task.line = r.result;
         else
