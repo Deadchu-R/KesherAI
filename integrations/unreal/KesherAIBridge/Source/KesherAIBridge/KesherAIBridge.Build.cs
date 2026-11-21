@@ -20,6 +20,10 @@ public class KesherAIBridge : ModuleRules
 		if (Target.Platform == UnrealTargetPlatform.Win64 && Target.Version.MajorVersion == 5 && Target.Version.MinorVersion <= 4)
 		{
 			PrivateDefinitions.Add("__has_feature(x)=0");
+			// The define must reach every file: a shared engine PCH is built without it (0.1.31 still failed), so this
+			// module compiles without shared PCHs on these engines (slower build, same plugin).
+			PCHUsage = PCHUsageMode.NoPCHs;
+			bUseUnity = false;
 		}
 
 		PrivateDependencyModuleNames.AddRange(new string[]
