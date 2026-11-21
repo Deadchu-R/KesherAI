@@ -125,6 +125,11 @@ test("gif: frames round-trip through LZW with their delays; solid colors stay ex
   // A noisy frame makes the dictionary fill up (past 4096 codes) and reset: the hard part of LZW.
   const noisy: Rgba = { width: 200, height: 150, data: Uint8Array.from({ length: 200 * 150 * 4 }, (_, i) => (i * 2654435761) >>> 24) };
   const g = encodeGif([{ image: solid(200, 150, [255, 0, 0]), delayMs: 500 }, { image: noisy, delayMs: 120 }, { image: solid(100, 75, [0, 0, 255]), delayMs: 1000 }, { image: solid(200, 150, [0, 0, 255]), delayMs: 300 }]);
+  // Frames decoded only when their turn comes give the same file (one picture in memory at a time; scan 169).
+  let calls = 0;
+  const lazy = (img: Rgba) => () => (calls++, img);
+  assert.deepEqual(encodeGif([{ image: lazy(solid(200, 150, [255, 0, 0])), delayMs: 500 }, { image: lazy(noisy), delayMs: 120 }, { image: lazy(solid(100, 75, [0, 0, 255])), delayMs: 1000 }, { image: lazy(solid(200, 150, [0, 0, 255])), delayMs: 300 }]), g);
+  assert.equal(calls, 4, "each frame decoded once");
   const r = readGif(g);
   assert.equal(r.w, 200);
   assert.equal(r.h, 150);

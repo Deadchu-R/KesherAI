@@ -159,14 +159,18 @@ function lzw(indexes: Uint8Array): Uint8Array {
 /**
  * Makes a looping GIF from frames.
  *
- * @param frames - The pictures and how long each shows (ms). The GIF takes the last frame's shape (the page as it ended);
+ * @param frames - The pictures (or functions that decode them when needed) and how long each shows (ms). The GIF takes
+ *   the last frame's shape (the page as it ended);
  *   frames of another shape (a view that changed size while recording) are fitted inside it on white, not stretched.
  * @param o.maxWidth - The GIF's widest (default 640); taller pictures are kept in proportion.
  * @returns The GIF's bytes.
  */
-export function encodeGif(frames: Array<{ image: Rgba; delayMs: number }>, o: { maxWidth?: number } = {}): Uint8Array {
+export function encodeGif(frames: Array<{ image: Rgba | (() => Rgba); delayMs: number }>, o: { maxWidth?: number } = {}): Uint8Array {
   if (!frames.length) throw new Error("No frames to make a GIF from.");
-  const shape = frames[frames.length - 1]!.image;
+  // A frame may be given as a function, decoded only when its turn comes: one decoded picture in memory at a time
+  // instead of all of them (120 frames of 800 × 800 were ~300 MB; scan 169).
+  const last = frames[frames.length - 1]!.image;
+  const shape = typeof last === "function" ? last() : last;
   const k = Math.min(1, (o.maxWidth ?? 640) / shape.width);
   const W = Math.max(1, Math.round(shape.width * k));
   const H = Math.max(1, Math.round(shape.height * k));
@@ -193,8 +197,14 @@ export function encodeGif(frames: Array<{ image: Rgba; delayMs: number }>, o: { 
   text("NETSCAPE2.0");
   bytes.push(3, 1, 0, 0, 0);
   const idx = new Uint8Array(W * H);
-  for (const f of frames) {
-    const img = f.image;
+  const out: Uint8Array[] = [];
+  const flush = () => {
+    out.push(Uint8Array.from(bytes));
+    bytes.length = 0;
+  };
+  for (let fi = 0; fi < frames.length; fi++) {
+    const f = frames[fi]!;
+    const img = fi === frames.length - 1 ? shape : typeof f.image === "function" ? f.image() : f.image;
     // Fit the frame inside W × H keeping its shape, centred; the rest is white.
     const fit = Math.min(W / img.width, H / img.height);
     const fw = Math.max(1, Math.round(img.width * fit));
@@ -223,8 +233,16 @@ export function encodeGif(frames: Array<{ image: Rgba; delayMs: number }>, o: { 
     u16(W);
     u16(H);
     bytes.push(0);
-    for (const b of lzw(idx)) bytes.push(b);
+    flush();
+    out.push(lzw(idx));
   }
   bytes.push(0x3b);
-  return Uint8Array.from(bytes);
+  flush();
+  const gif = new Uint8Array(out.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of out) {
+    gif.set(c, at);
+    at += c.length;
+  }
+  return gif;
 }

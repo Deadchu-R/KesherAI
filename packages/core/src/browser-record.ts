@@ -61,7 +61,7 @@ export async function encodeRecording(frames: RecordedFrame[], format: "gif" | "
     note = "FFmpeg is not on this computer, so the recording is a GIF (WebM needs FFmpeg).";
   }
   const kept = thinFrames(delays, GIF_FRAMES);
-  const gif = encodeGif(kept.map((k) => ({ image: decodePng(frames[k.i]!.data), delayMs: k.delay })));
+  const gif = encodeGif(kept.map((k) => ({ image: () => decodePng(frames[k.i]!.data), delayMs: k.delay })));
   return { data: Buffer.from(gif), mimeType: "image/gif", ...(note ? { note } : {}) };
 }
 
