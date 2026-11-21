@@ -108,6 +108,8 @@ export function opsSummary(ops: unknown[], base: Record<string, string> = {}): s
       case "move": return `↔ ${name(o.node)}`;
       case "comment": return `💬 ${name(o.node)}`;
       case "material": return `◧ ${String(o.actor ?? "")} [${String(o.slot ?? "0")}]: ${String(o.material ?? "").split("/").pop() ?? ""}`;
+      case "spawn": return `+ ${String(o.name ?? o.shape ?? o.class ?? "actor")}`;
+      case "vfx": return `✨ ${String(o.preset ?? "effect")}`;
       default: return String(o.op ?? "?");
     }
   });

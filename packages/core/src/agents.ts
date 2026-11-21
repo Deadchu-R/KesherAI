@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { HelperKind } from "@kesher/shared";
+import type { HelperKind, SpecialistId } from "@kesher/shared";
 
 /**
  * Agents: named helpers the chat's model hands work to by their description (like Claude Code's subagents and
@@ -44,6 +44,8 @@ export interface AgentDef {
   maxMinutes?: number;
   /** The file it came from (project agents), relative to the project. */
   file?: string;
+  /** An engine specialist (engine-specialists.ts): its own curated engine tools, which act with the user's approval. */
+  specialist?: SpecialistId;
 }
 
 /** Steps per built-in type (the research plan, step 1). */

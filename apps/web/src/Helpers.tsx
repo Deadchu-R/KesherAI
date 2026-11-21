@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { agentDoing, parseDiff, stepTool, type AgentLabel, type DiffFile, type HelperRunInfo, type LabelWords } from "@kesher/shared";
+import { agentDoing, isSpecialist, parseDiff, SPECIALISTS, stepTool, type AgentLabel, type DiffFile, type HelperRunInfo, type LabelWords } from "@kesher/shared";
 import { AgentLabelEditor, AgentLabelLines, words } from "./AgentLabel";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
@@ -37,10 +37,18 @@ const KINDS: Record<HelperRunInfo["kind"], { icon: string; he: string; en: strin
 /** @returns The type's icon ("📚"). */
 export const helperKindIcon = (kind: HelperRunInfo["kind"]): string => (KINDS[kind] ?? KINDS.research).icon;
 
-/** @returns The type's short name ("מחקר"), or the named agent's. */
-export function helperKindName(r: Pick<HelperRunInfo, "kind" | "agent">): string {
+/** An engine specialist's info (engine-specialists.ts), from its run or from the agent name an approval card carries. */
+const specialistOf = (r: Pick<HelperRunInfo, "agent" | "specialist">) => (r.specialist ? SPECIALISTS[r.specialist] : isSpecialist(r.agent) ? SPECIALISTS[r.agent] : undefined);
+
+/** @returns The type's short name ("מחקר"), an engine specialist's ("חומרים"), or the named agent's. */
+export function helperKindName(r: Pick<HelperRunInfo, "kind" | "agent" | "specialist">): string {
+  const sp = specialistOf(r);
+  if (sp) return L(sp.he, sp.en);
   return r.agent ? `@${r.agent}` : L(KINDS[r.kind].he, KINDS[r.kind].en);
 }
+
+/** @returns A run's icon: its engine specialist's ("🧱"), else its type's. */
+export const helperIcon = (r: Pick<HelperRunInfo, "kind" | "agent" | "specialist">): string => specialistOf(r)?.icon ?? helperKindIcon(r.kind);
 
 /** The role as a sub-agent's name on an approval card: "סוכן מחקר", "research agent" (a named agent: "@name"). */
 const AGENT_WORD: Record<HelperRunInfo["kind"], [string, string]> = {
@@ -57,6 +65,8 @@ const AGENT_WORD: Record<HelperRunInfo["kind"], [string, string]> = {
  */
 export function helperAskerName(h: Pick<HelperRunInfo, "kind" | "agent">): { icon: string; role: string } {
   const w = AGENT_WORD[h.kind] ?? AGENT_WORD.research;
+  const sp = specialistOf(h);
+  if (sp) return { icon: sp.icon, role: L(`סוכן ${sp.he}`, `${sp.en} agent`) };
   return { icon: (KINDS[h.kind] ?? KINDS.research).icon, role: h.agent ? `@${h.agent}` : L(w[0], w[1]) };
 }
 
@@ -439,7 +449,7 @@ export function HelperCard({ run: r, convId }: { run: HelperRunInfo; convId: str
     <div className={`hcard ${going(r) && r.state !== "waiting" ? "live" : ""}`} id={`helper-${r.id}`}>
       <div className="hd">
         <StateMark r={r} />
-        <span aria-hidden>{KINDS[r.kind].icon}</span>
+        <span aria-hidden>{helperIcon(r)}</span>
         <b>{helperKindName(r)}</b>
         <span className={`htitle${r.name ? " named" : ""}`} title={r.title} dir="auto">{helperName(r)}</span>
         {r.cloud && <span className="htag t-wait">☁ {r.cloudFiles === false ? L("ענן · רק שאלה, בלי קבצי הפרויקט", "cloud · the question only, no project files") : L("ענן", "cloud")}</span>}
@@ -508,7 +518,7 @@ export function HelpersStrip({ runs, convId, onOpen }: { runs: HelperRunInfo[]; 
             <div key={r.id} className={`hchip ${r.state === "waiting" ? "waiting" : ""}`}>
               <button type="button" className="hchip-open" onClick={() => onOpen(r)} title={[r.name, r.title, r.note, r.usage ? `↑${kTokens(r.usage.input)} ↓${kTokens(r.usage.output)}` : ""].filter(Boolean).join(" · ")}>
                 <StateMark r={r} />
-                <span aria-hidden>{KINDS[r.kind].icon}</span>
+                <span aria-hidden>{helperIcon(r)}</span>
                 <span className="hchip-name">{r.name || helperKindName(r)}<span className="hchip-task">: {r.name ? words(helperDoing(r)) || r.title : r.title}</span></span>
                 <span className="hmodel">{r.model}</span>
                 {r.state === "waiting" && r.restart === "paused" ? <span className="warn small">{L("הושהה", "paused")}</span> : r.state === "waiting" ? <span className="warn small">{L("בתור", "queued")}</span> : r.state === "asking" ? <span className="ask small">{L("שואל", "asking")}</span> : <span className="mono muted">{t === undefined ? "" : clock(t)}</span>}
@@ -544,7 +554,7 @@ export function HelperSheet({ run: r, convId, onClose }: { run: HelperRunInfo; c
         <div className="hsheet-handle" aria-hidden />
         <div className="hd">
           <StateMark r={r} />
-          <span aria-hidden>{KINDS[r.kind].icon}</span>
+          <span aria-hidden>{helperIcon(r)}</span>
           <b>{helperKindName(r)}</b>
           <span className="grow" />
           <ResumedTag r={r} />

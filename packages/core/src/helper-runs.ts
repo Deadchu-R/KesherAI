@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import type { AgentLabel, AgentMessage, HelperKind, HelperPlanRef, HelperRunInfo, HelperUsage } from "@kesher/shared";
+import type { AgentLabel, AgentMessage, HelperKind, HelperPlanRef, HelperRunInfo, HelperUsage, SpecialistId } from "@kesher/shared";
 
 /**
  * The helper runs of every chat (docs/RESEARCH_LOG.md, "Helper agents in the chat", plan steps 3, 5 and 6): a queue
@@ -33,7 +33,7 @@ export interface HelperControl {
    */
   usage(u: { input: number; output: number; cached?: number; estimated?: boolean }): void;
   /** Changes what the card shows (the model after a swap, the swap's phase…). */
-  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "modelNoteHe" | "swap" | "cloudFiles" | "cloud" | "runAsk" | "approval" | "tests">>): void;
+  update(p: Partial<Pick<HelperRunInfo, "model" | "modelNote" | "modelNoteHe" | "swap" | "cloudFiles" | "cloud" | "runAsk" | "approval" | "tests" | "checklist">>): void;
   /**
    * Waits for something the user answers elsewhere (the Antigravity ask): the card says why, and the time cap waits.
    *
@@ -71,6 +71,8 @@ export interface HelperJob {
   kind: HelperKind;
   title: string;
   agent?: string;
+  /** An engine specialist (its card shows the role's own name and icon). */
+  specialist?: SpecialistId;
   callId?: string;
   background: boolean;
   maxSteps: number;
@@ -234,7 +236,7 @@ export class HelperRuns extends EventEmitter {
     let end!: (i: HelperRunInfo) => void;
     const ended = new Promise<HelperRunInfo>((r) => (end = r));
     const run: Run = {
-      info: { id, kind: job.kind, title: job.title.replace(/\s+/g, " ").trim().slice(0, 120), model: job.model, state: "waiting", queuedAt: this.now(), step: 0, maxSteps: job.maxSteps, steps: [], background: job.background, ...(job.agent ? { agent: job.agent } : {}), ...(job.callId ? { callId: job.callId } : {}), ...(job.modelNote ? { modelNote: job.modelNote } : {}), ...(job.modelNoteHe ? { modelNoteHe: job.modelNoteHe } : {}), ...(job.cloud ? { cloud: true } : {}), ...(job.plan ? { plan: { ...job.plan } } : {}) },
+      info: { id, kind: job.kind, title: job.title.replace(/\s+/g, " ").trim().slice(0, 120), model: job.model, state: "waiting", queuedAt: this.now(), step: 0, maxSteps: job.maxSteps, steps: [], background: job.background, ...(job.agent ? { agent: job.agent } : {}), ...(job.specialist ? { specialist: job.specialist } : {}), ...(job.callId ? { callId: job.callId } : {}), ...(job.modelNote ? { modelNote: job.modelNote } : {}), ...(job.modelNoteHe ? { modelNoteHe: job.modelNoteHe } : {}), ...(job.cloud ? { cloud: true } : {}), ...(job.plan ? { plan: { ...job.plan } } : {}) },
       job,
       chatId: job.chatId,
       abort: new AbortController(),

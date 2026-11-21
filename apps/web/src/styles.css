@@ -4398,6 +4398,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .plan-row .bad { color: #ff8a8a; }
 .plan-rows > li.removed .plan-task { text-decoration: line-through; color: var(--muted); }
 .plan-rows > li.removed .plan-row { opacity: 0.7; }
+/* An engine specialist's output checklist under its row (PlanCard.tsx Checklist). */
+.plan-check { list-style: none; margin: 0; padding: 0 8px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.plan-check li { white-space: nowrap; }
+.plan-check li.good { color: #7fd6a4; }
 .hchip-plan .hchip-open { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 @media (max-width: 760px) {
   /* A 390 px phone: the model chip leaves the row (the sub-agent's own sheet shows it). */

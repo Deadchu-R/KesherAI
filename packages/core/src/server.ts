@@ -18,7 +18,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { beaconSecret, branding, features, helperHandoff, parseWorkList } from "@kesher/shared";
+import { ASSIGN_CHOICES, beaconSecret, branding, features, helperHandoff, parseWorkList } from "@kesher/shared";
 import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
@@ -637,7 +637,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     toChat: async (role, title, text) => {
       const repo = config.taskInbox.repo;
       if (!repo) throw new Error("Pick the git project for the task inbox in Settings > Task inbox first.");
-      const chatTitle = `${role === "build" ? "🛠️" : role === "research" ? "📚" : "🔎"} ${title}`.slice(0, 120);
+      const chatTitle = `${ASSIGN_CHOICES.find((c) => c.to === `helper:${role}`)?.icon ?? "🔎"} ${title}`.slice(0, 120);
       const chat = await services.conversations.create({ kind: "code", workspace: repo, title: chatTitle });
       void services.conversations.send(chat.id, helperHandoff(role, title, text)).catch(() => undefined);
       return chatTitle;

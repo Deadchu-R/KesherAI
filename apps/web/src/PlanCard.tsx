@@ -1,8 +1,8 @@
 import { useState } from "react";
-import type { HelperRunInfo } from "@kesher/shared";
+import { SPECIALISTS, type HelperRunInfo } from "@kesher/shared";
 import { getLocale, he$ } from "./i18n";
 import { ItemCard } from "./DocPanel";
-import { clock, going, HelperCard, helperKindIcon, helperKindName, ModelChip, StateMark, stop, useNow } from "./Helpers";
+import { clock, going, HelperCard, helperIcon, helperKindName, ModelChip, StateMark, stop, useNow } from "./Helpers";
 import { planCollapsed, type PlanView } from "./plan-view";
 
 /**
@@ -57,16 +57,38 @@ function PlanRows({ v, convId, onOpen }: { v: PlanView; convId: string; onOpen?:
         <li key={r.id} className={r.removed ? "removed" : ""}>
           <button type="button" className="plan-row" aria-expanded={!onOpen ? open === r.id : undefined} onClick={() => (onOpen ? onOpen(r) : setOpen((o) => (o === r.id ? null : r.id)))}>
             <StateMark r={r} />
-            <span aria-hidden>{helperKindIcon(r.kind)}</span>
+            <span aria-hidden>{helperIcon(r)}</span>
             <b className="plan-role">{helperKindName(r)}</b>
             <span className="plan-task" dir="auto" title={r.title}>{r.title}</span>
             <ModelChip r={r} />
             <span className={`plan-state small ${r.state === "failed" ? "bad" : r.state === "done" ? "good" : "muted"}`}>{rowState(r)}</span>
           </button>
+          <Checklist r={r} />
           {!onOpen && open === r.id && <HelperCard run={r} convId={convId} />}
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * An engine specialist's output checklist under its row (engine-specialists.ts): its lines with ✓ when its report
+ * marked them done, ○ when not yet (while it runs, all ○). Wraps on a 390 px phone.
+ */
+function Checklist({ r }: { r: HelperRunInfo }) {
+  if (!r.specialist || r.removed) return null;
+  const marks = new Map((r.checklist ?? []).map((m) => [m.key, m]));
+  return (
+    <ul className="plan-check small" aria-label={L("רשימת תוצרים", "Output checklist")}>
+      {SPECIALISTS[r.specialist].checklist.map((c) => {
+        const m = marks.get(c.key);
+        return (
+          <li key={c.key} className={m?.done ? "good" : "muted"} title={m?.note}>
+            <span aria-hidden>{m?.done ? "✓" : "○"}</span> {L(c.he, c.en)}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

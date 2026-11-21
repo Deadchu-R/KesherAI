@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { AgentSession, type AgentTool, type ModelTurn } from "@kesher/agent";
-import type { AgentEvent, AgentMessage, ApprovalDecision, HelperAsker, HelperKind, HelperPlanRef, HelperRunInfo } from "@kesher/shared";
+import { parseChecklist, type AgentEvent, type AgentMessage, type ApprovalDecision, type HelperAsker, type HelperKind, type HelperPlanRef, type HelperRunInfo } from "@kesher/shared";
 import { builtinHelpers, HELPER_STEPS, type AgentDef } from "./agents.js";
+import { specialistAgents, specialistReady, specialistTools } from "./engine-specialists.js";
 import { runTestsTool } from "./helper-tests.js";
 import { UNTRUSTED_RULE } from "./browser-safety.js";
 import { HelperRuns, NOTE_CHARS, packEnd, reportPart, type HelperControl, type HelperJob, type NoteFrom, type SavedHelperRun } from "./helper-runs.js";
@@ -237,8 +238,11 @@ async function runHelper(
   const own = (t: AgentTool) => !agent?.tools || agent.tools.includes(t.spec.name) || (worker && (WORKER_TOOLS.test(t.spec.name) || t.spec.name === "run_tests"));
   // A builder's commands run in its copy only (the session's workspace); without a copy it gets none.
   const roles = roleTools(p.kind, o.tools()).filter((t) => worker || t.spec.name !== "run_command");
-  const tools = [...roles, ...(copy ? [...o.tools().filter((t) => WORKER_TOOLS.test(t.spec.name)), runTestsTool(copy, o.workspace?.(), onTests)] : [])].filter((t) => own(t) && (!p.webOnly || WEB_ONLY.test(t.spec.name)));
-  const hands = tools.some((t) => t.risk === "exec" || HANDS.test(t.spec.name));
+  const special = agent?.specialist;
+  // An engine specialist: its curated engine tools (the chat's own, with their risks and checkpoints), nothing else.
+  const tools = special ? specialistTools(special, o.tools()) : [...roles, ...(copy ? [...o.tools().filter((t) => WORKER_TOOLS.test(t.spec.name)), runTestsTool(copy, o.workspace?.(), onTests)] : [])].filter((t) => own(t) && (!p.webOnly || WEB_ONLY.test(t.spec.name)));
+  // Tools that act (a specialist's engine writes too): the prompt then explains the approval cards.
+  const hands = tools.some((t) => t.risk === "exec" || HANDS.test(t.spec.name) || (!!special && t.risk === "write"));
   const siteAlways = () => o.helperSiteAlways?.() === true;
   const s = new AgentSession({
     id: `helper-${randomUUID()}`,
@@ -262,7 +266,7 @@ async function runHelper(
       (tools.some((t) => t.spec.name.startsWith("browser_")) ? `${UNTRUSTED_RULE} ` : "") +
       (hands && ask ? "Looking (reading a page, a picture of a page or the screen, reading files) runs at once; every action that changes something (opening a page, a click, typing, a command) waits for the user's approval, so do only what the task needs, and if the user denies a step, do not try it again another way. Never type passwords, keys or payment details. " : "") +
       (p.webOnly ? "You may not read the user's project: answer from the task and the web only. " : "") +
-      "You are a helper of another assistant. Do only the part you are given, using your tools to look things up (you can read and search" + (worker ? ", and change files in your copy" : ", not change anything") + "). Be thorough but fast. Finish with a short, factual report (under 15 lines) of what you found: exact file paths, names, numbers and quotes, so the assistant can act on it without looking again. Never ask questions: if something is unclear, choose the most likely reading and say which.",
+      (special ? "You are a specialist sub-agent of another assistant: do only the part you are given, with your engine tools; changes happen only through them, each with the user's approval. Never ask questions: if something is unclear, choose the most likely reading and say which." : "You are a helper of another assistant. Do only the part you are given, using your tools to look things up (you can read and search" + (worker ? ", and change files in your copy" : ", not change anything") + "). Be thorough but fast. Finish with a short, factual report (under 15 lines) of what you found: exact file paths, names, numbers and quotes, so the assistant can act on it without looking again. Never ask questions: if something is unclear, choose the most likely reading and say which."),
     maxSteps: p.maxSteps,
     finalStepReport: true,
     contextTokens: o.contextTokens?.(p.modelId) ?? 12_000,
@@ -404,7 +408,7 @@ export function helperWork(
         ? "(You are in a fresh copy of the project: your earlier file changes are not in it. Make them again together with what the follow-up asks, so your new diff holds the whole change.)"
         : "(Your earlier file changes were lost with the restart: you are in a fresh copy of the project, so make them again.)";
       const resumed = ctl.resumed && write ? [...ctl.resumed, { role: "user" as const, content: fresh }] : ctl.resumed;
-      const who: HelperAsker = { id: ctl.id, title, kind, ...(agent && agent.source !== "builtin" ? { agent: agent.name } : {}) };
+      const who: HelperAsker = { id: ctl.id, title, kind, ...(agent && (agent.source !== "builtin" || agent.specialist) ? { agent: agent.name } : {}) };
       const approve = o.approve;
       // A step that needs the user: shown on the chat's card naming this helper; its card says it waits, and the time cap waits.
       const ask = approve
@@ -431,6 +435,8 @@ export function helperWork(
       const diff = copy ? await copy.finish().catch((e: Error) => `(could not read its changes: ${e.message})`) : undefined;
       copy = undefined;
       // The last check it ran, as a line the lead can trust (the model's own words may say otherwise).
+      // A specialist's checklist, as its report says it (the plan card shows ✓ / ○ per line).
+      if (agent?.specialist) ctl.update({ checklist: parseChecklist(agent.specialist, report) });
       const checked = last.tests ? `\n\nChecks in its copy: ${last.tests.ok ? "passed" : "FAILED"} (${last.tests.command}).` : write ? "\n\nChecks in its copy: not run." : "";
       return { report: report + checked, ...(diff !== undefined ? { diff } : {}) };
     } finally {
@@ -453,7 +459,7 @@ function workFromSaved(o: DelegateOptions, saved: SavedHelperRun): HelperJob["ru
   if (!r || typeof r.task !== "string" || !r.kind || !["lookup", "research", "build", "operate"].includes(r.kind)) return undefined;
   const write = !!r.write;
   if (write && !o.worktree?.()) return undefined;
-  const agent = r.agent ? [...(o.agents?.() ?? []), ...builtinHelpers(o.limits?.().steps)].find((a) => a.name === r.agent) : undefined;
+  const agent = r.agent ? [...(o.agents?.() ?? []), ...builtinHelpers(o.limits?.().steps), ...engineAgents(o)].find((a) => a.name === r.agent) : undefined;
   const kind = r.kind;
   const asked = r.model;
   const model = async (): Promise<HelperModel> => {
@@ -644,10 +650,23 @@ export function helperToolsFor(o: DelegateOptions): AgentTool[] {
   ];
 }
 
+/**
+ * The engine specialists this chat can use (engine-specialists.ts): only those whose engine tools the chat has.
+ *
+ * @param o - The chat's side.
+ * @returns Named agents "materials", "vfx", "level" that can work here.
+ */
+export function engineAgents(o: Pick<DelegateOptions, "tools" | "limits">): AgentDef[] {
+  const tools = o.tools();
+  const mcp = tools.some((t) => /(^|_)list_toolsets$/.test(t.spec.name));
+  return specialistAgents(o.limits?.().steps, mcp).filter((a) => specialistReady(a.specialist!, tools));
+}
+
 /** The `delegate` tool. */
 export function delegateTool(o: DelegateOptions): AgentTool {
   const models = o.models().slice(0, 12);
-  const agents = (o.agents?.() ?? []).slice(0, 12);
+  const engine = engineAgents(o);
+  const agents = [...(o.agents?.() ?? []).slice(0, 12), ...engine];
   const runs = o.runs ?? new HelperRuns({ limit: () => 4 });
   const chatId = o.chatId ?? `chat-${randomUUID().slice(0, 6)}`;
   const background = !!o.runs;
@@ -655,7 +674,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
     risk: "safe",
     spec: {
       name: "delegate",
-      description: `Hand independent parts of a job to helpers that run at the same time, each in its own clean context, and get their short reports back. Helper types: "lookup" (find where something is, read and quote files; a small fast model), "research" (read code and the web on one question; your own model), "build" (make one change in its own copy of the project and run the project's tests there, comes back as a diff with the test result for you to apply; only in a code chat on a git project), "operate" (do one task in the user's browser or on the computer: open pages, click, type, control an app). Research may also read the user's browser tabs. Every action that changes something (a page opened, a click, typing, a command) waits for the user's approval on a card that names the helper. Use it for legwork that would fill your context. Give each part everything it needs (helpers do not see the chat) and ask for a report under 15 lines with paths and numbers. Up to 4 parts; more wait in a queue. A part may name a model${models.length ? ` (${models.join(", ")})` : ""}; otherwise the type's model from Settings is used. Helpers never change the user's files: you make the changes yourself after.${background ? ' Set "background": true on a part to go on working meanwhile: delegate answers at once with its id, its report reaches you at your next turn, or ask with helper_result / helper_wait.' : ""} They all run on this computer: to split work across the user's other computers (My devices), use split_across_computers instead.${agents.length ? `\n\nNamed agents (set "agent" on a part when one fits the job, or when the user names or @-mentions it; it brings its own instructions and model):\n${agents.map((a) => `- ${a.name}${a.source === "project" ? " (this project's)" : ""}: ${a.description.replace(/\s+/g, " ").slice(0, 200)}`).join("\n")}` : ""}`,
+      description: `Hand independent parts of a job to helpers that run at the same time, each in its own clean context, and get their short reports back. Helper types: "lookup" (find where something is, read and quote files; a small fast model), "research" (read code and the web on one question; your own model), "build" (make one change in its own copy of the project and run the project's tests there, comes back as a diff with the test result for you to apply; only in a code chat on a git project), "operate" (do one task in the user's browser or on the computer: open pages, click, type, control an app). Research may also read the user's browser tabs. Every action that changes something (a page opened, a click, typing, a command) waits for the user's approval on a card that names the helper. Use it for legwork that would fill your context. Give each part everything it needs (helpers do not see the chat) and ask for a report under 15 lines with paths and numbers. Up to 4 parts; more wait in a queue. A part may name a model${models.length ? ` (${models.join(", ")})` : ""}; otherwise the type's model from Settings is used. Helpers never change the user's files: you make the changes yourself after.${background ? ' Set "background": true on a part to go on working meanwhile: delegate answers at once with its id, its report reaches you at your next turn, or ask with helper_result / helper_wait.' : ""} They all run on this computer: to split work across the user's other computers (My devices), use split_across_computers instead.${agents.length ? `\n\nNamed agents (set "agent" on a part when one fits the job, or when the user names or @-mentions it; it brings its own instructions and model):\n${agents.map((a) => `- ${a.name}${a.source === "project" ? " (this project's)" : ""}: ${a.description.replace(/\s+/g, " ").slice(0, 200)}`).join("\n")}` : ""}${engine.length ? `\n\nEngine specialists (${engine.map((a) => a.name).join(", ")}) are the exception to "helpers never change": they change the open game project themselves through their engine tools, each step approved by the user on a card with the scene diff, and end with a checklist. Give one the whole engine task (the object names, the look wanted, the target phones).` : ""}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -700,7 +719,7 @@ export function delegateTool(o: DelegateOptions): AgentTool {
       const fallback = o.currentModel();
       const started = Date.now();
       const limits = o.limits?.() ?? {};
-      const builtin = builtinHelpers(limits.steps);
+      const builtin = [...builtinHelpers(limits.steps), ...engine];
       const results: Array<string | { id: string; n: number; background: boolean }> = [];
       // Two or more parts for one job make a plan (one Plan card in the chat); `plan` adds parts to an earlier one.
       const goal = typeof input.goal === "string" ? input.goal.replace(/\s+/g, " ").trim().slice(0, 200) : "";
@@ -753,7 +772,8 @@ export function delegateTool(o: DelegateOptions): AgentTool {
           chatId,
           kind,
           title,
-          ...(agent && agent.source !== "builtin" ? { agent: agent.name } : {}),
+          ...(agent && (agent.source !== "builtin" || agent.specialist) ? { agent: agent.name } : {}),
+          ...(agent?.specialist ? { specialist: agent.specialist } : {}),
           ...(ctx.callId ? { callId: ctx.callId } : {}),
           background: bg,
           maxSteps,

@@ -25,6 +25,7 @@ import type { GameCheckpoints, GameEngine } from "./game-checkpoints.js";
 import { planFile, playTestTool } from "./play-test.js";
 import { unityAssetFile, unrealAssetFile, unrealLevelFile } from "./game-sync.js";
 import { unrealLevelTools } from "./unreal-level-tools.js";
+import { unrealBuildTools } from "./engine-build-tools.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -109,6 +110,8 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
       ...(deps.unreal ? { bridge: deps.unreal } : {}),
       projectDir: () => (deps.unreal?.projectFile ? dirname(deps.unreal.projectFile) : p.unreal.project ? (/\.uproject$/i.test(p.unreal.project) ? dirname(p.unreal.project) : p.unreal.project) : undefined),
     }));
+    // The engine specialists' Unreal tools (engine-build-tools.ts): block-out and Niagara effects through the Bridge.
+    tools.push(...unrealBuildTools(deps.unreal ? { bridge: deps.unreal } : {}));
     notes.push("unreal_inspect_level lists a level's actors (labels, classes, transforms, mesh slots and materials), also with Unreal closed; unreal_apply_material puts a material in an actor's mesh slot (the user sees the old → new material before it runs).");
   }
   // A game project in use: running its Android build on the user's phone and reading why it closed.
@@ -171,6 +174,8 @@ export function engineWrites(name: string, input: Record<string, unknown>, dirs:
     }
     case "unreal_apply_material":
       return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim()) : undefined);
+    case "unreal_blockout":
+      return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim().split(".")[0]!) : undefined);
     case "unreal_write_source":
       return one("unreal", dirs.unreal, path && dirs.unreal ? join(dirs.unreal, path) : undefined);
     case "godot_file":

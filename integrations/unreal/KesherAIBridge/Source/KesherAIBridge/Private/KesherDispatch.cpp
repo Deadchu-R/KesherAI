@@ -8,6 +8,7 @@
 #include "KesherLevel.h"
 #include "KesherPlay.h"
 #include "KesherPlayTest.h"
+#include "KesherSpawn.h"
 #include "KesherWidget.h"
 #include "Modules/ModuleManager.h"
 #if WITH_LIVE_CODING
@@ -162,6 +163,13 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 		In->TryGetStringField(TEXT("material"), Material);
 		Result = KesherLevel::SetMaterial(Path, Actor, Component, Slot.IsEmpty() ? FString(TEXT("0")) : Slot, Material, bOffline);
 	}
+	// The engine specialists (engine-build-tools.ts): a block-out's actors, and a Niagara effect from a template.
+	else if (Cmd == TEXT("level_spawn"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Actors = nullptr;
+		if (In->TryGetArrayField(TEXT("actors"), Actors)) Result = KesherSpawn::Spawn(Path, *Actors, bOffline);
+	}
+	else if (Cmd == TEXT("vfx_create")) Result = KesherSpawn::CreateVfx(In, bOffline);
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

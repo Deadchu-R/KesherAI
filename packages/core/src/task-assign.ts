@@ -10,7 +10,7 @@
  * - A running task is stopped, and a finished one run again, only after the user's yes (`confirm`); without it the
  *   answer is a question (`ask`).
  */
-import { ASSIGN_CHOICES, inboxExecutorOf, roleOf, type AssignResult, type AssignRole, type AssignTo, type InboxTaskView } from "@kesher/shared";
+import { ASSIGN_CHOICES, inboxExecutorOf, roleOf, type AssignResult, type AssignRole, type AssignTo, type InboxTaskView, type SpecialistId } from "@kesher/shared";
 
 /** What an assignment needs from the app. */
 export interface AssignDeps {
@@ -24,7 +24,7 @@ export interface AssignDeps {
   reassign: (id: string, to: "opus" | "antigravity" | "local", again: boolean) => Promise<unknown>;
   add: (input: { title: string; goal: string; executor: string }) => Promise<{ id: string }>;
   /** Opens a code chat whose lead hands the task to a sub-agent of the role; returns the chat's title. */
-  toChat?: (role: AssignRole, title: string, text: string) => Promise<string>;
+  toChat?: (role: AssignRole | SpecialistId, title: string, text: string) => Promise<string>;
   movedOut: (id: string, where: string) => Promise<unknown>;
 }
 

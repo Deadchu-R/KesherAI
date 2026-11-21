@@ -1,0 +1,383 @@
+{
+ "group": "סוכנים · Agents",
+ "mocks": [
+  {
+   "url": "**/api/conversations/c1",
+   "method": "GET",
+   "json": {
+    "id": "c1",
+    "projectId": null,
+    "title": "זירה: בלוק-אאוט, אש ותאורה",
+    "kind": "code",
+    "modelId": "qwen3-coder",
+    "mode": "ask",
+    "workspace": "D:/Games/Arena",
+    "createdAt": {
+     "$ago": "1m"
+    },
+    "updatedAt": {
+     "$ago": "1m"
+    },
+    "messageCount": 3,
+    "session": {
+     "id": "c1",
+     "status": "idle",
+     "modelId": "qwen3-coder",
+     "mode": "ask",
+     "workspace": "D:/Games/Arena",
+     "pendingApprovals": [],
+     "pendingQuestions": [],
+     "canUndo": false,
+     "grants": [],
+     "queued": []
+    },
+    "events": [
+     {
+      "seq": 1,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "user",
+      "text": "תבנה לי זירה קטנה עם רמפה, מדורה באמצע ותאורת שקיעה"
+     },
+     {
+      "seq": 2,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_call",
+      "callId": "d1",
+      "name": "delegate",
+      "input": {
+       "goal": "זירה: בלוק-אאוט ואפקט אש",
+       "parts": [
+        {
+         "task": "Block out a 12x12 m arena with a ramp, sunset light, navmesh",
+         "title": "בלוק-אאוט לזירה",
+         "agent": "level"
+        },
+        {
+         "task": "A campfire in the middle",
+         "title": "מדורה באמצע",
+         "agent": "vfx"
+        }
+       ]
+      }
+     },
+     {
+      "seq": 3,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "tool_result",
+      "callId": "d1",
+      "name": "delegate",
+      "ok": true,
+      "output": "Started 2 specialists in the background."
+     },
+     {
+      "seq": 4,
+      "at": {
+       "$ago": "4m"
+      },
+      "type": "assistant",
+      "turn": 1,
+      "text": "נתתי את הזירה לסוכן עיצוב השלבים ואת המדורה לסוכן האפקטים. כל שינוי במנוע יחכה לאישור שלך עם רשימת האובייקטים."
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/conversations/c1/helpers",
+   "json": {
+    "runs": [
+     {
+      "id": "h1",
+      "callId": "d1",
+      "kind": "operate",
+      "agent": "level",
+      "specialist": "level",
+      "title": "בלוק-אאוט לזירה",
+      "model": "Qwen3-Coder-30B",
+      "state": "done",
+      "queuedAt": {
+       "$agoMs": "4m"
+      },
+      "startedAt": {
+       "$agoMs": "230s"
+      },
+      "endedAt": {
+       "$agoMs": "60s"
+      },
+      "step": 9,
+      "maxSteps": 25,
+      "background": true,
+      "plan": {
+       "id": "p-arena01",
+       "kind": "plan",
+       "goal": "זירה: בלוק-אאוט ואפקט אש"
+      },
+      "steps": [
+       "unity_scene: hierarchy",
+       "unity_blockout: 14 items, 3 lights, navmesh",
+       "unity_screenshot: game"
+      ],
+      "report": "Placed 14 objects and 3 lights under Blockout; NavMeshSurface built.",
+      "checklist": [
+       {
+        "key": "layout",
+        "done": true
+       },
+       {
+        "key": "blockout",
+        "done": true
+       },
+       {
+        "key": "lighting",
+        "done": true
+       },
+       {
+        "key": "navmesh",
+        "done": true
+       },
+       {
+        "key": "checkpoint",
+        "done": false,
+        "note": "scene not saved yet"
+       }
+      ]
+     },
+     {
+      "id": "h2",
+      "callId": "d1",
+      "kind": "operate",
+      "agent": "vfx",
+      "specialist": "vfx",
+      "title": "מדורה באמצע",
+      "model": "Qwen3-Coder-30B",
+      "state": "running",
+      "queuedAt": {
+       "$agoMs": "4m"
+      },
+      "startedAt": {
+       "$agoMs": "200s"
+      },
+      "step": 4,
+      "maxSteps": 25,
+      "background": true,
+      "plan": {
+       "id": "p-arena01",
+       "kind": "plan",
+       "goal": "זירה: בלוק-אאוט ואפקט אש"
+      },
+      "steps": [
+       "unity_inspect_object: Blockout/Floor",
+       "unity_vfx: create fire"
+      ],
+      "checklist": [
+       {
+        "key": "spec",
+        "done": true
+       },
+       {
+        "key": "created",
+        "done": true
+       }
+      ]
+     }
+    ],
+    "agents": []
+   }
+  },
+  {
+   "url": "**/api/conversations/c1/events*",
+   "body": ": hi\n\n",
+   "contentType": "text/event-stream"
+  },
+  {
+   "url": "**/api/task-inbox",
+   "json": {
+    "settings": {
+     "enabled": true,
+     "paused": false,
+     "repo": "D:/Projects/KesherAI",
+     "branch": "kesher-inbox",
+     "fetchMinutes": 10,
+     "dailyCap": 10,
+     "maxMinutes": 30,
+     "model": "",
+     "allowedPaths": [],
+     "forbiddenPaths": [],
+     "commands": [
+      "pnpm -s typecheck"
+     ],
+     "notWhileGame": true,
+     "notWhileEditor": false,
+     "gpuBusyPercent": 0
+    },
+    "today": {
+     "date": "2026-11-20",
+     "used": 2
+    },
+    "busy": {
+     "free": true,
+     "reasons": []
+    },
+    "runHere": true,
+    "project": "KesherAI",
+    "lastFetch": {
+     "$agoMs": "2m"
+    },
+    "tasks": [
+     {
+      "id": "t-0412",
+      "title": "להשוות את מסך ההגדרות למתחרים",
+      "executor": "auto",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "להשוות את מסך ההגדרות למתחרים",
+      "status": "waiting",
+      "runBy": "antigravity",
+      "branch": "agy/t-0412",
+      "label": {
+       "name": "השוואת הגדרות",
+       "note": "לא לגעת בעיצוב הישן"
+      }
+     },
+     {
+      "id": "t-0411",
+      "title": "לתקן אזהרות לינט בחבילת core",
+      "executor": "auto",
+      "risk": "low",
+      "from": "self-work",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לתקן אזהרות לינט בחבילת core",
+      "status": "queued",
+      "runBy": "local",
+      "branch": "agy/t-0411"
+     },
+     {
+      "id": "t-0409",
+      "title": "לעדכן את תיעוד ההתקנה",
+      "executor": "auto",
+      "risk": "low",
+      "from": "roee",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לעדכן את תיעוד ההתקנה",
+      "status": "done",
+      "runBy": "opus",
+      "branch": "agy/t-0409"
+     }
+    ]
+   }
+  },
+  {
+   "url": "**/api/task-inbox/work-list",
+   "json": {
+    "items": [
+     {
+      "id": "w-1a2b",
+      "section": "בתור",
+      "status": "next",
+      "title": "לחבר חיפוש בכל המשחקים לדף הפרויקטים",
+      "text": "",
+      "order": 0
+     },
+     {
+      "id": "w-3c4d",
+      "section": "בתור",
+      "status": "next",
+      "title": "לבדוק את מסך ההגדרות בטלפון ב-390 פיקסלים",
+      "text": "",
+      "order": 1
+     },
+     {
+      "id": "w-5e6f",
+      "section": "ממתין לך",
+      "status": "waiting",
+      "title": "לאשר את הצבעים של עורך התמונות",
+      "text": "",
+      "order": 2
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "EngineAssign",
+   "title": "מי מבצע: סוכני המנוע (חומרים, אפקטים, עיצוב שלבים)",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has(.tinbox-title)"
+    },
+    {
+     "click": ".tinbox-row:has(.tinbox-title) >> nth=0 >> .assign > button"
+    },
+    {
+     "wait": ".assign-list"
+    }
+   ]
+  },
+  {
+   "id": "EnginePlanLevel",
+   "title": "תוכנית עם סוכן עיצוב שלבים: רשימת תוצרים",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 1100
+   },
+   "steps": [
+    {
+     "wait": ".plan-card"
+    },
+    {
+     "waitMs": 800
+    },
+    {
+     "click": ".plan-card .plan-row >> nth=0"
+    },
+    {
+     "wait": ".plan-check"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".plan-card"
+    },
+    {
+     "waitMs": 800
+    },
+    {
+     "wait": ".plan-check"
+    }
+   ]
+  }
+ ]
+}

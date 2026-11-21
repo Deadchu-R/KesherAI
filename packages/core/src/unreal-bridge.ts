@@ -43,9 +43,11 @@ export interface QueuedEdit {
   /**
    * "create": make this Blueprint first (it was made in KesherAI with Unreal closed). "material": a material for a
    * level actor's mesh slot (unreal_apply_material with Unreal closed): `path` is the level, `ops` has one
-   * { op: "material", actor, component, slot, material }.
+   * { op: "material", actor, component, slot, material }. "spawn": actors placed in a level by the Level design
+   * specialist (unreal_blockout): `path` is the level, `ops` the actors for `level_spawn`. "vfx": a Niagara system
+   * made by the VFX specialist (unreal_vfx): `path` is the new asset, `ops` has one spec for `vfx_create`.
    */
-  kind?: "create" | "material";
+  kind?: "create" | "material" | "spawn" | "vfx";
   /** For "create": the parent class (Actor, Pawn, Character, GameModeBase, PlayerController, ActorComponent, UserWidget…). */
   parent?: string;
   at: string;
@@ -80,7 +82,7 @@ export interface HeadlessAnswer {
 }
 
 /** Commands the headless editor (the editor closed) can run. */
-const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move", "level_material"]);
+const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move", "level_material", "level_spawn", "vfx_create"]);
 
 /** A stand-in answer kept on disk, unless it is an empty level list (a scan that was not ready, kept by 0.6.383). */
 const usable = <T>(cmd: string, v: T | undefined): T | undefined => (cmd === "levels" && v && !(v as { levels?: unknown[] }).levels?.length ? undefined : v);
@@ -90,8 +92,21 @@ const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "leve
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
 const fileFor = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
-/** The file a queued change writes: a level's .umap for a material, else the Blueprint's .uasset. */
-const queuedFile = (dir: string, q: QueuedEdit) => (q.kind === "material" ? unrealLevelFile(dir, q.path) : unrealAssetFile(dir, q.path));
+/** The file a queued change writes: a level's .umap for a material or placed actors, else the asset's .uasset. */
+const queuedFile = (dir: string, q: QueuedEdit) => (q.kind === "material" || q.kind === "spawn" ? unrealLevelFile(dir, q.path) : unrealAssetFile(dir, q.path));
+/** Queued changes that are one bridge command of their own (not a Blueprint graph's ops). */
+const ownCommand = (q: QueuedEdit) => q.kind === "material" || q.kind === "spawn" || q.kind === "vfx";
+/**
+ * The bridge command of a queued material, placement or effect.
+ *
+ * @param q - The queued change (`ownCommand` is true for it).
+ * @returns The command with its arguments.
+ */
+function queuedCommand(q: QueuedEdit): Record<string, unknown> {
+  if (q.kind === "spawn") return { cmd: "level_spawn", path: q.path, actors: q.ops };
+  if (q.kind === "vfx") return { ...((q.ops[0] ?? {}) as Record<string, unknown>), cmd: "vfx_create", path: q.path };
+  return { cmd: "level_material", path: q.path, ...materialArgs(q) };
+}
 /** A queued material change's arguments for the `level_material` command. */
 function materialArgs(q: QueuedEdit): Record<string, string> {
   const o = (q.ops[0] ?? {}) as Record<string, unknown>;
@@ -373,8 +388,9 @@ export class UnrealBridge {
     for (const q of apply) {
       try {
         // A Blueprint made in KesherAI while Unreal was closed: made now, before the changes that follow it in the queue.
-        if (q.kind === "material") {
-          await this.request("level_material", { path: q.path, ...materialArgs(q) }, 120_000);
+        if (ownCommand(q)) {
+          const { cmd, ...args } = queuedCommand(q);
+          await this.request(String(cmd), args, 120_000);
           await this.unqueue(q.id);
           applied++;
           continue;
@@ -726,11 +742,11 @@ export class UnrealBridge {
       const commands: Array<Record<string, unknown>> = [];
       for (const q of mine) {
         if (q.kind === "create") commands.push({ cmd: "create", path: q.path, parent: q.parent ?? "Actor" });
-        else if (q.kind === "material") commands.push({ cmd: "level_material", path: q.path, ...materialArgs(q) });
+        else if (ownCommand(q)) commands.push(queuedCommand(q));
         else commands.push({ cmd: "apply", path: q.path, graph: q.graph, ops: q.ops });
       }
       // Blueprints are compiled, saved and read again; a level is saved by its own command.
-      const paths = [...new Set(mine.filter((q) => q.kind !== "material").map((q) => q.path))];
+      const paths = [...new Set(mine.filter((q) => !ownCommand(q)).map((q) => q.path))];
       for (const path of paths) commands.push({ cmd: "compile", path }, { cmd: "save", path });
       for (const path of paths) commands.push({ cmd: "graph", path });
       const answers = await this.offline(commands);
@@ -742,7 +758,7 @@ export class UnrealBridge {
           applied++;
           await this.unqueue(mine[i]!.id);
           // A level changed: its kept copy is old now (the next read takes it again).
-          if (mine[i]!.kind === "material") await rm(join(this.projectDir(project), "standin", `level-${fileFor(mine[i]!.path)}`), { force: true }).catch(() => undefined);
+          if (mine[i]!.kind === "material" || mine[i]!.kind === "spawn") await rm(join(this.projectDir(project), "standin", `level-${fileFor(mine[i]!.path)}`), { force: true }).catch(() => undefined);
         } else failed++;
       }
       // The graphs read at the end become the saved copies the page shows.

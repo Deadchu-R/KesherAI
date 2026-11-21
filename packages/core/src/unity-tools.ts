@@ -7,6 +7,7 @@ import { unityAddComponentDiff, unityCreateDiff } from "./scene-diff-build.js";
 import { readResult, type UnityCli } from "./unity-cli.js";
 import { targetFps, unityFrameRateScript, type Phone } from "./phones.js";
 import { clampInt, hierarchyCs, unityEditTools, type UnityEditDeps } from "./unity-edit-tools.js";
+import { unityBuildTools } from "./engine-build-tools.js";
 import { MAX_COMPILE_FIXES, UNITY_EDIT_TOOLS, compileErrors, type UnityTurnHandle } from "./unity-turns.js";
 
 /**
@@ -564,6 +565,8 @@ return "Changed " + PathOf(go.transform) + report + " (not saved yet: unity_scen
       },
     },
     ...unityEditTools({ project, need, evalCs: async (code) => cut(await evalCs(code)), ...(readAsset ? { readAsset } : {}) }),
+    // The engine specialists' tools (engine-build-tools.ts): block-out, effects, texture settings.
+    ...unityBuildTools({ project, need, evalCs: async (code) => cut(await evalCs(code)) }),
     {
       risk: "read",
       spec: {

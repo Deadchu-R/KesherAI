@@ -9,6 +9,8 @@
  * @packageDocumentation
  */
 
+import type { ChecklistMark, SpecialistId } from "./engine-specialists.js";
+
 /** A media job's progress, as a tool reports it (ComfyUI's `/ws` messages, the built-in engine's console). */
 export interface JobProgress {
   /** What it is doing: "queued", "loading", "sampling", "decoding", "saving"; free text from the engine otherwise. */
@@ -158,6 +160,10 @@ export interface HelperRunInfo {
   kind: HelperKind;
   /** A named helper (a persona or an agent file), when one was used. */
   agent?: string;
+  /** An engine specialist (engine-specialists.ts): the card shows its own name and icon. */
+  specialist?: SpecialistId;
+  /** A specialist's output checklist, from its report (✓ / ○ on the plan card). */
+  checklist?: ChecklistMark[];
   /** The task in a few words. */
   title: string;
   /** The owner's own name and note for the run, and when set (agent-label.ts; kept by the PC, not in the run). */
