@@ -242,9 +242,8 @@
    "id": "ModelsHubFit",
    "title": "מודלים: חיפוש ב-Hugging Face מסומן לפי המחשב (כולו על כרטיס המסך, חלקית, גדול מדי), סינון לפי משימה, גודל ורישיון",
    "route": "#/models",
-   "height": {
-    "desktop": 1300,
-    "phone": 2300
+   "shot": {
+    "desktop": "section.hub"
    },
    "mocks": [],
    "steps": [
@@ -257,15 +256,34 @@
     {
      "waitMs": 300
     }
-   ]
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".hub-row"
+    },
+    {
+     "click": ".hub-fit-filter .segmented button:last-child"
+    },
+    {
+     "waitMs": 300
+    },
+    {
+     "top": "section.hub"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "height": {
+    "phone": 1350
+   }
   },
   {
    "id": "ModelsHubFiles",
    "title": "מודלים: קבצי המודל עם הקוונטיזציה, \"תוסף ראייה\", סימון לכל קובץ ו\"להשתמש בצ'אט\" אחרי ההורדה",
    "route": "#/models",
-   "height": {
-    "desktop": 1300,
-    "phone": 2300
+   "shot": {
+    "desktop": "section.hub"
    },
    "mocks": [],
    "steps": [
@@ -282,20 +300,42 @@
      "wait": ".hub-file"
     },
     {
-     "scroll": ".hub-row.open"
+     "waitMs": 3600
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".hub-row"
+    },
+    {
+     "click": ".hub-fit-filter .segmented button:last-child"
+    },
+    {
+     "click": ".hub-row:nth-child(2) .hub-head"
+    },
+    {
+     "wait": ".hub-file"
+    },
+    {
+     "waitMs": 3600
+    },
+    {
+     "top": "section.hub"
     },
     {
      "waitMs": 300
     }
-   ]
+   ],
+   "height": {
+    "phone": 2050
+   }
   },
   {
    "id": "ModelsHubDrive",
    "title": "מודלים: חלון ההורדה עם בחירת כונן (כונן הנתונים הכבדים כברירת מחדל) ומקום פנוי בכל כונן",
    "route": "#/models",
-   "height": {
-    "desktop": 1300,
-    "phone": 2300
+   "shot": {
+    "desktop": "section.hub"
    },
    "mocks": [
     {
@@ -353,12 +393,38 @@
      "wait": ".hub-drives"
     },
     {
-     "scroll": ".plan"
+     "waitMs": 300
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".hub-row"
+    },
+    {
+     "click": ".hub-row:nth-child(2) .hub-head"
+    },
+    {
+     "wait": ".hub-file"
+    },
+    {
+     "click": ".hub-file:has-text(\"Q4_K_M\") button.primary"
+    },
+    {
+     "wait": ".hub-drives"
+    },
+    {
+     "waitMs": 300
+    },
+    {
+     "top": "section.hub"
     },
     {
      "waitMs": 300
     }
-   ]
+   ],
+   "height": {
+    "phone": 2200
+   }
   }
  ]
 }

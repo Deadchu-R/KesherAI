@@ -64,3 +64,10 @@ test("a hub board takes a tab or a path as its route and its own seed; an app ro
   assert.throws(() => parseScenarioFile(JSON.stringify({ group: "g", boards: [{ id: "S", title: "t", route: "#settings" }] }), "f.json"), /route/);
   assert.equal(parseScenarioFile(JSON.stringify({ group: "g", boards: [{ id: "S", title: "t", route: "#/games" }] }), "f.json")[0]!.target, "app");
 });
+
+test("shot is one selector for both sizes, or one per size", () => {
+  const jobs = (shot: unknown) => parseScenarioFile(file({ boards: [{ id: "G", title: "t", route: "#/g", shot }] }), "f.json");
+  assert.deepEqual(jobs(".a").map((j) => j.shot), [".a", ".a"]);
+  assert.deepEqual(jobs({ desktop: ".d" }).map((j) => j.shot), [".d", undefined]);
+  assert.deepEqual(jobs(undefined).map((j) => j.shot), [undefined, undefined]);
+});

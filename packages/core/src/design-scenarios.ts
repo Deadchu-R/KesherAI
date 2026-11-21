@@ -48,6 +48,8 @@ const stepSchema = z.union([
   z.object({ fill: selector, value: z.string().max(2000) }).strict(),
   z.object({ hover: selector }).strict(),
   z.object({ scroll: selector }).strict(),
+  // Scrolls the element to the top of the window (just under the app bar), so a tall window shows it from its first line.
+  z.object({ top: selector }).strict(),
   // Selects the element's text (as a user's drag or the phone's handles would), for boards of a selection's tools.
   z.object({ select: selector }).strict(),
 ]);
@@ -83,7 +85,8 @@ const boardSchema = z.object({
   locale: z.enum(["he", "en"]).default("he"),
   height: z.union([height, z.object({ desktop: height.optional(), phone: height.optional() })]).optional(),
   fullPage: z.boolean().default(false),
-  shot: selector.optional(),
+  // One element to shoot alone: a selector, or one per size (a phone's element shot is better left to the whole page).
+  shot: z.union([selector, z.object({ desktop: selector.optional(), phone: selector.optional() })]).optional(),
   mocks: z.array(mockSchema).max(80).default([]),
   steps: z.array(stepSchema).max(60).default([]),
   phoneSteps: z.array(stepSchema).max(60).optional(),
@@ -99,7 +102,7 @@ const fileSchema = z.object({
 
 /** A mocked API answer (Playwright route): the URL glob, and the JSON or raw body to answer with. */
 export type DesignMock = z.infer<typeof mockSchema>;
-/** One step before the shot: click, wait for, wait a moment, type into, hover, scroll to or select an element's text. */
+/** One step before the shot: click, wait for, wait a moment, type into, hover, scroll to, scroll to the top or select an element's text. */
 export type DesignStep = z.infer<typeof stepSchema>;
 
 /** One board at one size, ready to render. */
@@ -129,6 +132,11 @@ export interface DesignJob {
   target: "app" | "hub";
   /** A hub board's starting state (times already fixed). */
   hub?: HubSeed;
+}
+
+/** The element a board shoots alone at this size (`shot` is one selector, or one per size), if any. */
+function shotOf(shot: string | { desktop?: string | undefined; phone?: string | undefined } | undefined, viewport: DesignViewport): string | undefined {
+  return typeof shot === "string" ? shot : shot?.[viewport];
 }
 
 const UNITS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
@@ -195,7 +203,7 @@ export function parseScenarioFile(text: string, file: string): DesignJob[] {
         locale: b.locale,
         route: b.route,
         fullPage: b.fullPage,
-        ...(b.shot ? { shot: b.shot } : {}),
+        ...(shotOf(b.shot, viewport) ? { shot: shotOf(b.shot, viewport)! } : {}),
         mocks: [...b.mocks, ...f.mocks].map((m) => (m.json === undefined ? m : { ...m, json: resolveTimes(m.json, now) })),
         steps: (phone && b.phoneSteps) || b.steps,
         now,

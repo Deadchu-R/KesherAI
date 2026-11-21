@@ -144,7 +144,14 @@ async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   else if ("fill" in s) await page.locator(s.fill).first().fill(s.value, T);
   else if ("hover" in s) await page.locator(s.hover).first().hover(T);
   else if ("scroll" in s) await page.locator(s.scroll).first().scrollIntoViewIfNeeded(T);
-  else if ("select" in s) {
+  else if ("top" in s) {
+    const el = page.locator(s.top).first();
+    await el.waitFor(T);
+    await el.evaluate((node) => {
+      (node as HTMLElement).style.scrollMarginTop = "76px";
+      node.scrollIntoView({ block: "start" });
+    });
+  } else if ("select" in s) {
     const el = page.locator(s.select).first();
     await el.waitFor(T);
     // Select its text, then the mouse up the page listens for (the phone follows selectionchange by itself).
