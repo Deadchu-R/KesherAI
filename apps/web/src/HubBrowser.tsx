@@ -253,14 +253,14 @@ function HubRow({ m, fit, open, onToggle, label, onDownloaded, onlyRuns }: { m: 
 
   return (
     <div className={`hub-row ${open ? "open" : ""}`}>
-      <button type="button" className="hub-head" onClick={onToggle} aria-expanded={open}>
-        <span className="hub-name" dir="ltr"><strong>{name}</strong> <span className="muted">{author}</span></span>
-        <span className="hub-stats muted" dir="ltr">
+      <button type="button" className="hub-row-head" onClick={onToggle} aria-expanded={open}>
+        <span className="hub-row-name" dir="ltr"><strong>{name}</strong> <span className="muted">{author}</span></span>
+        <span className="hub-row-stats muted" dir="ltr">
           <span title={t("sort-likes")}>♥ {compact(m.likes)}</span>
           <span title={t("sort-downloads")}>↓ {compact(m.downloads)}</span>
           {m.lastModified && <span title={t("sort-modified")}>{ago(m.lastModified)}</span>}
         </span>
-        <span className="hub-facts muted">
+        <span className="hub-row-facts muted">
           {fit && <FitBadge fit={fit} />}
           {facts.join(" · ")}
           {m.gated ? <span className="pill warn">{t("gated")}</span> : null}

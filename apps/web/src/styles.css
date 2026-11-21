@@ -278,16 +278,17 @@ button.on { border-color: var(--accent); }
 .hub-filters input { min-width: 200px; flex: 1; }
 .hub-list { display: flex; flex-direction: column; }
 .hub-row { border-top: 1px solid var(--border); }
-.hub-head { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name stats" "facts facts"; gap: 2px 12px; text-align: start; background: none; border: 0; border-radius: 0; padding: 10px 4px; height: auto; color: var(--text); cursor: pointer; }
-.hub-head:hover { background: rgba(255,255,255,.03); }
-.hub-name { grid-area: name; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
-.hub-stats { grid-area: stats; display: flex; gap: 12px; font-size: 13px; white-space: nowrap; }
-.hub-facts { grid-area: facts; font-size: 13px; display: flex; gap: 8px; align-items: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Rows wrap instead of clipping: name (own line when long), then stats, then fit badge + facts. Classes are hub-row-* so they never collide with the computer popup's .hub-head/.hub-facts. */
+.hub-row-head { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name stats" "facts facts"; gap: 4px 12px; align-items: start; text-align: start; background: none; border: 0; border-radius: 0; padding: 10px 4px; height: auto; color: var(--text); cursor: pointer; }
+.hub-row-head:hover { background: rgba(255,255,255,.03); }
+.hub-row-name { grid-area: name; min-width: 0; overflow-wrap: anywhere; text-align: start; }
+.hub-row-stats { grid-area: stats; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; white-space: nowrap; }
+.hub-row-facts { grid-area: facts; min-width: 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; overflow-wrap: anywhere; }
 .hub-body { padding: 4px 4px 14px; }
 .hub-summary { margin: 0; line-height: 1.55; font-size: 14px; color: var(--text); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .hub-row.open .hub-summary:hover { -webkit-line-clamp: unset; }
 .small { font-size: 13px; }
-@media (max-width: 760px) { .hub-head { grid-template-areas: "name" "stats" "facts"; grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .hub-row-head { grid-template-areas: "name" "stats" "facts"; grid-template-columns: minmax(0, 1fr); } }
 
 .anywhere { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
 

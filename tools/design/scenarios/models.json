@@ -294,7 +294,7 @@
      "click": ".hub-fit-filter .segmented button:last-child"
     },
     {
-     "click": ".hub-row:nth-child(2) .hub-head"
+     "click": ".hub-row:nth-child(2) .hub-row-head"
     },
     {
      "wait": ".hub-file"
@@ -311,7 +311,7 @@
      "click": ".hub-fit-filter .segmented button:last-child"
     },
     {
-     "click": ".hub-row:nth-child(2) .hub-head"
+     "click": ".hub-row:nth-child(2) .hub-row-head"
     },
     {
      "wait": ".hub-file"
@@ -381,7 +381,7 @@
      "wait": ".hub-row"
     },
     {
-     "click": ".hub-row:nth-child(2) .hub-head"
+     "click": ".hub-row:nth-child(2) .hub-row-head"
     },
     {
      "wait": ".hub-file"
@@ -401,7 +401,7 @@
      "wait": ".hub-row"
     },
     {
-     "click": ".hub-row:nth-child(2) .hub-head"
+     "click": ".hub-row:nth-child(2) .hub-row-head"
     },
     {
      "wait": ".hub-file"
