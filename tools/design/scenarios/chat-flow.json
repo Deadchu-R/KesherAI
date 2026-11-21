@@ -280,6 +280,149 @@
      "wait": ".msg-versions"
     }
    ]
+  },
+  {
+   "id": "ChatThinkingPicker",
+   "title": "צ'אט: בחירת רמת חשיבה בתפריט המודל (רגילה, כבויה, נמוכה, גבוהה) למודלים מקומיים שחושבים",
+   "titleEn": "Chat: thinking level in the model menu (default, off, low, high) for local reasoning models",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1000
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "באג בסקריפט",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "user",
+        "text": "למה הקוד הזה זורק NullReferenceException?"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "כי `rb` לא אותחל ב-Awake. תוסיף `rb = GetComponent<Rigidbody>();`."
+       }
+      ],
+      "thinking": "low"
+     }
+    },
+    {
+     "url": "**/api/models",
+     "json": {
+      "models": [
+       {
+        "id": "llamacpp/Qwen3.8-27B-Q4",
+        "name": "Qwen3.8 27B",
+        "providerId": "llamacpp",
+        "providerModelId": "Qwen3.8-27B-Q4",
+        "category": "chat",
+        "location": "local"
+       },
+       {
+        "id": "llamacpp/gemma-3-12b",
+        "name": "Gemma 3 12B",
+        "providerId": "llamacpp",
+        "providerModelId": "gemma-3-12b",
+        "category": "chat",
+        "location": "local"
+       }
+      ],
+      "errors": []
+     }
+    },
+    {
+     "url": "**/api/providers",
+     "json": [
+      {
+       "id": "llamacpp",
+       "name": "KesherAI engine"
+      }
+     ]
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".model-chip"
+    },
+    {
+     "click": ".model-chip"
+    },
+    {
+     "wait": ".model-think"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".model-chip"
+    },
+    {
+     "click": ".model-chip",
+     "force": true
+    },
+    {
+     "wait": ".model-think"
+    }
+   ]
   }
  ]
 }

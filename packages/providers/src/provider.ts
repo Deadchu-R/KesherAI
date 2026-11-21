@@ -1,4 +1,4 @@
-import type { AgentMessage, JobProgress, CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation, ToolCall, ToolSpec } from "@kesher/shared";
+import type { AgentMessage, JobProgress, CategoryId, ChatMessage, ChatStreamEvent, ModelInfo, ModelLocation, ThinkingLevel, ToolCall, ToolSpec } from "@kesher/shared";
 
 /**
  * Settings for one provider instance, as stored in the user's config file.
@@ -68,6 +68,8 @@ export interface ProviderToolChatRequest {
    * enough slots. Unset counts as `other`. Other providers ignore it.
    */
   slotKind?: SlotKind;
+  /** Local reasoning models: how much to think (shared thinking.ts); unset leaves the model's default. */
+  thinking?: ThinkingLevel;
 }
 
 /** Which agent asks: the chat's main model, a helper (sub-agent), or anything else (router, teammate, side jobs). */

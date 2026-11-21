@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type ModelInfo } from "./api";
-import { t } from "./i18n";
 import { refreshComputers } from "./computers";
 import { toast } from "./library";
+import { thinkingLevels, type ThinkingLevel } from "@kesher/shared";
+import { getLocale, he$, t } from "./i18n";
+
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * The composer's model chooser: a searchable menu grouped by where the model
@@ -41,8 +44,10 @@ export function shortModelName(id: string): string {
  * @param props.models - Chat models to offer.
  * @param props.value - The conversation's current model id.
  * @param props.onChange - Called with the chosen model id.
+ * @param props.thinking - The chat's thinking level and its setter (null = the model's default); the picker shows
+ *   only for local reasoning models (thinking.ts).
  */
-export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; value: string; onChange: (id: string) => void }) {
+export function ModelMenu({ models, value, onChange, thinking }: { models: ModelInfo[]; value: string; onChange: (id: string) => void; thinking?: { value?: ThinkingLevel; onChange: (level: ThinkingLevel | null) => void } }) {
   const [open, setOpen] = useState(false);
   const [finding, setFinding] = useState(false);
   const [findLine, setFindLine] = useState("");
@@ -71,6 +76,9 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
   }, [open]);
 
   const current = models.find((m) => m.id === value);
+  // Thinking levels this model's server can apply (none: the picker is hidden).
+  const levels = thinking && current ? thinkingLevels(current.providerId, current.providerModelId || current.id, current.location) : [];
+  const levelName = (l: ThinkingLevel) => (l === "off" ? L("כבויה", "Off") : l === "low" ? L("נמוכה", "Low") : L("גבוהה", "High"));
   /** The user's other computers (My devices): each is a connection "device-…". */
   const deviceName = (providerId: string) => (names[providerId] ?? providerId).replace(/\s*\(your computer\)\s*$/i, "");
   const devices = useMemo(() => [...new Set(models.map((m) => m.providerId).filter((p) => p.startsWith("device-")))], [models]);
@@ -101,6 +109,7 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
         <span className={`where-dot ${current?.location ?? "local"}`} aria-hidden="true" />
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
         <span className="model-chip-name" title={value || undefined}>{current?.name ?? (value ? shortModelName(value) : t("defaultModel"))}</span>
+        {levels.length > 0 && thinking?.value && levels.includes(thinking.value) && <span className="model-chip-think" title={L("רמת חשיבה", "Thinking level")}>· {levelName(thinking.value)}</span>}
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (
@@ -114,6 +123,18 @@ export function ModelMenu({ models, value, onChange }: { models: ModelInfo[]; va
             </div>
           )}
           {where && <p className="muted small model-where-note">{t("runsOnNote", { name: deviceName(where) })}</p>}
+          {levels.length > 0 && thinking && (
+            // How much this reasoning model thinks before answering, for this chat (thinking.ts).
+            <div className="model-think">
+              <span className="small muted">{L("חשיבה", "Thinking")}</span>
+              <div className="segmented" role="group" aria-label={L("רמת חשיבה לצ'אט הזה", "Thinking level for this chat")}>
+                <button type="button" className={!thinking.value ? "on" : ""} aria-pressed={!thinking.value} title={L("ברירת המחדל של המודל", "The model's default")} onClick={() => thinking.onChange(null)}>{L("רגילה", "Default")}</button>
+                {levels.map((l) => (
+                  <button key={l} type="button" className={thinking.value === l ? "on" : ""} aria-pressed={thinking.value === l} onClick={() => thinking.onChange(l)}>{levelName(l)}</button>
+                ))}
+              </div>
+            </div>
+          )}
           <input autoFocus placeholder={t("searchModels")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("searchModels")} />
           <div className="model-pop-list">
             {groups.length === 0 && <p className="muted small">{t("noModelsMatch")}</p>}

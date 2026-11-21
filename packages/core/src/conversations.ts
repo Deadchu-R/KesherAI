@@ -16,7 +16,7 @@ import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as res
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
-import { branding, editQueued, sendNowQueued, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
+import { branding, editQueued, sendNowQueued, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
 import { continueHelperRun, helperToolsFor, resumeHelperRun, type DelegateOptions } from "./delegate.js";
@@ -845,7 +845,7 @@ export class ConversationManager {
       id,
       modelId: conversation.modelId,
       ...(outside ? { external: outside } : {}),
-      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params, "main"),
+      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params, "main", { thinking: () => this.deps.library.summary(id)?.thinking }),
       mode: conversation.mode,
       ...(workspace ? { workspace } : {}),
       tools,
@@ -1371,12 +1371,21 @@ export class ConversationManager {
    * @param patch - Fields to change.
    * @returns The updated conversation.
    */
-  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar" | "toolsOff">> & { personaId?: string | null }): Promise<Conversation | undefined> {
+  async update(id: string, patch: Partial<Pick<Conversation, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "prWatch" | "web" | "bar" | "toolsOff">> & { personaId?: string | null; thinking?: ThinkingLevel | null; archived?: boolean }): Promise<Conversation | undefined> {
     const opened = await this.open(id);
     if (!opened) return undefined;
     const { session, conversation } = opened;
-    const { personaId, ...rest } = patch;
+    const { personaId, thinking, archived, ...rest } = patch;
     let next: Conversation = { ...conversation, ...rest };
+    // Unset fields are taken off, not saved as null/false: the model's own thinking default, a chat not archived.
+    if (thinking !== undefined) {
+      const { thinking: _t, ...without } = next;
+      next = thinking ? { ...without, thinking } : without;
+    }
+    if (archived !== undefined) {
+      const { archived: _a, ...without } = next;
+      next = archived ? { ...without, archived: true } : without;
+    }
     if (personaId !== undefined) {
       const { personaId: _old, ...without } = next;
       next = personaId ? { ...without, personaId } : without;
@@ -1391,7 +1400,7 @@ export class ConversationManager {
       session.setTools(tools);
       session.systemPrompt = await this.promptFor(next, notes);
     }
-    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main"));
+    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main", { thinking: () => this.deps.library.summary(id)?.thinking }));
     if (patch.mode) session.setMode(patch.mode);
     const saved = await this.deps.library.saveConversation({
       ...next,

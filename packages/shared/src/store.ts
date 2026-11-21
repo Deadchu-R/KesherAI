@@ -1,4 +1,5 @@
 import type { Teammate, AgentEvent, AgentMessage, PermissionMode } from "./agent.js";
+import type { ThinkingLevel } from "./thinking.js";
 
 /**
  * A project groups conversations. It can carry a workspace folder (code
@@ -95,6 +96,10 @@ export interface Conversation {
   group?: string[];
   /** The persona this chat talks as (its instructions join the system prompt). */
   personaId?: string;
+  /** How much a local reasoning model thinks before it answers (thinking.ts); unset: the model's own default. */
+  thinking?: ThinkingLevel;
+  /** Archived: out of the sidebar's lists and the palette, kept with everything in it (the Archived view restores it). */
+  archived?: boolean;
   /** For a branch: the conversation and event it was branched from. */
   branchOf?: { id: string; seq: number; title: string };
   /** Where the chat is from: `telegram` chats ask before every change and get no computer or browser control; `routine` chats were started by a routine (the sidebar keeps them in their own group). */

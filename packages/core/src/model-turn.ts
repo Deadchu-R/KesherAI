@@ -5,7 +5,7 @@
  */
 import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
-import { OTHER_SCRIPTS_BIAS } from "@kesher/shared";
+import { OTHER_SCRIPTS_BIAS, thinkingLevels, type ThinkingLevel } from "@kesher/shared";
 import type { ProviderRegistry, SlotKind } from "@kesher/providers";
 
 let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | undefined;
@@ -30,10 +30,11 @@ export function onModelSpeed(fn: typeof speedRecorder): void {
  * @param params - A persona's sampling settings, if any.
  * @param slotKind - Who asks (the chat's main model, a helper, or other), so llama.cpp keeps each kind's prompt
  *   cache in its own slot. Default `other`.
+ * @param opts.thinking - The chat's thinking level, read at each call (it can change mid-chat; thinking.ts).
  * @returns The turn function.
  */
-export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind): ModelTurn {
-  const inner = rawTurnFor(registry, modelId, params, slotKind);
+export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined } = {}): ModelTurn {
+  const inner = rawTurnFor(registry, modelId, params, slotKind, opts.thinking);
   return async (req, signal, onText) => {
     let first = 0;
     let chars = 0;
@@ -76,7 +77,7 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string, params
   };
 }
 
-function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind): ModelTurn {
+function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, thinkingOf?: () => ThinkingLevel | undefined): ModelTurn {
   return async (req, signal, onText) => {
     const { provider, providerModelId } = registry.resolve(modelId);
     // A persona's own settings (temperature, top_p, stop), when it has them.
@@ -86,7 +87,10 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       const last = [...req.messages].reverse().find((m) => m.role === "user");
       const he = (last?.content.match(/[\u0590-\u05FF]/g) ?? []).length;
       const hebrew = provider.id === "llamacpp" && he >= 2 && he >= (last?.content.match(/[A-Za-z]/g) ?? []).length;
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}) }, signal, onText);
+      // Only for a local model the menu offers levels for (a cloud model or an unknown family is left as it is).
+      const level = thinkingOf?.();
+      const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

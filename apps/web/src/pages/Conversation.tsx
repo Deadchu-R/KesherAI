@@ -8,7 +8,7 @@ import { createPortal } from "react-dom";
 import { PermissionsSection } from "../settings/PermissionsSection";
 import { ReportDialog } from "../ReportDialog";
 import { ChatBarButton, barShows, useBarDefaults } from "../ChatBar";
-import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, QueueMode, Teammate, WebPrefs } from "@kesher/shared";
+import type { AgentEvent, AgentSessionInfo, ConversationSummary, JobProgress, ModelInfo, PermissionMode, QueueMode, Teammate, ThinkingLevel, WebPrefs } from "@kesher/shared";
 import { stopStage } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { desktop, refreshLibrary, toast, useActivity, useLibrary } from "../library";
@@ -674,10 +674,14 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       setInput(text);
     }
   };
-  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean> }>) => {
+  const patch = async (body: Partial<{ title: string; modelId: string; mode: PermissionMode; team: Teammate[]; group: string[]; personaId: string | null; web: WebPrefs | null; bar: Record<string, boolean>; thinking: ThinkingLevel | null }>) => {
     await api(`/api/conversations/${id}`, { method: "PATCH", body }).catch((e: Error) => setError(e.message));
-    const { personaId, web: webPrefs, ...rest } = body;
+    const { personaId, web: webPrefs, thinking, ...rest } = body;
     const next = { ...conv, ...rest };
+    if (thinking !== undefined) {
+      delete next.thinking;
+      if (thinking) next.thinking = thinking;
+    }
     if (personaId !== undefined) {
       delete next.personaId;
       if (personaId) next.personaId = personaId;
@@ -1207,7 +1211,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
               onWeb={setWeb}
               {...(voicePart ? { onDictate: (txt: string) => setInput((v) => (v ? `${v.trimEnd()} ${txt}` : txt)) } : {})}
               {...(conv.kind === "chat" ? { persona: { value: conv.personaId, onChange: (p: { id: string } | null) => void patch({ personaId: p?.id ?? null }) } } : {})}
-              model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid }) }}
+              model={{ models: modelOptions, value: conv.modelId, onChange: (mid) => void patch({ modelId: mid }), thinking: { ...(conv.thinking ? { value: conv.thinking } : {}), onChange: (level) => void patch({ thinking: level }) } }}
               mode={{ value: info?.mode ?? conv.mode, onChange: (m) => void patch({ mode: m }) }}
               modeInMenu={conv.kind !== "code"}
               extra={

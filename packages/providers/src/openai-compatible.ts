@@ -1,5 +1,5 @@
 import { textToolCalls } from "./text-tool-calls.js";
-import { makeModelId, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
+import { makeModelId, thinkingFields, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
 import type {
   Provider,
   ProviderChatRequest,
@@ -201,6 +201,7 @@ export class OpenAICompatibleProvider implements Provider {
         stream: true,
         stream_options: { include_usage: true },
         ...(this.llamaCpp ? llamaCppFields(request.slotKind, this.llamaCpp.slots?.() ?? 0, this.llamaCpp.parallelChats?.() ?? 1) : {}),
+        ...thinkingFields(request.thinking, !!this.llamaCpp),
       }),
     }), signal);
     if (!res.body) throw new Error("Empty response body");

@@ -4477,3 +4477,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* ‹ n/m › on an edited message (branch-versions.ts): always visible, so a phone (no hover) can switch too. */
 .msg-versions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin-top: 4px; }
 .msg-versions .say-btn { min-width: 32px; min-height: 32px; }
+/* The model menu's thinking picker (thinking.ts): local reasoning models only; wraps on a 390 px phone. */
+.model-think { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0 2px 4px; }
+.model-think .segmented button { padding: 4px 10px; font-size: 12.5px; min-height: 30px; }
+.model-chip-think { flex: none; color: var(--muted); font-size: 12px; }

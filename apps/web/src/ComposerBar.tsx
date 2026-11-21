@@ -26,7 +26,7 @@ export function ComposerBar(p: {
   /** Dictation into the box; omit to hide the microphone. */
   onDictate?: (text: string) => void;
   persona?: { value: string | undefined; onChange: (p: Persona | null) => void };
-  model?: { models: Parameters<typeof ModelMenu>[0]["models"]; value: string; onChange: (id: string) => void };
+  model?: { models: Parameters<typeof ModelMenu>[0]["models"]; value: string; onChange: (id: string) => void; thinking?: Parameters<typeof ModelMenu>[0]["thinking"] };
   mode?: { value: PermissionMode; onChange: (m: PermissionMode) => void };
   /** The approvals mode in the + menu instead of a chip (a plain chat: Claude shows it only in code). */
   modeInMenu?: boolean;
@@ -44,7 +44,7 @@ export function ComposerBar(p: {
       {p.onDictate && <Mic onText={p.onDictate} />}
       {p.persona && <PersonaChip value={p.persona.value} onChange={p.persona.onChange} />}
       {/* A chat answered by an outside agent (Antigravity) keeps it: it is not a model to switch. */}
-      {p.model && (p.model.value.startsWith("agent/") ? <AgentChip modelId={p.model.value} {...(p.attach.convId ? { convId: p.attach.convId } : {})} /> : <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} />)}
+      {p.model && (p.model.value.startsWith("agent/") ? <AgentChip modelId={p.model.value} {...(p.attach.convId ? { convId: p.attach.convId } : {})} /> : <ModelMenu models={p.model.models} value={p.model.value} onChange={p.model.onChange} {...(p.model.thinking ? { thinking: p.model.thinking } : {})} />)}
       {p.mode && !p.modeInMenu && (
         <Select className="model-chip" value={p.mode.value} onChange={(e) => p.mode!.onChange(e.target.value as PermissionMode)} aria-label={t("mode")}>
           <option value="plan">{t("modePlan")}</option>

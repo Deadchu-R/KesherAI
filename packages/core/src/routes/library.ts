@@ -6,7 +6,8 @@ import { mkdir, stat, writeFile } from "node:fs/promises";
 import { createReadStream, existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate } from "@kesher/shared";
+import type { AgentEvent, ConversationKind, PermissionMode, Project, Teammate, ThinkingLevel } from "@kesher/shared";
+import { THINKING_LEVELS } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { startSSE } from "../sse.js";
 import { assertFolder, NoModelError } from "../conversations.js";
@@ -375,7 +376,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown; toolsOff?: unknown } }>(
+  app.patch<{ Params: { id: string }; Body: { title?: string; modelId?: string; mode?: PermissionMode; projectId?: string | null; team?: Teammate[]; group?: string[]; personaId?: string | null; web?: unknown; bar?: unknown; toolsOff?: unknown; thinking?: unknown; archived?: unknown } }>(
     "/api/conversations/:id",
     async (req, reply) => {
       const b = req.body ?? {};
@@ -390,9 +391,12 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       // The + menu's tool switches: group ids and `mcp:<server>` keys, short text only.
       if (b.toolsOff !== undefined && (!Array.isArray(b.toolsOff) || b.toolsOff.length > 64 || b.toolsOff.some((x) => typeof x !== "string" || !/^(mcp:)?[\w.-]{1,64}$/.test(x)))) return reply.code(400).send({ error: "toolsOff is a list of tool group ids and mcp:<server> keys." });
       const toolsOff = b.toolsOff as string[] | undefined;
+      // The thinking level (thinking.ts; null = the model's default) and archive (true/false) are checked here.
+      if (b.thinking !== undefined && b.thinking !== null && !THINKING_LEVELS.includes(b.thinking as ThinkingLevel)) return reply.code(400).send({ error: "thinking is off, low, high or null." });
+      if (b.archived !== undefined && typeof b.archived !== "boolean") return reply.code(400).send({ error: "archived is true or false." });
       const rest = Object.fromEntries((["title", "modelId", "mode", "projectId", "team", "group", "personaId"] as const).filter((k) => b[k] !== undefined).map((k) => [k, b[k]])) as Partial<Pick<typeof b, "title" | "modelId" | "mode" | "projectId" | "team" | "group" | "personaId">>;
       if (rest.title !== undefined && typeof rest.title !== "string") return reply.code(400).send({ error: "title must be text" });
-      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}), ...(toolsOff ? { toolsOff: [...new Set(toolsOff)] } : {}) });
+      const c = await s.conversations.update(req.params.id, { ...rest, ...(web !== undefined ? { web: cleanWebPrefs(web) } : {}), ...(bar !== undefined ? { bar: cleanBar(bar) } : {}), ...(toolsOff ? { toolsOff: [...new Set(toolsOff)] } : {}), ...(b.thinking !== undefined ? { thinking: b.thinking as ThinkingLevel | null } : {}), ...(typeof b.archived === "boolean" ? { archived: b.archived } : {}) });
       if (!c) return reply.code(404).send({ error: "Conversation not found" });
       const { messages: _m, events: _e, ...summary } = c;
       return summary;
