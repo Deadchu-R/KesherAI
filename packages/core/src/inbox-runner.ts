@@ -44,6 +44,12 @@ export interface TaskInboxDeps {
   busy: () => Promise<InboxBusy>;
   /** This computer's user name and home folder, which the privacy scan looks for. */
   me?: { username?: string; home?: string };
+  /**
+   * Small research tasks with the user's free "gemini" provider (route B; absent: none can run). `ready` says whether
+   * that provider is configured; `run` writes the report for a question (deep-research.ts `researchReport`) and throws
+   * the provider's own error, so a quota or billing error can be told apart here.
+   */
+  research?: { ready: () => boolean; run: (question: string, signal: AbortSignal) => Promise<string> };
   now?: () => number;
   /** How long an asked step waits before it is denied (default 30 minutes). */
   approvalMs?: number;
@@ -57,6 +63,8 @@ interface Saved {
   tasks: InboxTaskView[];
   today: { date: string; used: number };
   quota?: InboxState["quota"];
+  /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
+  geminiUntil?: number;
   lastFetch?: number;
   lastError?: string;
 }
@@ -99,9 +107,13 @@ export function quotaUntil(msg: string, now: number): { until: number; estimated
   return { until: now + 60 * 60_000, estimated: true };
 }
 
-/** Whether an agent's error is its plan's quota or rate limit. */
+/**
+ * Whether an agent's or provider's error is its plan's quota or rate limit, or an offer to pay (credits, an upgrade,
+ * billing). Never paid for, ever (Roee, 2026-11-21): the task is deferred to the reset instead of failing or buying.
+ * The free Gemini key must stay without a billing account, so it can never charge.
+ */
 export function isQuotaError(msg: string): boolean {
-  return /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|limit reached|exceeded your/i.test(msg);
+  return /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|limit reached|exceeded your|ai credits?|(buy|purchase|top.?up|add|get)\s+(more\s+)?credits?|\bpurchase\b|upgrade\s+(your\s+|to\s+|the\s+)?(a\s+)?(plan|subscription|pro|ultra|tier)|\bbilling\b/i.test(msg);
 }
 
 /** The queue, its runs and the inbox branch. */
@@ -114,6 +126,9 @@ export class TaskInbox {
   private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
   private saving: Promise<void> = Promise.resolve();
   private syncing?: Promise<void>;
+  /** The free-Gemini research loop (one task at a time) and the stop for its current model call. */
+  private geminiRun?: Promise<void>;
+  private geminiStop?: AbortController;
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TaskInboxDeps) {}
@@ -134,7 +149,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -226,6 +241,7 @@ export class TaskInbox {
   /** Resolves when no run is going on (its result written). */
   async idle(): Promise<void> {
     await this.active?.done;
+    await this.geminiRun;
   }
 
   /**
@@ -261,6 +277,7 @@ export class TaskInbox {
   async stopAll(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    this.geminiStop?.abort();
     if (this.active) await this.stop(this.active.id).catch(() => undefined);
   }
 
@@ -349,6 +366,7 @@ export class TaskInbox {
     await this.followBoard();
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
+    void this.pumpGemini().catch(() => undefined);
   }
 
   /** A task file that could not be read: shown as declined, with why. */
@@ -363,12 +381,12 @@ export class TaskInbox {
       ...spec,
       runBy,
       branch: branchFor(spec, runBy),
-      status: runBy === "antigravity" ? "waiting" : "queued",
-      ...(runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : {}),
+      status: runBy === "antigravity" || runBy === "gemini" ? "waiting" : "queued",
+      ...(runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : {}),
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
-      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : ""}.`, `Branch: ${t.branch}`].join("\n"), size: runBy === "local" ? "small" : "big" }]).catch(() => undefined);
+      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: runBy === "local" ? "small" : "big" }]).catch(() => undefined);
       const added = b?.tasks.at(-1);
       if (added) {
         t.boardId = added.id;
@@ -463,6 +481,7 @@ export class TaskInbox {
     if ("error" in parsed) throw fail(parsed.error, 400);
     const t = await this.enqueue(parsed.spec);
     await this.save();
+    void this.pumpGemini().catch(() => undefined);
     if (s.enabled && s.repo) await this.commitToInbox([[`tasks/${spec.id}.md`, taskFileText(parsed.spec)]], `inbox: task ${spec.id}`).catch((e) => {
       this.saved.lastError = `Could not write the task to ${s.branch}: ${(e as Error).message.slice(0, 160)}`;
     });
@@ -500,6 +519,90 @@ export class TaskInbox {
     await pushRef(this.d.git, wt, br, br);
   }
 
+  /**
+   * Runs the free-Gemini research tasks (route B) by themselves, one at a time: no Run press is needed, because the
+   * free Gemini key is the user's own API key and not an agent's account. A task waits with a note when no "gemini"
+   * provider is configured. When the key's limit is reached the run stops and the task is deferred to the reset; it
+   * gets at most one automatic retry after that, never a loop.
+   *
+   * @returns Resolves when no task is left to run now.
+   */
+  pumpGemini(): Promise<void> {
+    this.geminiRun ??= this.doGemini().finally(() => {
+      this.geminiRun = undefined;
+    });
+    return this.geminiRun;
+  }
+
+  private async doGemini(): Promise<void> {
+    await this.load();
+    const s = this.s;
+    if (!s.enabled || s.paused) return;
+    for (;;) {
+      const now = this.now();
+      const due = (x: InboxTaskView) => x.runBy === "gemini" && (x.status === "waiting" || (x.status === "deferred-quota" && !x.autoRetried && x.retryAt !== undefined && x.retryAt <= now));
+      const t = this.saved.tasks.find(due);
+      if (!t || (this.saved.geminiUntil ?? 0) > now) return;
+      const r = this.d.research;
+      if (!r?.ready()) {
+        const note = "Waiting for a Gemini connection: add Google Gemini with a free AI Studio key (Settings > Connections).";
+        if (t.note !== note) {
+          t.note = note;
+          await this.save();
+        }
+        return;
+      }
+      await this.runGemini(t, r);
+    }
+  }
+
+  /** One free-Gemini research run, to its end (done, failed or deferred by the quota). */
+  private async runGemini(t: InboxTaskView, r: NonNullable<TaskInboxDeps["research"]>): Promise<void> {
+    if (t.status === "deferred-quota") t.autoRetried = true;
+    Object.assign(t, { status: "running" as InboxStatus, startedAt: this.now(), resultWritten: false });
+    for (const k of ["endedAt", "note", "summary", "retryAt", "researchReport"] as const) delete t[k];
+    await this.save();
+    this.d.notify("✦ Research started (free Gemini)", `${t.id}: ${t.title}`);
+    const stop = (this.geminiStop = new AbortController());
+    const timer = setTimeout(() => stop.abort(), t.maxMinutes * 60_000);
+    let status: InboxStatus = "done";
+    try {
+      const question = [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
+      const report = (await r.run(question, stop.signal)).trim();
+      if (!report) throw new Error("The model wrote no report.");
+      t.researchReport = report;
+      t.summary = report.slice(0, 2000);
+    } catch (e) {
+      const msg = (e as Error).message || String(e);
+      if (isQuotaError(msg)) {
+        // A limit, quota or billing offer: stop here and wait for the reset. Never retried in a loop, never paid.
+        const q = quotaUntil(msg, this.now());
+        this.saved.geminiUntil = q.until;
+        status = "deferred-quota";
+        if (!t.autoRetried) t.retryAt = q.until;
+        t.note = `The free Gemini limit was reached; ${t.autoRetried ? "run it again later." : `it tries once more after ${new Date(q.until).toISOString()}.`}`;
+      } else {
+        status = "failed";
+        t.note = stop.signal.aborted ? `Stopped at the ${t.maxMinutes}-minute limit or by you.` : `The research failed: ${msg.slice(0, 300)}`;
+      }
+    } finally {
+      clearTimeout(timer);
+      this.geminiStop = undefined;
+    }
+    t.status = status;
+    t.endedAt = this.now();
+    await this.save();
+    if (t.boardId && this.d.board) {
+      const line = `${status}${t.note ? ` — ${t.note}` : ""}`.slice(0, 1000);
+      await this.d.board.change("kesher", [status === "done" ? { op: "done", id: t.boardId, result: `done: report in results/${t.id}.md` } : status === "deferred-quota" ? { op: "note", text: line, task: t.boardId } : { op: "block", id: t.boardId, result: line }]).catch(() => undefined);
+    }
+    if (t.from !== "hub") await this.writeResult(t).catch((e) => {
+      this.saved.lastError = `Could not write the result: ${(e as Error).message.slice(0, 160)}`;
+    });
+    await this.save();
+    this.d.notify(`${status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : "✕"} ${t.id} ${status}`, t.title);
+  }
+
   /** Writes a task's result file to the inbox branch. */
   private async writeResult(t: InboxTaskView, checkTail = ""): Promise<void> {
     if (!this.s.enabled || !this.s.repo || !validTaskId(t.id)) return;
@@ -516,7 +619,7 @@ export class TaskInbox {
     const s = this.s;
     if (!s.enabled) return { msg: "The inbox is off (Settings > Task inbox).", code: 409 };
     if (s.paused) return { msg: "The inbox is paused.", code: 409 };
-    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : "Claude runs this task.", code: 409 };
+    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
     if (this.active) return { msg: "Another task is running. One at a time.", code: 409 };
     if (!RUNNABLE.has(t.status)) return { msg: "This task cannot be run now.", code: 409 };
     if (this.saved.quota && this.saved.quota.until > this.now()) return { msg: `Antigravity's quota ran out; it can run again at ${new Date(this.saved.quota.until).toISOString()}.`, code: 429 };
@@ -694,7 +797,7 @@ export class TaskInbox {
     const s = this.s;
     // Packages for the checks (the project's own lockfile, from the store; no new ones).
     if (existsSync(join(worktree, "pnpm-lock.yaml"))) await this.d.run(worktree, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
-    const ctx = { worktree, allowedPaths: t.allowedPaths, forbiddenPaths: t.forbiddenPaths, commands: s.commands };
+    const ctx = { worktree, allowedPaths: t.allowedPaths, forbiddenPaths: t.forbiddenPaths, commands: s.commands, ...(t.kind === "research" ? { research: true } : {}) };
     const toolIds = new Set<string>();
     let text = "";
     let error = "";

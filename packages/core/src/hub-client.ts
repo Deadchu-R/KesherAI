@@ -201,7 +201,8 @@ export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | unde
     taskId: t.id,
     title: (t.title || t.id).slice(0, 200),
     state,
-    executor: t.runBy === "opus" ? "claude" : t.runBy,
+    // The hub knows three executors; free-Gemini research runs by itself on this PC, so it shows as "local" (no Run wait).
+    executor: t.runBy === "opus" ? "claude" : t.runBy === "gemini" ? "local" : t.runBy,
     from: t.from === "roee" || t.from === "self-work" ? t.from : "claude",
     // The branch shows once there is work on it (a started or ended run), never a planned name.
     ...(t.branch && (t.startedAt || ended) && t.status !== "declined" ? { branch: t.branch } : {}),

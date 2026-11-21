@@ -580,7 +580,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.workerHost = options.workerHost;
   services.board = taskBoard;
   // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
-  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard });
+  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard, registry });
   services.taskInbox = taskInbox;
   // "Continue what was running" after a restart (resume-board.ts): the main app only; a worker has no card.
   if (!options.worker) services.resume = buildResume(paths.root, services);

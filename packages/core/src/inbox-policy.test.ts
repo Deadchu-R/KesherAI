@@ -72,3 +72,24 @@ test("inbox policy: changed files are checked against the paths, the count and v
   assert.equal(changesVersion('+++ b/apps/web/package.json\n-  "version": "0.6.1",\n+  "version": "0.6.2",\n'), true);
   assert.equal(changesVersion('+++ b/apps/web/src/x.ts\n+  "version": 2,\n'), false);
 });
+
+test("inbox policy: no-payment — a step about credits, a plan or billing is denied; a report may mention billing", () => {
+  const deny = (p: AcpPermission) => decideStep(p, ctx);
+  for (const p of [
+    step("execute", { command: "open https://x.example/buy-credits" }, "Buy more AI credits to continue"),
+    step("other", { url: "https://x.example" }, "Upgrade your plan"),
+    step("other", { action: "click" }, "Open the billing page"),
+    step("other", { text: "Complete the payment" }),
+  ]) assert.deepEqual([deny(p).verdict, deny(p).rule], ["deny", "no-payment"]);
+  // An edit is judged by its title: the text of a report about pricing is not a step that pays.
+  assert.equal(deny(step("edit", { path: "apps/web/src/a.ts", content: "How billing works in Notion" }, "edit a.ts")).verdict, "allow");
+});
+
+test("inbox policy: a research task may read public pages (fetch); a code task may not", () => {
+  const fetch = step("fetch", { url: "https://example.org" }, "Read example.org");
+  assert.deepEqual([decideStep(fetch, ctx).verdict, decideStep(fetch, ctx).rule], ["deny", "no network"]);
+  assert.equal(decideStep(fetch, { ...ctx, research: true }).verdict, "allow");
+  // Even in research, a download command and a payment page stay denied.
+  assert.equal(decideStep(step("execute", { command: "curl -O https://x.example/a.zip" }), { ...ctx, research: true }).verdict, "deny");
+  assert.equal(decideStep(step("fetch", { url: "https://x.example/billing" }, "Open billing"), { ...ctx, research: true }).rule, "no-payment");
+});

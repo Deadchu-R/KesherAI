@@ -119,3 +119,25 @@ test("deep research with nothing found fails the plan, and without documents the
   const r2 = await plain.run({ question: "Q", parts: [] }, { signal: new AbortController().signal, recordChange: () => undefined });
   assert.match(r2.output, /keeps no documents[\s\S]*## Sources\n\n1\. \[a\.io\]\(https:\/\/a\.io\/x\)/);
 });
+
+test("researchReport: plans parts, searches and reads one after the other, writes one report with a Sources list", async () => {
+  const { researchReport } = await import("./deep-research.js");
+  const asked: string[] = [];
+  const model: ModelTurn = async (req) => {
+    const system = req.messages[0]!.content as string;
+    asked.push(system.slice(0, 20));
+    return { text: system.startsWith("Split") ? '{"parts": ["sync in Obsidian", "sync in Notion", "sync in Obsidian", "a", "b"]}' : "# Sync\n\nObsidian syncs files [1].\n\n## Sources\n\n1. made up" } as Awaited<ReturnType<ModelTurn>>;
+  };
+  const searches: string[] = [];
+  const report = await researchReport("How do apps sync notes?", {
+    model,
+    search: async (q) => (searches.push(q), [{ title: `Doc ${q}`, url: `https://${q.split(" ").pop()}.example/doc`, snippet: "s" }]),
+    read: async () => "page text",
+  }, new AbortController().signal);
+  assert.deepEqual(searches, ["sync in Obsidian", "sync in Notion", "a"], "at most three parts, no repeats");
+  assert.match(report, /Obsidian syncs files \[1\]/);
+  assert.match(report, /## Sources\n\n1\. \[Doc sync in Obsidian\]\(https:\/\/Obsidian\.example\/doc\)/);
+  assert.doesNotMatch(report, /made up/);
+  // The model's own error (a quota) is thrown as it is.
+  await assert.rejects(researchReport("q", { model: async () => { throw new Error("429 RESOURCE_EXHAUSTED"); }, search: async () => [], read: async () => "" }, new AbortController().signal), /RESOURCE_EXHAUSTED/);
+});

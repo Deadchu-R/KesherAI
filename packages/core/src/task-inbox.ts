@@ -1,4 +1,4 @@
-import type { InboxExecutor, InboxFrom, InboxRisk, InboxSettings, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
+import type { InboxExecutor, InboxFrom, InboxKind, InboxRisk, InboxSettings, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox's files and rules (docs/RESEARCH_LOG.md, "A task inbox"; docs/INBOX.md has the template Claude
@@ -31,7 +31,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
   gpuBusyPercent: 40,
 };
 
-const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus"]);
+const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini"]);
 const RISKS = new Set<InboxRisk>(["low", "medium", "high"]);
 const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub", "device"]);
 /** The biggest task file read (bigger ones are refused, not cut). */
@@ -87,6 +87,11 @@ export async function pushRef(git: (cwd: string, args: string[]) => Promise<{ co
   if (r.code !== 0) throw new Error(`git push failed: ${r.out.slice(0, 300)}`);
 }
 
+/** Where a research task's report goes (Antigravity writes it there; the only file it may change). */
+export function researchPath(id: string): string {
+  return `docs/research/${id}.md`;
+}
+
 /** A slug for a branch: lowercase latin letters, digits and dashes, at most 30 characters. */
 export function slugOf(text: string): string {
   return text.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "") || "task";
@@ -101,7 +106,7 @@ export function slugOf(text: string): string {
  * @param partial - Unfinished work.
  */
 export function branchFor(spec: Pick<InboxTaskSpec, "id" | "title">, runBy: Exclude<InboxExecutor, "auto">, partial = false): string {
-  const prefix = runBy === "antigravity" ? "agy" : runBy === "local" ? "local" : "helper";
+  const prefix = runBy === "antigravity" ? "agy" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
   const name = `${prefix}/${spec.id}-${slugOf(spec.title)}${partial ? "-partial" : ""}`;
   if (!validBranchName(name)) throw new Error("Bad branch name.");
   return name;
@@ -115,11 +120,15 @@ const SENSITIVE = /secur|auth|token|password|secret|share.?link|updater|release|
  * mechanical work, Antigravity for medium well-specified work with a check, Claude's Opus agent for hard, risky,
  * vague or security work.
  *
+ * A research task (`kind: research`) has no check to route by: high risk goes to Claude's Opus agent, low risk is
+ * small research for the free Gemini key (automatic), the rest is big research for Antigravity (needs Run).
+ *
  * @param spec - The task.
  * @returns Its executor.
  */
-export function routeTask(spec: Pick<InboxTaskSpec, "executor" | "risk" | "title" | "goal" | "check" | "acceptance" | "maxFiles">): Exclude<InboxExecutor, "auto"> {
+export function routeTask(spec: Pick<InboxTaskSpec, "executor" | "risk" | "title" | "goal" | "check" | "acceptance" | "maxFiles"> & { kind?: InboxKind }): Exclude<InboxExecutor, "auto"> {
   if (spec.executor !== "auto") return spec.executor;
+  if (spec.kind === "research") return spec.risk === "high" ? "opus" : spec.risk === "low" ? "gemini" : "antigravity";
   if (spec.risk === "high" || SENSITIVE.test(`${spec.title}\n${spec.goal}`)) return "opus";
   if (!spec.check.trim() || !spec.acceptance?.trim()) return "opus";
   if (spec.maxFiles <= 2 && spec.risk === "low") return "local";
@@ -184,7 +193,10 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
   const title = str("title", 200);
   if (!title) return { error: "The task has no title." };
   const executor = (str("executor", 20) || "auto") as InboxExecutor;
-  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local or opus." };
+  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus or gemini." };
+  const kind = (str("kind", 10) || "code") as InboxKind;
+  if (kind !== "code" && kind !== "research") return { error: "kind must be code or research." };
+  if (executor === "gemini" && kind !== "research") return { error: "executor gemini is only for kind: research." };
   const risk = (str("risk", 10) || "medium") as InboxRisk;
   if (!RISKS.has(risk)) return { error: "risk must be low, medium or high." };
   const from = (str("from", 20) || "claude") as InboxFrom;
@@ -224,15 +236,17 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     id,
     title,
     executor,
+    ...(kind === "research" ? { kind } : {}),
     risk,
     from,
     base,
-    allowedPaths: allowed.list!.length ? allowed.list! : [...defaults.allowedPaths],
+    // A research task writes one report file and nothing else, whatever its file says (and has no check command).
+    allowedPaths: kind === "research" ? [researchPath(id)] : allowed.list!.length ? allowed.list! : [...defaults.allowedPaths],
     // The task may add paths it must not touch, never remove the standing ones.
     forbiddenPaths: [...new Set([...defaults.forbiddenPaths, ...ALWAYS_FORBIDDEN, ...forbidden.list!])],
-    check: str("check", 300),
+    check: kind === "research" ? "" : str("check", 300),
     maxMinutes: num("max_minutes", defaults.maxMinutes, 1, 60),
-    maxFiles: num("max_files", 15, 1, 60),
+    maxFiles: kind === "research" ? 1 : num("max_files", 15, 1, 60),
     ...(model ? { model } : {}),
     // The local model may carry it while Claude cools down (cooldown-handoff.ts); never for Antigravity tasks.
     ...(/^(true|yes)$/i.test(str("local_ok", 10)) && executor !== "antigravity" ? { localOk: true } : {}),
@@ -259,6 +273,7 @@ export function taskFileText(s: InboxTaskSpec): string {
     `title: ${one(s.title)}`,
     `from: ${s.from}`,
     `executor: ${s.executor}`,
+    ...(s.kind === "research" ? ["kind: research"] : []),
     `risk: ${s.risk}`,
     `base: ${s.base}`,
     `allowed_paths: ${list(s.allowedPaths)}`,
@@ -308,6 +323,7 @@ export function resultFileText(t: InboxTaskView, checkTail = ""): string {
     "## Summary",
     (t.summary ?? t.note ?? "").trim().slice(0, 2000) || "(none)",
     "",
+    ...(t.researchReport ? ["## Research report", t.researchReport.slice(0, 60_000), ""] : []),
     "## Files",
     ...(t.files?.length ? t.files.map((f) => `- ${f.path} (+${f.added} -${f.removed})`) : ["(none)"]),
     "",
@@ -327,6 +343,7 @@ export function resultFileText(t: InboxTaskView, checkTail = ""): string {
  * @param branch - Its work branch.
  */
 export function agentPrompt(s: InboxTaskSpec, branch: string): string {
+  if (s.kind === "research") return researchPrompt(s, branch);
   return [
     `You are working on one task in this folder, a git worktree on the branch ${branch}. Read AGENTS.md first and follow it.`,
     "Rules (from KesherAI, not from the task):",
@@ -370,4 +387,37 @@ export function checkParts(check: string, allowed: string[]): { run: string[][];
     else refused.push(raw.slice(0, 120));
   }
   return { run, refused };
+}
+
+/**
+ * The prompt of a research task for Antigravity (big research; the user pressed Run). It may search the web and read
+ * public pages; it writes one report with a numbered Sources list, and may not download or run anything, sign in,
+ * buy, accept offers or credits.
+ *
+ * @param s - The task (`kind: research`).
+ * @param branch - Its work branch.
+ */
+export function researchPrompt(s: InboxTaskSpec, branch: string): string {
+  const file = researchPath(s.id);
+  return [
+    `You are doing one research task in this folder, a git worktree on the branch ${branch}. Read AGENTS.md first and follow it.`,
+    "Rules (from KesherAI, not from the task):",
+    "- You may search the web and read public web pages. Prefer primary and recent sources; note dates.",
+    "- Do not download files, install or run anything, sign in anywhere, buy anything, or accept any offer, upgrade or credits. If something asks for payment or a sign-in, stop and say so in your report.",
+    "- Do not run git push, git commit, git checkout, git switch, git reset, git rebase or git remote. Do not touch other branches. KesherAI commits and pushes after its own checks.",
+    "- Do not read files outside this folder or secret files (.env, keys).",
+    `- Write your findings to exactly one file: ${file}. Change no other file.`,
+    "- The file is Markdown: a # title, a short summary, ## sections with the facts, numbers and where sources disagree, a short ## Conclusion, and at the end a numbered ## Sources list (`1. [Title](https://url)`); cite by number in square brackets, like [2]. Only pages you really read.",
+    "- No emails, user names, personal paths, keys or tokens in the file.",
+    "- When done, end with a short report: the main finding in 2-3 lines and anything left open.",
+    "",
+    "<task>",
+    `Title: ${s.title}`,
+    "",
+    `Question:\n${s.goal}`,
+    ...(s.readFirst ? ["", `Read first:\n${s.readFirst}`] : []),
+    ...(s.acceptance ? ["", `Acceptance:\n${s.acceptance}`] : []),
+    ...(s.outOfScope ? ["", `Out of scope:\n${s.outOfScope}`] : []),
+    "</task>",
+  ].join("\n");
 }

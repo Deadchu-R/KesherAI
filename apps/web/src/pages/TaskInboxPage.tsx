@@ -36,7 +36,10 @@ function statusChip(t: InboxTaskView): { text: string; cls: string } {
 }
 
 /** The executor's chip. */
-function executorChip(runBy: InboxTaskView["runBy"]): { text: string; cls: string } {
+function executorChip(runBy: InboxTaskView["runBy"], kind?: InboxTaskView["kind"]): { text: string; cls: string } {
+  // Research: big research needs the user's Run (Antigravity); small research runs by itself on the free Gemini key.
+  if (kind === "research" && runBy === "antigravity") return { text: L("✦ מחקר · צריך הפעלה", "✦ Research · needs Run"), cls: "agy" };
+  if (runBy === "gemini") return { text: L("✧ מחקר · אוטומטי (Gemini חינם)", "✧ Research · automatic (free Gemini)"), cls: "local" };
   if (runBy === "antigravity") return { text: "✦ Antigravity", cls: "agy" };
   if (runBy === "local") return { text: L("◆ מודל מקומי", "◆ Local model"), cls: "local" };
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
@@ -266,7 +269,7 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
 /** One task in the queue: a table row on the computer, a card on the phone. */
 function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean; onAssigned: () => void }) {
   const st = statusChip(t);
-  const ex = executorChip(t.runBy);
+  const ex = executorChip(t.runBy, t.kind);
   const open = () => (location.hash = `#/task-inbox/${t.id}`);
   const runnable = t.runBy === "antigravity" && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
   const copy = () => void navigator.clipboard?.writeText(forClaude(t)).then(() => toast(L("הועתק", "Copied")), () => toast(forClaude(t)));
@@ -283,7 +286,7 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>
       <span className="tinbox-branch small muted" dir="ltr" title={t.branch}>{t.branch}</span>
       <span className="row tinbox-actions">
-        {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
+        {(t.status === "running" || t.status === "needs-approval") && t.runBy !== "gemini" && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "needs-approval" && <button type="button" onClick={open}>{L("אשר / דחה", "Allow / Deny")}</button>}
         {runnable && state.runHere && <button type="button" className="primary" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/run`)}>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</button>}
         {runnable && !state.runHere && !t.runAsk && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/ask`)}>▶ {L("הפעל", "Run")}</button>}
@@ -357,7 +360,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
   }, [id]);
   if (!t) return <div className="page"><p><a href="#/task-inbox">📥 {L("תיבת משימות", "Task inbox")}</a></p></div>;
   const st = statusChip(t);
-  const ex = executorChip(t.runBy);
+  const ex = executorChip(t.runBy, t.kind);
   const auto = (t.decisions ?? []).filter((d) => d.verdict === "allow").length;
   const denied = (t.decisions ?? []).filter((d) => d.verdict === "deny");
   const minutes = t.startedAt && t.endedAt ? Math.round((t.endedAt - t.startedAt) / 6000) / 10 : undefined;

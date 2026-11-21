@@ -7,7 +7,13 @@
 import type { AgentLabel } from "./agent-label.js";
 
 /** Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts). */
-export type InboxExecutor = "auto" | "antigravity" | "local" | "opus";
+export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini";
+
+/**
+ * What a task is: `code` (the default) changes the project; `research` only writes one report, either with Antigravity
+ * (big research, needs the user's Run) or with the free Gemini key (small research, runs by itself).
+ */
+export type InboxKind = "code" | "research";
 
 /** How risky a task is (security, git, auth, releases are always `high`). */
 export type InboxRisk = "low" | "medium" | "high";
@@ -30,6 +36,8 @@ export interface InboxTaskSpec {
   id: string;
   title: string;
   executor: InboxExecutor;
+  /** `research`: the task writes one report (`docs/research/<id>.md`) and nothing else; absent = `code`. */
+  kind?: InboxKind;
   risk: InboxRisk;
   from: InboxFrom;
   /** The branch or commit to start from (default `origin/main`). */
@@ -115,6 +123,12 @@ export interface InboxTaskView extends InboxTaskSpec {
   note?: string;
   startedAt?: number;
   endedAt?: number;
+  /** A free-Gemini research task's report (the result file carries it whole; the page shows it). */
+  researchReport?: string;
+  /** For a free-Gemini task deferred by its quota: when it may try once more by itself (ms since epoch). */
+  retryAt?: number;
+  /** The one automatic retry after the quota reset was used (a second quota stop waits for the user). */
+  autoRetried?: boolean;
   /** Whether the result file was written to the inbox branch. */
   resultWritten?: boolean;
   /**

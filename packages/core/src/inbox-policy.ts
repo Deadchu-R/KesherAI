@@ -24,7 +24,15 @@ export interface PolicyContext {
   allowedPaths: string[];
   forbiddenPaths: string[];
   commands: string[];
+  /** A research task: reading public web pages (fetch steps) is allowed; nothing is downloaded or run. */
+  research?: boolean;
 }
+
+/**
+ * Steps that would spend money: buying or topping up credits, upgrading a plan, billing, payment. Never allowed in a
+ * task, whatever the agent says it is for (Roee, 2026-11-21: no extra payment, ever).
+ */
+const PAYMENT = /\b(buy|purchas\w*|top.?up|get|add)\s+(more\s+)?(ai\s+)?credits?\b|\bai credits?\b|\bupgrade\s+(your\s+|to\s+|the\s+)?(a\s+)?(plan|subscription|pro|ultra|tier)\b|\bbilling\b|\bpayments?\b|\bcheck.?out\b|\bsubscri(be|ption)\b/i;
 
 /** Commands never allowed (the first word, or the first two). */
 const DENY_COMMANDS: RegExp[] = [
@@ -132,6 +140,11 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
   const paths = [...new Set([...f.paths, ...diffPaths])];
   const label = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 200);
 
+  // First of all: nothing that buys, upgrades or pays (a quota or credit offer must end the task, not be accepted).
+  // File edits are checked by their title only: a report may talk about pricing and billing; it is not a step that pays.
+  const writes = kind === "edit" || kind === "delete" || kind === "move";
+  if (PAYMENT.test(writes ? (p.title ?? "") : `${p.title ?? ""}\n${p.rawInput ?? ""}`)) return { verdict: "deny", rule: "no-payment", what: label(p.title || "a step about credits, a plan or payment") };
+
   if (f.command || kind === "execute") {
     const command = f.command ?? p.title;
     const what = label(command || "a command");
@@ -143,7 +156,7 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     return commandAllowed(command, ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
-  if (kind === "fetch") return { verdict: "deny", rule: "no network", what: label(p.title || "fetch") };
+  if (kind === "fetch") return ctx.research ? { verdict: "allow", rule: "research: reading a public page", what: label(p.title || "fetch") } : { verdict: "deny", rule: "no network", what: label(p.title || "fetch") };
 
   const rel = paths.map((x) => insideWorktree(ctx.worktree, x));
   const shown = label(`${kind || "step"} ${rel.map((r, i) => r ?? paths[i]).join(", ") || p.title}`);

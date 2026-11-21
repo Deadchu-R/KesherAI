@@ -119,3 +119,60 @@ test("inbox: local_ok marks a task the local model may carry during Claude's coo
   const agy = parseTaskFile(FILE.replace("risk: low", "risk: low\nlocal_ok: true"), "c-20261119-04", INBOX_DEFAULTS);
   assert.ok("spec" in agy && agy.spec.localOk === undefined);
 });
+
+const RESEARCH = `---
+id: r-20261121-01
+title: How do others sync notes
+executor: auto
+kind: research
+risk: low
+allowed_paths: [apps/**]
+check: pnpm -s typecheck
+max_files: 9
+---
+
+## Goal
+How do Obsidian and Notion sync notes between devices?
+`;
+
+test("inbox: a research task is forced to one report file, no check, and round-trips", () => {
+  const defaults = { maxMinutes: 15, allowedPaths: INBOX_DEFAULTS.allowedPaths, forbiddenPaths: INBOX_DEFAULTS.forbiddenPaths };
+  const r = parseTaskFile(RESEARCH, "r-20261121-01", defaults);
+  assert.ok("spec" in r);
+  const s = r.spec;
+  assert.deepEqual([s.kind, s.allowedPaths, s.maxFiles, s.check], ["research", ["docs/research/r-20261121-01.md"], 1, ""]);
+  const again = parseTaskFile(taskFileText(s), "r-20261121-01", defaults);
+  assert.ok("spec" in again);
+  assert.deepEqual(again.spec, s);
+  // A code task has no kind; a bad kind, and the gemini executor on a code task, are refused.
+  const code = parseTaskFile(FILE, "c-20261119-04", defaults);
+  assert.ok("spec" in code && code.spec.kind === undefined && !taskFileText(code.spec).includes("kind:"));
+  assert.match((parseTaskFile(RESEARCH.replace("kind: research", "kind: poem"), "r-20261121-01", defaults) as { error: string }).error, /kind must be/);
+  assert.match((parseTaskFile(FILE.replace("executor: antigravity", "executor: gemini"), "c-20261119-04", defaults) as { error: string }).error, /only for kind: research/);
+});
+
+test("inbox: research routing — low risk to free Gemini, bigger to Antigravity, high to Opus; explicit executors stay", () => {
+  const base = { title: "Compare sync", goal: "How do they sync?", check: "", acceptance: undefined, maxFiles: 1, kind: "research" as const };
+  assert.equal(routeTask({ ...base, executor: "auto", risk: "low" }), "gemini");
+  assert.equal(routeTask({ ...base, executor: "auto", risk: "medium" }), "antigravity");
+  assert.equal(routeTask({ ...base, executor: "auto", risk: "high" }), "opus");
+  assert.equal(routeTask({ ...base, executor: "antigravity", risk: "low" }), "antigravity");
+  assert.equal(routeTask({ ...base, executor: "gemini", risk: "medium" }), "gemini");
+  // A code task never goes to Gemini by routing.
+  assert.notEqual(routeTask({ ...base, kind: undefined, executor: "auto", risk: "low" }), "gemini");
+  assert.equal(branchFor({ id: "r-1x", title: "T" }, "gemini"), "gemini/r-1x-t");
+});
+
+test("inbox: the research prompt may search but not download, sign in or pay, and writes one file; the result carries the report", () => {
+  const defaults = { maxMinutes: 15, allowedPaths: INBOX_DEFAULTS.allowedPaths, forbiddenPaths: INBOX_DEFAULTS.forbiddenPaths };
+  const r = parseTaskFile(RESEARCH, "r-20261121-01", defaults);
+  assert.ok("spec" in r);
+  const p = agentPrompt(r.spec, "agy/r-20261121-01-how");
+  assert.match(p, /search the web and read public web pages/);
+  assert.match(p, /Do not download files.*sign in.*buy.*accept any offer, upgrade or credits/);
+  assert.match(p, /exactly one file: docs\/research\/r-20261121-01\.md/);
+  assert.match(p, /numbered ## Sources list/);
+  assert.doesNotMatch(p, /do not use the network/i);
+  const text = resultFileText({ ...r.spec, status: "done", runBy: "gemini", branch: "", researchReport: "# Sync\n\nText [1]\n\n## Sources\n\n1. [A](https://a.example/x)" });
+  assert.match(text, /## Research report\n# Sync/);
+});

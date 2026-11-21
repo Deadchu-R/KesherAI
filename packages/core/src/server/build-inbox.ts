@@ -2,11 +2,14 @@ import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
-import { AGENT_GIT_IDENTITY } from "@kesher/agent";
+import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ToolContext } from "@kesher/agent";
+import type { ProviderRegistry } from "@kesher/providers";
 import type { InboxBusy } from "@kesher/shared";
 import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
 import type { KesherConfig } from "../config.js";
+import { modelTurnFor, withFilter } from "../conversations.js";
+import { researchReport } from "../deep-research.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
 import { TaskInbox, type RunCmd } from "../inbox-runner.js";
@@ -63,10 +66,11 @@ function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
  * Builds the task inbox: git and checks as argument lists, the unmodified `agy acp` (it signs in by itself), the
  * shared board, notifications to this PC and the phone, and the busy check (games, editors, the graphics card).
  *
- * @param p - The config, data folder, board, notifier and the graphics card guard.
+ * @param p - The config, data folder, board, notifier, the graphics card guard and the provider registry (small research
+ *   tasks run on its "gemini" provider).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard }): TaskInbox {
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry }): TaskInbox {
   const git = runner("git", false);
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
@@ -93,6 +97,24 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       const local = agyPath();
       const command = local && (await stat(local).catch(() => undefined)) ? local : "agy";
       return AcpAgent.spawn(command, ["acp", "--add-dir", cwd], cwd, h);
+    },
+    // Small research tasks (route B) run by themselves on the user's free "gemini" provider (a free AI Studio key).
+    // That key must stay without a billing account, so it can never charge; a limit error defers the task.
+    research: {
+      ready: () => !!p.registry.get("gemini"),
+      run: async (question, signal) => {
+        const provider = p.registry.get("gemini");
+        if (!provider) throw new Error("No Gemini connection.");
+        const models = await provider.listModels(signal);
+        const pick = models.find((m) => m.category === "chat" && /flash/i.test(m.providerModelId) && !/lite|image|tts|live/i.test(m.providerModelId)) ?? models.find((m) => m.category === "chat");
+        if (!pick) throw new Error("The Gemini connection lists no chat model.");
+        const prefs = withFilter(undefined, p.config.webFilter, false);
+        return researchReport(question, {
+          model: modelTurnFor(p.registry, pick.id, undefined, "helper"),
+          search: (q, sig) => searchWeb(q, prefs, sig),
+          read: async (url, sig) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output,
+        }, signal);
+      },
     },
     board: p.board,
     notify: (title, body) => void p.notifier.send({ title, body, path: "#/task-inbox", tags: ["inbox_tray"] }).catch(() => undefined),

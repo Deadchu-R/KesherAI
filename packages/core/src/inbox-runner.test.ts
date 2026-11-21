@@ -345,3 +345,91 @@ test("inbox: git missing (Windows without Git) shows as such, not as \"no inbox 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("inbox: credit, upgrade and billing offers count as a quota stop (never paid)", () => {
+  for (const m of ["You have run out of AI credits", "Buy more credits to continue", "Please upgrade your plan", "Billing is required", "429 RESOURCE_EXHAUSTED"]) assert.ok(isQuotaError(m), m);
+  assert.ok(!isQuotaError("The agent crashed: ENOENT"));
+});
+
+const RESEARCH_TASK = (id: string) => `---
+id: ${id}
+title: How do others sync notes
+kind: research
+risk: low
+---
+
+## Goal
+How do Obsidian and Notion sync notes?
+`;
+
+test("inbox: free-Gemini research runs by itself, one at a time, and waits with a note while no Gemini connection exists", async () => {
+  const { root, repo } = await setup({ "r-20261121-01": RESEARCH_TASK("r-20261121-01") });
+  const notes: string[] = [];
+  let ready = false;
+  const asked: string[] = [];
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async () => ({ code: 1, out: "not in tests" }),
+    startAgent: () => Promise.reject(new Error("Antigravity must not start for a Gemini task")),
+    notify: (t, b) => void notes.push(`${t} ${b}`),
+    busy: async () => ({ free: true, reasons: [] }),
+    research: { ready: () => ready, run: async (q) => (asked.push(q), "# Sync\n\nText [1]\n\n## Sources\n\n1. [A](https://a.example/x)") },
+  });
+  try {
+    await inbox.sync();
+    await inbox.idle();
+    let t = await inbox.task("r-20261121-01");
+    assert.deepEqual([t.runBy, t.kind, t.status, t.allowedPaths], ["gemini", "research", "waiting", ["docs/research/r-20261121-01.md"]]);
+    assert.match(t.note ?? "", /Waiting for a Gemini connection/);
+    assert.equal(asked.length, 0);
+    await assert.rejects(inbox.run("r-20261121-01", { here: true }), /runs by itself/);
+    ready = true;
+    await inbox.pumpGemini();
+    t = await inbox.task("r-20261121-01");
+    assert.deepEqual([t.status, t.note, t.researchReport?.startsWith("# Sync")], ["done", undefined, true]);
+    assert.match(asked[0]!, /How do others sync notes\n\nHow do Obsidian/);
+    assert.match(await sh(repo, "show", "origin/kesher-inbox:results/r-20261121-01.md").catch(async () => (await sh(repo, "fetch", "-q", "origin", "kesher-inbox"), sh(repo, "show", "FETCH_HEAD:results/r-20261121-01.md"))), /status: done[\s\S]*## Research report\n# Sync/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox: a Gemini limit or billing error defers the task to the reset; one automatic retry, never a loop", async () => {
+  const { root, repo } = await setup({ "r-20261121-02": RESEARCH_TASK("r-20261121-02") });
+  let now = 1_000_000;
+  let calls = 0;
+  let fail: string | undefined = "429 RESOURCE_EXHAUSTED: quota exceeded, retry in 30m";
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox" }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async () => ({ code: 1, out: "not in tests" }),
+    startAgent: () => Promise.reject(new Error("no")),
+    notify: () => undefined,
+    busy: async () => ({ free: true, reasons: [] }),
+    now: () => now,
+    research: { ready: () => true, run: async () => (calls++, fail ? Promise.reject(new Error(fail)) : "# R\n\nok") },
+  });
+  try {
+    await inbox.sync();
+    await inbox.idle();
+    let t = await inbox.task("r-20261121-02");
+    assert.deepEqual([t.status, calls, t.retryAt], ["deferred-quota", 1, 1_000_000 + 30 * 60_000]);
+    // Before the reset nothing runs, however often it is pumped.
+    for (let i = 0; i < 3; i++) await inbox.pumpGemini();
+    assert.equal(calls, 1);
+    // After the reset: the one automatic retry; a second limit error ends it deferred, with no further retry.
+    now += 31 * 60_000;
+    fail = "Please upgrade your plan or buy credits";
+    await inbox.pumpGemini();
+    t = await inbox.task("r-20261121-02");
+    assert.deepEqual([t.status, calls, t.autoRetried, t.retryAt], ["deferred-quota", 2, true, undefined]);
+    now += 3 * 60 * 60_000;
+    await inbox.pumpGemini();
+    assert.equal(calls, 2, "no loop: a second stop waits for the user");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

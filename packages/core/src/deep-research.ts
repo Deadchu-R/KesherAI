@@ -1,4 +1,4 @@
-import type { AgentTool } from "@kesher/agent";
+import type { AgentTool, ModelTurn } from "@kesher/agent";
 import type { HelperPlanRef, HelperRunInfo } from "@kesher/shared";
 import { HELPER_STEPS } from "./agents.js";
 import { helperWork, newPlanId, type DelegateOptions, type HelperModel, type HelperResume } from "./delegate.js";
@@ -240,4 +240,57 @@ export function deepResearchTool(o: DelegateOptions): AgentTool {
       return { output: `(${tally}; this chat keeps no documents, so give the user the report below as your answer.)\n\n${text}` };
     },
   };
+}
+
+/** What {@link researchReport} needs (injected, so tests need no network or model). */
+export interface ReportDeps {
+  /** The research and writer model (the task inbox gives the user's free "gemini" provider). */
+  model: ModelTurn;
+  search: (query: string, signal: AbortSignal) => Promise<Array<{ title: string; url: string; snippet: string }>>;
+  read: (url: string, signal: AbortSignal) => Promise<string>;
+}
+
+/** The most sub-questions of the small, automatic research (a chat's deep research has {@link RESEARCH_PARTS}). */
+const SMALL_PARTS = 3;
+
+/**
+ * Small research without a chat, for the task inbox's free-Gemini route: the model splits the question into at most
+ * three sub-questions, each is searched and its best two pages read (one after the other, to stay inside a free
+ * key's rate limit), and the same model writes one report with a numbered Sources list. Errors of the model (a quota
+ * or rate limit) are thrown as they are: the caller decides, and never retries in a loop.
+ *
+ * @param question - The task's question.
+ * @param deps - The model, search and page reading.
+ * @param signal - Stops it.
+ * @returns The report's Markdown.
+ */
+export async function researchReport(question: string, deps: ReportDeps, signal: AbortSignal): Promise<string> {
+  const ask = async (system: string, user: string) => (await deps.model({ messages: [{ role: "system", content: system }, { role: "user", content: user }], tools: [] }, signal, () => undefined)).text.replace(/<think>[\s\S]*?<\/think>\s*/g, "").trim();
+  const planned = await ask(`Split the research question into at most ${SMALL_PARTS} separate, specific web-search queries. Reply with JSON only: {"parts": ["...", "..."]}.`, question);
+  let parts: string[] = [];
+  try {
+    const j = JSON.parse(/\{[\s\S]*\}/.exec(planned)?.[0] ?? "{}") as { parts?: unknown };
+    parts = (Array.isArray(j.parts) ? j.parts : []).filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.replace(/\s+/g, " ").trim().slice(0, 200));
+  } catch {
+    /* not JSON: the whole question is searched */
+  }
+  parts = [...new Set(parts)].slice(0, SMALL_PARTS);
+  if (!parts.length) parts = [question.replace(/\s+/g, " ").trim().slice(0, 200)];
+  const findings: Array<{ sub: string; text: string }> = [];
+  for (const sub of parts) {
+    signal.throwIfAborted();
+    const results = await deps.search(sub, signal).catch(() => []);
+    const pages: string[] = [];
+    for (const r of results.slice(0, 2)) {
+      const text = await deps.read(r.url, signal).catch(() => "");
+      if (text.trim()) pages.push(`## ${r.title}\n${text.replace(/\s+/g, " ").slice(0, 6000)}`);
+    }
+    const list = results.slice(0, 8).map((r) => `- ${r.title} — ${r.url}\n  ${r.snippet}`);
+    findings.push({ sub, text: `${pages.join("\n\n")}\n\nSources:\n${list.join("\n")}` });
+  }
+  const sources = collectSources(findings.map((f) => f.text));
+  const [system, user] = writerMessages(question, findings, sources);
+  const body = await ask(system!.content, user!.content);
+  if (!body) throw new Error("The model wrote no report.");
+  return assembleReport(body, sources, isHebrew(question));
 }
