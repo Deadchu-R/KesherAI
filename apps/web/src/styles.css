@@ -4216,8 +4216,8 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* Godot: the project's scenes for the stand-in, as buttons that wrap on a phone. */
 /* The engine's projects found on the computer, as tappable cards (the scenes of the chosen one show below) */
 .standin-projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
-.standin-projects button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; padding: 10px 12px; min-width: 0; }
-.standin-projects button b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.standin-projects button { height: auto; min-height: 52px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: start; padding: 10px 12px; min-width: 0; }
+.standin-projects button b { flex-shrink: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .standin-projects button.on { outline: 2px solid var(--accent); }
 .standin-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .standin-scenes .button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
