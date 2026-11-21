@@ -55,6 +55,7 @@ import { translateRoutes } from "../routes/translate.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
 import { healthRoutes } from "../routes/health.js";
+import { webSearchCheckRoutes } from "../routes/web-search-check.js";
 import { storageRoutes } from "../routes/storage.js";
 import { ideRoutes } from "../routes/ide.js";
 import { torRoutes } from "../routes/tor.js";
@@ -138,6 +139,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
+  await webSearchCheckRoutes(app);
   await storageRoutes(app, services);
   await ideRoutes(app);
   await torRoutes(app, services);

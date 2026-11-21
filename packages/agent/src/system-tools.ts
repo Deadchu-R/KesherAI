@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import type { AgentTool, ToolContext } from "./tools.js";
 import { MAX_OUTPUT, refreshPath, runShell } from "./shell.js";
 import { resolveForTool } from "./workspace.js";
+import { safeValue, searchBackends } from "./web-search.js";
 
 /**
  * Tools that reach beyond the project folder: what is installed on this
@@ -234,7 +235,8 @@ export const DEPTH = {
 } as const;
 
 /**
- * Searches DuckDuckGo with a chat's settings: only / never these sites, and how many results by depth.
+ * Searches the web with a chat's settings: only / never these sites, safe search, and how many results by depth.
+ * Goes through the backends in web-search.ts (DuckDuckGo, DuckDuckGo Lite, Mojeek, Bing) until one answers.
  *
  * @returns The results, already filtered.
  */
@@ -243,19 +245,7 @@ export async function searchWeb(query: string, prefs: import("@kesher/shared").W
   const never = (prefs?.never ?? []).map(siteName).filter(Boolean).slice(0, 30);
   const depth = DEPTH[prefs?.depth ?? "normal"];
   const q = only.length ? `${query} ${only.map((d) => `site:${d}`).join(" OR ")}` : query;
-  // DuckDuckGo's safe search: kp=1 strict, -1 moderate, -2 off (the user's own setting).
-  const kp = prefs?.safeSearch === "strict" ? "1" : prefs?.safeSearch === "off" ? "-2" : "-1";
-  const get = async (extra: string) => {
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}&kp=${kp}${extra}`, {
-      signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-      headers: { "user-agent": "Mozilla/5.0 (KesherAI)" },
-    });
-    if (!res.ok) throw new Error(`Search answered ${res.status}.`);
-    return parseSearchResults(await res.text());
-  };
-  let results = await get("");
-  // Deep: the next page of results too.
-  if (depth.results > 10 && results.length >= 8) results = [...results, ...(await get("&s=30&dc=31").catch(() => []))];
+  const results = await searchBackends({ query: q, kp: safeValue(prefs), signal }, depth.results > 10);
   const seen = new Set<string>();
   return results
     .filter((r) => (only.length ? only.some((d) => onSite(r.url, d)) : true) && !never.some((d) => onSite(r.url, d)))
@@ -267,7 +257,7 @@ export const webSearchTool: AgentTool = {
   risk: "read",
   spec: {
     name: "web_search",
-    description: "Search the web (DuckDuckGo) for documentation, error messages, libraries or current information. Returns titles, links and snippets; open a result with web_fetch. The chat's own settings (which sites, how deep) apply.",
+    description: "Search the web for documentation, error messages, libraries or current information. Returns titles, links and snippets; open a result with web_fetch. The chat's own settings (which sites, how deep) apply.",
     inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
   },
   async run(input, ctx) {

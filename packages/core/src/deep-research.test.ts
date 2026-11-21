@@ -141,3 +141,18 @@ test("researchReport: plans parts, searches and reads one after the other, write
   // The model's own error (a quota) is thrown as it is.
   await assert.rejects(researchReport("q", { model: async () => { throw new Error("429 RESOURCE_EXHAUSTED"); }, search: async () => [], read: async () => "" }, new AbortController().signal), /RESOURCE_EXHAUSTED/);
 });
+
+test("researchReport: no search result and no page read means no report, and the writer must not invent sources", async () => {
+  const { researchReport, NO_SEARCH_NOTE, writerMessages } = await import("./deep-research.js");
+  let wrote = false;
+  const model: ModelTurn = async (req) => {
+    const system = req.messages[0]!.content as string;
+    if (!system.startsWith("Split")) wrote = true;
+    return { text: system.startsWith("Split") ? '{"parts": ["a"]}' : "# T\n\nmade up [Findings 1]" } as Awaited<ReturnType<ModelTurn>>;
+  };
+  await assert.rejects(researchReport("q", { model, search: async () => [], read: async () => "" }, new AbortController().signal), new RegExp(NO_SEARCH_NOTE));
+  // Results but no page that opened: still nothing was read.
+  await assert.rejects(researchReport("q", { model, search: async () => [{ title: "A", url: "https://a.io/x", snippet: "s" }], read: async () => "" }, new AbortController().signal), new RegExp(NO_SEARCH_NOTE));
+  assert.equal(wrote, false);
+  assert.match(writerMessages("q", [], [])[0]!.content, /never invent a source or write placeholders such as \[Findings N\]/);
+});

@@ -14,6 +14,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Agents and chat-first (Roee 19:3x; gap list RESEARCH_LOG 2026-11-20)
 - 👤✅ Decisions: a background helper continues where it stopped after a PC restart; helpers may use the browser and computer with Roee's approval per action (the approval card names the helper); documents open in a side panel in the chat.
+- ✅ Web search fallbacks (DuckDuckGo, DDG Lite, Mojeek, Bing; last good one first for 30 min), diagnostic GET /api/web/search-check (local only), and Gemini research writes no report when nothing was found (no invented sources). To test on the PC after the build: open /api/web/search-check.
 - ✅ Agents step 1: helper notifications, tokens and cost per helper, Usage line.
 - ✅ Hub: Gemini (free) tasks with their own chip, group, status (waiting, running, deferred until the quota reset, done) and result; a "~N steps" estimate on every task (`estimateTaskSteps` in packages/shared/src/task-steps.ts, no model call) and "step X of ~N" while it runs, in the hub page and the PC inbox card; design board HubGeminiSteps.
 - ✅ Agents step 2: persist helper runs, resume after restart, wake the lead when a background helper ends.

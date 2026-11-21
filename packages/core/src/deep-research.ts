@@ -121,7 +121,7 @@ export function writerMessages(question: string, findings: Array<{ sub: string; 
     {
       role: "system",
       content:
-        "You write research reports from the findings of research agents. Write in the language of the question. Markdown: a # title line, a short summary (3-5 lines) first, then ## sections by theme (not by agent), with the facts, numbers and where sources disagree, and a short ## conclusion. Cite sources by their number in square brackets, like [2], right after the fact. Use only the findings given; say what is unknown. Do not write a sources list (it is added after your text).",
+        "You write research reports from the findings of research agents. Write in the language of the question. Markdown: a # title line, a short summary (3-5 lines) first, then ## sections by theme (not by agent), with the facts, numbers and where sources disagree, and a short ## conclusion. Cite sources by their number in square brackets, like [2], right after the fact. Use only the findings given; say what is unknown. Cite only the numbered sources you were given, and never invent a source or write placeholders such as [Findings N]. Do not write a sources list (it is added after your text).",
     },
     {
       role: "user",
@@ -250,6 +250,9 @@ export interface ReportDeps {
   read: (url: string, signal: AbortSignal) => Promise<string>;
 }
 
+/** The note of a task whose searches returned nothing (no report is written then). */
+export const NO_SEARCH_NOTE = "Web search returned nothing; no report written";
+
 /** The most sub-questions of the small, automatic research (a chat's deep research has {@link RESEARCH_PARTS}). */
 const SMALL_PARTS = 3;
 
@@ -276,7 +279,7 @@ export async function researchReport(question: string, deps: ReportDeps, signal:
   }
   parts = [...new Set(parts)].slice(0, SMALL_PARTS);
   if (!parts.length) parts = [question.replace(/\s+/g, " ").trim().slice(0, 200)];
-  const findings: Array<{ sub: string; text: string }> = [];
+  const findings: Array<{ sub: string; text: string; read: boolean }> = [];
   for (const sub of parts) {
     signal.throwIfAborted();
     const results = await deps.search(sub, signal).catch(() => []);
@@ -286,9 +289,11 @@ export async function researchReport(question: string, deps: ReportDeps, signal:
       if (text.trim()) pages.push(`## ${r.title}\n${text.replace(/\s+/g, " ").slice(0, 6000)}`);
     }
     const list = results.slice(0, 8).map((r) => `- ${r.title} — ${r.url}\n  ${r.snippet}`);
-    findings.push({ sub, text: `${pages.join("\n\n")}\n\nSources:\n${list.join("\n")}` });
+    findings.push({ sub, read: pages.length > 0, text: `${pages.join("\n\n")}\n\nSources:\n${list.join("\n")}` });
   }
   const sources = collectSources(findings.map((f) => f.text));
+  // Nothing usable (no page read, no result): a report would be made up, so there is none.
+  if (!sources.length || !findings.some((f) => f.read)) throw new Error(NO_SEARCH_NOTE);
   const [system, user] = writerMessages(question, findings, sources);
   const body = await ask(system!.content, user!.content);
   if (!body) throw new Error("The model wrote no report.");

@@ -4463,3 +4463,8 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **Translator**: cheapest available first: the loaded local chat model, the free Gemini key (flash), else TranslateGemma 4B (Google, Gemma 3 based, 55 languages incl. Hebrew; GGUF Q4_K_M ~2.5 GB, `42ailab/TranslateGemma-4B-GGUF`, plain Gemma chat prompt works, ~2K tokens per call so long text is split), loaded beside the main model on demand. Considered: Qwen3 1.7B/4B (good general, weaker Hebrew), NLLB/Opus-MT (not llama.cpp).
 - From known practice of these tools plus the model page, not a fresh broad search.
 - **Stopped at:** done; built in the same task (gpu-guard idle times, translate.ts, Translate page).
+
+## 2026-11-21: Web search returned nothing on the PC
+- DuckDuckGo's HTML page alone often answers a bot check (status 202 or an anomaly page) or an empty list to a program's user-agent; Gemini research then wrote a report from no sources. Taken: a browser user-agent, and fallbacks DuckDuckGo Lite, Mojeek, Bing HTML (no key, no dependency); the research task fails with "Web search returned nothing; no report written".
+- Parsers are written from the pages' known structure (fixtures in web-search.test.ts), not checked against live pages here: confirm on the PC with GET /api/web/search-check.
+- **Stopped at:** done; built in the same task.
