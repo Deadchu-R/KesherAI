@@ -1,0 +1,316 @@
+{
+ "group": "שיתוף פעולה · Collaborators",
+ "now": "2026-11-21T20:00:00Z",
+ "boards": [
+  {
+   "id": "CollabProjectView",
+   "title": "משתפת פעולה בלי מנוע: תצוגת הפרויקט (סצנות וקבצים, \"מסונכרן עם המחשב של רועי ✓\"). תוכנית, עוד לא תכונה: נבנה על לשונית הסצנות של אורח",
+   "titleEn": "A collaborator with no engine: project view (scenes and files, \"synced with Roee's PC ✓\"). A plan, not a feature yet: drawn on the guest Scenes tab",
+   "route": "#/join/dsgnCollabToken0123456789abcdefghijklmnopq",
+   "viewports": [
+    "phone",
+    "desktop"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 1000
+   },
+   "mocks": [
+    {
+     "url": "**/api/join/dsgnCollabToken0123456789abcdefghijklmnopq",
+     "json": {
+      "project": "Platformer · מסונכרן עם המחשב של רועי ✓",
+      "role": "edit"
+     }
+    },
+    {
+     "url": "**/api/guest/me",
+     "json": {
+      "name": "דנה",
+      "project": "Platformer · מסונכרן עם המחשב של רועי ✓",
+      "role": "edit",
+      "left": 17,
+      "dailyLimit": 20
+     }
+    },
+    {
+     "url": "**/api/guest/chats",
+     "json": {
+      "chats": [
+       {
+        "id": "c1",
+        "title": "תכנון שלב 3",
+        "updatedAt": {
+         "$ago": "4m"
+        },
+        "mine": false
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/guest/scenes",
+     "json": {
+      "scenes": [
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Level1.unity",
+        "open": true
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Level2.unity",
+        "open": false
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Boss.unity",
+        "open": false
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Prefabs/Crate.prefab",
+        "open": false
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Data/EnemyStats.asset",
+        "open": false
+       }
+      ],
+      "editor": {
+       "pluginId": "scene-editor",
+       "file": "index.html",
+       "title": "עורך סצנה",
+       "uses": [],
+       "filesKey": "design-files-key"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".guest-join input"
+    },
+    {
+     "fill": ".guest-join input",
+     "value": "דנה"
+    },
+    {
+     "click": ".guest-join button[type=submit]"
+    },
+    {
+     "wait": ".guest-tabs"
+    },
+    {
+     "click": ".guest-tabs button >> nth=1"
+    },
+    {
+     "wait": ".guest-scene"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "CollabSceneLocked",
+   "title": "משתפת פעולה: סצנה נעולה על ידי מישהו אחר (Level2 עם דנה; לא ניתן לערוך עד שתשחרר או תפוג)",
+   "titleEn": "A collaborator: a scene locked by someone else (Level2 held by Dana; read only until released or expired)",
+   "route": "#/join/dsgnCollabToken0123456789abcdefghijklmnopq",
+   "viewports": [
+    "phone",
+    "desktop"
+   ],
+   "height": {
+    "desktop": 800,
+    "phone": 1000
+   },
+   "mocks": [
+    {
+     "url": "**/api/join/dsgnCollabToken0123456789abcdefghijklmnopq",
+     "json": {
+      "project": "Platformer · מסונכרן עם המחשב של רועי ✓",
+      "role": "edit"
+     }
+    },
+    {
+     "url": "**/api/guest/me",
+     "json": {
+      "name": "נועם",
+      "project": "Platformer · מסונכרן עם המחשב של רועי ✓",
+      "role": "edit",
+      "left": 17,
+      "dailyLimit": 20
+     }
+    },
+    {
+     "url": "**/api/guest/chats",
+     "json": {
+      "chats": [
+       {
+        "id": "c1",
+        "title": "תכנון שלב 3",
+        "updatedAt": {
+         "$ago": "4m"
+        },
+        "mine": false
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/guest/scenes",
+     "json": {
+      "scenes": [
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Level1.unity 🔒 רועי",
+        "open": true
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Level2.unity 🔒 דנה",
+        "open": true
+       },
+       {
+        "engine": "unity",
+        "project": ".",
+        "scene": "Assets/Scenes/Boss.unity",
+        "open": false
+       }
+      ],
+      "editor": {
+       "pluginId": "scene-editor",
+       "file": "index.html",
+       "title": "עורך סצנה",
+       "uses": [],
+       "filesKey": "design-files-key"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".guest-join input"
+    },
+    {
+     "fill": ".guest-join input",
+     "value": "דנה"
+    },
+    {
+     "click": ".guest-join button[type=submit]"
+    },
+    {
+     "wait": ".guest-tabs"
+    },
+    {
+     "click": ".guest-tabs button >> nth=1"
+    },
+    {
+     "wait": ".guest-scene"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "CollabApplyCard",
+   "title": "המחשב הראשי: \"3 שינויים מדנה מחכים: להחיל\" ותוצאות שחוזרות אליה (תמונה, קומפילציה, הרצה)",
+   "titleEn": "The main PC: \"3 changes from Dana waiting: apply\" and the results sent back to her (picture, compile, play)",
+   "route": "#/games",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1000,
+    "phone": 1380
+   },
+   "mocks": [
+    {
+     "url": "**/api/games",
+     "json": {
+      "projects": [
+       {
+        "engine": "unity",
+        "name": "Platformer",
+        "path": "D:/Games/Platformer",
+        "version": "6000.0.32f1",
+        "open": false,
+        "pending": 3,
+        "moves": 3,
+        "values": 0,
+        "clashes": 0,
+        "lastSync": {
+         "$ago": "3m"
+        },
+        "canSync": true,
+        "page": "#/unity"
+       }
+      ],
+      "clashes": 0
+     }
+    },
+    {
+     "url": "**/api/games/conflicts",
+     "json": {
+      "conflicts": []
+     }
+    },
+    {
+     "url": "**/api/unity/queue",
+     "json": [
+      {
+       "id": "q0",
+       "project": "D:/Games/Platformer",
+       "path": "Assets/Scenes/Level2.unity · הזזת Crate (דנה)",
+       "at": {
+        "$ago": "22m"
+       }
+      },
+      {
+       "id": "q1",
+       "project": "D:/Games/Platformer",
+       "path": "Assets/Scenes/Level2.unity · הוספת Coin ×4 (דנה)",
+       "at": {
+        "$ago": "18m"
+       }
+      },
+      {
+       "id": "q2",
+       "project": "D:/Games/Platformer",
+       "path": "Assets/Data/EnemyStats.asset · speed 3.5 (דנה)",
+       "at": {
+        "$ago": "9m"
+       }
+      }
+     ]
+    },
+    {
+     "url": "**/api/unreal/queue",
+     "json": []
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".games-card"
+    },
+    {
+     "click": ".games-card >> nth=0 >> text=הצג ממתינים"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
+  }
+ ]
+}

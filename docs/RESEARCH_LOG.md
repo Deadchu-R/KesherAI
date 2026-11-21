@@ -4519,3 +4519,10 @@ Full report: [research/c-20261121-41.md](research/c-20261121-41.md) (Epic previe
 - **Copy**: a full Downloads page (not only the corner list) with a touch-reorderable queue; two meters — network MB/s and disk/verify MB/s, phases (downloading → verifying → installing) with time left from a smoothed rate; parallel range parts for big Hugging Face files (4–8 streams, resume per part); a drive manager (free space per drive, models vs heavy-data, headroom check before start); auto-throttle/pause while a big local model answers or Unreal/Unity is in Play; on-demand "Verify" (SHA-256 against the hub's hash) and repair; phone push when a download ends or fails; error cards with the cause and one fix button (disk full → pick another drive; 401 → token; network → retry).
 - **Taken**: into WORK_LIST "Night 21–22.11" as D-items (S first).
 - **Stopped at:** done (read summary and section 5 headings).
+
+## 2026-11-21: Collaborators plan, before research c-39 (Claude helper, from the repo only)
+Full plan: [COLLAB_PLAN.md](COLLAB_PLAN.md). No web research here; that is task c-20261121-39 (Unity Version Control/Plastic, Perforce + Unreal multi-user, Diversion, Anchorpoint, Godot text scenes).
+- **Already there**: scene stand-ins and pending moves (Unity, Unreal, Godot), checkpoints, sync and clash sheet, scene rooms, guests, shared chats, pairing, hub, task inbox.
+- **Decided in the plan**: text is patched, binaries are never merged (a lock per scene or level, auto-release); Unreal binaries only as ops applied on the main PC; every change arrives as a validated "change packet" that the main PC shows and applies (always asks by default); results (picture, compile, play) go back.
+- **Open until c-39**: the channel (git, the hub, or both). Pros and cons are in the plan; steps 1 to 6 do not depend on it.
+- **Stopped at:** plan written; waiting for c-39 to choose the channel and to check the plan's step 7 and locks against Perforce/Plastic/Diversion practice.
