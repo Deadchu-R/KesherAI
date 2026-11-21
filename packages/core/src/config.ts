@@ -99,6 +99,19 @@ export const KesherConfigSchema = z.object({
   modelsDir: z.string().optional(),
   /** Where self-work makes its copies of a project (a folder per run). Defaults to `<project>-self-work` next to it. */
   selfWorkDir: z.string().optional(),
+  /**
+   * The local model carries "local ok" tasks while Claude cools down (cooldown-handoff.ts): on, the project and its
+   * check self-work uses (chosen on the computer), tasks per day and per run.
+   */
+  cooldownHandoff: z
+    .object({
+      enabled: z.boolean().default(true),
+      repo: z.string().default(""),
+      check: z.string().default(""),
+      dailyCap: z.number().int().min(1).max(50).default(6),
+      batch: z.number().int().min(1).max(10).default(3),
+    })
+    .prefault({}),
   /** The folder for heavy things on another drive (engines, the worker's data, Unreal builds, outputs move there). */
   heavyDir: z.string().optional(),
   /** Heavy folders copied and waiting for the next start to finish moving (heavy-folder.ts). */

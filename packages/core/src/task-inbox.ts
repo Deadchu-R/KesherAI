@@ -234,6 +234,8 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     maxMinutes: num("max_minutes", defaults.maxMinutes, 1, 60),
     maxFiles: num("max_files", 15, 1, 60),
     ...(model ? { model } : {}),
+    // The local model may carry it while Claude cools down (cooldown-handoff.ts); never for Antigravity tasks.
+    ...(/^(true|yes)$/i.test(str("local_ok", 10)) && executor !== "antigravity" ? { localOk: true } : {}),
     goal,
     ...(sec("read first") ? { readFirst: sec("read first")! } : {}),
     ...(sec("acceptance") ? { acceptance: sec("acceptance")! } : {}),
@@ -265,6 +267,7 @@ export function taskFileText(s: InboxTaskSpec): string {
     `max_minutes: ${s.maxMinutes}`,
     `max_files: ${s.maxFiles}`,
     ...(s.model ? [`model: ${one(s.model)}`] : []),
+    ...(s.localOk ? ["local_ok: true"] : []),
     "---",
     "",
     "## Goal",

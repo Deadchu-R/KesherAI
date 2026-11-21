@@ -9,6 +9,7 @@ import { CommandPalette } from "./CommandPalette";
 import { VersionWatch } from "./VersionWatch";
 import { AboutYou, loadUser, type User } from "./AboutYou";
 import { GuardBanner } from "./GuardSection";
+import { CooldownBanner } from "./CooldownHandoff";
 import { StopSpeakingBar } from "./Speak";
 import { Welcome, useRole } from "./Welcome";
 import { PhoneTabs } from "./PhoneTabs";
@@ -415,6 +416,7 @@ export function App() {
         <UpdatedCard hash={hash} />
         <ResumeCard />
         <GuardBanner />
+        <CooldownBanner />
         {online === false && (
           <p className="error row" style={{ padding: "12px 28px", gap: 10 }}>
             <span className="grow">{t("serverOffline")}</span>

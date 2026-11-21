@@ -69,6 +69,8 @@ export interface BoardTask {
   size?: BoardSize;
   /** Roee handed this task to self-work: it takes it first, whatever its size. */
   forKesher?: boolean;
+  /** The local model may do it while Claude cools down (cooldown-handoff.ts hands it over then, and back after). */
+  localOk?: boolean;
   owner?: BoardActor;
   /** What was done (commit, files, how it was checked). */
   result?: string;
@@ -103,7 +105,7 @@ export type BoardChange =
   | { op: "done"; id: string; result: string }
   | { op: "block"; id: string; result: string }
   | { op: "reopen"; id: string }
-  | { op: "edit"; id: string; title?: string; details?: string; priority?: number; category?: BoardCategory; size?: BoardSize; forKesher?: boolean }
+  | { op: "edit"; id: string; title?: string; details?: string; priority?: number; category?: BoardCategory; size?: BoardSize; forKesher?: boolean; localOk?: boolean }
   | { op: "note"; text: string; task?: string };
 
 /** The task board in a file. */
@@ -209,6 +211,10 @@ export class TaskBoard {
               if (c.forKesher) t.forKesher = true;
               else delete t.forKesher;
             }
+            if (c.localOk !== undefined) {
+              if (c.localOk) t.localOk = true;
+              else delete t.localOk;
+            }
             Object.assign(t, { updatedAt: now, updatedBy: by });
             break;
           }
@@ -241,7 +247,7 @@ export function boardText(b: Board, notes = 10): string {
   const order = { claimed: 0, open: 1, blocked: 2, done: 3 } as const;
   const tasks = [...b.tasks].sort((x, y) => order[x.status] - order[y.status] || x.priority - y.priority);
   // Self-work takes tasks handed to it first, then small ones; big and Fable ones are Claude's.
-  const cat = (t: BoardTask) => (categoryOf(t) === "fable" ? " {fable}" : ` {${sizeOf(t)}}`) + (t.forKesher ? " {for self-work}" : "");
+  const cat = (t: BoardTask) => (categoryOf(t) === "fable" ? " {fable}" : ` {${sizeOf(t)}}`) + (t.forKesher ? " {for self-work}" : "") + (t.localOk && !t.forKesher ? " {local ok}" : "");
   const line = (t: BoardTask) => `${t.id} [${t.status}${t.owner ? `: ${t.owner}` : ""}] p${t.priority}${cat(t)} ${t.title}${t.result ? ` — ${t.result.split("\n")[0]!.slice(0, 160)}` : ""}`;
   return [`Board revision ${b.rev}.`, ...tasks.filter((t) => t.status !== "done").map(line), ...(tasks.some((t) => t.status === "done") ? [`Done: ${tasks.filter((t) => t.status === "done").length} (latest: ${tasks.filter((t) => t.status === "done").slice(-3).map((t) => t.id).join(", ")})`] : []), ...(b.notes.length ? ["Notes:", ...b.notes.slice(-notes).map((n) => `${n.at.slice(0, 16)} ${n.from}${n.task ? ` (${n.task})` : ""}: ${n.text}`)] : [])].join("\n");
 }

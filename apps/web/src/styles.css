@@ -384,6 +384,11 @@ button.on { border-color: var(--accent); }
 .grant-list .grant-row { flex-wrap: wrap; row-gap: 4px; }
 .grant-list .grant-what { min-width: 0; overflow-wrap: anywhere; }
 .card.approval .row, .cc-buttons { flex-wrap: wrap; }
+/* The local model carries tasks while Claude cools down (CooldownHandoff.tsx): wraps at 390 px, nothing cut. */
+.cooldown-banner span { overflow-wrap: anywhere; min-width: 0; }
+.cooldown-card .cooldown-repo { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; overflow-wrap: anywhere; }
+.cooldown-card .row.wrap { flex-wrap: wrap; gap: 8px; }
+.cooldown-tasks { margin: 0; padding-inline-start: 18px; overflow-wrap: anywhere; }
 
 /* Markdown in replies */
 .msg-text { white-space: normal; }

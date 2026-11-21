@@ -10,6 +10,7 @@ import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
+import { CooldownHandoff, onClaudeError, type HandoffSettings } from "../cooldown-handoff.js";
 
 /**
  * Self-work: start, follow and stop KesherAI working on a git project by itself.
@@ -213,4 +214,84 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       return reply.code((e as { code?: number }).code === 409 ? 409 : 400).send({ error: (e as Error).message });
     }
   });
+
+  // ---------- The local model carries tasks while Claude cools down (cooldown-handoff.ts) ----------
+  // The main app only: a worker runs self-work, it does not decide what to hand over.
+  if (!s.worker && s.board) {
+    const board = s.board;
+    const settings = (): HandoffSettings => ({ ...s.config.cooldownHandoff });
+    // Self-work is started and stopped through its own routes, so every check (home folder, disk, model) holds.
+    const local = async (method: "POST", url: string, payload: unknown) => {
+      const r = await app.inject({ method, url, payload: payload as Record<string, unknown>, headers: { host: "localhost" }, remoteAddress: "127.0.0.1" });
+      if (r.statusCode >= 400) throw new Error((r.json() as { error?: string }).error ?? `Self-work answered ${r.statusCode}.`);
+    };
+    const handoff = new CooldownHandoff({
+      file: join(s.paths.root, "cooldown-handoff.json"),
+      settings,
+      board: async () => (await board.read()).tasks,
+      inbox: async () => (s.taskInbox ? await s.taskInbox.list() : []),
+      selfWork: async () => {
+        const run = await current();
+        return { running: !!run && (run.status === "running" || run.status === "waiting"), ...(run ? { goal: run.goal } : {}) };
+      },
+      startSelfWork: (o) => local("POST", "/api/self-work/start", o),
+      stopSelfWork: () => local("POST", "/api/self-work/stop", {}),
+      mark: async (t, toLocal) => {
+        if (t.inboxId && s.taskInbox) {
+          await s.taskInbox.reassign(t.inboxId, toLocal ? "local" : "opus");
+          return;
+        }
+        const now = (await board.read()).tasks.find((x) => x.id === t.boardId);
+        const changes: BoardChange[] = [{ op: "edit", id: t.boardId, forKesher: toLocal }];
+        // Given back while self-work still held it: free it for Claude.
+        if (!toLocal && now?.status === "claimed" && now.owner === "kesher") changes.push({ op: "release", id: t.boardId });
+        await board.change("kesher", changes);
+      },
+      notify: (title, body) => s.notifier.send({ title, body, path: "#/code", tags: ["robot"] }).then(() => undefined),
+    });
+    onClaudeError((modelId, message) => void handoff.noteError(modelId, message).catch(() => undefined));
+    handoff.start();
+    app.addHook("onClose", async () => {
+      handoff.close();
+      onClaudeError(undefined);
+    });
+
+    // The banner and the page: whether Claude is cooling down, until when, and what the local model took.
+    app.get("/api/cooldown", async () => handoff.view());
+    // Claude is cooling down until a time (from the page, the phone, or Claude itself through KesherAI's connector).
+    app.put<{ Body: { until?: string; minutes?: number; reason?: string; source?: string } }>("/api/cooldown", async (req, reply) => {
+      const b = req.body ?? {};
+      const now = Date.now();
+      const until = typeof b.until === "string" ? Date.parse(b.until) : now + Number(b.minutes) * 60_000;
+      if (!Number.isFinite(until) || until <= now || until > now + 14 * 24 * 3_600_000) return reply.code(400).send({ error: "Give a time in the next 14 days (until, or minutes)." });
+      await handoff.set(until, b.source === "claude" ? "claude" : "manual", typeof b.reason === "string" ? b.reason : undefined);
+      return handoff.view();
+    });
+    // Claude is back: what the local model did not finish goes back to it.
+    app.delete("/api/cooldown", async () => {
+      await handoff.clear();
+      return handoff.view();
+    });
+    // The hand-off's settings. The project and its check are chosen on the computer only (as for self-work); on/off,
+    // tasks per day and per run from the phone too.
+    app.put<{ Body: Partial<HandoffSettings> }>("/api/cooldown/settings", async (req, reply) => {
+      const b = req.body ?? {};
+      const c = s.config.cooldownHandoff;
+      const here = isLocalRequest(req);
+      if ((b.repo !== undefined || b.check !== undefined) && !here) return reply.code(403).send({ error: "Choose the project and its check on the computer." });
+      if (b.repo !== undefined) {
+        const repo = String(b.repo).trim();
+        if (repo && (!isAbsolute(repo) || !(resolve(repo) + sep).startsWith(resolve(homedir()) + sep))) return reply.code(400).send({ error: "The project must be a folder inside your home folder." });
+        c.repo = repo ? resolve(repo) : "";
+      }
+      if (b.check !== undefined) c.check = String(b.check).trim().slice(0, 300);
+      if (typeof b.enabled === "boolean") c.enabled = b.enabled;
+      const int = (v: unknown, lo: number, hi: number) => (Number.isInteger(Number(v)) && Number(v) >= lo && Number(v) <= hi ? Number(v) : undefined);
+      if (b.dailyCap !== undefined) c.dailyCap = int(b.dailyCap, 1, 50) ?? c.dailyCap;
+      if (b.batch !== undefined) c.batch = int(b.batch, 1, 10) ?? c.batch;
+      await s.saveConfig();
+      void handoff.tick().catch(() => undefined);
+      return handoff.view();
+    });
+  }
 }

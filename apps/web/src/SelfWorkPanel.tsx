@@ -3,6 +3,7 @@ import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { TaskBoardView } from "./TaskBoardView";
+import { CooldownHandoffCard } from "./CooldownHandoff";
 import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -198,6 +199,7 @@ export function SelfWorkPanel(p: { folder: string; startOpen?: boolean }) {
               )}
             </>
           )}
+          <CooldownHandoffCard folder={p.folder} />
           <TaskBoardView />
         </div>
       )}

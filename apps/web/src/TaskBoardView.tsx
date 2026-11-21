@@ -17,6 +17,7 @@ interface Task {
   size?: "small" | "big";
   /** Handed to self-work by Roee: it takes this one first. */
   forKesher?: boolean;
+  localOk?: boolean;
   owner?: "claude" | "kesher" | "roee";
   result?: string;
   priority: number;
@@ -107,6 +108,7 @@ export function TaskBoardView() {
                       {t.owner && <span>{L(...WHO[t.owner]!)}</span>}
                       {c === "normal" && <span>{sizeOf(t) === "small" ? L("קטנה", "Small") : L("גדולה", "Big")}</span>}
                       {t.forKesher && t.status !== "done" && <span className="task-state claimed">🤖 {L("לעבודה העצמית", "For self-work")}</span>}
+                      {t.localOk && !t.forKesher && t.status !== "done" && <span>🌙 {L("מקומי בסדר", "Local ok")}</span>}
                     </span>
                   </span>
                 </button>
@@ -123,6 +125,11 @@ export function TaskBoardView() {
                       {t.status !== "done" && (
                         <button type="button" onClick={() => change([{ op: "edit", id: t.id, forKesher: !t.forKesher }])} title={L("העבודה העצמית תיקח אותה ראשונה, בלי קשר לגודל", "Self-work takes it first, whatever its size")}>
                           {t.forKesher ? L("בטל: לא לעבודה העצמית", "Undo: not for self-work") : L("🤖 תן לעבודה העצמית", "🤖 Give to self-work")}
+                        </button>
+                      )}
+                      {t.status !== "done" && (
+                        <button type="button" aria-pressed={!!t.localOk} onClick={() => change([{ op: "edit", id: t.id, localOk: !t.localOk }])} title={L("כש-Claude בקירור, המודל המקומי יכול לקחת אותה", "When Claude is cooling down, the local model may take it")}>
+                          {t.localOk ? L("בטל: לא למודל המקומי", "Undo: not for the local model") : L("🌙 מקומי בסדר", "🌙 Local ok")}
                         </button>
                       )}
                       {(t.status === "done" || t.status === "blocked" || t.status === "claimed") && <button type="button" onClick={() => change([{ op: "reopen", id: t.id }])}>{L("החזר לפתוחה", "Reopen")}</button>}

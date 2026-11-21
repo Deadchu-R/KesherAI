@@ -373,6 +373,8 @@ export class TaskInbox {
       if (added) {
         t.boardId = added.id;
         if (runBy === "local") await this.d.board.change("roee", [{ op: "edit", id: added.id, forKesher: true }]).catch(() => undefined);
+        // "local ok": the cooldown hand-off may give it to the local model while Claude is cooling down.
+        else if (spec.localOk && runBy === "opus") await this.d.board.change("roee", [{ op: "edit", id: added.id, localOk: true }]).catch(() => undefined);
       }
     }
     this.saved.tasks.push(t);

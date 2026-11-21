@@ -42,6 +42,8 @@ export interface InboxTaskSpec {
   maxFiles: number;
   /** A model the task asks for (inside Antigravity); empty = the inbox's default. */
   model?: string;
+  /** `local_ok: true`: the local model may carry it while Claude cools down (never an Antigravity task). */
+  localOk?: boolean;
   goal: string;
   readFirst?: string;
   acceptance?: string;

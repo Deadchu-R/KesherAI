@@ -67,6 +67,7 @@ import type { Updater } from "../updates.js";
 import type { WhisperEngine } from "../whisper.js";
 import type { DownloadManager } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
+import { reportClaudeError } from "../cooldown-handoff.js";
 
 /** A file's size in bytes, or undefined when it cannot be read (model size per turn compares model files). */
 const fileSize = (path: string): number | undefined => {
@@ -210,6 +211,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     onEvent: (convId, e, title, lastAnswer) => {
       notifier.onConversationEvent(convId, title, e, lastAnswer);
       telegram.onConversationEvent(convId, e);
+      // A Claude chat that hit its usage limit: the local model may carry "local ok" tasks meanwhile.
+      if (e.type === "status" && e.status === "error" && e.message) reportClaudeError(library.summary(convId)?.modelId, e.message);
     },
     ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
     // Parts the user turned off (Settings → Parts) give no tools.

@@ -111,3 +111,11 @@ test("inbox: the prompt puts the task inside a marked block after KesherAI's rul
   assert.match(res, /status: done/);
   assert.match(res, /- a\.ts \(\+2 -1\)/);
 });
+
+test("inbox: local_ok marks a task the local model may carry during Claude's cooldown, never an Antigravity one", () => {
+  const opus = parseTaskFile(FILE.replace("executor: antigravity", "executor: opus\nlocal_ok: true"), "c-20261119-04", INBOX_DEFAULTS);
+  assert.ok("spec" in opus && opus.spec.localOk === true);
+  assert.ok("spec" in opus && /local_ok: true/.test(taskFileText(opus.spec)), "kept when written again");
+  const agy = parseTaskFile(FILE.replace("risk: low", "risk: low\nlocal_ok: true"), "c-20261119-04", INBOX_DEFAULTS);
+  assert.ok("spec" in agy && agy.spec.localOk === undefined);
+});
