@@ -13,7 +13,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 4. Everything else.
 
 ## Night 21–22.11 (Roee 19:21–19:58, until 07:00)
-Rules: at most 2 Claude helpers (Sonnet by default, Opus only for hard code), small items to the PC's local model (self-work), research only on Antigravity/Gemini; a build about every 2 hours (security scan after every 5); the design doc published once at 07:00. Reversible decisions: the recommended option, marked in the morning report; irreversible ones wait for Roee. Approved downloads: Qwen3.5 2B router + Qwen3.6 mmproj (started 20:08).
+Rules (Roee 20:35: as many tasks as possible until 07:00): at most 2 Claude helpers (Sonnet by default, Opus only for hard code) running all night, plus ONE local agent on the PC (KesherAI self-work on the local model) kept busy with small items, research only on Antigravity/Gemini; a build about every 2 hours (security scan after every 5); the design doc published once at 07:00. Reversible decisions: the recommended option, marked in the morning report; irreversible ones wait for Roee. Approved downloads: Qwen3.5 2B router + Qwen3.6 mmproj (started 20:08).
 Order (from the deep research c-20261121-38, RESEARCH_LOG 2026-11-21; S first):
 - ✅ 0.6.437: research keeps going (safe read-only pipes, second prompt when no report); the deep research finished (32 steps).
 - 🔨 Unreal without the editor: levels from .umap files (committed), then check opening a level on AutoShooter after the build; plugin 0.1.27 into the 5.4 projects once Roee's Unreal 5.4 download finishes (install-all).

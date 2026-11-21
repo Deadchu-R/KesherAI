@@ -352,6 +352,43 @@
     ],
     "offline": true
    }
+  },
+  {
+   "url": "**/api/unity/projects",
+   "json": {
+    "projects": [
+     {
+      "name": "Platformer",
+      "path": "D:/Games/Platformer",
+      "engine": "6000.0.32f1",
+      "added": true,
+      "active": true
+     },
+     {
+      "name": "ProjectBossRush",
+      "path": "D:/Games/ProjectBossRush",
+      "engine": "6000.0.32f1",
+      "added": false,
+      "active": false
+     },
+     {
+      "name": "Runner",
+      "path": "D:/OneDrive/GitHub/Runner",
+      "engine": "2022.3.5f1",
+      "added": false,
+      "active": false,
+      "parent": "OneDrive › GitHub"
+     },
+     {
+      "name": "Runner",
+      "path": "D:/Documents/GitHub/Runner",
+      "engine": "2022.3.5f1",
+      "added": false,
+      "active": false,
+      "parent": "Documents › GitHub"
+     }
+    ]
+   }
   }
  ],
  "boards": [
@@ -464,6 +501,31 @@
     },
     {
      "scroll": ".ue-check"
+    }
+   ]
+  },
+  {
+   "id": "UnityProjectMenu",
+   "title": "Unity: תפריט הפרויקטים מציג כל פרויקט במחשב",
+   "titleEn": "Unity: the project menu lists every project on the computer",
+   "route": "#/unity",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 700,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".ue-projects button"
+    },
+    {
+     "click": ".ue-projects button"
+    },
+    {
+     "wait": "[role=listbox]"
     }
    ]
   }

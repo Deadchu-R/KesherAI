@@ -153,7 +153,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   const menuKey = `${st?.projects.join("|") ?? ""}#${st?.active ?? ""}`;
   useEffect(() => {
     if (unity && st) void api<{ projects: UnityMenuItem[] }>(`${base}/projects`).then((r) => setMenu(r.projects), () => undefined);
-  }, [unity, base, menuKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unity, base, menuKey]);
   const loadQueue = () => void api<Queued[]>(`${base}/queue`).then(setQueue, () => undefined);
   const loadBp = (p: string) =>
     void api<NonNullable<typeof bp>>(`${base}/graph?path=${encodeURIComponent(p)}`).then(
