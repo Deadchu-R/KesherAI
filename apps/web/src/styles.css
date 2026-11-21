@@ -3225,7 +3225,7 @@ html.handheld .palette-list button { min-height: 44px; }
 .doc-panel-menu > summary::-webkit-details-marker { display: none; }
 .doc-panel-menu-list { position: absolute; inset-inline-end: 0; top: calc(100% + 4px); z-index: 5; display: grid; min-width: 140px; padding: 4px; background: var(--panel); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: var(--shadow-2, 0 8px 24px rgb(0 0 0 / .35)); }
 .doc-panel-menu-list button { justify-content: flex-start; text-align: start; }
-.doc-panel-ask { display: grid; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel); }
+.doc-panel-ask { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--panel); }
 .doc-panel-ask q { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .doc-panel-ask .row { gap: 6px; align-items: center; flex-wrap: wrap; }
 /* A tool's edit of a document, sheet or deck in the chat: a compact card that opens the panel. */
@@ -4506,3 +4506,11 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .archived-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .side-archived { font-size: 13px; margin-top: 4px; }
 .archived-note { align-items: center; gap: 8px; margin: 6px 0; }
+/* Highlight-to-edit (SpanEdit.tsx): the "Edit with AI" bubble at the panel's bottom, and the inline word diff. */
+.span-edit-bubble { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; margin: 6px auto 8px; padding: 4px 6px; max-width: calc(100% - 16px); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.25); }
+.span-edit-bubble button { min-height: 36px; border-radius: 999px; }
+.span-edit .row button { min-height: 36px; }
+.span-edit-diff { max-height: 40vh; overflow: auto; padding: 8px 10px; border: 1px solid var(--border); border-radius: calc(8px * var(--r-scale, 1)); background: var(--panel-2); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.span-edit-diff.code { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; }
+.span-edit-diff del { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); text-decoration: line-through; }
+.span-edit-diff ins { color: var(--good); background: color-mix(in srgb, var(--good) 16%, transparent); text-decoration: none; }

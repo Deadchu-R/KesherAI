@@ -74,7 +74,7 @@ sharing `chat/ShareDialog.tsx`, `routes/shares.ts`, guests (`GuestApp.tsx`, `rou
 
 - ✅ S: Composer stays enabled while busy; new messages become queued chips (edit, delete, send now); Stop clears the queue first. (chat-queue.ts, chat/QueueChips.tsx)
 - ✅ M: Steer mode: a queued message is injected at the next tool step of the running turn (setting: queue or steer). (session.ts injectSteers)
-- M: Highlight-to-edit in DocPanel and ArtifactPanel: select text, type a change, the model rewrites only that span with a diff.
+- ✅ M: Highlight-to-edit in DocPanel and ArtifactPanel: select text, type a change, the model rewrites only that span with a diff. (span-edit.ts, SpanEdit.tsx)
 - ✅ S: Version arrows on a message whose branches exist (reuse `branchOf`, switch in place). (branch-versions.ts)
 - ✅ S: Thinking picker in the model menu for reasoning models (maps to chat template flags / reasoning effort). (thinking.ts)
 - ✅ S: Context ring in the composer from `chat-status.ts`; at 80% offer `/compact`. (chat/ContextRing.tsx)

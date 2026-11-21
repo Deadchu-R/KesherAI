@@ -47,6 +47,8 @@ const stepSchema = z.union([
   z.object({ fill: selector, value: z.string().max(2000) }).strict(),
   z.object({ hover: selector }).strict(),
   z.object({ scroll: selector }).strict(),
+  // Selects the element's text (as a user's drag or the phone's handles would), for boards of a selection's tools.
+  z.object({ select: selector }).strict(),
 ]);
 const height = z.number().int().min(200).max(6000);
 const boardSchema = z.object({
@@ -72,7 +74,7 @@ const fileSchema = z.object({
 
 /** A mocked API answer (Playwright route): the URL glob, and the JSON or raw body to answer with. */
 export type DesignMock = z.infer<typeof mockSchema>;
-/** One step before the shot: click, wait for, wait a moment, type into, hover or scroll to an element. */
+/** One step before the shot: click, wait for, wait a moment, type into, hover, scroll to or select an element's text. */
 export type DesignStep = z.infer<typeof stepSchema>;
 
 /** One board at one size, ready to render. */

@@ -4386,3 +4386,9 @@ Roee: the chat and its helpers control and DEBUG a browser (his Chrome through a
 - **LobeHub / Open WebUI**: LobeHub asks a role and shapes the agent market; Open WebUI only creates the admin and shows a changelog. Taken: roles that order what is shown; left: an empty first run.
 - **Raycast**: a short onboarding, then a launcher grouped by category with search across everything. Taken: All tools grouped in role categories, the picked ones first, "Show all" for the rest, search always across all. Nothing is removed.
 - **Stopped at:** done (shared/tool-categories.ts, roles.ts researcher + everyday, core/starter-models.ts, GET /api/welcome/check, Welcome.tsx models + start steps, AppsPage categories). From product knowledge, no fresh web check.
+
+## 2026-11-21: Highlight-to-edit and memory topics (competitor note)
+- **Claude / ChatGPT canvas inline edit**: select text in the draft, a small "Edit"/"Ask ChatGPT" bubble, type the change; only that part is rewritten, shown changed in place (ChatGPT marks it, Claude applies it as a new version). Taken: the bubble, span + nearby context in the prompt, an inline word diff with Accept / Reject / Try again, versions kept; the old "ask the chat" path stays as Ask.
+- **Code (Cursor Cmd+K, ChatGPT canvas code)**: the same on a code selection, diff before keeping. Taken: the Code tab of the page panel, offsets from the screen text so only those characters change.
+- **ChatGPT memory management / Claude memory (2026)**: a searchable list with delete per item; Claude groups memory in topics edited in conversation and offers a periodic "what I learned" recap. Taken: topics with rename, merge, move a fact, delete, search, and an opt-in monthly recap card with Remove per fact (in-app only, never in notifications).
+- **Stopped at:** done (shared/span-edit.ts, SpanEdit.tsx; memory-topics.ts, MemoryPage.tsx). From product knowledge, no fresh web check.

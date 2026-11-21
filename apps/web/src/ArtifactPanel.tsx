@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import type { TextSpan } from "@kesher/shared";
 import { CodeView } from "./ide/CodeView";
 import type { PanelItem } from "./doc-items";
 import type { CanvasItem } from "./chat/canvas-items";
@@ -9,12 +10,16 @@ const DesignBoard = lazy(() => import("./DesignBoard").then((m) => ({ default: m
 const ItemPanel = lazy(() => import("./DocPanel").then((m) => ({ default: m.ItemPanel })));
 // Pictures, PBR map sets and code diffs (CanvasPanel.tsx, design ChatCanvas), loaded when first opened.
 const CanvasPanel = lazy(() => import("./CanvasPanel").then((m) => ({ default: m.CanvasPanel })));
+// "Edit with AI" on a selection in the code (SpanEdit.tsx), loaded when first used.
+const SpanEdit = lazy(() => import("./SpanEdit").then((m) => ({ default: m.SpanEdit })));
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /**
  * Artifacts (design ArtifactPanel, like Claude's): a page the model wrote in a ```html block opens live in a panel
- * beside the chat, with preview and code, its versions in this chat, reload, full screen and download.
+ * beside the chat, with preview and code, its versions in this chat, reload, full screen and download. Selecting part
+ * of the code shows "Edit with AI" (SpanEdit.tsx): the model rewrites only that part, and the accepted change becomes
+ * the panel's newest version (kept while the panel is open, like the other versions it lists).
  *
  * It runs in a sandboxed frame with no same-origin access (it cannot reach KesherAI, its files or the app key) and a
  * content policy that blocks the network: scripts and styles inside the page only, pictures from data: and blob:.
@@ -235,9 +240,52 @@ export function ArtifactPanel() {
       ) : tab === "preview" ? (
         <iframe key={`${current}-${reload}`} className="artifact-frame" title={title} sandbox="allow-scripts allow-forms allow-modals" srcDoc={framed(code)} />
       ) : (
-        <div className="artifact-code"><CodeView code={code} language="html" /></div>
+        <CodeTab key={current} code={code} title={title} />
       )}
       <p className="muted small artifact-note">{L("רץ בתיבה סגורה: בלי גישה לקבצים, לחשבונות או לרשת.", "Runs in a closed box: no access to files, accounts or the network.")}</p>
     </aside>
+  );
+}
+
+/**
+ * The Code tab: the page's code, and "Edit with AI" on a selection in it. On the computer a mouse up shows the bubble,
+ * on the phone the selection handles do (selectionchange). An accepted change is added as the newest version.
+ */
+function CodeTab({ code, title }: { code: string; title: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [span, setSpan] = useState<TextSpan | null>(null);
+  const pick = () => {
+    const s = getSelection();
+    const el = box.current?.querySelector("code");
+    if (!s || s.isCollapsed || !el || !s.rangeCount) return;
+    const r = s.getRangeAt(0);
+    if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return;
+    void import("./SpanEdit").then(({ textOffset }) => {
+      const start = textOffset(el, r.startContainer, r.startOffset);
+      const end = textOffset(el, r.endContainer, r.endOffset);
+      if (end > start && code.slice(start, end).trim()) setSpan({ start, end });
+    });
+  };
+  useEffect(() => {
+    const onChange = () => {
+      if (matchMedia("(pointer: coarse)").matches) pick();
+    };
+    document.addEventListener("selectionchange", onChange);
+    return () => document.removeEventListener("selectionchange", onChange);
+  });
+  const accept = (next: string) => {
+    versions.push(next);
+    current = versions.length - 1;
+    changed();
+  };
+  return (
+    <>
+      <div className="artifact-code" ref={box} onMouseUp={pick} onTouchEnd={pick}><CodeView code={code} language="html" /></div>
+      {span && (
+        <Suspense fallback={null}>
+          <SpanEdit key={`${span.start}-${span.end}`} source={code} span={span} kind="code" language="html" title={title} onAccept={accept} onClose={() => { setSpan(null); getSelection()?.removeAllRanges(); }} />
+        </Suspense>
+      )}
+    </>
   );
 }

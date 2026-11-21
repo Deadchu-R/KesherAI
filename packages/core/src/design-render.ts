@@ -118,6 +118,7 @@ interface PwLocator {
   fill(v: string, o?: { timeout?: number }): Promise<void>;
   hover(o?: { timeout?: number }): Promise<void>;
   scrollIntoViewIfNeeded(o?: { timeout?: number }): Promise<void>;
+  evaluate(fn: (el: Element) => void): Promise<void>;
   screenshot(o: Record<string, unknown>): Promise<Buffer>;
 }
 interface PwRoute {
@@ -140,6 +141,19 @@ async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   else if ("fill" in s) await page.locator(s.fill).first().fill(s.value, T);
   else if ("hover" in s) await page.locator(s.hover).first().hover(T);
   else if ("scroll" in s) await page.locator(s.scroll).first().scrollIntoViewIfNeeded(T);
+  else if ("select" in s) {
+    const el = page.locator(s.select).first();
+    await el.waitFor(T);
+    // Select its text, then the mouse up the page listens for (the phone follows selectionchange by itself).
+    await el.evaluate((node) => {
+      const r = document.createRange();
+      r.selectNodeContents(node);
+      const sel = getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(r);
+      node.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+  }
 }
 
 /** Shoots one job; returns the PNG. */

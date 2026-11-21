@@ -182,7 +182,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - 🔨 Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) missing: a guide for every part
 - ✅ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8) (in code: chat-queue.ts, chat/QueueChips.tsx)
 - ✅ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor) (in code: session.ts injectSteers)
-- ⬜ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude)
+- ✅ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude) (in code: shared/span-edit.ts, routes/span-edit.ts, SpanEdit.tsx)
 - ✅ Version arrows ‹ n/m › on edited or regenerated messages, switching branches in place (Claude, ChatGPT) (in code: branch-versions.ts; regenerated answers already had them)
 - ✅ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio) (in code: thinking.ts, ModelMenu.tsx)
 - ✅ Context ring in the composer from the last call's prompt size; offer /compact near the limit (in code: chat/ContextRing.tsx, budget.ts pinnedBefore)

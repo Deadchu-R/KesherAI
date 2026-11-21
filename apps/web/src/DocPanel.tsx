@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addr, computeSheet, docxFiles, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet } from "@kesher/shared";
+import { addr, computeSheet, docxFiles, locateSpan, sheetCsv, showValue, xlsxFiles, type Deck, type Sheet, type TextSpan } from "@kesher/shared";
 import { api, withToken } from "./api";
 import { closePanel, openItem } from "./ArtifactPanel";
 import { ITEM_KINDS, selectionMessage, type ItemKind, type PanelItem } from "./doc-items";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { RichText } from "./RichText";
+import { SpanEdit } from "./SpanEdit";
 import { DocsPage, printDoc, saveOffice } from "./pages/DocsPage";
 import { SheetsPage } from "./pages/SheetsPage";
 import { downloadPptx, printDeckPdf, SlidesPage, SlideView } from "./pages/SlidesPage";
@@ -17,7 +18,8 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  * a tool's edit shows as a compact card in the chat, and the item opens in the side panel (desktop) or a full-screen
  * sheet with a back button (phone). The panel shows it live (it follows the model's next edits), its versions (view
  * an older one, restore it), Edit (the item's own editor inside the panel), "Open full page" and the downloads the
- * editors have. Selecting text in it opens a small box that asks about the part, or asks the chat to change it.
+ * editors have. Selecting text in a document shows an "Edit with AI" bubble (SpanEdit.tsx): the model rewrites only that
+ * span, shown as a diff to accept; elsewhere (or when the span cannot be found) a small box asks the chat about the part.
  * Everything goes through the server's API, so the phone connected to the PC works the same.
  */
 
@@ -72,6 +74,9 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
   const [viewVer, setViewVer] = useState<number | null>(null);
   const [edit, setEdit] = useState(false);
   const [picked, setPicked] = useState("");
+  /** Where the selection is in the document's markdown (for "Edit with AI"), and whether she chose to ask the chat instead. */
+  const [span, setSpan] = useState<TextSpan | null>(null);
+  const [asking, setAsking] = useState(false);
   const [ask, setAsk] = useState("");
   const [sending, setSending] = useState(false);
   const view = useRef<HTMLDivElement>(null);
@@ -135,7 +140,32 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
   const pick = () => {
     const s = getSelection();
     const text = s?.toString().trim() ?? "";
-    if (text && s?.anchorNode && view.current?.contains(s.anchorNode)) setPicked(text);
+    if (!text || !s?.anchorNode || !view.current?.contains(s.anchorNode)) return;
+    setPicked(text);
+    setAsking(false);
+    const body = item.kind === "doc" && viewVer === null && data ? String(data.body ?? "") : "";
+    if (!body) return setSpan(null);
+    // Where on screen the selection starts, as a share of the shown text: picks between repeats of the same words.
+    const range = s.getRangeAt(0);
+    const before = document.createRange();
+    before.selectNodeContents(view.current);
+    before.setEnd(range.startContainer, range.startOffset);
+    const share = before.toString().length / Math.max(1, view.current.textContent?.length ?? 1);
+    setSpan(locateSpan(body, text, Math.round(share * body.length)));
+  };
+  const dropPick = () => {
+    setPicked("");
+    setSpan(null);
+    setAsking(false);
+    getSelection()?.removeAllRanges();
+  };
+  /** "Edit with AI" accepted: the new markdown saved from the revision shown, as a new version. */
+  const saveSpan = async (next: string) => {
+    if (!data) return;
+    const d = await api<Loaded>(`${meta.api}/${item.id}`, { method: "PUT", body: { body: next, rev: data.rev } });
+    setData((cur) => ({ ...(cur ?? d), ...d }));
+    load();
+    toast(L("השינוי נשמר כגרסה חדשה.", "Saved as a new version."));
   };
   useEffect(() => {
     const onChange = () => {
@@ -213,11 +243,13 @@ export function ItemPanel({ item, full, onFull }: { item: PanelItem; full: boole
           <ItemView kind={item.kind} item={shown} />
         </div>
       )}
-      {picked && !edit && (
+      {picked && !edit && span && !asking && !old && data ? (
+        <SpanEdit key={`${span.start}-${span.end}`} source={String(data.body ?? "")} span={span} kind="doc" title={title} onAccept={saveSpan} onAsk={() => setAsking(true)} onClose={dropPick} />
+      ) : picked && !edit && (
         <form className="doc-panel-ask" onSubmit={(e) => { e.preventDefault(); void sendPicked(true); }}>
           <div className="row">
             <q className="muted small grow" dir="auto">{picked.length > 120 ? `${picked.slice(0, 120)}…` : picked}</q>
-            <button type="button" className="ghost small" aria-label={L("ביטול", "Cancel")} onClick={() => setPicked("")}>✕</button>
+            <button type="button" className="ghost small" aria-label={L("ביטול", "Cancel")} onClick={dropPick}>✕</button>
           </div>
           <input dir="auto" autoFocus={!narrow()} value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={L("מה לעשות עם החלק הזה?", "What to do with this part?")} aria-label={L("הבקשה על החלק שנבחר", "Your request about the selected part")} />
           <div className="row">

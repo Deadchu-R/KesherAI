@@ -48,6 +48,7 @@ import { projectFactsRoutes } from "../routes/project-facts.js";
 import { gitRoutes } from "../routes/git.js";
 import { lspRoutes } from "../routes/lsp.js";
 import { codeRoutes } from "../routes/code.js";
+import { spanEditRoutes } from "../routes/span-edit.js";
 import { guardRoutes } from "../routes/guard.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
@@ -240,6 +241,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await gitRoutes(app, services);
   lspRoutes(app, services);
   codeRoutes(app, services);
+  spanEditRoutes(app, services);
   await unityRoutes(app, services);
   await copilotRoutes(app, services);
   await browserRoutes(app, services);
