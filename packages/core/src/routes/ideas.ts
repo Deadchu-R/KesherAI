@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, rm, statfs } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, statfs, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Ideas } from "../ideas.js";
 import { modelTurnFor } from "../model-turn.js";
@@ -12,10 +13,13 @@ type S = { Params: { id: string } };
 
 /**
  * "Open mind" (#/ideas, design IdeaSession): a recording of her thinking aloud, as long as she likes, turned into
- * sorted ideas; research on one idea or on all of them in a row, as chats with the web.
+ * sorted ideas, tasks and questions she reviews (edit, merge, split, delete); each one can go to a chat, a deep research
+ * (a report document), the task inbox or a note in Knowledge.
  */
 export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const root = join(s.paths.root, "ideas");
+  /** Where "Save as a note" writes: one Markdown file per idea, read by the "Open mind notes" knowledge base. */
+  const notesDir = join(s.paths.root, "ideas-notes");
   const ideas = new Ideas(root, {
     ask: async (system, user, signal) => {
       const id = s.config.activeModels.chat;
@@ -48,9 +52,24 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
         await new Promise((r) => setTimeout(r, 2000));
       }
     },
+    saveNote: async (title, markdown) => {
+      await mkdir(notesDir, { recursive: true });
+      // The name is made here (date, a few letters of the title, a random part): nothing from the request reaches the path.
+      const slug = title.normalize("NFC").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "idea";
+      const name = `${new Date().toISOString().slice(0, 10)}-${slug}-${randomUUID().slice(0, 6)}.md`;
+      await writeFile(join(notesDir, name), markdown);
+      const old = (await s.knowledge.list()).find((k) => k.folders.length === 1 && k.folders[0] === notesDir);
+      if (old) await s.knowledge.reindex(old.id).catch(() => undefined);
+      else await s.knowledge.save({ name: "Open mind notes", description: "Ideas, tasks and questions she saved from her Open mind brain dumps, one note each.", folders: [notesDir], urls: [] });
+      return name;
+    },
+    addTask: async (task) => {
+      if (!s.taskInbox) throw Object.assign(new Error("The task inbox is off (Settings > Task inbox)."), { statusCode: 409 });
+      return (await s.taskInbox.add(task)).id;
+    },
   });
 
-  app.get("/api/ideas", async () => ({ sessions: await ideas.list() }));
+  app.get<{ Querystring: { q?: string } }>("/api/ideas", async (req) => ({ sessions: await ideas.list(String(req.query?.q ?? "").slice(0, 200)) }));
   app.get<S>("/api/ideas/:id", async (req) => ideas.get(req.params.id));
   app.delete<S>("/api/ideas/:id", async (req) => {
     await ideas.remove(req.params.id);
@@ -106,6 +125,15 @@ export async function ideasRoutes(app: FastifyInstance, s: KesherServices): Prom
       if (!ok) await rm(dir, { recursive: true, force: true });
     }
   });
+  type I = { Params: { id: string; idea: string } };
+  /** Her review: edit one, delete one, merge several, split one. */
+  app.patch<I & { Body: unknown }>("/api/ideas/:id/ideas/:idea", async (req) => ideas.edit(req.params.id, req.params.idea, req.body));
+  app.delete<I>("/api/ideas/:id/ideas/:idea", async (req) => ideas.removeIdea(req.params.id, req.params.idea));
+  app.post<S & { Body: { ids?: unknown } }>("/api/ideas/:id/merge", async (req) => ideas.merge(req.params.id, Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 30) : []));
+  app.post<I & { Body: { parts?: unknown } }>("/api/ideas/:id/ideas/:idea/split", async (req) => ideas.split(req.params.id, req.params.idea, Array.isArray(req.body?.parts) ? req.body.parts.map(String) : undefined));
+  /** One idea onward: a note in Knowledge, a task in the task inbox. */
+  app.post<I & { Body: { lang?: string } }>("/api/ideas/:id/ideas/:idea/note", async (req) => ideas.saveNote(req.params.id, req.params.idea, req.body?.lang !== "en"));
+  app.post<I>("/api/ideas/:id/ideas/:idea/task", async (req) => ideas.toTask(req.params.id, req.params.idea));
   app.post<S & { Params: { idea: string }; Body: { lang?: string } }>("/api/ideas/:id/ideas/:idea/research", async (req) => ({ conversationId: await ideas.research(req.params.id, req.params.idea, req.body?.lang !== "en") }));
   app.post<S & { Body: { lang?: string } }>("/api/ideas/:id/research-all", async (req) => ideas.researchAll(req.params.id, req.body?.lang !== "en"));
   app.post<S>("/api/ideas/:id/research-all/stop", async (req) => ideas.stopAll(req.params.id));

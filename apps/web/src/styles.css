@@ -3443,6 +3443,27 @@ html.handheld .palette-list button { min-height: 44px; }
 .ideas-paste textarea { width: 100%; margin: 6px 0; }
 .ideas-transcript { margin-top: 12px; }
 .ideas-transcript p { white-space: pre-wrap; line-height: 1.7; }
+/* Open mind: the big record button, search, review and the four ways on (390 px: buttons wrap, text never cut). */
+.ideas-big { cursor: pointer; border: 2px solid #ff7a7a; width: 156px; height: 156px; gap: 4px; color: var(--text); background: radial-gradient(circle, rgba(255, 122, 122, 0.18), transparent 70%); }
+.ideas-big:hover, .ideas-big:focus-visible { background: radial-gradient(circle, rgba(255, 122, 122, 0.32), transparent 70%); }
+.ideas-big-mic { font-size: 44px; line-height: 1; }
+.ideas-big b { font-size: 18px; }
+.ideas-search { width: 100%; margin-bottom: 8px; }
+.ideas-session-row { flex-wrap: wrap; }
+.ideas-session-titles { flex-basis: 100%; color: var(--muted); overflow-wrap: anywhere; }
+.ideas-mergebar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; margin-bottom: 8px; border-radius: 10px; border: 1px solid var(--accent); background: var(--panel); }
+.idea.picked { outline: 1px solid var(--accent); }
+.idea-title { overflow-wrap: anywhere; min-width: 0; }
+.idea-quote { margin: 0; padding-inline-start: 10px; border-inline-start: 2px solid var(--border-strong); font-style: italic; line-height: 1.6; overflow-wrap: anywhere; }
+.idea-next { overflow-wrap: anywhere; }
+.idea-prompt { overflow-wrap: anywhere; }
+.idea-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+.idea-actions button { white-space: normal; height: auto; min-height: 36px; line-height: 1.3; }
+.idea-review { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+.idea-review .danger { color: var(--bad); }
+.idea-edit { display: flex; flex-direction: column; gap: 8px; }
+.idea-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.idea-edit input, .idea-edit textarea, .idea-edit select { width: 100%; }
 /* The match game (design StudyMatch). */
 .study-match { display: flex; flex-direction: column; gap: 10px; }
 .study-match-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }

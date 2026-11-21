@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { replaceFile } from "./replace-file.js";
 import { join } from "node:path";
-import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, ideaQuery, jsonIn, mostlyHebrew, researchPrompt, type Idea, type IdeaSession } from "@kesher/shared";
+import { IDEAS_PROMPT, TRIED_PROMPT, cleanIdeas, editIdea, ideaNote, ideaQuery, ideaTask, jsonIn, mergeIdeas, mostlyHebrew, researchPrompt, sessionMatches, splitIdea, type Idea, type IdeaSession } from "@kesher/shared";
 
 /** What the ideas need from the rest of KesherAI (fakes in the tests). */
 export interface IdeasDeps {
@@ -18,6 +18,10 @@ export interface IdeasDeps {
   startResearch: (title: string, text: string) => Promise<string>;
   /** Waits until that chat is done (or a while); "done" or "error". */
   settle: (conversationId: string) => Promise<"done" | "error">;
+  /** Saves a Markdown note where Knowledge reads it; the note's file name. */
+  saveNote: (title: string, markdown: string) => Promise<string>;
+  /** Adds a task to the task inbox; its id. */
+  addTask: (task: { title: string; goal: string; acceptance?: string }) => Promise<string>;
 }
 
 const SID = /^[\w-]{1,64}$/;
@@ -44,15 +48,19 @@ export class Ideas {
     return join(this.dir, `${id}.json`);
   }
 
-  /** Her sessions, newest first, without transcripts. */
-  async list(): Promise<Array<Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number }>> {
+  /**
+   * Her sessions, newest first, without transcripts; each with its first idea titles for the list.
+   *
+   * @param q - Only sessions whose transcript or ideas have every word of this (empty: all).
+   */
+  async list(q = ""): Promise<Array<Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number; titles: string[] }>> {
     await mkdir(this.dir, { recursive: true });
     const out = [];
     for (const n of (await readdir(this.dir)).filter((n) => n.endsWith(".json"))) {
       const s = await this.get(n.slice(0, -5)).catch(() => undefined);
-      if (!s) continue;
+      if (!s || !sessionMatches(s, q)) continue;
       const { transcript: _t, ideas, ...rest } = s;
-      out.push({ ...rest, count: ideas.length, good: ideas.filter((i) => i.verdict === "good").length });
+      out.push({ ...rest, count: ideas.length, good: ideas.filter((i) => i.verdict === "good").length, titles: ideas.slice(0, 3).map((i) => i.title) });
     }
     return out.sort((a, b) => b.t - a.t);
   }
@@ -104,9 +112,9 @@ export class Ideas {
       const he = mostlyHebrew(s.transcript);
       const lang = he ? "\nLANGUAGE: they spoke Hebrew. Write title, prompt, why, audience and category IN HEBREW." : "";
       const user = `THEIR PROJECTS: ${projects.length ? projects.join(" | ") : "(none)"}${lang}\n\nTRANSCRIPT:\n<<<\n${s.transcript.slice(0, 120_000)}\n>>>`;
-      let ideas = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, user)), projects, () => randomUUID());
+      let ideas = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, user)), projects, () => randomUUID(), s.transcript);
       if (he && ideas.length && ideas.filter((i) => !mostlyHebrew(`${i.title} ${i.prompt}`)).length > ideas.length / 2) {
-        const again = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, `${user}\n\nYour last answer was in English. Answer again with every text field in Hebrew.`).catch(() => "")), projects, () => randomUUID());
+        const again = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, `${user}\n\nYour last answer was in English. Answer again with every text field in Hebrew.`).catch(() => "")), projects, () => randomUUID(), s.transcript);
         if (again.length) ideas = again;
       }
       if (!ideas.length) throw new Error("No ideas were found in what was said.");
@@ -144,6 +152,116 @@ export class Ideas {
       if (typeof v.note === "string" && v.note.trim()) idea.triedNote = v.note.trim().slice(0, 300);
       idea.triedIn = f.hits.map((h) => ({ conversationId: h.id, title: h.title.slice(0, 120) }));
     }
+  }
+
+  /** The session and one of its ideas (404 when either is missing). */
+  private async idea(id: string, ideaId: string): Promise<{ s: IdeaSession; idea: Idea }> {
+    const s = await this.get(id);
+    const idea = s.ideas.find((i) => i.id === ideaId);
+    if (!idea) throw Object.assign(new Error("No such idea."), { statusCode: 404 });
+    return { s, idea };
+  }
+
+  /**
+   * Her edit to one idea (title, prompt, kind, quote, next step, verdict).
+   *
+   * @param id - The session.
+   * @param ideaId - The idea.
+   * @param e - The changes (any shape; cleaned by editIdea).
+   */
+  async edit(id: string, ideaId: string, e: unknown): Promise<IdeaSession> {
+    const { s, idea } = await this.idea(id, ideaId);
+    s.ideas = s.ideas.map((i) => (i === idea ? editIdea(i, e) : i));
+    await this.save(s);
+    return s;
+  }
+
+  /** Deletes one idea from a session (its research chat, note and task stay). */
+  async removeIdea(id: string, ideaId: string): Promise<IdeaSession> {
+    const { s, idea } = await this.idea(id, ideaId);
+    s.ideas = s.ideas.filter((i) => i !== idea);
+    await this.save(s);
+    return s;
+  }
+
+  /**
+   * Joins two or more ideas into one, in the place of the first.
+   *
+   * @param id - The session.
+   * @param ids - The ideas to join.
+   */
+  async merge(id: string, ids: string[]): Promise<IdeaSession> {
+    const s = await this.get(id);
+    const next = mergeIdeas(s.ideas, ids, randomUUID());
+    if (!next) throw Object.assign(new Error("Choose at least two ideas to merge."), { statusCode: 400 });
+    s.ideas = next;
+    await this.save(s);
+    return s;
+  }
+
+  /**
+   * Splits one idea into separate ones: by the lines she wrote (two or more), else by the chat model reading the idea
+   * again with the same instructions as the whole dump.
+   *
+   * @param id - The session.
+   * @param ideaId - The idea.
+   * @param lines - Her own parts, one per line (optional).
+   */
+  async split(id: string, ideaId: string, lines?: string[]): Promise<IdeaSession> {
+    const { s, idea } = await this.idea(id, ideaId);
+    const own = (lines ?? []).map((l) => String(l).replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 12);
+    let parts: Idea[];
+    if (own.length >= 2) {
+      // Her own parts start fresh: no research, note, task or quote of the whole.
+      const { research: _r, note: _n, task: _t, quote: _q, ...rest } = idea;
+      parts = own.map((l) => ({ ...rest, id: randomUUID(), title: l.slice(0, 120), prompt: l.slice(0, 4000) }));
+    } else {
+      const text = [idea.quote, idea.title, idea.prompt].filter(Boolean).join("\n");
+      const he = mostlyHebrew(`${idea.title} ${idea.prompt}`) ? "\nLANGUAGE: Hebrew. Write the text fields in Hebrew." : "";
+      const user = `THEIR PROJECTS: ${idea.projects.join(" | ") || "(none)"}${he}\nThis is ONE item that holds several; split it into its separate ideas.\n\nTRANSCRIPT:\n<<<\n${text}\n>>>`;
+      parts = cleanIdeas(jsonIn(await this.deps.ask(IDEAS_PROMPT, user)), idea.projects, () => randomUUID(), `${s.transcript ?? ""}\n${text}`);
+    }
+    const next = splitIdea(s.ideas, ideaId, parts);
+    if (!next) throw Object.assign(new Error("It could not be split. Write each part on its own line."), { statusCode: 422 });
+    s.ideas = next;
+    await this.save(s);
+    return s;
+  }
+
+  /**
+   * Saves an idea as a note in Knowledge (once; again returns the same note).
+   *
+   * @param id - The session.
+   * @param ideaId - The idea.
+   * @param he - Write the note's labels in Hebrew.
+   */
+  async saveNote(id: string, ideaId: string, he: boolean): Promise<IdeaSession> {
+    const { idea } = await this.idea(id, ideaId);
+    if (idea.note) return this.get(id);
+    const t = (await this.get(id)).t;
+    const note = await this.deps.saveNote(idea.title, ideaNote(idea, t, he));
+    const s = await this.get(id);
+    const now = s.ideas.find((i) => i.id === ideaId);
+    if (now) now.note = note;
+    await this.save(s);
+    return s;
+  }
+
+  /**
+   * Adds an idea to the task inbox (once).
+   *
+   * @param id - The session.
+   * @param ideaId - The idea.
+   */
+  async toTask(id: string, ideaId: string): Promise<IdeaSession> {
+    const { idea } = await this.idea(id, ideaId);
+    if (idea.task) return this.get(id);
+    const task = await this.deps.addTask(ideaTask(idea));
+    const s = await this.get(id);
+    const now = s.ideas.find((i) => i.id === ideaId);
+    if (now) now.task = task;
+    await this.save(s);
+    return s;
   }
 
   private async setResearch(id: string, ideaId: string, r: Idea["research"]): Promise<IdeaSession> {

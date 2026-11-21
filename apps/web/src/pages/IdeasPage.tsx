@@ -1,30 +1,42 @@
 import { useEffect, useRef, useState } from "react";
-import type { Idea, IdeaSession, IdeaVerdict } from "@kesher/shared";
+import type { Idea, IdeaKind, IdeaSession, IdeaVerdict } from "@kesher/shared";
 import { api, withToken } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { createConversation, toast } from "../library";
 import { openWithDraft } from "../phone";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
-type Row = Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number };
+type Row = Omit<IdeaSession, "transcript" | "ideas"> & { count: number; good: number; titles?: string[] };
 
 const VERDICT: Record<IdeaVerdict, [string, string, string]> = {
   good: ["👍 טוב", "👍 Good", "good"],
   maybe: ["🤔 אולי", "🤔 Maybe", "maybe"],
   weak: ["👎 חלש", "👎 Weak", "weak"],
 };
-const MINUTES = [5, 10, 15, 30, 0];
+const KIND: Record<IdeaKind, [string, string]> = {
+  idea: ["💡 רעיון", "💡 Idea"],
+  task: ["✅ משימה", "✅ Task"],
+  question: ["❓ שאלה", "❓ Question"],
+};
+/** Recording lengths in minutes; 30 is the longest a dump may run. */
+const MINUTES = [5, 10, 15, 30];
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /**
- * "Open mind" (#/ideas, design IdeaSession): record yourself thinking aloud for as long as you choose, then see every
- * idea sorted (good / maybe / weak, tried before or new, which project, who for), research one or all in a row.
+ * "Open mind" (#/ideas, design IdeaSession): record yourself thinking aloud (up to 30 minutes, on the computer or the
+ * phone; the audio goes to the PC and is transcribed there), then review every idea, task and question (edit, merge,
+ * split, delete) and send each on: a chat, a deep research report, the task inbox or a note in Knowledge.
  */
 export function IdeasPage() {
   const [sessions, setSessions] = useState<Row[]>([]);
   const [open, setOpen] = useState<string | null>(null);
-  const load = () => void api<{ sessions: Row[] }>("/api/ideas").then((r) => setSessions(r.sessions), (e: Error) => toast(e.message));
-  useEffect(load, []);
+  const [q, setQ] = useState("");
+  const load = () => void api<{ sessions: Row[] }>(`/api/ideas${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`).then((r) => setSessions(r.sessions), (e: Error) => toast(e.message));
+  // Searching waits for a short pause in typing.
+  useEffect(() => {
+    const t = window.setTimeout(load, q ? 250 : 0);
+    return () => window.clearTimeout(t);
+  }, [q]);
   return (
     <div className="page ideas-page">
       <header className="page-head">
@@ -37,13 +49,15 @@ export function IdeasPage() {
           {open ? <SessionView id={open} onBack={() => { setOpen(null); load(); }} /> : (
             <>
               <h2>{L("סשנים קודמים", "Earlier sessions")}</h2>
-              {!sessions.length && <p className="muted">{L("עוד אין. התחילו הקלטה, או הדביקו טקסט.", "None yet. Start a recording, or paste text.")}</p>}
+              <input type="search" className="ideas-search" value={q} onChange={(e) => setQ(e.target.value)} dir="auto" placeholder={L("חיפוש בתמלולים וברעיונות…", "Search transcripts and ideas…")} aria-label={L("חיפוש בסשנים", "Search sessions")} />
+              {!sessions.length && <p className="muted">{q.trim() ? L("לא נמצא סשן כזה.", "No session matches.") : L("עוד אין. התחילו הקלטה, או הדביקו טקסט.", "None yet. Start a recording, or paste text.")}</p>}
               <ul className="ideas-sessions">
                 {sessions.map((s) => (
                   <li key={s.id}>
                     <button type="button" className="ideas-session-row" onClick={() => setOpen(s.id)}>
                       <b>{new Date(s.t).toLocaleString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}</b>
-                      <span className="muted small">{s.seconds ? `${Math.round(s.seconds / 60)} ${L("דק׳", "min")} · ` : ""}{s.status === "done" ? L(`${s.count} רעיונות, ${s.good} טובים`, `${s.count} ideas, ${s.good} good`) : s.status === "error" ? L("נכשל", "Failed") : L("ממיין…", "Sorting…")}</span>
+                      <span className="muted small">{s.seconds ? `${Math.round(s.seconds / 60)} ${L("דק׳", "min")} · ` : ""}{s.status === "done" ? L(`${s.count} פריטים, ${s.good} טובים`, `${s.count} items, ${s.good} good`) : s.status === "error" ? L("נכשל", "Failed") : L("ממיין…", "Sorting…")}</span>
+                      {!!s.titles?.length && <span className="ideas-session-titles small" dir="auto">{s.titles.join(" · ")}</span>}
                     </button>
                   </li>
                 ))}
@@ -57,9 +71,9 @@ export function IdeasPage() {
   );
 }
 
-/** The recorder: a length (or until stopped), a timer with a level meter, pause, finish. */
+/** The recorder: one big button, a length (at most 30 minutes), a timer with a level meter, pause, finish. */
 function Recorder({ onDone }: { onDone: (id: string) => void }) {
-  const [minutes, setMinutes] = useState(15);
+  const [minutes, setMinutes] = useState(30);
   const [state, setState] = useState<"idle" | "rec" | "paused" | "sending">("idle");
   const [secs, setSecs] = useState(0);
   const [levels, setLevels] = useState<number[]>(Array(14).fill(2));
@@ -121,7 +135,7 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
       if (r.state !== "recording") return;
       secsRef.current += 1;
       setSecs(secsRef.current);
-      if (minutes && secsRef.current >= minutes * 60) r.stop();
+      if (secsRef.current >= minutes * 60) r.stop();
     }, 1000);
   };
   useEffect(() => () => stopAll.current(), []);
@@ -138,23 +152,29 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
     }
   };
   const total = minutes * 60;
-  const pct = total ? Math.min(1, secs / total) : 0;
+  const pct = Math.min(1, secs / total);
   return (
     <section className="card ideas-rec">
       <b>{L("הקלטה", "Recording")}</b>
       <span className="muted small">{L("שבו בנוח, דברו כל מה שעולה. אפשר לחזור על עצמכם, לקפוץ בין נושאים ולשתוק.", "Sit back and say whatever comes. Repeat yourself, jump between topics, be quiet a while.")}</span>
-      <div className={`ideas-dial ${state}`} style={{ ["--p" as string]: String(pct) }}>
-        <b dir="ltr">{clock(secs)}</b>
-        <span className="muted small">{minutes ? L(`מתוך ${clock(total)}`, `of ${clock(total)}`) : L("עד שתעצרו", "until you stop")}</span>
-      </div>
+      {state === "idle" ? (
+        <button type="button" className="ideas-dial ideas-big" onClick={() => void start()} aria-label={L("להתחיל להקליט", "Start recording")}>
+          <span className="ideas-big-mic" aria-hidden="true">🎙</span>
+          <b>{L("להקליט", "Record")}</b>
+        </button>
+      ) : (
+        <div className={`ideas-dial ${state}`} style={{ ["--p" as string]: String(pct) }}>
+          <b dir="ltr">{clock(secs)}</b>
+          <span className="muted small">{L(`מתוך ${clock(total)}`, `of ${clock(total)}`)}</span>
+        </div>
+      )}
       <div className="ideas-levels" aria-hidden="true">{levels.map((h, i) => <span key={i} style={{ height: state === "rec" ? h : 2 }} />)}</div>
       {state === "idle" && (
         <div className="ideas-mins" role="radiogroup" aria-label={L("כמה זמן", "How long")}>
-          {MINUTES.map((m) => <button type="button" key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? "on" : ""} onClick={() => setMinutes(m)}>{m ? (m === 5 ? L("5 דק׳", "5 min") : m) : L("עד שאעצור", "Until I stop")}</button>)}
+          {MINUTES.map((m) => <button type="button" key={m} role="radio" aria-checked={minutes === m} className={minutes === m ? "on" : ""} onClick={() => setMinutes(m)}>{L(`${m} דק׳`, `${m} min`)}</button>)}
         </div>
       )}
       <div className="row">
-        {state === "idle" && <button type="button" className="primary" onClick={() => void start()}>🎙 {L("להתחיל", "Start")}</button>}
         {(state === "rec" || state === "paused") && <button type="button" onClick={pause}>{state === "paused" ? `▶ ${L("להמשיך", "Resume")}` : `⏸ ${L("השהיה", "Pause")}`}</button>}
         {(state === "rec" || state === "paused") && <button type="button" className="primary" onClick={() => rec.current?.stop()}>⏹ {L("לסיים ולמיין", "Finish and sort")}</button>}
         {state === "sending" && <span className="muted">{L("שולח…", "Sending…")}</span>}
@@ -194,13 +214,14 @@ function PasteText({ onDone }: { onDone: (id: string) => void }) {
   );
 }
 
-type Filter = "all" | IdeaVerdict | "tried" | "new";
+type Filter = "all" | IdeaVerdict | IdeaKind | "tried" | "new";
 
-/** One session: its ideas, filters, research one or all. */
+/** One session: its ideas, tasks and questions; filters; her review (edit, merge, split, delete); research one or all. */
 function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
   const [s, setS] = useState<IdeaSession | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [showText, setShowText] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
   const lang = getLocale() === "he" ? "he" : "en";
   const load = () => void api<IdeaSession>(`/api/ideas/${id}`).then(setS, (e: Error) => toast(e.message));
   useEffect(load, [id]);
@@ -212,11 +233,22 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
     return () => window.clearInterval(t);
   }, [live, id]);
   if (!s) return <p className="muted">…</p>;
+  /** Calls the server and shows the session it answers with; errors as a toast. */
+  const act = async (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown, done?: string) => {
+    try {
+      setS(await api<IdeaSession>(`/api/ideas/${id}${path}`, { method, ...(body === undefined ? {} : { body }) }));
+      if (done) toast(done);
+      return true;
+    } catch (e) {
+      toast((e as Error).message);
+      return false;
+    }
+  };
   const research = async (idea: Idea) => {
     if (idea.research?.conversationId && idea.research.status !== "error") return void (location.hash = `#/c/${idea.research.conversationId}`);
     try {
       await api(`/api/ideas/${id}/ideas/${idea.id}/research`, { method: "POST", body: { lang } });
-      toast(L("המחקר התחיל בצ'אט חדש", "Research started in a new chat"));
+      toast(L("המחקר המעמיק התחיל בצ'אט חדש; הדוח ייפתח שם כמסמך", "Deep research started in a new chat; the report opens there as a document"));
       load();
     } catch (e) {
       toast((e as Error).message);
@@ -233,11 +265,18 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
       toast((e as Error).message);
     }
   };
+  const merge = async () => {
+    if (await act("/merge", "POST", { ids: picked }, L("אוחדו לפריט אחד", "Merged into one"))) setPicked([]);
+  };
   const n = (f: (i: Idea) => boolean) => s.ideas.filter(f).length;
-  const shown = s.ideas.filter((i) => filter === "all" || (filter === "tried" ? i.tried === "yes" : filter === "new" ? i.tried !== "yes" : i.verdict === filter));
+  const kindOf = (i: Idea): IdeaKind => i.kind ?? "idea";
+  const shown = s.ideas.filter((i) => filter === "all" || (filter === "tried" ? i.tried === "yes" : filter === "new" ? i.tried !== "yes" : filter in KIND ? kindOf(i) === filter : i.verdict === filter));
   const researched = n((i) => i.research?.status === "done");
   const pills: Array<[Filter, string, number]> = [
     ["all", L("הכל", "All"), s.ideas.length],
+    ["idea", L("רעיונות", "Ideas"), n((i) => kindOf(i) === "idea")],
+    ["task", L("משימות", "Tasks"), n((i) => kindOf(i) === "task")],
+    ["question", L("שאלות", "Questions"), n((i) => kindOf(i) === "question")],
     ["good", L("טובים", "Good"), n((i) => i.verdict === "good")],
     ["maybe", L("אולי", "Maybe"), n((i) => i.verdict === "maybe")],
     ["weak", L("חלשים", "Weak"), n((i) => i.verdict === "weak")],
@@ -251,41 +290,35 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
         <b>{new Date(s.t).toLocaleString(lang === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}{s.seconds ? ` · ${Math.round(s.seconds / 60)} ${L("דקות", "min")}` : ""}</b>
         <span className="grow" />
         {s.status === "done" && <button type="button" className={s.researchAll ? "" : "primary"} onClick={() => void all()}>{s.researchAll ? `⏹ ${L("לעצור את המחקר ברצף", "Stop researching")}` : `🔬 ${L("מחקר על הכל ברצף", "Research all in a row")}`} ({researched}/{s.ideas.length})</button>}
-        <button type="button" className="icon-btn" title={L("מחיקת הסשן", "Delete the session")} onClick={async () => { if (confirm(L("למחוק את הסשן? צ'אטי המחקר נשארים.", "Delete the session? Research chats stay."))) { await api(`/api/ideas/${id}`, { method: "DELETE" }); onBack(); } }}>🗑</button>
+        <button type="button" className="icon-btn" title={L("מחיקת הסשן", "Delete the session")} aria-label={L("מחיקת הסשן", "Delete the session")} onClick={async () => { if (confirm(L("למחוק את הסשן? צ'אטי המחקר, ההערות והמשימות נשארים.", "Delete the session? Research chats, notes and tasks stay."))) { await api(`/api/ideas/${id}`, { method: "DELETE" }); onBack(); } }}>🗑</button>
       </div>
-      {s.status === "transcribing" && <p className="muted">⏳ {L("מתמלל את ההקלטה… (הקלטה ארוכה לוקחת כמה דקות)", "Transcribing the recording… (a long one takes a few minutes)")}</p>}
-      {s.status === "sorting" && <p className="muted">⏳ {L("מוציא את הרעיונות וממיין…", "Pulling out the ideas and sorting…")}</p>}
+      {s.status === "transcribing" && <p className="muted">⏳ {L("מתמלל את ההקלטה במחשב… (הקלטה ארוכה לוקחת כמה דקות)", "Transcribing the recording on the computer… (a long one takes a few minutes)")}</p>}
+      {s.status === "sorting" && <p className="muted">⏳ {L("מפריד לרעיונות, משימות ושאלות…", "Splitting into ideas, tasks and questions…")}</p>}
       {s.status === "error" && <p className="error">{s.error}</p>}
       {s.status === "done" && (
         <>
           <div className="ideas-filters" role="tablist">
-            {pills.map(([f, label, c]) => <button type="button" key={f} role="tab" aria-selected={filter === f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{label} {c}</button>)}
+            {pills.filter(([f, , c]) => f === "all" || c > 0).map(([f, label, c]) => <button type="button" key={f} role="tab" aria-selected={filter === f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{label} {c}</button>)}
           </div>
+          {picked.length > 0 && (
+            <div className="ideas-mergebar" role="status">
+              <span>{L(`נבחרו ${picked.length}`, `${picked.length} chosen`)}</span>
+              <button type="button" className="primary" disabled={picked.length < 2} onClick={() => void merge()}>🔗 {L("לאחד", "Merge")}</button>
+              <button type="button" className="link" onClick={() => setPicked([])}>{L("ביטול", "Cancel")}</button>
+            </div>
+          )}
           <ul className="ideas-list">
             {shown.map((i) => (
-              <li key={i.id} className={`card idea ${VERDICT[i.verdict][2]}`}>
-                <div className="idea-top">
-                  <b dir="auto">{i.title}</b>
-                  <span className={`idea-tag ${VERDICT[i.verdict][2]}`} title={i.why}>{L(VERDICT[i.verdict][0], VERDICT[i.verdict][1])}</span>
-                  {i.tried === "yes" ? <span className="idea-tag tried" title={i.triedNote}>↺ {L("ניסית בעבר", "Tried before")}</span> : <span className="idea-tag">✦ {L("חדש", "New")}</span>}
-                </div>
-                <p className="muted small" dir="auto">{i.why}</p>
-                <p className="idea-prompt" dir="auto">“{i.prompt}”</p>
-                {i.tried === "yes" && (
-                  <p className="small" dir="auto">↺ {i.triedNote} {i.triedIn?.map((c) => <a key={c.conversationId} href={`#/c/${c.conversationId}`} className="idea-was">{c.title}</a>)}</p>
-                )}
-                <div className="idea-meta">
-                  <span>📁 {i.projects.length ? i.projects.join(", ") : L("לא שייך לפרויקט", "No project")}</span>
-                  {i.audience && <span>👥 {i.audience}</span>}
-                  {i.category && <span>🏷 {i.category}</span>}
-                </div>
-                <div className="row">
-                  <button type="button" className={i.research?.status === "done" ? "primary" : ""} onClick={() => void research(i)}>
-                    {i.research?.status === "done" ? `📄 ${L("המחקר מוכן", "Research ready")}` : i.research?.status === "running" ? `⏳ ${L("חוקר…", "Researching…")}` : i.research?.status === "error" ? `↻ ${L("לנסות שוב מחקר", "Retry research")}` : `🔬 ${L("מחקר", "Research")}`}
-                  </button>
-                  <button type="button" onClick={() => void toChat(i)}>💬 {L("לצ'אט כפרומפט", "To a chat as a prompt")}</button>
-                </div>
-              </li>
+              <IdeaCard
+                key={i.id}
+                idea={i}
+                picked={picked.includes(i.id)}
+                onPick={(on) => setPicked((p) => (on ? [...p, i.id] : p.filter((x) => x !== i.id)))}
+                act={(path, method, body, done) => act(`/ideas/${i.id}${path}`, method, body, done)}
+                onResearch={() => void research(i)}
+                onChat={() => void toChat(i)}
+                lang={lang}
+              />
             ))}
           </ul>
         </>
@@ -297,5 +330,94 @@ function SessionView({ id, onBack }: { id: string; onBack: () => void }) {
         </details>
       )}
     </div>
+  );
+}
+
+type Act = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown, done?: string) => Promise<boolean>;
+
+/**
+ * One idea, task or question: her words, the prompt, the next step; the four ways on (chat, deep research, task inbox,
+ * note in Knowledge) and her review (choose for merging, edit, split, delete).
+ */
+function IdeaCard({ idea: i, picked, onPick, act, onResearch, onChat, lang }: { idea: Idea; picked: boolean; onPick: (on: boolean) => void; act: Act; onResearch: () => void; onChat: () => void; lang: string }) {
+  const [mode, setMode] = useState<"view" | "edit" | "split">("view");
+  const [draft, setDraft] = useState({ title: i.title, prompt: i.prompt, quote: i.quote ?? "", next: i.next ?? "", kind: i.kind ?? "idea" });
+  const [parts, setParts] = useState("");
+  const [busy, setBusy] = useState(false);
+  const run = async (f: () => Promise<boolean>) => {
+    setBusy(true);
+    const ok = await f().finally(() => setBusy(false));
+    if (ok) setMode("view");
+  };
+  const kind = i.kind ?? "idea";
+  return (
+    <li className={`card idea ${VERDICT[i.verdict][2]}${picked ? " picked" : ""}`}>
+      <div className="idea-top">
+        <input type="checkbox" checked={picked} onChange={(e) => onPick(e.target.checked)} aria-label={L("לבחור לאיחוד", "Choose to merge")} title={L("לבחור לאיחוד", "Choose to merge")} />
+        <b dir="auto" className="idea-title">{i.title}</b>
+        <span className="idea-tag">{L(...KIND[kind])}</span>
+        <span className={`idea-tag ${VERDICT[i.verdict][2]}`} title={i.why}>{L(VERDICT[i.verdict][0], VERDICT[i.verdict][1])}</span>
+        {i.tried === "yes" ? <span className="idea-tag tried" title={i.triedNote}>↺ {L("ניסית בעבר", "Tried before")}</span> : <span className="idea-tag">✦ {L("חדש", "New")}</span>}
+      </div>
+      {mode === "edit" ? (
+        <form className="idea-edit" onSubmit={(e) => { e.preventDefault(); void run(() => act("", "PATCH", draft, L("נשמר", "Saved"))); }}>
+          <label>{L("כותרת", "Title")}<input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} dir="auto" maxLength={120} /></label>
+          <label>{L("סוג", "Kind")}
+            <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as IdeaKind })}>
+              {(Object.keys(KIND) as IdeaKind[]).map((k) => <option key={k} value={k}>{L(...KIND[k])}</option>)}
+            </select>
+          </label>
+          <label>{L("המילים שלך", "Your words")}<textarea value={draft.quote} onChange={(e) => setDraft({ ...draft, quote: e.target.value })} dir="auto" rows={2} /></label>
+          <label>{L("הפרומפט", "The prompt")}<textarea value={draft.prompt} onChange={(e) => setDraft({ ...draft, prompt: e.target.value })} dir="auto" rows={4} /></label>
+          <label>{L("הצעד הבא", "Next step")}<input value={draft.next} onChange={(e) => setDraft({ ...draft, next: e.target.value })} dir="auto" /></label>
+          <div className="row">
+            <button type="submit" className="primary" disabled={busy}>{L("לשמור", "Save")}</button>
+            <button type="button" onClick={() => setMode("view")}>{L("ביטול", "Cancel")}</button>
+          </div>
+        </form>
+      ) : mode === "split" ? (
+        <div className="idea-edit">
+          <label>{L("כל חלק בשורה משלו (או ריק, ו-KesherAI יפצל)", "Each part on its own line (or empty, and KesherAI splits it)")}
+            <textarea value={parts} onChange={(e) => setParts(e.target.value)} dir="auto" rows={4} />
+          </label>
+          <div className="row">
+            <button type="button" className="primary" disabled={busy} onClick={() => void run(() => act("/split", "POST", { parts: parts.split("\n") }, L("פוצל", "Split")))}>{busy ? "…" : `✂ ${L("לפצל", "Split")}`}</button>
+            <button type="button" onClick={() => setMode("view")}>{L("ביטול", "Cancel")}</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {i.quote && <blockquote className="idea-quote" dir="auto">“{i.quote}”</blockquote>}
+          <p className="idea-prompt" dir="auto">{i.prompt}</p>
+          {i.next && <p className="idea-next small" dir="auto">➜ <b>{L("הצעד הבא:", "Next step:")}</b> {i.next}</p>}
+          {i.why && <p className="muted small" dir="auto">{i.why}</p>}
+        </>
+      )}
+      {i.tried === "yes" && mode === "view" && (
+        <p className="small" dir="auto">↺ {i.triedNote} {i.triedIn?.map((c) => <a key={c.conversationId} href={`#/c/${c.conversationId}`} className="idea-was">{c.title}</a>)}</p>
+      )}
+      <div className="idea-meta">
+        <span>📁 {i.projects.length ? i.projects.join(", ") : L("לא שייך לפרויקט", "No project")}</span>
+        {i.audience && <span>👥 {i.audience}</span>}
+        {i.category && <span>🏷 {i.category}</span>}
+      </div>
+      {mode === "view" && (
+        <>
+          <div className="idea-actions">
+            <button type="button" onClick={onChat}>💬 {L("לצ'אט", "Chat")}</button>
+            <button type="button" className={i.research?.status === "done" ? "primary" : ""} onClick={onResearch}>
+              {i.research?.status === "done" ? `📄 ${L("הדוח מוכן", "Report ready")}` : i.research?.status === "running" ? `⏳ ${L("חוקר…", "Researching…")}` : i.research?.status === "error" ? `↻ ${L("שוב מחקר", "Retry research")}` : `🔬 ${L("מחקר מעמיק", "Deep research")}`}
+            </button>
+            <button type="button" disabled={busy || !!i.task} onClick={() => void run(() => act("/task", "POST", undefined, L("נוסף לתיבת המשימות", "Added to the task inbox")))}>{i.task ? `✓ ${L("בתיבת המשימות", "In the task inbox")}` : `📥 ${L("לתיבת המשימות", "To the task inbox")}`}</button>
+            <button type="button" disabled={busy || !!i.note} onClick={() => void run(() => act("/note", "POST", { lang }, L("נשמר כהערה בידע", "Saved as a note in Knowledge")))}>{i.note ? `✓ ${L("שמור בידע", "In Knowledge")}` : `📝 ${L("הערה לידע", "Note to Knowledge")}`}</button>
+          </div>
+          <div className="idea-review">
+            <button type="button" className="link" onClick={() => { setDraft({ title: i.title, prompt: i.prompt, quote: i.quote ?? "", next: i.next ?? "", kind }); setMode("edit"); }}>✎ {L("עריכה", "Edit")}</button>
+            <button type="button" className="link" onClick={() => { setParts(""); setMode("split"); }}>✂ {L("פיצול", "Split")}</button>
+            <button type="button" className="link danger" onClick={() => { if (confirm(L("למחוק את הפריט?", "Delete this item?"))) void act("", "DELETE", undefined, L("נמחק", "Deleted")); }}>🗑 {L("מחיקה", "Delete")}</button>
+          </div>
+        </>
+      )}
+    </li>
   );
 }
