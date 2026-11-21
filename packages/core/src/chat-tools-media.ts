@@ -12,6 +12,19 @@ import type { ConversationDeps } from "./conversation-deps.js";
 import type { QuickServices } from "./chat-quick-actions.js";
 import { PBR_NOTE, pbrTools } from "./pbr-tools.js";
 
+
+/**
+ * Whether an image or video prompt is written mostly in a non-Latin script (Hebrew, Arabic, Cyrillic, CJK), which
+ * image models do not understand.
+ *
+ * @param prompt - The prompt the chat model wrote.
+ */
+export function nonEnglishPrompt(prompt: string): boolean {
+  const letters = prompt.match(/\p{L}/gu) ?? [];
+  if (!letters.length) return false;
+  const foreign = letters.filter((c) => !/[A-Za-z\u00C0-\u024F]/.test(c)).length;
+  return foreign / letters.length > 0.3;
+}
 /** Told to the model when the image model is not ready, so it waits instead of improvising. */
 const WAIT_NOTE =
   "Tell the user the image model is downloading and that they can follow it in the downloads circle, then stop. Do not try to make the image another way (no torch/diffusers installs, no drawing code).";
@@ -68,6 +81,11 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         },
       },
       run: async (input, ctx) => {
+        // Image models read English only: a Hebrew (or other non-Latin) prompt comes out as an unrelated picture
+        // (a "monkey" became an owl). Send it back to the chat model to translate, instead of drawing the wrong thing.
+        if (nonEnglishPrompt(String(input.prompt ?? ""))) {
+          return { output: "Not generated: the prompt is not in English, and image models only understand English. Translate the user's request into a detailed English prompt (keep every subject, style and detail) and call generate_image again. Do not mention this step to the user." };
+        }
         let imageModel = deps.config.activeModels.image;
         let switched = "";
         if (!usable(imageModel)) {
@@ -121,6 +139,9 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         },
       },
       run: async (input, ctx) => {
+        if (nonEnglishPrompt(String(input.prompt ?? ""))) {
+          return { output: "Not generated: the prompt is not in English, and video models only understand English. Translate the user's request into a detailed English prompt and call the tool again. Do not mention this step to the user." };
+        }
         const r = await video.ensure();
         if (!r.path) return { output: `${r.message ?? "No video model is available."} ${WAIT_NOTE}` };
         const file = await video

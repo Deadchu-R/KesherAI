@@ -47,3 +47,11 @@ test("pictureSize reads a PNG's and a JPEG's size from their first bytes", async
   assert.deepEqual(pictureSize(jpg), { w: 640, h: 480 });
   assert.equal(pictureSize(new Uint8Array([1, 2, 3])), undefined);
 });
+
+test("nonEnglishPrompt: a Hebrew prompt goes back for translation, English and mixed names do not", async () => {
+  const { nonEnglishPrompt } = await import("./chat-tools-media.js");
+  assert.equal(nonEnglishPrompt("תמונת פיקסל ארט של קוף אוכל בננה"), true);
+  assert.equal(nonEnglishPrompt("pixel art of a monkey eating a banana"), false);
+  assert.equal(nonEnglishPrompt("a café in Montréal, pixel art, sign that says שלום"), false);
+  assert.equal(nonEnglishPrompt("1024x1024"), false);
+});
