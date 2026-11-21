@@ -9,6 +9,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
+import type { ShareReplies } from "./shared-chat.js";
 
 /** One message in a share. */
 export interface SharedMessage {
@@ -34,6 +35,8 @@ export interface Share {
   views: number;
   /** The sharer's interface language: the page's labels and direction. */
   lang?: "he" | "en";
+  /** "Allow replies" for the project's guests (shared-chat.ts); missing: off. */
+  replies?: ShareReplies;
 }
 
 /** What the share list shows (no messages). */
@@ -164,6 +167,34 @@ export class ShareStore {
     s.views++;
     void this.save().catch(() => undefined);
     return s;
+  }
+
+  /**
+   * A chat's share as it is kept (with its reply settings), without counting a view.
+   *
+   * @param convId - The chat.
+   * @returns The share, or undefined when there is none or it expired.
+   */
+  async live(convId: string, now = Date.now()): Promise<Share | undefined> {
+    const s = (await this.all()).find((x) => x.convId === convId);
+    return s && !(s.expiresAt && Date.parse(s.expiresAt) <= now) ? s : undefined;
+  }
+
+  /**
+   * Changes a share's reply settings (shared-chat.ts updateReplies checks them first).
+   *
+   * @param convId - The chat.
+   * @param change - Gets the settings now, returns the new ones (or an error to show).
+   * @returns The new settings, an error, or undefined when the chat has no share.
+   */
+  async setReplies(convId: string, change: (old: ShareReplies | undefined, share: Share) => ShareReplies | { error: string }): Promise<ShareReplies | { error: string } | undefined> {
+    const s = await this.live(convId);
+    if (!s) return undefined;
+    const next = change(s.replies, s);
+    if ("error" in next) return next;
+    s.replies = next;
+    await this.save();
+    return next;
   }
 
   /**

@@ -192,6 +192,8 @@ export interface KesherServices {
   deviceKeys?: import("./device-keys.js").DeviceKeys;
   /** Who has which engine scene open (scene-rooms.ts), one set shared by the owner's and the guests' routes. */
   sceneRooms?: import("./scene-rooms.js").SceneRooms;
+  /** Guests' answers per day (guests.ts), one count for their own chats and their replies in shared chats. */
+  guestQuota?: import("./guests.js").GuestQuota;
   /** Search across conversations. */
   conversationSearch: ConversationSearch;
   /** When the model APIs last answered another app or device (ms), for staying awake while serving. */

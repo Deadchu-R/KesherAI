@@ -1739,3 +1739,25 @@ screenshot route, `tool_output`, Unreal level tools, GIF recording.
     JPEG frames or thinning while recording would cut it.
   - Carried from 168: TOCTOU on real-path checks, game-source backups never pruned, hub page unbundled.
 - Verdict: the connector is safe to deploy with these fixes (main pushes the hub).
+
+## Threat note (2026-11-21): "Allow replies" in shared chats (pending for the next scan)
+
+Guests of a shared project (their existing invite key, `project:<id>:edit`) can write in an owner's chat when its
+share has replies on (`packages/core/src/shared-chat.ts`, `routes/shared-chat.ts`). What was built against each threat:
+- **A guest steering the owner's tools.** A guest turn gets no tools; with "guests may use tools" every action is
+  gated `ask` + `noAlways` (a tool's own gate can only deny), `delegate`/`offer_install` are left out, the smart
+  reviewer never runs (it skips gated tools). The rule lives in `toolsFor`, so a model change mid-turn keeps it; a
+  resumed turn that a guest started resumes with no tools. Guest messages never steer a running owner turn.
+- **Header injection.** `[Attached: …]` would read a file from this computer, `[Unity/Unreal project: …]` opens a
+  project, `[Guest: …]` would impersonate; any `[x:` in guest text becomes `(x:` and `@helper` loses its `@`.
+- **Leaks to guests.** The live route sends only user/assistant text and the streaming answer, through
+  `cleanForShare` (paths, keys); approval cards, questions, tool steps and notes never go out.
+- **Abuse.** Per-guest messages a minute (2/6/12), the daily guest allowance, typing beats 1/s, 16 KB bodies, 4,000
+  characters a message; mute, remove (key revoked) and delete-message for the owner; replies end with their own
+  time, the share's expiry, "off" or revoking the share, checked on every request.
+- **To review next scan:** (1) prompt injection through a guest's words is only softened by a system note: with
+  tools on, the owner's approval card is the real guard; check the card shows "a guest asked" clearly. (2) The owner's
+  memory and system prompt still go into a guest turn (the model is told not to share them); consider leaving memory
+  out of guest turns. (3) `ChatLive` follows a session with one listener per server life; sessions closed and reopened
+  get a new one (WeakSet), check nothing piles up. (4) Owner routes rely on the auth hook (guest keys reach only
+  `/api/guest/*`); a route test covers the PUT. (5) The removed message's words stay in older saved branches/exports.

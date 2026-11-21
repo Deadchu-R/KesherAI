@@ -4523,3 +4523,21 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .memory-page .memory-list li > .grow { min-width: min(100%, 180px); overflow-wrap: anywhere; }
 .memory-recap { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
 .memory-recap h2 { margin: 0; }
+
+/* "Allow replies" on a shared chat (chat/ShareReplies.tsx) and the guest's live view of it (GuestApp.tsx). */
+.dialog:has(.share-replies) { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.share-replies { border-top: 1px solid var(--border); padding-top: 10px; gap: 10px; }
+.share-replies-switch { gap: 10px; align-items: flex-start; }
+.share-replies-switch input { margin-top: 4px; flex: none; }
+.share-replies-switch b, .share-replies-note, .share-guest-name, .share-guest-msg span { overflow-wrap: anywhere; }
+.share-replies-opts { gap: 8px 16px; flex-wrap: wrap; }
+.share-replies-opts label { gap: 6px; flex-wrap: wrap; }
+.share-guests, .share-guest-msgs ul { list-style: none; margin: 0; padding: 0; gap: 6px; }
+.share-guest, .share-guest-msg { gap: 6px; align-items: center; min-width: 0; }
+.share-guest-name { min-width: 0; }
+.danger-text { color: var(--bad); }
+.share-typing, .guest-typing { font-style: italic; }
+.guest-from { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.msg.user.from-guest { border-inline-start: 3px solid var(--accent); }
+.guest-tag { display: inline-block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.guest-writing { opacity: 0.85; }

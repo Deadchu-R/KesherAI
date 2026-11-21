@@ -64,6 +64,8 @@ import { namedDocuments, splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
 import { LineIcon } from "../ui/Glyph";
 
+/** The first line of a guest's message in a shared chat (core shared-chat.ts guestMessage). */
+const GUEST_LABEL = /^\[Guest: ([^\]\n]{1,40})\]\n/;
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 type Loaded = ConversationSummary & { session: AgentSessionInfo; events: AgentEvent[]; interruptedAt?: string };
@@ -944,13 +946,17 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                     </div>
                   </form>
                 ) : (
-                  <div key={e.seq} className="msg user" dir="auto" data-seq={e.seq}>
-                    <h2 className="sr-only">{L("ההודעה שלך", "You")}</h2>
+                  <div key={e.seq} className={GUEST_LABEL.test(e.text) ? "msg user from-guest" : "msg user"} dir="auto" data-seq={e.seq}>
+                    {(() => {
+                      // A guest's message in a shared chat ("Allow replies", core shared-chat.ts): who wrote it.
+                      const guest = GUEST_LABEL.exec(e.text)?.[1];
+                      return guest ? <span className="guest-tag">👤 {L(`אורח: ${guest}`, `Guest: ${guest}`)}</span> : <h2 className="sr-only">{L("ההודעה שלך", "You")}</h2>;
+                    })()}
                     {e.steered && <span className="steered-tag small">↪ {L("נשלחה בזמן העבודה ונכנסה לתשובה", "Sent while it worked, joined the answer")}</span>}
                     {(() => {
                       // Attached files as chips that open a preview (the "[Attached: …]" lines stay in the message for the model).
-                      const { body, files } = splitAttachments(e.text);
-                      return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text;
+                      const { body, files } = splitAttachments(e.text.replace(GUEST_LABEL, ""));
+                      return files.length ? <>{body}<AttachmentChips convId={id} files={files} /></> : e.text.replace(GUEST_LABEL, "");
                     })()}
                     {(() => {
                       // Edited versions of this message (each edit is a branch chat): ‹ n/m › switches in place.

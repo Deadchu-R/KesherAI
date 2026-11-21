@@ -89,6 +89,7 @@ import { lensRoutes } from "../routes/lens.js";
 import { canvasRoutes } from "../routes/canvas.js";
 import { shareRoutes } from "../routes/shares.js";
 import { ShareStore } from "../shares.js";
+import { sharedChatRoutes } from "../routes/shared-chat.js";
 import { textHelperRoutes } from "../routes/text-helper.js";
 import { githubRoutes } from "../routes/github.js";
 import { deviceRoutes } from "../routes/devices.js";
@@ -170,12 +171,15 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await lensRoutes(app, services);
   await importRoutes(app, { docs: docStoreFor(join(paths.root, "docs")), decks: deckStoreFor(join(paths.root, "decks")), sheets: sheetStoreFor(join(paths.root, "sheets")) });
   // Share links: a chat as a read-only page at /s/<token> (never an incognito chat).
-  await shareRoutes(app, new ShareStore(join(paths.root, "shares.json")), async (convId) => {
+  const shares = new ShareStore(join(paths.root, "shares.json"));
+  await shareRoutes(app, shares, async (convId) => {
     const summary = library.summary(convId);
     if (!summary || summary.incognito) return undefined;
     const opened = await services.conversations.open(convId);
     return opened ? { title: summary.title ?? "Chat", events: opened.session.events } : undefined;
   });
+  // "Allow replies" on a shared chat: the project's guests write in it, under the owner's rules (shared-chat.ts).
+  await sharedChatRoutes(app, services, shares);
   await knowledgeRoutes(app, services);
   await librariesRoutes(app, services);
   await personaRoutes(app, services);

@@ -3,6 +3,7 @@ import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { RichText } from "./RichText";
 import { PluginFrame, type GuestSceneInput } from "./plugins";
+import { GuestLiveChat } from "./GuestLiveChat";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const TOKEN_KEY = "kesher-token";
@@ -202,8 +203,8 @@ export function GuestApp() {
     try {
       const c = await api<Chat>(`/api/guest/chats/${encodeURIComponent(id)}`);
       setOpen(c);
-      // While the model answers, read again every 2.5 seconds.
-      if (c.busy) timer.current = setTimeout(() => void read(id), 2500);
+      // While the model answers, read again every 2.5 seconds (the owner's chats follow themselves: GuestLiveChat).
+      if (c.busy && c.mine) timer.current = setTimeout(() => void read(id), 2500);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -287,6 +288,9 @@ export function GuestApp() {
           {me?.role === "edit" && <button type="button" className="primary" onClick={() => void newChat()}>＋ {L("צ'אט חדש בפרויקט", "New chat in the project")}</button>}
           {me && <p className="muted small">{L(`נשארו לך היום ${me.left} מתוך ${me.dailyLimit} תשובות.`, `${me.left} of ${me.dailyLimit} answers left today.`)}</p>}
         </section>
+      ) : !open.mine ? (
+        // The owner's chat: live, and open for replies when the owner allows them.
+        <GuestLiveChat id={open.id} me={me?.name ?? ""} onLeft={(left) => setMe((m) => (m ? { ...m, left } : m))} />
       ) : (
         <section className="stack guest-chat-view">
           {open.messages.map((m) => (

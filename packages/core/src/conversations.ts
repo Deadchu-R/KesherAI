@@ -3,6 +3,7 @@ import { gateControlTools } from "./control-gate.js";
 import { ControlLog } from "./control-policy.js";
 import { localControlReviewer } from "./control-reviewer.js";
 import { guestFileTools } from "./guests.js";
+import { guestLabelOf, guestTurnNote, guestTurnTools, REMOVED } from "./shared-chat.js";
 import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
@@ -224,8 +225,15 @@ export class ConversationManager {
   private toolsFor(kind: ConversationKind, id?: string): { tools: AgentTool[]; notes: string[] } {
     const all = this.allToolsFor(kind, id);
     const off = id ? this.deps.library.summary(id)?.toolsOff : undefined;
-    return off?.length ? { ...all, tools: withoutOff(all.tools, off, (server) => mcpToolName(server, "")) } : all;
+    const own = off?.length ? { ...all, tools: withoutOff(all.tools, off, (server) => mcpToolName(server, "")) } : all;
+    // A turn a guest's message started (shared-chat.ts): no tools, or each action asks the owner. Checked here, so
+    // every rebuild during that turn (a model change, a refresh) keeps it.
+    const guest = id ? this.guestTurns.get(id) : undefined;
+    return guest ? { tools: guestTurnTools(own.tools, guest), notes: [...own.notes, guestTurnNote(guest.name, guest.tools)] } : own;
   }
+
+  /** Chats whose running turn a guest's message started: the guest's name and whether tools ask the owner. */
+  private readonly guestTurns = new Map<string, { name: string; tools: boolean }>();
 
   /**
    * The + menu's Tools sheet: each tool group and each connected MCP server this chat has tools from, with whether
@@ -919,6 +927,8 @@ export class ConversationManager {
     // installer closing the app) still leaves "continue where it stopped" (found by Roee: a chat just stopped).
     session.on("event", (e: { type: string; status?: string }) => {
       if (e.type !== "status") return;
+      // A guest's turn ends with its answer (the next message sets its own rules).
+      if (e.status === "idle" || e.status === "error") this.guestTurns.delete(id);
       void this.noteWorking(id, e.status === "running" || e.status === "waiting");
     });
     // A chat that failed goes into the fault log (its own doctor reads it).
@@ -1082,7 +1092,7 @@ export class ConversationManager {
    * @param text - Message.
    * @throws Error if the conversation does not exist or is busy.
    */
-  async send(id: string, text: string, opts: { web?: boolean; steer?: boolean } = {}): Promise<{ queued?: number }> {
+  async send(id: string, text: string, opts: { web?: boolean; steer?: boolean; guest?: { name: string; tools: boolean } } = {}): Promise<{ queued?: number }> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     // A new worktree's setup (npm install…) finishes before the model starts working in it.
@@ -1092,7 +1102,8 @@ export class ConversationManager {
     if (session.busy || session.queued.length) {
       // Steer mode (chat-queue.ts): it joins the running turn at its next step instead of waiting for the answer.
       const { steer, ...data } = opts;
-      session.queued.push({ id: randomUUID(), text, data, ...(steer && session.busy ? { steer: true } : {}) });
+      // A guest's message never steers the owner's running turn: it waits for its own turn and rules.
+      session.queued.push({ id: randomUUID(), text, data, ...(steer && session.busy && !opts.guest ? { steer: true } : {}) });
       session.queuePaused = false;
       session.queueChanged();
       if (!session.busy) await this.drain(id);
@@ -1150,7 +1161,7 @@ export class ConversationManager {
     const next = session.queued.shift();
     if (!next) return;
     session.queueChanged();
-    await this.sendNow(id, next.text, (next.data as { web?: boolean }) ?? {}).catch((err: Error) => {
+    await this.sendNow(id, next.text, (next.data as { web?: boolean; guest?: { name: string; tools: boolean } }) ?? {}).catch((err: Error) => {
       session.queued.unshift(next);
       session.queueChanged();
       console.warn(`[queue] ${id}: ${err.message}`);
@@ -1270,10 +1281,15 @@ export class ConversationManager {
     session.systemPrompt = await this.promptFor(conversation, notes);
   }
 
-  private async sendNow(id: string, text: string, opts: { web?: boolean }): Promise<void> {
+  private async sendNow(id: string, text: string, opts: { web?: boolean; guest?: { name: string; tools: boolean } }): Promise<void> {
     const opened = await this.open(id);
     if (!opened) throw new Error("Conversation not found");
     const { session, conversation } = opened;
+    // A guest's message (shared-chat.ts): its own rules for this turn, no web search first, no project headers.
+    if (opts.guest) {
+      this.guestTurns.set(id, opts.guest);
+      opts = { guest: opts.guest };
+    } else this.guestTurns.delete(id);
     // "[Unreal project: Name, UE 5.8 — C:\path; …]" (Unreal page → Open in chat): the Unreal tools work on that project.
     const unrealHeader = /^\s*\[Unreal project: [^\]\n]*? — ([^;\]\n]+)[;\]]/.exec(text);
     let unrealDir = unrealHeader ? await readProject(unrealHeader[1]!.trim()).then((p) => p.dir, () => undefined) : undefined;
@@ -1793,8 +1809,33 @@ export class ConversationManager {
     const list = await this.interrupted();
     if (!list.some((x) => x.id === id)) return false;
     await writeFile(this.interruptedFile, JSON.stringify(list.filter((x) => x.id !== id)));
+    // A turn a guest started goes on as a guest's turn with no tools (whatever the share says now).
+    const lastUser = [...((await this.open(id))?.session.events ?? [])].reverse().find((e): e is Extract<AgentEvent, { type: "user" }> => e.type === "user" && !e.steered);
+    const guest = lastUser ? guestLabelOf(lastUser.text) : undefined;
     if (!dismiss)
-      await this.send(id, "KesherAI restarted (an update or a restart) while you were working on this. Continue the task from where you stopped. First look at the last tool results above to see what was already done, and do not repeat finished steps.");
+      await this.send(id, "KesherAI restarted (an update or a restart) while you were working on this. Continue the task from where you stopped. First look at the last tool results above to see what was already done, and do not repeat finished steps.", guest ? { guest: { name: guest.name, tools: false } } : {});
+    return true;
+  }
+
+  /**
+   * Deletes a guest's message in a chat (the owner's moderation, shared-chat.ts): its words are replaced, for the
+   * owner, the guests and the model, by "(removed by the owner)". The owner's own messages cannot be removed this way.
+   *
+   * @param id - The chat.
+   * @param seq - The message's event number.
+   * @returns Whether a guest message was removed.
+   */
+  async removeGuestMessage(id: string, seq: number): Promise<boolean> {
+    const opened = await this.open(id);
+    const e = opened?.session.events.find((x): x is Extract<AgentEvent, { type: "user" }> => x.seq === seq && x.type === "user");
+    const label = e ? guestLabelOf(e.text) : undefined;
+    if (!opened || !e || !label || label.text === REMOVED) return false;
+    const before = e.text;
+    const after = `[Guest: ${label.name}]\n${REMOVED}`;
+    e.text = after;
+    // The model's copy too (it may carry extra context after "---").
+    for (const m of opened.session.messages) if (m.role === "user" && typeof m.content === "string" && (m.content === before || m.content.startsWith(`${before}\n\n---\n`))) m.content = after;
+    this.scheduleSave(id);
     return true;
   }
 

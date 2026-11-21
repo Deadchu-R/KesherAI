@@ -21,7 +21,7 @@ import { unityAssetOf, unitySceneOf, unityScenes } from "./unity-scene.js";
  */
 export async function guestRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   const invites = new GuestInvites(join(s.paths.root, "guest-invites.json"));
-  const quota = new GuestQuota();
+  const quota = (s.guestQuota ??= new GuestQuota());
   const limit = () => s.config.remote.guestDailyLimit;
   const devices = () => s.config.remote.devices;
   const watch = new GuestWatch();
@@ -41,7 +41,8 @@ export async function guestRoutes(app: FastifyInstance, s: KesherServices): Prom
       night: `${who} is using "${project}" during your quiet hours (23:00–07:00).`,
     };
     // A scene's beats (about one a second) and the models it shows are limited on their own, apart from "busy".
-    const counted = !/^\/api\/guest\/(rooms\/|scene\/asset)/.test(req.url);
+    // A shared chat's live view and typing beats too (routes/shared-chat.ts limits them).
+    const counted = !/^\/api\/guest\/(rooms\/|scene\/asset|chats\/[^/]+\/(live|typing))/.test(req.url);
     for (const a of watch.see(d.id, clientAddress(req), reply.statusCode, Date.now(), s.config.remote.guestNightAlert, counted)) {
       void s.notifier.send({ title: "KesherAI: a guest", body: say[a], tags: ["warning"], priority: a === "outside" ? 4 : 3 }).catch(() => undefined);
     }

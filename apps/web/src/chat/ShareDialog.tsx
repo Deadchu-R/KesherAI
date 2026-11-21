@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { ShareReplies } from "./ShareReplies";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -67,6 +68,7 @@ export function ShareDialog({ convId, onClose }: { convId: string; onClose: () =
               <button type="button" className="primary" onClick={copy}>{L("העתק", "Copy")}</button>
             </div>
             <p className="muted small">{L(`${share.messages} הודעות · נפתח ${share.views} פעמים · ${untilText(share.expiresAt)}`, `${share.messages} messages · opened ${share.views} times · ${untilText(share.expiresAt)}`)}</p>
+            <ShareReplies convId={convId} />
           </>
         )}
         {share !== undefined && (
