@@ -1,7 +1,7 @@
 {
   "name": "kesher",
   "private": true,
-  "version": "0.6.439",
+  "version": "0.6.440",
   "description": "Local-first, open-source desktop app that runs every kind of AI model — chat, image, video, audio — in one place.",
   "license": "Apache-2.0",
   "type": "module",
@@ -17,6 +17,7 @@
     "typecheck": "pnpm build:packages && pnpm --filter @kesher/web typecheck && pnpm --filter @kesher/desktop typecheck && pnpm --filter @kesher/hub typecheck && tsc -p tools/hub-report/tsconfig.json",
     "lint": "eslint .",
     "test": "node --conditions=source --import tsx --test --test-force-exit --test-timeout=120000 \"packages/*/src/**/*.test.ts\" \"apps/web/src/**/*.test.ts\" \"apps/hub/src/**/*.test.ts\"",
+    "e2e": "pnpm build:packages && pnpm --filter @kesher/web build && node scripts/e2e.mjs",
     "design:render": "node --conditions=source --import tsx tools/design/render.ts",
     "docs:api": "typedoc",
     "create-plugin": "node scripts/create-plugin.mjs",

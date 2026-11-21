@@ -14,6 +14,13 @@ public class KesherAIBridge : ModuleRules
 		// The setting moved between engine versions (bool before, enum after, then inside CppCompileWarningSettings),
 		// and a name that does not exist fails the whole build (found on Unreal 5.4): set whichever exists, by reflection.
 		DisableUndefinedIdentifierWarnings();
+		// Unreal 5.4 and older with Visual Studio 17.10+: the engine's own ConcurrentLinearAllocator.h uses
+		// `#if __has_feature(...)`, which that compiler does not define, so C4668 and C4067 stop the build whatever the
+		// warning settings. Define it for this module's files only (MSVC accepts a function-like /D), as clang does: 0.
+		if (Target.Platform == UnrealTargetPlatform.Win64 && Target.Version.MajorVersion == 5 && Target.Version.MinorVersion <= 4)
+		{
+			PrivateDefinitions.Add("__has_feature(x)=0");
+		}
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
