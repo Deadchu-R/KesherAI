@@ -106,7 +106,11 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
         const provider = p.registry.get("gemini");
         if (!provider) throw new Error("No Gemini connection.");
         const models = await provider.listModels(signal);
-        const pick = models.find((m) => m.category === "chat" && /flash/i.test(m.providerModelId) && !/lite|image|tts|live/i.test(m.providerModelId)) ?? models.find((m) => m.category === "chat");
+        // Google keeps listing retired models (Gemini 2.5 answers 404 since Oct 2026): prefer the "flash-latest" alias,
+        // then the newest numbered Flash.
+        const flash = models.filter((m) => m.category === "chat" && /flash/i.test(m.providerModelId) && !/lite|image|tts|live|preview|exp/i.test(m.providerModelId));
+        const ver = (id: string) => Number(/gemini-(\d+(?:\.\d+)?)/.exec(id)?.[1] ?? 0);
+        const pick = flash.find((m) => /flash-latest$/i.test(m.providerModelId)) ?? flash.sort((x, y) => ver(y.providerModelId) - ver(x.providerModelId))[0] ?? models.find((m) => m.category === "chat");
         if (!pick) throw new Error("The Gemini connection lists no chat model.");
         const prefs = withFilter(undefined, p.config.webFilter, false);
         return researchReport(question, {
