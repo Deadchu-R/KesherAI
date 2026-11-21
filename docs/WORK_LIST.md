@@ -79,7 +79,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   a hub builder tool, quick and easy (FUTURE_FEATURES, "Hub builder"). hub live (0.6.401); missing: the hub builder for self-hosting
 - ✅ Roee (13:14): the phone app's top-bar toggle Phone / Computer becomes Phone / Computer / Cloud (Cloud = the
   hub inside the app; works when the PC is off). Board PhoneWhereToggle; built with the hub screens. (0.6.401)
-- ⬜ Roee (13:16): the hub as a Claude custom connector (remote MCP on the same Worker, OAuth for his account):
+- ✅ Roee (13:16): the hub as a Claude custom connector (remote MCP on the same Worker, OAuth for his account): (99a51d5 remote MCP at /mcp, OAuth for the owner only; 0e492d0 a5dc3de hardening)
   Claude stays the lead, the hub is its hands (devices, send a task to Antigravity / local model, results,
   approvals), all inside his Max plan. Research first (incl. how others do it), after hub v1. not built
 - ✅ Research Google's terms for unattended Antigravity in depth (Roee: "remember to check it in depth"). (research done, see below)
@@ -112,7 +112,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ 0.6.406 on the PC (Roee 18:xx); tasks sync connected (Drive OK, 0 tasks at 19:22, being checked). PC cleanup: LM Studio models moved to the E: drive, C: copy deleted; 20 compressed videos' originals binned and bin emptied (C: ~160 GB free).
 - 👤 Run inbox tasks c-20261119-01, -02 and c-20261120-01 (Antigravity research: browser + computer control).
 - ✅ Batch 2A: Unity core tools (compact hierarchy + inspect_object, modify_scene, import_sprite, create_pbr_material). (8ceab6c 94aa3af 25c1298 5392e12)
-- 🔨 Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat
+- 🔨 Usability, in the research's order: (1) routing + KV cache + a visible token footer; (2) typed blocks in the chat night run: typed blocks done (ccacb66 539cb4b 4fd5f94 035a5f2), token savers (e505b5d 3b55039 4c63277 15aaa9d); missing: re-check steps (3) and (4)
   (step accordion, live media card, inline zero-token actions, approval card, side canvas); (3) Unity core toolset at
   100% (reconnect after domain reload, main-thread queue, one Undo per turn, compile-fix loop); (4) ComfyUI → Unity
   end-to-end demo. First a gap list against what exists, then the design doc, then builds. (fc714f2 498e496 fb4b88d f13881b; 0.6.403) missing: inline actions, side canvas, ComfyUI-Unity demo
@@ -129,7 +129,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 ## Roee (2026-11-20 17:12): add to KesherAI
 - ✅ Browser control + debugging like Claude in Chrome, for the user's own Chrome (extension) AND KesherAI's built-in browser: open tabs, read the page as text/accessibility tree, click/type, console messages, network requests, run JS, screenshots/GIF; site permissions and the same safety rules (no passwords, ask before submitting). Research first (Claude in Chrome, Playwright MCP, Chrome DevTools MCP, browser-use). (480affc 201c542 295839f 2e6c0fa; extension store release held)
-- 🔨 Computer control like Claude's computer use (screenshots, click/type, per-app access, tiers for browsers/terminals) and control of the computer's features (settings, files, apps) — through KesherAI, with approvals. Research first. missing: safety tiers and UIA tools not committed yet
+- 🔨 Computer control like Claude's computer use (screenshots, click/type, per-app access, tiers for browsers/terminals) and control of the computer's features (settings, files, apps) — through KesherAI, with approvals. Research first. missing: safety tiers and UIA tools not committed yet night run: phases 0-7 and vision done (480affc 201c542 295839f 2e6c0fa b0b2a5a 8184be2 9b98b80 c44b7fc); missing: computer control beyond Windows, extension 0.3.0 store release waits for Roee
 
 ## Waiting on Roee 👤
 - 👤 When convenient: 🖌 paint a model (ComfyUI 0.46+; asks before downloading SD 1.5 + ControlNet depth, ~2.8 GB).
@@ -145,7 +145,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 ## Next, from FUTURE_FEATURES (code only)
 - ✅ Say on screen what loaded a model ("Loaded because: …" on the Models page and in the computer's details).
 - ✅ A scene together (Unity Studio style): each person's colour chip, camera (a cone with the name) and selection,
-  and follow their view; for this computer, the phone and paired devices. ⬜ Later: guests through share links.
+  and follow their view; for this computer, the phone and paired devices. ⬜ Later: guests through share links. (partly: 82a971a guests write in a shared chat; sign-in guests by share link not built)
 - 👤 Open items that need Roee: Magic Tab (testing at the keyboard), the npm SDK (an npm account), Google sign-in for
   email invites, the Unreal levels bug (Roee: later).
 
@@ -159,10 +159,10 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 ## Backlog: Chat and UI
 - ✅ Typed chat blocks: fold consecutive tool calls into one line ("7 steps"), like Claude's step list (in code: Activity.tsx ActivityGroup)
 - ✅ Live progress and preview of a media job inside the chat bubble (4fd5f94 ComfyUI socket steps, preview frames, Cancel; checked 2026-11-21)
-- 🔨 Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations) (c7ae62b file chips) missing: Import to Unity, Apply, 4 variations
-- 🔨 Side canvas for heavy results: images, PBR maps, code diffs (02094ed documents) missing: images, PBR maps, code diffs
+- ✅ Inline zero-token action buttons under a result (Import to Unity, Apply, 4 variations) (c7ae62b file chips) (ccacb66 4fd5f94)
+- ✅ Side canvas for heavy results: images, PBR maps, code diffs (02094ed documents) (539cb4b)
 - ✅ Unity and ComfyUI status chips in the composer of every chat, live when the Editor closes (f13881b Unity chip; 2ee1740 41a33bd ComfyUI chip in every chat, Unity chip in plain chats once in use)
-- 🔨 Approval card shows the diff or object list for Unity scene changes (e72dc60 helper hunks) missing: Unity scene diff or object list on approval
+- ✅ Approval card shows the diff or object list for Unity scene changes (e72dc60 helper hunks) (035a5f2)
 - ✅ Router that picks tool groups and model size per turn; pin agent kinds to their own engine slots (fc714f2 tool groups; 15aaa9d model size per turn, slotKind main/helper/other via llamaCppFields; checked 2026-11-21)
 - ✅ One shared chat component everywhere; the new-chat box on the main screen gets the same + menu (ComposerBar + useChatAttach in every box; 846a898 tools in this chat and approvals mode on the start screens)
 - ✅ Rich + menu: files, camera, projects, devices, skills, memory and more (apps/web/src/AddMenu.tsx)
@@ -174,12 +174,12 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Look changes: styles from words, web pictures, presets, full dark for HDR, synced look, reset (FUTURE_FEATURES)
 - 🔨 Look: backgrounds, fonts, icons from the web, SteamOS-like ordering; AI restyle that never touches functions (appearance.ts, change_look) missing: icons from the web, SteamOS-like ordering
 - ✅ Gamepad support with controller hints and on-screen keyboard (apps/web/src/gamepad.ts)
-- 🔨 Console mode with big buttons for the ROG Xbox Ally X, and a gaming AI helper in it (PadHints.tsx gamepad) missing: big-button console mode, gaming helper
+- ✅ Console mode with big buttons for the ROG Xbox Ally X, and a gaming AI helper in it (PadHints.tsx gamepad) (e480a7d)
 - ✅ "Open mind": record a brain dump, sort it into prompts, research each idea (in code: ideas.ts)
-- 🔨 Hugging Face search filtered by what runs well on this computer, each result marked (huggingface.ts search) missing: runs-well mark per result
+- ✅ Hugging Face search filtered by what runs well on this computer, each result marked (huggingface.ts search) (dd2dae7 ddbf223)
 - 🔨 Train models from the UI: pick the kind, show what is supported, plug the result into a category (TRAINING.md) missing: kinds beyond picture LoRA and chat model
 - ✅ Import settings, agents, chats and personas from other apps; chats from ChatGPT, Claude and Gemini (in code: chat-import.ts, persona-import.ts, claude-code-import.ts)
-- 🔨 Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) missing: a guide for every part
+- ✅ Setup guides for each part, kept as files in the repo (docs/UNITY.md, UNREAL.md ...) (3446d4a 4e6ab69)
 - ✅ Queue messages while a chat is busy: editable chips, Send now, Stop clears the queue first (Jan 0.8) (in code: chat-queue.ts, chat/QueueChips.tsx)
 - ✅ Steer mode: a message sent mid-run joins the running turn at the next tool step (setting: queue or steer; Cursor) (in code: session.ts injectSteers)
 - ✅ Highlight-to-edit in documents and artifacts: select text, describe the change, only that span is rewritten, diff shown (Claude) (in code: shared/span-edit.ts, routes/span-edit.ts, SpanEdit.tsx)
@@ -187,8 +187,8 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Thinking picker for local reasoning models in the model menu: off, low, high (Open WebUI 0.12, LM Studio) (in code: thinking.ts, ModelMenu.tsx)
 - ✅ Context ring in the composer from the last call's prompt size; offer /compact near the limit (in code: chat/ContextRing.tsx, budget.ts pinnedBefore)
 - ✅ Turn status line and duration under a busy answer: running a tool, waiting for approval (Cursor) (in code: turn-status.ts, chat/TurnStatusLine.tsx)
-- ⬜ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12)
-- ⬜ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI)
+- ✅ Shared chat mode Allow replies: guests write in the same thread, names, live streaming, typing (Open WebUI 0.12) (82a971a d701c61)
+- ✅ Realtime voice hand-off: a small voice model talks, the chat's model works, approvals stay on screen (Open WebUI) (753829f f21401a)
 - ✅ Memory topics view (edit or delete a topic) and an opt-in monthly recap card (Claude) (in code: shared/memory-topics.ts, memory-store.ts, pages/MemoryPage.tsx: search, merge, move, recap with Remove)
 - ✅ Command palette lists chats and projects; /archive instead of delete; day separators in long chats (LM Studio) (in code: chat-archive.ts, pages/ArchivedPage.tsx, CommandPalette.tsx)
 
@@ -200,18 +200,18 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Unity: compile-fix loop with at most 2 automatic fixes, errors returned as file, line, message (fb4b88d)
 - ✅ Unity: create a new project through Unity's CLI without an existing one (packages/core/src/unity-cli.ts)
 - ✅ Unity: embedded graphs and state graphs read and edited (integrations/unity/com.kesherai.bridge KesherGraph.cs)
-- ⬜ Unity Visual Scripting node editor that supports everything the engine does and syncs on open not built
+- ✅ Unity Visual Scripting node editor that supports everything the engine does and syncs on open (d0153c0)
 - ✅ Unity C# shown as visual nodes and translated back to code (in code: csharp-graph.ts, ScriptNodes.tsx)
-- 🔨 ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s) (5392e12 PBR material) missing: one-request flow with 45 s check
-- 🔨 Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background) (comfy-flows.ts, bg-remove.ts) missing: seamless albedo, normal, roughness, AO set
+- ✅ ComfyUI to Unity demo: one request becomes an imported PBR material on a selected object (45 s) (5392e12 PBR material) (df1de61)
+- ✅ Tools for a seamless albedo plus normal, roughness and AO flow, and a UI-sprite flow (generate, remove background) (comfy-flows.ts, bg-remove.ts) (df1de61)
 - ✅ Intent routing: "make a tileable wall texture" picks the PBR flow by itself (df1de61 flowIntent in tool-router.ts; checked 2026-11-21)
 - 🔨 Unreal: Blueprint node editor that supports everything the engine does; the page works with Unreal closed (BlueprintCanvas.tsx, 5c302ab) missing: full node coverage, editing with Unreal closed
-- 🔨 Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets) (blueprint-test.ts) missing: gameplay input tests via 5.9 toolsets
-- ⬜ Unreal: inspect_level and apply_material tools; profiling against the chosen target phones not built
+- ✅ Unreal: Test button that runs a Blueprint in Unreal, with gameplay input tests (MCP 5.9 toolsets) (blueprint-test.ts) (254b768)
+- 🔨 Unreal: inspect_level and apply_material tools; profiling against the chosen target phones (c9be703 inspect_level and apply_material built; missing: profiling against the chosen target phones)
 - 🔨 Unreal: code views for C++ and Verse; Blueprint to Verse; prepare for UE6 (cf6bace Source view, blueprint-code.ts) missing: UE6 preparation
 - ⬜ Specialised engine agents: materials, Niagara and VFX, level design not built
 - ⬜ A Unity-like workspace inside KesherAI: code, animation, materials, Visual Scripting not built
-- 🔨 Draw on a screenshot from the phone and send it as a change request to the engine (Annotator.tsx) missing: send the drawing to the engine as a change request
+- ✅ Draw on a screenshot from the phone and send it as a change request to the engine (Annotator.tsx) (fadc4d4)
 - ⬜ Play a web build on the phone (UE 5.9 Web, Unity WASM64) not built
 - ✅ Godot support: bridge addon, scenes, nodes, scripts, run and log (FUTURE_FEATURES)
 - ✅ Minecraft and Roblox modding (mod_new, mod_build) and UEFN / Verse files (FUTURE_FEATURES)
@@ -219,9 +219,9 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ✅ Phone build targets chosen by phone model, known engine bugs checked before builds (FUTURE_FEATURES)
 
 ## Backlog: Models and agents
-- ⬜ Cache: fixed engine slot per agent kind, slot save and restore around ComfyUI VRAM use not built
-- ⬜ Findings-pack limit (200-400 tokens) for helper agent reports; per-turn cap of 4-6 loaded tools not built
-- ⬜ Tool outputs pruned after 2 turns with a summary line and a pointer to the full output on disk not built
+- 🔨 Cache: fixed engine slot per agent kind, slot save and restore around ComfyUI VRAM use (15aaa9d router slot pinned, chat slot kept around heavy ComfyUI jobs; missing: a fixed slot for every agent kind)
+- ✅ Findings-pack limit (200-400 tokens) for helper agent reports; per-turn cap of 4-6 loaded tools (3b55039 4c63277)
+- ✅ Tool outputs pruned after 2 turns with a summary line and a pointer to the full output on disk (e505b5d)
 - ✅ Calibrate the local engine to the computer (speed against accuracy); chats-at-once setting (in code: calibrate, ChatsAtOnce.tsx)
 - 🔨 Download the right engine and models for the hardware (NVIDIA, Intel, AMD) automatically, no button (downloads/hardware.ts) missing: fully automatic, no button
 - ⬜ Smart split of one task across connected computers by hardware; per-chat device choice; laptop gets no heavy work not built
@@ -230,7 +230,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ Test DeepSeek V4-Flash and tune Qwen 3.6-27B for the PC; goal is Claude-like quality locally not built
 - 🔨 Microsoft Copilot connection for businesses, with an option to use only Copilot (copilot.ts, docs/COPILOT.md) missing: Copilot-only mode
 - ⬜ Models talking to each other: multilingual model plus strong code model as a team not built
-- 🔨 Claude uses KesherAI more and more itself; a KesherAI connector so Claude can send it commands (McpServerSection.tsx) missing: Claude-initiated commands flow
+- ✅ Claude uses KesherAI more and more itself; a KesherAI connector so Claude can send it commands (McpServerSection.tsx) (99a51d5)
 - 🔨 Long-term approvals in chats (for good or for a set time) in every flow, not only commands (agent/permissions.ts) missing: set-time grants in every flow
 - ✅ Gemini through the user's Google subscription, Telegram approvals, named agents, heartbeat routines (FUTURE_FEATURES)
 - ✅ Translation model in the team, reply-language settings (FUTURE_FEATURES, chat at Claude/Gemini level)
@@ -242,7 +242,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - 🔨 Notifications like any app, no ntfy and no cost, opening the right page (37a0a1b 6f91127 hub Web Push) missing: ntfy still used on the PC
 - ⬜ A computer about to sleep tells the others; faster device discovery with status not built
 - ⬜ Found computers shared by every chat; disconnect and switch computer from the menu not built
-- 🔨 Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds (2e9a75f agents) missing: commands and other task kinds
+- ✅ Pause running commands and tasks on restart, update or shutdown and resume where stopped, for all kinds (2e9a75f agents) (4c47834)
 - ✅ Telegram bot with approval buttons (packages/core/src/telegram.ts)
 - ✅ Remote desktop with a PIN, computer load view with Terminate, computer tabs (FUTURE_FEATURES)
 - ✅ Fixed outside address by Cloudflare domain or Tailscale Funnel (FUTURE_FEATURES)
@@ -274,7 +274,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - ⬜ Plugin store with install from the app; clear plugin and fork docs for developers not built
 - ⬜ Fully modular parts; no single provider needed; less dependence on Ollama and LM Studio over time not built
 - ⬜ Automated test system per version: it works and has no security holes not built
-- 🔨 Full security review and performance pass after every 5 builds (running rule) (460279e scan 168) missing: next scan after 5 builds
+- 🔨 Full security review and performance pass after every 5 builds (running rule) (460279e scan 168) missing: next scan after 5 builds (scans 169 79c3dbc and 170 b606675 done after 460279e; next scan after 5 more builds)
 - 🔨 Hardware limits in the UI: RAM and CPU caps, CPU temperature (gpu-guard.ts) missing: RAM and CPU caps, CPU temperature
 - 🔨 Reset to defaults and a reinstall option checked on every platform (ResetSection.tsx) missing: reinstall check on every platform
 - ✅ Project index: faster search over assets, scripts and Blueprints for big projects (bcbe818 5c302ab e7c3278)
