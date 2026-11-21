@@ -189,6 +189,8 @@ export interface PartsOptions {
   backoffMs?: number;
   /** How often the progress is saved (default 1000). */
   saveEveryMs?: number;
+  /** `false`: do not write the parts file at all (a repair of a finished file keeps nothing beside it). */
+  persist?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -212,7 +214,7 @@ export async function downloadParts(o: PartsOptions): Promise<void> {
   o.signal.addEventListener("abort", stop);
   const fh = await open(o.file, "r+");
   let saving: Promise<void> = Promise.resolve();
-  const save = () => (saving = saving.then(() => saveParts(o.file, o.state)).catch(() => undefined));
+  const save = () => (saving = o.persist === false ? saving : saving.then(() => saveParts(o.file, o.state)).catch(() => undefined));
   const timer = setInterval(() => void save(), o.saveEveryMs ?? 1000);
   let failure: unknown;
 

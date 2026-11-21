@@ -9,3 +9,5 @@ export * from "./downloader.js";
 export * from "./hardware.js";
 export * from "./fit.js";
 export * from "./progress.js";
+export * from "./busy.js";
+export * from "./verify.js";

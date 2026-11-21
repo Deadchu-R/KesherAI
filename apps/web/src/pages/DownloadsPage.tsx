@@ -1,7 +1,7 @@
 import "../downloads-page.css";
 import { useCallback, useEffect, useState } from "react";
 import { api, isRemote } from "../api";
-import { ErrorCard, JobMeters, PhaseTrack, eta, gb, mbps, refreshDownloads, useDownloads, type Job } from "../Downloads";
+import { DontSlowToggle, ErrorCard, JobMeters, PhaseTrack, VerifyActions, eta, gb, mbps, refreshDownloads, useDownloads, type Job } from "../Downloads";
 import { getLocale, t, he$, type StringKey } from "../i18n";
 import { Select } from "../ui/Select";
 
@@ -55,6 +55,8 @@ export function DownloadsPage() {
   const [drives, setDrives] = useState<Drive[]>([]);
   const [max, setMax] = useState(2);
   const [parts, setParts] = useState(4);
+  const [busy, setBusy] = useState({ on: true, share: 0.5 });
+  const [verifyBig, setVerifyBig] = useState(true);
   const [problem, setProblem] = useState("");
   const [dragId, setDragId] = useState<string | undefined>();
   const { running, queued, paused, finished, failed } = groupDownloads(all);
@@ -66,6 +68,8 @@ export function DownloadsPage() {
     loadDrives();
     void api<{ max: number }>("/api/downloads/concurrency").then((r) => setMax(r.max)).catch(() => undefined);
     void api<{ parts: number }>("/api/downloads/parts").then((r) => setParts(r.parts)).catch(() => undefined);
+    void api<{ on: boolean; share: number }>("/api/downloads/busy").then(setBusy).catch(() => undefined);
+    void api<{ on: boolean }>("/api/downloads/verify-auto").then((r) => setVerifyBig(r.on)).catch(() => undefined);
     // Free space changes as files land: look again every half minute.
     const timer = setInterval(loadDrives, 30_000);
     return () => clearInterval(timer);
@@ -91,6 +95,15 @@ export function DownloadsPage() {
   const changeParts = (n: number) => {
     setParts(n);
     void act("parts", { parts: n }, "PUT");
+  };
+
+  const changeBusy = (patch: Partial<typeof busy>) => {
+    setBusy({ ...busy, ...patch });
+    void act("busy", patch, "PUT");
+  };
+  const changeVerifyBig = (on: boolean) => {
+    setVerifyBig(on);
+    void act("verify-auto", { on }, "PUT");
   };
 
   const driveName = (id: Drive["id"]) => (id === "heavy" ? L("כונן הנתונים הכבדים", "Heavy-data drive") : L("תיקיית ההורדות", "Download folder"));
@@ -132,6 +145,23 @@ export function DownloadsPage() {
           <span className="grow">{L("חלקים בכל הורדה (קבצים מ-1 GB)", "Parts per download (files from 1 GB)")}</span>
           <Select value={parts} onChange={(e) => changeParts(Number(e.target.value))}>{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n === 1 ? L("1 (כבוי)", "1 (off)") : n}</option>)}</Select>
         </label>
+        <label className="check small">
+          <input type="checkbox" checked={busy.on} onChange={(e) => changeBusy({ on: e.target.checked })} /> {L("האט הורדות כשהמחשב עסוק", "Slow downloads while the PC is busy")}
+        </label>
+        {busy.on && (
+          <>
+            <label className="row small">
+              <span className="grow">{L("כשהצ'אט עונה, ההורדות רצות במהירות של", "While the chat answers, downloads keep")}</span>
+              <Select value={String(Math.round(busy.share * 100))} onChange={(e) => changeBusy({ share: Number(e.target.value) / 100 })}>
+                {[...new Set([25, 50, 75, Math.round(busy.share * 100)])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}%</option>)}
+              </Select>
+            </label>
+            <span className="muted small">{L("כשמשחק ב-Unity או ב-Unreal רץ (Play) ההורדות נעצרות וממשיכות אחרי. הורדה שסימנתם \"אל תאט\" לא נעצרת.", "While a Unity or Unreal game is in Play, downloads pause and go on after it. A download marked \"Don't slow\" never does.")}</span>
+          </>
+        )}
+        <label className="check small">
+          <input type="checkbox" checked={verifyBig} onChange={(e) => changeVerifyBig(e.target.checked)} /> {L("בדוק קבצים מעל 1 GB מול ה-hash באתר אחרי ההורדה", "Check files over 1 GB against the hub's hash after the download")}
+        </label>
         {problem && <span className="error small">{problem}</span>}
       </section>
 
@@ -145,6 +175,7 @@ export function DownloadsPage() {
               <Name j={j} />
               <PhaseTrack status={j.status} />
               <JobMeters j={j} />
+              {j.status === "downloading" && <DontSlowToggle j={j} onDone={() => void refreshDownloads()} />}
               <div className="row dl-actions">
                 <button type="button" onClick={() => void act(`${j.id}/pause`)}>{t("dlPause")}</button>
                 <button type="button" onClick={() => void act(j.id, undefined, "DELETE")}>{t("cancel")}</button>
@@ -179,6 +210,7 @@ export function DownloadsPage() {
                   <Name j={j} />
                 </div>
                 <JobMeters j={j} />
+                <DontSlowToggle j={j} onDone={() => void refreshDownloads()} />
                 <div className="row dl-actions">
                   <button type="button" disabled={i === 0} onClick={() => void act(`${j.id}/move`, { to: "up" })} aria-label={L("הזז למעלה", "Move up")}>↑</button>
                   <button type="button" disabled={i === queued.length - 1} onClick={() => void act(`${j.id}/move`, { to: "down" })} aria-label={L("הזז למטה", "Move down")}>↓</button>
@@ -208,6 +240,7 @@ export function DownloadsPage() {
           {finished.map((j) => (
             <article key={j.id} className="card dl-item">
               <Name j={j} />
+              <VerifyActions j={j} onDone={() => void refreshDownloads()} />
               <div className="row dl-actions">
                 {j.total ? <span className="muted small mono grow" dir="ltr">{gb(j.total)}</span> : <span className="grow" />}
                 {/* The folder opens on the computer itself, so it is not offered on a phone (the server refuses it there too). */}

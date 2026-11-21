@@ -17,6 +17,20 @@ export interface Job {
   errorKind?: "disk-full" | "auth" | "network" | "changed" | "other";
   /** While waiting: the place in the line (1 starts next). */
   position?: number;
+  /** Why it is not at full speed: the chat is answering (`slowed`) or a game is in Play (`paused`, also while waiting). */
+  busy?: "slowed" | "paused";
+  /** "Don't slow": this download ignores the chat and the game. */
+  dontSlow?: boolean;
+  /** The hub's hash is known (Verify shows). */
+  sha256?: string;
+  /** From the hub: Verify can fetch the hash itself. */
+  fromHub?: boolean;
+  /** The last check: same as the hub (`ok`) or different (`bad`, with Repair). */
+  integrity?: "ok" | "bad";
+  /** What Repair does (`bad`) or is doing: only the broken ranges, or the whole file. */
+  repair?: "ranges" | "whole";
+  /** A repair is downloading right now. */
+  repairing?: boolean;
 }
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -128,6 +142,29 @@ function TotalLine({ active }: { active: Job[] }) {
 }
 
 /**
+ * The badge of a download that gives way to the computer: slowed while the chat answers, paused while a game plays
+ * (a waiting download shows it too, since it will not start before the game ends). Nothing when it runs freely.
+ */
+export function BusyBadge({ j }: { j: Job }) {
+  if (!j.busy || !["downloading", "queued", "paused"].includes(j.status)) return null;
+  return (
+    <span className="pill warn dl-busy" role="status">
+      {j.busy === "paused" ? L("מושהית בזמן שהמשחק רץ", "Paused while the game plays") : L("עסוק: מואטת בשביל הצ'אט", "Busy: slowed for the chat")}
+    </span>
+  );
+}
+
+/** The "Don't slow" switch of one download: it then ignores the chat and the game and runs at full speed. */
+export function DontSlowToggle({ j, onDone }: { j: Job; onDone?: () => void }) {
+  return (
+    <label className="check small dl-dontslow">
+      <input type="checkbox" checked={!!j.dontSlow} onChange={(e) => void api(`/api/downloads/${j.id}/dont-slow`, { method: "POST", body: { on: e.target.checked } }).catch(() => undefined).then(() => onDone?.())} />
+      {L("אל תאט את ההורדה הזו", "Don't slow this one")}
+    </label>
+  );
+}
+
+/**
  * What one download shows while it is not finished: its phase, a bar, and the numbers that fit the phase: the
  * network speed and time left while downloading, the check's progress while the file is verified.
  */
@@ -143,14 +180,52 @@ export function JobMeters({ j }: { j: Job }) {
       </>
     );
   }
-  if (j.status === "queued") return <div className="muted small">{L("מחכה לתור שלו", "Waiting for its turn")}</div>;
+  if (j.status === "queued") return <><BusyBadge j={j} /><div className="muted small">{j.busy === "paused" ? L("מחכה שהמשחק יסתיים", "Waiting for the game to end") : L("מחכה לתור שלו", "Waiting for its turn")}</div></>;
   return (
     <>
+      <BusyBadge j={j} />
+      {j.repairing && <span className="pill dl-busy">{L("מתקן: מוריד רק את החלקים הפגומים", "Repairing: downloading only the broken parts")}</span>}
       {j.total ? <div className="bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><div style={{ width: `${pct}%` }} /></div> : null}
       <div className="row small muted">
         <span className="mono grow" dir="ltr">{size}{j.speed ? ` · ${mbps(j.speed)}` : ""}</span>
         {j.status === "downloading" && j.etaSeconds !== undefined && <span>{t("timeLeft", { time: eta(j.etaSeconds) })}</span>}
       </div>
+    </>
+  );
+}
+
+/**
+ * Verify and Repair for a finished file. Verify reads the file once and compares its SHA-256 with the hub's (the
+ * progress shows as the checking phase); it is offered only when a hash is known or can be fetched. A file that
+ * differs shows Repair: only the broken ranges when it was downloaded in parts and they can be told, else the file
+ * is downloaded again. Works from the phone too: the server does the reading and sends back only the result.
+ */
+export function VerifyActions({ j, onDone }: { j: Job; onDone?: () => void }) {
+  const [problem, setProblem] = useState("");
+  const [noHash, setNoHash] = useState(false);
+  const call = (path: "verify" | "repair") => {
+    setProblem("");
+    return api(`/api/downloads/${j.id}/${path}`, { method: "POST" })
+      .catch((e: Error) => {
+        if (path === "verify" && /no hash/i.test(e.message)) setNoHash(true);
+        else setProblem(e.message);
+      })
+      .then(() => onDone?.());
+  };
+  const canVerify = !noHash && (!!j.sha256 || !!j.fromHub);
+  return (
+    <>
+      {j.integrity === "ok" && <span className="pill good">{L("זהה לקובץ באתר", "Matches the hub")}</span>}
+      {j.integrity === "bad" && (
+        <div className="dl-error stack" role="alert">
+          <strong>{L("הקובץ שונה מהקובץ באתר.", "The file differs from the one on the hub.")}</strong>
+          <span className="muted small">{j.repair === "ranges" ? L("חלקים ממנו פגומים: אפשר להוריד רק אותם.", "Parts of it are broken: only those can be downloaded again.") : L("אי אפשר לדעת איפה: הקובץ יורד מחדש.", "It cannot be told where: the file is downloaded again.")}</span>
+          <div className="row dl-actions"><button type="button" className="primary" onClick={() => void call("repair")}>{j.repair === "ranges" ? L("תקן (רק החלקים הפגומים)", "Repair (only the broken parts)") : L("תקן (הורדה מחדש)", "Repair (download again)")}</button></div>
+        </div>
+      )}
+      {canVerify && j.integrity !== "bad" && <div className="row dl-actions"><button type="button" onClick={() => void call("verify")}>{L("בדוק את הקובץ", "Verify")}</button></div>}
+      {noHash && <span className="muted small">{L("באתר אין hash לקובץ הזה, אז אי אפשר לבדוק אותו.", "The hub has no hash for this file, so it cannot be checked.")}</span>}
+      {problem && <span className="error small">{problem}</span>}
     </>
   );
 }
@@ -243,6 +318,7 @@ export function DownloadsButton() {
                 {ACTIVE.has(j.status) && <PhaseTrack status={j.status} />}
                 {ACTIVE.has(j.status) || j.status === "paused" ? <JobMeters j={j} /> : j.status === "done" && j.total ? <span className="muted small mono" dir="ltr">{gb(j.total)}</span> : null}
                 {j.status === "failed" && <ErrorCard j={j} />}
+                {(j.status === "downloading" || j.status === "queued") && <DontSlowToggle j={j} onDone={() => void refreshDownloads()} />}
                 <div className="row muted">
                   <span className="grow" />
                   {(j.status === "downloading" || j.status === "queued") && <button type="button" onClick={() => void api(`/api/downloads/${j.id}/pause`, { method: "POST" })}>{t("dlPause")}</button>}

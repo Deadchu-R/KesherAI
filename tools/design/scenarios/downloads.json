@@ -824,6 +824,339 @@
      }
     }
    ]
+  },
+  {
+   "id": "DownloadsBusySlowed",
+   "title": "דף הורדות: \"עסוק: מואטת בשביל הצ'אט\" כשהמודל המקומי עונה, \"אל תאט את ההורדה הזו\" לכל הורדה, והגדרה \"האט הורדות כשהמחשב עסוק\" עם חלק המהירות",
+   "route": "#/downloads",
+   "steps": [
+    {
+     "wait": ".dl-item"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": ".dl-page",
+    "phone": ".dl-page"
+   },
+   "height": {
+    "desktop": 1100,
+    "phone": 2200
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "b1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 6871947673,
+       "total": 17716740096,
+       "speed": 9542041,
+       "etaSeconds": 1140,
+       "busy": "slowed"
+      },
+      {
+       "id": "b2",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 2254857830,
+       "total": 5261334937,
+       "speed": 19084083,
+       "etaSeconds": 160,
+       "dontSlow": true
+      },
+      {
+       "id": "b3",
+       "label": "unsloth/Qwen3-30B-A3B-GGUF · Qwen3-30B-A3B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 19971597926,
+       "speed": 0,
+       "position": 1
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/drives",
+     "json": [
+      {
+       "id": "heavy",
+       "freeGb": 312,
+       "totalGb": 2000
+      },
+      {
+       "id": "models",
+       "freeGb": 48,
+       "totalGb": 512
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/concurrency",
+     "json": {
+      "max": 2
+     }
+    },
+    {
+     "url": "**/api/downloads/busy",
+     "json": {
+      "on": true,
+      "share": 0.5
+     }
+    },
+    {
+     "url": "**/api/downloads/verify-auto",
+     "json": {
+      "on": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "DownloadsBusyPaused",
+   "title": "דף הורדות: \"מושהית בזמן שהמשחק רץ\" בזמן Play ב-Unity או Unreal; ההורדות ממשיכות לבד אחרי. הורדה עם \"אל תאט\" ממשיכה",
+   "route": "#/downloads",
+   "steps": [
+    {
+     "wait": ".dl-item"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": ".dl-page",
+    "phone": ".dl-page"
+   },
+   "height": {
+    "desktop": 1100,
+    "phone": 2200
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "p1",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "paused",
+       "received": 6871947673,
+       "total": 17716740096,
+       "speed": 0,
+       "busy": "paused"
+      },
+      {
+       "id": "p2",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 2254857830,
+       "total": 5261334937,
+       "speed": 19084083,
+       "etaSeconds": 160,
+       "dontSlow": true
+      },
+      {
+       "id": "p3",
+       "label": "unsloth/Qwen3-30B-A3B-GGUF · Qwen3-30B-A3B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "queued",
+       "received": 0,
+       "total": 19971597926,
+       "speed": 0,
+       "position": 1,
+       "busy": "paused"
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/drives",
+     "json": [
+      {
+       "id": "heavy",
+       "freeGb": 312,
+       "totalGb": 2000
+      },
+      {
+       "id": "models",
+       "freeGb": 48,
+       "totalGb": 512
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/concurrency",
+     "json": {
+      "max": 2
+     }
+    },
+    {
+     "url": "**/api/downloads/busy",
+     "json": {
+      "on": true,
+      "share": 0.5
+     }
+    },
+    {
+     "url": "**/api/downloads/verify-auto",
+     "json": {
+      "on": true
+     }
+    }
+   ]
+  },
+  {
+   "id": "DownloadsVerifyRepair",
+   "title": "דף הורדות: \"בדוק את הקובץ\" מול ה-hash של Hugging Face (שלב הבדיקה עם אחוזים), \"זהה לקובץ באתר\", ו\"תקן\" כשהקובץ שונה: רק החלקים הפגומים או הורדה מחדש; ובהגדרות \"בדוק קבצים מעל 1 GB\"",
+   "route": "#/downloads",
+   "steps": [
+    {
+     "wait": ".dl-item"
+    },
+    {
+     "waitMs": 300
+    }
+   ],
+   "shot": {
+    "desktop": ".dl-page",
+    "phone": ".dl-page"
+   },
+   "height": {
+    "desktop": 1700,
+    "phone": 3400
+   },
+   "mocks": [
+    {
+     "url": "**/api/downloads",
+     "method": "GET",
+     "json": [
+      {
+       "id": "v1",
+       "label": "unsloth/Qwen3-8B-GGUF · Qwen3-8B-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "verifying",
+       "received": 5261334937,
+       "total": 5261334937,
+       "speed": 0,
+       "verified": 2254857830,
+       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+       "id": "v2",
+       "label": "bartowski/gemma-3-27b-it-GGUF · gemma-3-27b-it-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 17716740096,
+       "total": 17716740096,
+       "speed": 0,
+       "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "integrity": "ok"
+      },
+      {
+       "id": "v3",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 7301444403,
+       "total": 7301444403,
+       "speed": 0,
+       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "integrity": "bad",
+       "repair": "ranges"
+      },
+      {
+       "id": "v4",
+       "label": "unsloth/Llama-3.3-70B-Instruct-GGUF · Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 42520176230,
+       "total": 42520176230,
+       "speed": 0,
+       "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+       "integrity": "bad",
+       "repair": "whole"
+      },
+      {
+       "id": "v5",
+       "label": "NousResearch/Hermes-3-Llama-3.1-8B-GGUF · Hermes-3-Llama-3.1-8B.Q4_K_M.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "done",
+       "received": 5261334937,
+       "total": 5261334937,
+       "speed": 0,
+       "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      {
+       "id": "v6",
+       "label": "city96/FLUX.1-dev-gguf · flux1-dev-Q4_K_S.gguf",
+       "url": "https://huggingface.co/x/resolve/main/f.gguf",
+       "dest": "E:/KesherAI/heavy/chat/f.gguf",
+       "status": "downloading",
+       "received": 5100000000,
+       "total": 7301444403,
+       "speed": 15000000,
+       "etaSeconds": 150,
+       "repairing": true,
+       "repair": "ranges"
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/drives",
+     "json": [
+      {
+       "id": "heavy",
+       "freeGb": 312,
+       "totalGb": 2000
+      },
+      {
+       "id": "models",
+       "freeGb": 48,
+       "totalGb": 512
+      }
+     ]
+    },
+    {
+     "url": "**/api/downloads/concurrency",
+     "json": {
+      "max": 2
+     }
+    },
+    {
+     "url": "**/api/downloads/busy",
+     "json": {
+      "on": true,
+      "share": 0.5
+     }
+    },
+    {
+     "url": "**/api/downloads/verify-auto",
+     "json": {
+      "on": true
+     }
+    }
+   ]
   }
  ]
 }

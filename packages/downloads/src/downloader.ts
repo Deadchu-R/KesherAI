@@ -6,6 +6,8 @@ import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { PARALLEL_MIN_BYTES, Pacer, RangesRefused, downloadParts, loadParts, partsFilePath, planParts, probeRanges, removeParts, saveParts } from "./parallel.js";
+import { DEFAULT_BUSY_SHARE, busyMode, slowedLimit, type BusyMode, type BusyState } from "./busy.js";
+import { AUTO_VERIFY_BYTES, SCAN_BLOCK, hashesMatch, planRepair, scanFile, type ByteRange, type RepairPlan } from "./verify.js";
 import { RateMeter, classifyDownloadError, secondsLeft, type DownloadErrorKind } from "./progress.js";
 
 /** Lifecycle of a download. */
@@ -25,6 +27,8 @@ export interface DownloadRequest {
   headers?: Record<string, string>;
   /** Free-form label for the UI, e.g. `city96/FLUX.1-dev-gguf · Q4_K_S`. */
   label?: string;
+  /** The Hugging Face repo and file this is, so a finished download can be verified against the hub again later. */
+  hub?: { repo: string; path: string };
 }
 
 /** A download job as reported to the UI. */
@@ -49,6 +53,35 @@ export interface DownloadJob {
   errorKind?: DownloadErrorKind;
   /** While `queued`: the place in the line (1 starts next). Absent for every other status. */
   position?: number;
+  /** Why it is not at full speed: the chat is answering (`slowed`) or a game is in Play (`paused`, also while waiting). */
+  busy?: "slowed" | "paused";
+  /** The user's "Don't slow" mark: this download never slows or pauses for the chat or a game. */
+  dontSlow?: boolean;
+  /** Started from the Hugging Face hub: a hash can be fetched for it when it has none (an old job). */
+  fromHub?: true;
+  /** The hub's SHA-256 for this file, when known: the Verify button shows only then. */
+  sha256?: string;
+  /** The last check of the finished file: `ok` (same as the hub) or `bad` (it differs: Repair). */
+  integrity?: "ok" | "bad";
+  /** What Repair will do (`bad`) or is doing (`repairing`): fetch only the broken ranges, or the whole file. */
+  repair?: "ranges" | "whole";
+  /** True while a repair downloads (the status is `downloading`, but it is the fix of a finished file). */
+  repairing?: boolean;
+}
+
+/** What the manager keeps for each job. */
+interface Entry {
+  job: DownloadJob;
+  req: DownloadRequest;
+  abort?: AbortController;
+  /** How the file was split into parts, when it was downloaded in parts (the repair uses it). */
+  layout?: ByteRange[];
+  /** What Repair will do after a bad check. */
+  plan?: RepairPlan;
+  /** A check or a repair of a finished file runs (Cancel then stops that, not the job). */
+  checking?: boolean;
+  /** Check the file after the next download whatever its size (a download that repairs a bad file). */
+  verifyNext?: boolean;
 }
 
 /** Where {@link DownloadManager.move} puts a queued job: the front, one step earlier or later, or a place (0 is first). */
@@ -94,7 +127,7 @@ export async function fetchRetrying(url: string, init: RequestInit = {}, tries =
  * ```
  */
 export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
-  private readonly jobs = new Map<string, { job: DownloadJob; req: DownloadRequest; abort?: AbortController }>();
+  private readonly jobs = new Map<string, Entry>();
   private active = 0;
 
   /** Bytes per second all downloads may use together (0: no limit), so the internet stays usable. */
@@ -105,6 +138,24 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
    * split into this many ranges fetched at once, when the server allows ranges.
    */
   parts = 4;
+
+  /** "Slow downloads while the PC is busy" (the chat answers: a share of the speed; a game in Play: pause). */
+  slowWhenBusy = true;
+
+  /** The share of the speed kept while the chat answers (0.1 to 1). */
+  busyShare = DEFAULT_BUSY_SHARE;
+
+  /** "Check big files after the download": files over 1 GB are checked against the hub's hash (smaller ones always are). */
+  verifyBig = true;
+
+  /** Tells what keeps the PC busy; the server sets it (the chat guard and the Play state). Read for every chunk. */
+  busySource: () => BusyState = () => ({ chat: false, playing: false });
+
+  /** The best combined speed seen while nothing slowed the downloads: "full speed" when there is no limit. */
+  private peak = 0;
+
+  /** The block size a verify scan looks for holes in (1 MiB; tests lower it). */
+  scanBlock = SCAN_BLOCK;
 
   /** The size from which a file is downloaded in parts (1 GB; tests lower it). */
   parallelMinBytes = PARALLEL_MIN_BYTES;
@@ -149,6 +200,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       received: 0,
       ...(req.size !== undefined ? { total: req.size } : {}),
       speed: 0,
+      ...(req.sha256 ? { sha256: req.sha256 } : {}),
+      ...(req.hub ? { fromHub: true as const } : {}),
     };
     this.jobs.set(job.id, { job, req });
     this.renumber(job);
@@ -171,6 +224,11 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
    */
   cancel(id: string): boolean {
     const entry = this.jobs.get(id);
+    if (entry?.checking) {
+      // A check or repair of a finished file: stop that only; the file stays as it is.
+      entry.abort?.abort();
+      return true;
+    }
     if (!entry || ["done", "failed", "cancelled"].includes(entry.job.status)) return false;
     this.update(entry.job, { status: "cancelled" });
     entry.abort?.abort();
@@ -186,6 +244,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
   pause(id: string): boolean {
     const entry = this.jobs.get(id);
     if (!entry || !["queued", "downloading"].includes(entry.job.status)) return false;
+    // The user's own pause: a game ending must not start it again.
+    delete entry.job.busy;
     this.update(entry.job, { status: "paused", speed: 0 });
     entry.abort?.abort();
     return true;
@@ -294,6 +354,274 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     return true;
   }
 
+  /** What this job does about the busy PC now (see {@link busyMode}). */
+  private modeOf(job: DownloadJob): BusyMode {
+    return busyMode(this.busySource(), { enabled: this.slowWhenBusy }, job.dontSlow);
+  }
+
+  /**
+   * The speed limit for one job (bytes per second, 0: none): its share of the user's limit, which is cut to the
+   * "busy" share while the chat answers. Read for every chunk, so a change applies at once.
+   */
+  private jobLimit(job: DownloadJob): number {
+    const total = this.modeOf(job) === "slowed" ? slowedLimit(this.limit, this.peak, this.busyShare) : this.limit;
+    return total / Math.max(1, this.active);
+  }
+
+  /**
+   * Counts the bytes of one job (a stream, all its parts, or a repair) into its progress, a smoothed speed and the
+   * time left, once a second. The best combined speed seen while nothing slowed the downloads is remembered as
+   * "full speed" for the busy share.
+   *
+   * @returns The function to call with every chunk's size.
+   */
+  private counter(job: DownloadJob): (n: number) => void {
+    const meter = new RateMeter();
+    let windowBytes = 0;
+    let windowStart = Date.now();
+    return (n) => {
+      job.received += n;
+      windowBytes += n;
+      const elapsed = Date.now() - windowStart;
+      if (elapsed < 1000) return;
+      const speed = meter.add(windowBytes, elapsed);
+      const left = job.total !== undefined ? secondsLeft(job.total - job.received, speed) : undefined;
+      if (left === undefined) delete job.etaSeconds;
+      this.update(job, { speed, ...(left !== undefined ? { etaSeconds: left } : {}) });
+      if (this.modeOf(job) === "none") {
+        const all = [...this.jobs.values()].reduce((sum, e) => sum + (e.job.status === "downloading" ? e.job.speed : 0), 0);
+        this.peak = Math.max(this.peak, all);
+      }
+      windowBytes = 0;
+      windowStart = Date.now();
+    };
+  }
+
+  /**
+   * Looks at what keeps the PC busy and applies it: downloads that run get their "slowed" badge (the speed itself is
+   * cut per chunk), a game in Play pauses the running ones and holds the waiting ones, and when it ends the ones it
+   * paused start again by themselves. A download the user paused stays paused. Call it when the state may have
+   * changed (the server does it every second); it is cheap when nothing changed.
+   */
+  refreshBusy(): void {
+    for (const entry of [...this.jobs.values()]) {
+      const { job } = entry;
+      const mode = this.modeOf(job);
+      if (entry.checking) continue;
+      if (job.status === "downloading") {
+        if (mode === "paused") {
+          this.update(job, { status: "paused", speed: 0, busy: "paused" });
+          delete job.etaSeconds;
+          entry.abort?.abort();
+        } else this.setBusy(job, mode === "slowed" ? "slowed" : undefined);
+      } else if (job.status === "paused" && job.busy === "paused") {
+        if (mode !== "paused") {
+          delete job.busy;
+          this.update(job, { status: "queued", speed: 0 });
+        }
+      } else if (job.status === "queued") {
+        this.setBusy(job, mode === "paused" ? "paused" : undefined);
+      } else if (job.busy) this.setBusy(job, undefined);
+    }
+    this.pump();
+  }
+
+  private setBusy(job: DownloadJob, busy: DownloadJob["busy"]): void {
+    if (job.busy === busy) return;
+    if (busy) this.update(job, { busy });
+    else {
+      delete job.busy;
+      this.update(job, {});
+    }
+  }
+
+  /**
+   * Marks a download "Don't slow": it runs at full speed and never pauses for the chat or a game. Turning it off
+   * puts it back under the rules.
+   *
+   * @param id - Job id.
+   * @param on - The mark.
+   * @returns `true` if the job exists.
+   */
+  setDontSlow(id: string, on: boolean): boolean {
+    const entry = this.jobs.get(id);
+    if (!entry) return false;
+    if (on) this.update(entry.job, { dontSlow: true });
+    else {
+      delete entry.job.dontSlow;
+      this.update(entry.job, {});
+    }
+    this.refreshBusy();
+    return true;
+  }
+
+  /**
+   * One job's snapshot.
+   *
+   * @param id - Job id.
+   * @returns The job, or `undefined` when it does not exist.
+   */
+  get(id: string): DownloadJob | undefined {
+    const entry = this.jobs.get(id);
+    return entry ? { ...entry.job } : undefined;
+  }
+
+  /** @returns Which Hugging Face file a job is (for fetching its hash again), when it was started from the hub. */
+  hubOf(id: string): { repo: string; path: string } | undefined {
+    return this.jobs.get(id)?.req.hub;
+  }
+
+  /**
+   * Checks a finished file against the hub's SHA-256: the file is read once (the `verifying` phase shows the
+   * progress) and the job ends `done` with `integrity` `ok` or `bad`. A bad file offers {@link repair}.
+   *
+   * @param id - Job id; the job must be `done`.
+   * @param resolveHash - Fetches the hash when the job has none (an old job); called once.
+   * @returns The job as it starts checking, `"no-hash"` when the hub gave no hash, `"busy"` when the job is not a
+   * finished one, or `undefined` when it does not exist.
+   */
+  async verify(id: string, resolveHash?: () => Promise<string | undefined>): Promise<DownloadJob | "no-hash" | "busy" | undefined> {
+    const entry = this.jobs.get(id);
+    if (!entry) return undefined;
+    if (entry.job.status !== "done" || entry.checking) return "busy";
+    entry.checking = true;
+    let expected = entry.job.sha256;
+    try {
+      expected ??= await resolveHash?.().catch(() => undefined);
+    } finally {
+      if (!expected) entry.checking = false;
+    }
+    if (!expected) return "no-hash";
+    entry.req.sha256 = expected;
+    this.update(entry.job, { sha256: expected, status: "verifying", speed: 0, verified: 0 });
+    void this.check(entry, expected);
+    return { ...entry.job };
+  }
+
+  /** One pass over the finished file: ok, or bad with the plan for Repair. */
+  private async check(entry: Entry, expected: string): Promise<void> {
+    const { job, req } = entry;
+    const ctrl = new AbortController();
+    entry.abort = ctrl;
+    try {
+      const size = (await stat(req.dest)).size;
+      let lastTick = 0;
+      const scan = await scanFile(req.dest, {
+        signal: ctrl.signal,
+        blockSize: this.scanBlock,
+        onProgress: (bytes) => {
+          // A few updates a second are enough for a progress bar.
+          if (Date.now() - lastTick < 250) return;
+          lastTick = Date.now();
+          this.update(job, { verified: bytes });
+        },
+      });
+      delete job.verified;
+      if (hashesMatch(scan.sha256, expected)) {
+        delete job.repair;
+        delete entry.plan;
+        this.update(job, { status: "done", integrity: "ok" });
+        return;
+      }
+      // A file of the wrong length has no holes to find: it is downloaded again whole.
+      entry.plan = job.total !== undefined && size !== job.total ? { kind: "whole" } : planRepair(scan.zeroBlocks, size, entry.layout, this.scanBlock);
+      this.update(job, { status: "done", integrity: "bad", repair: entry.plan.kind });
+    } catch (err) {
+      delete job.verified;
+      if (ctrl.signal.aborted) {
+        this.update(job, { status: "done" });
+        return;
+      }
+      const reason = (err as Error).message;
+      this.update(job, { status: "failed", speed: 0, error: reason, errorKind: classifyDownloadError(reason) });
+    } finally {
+      entry.checking = false;
+      delete entry.abort;
+    }
+  }
+
+  /**
+   * Fixes a file that {@link verify} found different from the hub's: when it was downloaded in parts and only some
+   * ranges are broken (holes), only those ranges are fetched into the file and it is checked again; otherwise the
+   * file is deleted and downloaded again whole (queued like any download, and checked at the end).
+   *
+   * @param id - Job id; the job must be `done` with `integrity` `bad`.
+   * @returns The job, `"not-bad"` when there is nothing to repair, or `undefined` when it does not exist.
+   */
+  async repair(id: string): Promise<DownloadJob | "not-bad" | undefined> {
+    const entry = this.jobs.get(id);
+    if (!entry) return undefined;
+    const { job, req } = entry;
+    if (job.status !== "done" || job.integrity !== "bad" || entry.checking) return "not-bad";
+    const plan = entry.plan ?? { kind: "whole" as const };
+    if (plan.kind === "ranges") {
+      entry.checking = true;
+      void this.repairRanges(entry, plan.ranges, plan.bytes);
+      return { ...job };
+    }
+    await Promise.all([unlink(req.dest), removeParts(`${req.dest}.part`)].map((p) => p.catch(() => undefined)));
+    delete job.integrity;
+    delete job.repair;
+    delete entry.plan;
+    delete entry.layout;
+    entry.verifyNext = true;
+    this.update(job, { status: "queued", speed: 0, received: 0 });
+    this.pump();
+    return { ...job };
+  }
+
+  /** Fetches only the broken ranges into the finished file, then checks the whole file again. */
+  private async repairRanges(entry: Entry, ranges: ByteRange[], bytes: number): Promise<void> {
+    const { job, req } = entry;
+    const total = job.total ?? (await stat(req.dest)).size;
+    const ctrl = new AbortController();
+    entry.abort = ctrl;
+    const restoreBad = (patch: Partial<DownloadJob> = {}) => this.update(job, { status: "done", integrity: "bad", repair: "whole", speed: 0, repairing: false, ...patch });
+    try {
+      delete job.integrity;
+      this.update(job, { status: "downloading", repairing: true, repair: "ranges", received: total - bytes, speed: 0 });
+      delete job.etaSeconds;
+      const state = { size: total, parts: ranges.map((r) => ({ start: r.start, end: r.end, done: 0 })) };
+      await downloadParts({ url: req.url, headers: req.headers, file: req.dest, state, signal: ctrl.signal, onBytes: this.counter(job), limit: () => this.jobLimit(job), backoffMs: this.partBackoffMs, persist: false });
+      if (ctrl.signal.aborted) {
+        // Stopped by the user: the file is as it was, still bad, and Repair can run again.
+        this.update(job, { status: "done", integrity: "bad", repair: "ranges", speed: 0, repairing: false });
+        return;
+      }
+      this.update(job, { status: "verifying", speed: 0, verified: 0, repairing: false });
+      let lastTick = 0;
+      const scan = await scanFile(req.dest, { signal: ctrl.signal, blockSize: this.scanBlock, onProgress: (n) => {
+        if (Date.now() - lastTick < 250) return;
+        lastTick = Date.now();
+        this.update(job, { verified: n });
+      } });
+      delete job.verified;
+      if (hashesMatch(scan.sha256, req.sha256 ?? "")) {
+        delete job.repair;
+        delete entry.plan;
+        this.update(job, { status: "done", integrity: "ok" });
+      } else {
+        // The ranges did not fix it: the next Repair downloads the whole file.
+        entry.plan = { kind: "whole" };
+        restoreBad();
+      }
+    } catch (err) {
+      delete job.verified;
+      if (ctrl.signal.aborted) return void this.update(job, { status: "done", integrity: "bad", repair: "ranges", speed: 0, repairing: false });
+      if (err instanceof RangesRefused) {
+        entry.plan = { kind: "whole" };
+        restoreBad();
+        return;
+      }
+      const reason = (err as Error).message;
+      delete job.repairing;
+      this.update(job, { status: "failed", speed: 0, error: reason, errorKind: classifyDownloadError(reason) });
+    } finally {
+      entry.checking = false;
+      delete entry.abort;
+    }
+  }
+
   private update(job: DownloadJob, patch: Partial<DownloadJob>): void {
     Object.assign(job, patch);
     if ("status" in patch) this.renumber(job);
@@ -319,6 +647,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     for (const entry of this.jobs.values()) {
       if (this.active >= this.concurrency) return;
       if (entry.job.status !== "queued") continue;
+      // A game is in Play: waiting jobs stay in the line until it ends (refreshBusy starts them again).
+      if (this.modeOf(entry.job) === "paused") continue;
       this.active++;
       // Taken out of the line at once (not when its first file check ends), so the queue never shows a job that has begun.
       this.update(entry.job, { status: "downloading" });
@@ -329,7 +659,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     }
   }
 
-  private async run(entry: { job: DownloadJob; req: DownloadRequest; abort?: AbortController }): Promise<void> {
+  private async run(entry: Entry): Promise<void> {
     const { job, req } = entry;
     const part = `${req.dest}.part`;
     const ctrl = new AbortController();
@@ -345,25 +675,10 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       delete job.verified;
 
       // Speed and time left: the bytes of one stream, or of all parts together.
-      const meter = new RateMeter();
-      let windowBytes = 0;
-      let windowStart = Date.now();
-      const onBytes = (n: number) => {
-        job.received += n;
-        windowBytes += n;
-        const elapsed = Date.now() - windowStart;
-        if (elapsed >= 1000) {
-          const speed = meter.add(windowBytes, elapsed);
-          const left = job.total !== undefined ? secondsLeft(job.total - job.received, speed) : undefined;
-          if (left === undefined) delete job.etaSeconds;
-          this.update(job, { speed, ...(left !== undefined ? { etaSeconds: left } : {}) });
-          windowBytes = 0;
-          windowStart = Date.now();
-        }
-      };
+      const onBytes = this.counter(job);
       // The speed limit is shared by the whole job (one stream or all its parts).
       const pacer = new Pacer();
-      const currentLimit = () => this.limit / Math.max(1, this.active);
+      const currentLimit = () => this.jobLimit(job);
 
       const viaParts = await this.runParts(entry, part, ctrl, room, onBytes, currentLimit);
       if (viaParts === "stopped") return;
@@ -397,7 +712,9 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
         await pipeline(body, throttle, createWriteStream(part, { flags: resumed ? "a" : "w" }));
       }
 
-      if (req.sha256) {
+      let checked = false;
+      // Files up to 1 GB are always checked; bigger ones when the setting is on (or when this download repairs a bad file).
+      if (req.sha256 && ((job.total ?? job.received) <= AUTO_VERIFY_BYTES || this.verifyBig || entry.verifyNext)) {
         delete job.etaSeconds;
         this.update(job, { status: "verifying", speed: 0, verified: 0 });
         let lastTick = 0;
@@ -411,12 +728,18 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
           await removeParts(part);
           throw new Error(`SHA-256 mismatch: expected ${req.sha256}, got ${actual}`);
         }
+        checked = true;
       }
       await rename(part, req.dest);
       await unlink(partsFilePath(part)).catch(() => undefined);
       delete job.etaSeconds;
       delete job.verified;
-      this.update(job, { status: "done", speed: 0, received: job.total ?? job.received });
+      delete job.busy;
+      delete job.repair;
+      delete job.repairing;
+      delete job.integrity;
+      delete entry.verifyNext;
+      this.update(job, { status: "done", speed: 0, received: job.total ?? job.received, ...(checked ? { integrity: "ok" as const } : {}) });
     } catch (err) {
       // Stopped on purpose (pause or cancel), even if it was resumed since: not a failure.
       if ((ctrl.signal.aborted && !diskFull) || job.status === "cancelled" || job.status === "paused") return;
@@ -425,6 +748,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
       const reason = e.message === "fetch failed" || e.message === "terminated" ? `${e.message}: ${e.cause?.code ?? e.cause?.message ?? "network error"}` : (e.message ?? String(err));
       delete job.etaSeconds;
       delete job.verified;
+      delete job.busy;
+      delete job.repairing;
       this.update(job, { status: "failed", speed: 0, error: reason, errorKind: classifyDownloadError(`${reason} ${e.code ?? ""}`.trim()) });
     }
   }
@@ -457,7 +782,7 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
    * saved), `"single"` when the caller should download in one stream (no ranges, too small, or the setting is 1).
    */
   private async runParts(
-    entry: { job: DownloadJob; req: DownloadRequest },
+    entry: Entry,
     part: string,
     ctrl: AbortController,
     room: (need: number) => Promise<void>,
@@ -492,6 +817,8 @@ export class DownloadManager extends EventEmitter<{ update: [DownloadJob] }> {
     }
     if (!state) return "single";
     job.total = state.size;
+    // Kept for a later repair: which ranges the file was fetched in.
+    entry.layout = state.parts.map(({ start, end }) => ({ start, end }));
     const have = state.parts.reduce((n, p) => n + p.done, 0);
     this.update(job, { received: have });
     try {

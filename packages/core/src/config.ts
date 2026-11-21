@@ -479,6 +479,12 @@ export const KesherConfigSchema = z.object({
   maxConcurrentDownloads: z.number().int().min(1).max(6).default(2),
   /** Parts per big download (1 GB or more, when the server allows ranges); 1 turns parallel parts off. */
   downloadParts: z.number().int().min(1).max(8).default(4),
+  /** "Slow downloads while the PC is busy": a share of the speed while the chat answers, paused while a game is in Play. */
+  downloadSlowWhenBusy: z.boolean().default(true),
+  /** The share of the speed downloads keep while the chat answers (0.1 to 1). */
+  downloadBusyShare: z.number().min(0.1).max(1).default(0.5),
+  /** Check files over 1 GB against the hub's hash after the download (smaller files are always checked). */
+  downloadVerifyBig: z.boolean().default(true),
   /** The key the KesherAI browser extension connects with (shown in Settings → Browser). */
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */

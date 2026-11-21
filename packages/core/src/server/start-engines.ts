@@ -116,6 +116,11 @@ function wirePlayStandby(app: FastifyInstance, services: KesherServices, guard: 
   services.playStandby = standby;
   guard.playStatus = () => standby.status();
   guard.onIdle = () => void standby.poke().catch(() => undefined);
+  // Downloads give way to the chat and to the game: the guard knows a local model answers, standby knows Play.
+  services.downloads.busySource = () => ({ chat: guard.runningCount() > 0, playing: standby.isPlaying("unity") || standby.isPlaying("unreal") });
+  const busyTimer = setInterval(() => services.downloads.refreshBusy(), 1000);
+  busyTimer.unref();
+  app.addHook("onClose", async () => clearInterval(busyTimer));
   services.unreal.on((event) => {
     if (event === "play") void standby.setPlay("unreal", services.unreal.playing).catch(() => undefined);
     // A closed editor is not in Play.

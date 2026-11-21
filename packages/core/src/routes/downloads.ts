@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { join, normalize, sep } from "node:path";
 import { mkdir, readFile, statfs, unlink, writeFile } from "node:fs/promises";
-import { budgetOf, detectHardwareCached, driveWithRoom, hasHeadroom, headroomBytes, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort, type QueueMove } from "@kesher/downloads";
+import { budgetOf, clampShare, detectHardwareCached, driveWithRoom, hasHeadroom, headroomBytes, estimatePerformance, estimateRepoFit, estimateRunFit, fileKind, listHubFiles, modelSummary, quantOf, searchHub, splitGroup, type DownloadJob, type HubFile, type HubSort, type QueueMove } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { RECOMMENDED_IMAGE_MODELS, isMlx } from "../sdcpp.js";
 import { existsSync } from "node:fs";
@@ -353,6 +353,7 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
       ...(file.sha256 ? { sha256: file.sha256 } : {}),
       ...(token() ? { headers: { authorization: `Bearer ${token()}` } } : {}),
       label: `${body.repo} · ${body.path}`,
+      hub: { repo: body.repo, path: body.path },
     });
     pending.set(job.id, { repo: body.repo, path: body.path, ...(body.category ? { category: body.category } : {}), drive: drive.id });
     void savePending();
@@ -443,6 +444,61 @@ export async function downloadRoutes(app: FastifyInstance, s: KesherServices): P
     s.downloads.parts = v;
     await s.saveConfig();
     return { parts: v };
+  });
+
+  /** "Slow downloads while the PC is busy" and the share kept while the chat answers (a game in Play always pauses). */
+  app.get("/api/downloads/busy", async () => ({ on: s.config.downloadSlowWhenBusy, share: s.config.downloadBusyShare }));
+  app.put<{ Body: { on?: unknown; share?: unknown } }>("/api/downloads/busy", async (req, reply) => {
+    const { on, share } = req.body ?? {};
+    if (on !== undefined && typeof on !== "boolean") return reply.code(400).send({ error: "on: true or false." });
+    if (share !== undefined && !(typeof share === "number" && share >= 0.1 && share <= 1)) return reply.code(400).send({ error: "share: a number from 0.1 to 1." });
+    if (on !== undefined) s.config.downloadSlowWhenBusy = on;
+    if (share !== undefined) s.config.downloadBusyShare = clampShare(share);
+    s.downloads.slowWhenBusy = s.config.downloadSlowWhenBusy;
+    s.downloads.busyShare = s.config.downloadBusyShare;
+    s.downloads.refreshBusy();
+    await s.saveConfig();
+    return { on: s.config.downloadSlowWhenBusy, share: s.config.downloadBusyShare };
+  });
+
+  /** "Check big files after the download" (files over 1 GB; smaller ones are always checked). */
+  app.get("/api/downloads/verify-auto", async () => ({ on: s.config.downloadVerifyBig }));
+  app.put<{ Body: { on?: unknown } }>("/api/downloads/verify-auto", async (req, reply) => {
+    if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "on: true or false." });
+    s.config.downloadVerifyBig = req.body.on;
+    s.downloads.verifyBig = req.body.on;
+    await s.saveConfig();
+    return { on: req.body.on };
+  });
+
+  /** The "Don't slow" mark of one download: body `{ on: true | false }`. Only a job id, so the phone can do it too. */
+  app.post<{ Params: { id: string }; Body: { on?: unknown } }>("/api/downloads/:id/dont-slow", async (req, reply) => {
+    if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "on: true or false." });
+    return s.downloads.setDontSlow(req.params.id, req.body.on) ? { ok: true } : reply.code(404).send({ error: "Download not found" });
+  });
+
+  /**
+   * Checks a finished Hugging Face file against the hub's SHA-256. The hash was stored when the download started; an
+   * older job gets it from the hub now. Answers 409 when the hub gives no hash for the file (then there is no Verify).
+   */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/verify", async (req, reply) => {
+    const hub = s.downloads.hubOf(req.params.id);
+    const r = await s.downloads.verify(req.params.id, async () => {
+      if (!hub) return undefined;
+      return (await listHubFiles(hub.repo, { token: token() })).find((f) => f.path === hub.path)?.sha256;
+    });
+    if (r === undefined) return reply.code(404).send({ error: "Download not found" });
+    if (r === "no-hash") return reply.code(409).send({ error: "The hub gives no hash for this file, so it cannot be checked." });
+    if (r === "busy") return reply.code(409).send({ error: "Only a finished download can be checked, one at a time." });
+    return r;
+  });
+
+  /** Repairs a file that Verify found different from the hub's: only the broken ranges when possible, else the whole file. */
+  app.post<{ Params: { id: string } }>("/api/downloads/:id/repair", async (req, reply) => {
+    const r = await s.downloads.repair(req.params.id);
+    if (r === undefined) return reply.code(404).send({ error: "Download not found" });
+    if (r === "not-bad") return reply.code(409).send({ error: "This file has nothing to repair." });
+    return r;
   });
 
   /** The drives downloads go to, with free space (ids and sizes only, no paths). */

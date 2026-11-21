@@ -197,6 +197,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   }
   downloads.limit = config.downloadLimitMBps * 1024 * 1024;
   downloads.parts = config.downloadParts;
+  downloads.slowWhenBusy = config.downloadSlowWhenBusy;
+  downloads.busyShare = config.downloadBusyShare;
+  downloads.verifyBig = config.downloadVerifyBig;
   const assets = new AssetStore(paths.assets);
   // MCP servers (Notion, GitHub, Linear, Unity, …): their tools join every chat and agent.
   const persistEarly = () => saveConfig(paths, config);
