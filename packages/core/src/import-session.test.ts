@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { createKesherServer } from "./server.js";
 import { importedChatId } from "./chat-import.js";
-import { mediaIndex } from "./import-session.js";
+import { ImportSessions, mediaIndex } from "./import-session.js";
 
 /** A small ChatGPT export: one chat with a picture and an edited message, one plain chat, custom instructions. */
 function chatgptZip(): Buffer {
@@ -82,5 +82,31 @@ test("import from an uploaded zip: preview, pick, pictures attached, branches ke
   } finally {
     await server.close();
     await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a zip entry that inflates past the limit is dropped, not written whole (zip bomb)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-import-bomb-"));
+  try {
+    const conversations = [{
+      conversation_id: "pic", title: "Two pictures", create_time: 1_762_000_000, current_node: "u1",
+      mapping: { u1: { parent: null, children: [], message: { author: { role: "user" }, create_time: 1_762_000_000, content: { content_type: "multimodal_text", parts: [{ content_type: "image_asset_pointer", asset_pointer: "file-service://file-Big1" }, { content_type: "image_asset_pointer", asset_pointer: "file-service://file-Ok22" }, "Look"] } } } },
+    }];
+    // 64 KB of zeros deflates to a few hundred bytes; the limit here is 16 KB.
+    const zip = Buffer.from(zipSync({ "conversations.json": strToU8(JSON.stringify(conversations)), "file-Big1-bomb.png": new Uint8Array(64 * 1024), "file-Ok22-fine.png": new Uint8Array([1, 2, 3]) }));
+    const sessions = new ImportSessions(dir, () => false, () => false, { media: 16 * 1024, total: 1024 * 1024 });
+    const token = await sessions.receive([zip], "export.zip");
+    await sessions.preview(token);
+    const seen: Array<string | undefined> = [];
+    await sessions.commit(token, {}, {
+      saveChats: async (chats, media) => {
+        for (const c of chats) for (const m of c.messages) for (const f of m.files ?? []) seen.push(media(f) ? f.ref : undefined);
+        return { added: chats.length, skipped: 0 };
+      },
+      savePersona: async () => false,
+    });
+    assert.deepEqual(seen, [undefined, "file-service://file-Ok22"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

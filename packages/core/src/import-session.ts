@@ -8,7 +8,7 @@
  * unpacked only for the chats picked. Nothing leaves this computer.
  */
 
-import { createWriteStream, existsSync, closeSync, openSync, writeSync } from "node:fs";
+import { createWriteStream, existsSync, closeSync, openSync, rmSync, writeSync } from "node:fs";
 import { mkdir, readdir, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -67,6 +67,10 @@ const KEEP_MS = 6 * 60 * 60 * 1000;
 const MIN_FREE = 2 * 1024 ** 3;
 /** The biggest export accepted. */
 const MAX_UPLOAD = 20 * 1024 ** 3;
+/** The biggest picture or file unpacked from an export's zip (one entry). */
+const MAX_MEDIA = 200 * 1024 ** 2;
+/** The most unpacked from an export's zip for one import, all entries together. */
+const MAX_MEDIA_TOTAL = 8 * 1024 ** 3;
 
 /** The zip entry that holds a picture a chat points to, from the entries' names. */
 export function mediaIndex(entries: string[]): (f: ImportedFile) => string | undefined {
@@ -94,8 +98,14 @@ export class ImportSessions {
    * @param dir - Where uploads are kept (inside KesherAI's data folder).
    * @param exists - Whether a chat with this KesherAI id is here already.
    * @param personaHave - Whether a persona with these instructions is here already.
+   * @param limits - The most unpacked from a zip per entry and per import (bytes; smaller in tests).
    */
-  constructor(private readonly dir: string, private readonly exists: (id: string) => boolean, private readonly personaHave: (instructions: string) => boolean = () => false) {}
+  constructor(
+    private readonly dir: string,
+    private readonly exists: (id: string) => boolean,
+    private readonly personaHave: (instructions: string) => boolean = () => false,
+    private readonly limits: { media: number; total: number } = { media: MAX_MEDIA, total: MAX_MEDIA_TOTAL },
+  ) {}
 
   /**
    * Writes an uploaded export to disk as it comes (no size kept in memory). Uploads older than six hours are
@@ -215,6 +225,8 @@ export class ImportSessions {
     const take = (key: string) => !keys || keys.has(key);
     const mediaDir = join(this.dir, `${token}-media`);
     const unpacked = new Map<string, string>();
+    let unpackedBytes = 0;
+    let entryNo = 0;
     try {
       // Pass 1 (a zip with pictures for the chats picked): unpack only those entries.
       const wanted = new Set([...(u.wanted ?? [])].filter(([k]) => take(k)).flatMap(([, v]) => v));
@@ -224,12 +236,29 @@ export class ImportSessions {
           mediaOnly: true,
           media: (name) => {
             if (!wanted.has(name)) return undefined;
-            const path = join(mediaDir, `${unpacked.size}-${name.replace(/^.*\//, "").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 120)}`);
-            const fd = openSync(path, "w");
+            if (unpacked.has(name)) return undefined;
+            const path = join(mediaDir, `${entryNo++}-${name.replace(/^.*\//, "").replace(/[^\p{L}\p{N} ._()-]/gu, "_").slice(0, 120)}`);
+            let fd: number | undefined = openSync(path, "w");
+            let size = 0;
             unpacked.set(name, path);
+            // A zip entry's size is what the zip says, not what it holds: a few KB can inflate to many GB (a zip
+            // bomb). An entry past MAX_MEDIA, or past MAX_MEDIA_TOTAL for the whole import, is dropped.
             return (data, final) => {
+              if (fd === undefined) return;
+              size += data.length;
+              unpackedBytes += data.length;
+              if (size > this.limits.media || unpackedBytes > this.limits.total) {
+                closeSync(fd);
+                fd = undefined;
+                unpacked.delete(name);
+                rmSync(path, { force: true });
+                return;
+              }
               if (data.length) writeSync(fd, data);
-              if (final) closeSync(fd);
+              if (final) {
+                closeSync(fd);
+                fd = undefined;
+              }
             };
           },
         });
