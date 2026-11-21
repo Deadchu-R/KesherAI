@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { backendOrder, checkBackends, looksBlocked, parseBing, parseBrave, parseDuckLite, parseEcosia, parseMojeek, parseStartpage, parseTavily, parseYahoo, relevantHits, resetSearchMemory, setSearchKeys } from "./web-search.js";
+import { backendOrder, checkBackends, looksBlocked, parseBing, parseBrave, parseDuckLite, parseEcosia, parseMojeek, parseStartpage, parseTavily, parseYahoo, relevantHits, resetSearchMemory, setSearchEngine, setSearchKeys } from "./web-search.js";
 import { searchWeb } from "./system-tools.js";
 
 const LITE = `<table><tr><td>1.&nbsp;</td><td><a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdocs.python.org%2F3%2F&amp;rut=x" class='result-link'>Python <b>docs</b></a></td></tr>
@@ -183,5 +183,40 @@ test("keyed backends: parsers, and they are used first only when a key is set", 
   } finally {
     globalThis.fetch = real;
     setSearchKeys(() => undefined);
+  }
+});
+
+test("the chosen engine is tried first, the others follow; an unusable choice is ignored; the answering engine is reported", async () => {
+  resetSearchMemory();
+  const names = () => backendOrder().map((b) => b.name);
+  try {
+    assert.equal(names()[0], "duckduckgo", "automatic");
+    setSearchEngine(() => "yahoo");
+    assert.deepEqual(names(), ["yahoo", "duckduckgo", "duckduckgo-lite", "startpage", "mojeek", "ecosia", "bing"]);
+    setSearchEngine(() => "brave");
+    assert.equal(names()[0], "duckduckgo", "brave without a key is not used");
+    setSearchKeys(() => ({ brave: "b" }));
+    assert.deepEqual(names().slice(0, 2), ["brave", "duckduckgo"]);
+    setSearchKeys(() => ({ tavily: "t", brave: "b" }));
+    setSearchEngine(() => "brave");
+    assert.deepEqual(names().slice(0, 3), ["brave", "tavily", "duckduckgo"]);
+
+    // The choice errors: the next answers, and is named.
+    setSearchKeys(() => undefined);
+    setSearchEngine(() => "mojeek");
+    const f = fake({ "mojeek.com": 403, "html.duckduckgo.com": DDG.replace("DDG A", "q DDG A") });
+    try {
+      let engine = "";
+      const r = await searchWeb("q", undefined, new AbortController().signal, (n) => void (engine = n));
+      assert.equal(r.length, 1);
+      assert.equal(engine, "duckduckgo");
+      assert.match(f.asked[0]!, /mojeek\.com/);
+    } finally {
+      f.restore();
+    }
+  } finally {
+    setSearchEngine(() => "auto");
+    setSearchKeys(() => undefined);
+    resetSearchMemory();
   }
 });

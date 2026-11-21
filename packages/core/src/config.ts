@@ -497,6 +497,8 @@ export const KesherConfigSchema = z.object({
   webFilter: z.object({ safeSearch: z.enum(["strict", "moderate", "off"]).default("moderate"), onion: z.boolean().default(false), blocked: z.array(z.string().max(200)).max(200).default([]) }).default({ safeSearch: "moderate", onion: false, blocked: [] }),
   /** Settings > Web: the user's own free keys for Tavily and Brave Search (used first when set); never sent to a page. */
   webKeys: z.object({ tavily: z.string().max(200).optional(), brave: z.string().max(200).optional() }).prefault({}),
+  /** Settings > Web: which search engine is tried first ("auto": the best that works); the others are the fallbacks. */
+  webEngine: z.enum(["auto", "tavily", "brave", "duckduckgo", "duckduckgo-lite", "yahoo", "startpage", "mojeek", "ecosia", "bing"]).default("auto"),
   /** KesherAI as an MCP server at /mcp, for other AI apps on this computer. */
   mcpServer: z
     .object({

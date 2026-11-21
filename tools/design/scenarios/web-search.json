@@ -1,0 +1,109 @@
+{
+ "group": "חיפוש באינטרנט · Web search",
+ "boards": [
+  {
+   "id": "WebSearchEngineKeys",
+   "title": "הגדרות › פרטיות › חיפוש באינטרנט: בחירת מנוע ברירת מחדל (אוטומטי או מנוע אחד, עם ✓/✗ מהבדיקה האחרונה ו\"בדוק עכשיו\") ומפתח חינמי אופציונלי של Tavily / Brave",
+   "route": "#/settings/privacy",
+   "height": {
+    "desktop": 1500,
+    "phone": 1900
+   },
+   "steps": [
+    {
+     "wait": "h3:has-text(\"מנוע חיפוש\")"
+    },
+    {
+     "scroll": "h3:has-text(\"מנוע חיפוש\")"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/web-filter",
+     "json": {
+      "safeSearch": "moderate",
+      "onion": false,
+      "blocked": []
+     }
+    },
+    {
+     "url": "**/api/tor",
+     "json": {
+      "installed": false
+     }
+    },
+    {
+     "url": "**/api/web-keys",
+     "json": {
+      "tavily": true,
+      "brave": false
+     }
+    },
+    {
+     "url": "**/api/web-engine",
+     "json": {
+      "engine": "auto",
+      "keys": {
+       "tavily": true,
+       "brave": false
+      },
+      "last": {
+       "at": {
+        "$agoMs": "5m"
+       },
+       "query": "typescript documentation",
+       "results": [
+        {
+         "backend": "duckduckgo",
+         "ok": false,
+         "count": 0,
+         "relevant": 0,
+         "ms": 300,
+         "error": "Search answered 202 (a bot check or rate limit)."
+        },
+        {
+         "backend": "duckduckgo-lite",
+         "ok": false,
+         "count": 0,
+         "relevant": 0,
+         "ms": 300,
+         "error": "Search answered 202"
+        },
+        {
+         "backend": "yahoo",
+         "ok": true,
+         "count": 10,
+         "relevant": 9,
+         "ms": 900
+        },
+        {
+         "backend": "startpage",
+         "ok": true,
+         "count": 10,
+         "relevant": 10,
+         "ms": 1200
+        },
+        {
+         "backend": "mojeek",
+         "ok": false,
+         "count": 0,
+         "relevant": 0,
+         "ms": 500,
+         "error": "No results on the page."
+        },
+        {
+         "backend": "bing",
+         "ok": false,
+         "count": 3,
+         "relevant": 0,
+         "ms": 800,
+         "error": "Irrelevant results, likely a bot page."
+        }
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

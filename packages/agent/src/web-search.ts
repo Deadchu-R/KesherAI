@@ -56,6 +56,21 @@ export function setSearchKeys(fn: () => SearchKeys | undefined): void {
   keysOf = fn;
 }
 
+/** Which engine Settings > Web chose: "auto" (best that works) or one backend's name. */
+export type SearchEngineChoice = "auto" | SearchBackend["name"];
+
+/** Where the chosen engine comes from (the server's config); "auto" until {@link setSearchEngine}. */
+let engineOf: () => SearchEngineChoice | undefined = () => "auto";
+
+/**
+ * Tells the search where to read the user's engine choice (called once by the server; read on every search).
+ *
+ * @param fn - Returns the current choice.
+ */
+export function setSearchEngine(fn: () => SearchEngineChoice | undefined): void {
+  engineOf = fn;
+}
+
 /** @returns The key for a keyed backend, or "" when none is set. */
 const keyFor = (name: "tavily" | "brave"): string => keysOf()?.[name]?.trim() ?? "";
 
@@ -379,14 +394,18 @@ export function resetSearchMemory(): void {
 }
 
 /**
- * @returns The backends in the order to try: the keyed ones that have a key first, then the one that worked in the
- *   last 30 minutes, then the rest (keyed backends without a key are left out).
+ * @returns The backends in the order to try. The engine the user chose (Settings > Web) goes first, when it can be
+ *   used (a keyed one needs its key). Then, "automatic": the keyed ones that have a key, the one that worked in the
+ *   last 30 minutes, and the rest. Keyed backends without a key are left out.
  */
 export function backendOrder(now = Date.now()): SearchBackend[] {
   const usable = BACKENDS.filter((b) => !b.enabled || b.enabled());
   const keyed = usable.filter((b) => b.enabled);
   const first = lastGood && now - lastGood.at < REMEMBER_MS ? usable.find((b) => b.name === lastGood!.name && !b.enabled) : undefined;
-  return [...keyed, ...(first ? [first] : []), ...usable.filter((b) => !b.enabled && b !== first)];
+  const auto = [...keyed, ...(first ? [first] : []), ...usable.filter((b) => !b.enabled && b !== first)];
+  const chosen = engineOf();
+  const pick = chosen && chosen !== "auto" ? usable.find((b) => b.name === chosen) : undefined;
+  return pick ? [pick, ...auto.filter((b) => b !== pick)] : auto;
 }
 
 /** What one backend gave: every hit on the page, the ones about the query, and whether the page is irrelevant. */
@@ -425,10 +444,11 @@ async function runBackend(b: SearchBackend, ask: SearchAsk): Promise<SearchHit[]
  *
  * @param ask - The query (already with any site: words) and the safe-search value.
  * @param deep - Whether to read the next page of results too (when the backend has one).
+ * @param onEngine - Told which backend answered.
  * @returns The results; empty when every backend found nothing.
  * @throws When every backend errored (the message lists why).
  */
-export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean): Promise<SearchHit[]> {
+export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean, onEngine?: (name: SearchBackend["name"]) => void): Promise<SearchHit[]> {
   const failures: string[] = [];
   let empty = false;
   for (const b of backendOrder()) {
@@ -436,6 +456,7 @@ export async function searchBackends(ask: Omit<SearchAsk, "page">, deep: boolean
     try {
       let hits = await runBackend(b, { ...ask, page: 1 });
       lastGood = { name: b.name, at: Date.now() };
+      onEngine?.(b.name);
       if (deep && b.name === "duckduckgo" && hits.length >= 8) hits = [...hits, ...(await runBackend(b, { ...ask, page: 2 }).catch(() => []))];
       return hits;
     } catch (e) {
@@ -460,6 +481,14 @@ export interface BackendCheck {
   error?: string;
   /** The first results (title — address), to see that they match the query. */
   sample?: string[];
+}
+
+/** The last diagnostic (kept in memory, so a phone can read it): when, and one entry per backend. */
+let lastCheck: { at: number; query: string; results: BackendCheck[] } | undefined;
+
+/** @returns The last diagnostic, or undefined when none ran since the server started. */
+export function lastBackendCheck(): { at: number; query: string; results: BackendCheck[] } | undefined {
+  return lastCheck;
 }
 
 /**
@@ -489,6 +518,7 @@ export async function checkBackends(query: string, signal: AbortSignal): Promise
       out.push({ backend: b.name, ok: false, count: 0, relevant: 0, ms: Date.now() - t, error: (e as Error).message });
     }
   }
+  lastCheck = { at: Date.now(), query, results: out };
   return out;
 }
 

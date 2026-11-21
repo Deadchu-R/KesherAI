@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { checkBackends, setSearchKeys } from "@kesher/agent";
+import { checkBackends, lastBackendCheck, setSearchEngine, setSearchKeys } from "@kesher/agent";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 
@@ -16,6 +16,7 @@ import { isLocalRequest } from "../auth.js";
 export async function webSearchCheckRoutes(app: FastifyInstance, s: KesherServices): Promise<void> {
   // The search reads the user's keys from the config on every search, so a changed key applies at once.
   setSearchKeys(() => s.config.webKeys);
+  setSearchEngine(() => s.config.webEngine);
 
   app.get<{ Querystring: { q?: string } }>("/api/web/search-check", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
@@ -39,4 +40,18 @@ export async function webSearchCheckRoutes(app: FastifyInstance, s: KesherServic
     await s.saveConfig();
     return { tavily: !!next.tavily, brave: !!next.brave };
   });
+
+  // Settings > Web's engine choice and the last check's result (any device reads; "Check now" is GET /api/web/search-check, local only).
+  app.get("/api/web-engine", async () => ({ engine: s.config.webEngine ?? "auto", keys: { tavily: !!s.config.webKeys?.tavily, brave: !!s.config.webKeys?.brave }, last: lastBackendCheck() ?? null }));
+  app.put<{ Body: { engine?: string } }>("/api/web-engine", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "The search engine is chosen on the computer that runs KesherAI." });
+    const engine = String(req.body?.engine ?? "");
+    if (!ENGINES.has(engine)) return reply.code(400).send({ error: "Unknown search engine." });
+    s.config.webEngine = engine as typeof s.config.webEngine;
+    await s.saveConfig();
+    return { engine };
+  });
 }
+
+/** The choices Settings > Web accepts. */
+const ENGINES = new Set(["auto", "tavily", "brave", "duckduckgo", "duckduckgo-lite", "yahoo", "startpage", "mojeek", "ecosia", "bing"]);

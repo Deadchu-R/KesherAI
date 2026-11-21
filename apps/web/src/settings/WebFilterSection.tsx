@@ -7,6 +7,67 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 interface Filter { safeSearch: "strict" | "moderate" | "off"; onion: boolean; blocked: string[] }
 
+interface EngineCheck { backend: string; ok: boolean; count: number; relevant?: number; error?: string }
+interface EngineState { engine: string; keys: { tavily: boolean; brave: boolean }; last: { at: number; results: EngineCheck[] } | null }
+
+/** The engines in the choice list (keyed ones only appear when their key is set). */
+const ENGINES: Array<{ id: string; name: string; keyed?: "tavily" | "brave" }> = [
+  { id: "tavily", name: "Tavily", keyed: "tavily" },
+  { id: "brave", name: "Brave Search API", keyed: "brave" },
+  { id: "duckduckgo", name: "DuckDuckGo" },
+  { id: "duckduckgo-lite", name: "DuckDuckGo Lite" },
+  { id: "yahoo", name: "Yahoo" },
+  { id: "startpage", name: "Startpage" },
+  { id: "ecosia", name: "Ecosia" },
+  { id: "mojeek", name: "Mojeek" },
+  { id: "bing", name: "Bing" },
+];
+
+/**
+ * Settings → Web: the default search engine. "Automatic" (default) tries the best that works; any other choice is
+ * tried first, and the others are the fallback when it errors or answers unrelated results. Each engine shows whether
+ * it worked on the last check; "Check now" runs the check (on the computer only; the phone reads the last result).
+ */
+function SearchEngine() {
+  const [st, setSt] = useState<EngineState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const remote = isRemote();
+  const load = () => void api<EngineState>("/api/web-engine").then(setSt, () => undefined);
+  useEffect(load, []);
+  if (!st) return null;
+  const choose = (engine: string) => void api("/api/web-engine", { method: "PUT", body: { engine } }).then(() => { setSt({ ...st, engine }); toast(L("נשמר.", "Saved.")); }, (e: Error) => toast(e.message));
+  const check = () => {
+    setBusy(true);
+    void api("/api/web/search-check").then(load, (e: Error) => toast(e.message)).finally(() => setBusy(false));
+  };
+  const status = (id: string) => {
+    const r = st.last?.results.find((x) => x.backend === id);
+    if (!r) return <span className="muted">{L("לא נבדק", "not checked")}</span>;
+    return r.ok ? <span>✓ {L(`עבד (${r.relevant ?? r.count} תוצאות)`, `worked (${r.relevant ?? r.count} results)`)}</span> : <span title={r.error}>✗ {L("לא עבד", "failed")}</span>;
+  };
+  const rows = [{ id: "auto", name: L("אוטומטי (הטוב שעובד)", "Automatic (best that works)") }, ...ENGINES.filter((e) => !e.keyed || st.keys[e.keyed])];
+  return (
+    <div className="stack">
+      <h3>{L("מנוע חיפוש ברירת מחדל", "Default search engine")}</h3>
+      <p className="muted small">{L("המנוע שנבחר נוסה ראשון; אם הוא נכשל או מחזיר תוצאות לא קשורות, עוברים לאחרים. התשובה של המודל מציינת מי ענה.", "The chosen engine is tried first; if it fails or gives unrelated results the others take over. The search result says which engine answered.")}</p>
+      <fieldset className="stack small" disabled={remote}>
+        {rows.map((e) => (
+          <label key={e.id} className="check" style={{ flexWrap: "wrap", gap: 6 }}>
+            <input type="radio" name="engine" checked={st.engine === e.id} onChange={() => choose(e.id)} />
+            <span>{e.name}</span>
+            {e.id !== "auto" && <span className="small" style={{ marginInlineStart: "auto" }}>{status(e.id)}</span>}
+          </label>
+        ))}
+      </fieldset>
+      <div className="row small" style={{ flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        {!remote && <button type="button" disabled={busy} onClick={check}>{busy ? L("בודק…", "Checking…") : L("בדוק עכשיו", "Check now")}</button>}
+        <span className="muted">{st.last ? L(`הבדיקה האחרונה: ${new Date(st.last.at).toLocaleString("he-IL")}`, `Last check: ${new Date(st.last.at).toLocaleString()}`) : L("עוד לא נבדק מאז שהשרת עלה.", "Not checked since the server started.")}</span>
+      </div>
+      {remote && <p className="muted small">{L("הבדיקה והבחירה במחשב.", "Checking and choosing are done on the computer.")}</p>}
+    </div>
+  );
+}
+
 /**
  * Optional free search keys (Tavily, Brave Search): used first when set, so searches do not depend on engines that
  * block programs. The key is typed on the computer, kept encrypted, and never shown again (only "set").
@@ -85,6 +146,7 @@ export function WebFilterSection() {
       </label>
       {!remote && <button type="button" style={{ alignSelf: "start" }} onClick={() => save({ blocked: blocked.split(/[\s,]+/).filter(Boolean) })}>{L("שמור את רשימת החסומים", "Save the blocked list")}</button>}
       {remote && <p className="muted small">{L("משנים את זה במחשב.", "Changed on the computer.")}</p>}
+      <SearchEngine />
       <SearchKeys />
     </section>
   );

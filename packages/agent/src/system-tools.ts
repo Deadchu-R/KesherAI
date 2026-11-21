@@ -240,12 +240,12 @@ export const DEPTH = {
  *
  * @returns The results, already filtered.
  */
-export async function searchWeb(query: string, prefs: import("@kesher/shared").WebPrefs | undefined, signal: AbortSignal): Promise<Array<{ title: string; url: string; snippet: string }>> {
+export async function searchWeb(query: string, prefs: import("@kesher/shared").WebPrefs | undefined, signal: AbortSignal, onEngine?: (name: string) => void): Promise<Array<{ title: string; url: string; snippet: string }>> {
   const only = (prefs?.only ?? []).map(siteName).filter(Boolean).slice(0, 10);
   const never = (prefs?.never ?? []).map(siteName).filter(Boolean).slice(0, 30);
   const depth = DEPTH[prefs?.depth ?? "normal"];
   const q = only.length ? `${query} ${only.map((d) => `site:${d}`).join(" OR ")}` : query;
-  const results = await searchBackends({ query: q, kp: safeValue(prefs), signal }, depth.results > 10);
+  const results = await searchBackends({ query: q, kp: safeValue(prefs), signal }, depth.results > 10, onEngine);
   const seen = new Set<string>();
   return results
     .filter((r) => (only.length ? only.some((d) => onSite(r.url, d)) : true) && !never.some((d) => onSite(r.url, d)))
@@ -263,7 +263,8 @@ export const webSearchTool: AgentTool = {
   async run(input, ctx) {
     const q = String(input.query ?? "").trim();
     if (!q) throw new Error("Give a search query.");
-    const results = await searchWeb(q, ctx.web, ctx.signal);
+    let engine = "";
+    const results = await searchWeb(q, ctx.web, ctx.signal, (n) => void (engine = n));
     if (!results.length) return { output: ctx.web?.only?.length ? `No results on ${ctx.web.only.join(", ")} (this chat searches only there).` : "No results." };
     const limits = [
       ctx.web?.only?.length ? `This chat searches only: ${ctx.web.only.join(", ")}.` : "",
@@ -271,7 +272,7 @@ export const webSearchTool: AgentTool = {
       DEPTH[ctx.web?.depth ?? "normal"].read,
       ctx.web?.onion ? "Dark web (.onion) sites may be opened with web_fetch (through Tor); to search them, open https://ahmia.fi/search/?q=… with web_fetch." : "",
     ].filter(Boolean).join(" ");
-    return { output: `${results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n")}\n\n(${limits})` };
+    return { output: `${results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n")}\n\n(${limits}${engine ? ` Answered by: ${engine}.` : ""})` };
   },
 };
 
