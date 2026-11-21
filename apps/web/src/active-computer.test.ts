@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeComputer, lastSeenText, setActiveComputer, sortComputers, startComputer } from "./active-computer.js";
+import { activeComputer, computerLine, lastSeenText, setActiveComputer, sortComputers, startComputer } from "./active-computer.js";
 
 /** A tiny localStorage for the test (node has none). */
 function fakeStorage(): void {
@@ -50,4 +50,13 @@ test("last seen in minutes, hours and days, in both languages", () => {
   assert.equal(lastSeenText("2026-11-21T09:00:00Z", now, true), "נראה לפני 3 שעות");
   assert.equal(lastSeenText("2026-11-18T12:00:00Z", now, false), "seen 3 days ago");
   assert.equal(lastSeenText(undefined, now, false), "");
+});
+
+test("computer line: online, asleep (when and what was running), offline (last seen), version", () => {
+  const now = Date.parse("2026-11-21T12:00:00Z");
+  const pc = { id: "a", name: "PC", me: false, online: false, version: "0.6.1" };
+  assert.equal(computerLine({ ...pc, online: true }, false, now, false), "Online · v0.6.1");
+  assert.equal(computerLine({ ...pc, asleepSince: "2026-11-21T11:58:00Z", asleepNote: { downloads: 3 } }, false, now, false), "PC went to sleep · 2 min ago · 3 downloads paused · v0.6.1");
+  assert.equal(computerLine({ ...pc, asleepSince: "2026-11-21T11:58:00Z" }, false, now, true), "המחשב נכנס לשינה · לפני 2 דק' · v0.6.1");
+  assert.equal(computerLine({ ...pc, lastSeen: "2026-11-21T11:30:00Z" }, true, now, false), "Offline · seen 30 min ago · v0.6.1 · Used for all chats");
 });

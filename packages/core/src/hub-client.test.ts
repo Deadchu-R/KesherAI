@@ -456,3 +456,22 @@ test("scheduleInbox: changes in a row make one inbox report and one approvals ch
   assert.equal(reports, 1);
   assert.equal(approvals, 1, "the open asks follow the inbox, so a dropped ask leaves the phone at once");
 });
+
+test("going to sleep: the hub gets one clean away frame on a live link, nothing when not connected", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  r.client.announceAway("asleep", { downloads: 2 }); // not connected yet: nothing is sent
+  assert.equal(r.sent.filter((f) => f.t === "away").length, 0);
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  r.client.announceAway("asleep", { downloads: 2, selfWork: true, junk: 1 } as never);
+  r.client.announceAway("awake");
+  const away = r.sent.filter((f) => f.t === "away");
+  assert.deepEqual(away, [
+    { t: "away", state: "asleep", note: { downloads: 2, selfWork: true } },
+    { t: "away", state: "awake", note: {} },
+  ]);
+});

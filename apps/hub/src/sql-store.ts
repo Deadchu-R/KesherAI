@@ -3,6 +3,7 @@
  * uses bound parameters.
  */
 import { cleanAgents, cleanDeviceKind, cleanOptIn, type SealedKind } from "../../../packages/shared/src/hub.js";
+import { cleanAwayNote } from "../../../packages/shared/src/device-status.js";
 import type { AgentEventRow, AuditRow, DeviceRow, HubStore, OauthClientRow, OauthCodeRow, OauthGrantRow, PairingRow, QueuedRow, SessionRow, TicketRow } from "./store.js";
 import type { SqlStorage } from "./cf.js";
 
@@ -60,6 +61,7 @@ function toDevice(r: Row): DeviceRow {
     optIn,
     agents: cleanAgents(st.agents, optIn.reportLinks),
     ...(typeof st.version === "string" ? { version: st.version } : {}),
+    ...(st.away && typeof st.away === "object" && Number.isFinite(Number((st.away as { at?: unknown }).at)) ? { away: { at: Number((st.away as { at: unknown }).at), note: cleanAwayNote((st.away as { note?: unknown }).note) } } : {}),
   };
 }
 
@@ -116,7 +118,7 @@ export class SqlStore implements HubStore {
   }
   /** @inheritdoc */
   putDevice(d: DeviceRow): void {
-    const state = JSON.stringify({ busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}) });
+    const state = JSON.stringify({ busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), ...(d.away ? { away: d.away } : {}) });
     this.sql.exec(
       `INSERT INTO devices (id, name, kind, public_key, token_hash, token_issued_at, created_at, last_seen, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET name = excluded.name, public_key = excluded.public_key, token_hash = excluded.token_hash,

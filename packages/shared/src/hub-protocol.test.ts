@@ -153,3 +153,10 @@ test("board: filters, who an item is for, waiting on me", () => {
   assert.deepEqual(boardView(items, "open", "kesher").map((i) => i.id), ["t2", "t6"]);
   assert.equal(boardWaitsOnMe(items[4]!), false);
 });
+
+test("the away frame: asleep or awake, with a clean note; anything else is refused", () => {
+  const f = parseDeviceFrame(JSON.stringify({ t: "away", state: "asleep", note: { downloads: 3, tasks: -1, selfWork: true, secret: "x" } }));
+  assert.deepEqual(f, { t: "away", state: "asleep", note: { downloads: 3, selfWork: true } });
+  assert.equal(parseDeviceFrame(JSON.stringify({ t: "away", state: "awake" }))?.t, "away");
+  assert.equal(parseDeviceFrame(JSON.stringify({ t: "away", state: "dead" })), null);
+});

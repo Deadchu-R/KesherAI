@@ -5,6 +5,8 @@ import type { ProviderConfig, ProviderRegistry } from "@kesher/providers";
 import type { GoogleDrive } from "./google.js";
 import type { McpManager, McpServerConfig } from "./mcp.js";
 import { unityRelay } from "./mcp.js";
+import { findAddress } from "./device-address.js";
+import { cleanAwayNote, type AwayNote } from "@kesher/shared";
 
 /**
  * "My devices": computers signed in to the same Google account find each
@@ -49,6 +51,8 @@ export interface DeviceView {
   providerId?: string;
   /** It said it is going to sleep or shutting down (when). */
   asleepSince?: string;
+  /** What was running on it when it went to sleep (counts). */
+  asleepNote?: AwayNote;
 }
 
 /** The `devices` section of the config. */
@@ -60,6 +64,8 @@ export interface DevicesConfig {
   syncSettings: boolean;
   /** Per synced item: hash of what this computer has, and when it last changed. */
   stamps: Record<string, { hash: string; at: number }>;
+  /** Per computer: the address that answered last (tried first next time). */
+  lastUrls?: Record<string, string>;
 }
 
 interface SyncedItem<T> {
@@ -76,6 +82,14 @@ const UNITY_RELAY = "<unity-relay>";
 export const BEACON_PORT = 7421;
 const BEACON_TAG = "kesher-here";
 const hash = (v: unknown) => createHash("sha1").update(JSON.stringify(v)).digest("hex");
+/** The computer's IPv4 addresses as one string: when it changes, the network changed. */
+export const networkSignature = (): string =>
+  Object.values(networkInterfaces())
+    .flatMap((l) => l ?? [])
+    .filter((a) => a.family === "IPv4" && !a.internal)
+    .map((a) => a.address)
+    .sort()
+    .join(",");
 const isLocalUrl = (u?: string) => !!u && /^https?:\/\/(localhost|127\.|\[::1\]|0\.0\.0\.0)/i.test(u);
 
 /**
@@ -130,6 +144,7 @@ export class Devices {
   private retryStep = 0;
   private beacon?: Socket;
   private beaconTimer?: NodeJS.Timeout;
+  private beaconTick = 0;
 
   /**
    * @param d - What it works with.
@@ -213,7 +228,15 @@ export class Devices {
       });
       sock.unref();
       this.beacon = sock;
-      this.beaconTimer = setInterval(() => this.say(), 60_000);
+      // Every minute, and at once when this computer's network addresses change (Wi-Fi switched, VPN on, back from sleep).
+      let seen = networkSignature();
+      this.beaconTimer = setInterval(() => {
+        const now = networkSignature();
+        if (now !== seen) {
+          seen = now;
+          this.say();
+        } else if (++this.beaconTick % 4 === 0) this.say();
+      }, 15_000);
       this.beaconTimer.unref?.();
     } catch {
       // no UDP here: Google Drive still finds the computers
@@ -339,19 +362,23 @@ export class Devices {
    *
    * @param id - Its device id (must be one of the user's computers).
    * @param state - "asleep" or "awake".
+   * @param note - What was running on it (counts), when it went to sleep.
    * @returns Whether that computer is known.
    */
-  presence(id: string, state: "asleep" | "awake"): boolean {
+  presence(id: string, state: "asleep" | "awake", note: AwayNote = {}): boolean {
     const e = this.entries.find((x) => x.id === id && x.id !== this.id);
     if (!e) return false;
     const providerId = `device-${e.id.slice(0, 8)}`;
     const v = this.views.find((x) => x.id === id);
     if (state === "asleep") {
       this.d.registry.setAway(providerId, `${e.name} went to sleep or was turned off; its models come back when it wakes up.`);
-      if (v) Object.assign(v, { online: false, asleepSince: new Date().toISOString() });
+      if (v) Object.assign(v, { online: false, asleepSince: new Date().toISOString(), asleepNote: cleanAwayNote(note) });
     } else {
       this.d.registry.setAway(providerId, undefined);
-      if (v) delete v.asleepSince;
+      if (v) {
+        delete v.asleepSince;
+        delete v.asleepNote;
+      }
       // Reach it again now (it may have a new address after waking).
       void this.useDevice(e).then((nv) => (this.views = this.views.map((x) => (x.id === id ? nv : x))), () => undefined);
     }
@@ -364,8 +391,9 @@ export class Devices {
    *
    * @param state - "asleep" or "awake".
    * @param look - When back, also look for the others again (default yes).
+   * @param note - What is running here (counts), told with "asleep".
    */
-  async announce(state: "asleep" | "awake", look = true): Promise<void> {
+  async announce(state: "asleep" | "awake", look = true, note: AwayNote = {}): Promise<void> {
     if (!this.d.config.share) return;
     const others = this.entries.filter((x) => x.id !== this.id);
     await Promise.allSettled(
@@ -377,7 +405,7 @@ export class Devices {
             fetch(`${u.replace(/\/$/, "")}/api/devices/presence`, {
               method: "POST",
               headers: { authorization: `Bearer ${e.token}`, "content-type": "application/json" },
-              body: JSON.stringify({ id: this.id, state }),
+              body: JSON.stringify({ id: this.id, state, ...(state === "asleep" ? { note: cleanAwayNote(note) } : {}) }),
               signal: AbortSignal.timeout(state === "asleep" ? 2500 : 8000),
             }).then((r) => {
               if (!r.ok) throw new Error(String(r.status));
@@ -386,7 +414,10 @@ export class Devices {
         );
       }),
     );
-    if (state === "awake" && look) void this.sync().catch(() => undefined);
+    if (state === "awake") {
+      this.say();
+      if (look) void this.sync().catch(() => undefined);
+    }
   }
 
   /**
@@ -515,17 +546,19 @@ export class Devices {
     const providerId = `device-${x.id.slice(0, 8)}`;
     // A computer that said it went to sleep stays away until it says it is back (or a check later finds it).
     const prev = this.views.find((v) => v.id === x.id);
-    // Every address at once; the first that answers wins (no waiting address after address).
-    const tries = x.urls.map(async (u) => {
-      const url = u.replace(/\/$/, "");
+    // The address that worked last time first (a short wait), then every address at once; the first that answers wins.
+    const found = await findAddress(x.urls, this.d.config.lastUrls?.[x.id], async (url) => {
       const res = await fetch(`${url}/v1/models`, { headers: { authorization: `Bearer ${x.token}` }, signal: AbortSignal.timeout(8000) });
       if (!res.ok) throw new Error(`answered ${res.status}`);
       const j = (await res.json()) as { data?: unknown[] };
-      return { url, count: j.data?.length ?? 0 };
+      return j.data?.length ?? 0;
     });
-    const hit = tries.length ? await Promise.any(tries).catch(() => undefined) : undefined;
-    if (hit) {
-      const { url, count } = hit;
+    if (found) {
+      const { url, value: count } = found;
+      if (this.d.config.lastUrls?.[x.id] !== url) {
+        (this.d.config.lastUrls ??= {})[x.id] = url;
+        void this.d.save().catch(() => undefined);
+      }
       await this.d.addProvider({ id: providerId, type: "openai-compatible", name: `${x.name} (your computer)`, location: "server", baseUrl: `${url}/v1`, apiKey: x.token }, false);
       this.d.registry.setAway(providerId, undefined);
       // Its models show at once in every model list (the list asks it again later).
@@ -538,7 +571,7 @@ export class Devices {
       return { ...view, online: true, url, models: count, providerId };
     }
     this.checking.set(x.id, { name: x.name, state: prev?.asleepSince ? "asleep" : "offline" });
-    if (prev?.asleepSince) view.asleepSince = prev.asleepSince;
+    if (prev?.asleepSince) Object.assign(view, { asleepSince: prev.asleepSince, ...(prev.asleepNote ? { asleepNote: prev.asleepNote } : {}) });
     // Not reachable now (asleep, restarting, offline): keep its connection, so a chat that uses its model
     // still knows it and says it cannot reach the computer, and works again the moment it is back.
     const url = x.urls[0]?.replace(/\/$/, "");

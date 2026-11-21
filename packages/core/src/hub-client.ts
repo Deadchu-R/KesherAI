@@ -25,6 +25,8 @@ import {
   sealMessage,
   syncPinger,
   type HubAgent,
+  cleanAwayNote,
+  type AwayNote,
   type AgentLabel,
   type AssignResult,
   type AssignTo,
@@ -665,6 +667,18 @@ export class HubClient {
   private agents(): HubAgent[] {
     const all = this.deps.agents?.() ?? [];
     return this.s.optIn.reportLinks ? all : all.map(({ link: _link, ...a }) => a);
+  }
+
+  /**
+   * Tells the hub this PC is going to sleep or shutting down (with what was running), or is back, so the phone
+   * shows "the PC went to sleep" at once instead of waiting for a timeout. Sent only on a live link, and quick.
+   * An older hub refuses the frame; that changes nothing.
+   *
+   * @param state - "asleep" or "awake".
+   * @param note - What was running (counts only).
+   */
+  announceAway(state: "asleep" | "awake", note: AwayNote = {}): void {
+    if (this.connected) this.send({ t: "away", state, note: cleanAwayNote(note) });
   }
 
   /** The heartbeat: presence, then results and approvals to send. */

@@ -19,7 +19,8 @@
 import { isGoing, runWait, shownState, sortedCards, type AgentCard, type RunWait } from "../../../packages/shared/src/hub-agents.js";
 import { agentDoing, AGENT_LABEL_LIMITS, type LabelWords } from "../../../packages/shared/src/agent-label.js";
 import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSource, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
-import { deviceIcon, h, L, when } from "./dom.js";
+import { awayText } from "../../../packages/shared/src/device-status.js";
+import { deviceIcon, getLocale, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
 import { SNAPSHOT_SOURCE, type SyncedAgent } from "./drive-view.js";
 import { assignBox } from "./assign.js";
@@ -297,7 +298,7 @@ function groupHead(name: string, icon: string, pc: HubPresence | undefined, coun
     h("span", { "aria-hidden": "true" }, icon),
     h("b", null, name),
     pc ? h("span", { class: `dot ${on ? (pc.busy ? "busy" : "on") : "off"}`, "aria-hidden": "true" }) : null,
-    pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null,
+    pc ? h("span", { class: `sm ${on ? "ok" : "mut"}` }, on ? L("מחובר", "Online") : pc.away ? "💤 " + awayText({ at: pc.away.at, note: pc.away.note }, Date.now(), getLocale() === "he") : L("כבוי", "Off") + (pc.lastSeen ? L(" · נראה לאחרונה ", " · last seen ") + when(pc.lastSeen) : "")) : null,
     h("span", { class: "grow" }),
     h("span", { class: "tag t-off" }, String(count)),
   );

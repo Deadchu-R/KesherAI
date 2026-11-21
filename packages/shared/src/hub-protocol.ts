@@ -9,6 +9,7 @@
  */
 import { cleanAgentLabel, type AgentLabel } from "./agent-label.js";
 import { parseAssignTo, type AssignTo } from "./task-assign.js";
+import { cleanAwayNote, type AwayNote } from "./device-status.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -177,12 +178,16 @@ export interface HubPresence {
   optIn: HubOptIn;
   agents: HubAgent[];
   version?: string;
+  /** It said it is going to sleep or shut down (ISO time) and what was running; gone when it is back. */
+  away?: { at: string; note: AwayNote };
 }
 
 /** A frame a device sends the hub over its socket. */
 export type DeviceFrame =
   | { t: "hello"; version: string; platform?: string; busy: boolean; optIn: HubOptIn; agents: HubAgent[] }
   | { t: "beat"; busy: boolean; optIn?: HubOptIn; agents: HubAgent[] }
+  /** "Going to sleep or shutting down" (with what was running), or "back". An older hub refuses it (`bad-frame`) and nothing breaks. */
+  | { t: "away"; state: "asleep" | "awake"; note: AwayNote }
   | { t: "send"; env: SealedEnvelope }
   /** Live agent activity: one sealed `agent_event` per (viewer, run), kept by the hub as a short ring, never queued. */
   | { t: "agents"; envs: SealedEnvelope[] }
@@ -613,6 +618,8 @@ export function parseDeviceFrame(raw: unknown): DeviceFrame | null {
       const optIn = x.optIn === undefined ? undefined : cleanOptIn(x.optIn);
       return { t: "beat", busy: x.busy === true, ...(optIn ? { optIn } : {}), agents: cleanAgents(x.agents, optIn?.reportLinks ?? true) };
     }
+    case "away":
+      return x.state === "asleep" || x.state === "awake" ? { t: "away", state: x.state, note: cleanAwayNote(x.note) } : null;
     case "send": {
       const env = parseEnvelope(x.env);
       return env ? { t: "send", env } : null;

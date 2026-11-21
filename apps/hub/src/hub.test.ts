@@ -580,3 +580,27 @@ test("agent-event rows have a total cap: the oldest go first, whatever the run",
   store.capAgentEvents(100);
   assert.equal(store.agentEventCount(), 4, "under the cap nothing goes");
 });
+
+test("a PC that says it is going to sleep shows as asleep (with what was running) until it is back", async () => {
+  const { hub, sockets } = await setup();
+  const pc = await pair(hub, "pc", "PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  sockets.on.add(phone.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "away", state: "asleep", note: { downloads: 3 } }));
+  sockets.on.delete(pc.id); // the link drops as the PC sleeps
+  hub.onClose(pc.id);
+  const seen = hub.presence().find((d) => d.id === pc.id);
+  assert.equal(seen?.online, false);
+  assert.equal(seen?.away?.note.downloads, 3);
+  assert.ok(seen?.away?.at);
+  // Back: the new connection's hello clears it.
+  sockets.on.add(pc.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", version: "0.6.1", busy: false, optIn: { appear: true }, agents: [] }));
+  assert.equal(hub.presence().find((d) => d.id === pc.id)?.away, undefined);
+  // Saying "awake" clears it too.
+  await hub.onFrame(pc.id, JSON.stringify({ t: "away", state: "asleep", note: {} }));
+  await hub.onFrame(pc.id, JSON.stringify({ t: "away", state: "awake" }));
+  sockets.on.delete(pc.id);
+  assert.equal(hub.presence().find((d) => d.id === pc.id)?.away, undefined);
+});

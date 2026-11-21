@@ -541,7 +541,13 @@ export class Hub {
         optIn: d.optIn,
         agents: d.agents,
         ...(d.version ? { version: d.version } : {}),
+        ...this.awayOf(d),
       }));
+  }
+
+  /** "Went to sleep" for a device that is not on the link now (a stale mark is never shown for one that is back). */
+  private awayOf(d: DeviceRow): Pick<HubPresence, "away"> {
+    return d.away && !this.sockets.isOnline(d.id) ? { away: { at: new Date(d.away.at).toISOString(), note: d.away.note } } : {};
   }
 
   private broadcastPresence(): void {
@@ -557,7 +563,7 @@ export class Hub {
   async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; agents: { kept: number; writtenToday: number; freeWrites: number }; connections: ReturnType<ConnectorAuth["list"]>; audit: AuditRow[] }> {
     const all = this.store.devices();
     const devices = await Promise.all(
-      all.map(async (d) => ({ id: d.id, name: d.name, kind: d.kind, publicKey: d.publicKey, online: this.sockets.isOnline(d.id), ...(d.lastSeen ? { lastSeen: new Date(d.lastSeen).toISOString() } : {}), busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), fingerprint: await keyFingerprint(d.publicKey) })),
+      all.map(async (d) => ({ id: d.id, name: d.name, kind: d.kind, publicKey: d.publicKey, online: this.sockets.isOnline(d.id), ...(d.lastSeen ? { lastSeen: new Date(d.lastSeen).toISOString() } : {}), busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), ...this.awayOf(d), fingerprint: await keyFingerprint(d.publicKey) })),
     );
     // The free plan counts rows written per day (UTC): the page shows how much of it live activity used today.
     const today = new Date(this.now()).setUTCHours(0, 0, 0, 0);
@@ -617,16 +623,23 @@ export class Hub {
     switch (f.t) {
       case "hello":
       case "beat": {
-        const next: DeviceRow = { ...d, busy: f.busy, agents: f.agents, ...(f.t === "hello" || f.optIn ? { optIn: f.optIn ?? d.optIn } : {}), ...(f.t === "hello" && f.version ? { version: f.version } : {}) };
+        const { away: _wasAway, ...rest } = d;
+        const next: DeviceRow = { ...rest, busy: f.busy, agents: f.agents, ...(f.t === "hello" || f.optIn ? { optIn: f.optIn ?? d.optIn } : {}), ...(f.t === "hello" && f.version ? { version: f.version } : {}) };
         // A phone's opt-in has no meaning (it is not a worker); the Claude chat only reports activity, nothing else.
         if (next.kind === "phone") next.optIn = { ...DEFAULT_OPT_IN };
         if (next.kind === "claude-chat") Object.assign(next, { optIn: CLAUDE_CHAT_OPT_IN, agents: [] });
         if (!next.optIn.reportLinks) next.agents = next.agents.map(({ link: _link, ...a }) => a);
-        const changed = JSON.stringify([d.busy, d.optIn, d.agents, d.version]) !== JSON.stringify([next.busy, next.optIn, next.agents, next.version]);
+        const changed = JSON.stringify([d.busy, d.optIn, d.agents, d.version, d.away]) !== JSON.stringify([next.busy, next.optIn, next.agents, next.version, next.away]);
         // Last seen is written at most once a minute (Durable Object rows written are counted).
         if (changed || !d.lastSeen || t - d.lastSeen > MIN) this.store.putDevice({ ...next, lastSeen: t });
         if (changed) this.broadcastPresence();
         return;
+      }
+      case "away": {
+        // "Going to sleep / shutting down" (or "back"): shown to the owner's other devices instead of a plain "offline".
+        const { away: _prev, ...rest } = d;
+        this.store.putDevice({ ...rest, lastSeen: t, ...(f.state === "asleep" ? { away: { at: t, note: f.note } } : {}) });
+        return this.broadcastPresence();
       }
       case "ack":
         this.store.dequeue(deviceId, f.id);

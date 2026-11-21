@@ -48,6 +48,7 @@ export * from "./sheet.js";
 export * from "./office-out.js";
 export * from "./hub.js";
 export * from "./hub-sync.js";
+export * from "./device-status.js";
 export * from "./drive-sync.js";
 export * from "./work-list.js";
 export * from "./task-inbox.js";

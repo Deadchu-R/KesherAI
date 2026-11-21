@@ -4750,3 +4750,4 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .converted-ready ul { max-height: 180px; overflow: auto; overflow-wrap: anywhere; }
 .converted-installed .pill { white-space: normal; }
 .converted-installed button, .converted-ready .row button { white-space: normal; }
+.hub-led.asleep { background: var(--warn, #e0b252); box-shadow: 0 0 0 4px rgb(224 178 82 / .14); }

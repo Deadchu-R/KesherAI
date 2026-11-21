@@ -96,6 +96,25 @@
               "$ago": "5h"
             },
             "version": "0.6.430"
+          },
+          {
+            "id": "d-sleep",
+            "name": "Laptop-Work",
+            "platform": "win32",
+            "me": false,
+            "online": false,
+            "models": 0,
+            "lastSeen": {
+              "$ago": "2m"
+            },
+            "version": "0.6.442",
+            "providerId": "device-sleep",
+            "asleepSince": {
+              "$ago": "2m"
+            },
+            "asleepNote": {
+              "downloads": 3
+            }
           }
         ]
       }
@@ -203,16 +222,16 @@
     },
     {
       "id": "ComputersMenu",
-      "title": "תפריט מחשבים אחד לכל האפליקציה: מחוברים וזמינים, נראה לאחרונה, גרסה, \"השתמש בכל הצ'אטים\", מעבר וניתוק",
-      "titleEn": "One Computers menu for the whole app: state, last seen, version, use for all chats, switch and disconnect",
+      "title": "תפריט מחשבים: זמין, במצב שינה (\"המחשב נכנס לשינה · לפני 2 דק' · 3 הורדות מושהות\") או לא זמין, גרסה, שימוש בכל הצ'אטים, מעבר וניתוק",
+      "titleEn": "Computers menu: online, asleep (\"PC went to sleep · 2 min ago · 3 downloads paused\") or offline, version, use for all chats, switch, disconnect",
       "route": "#/",
       "viewports": [
         "phone",
         "desktop"
       ],
       "height": {
-        "desktop": 900,
-        "phone": 1000
+        "desktop": 1000,
+        "phone": 1150
       },
       "steps": [
         {

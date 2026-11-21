@@ -1,6 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { cleanAwayNote, type AwayNote } from "@kesher/shared";
+
+/** What is running on this computer now: downloads, inbox tasks, self-work (counts only). */
+async function awayNote(s: KesherServices): Promise<AwayNote> {
+  const downloads = s.downloads.list().filter((j) => j.status === "downloading" || j.status === "queued" || j.status === "paused" || j.status === "verifying").length;
+  const tasks = s.taskInbox ? (await s.taskInbox.list().catch(() => [])).filter((t) => t.status === "running").length : 0;
+  return cleanAwayNote({ downloads, tasks, selfWork: s.selfWork?.current?.status === "running" });
+}
 
 /**
  * "My devices": the user's other computers (same Google account), sharing
@@ -29,11 +37,11 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
   });
 
   /** Another of my computers (it holds this one's token) says it is going to sleep, or is back. */
-  app.post<{ Body: { id?: string; state?: string } }>("/api/devices/presence", async (req, reply) => {
+  app.post<{ Body: { id?: string; state?: string; note?: unknown } }>("/api/devices/presence", async (req, reply) => {
     const id = String(req.body?.id ?? "");
     const state = req.body?.state;
     if (!/^[\w-]{8,64}$/.test(id) || (state !== "asleep" && state !== "awake")) return reply.code(400).send({ error: "id and state (asleep or awake) are needed." });
-    if (!s.devices.presence(id, state)) return reply.code(404).send({ error: "Not one of your computers." });
+    if (!s.devices.presence(id, state, cleanAwayNote(req.body?.note))) return reply.code(404).send({ error: "Not one of your computers." });
     return { ok: true };
   });
 
@@ -41,7 +49,11 @@ export async function deviceRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.post<{ Body: { state?: string } }>("/api/devices/announce", async (req, reply) => {
     if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only this computer can say that." });
     const state = req.body?.state === "awake" ? "awake" : "asleep";
-    await s.devices.announce(state);
+    // What is running here goes with "asleep" (counts only): "3 downloads paused" on the phone.
+    const note: AwayNote = state === "asleep" ? await awayNote(s) : {};
+    // The hub (a live link only, instant) and the user's other computers (Google devices), together.
+    s.hub?.announceAway(state, note);
+    await s.devices.announce(state, true, note);
     return { ok: true };
   });
 

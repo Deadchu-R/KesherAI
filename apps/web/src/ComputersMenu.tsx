@@ -4,7 +4,8 @@ import { api, appHome, disconnectComputer, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { COMPUTERS_EVENT, refreshComputers } from "./computers";
-import { ACTIVE_COMPUTER_EVENT, activeComputer, lastSeenText, setActiveComputer, sortComputers, type ComputerRow } from "./active-computer";
+import { ACTIVE_COMPUTER_EVENT, activeComputer, computerLine, setActiveComputer, sortComputers, type ComputerRow } from "./active-computer";
+import { computerState } from "@kesher/shared";
 import "./computers-menu.css";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -43,18 +44,17 @@ export function ComputersPanel() {
     else if (bridge?.openDevice) void bridge.openDevice(r.id).then((x) => x.error && toast(x.error), (e: Error) => toast(e.message));
   };
   const canOpen = (r: ComputerRow) => r.online && !r.me && (!!home || (!!bridge?.openDevice && !isRemote()));
-  const stateText = (r: ComputerRow) => (r.online ? L("זמין", "Online") : r.asleepSince ? L("במצב שינה", "Asleep") : L("לא זמין", "Offline"));
   return (
     <div className="pcs">
       {sortComputers(rows, active).map((r) => {
         const inUse = active ? r.providerId === active : r.me;
         return (
           <div key={r.id} className={`pcs-row${inUse ? " use" : ""}`}>
-            <span className={`hub-led ${r.online ? "ok" : "off"}`} aria-hidden />
+            <span className={`hub-led ${computerState(r) === "online" ? "ok" : computerState(r) === "asleep" ? "asleep" : "off"}`} aria-hidden />
             <div className="pcs-main">
               <b dir="auto">{r.name}</b>
               <span className="muted small" dir="auto">
-                {[r.me ? L("המחשב המחובר", "Connected computer") : "", stateText(r), r.online ? "" : lastSeenText(r.asleepSince ?? r.lastSeen, Date.now(), he), r.version ? `v${r.version}` : "", inUse ? L("בשימוש בכל הצ'אטים", "Used for all chats") : ""].filter(Boolean).join(" · ")}
+                {computerLine(r, inUse, Date.now(), he)}
               </span>
             </div>
             <div className="pcs-acts">

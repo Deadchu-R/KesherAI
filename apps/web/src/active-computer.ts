@@ -1,3 +1,5 @@
+import { awayText, computerState, type AwayNote } from "@kesher/shared";
+
 /**
  * The computer the whole app works with, one choice for every chat (not one per chat). "" means the computer this
  * page is served from. A chat can still pick another computer for itself in its model menu; that choice wins, and
@@ -56,6 +58,22 @@ export interface ComputerRow {
   version?: string;
   providerId?: string;
   asleepSince?: string;
+  asleepNote?: AwayNote;
+}
+
+/**
+ * The status line under a computer's name: which one it is, online / asleep / offline (asleep says when and what
+ * was running, offline says when it was last seen), its version, and whether it is in use.
+ *
+ * @param r - The computer.
+ * @param inUse - Whether every chat starts on it.
+ * @param now - Now (ms), for tests.
+ * @param he - Hebrew (true) or English.
+ */
+export function computerLine(r: ComputerRow, inUse: boolean, now: number, he: boolean): string {
+  const state = computerState(r);
+  const status = state === "online" ? (he ? "זמין" : "Online") : state === "asleep" ? awayText({ at: r.asleepSince, note: r.asleepNote }, now, he) : [he ? "לא זמין" : "Offline", lastSeenText(r.lastSeen, now, he)].filter(Boolean).join(" · ");
+  return [r.me ? (he ? "המחשב המחובר" : "Connected computer") : "", status, r.version ? `v${r.version}` : "", inUse ? (he ? "בשימוש בכל הצ'אטים" : "Used for all chats") : ""].filter(Boolean).join(" · ");
 }
 
 /**

@@ -4,6 +4,7 @@
  * (docs/RESEARCH_LOG.md, "Kesher Cloud hub", addendum).
  */
 import type { HubAgent, HubDeviceKind, HubOptIn, SealedKind } from "../../../packages/shared/src/hub.js";
+import type { AwayNote } from "../../../packages/shared/src/device-status.js";
 
 /** A paired device. Times are ms since 1970. */
 export interface DeviceRow {
@@ -22,6 +23,8 @@ export interface DeviceRow {
   optIn: HubOptIn;
   agents: HubAgent[];
   version?: string;
+  /** It said it is going to sleep or shut down (ms) and what was running; cleared when it is back. */
+  away?: { at: number; note: AwayNote };
 }
 
 /** A signed-in browser session (hash of the cookie value). */

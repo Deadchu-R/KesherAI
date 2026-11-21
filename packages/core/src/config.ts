@@ -379,6 +379,8 @@ export const KesherConfigSchema = z.object({
       share: z.boolean().default(false),
       syncSettings: z.boolean().default(true),
       stamps: z.record(z.string(), z.object({ hash: z.string(), at: z.number() })).prefault({}),
+      /** Per computer: the address that answered last, tried first next time (device-address.ts). */
+      lastUrls: z.record(z.string(), z.string().max(300)).prefault({}),
     })
     .prefault({}),
   /** "Connect with GitHub" (device sign-in). */
