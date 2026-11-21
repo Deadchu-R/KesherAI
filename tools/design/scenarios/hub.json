@@ -1,0 +1,664 @@
+{
+ "group": "האב · Hub",
+ "target": "hub",
+ "now": "2026-11-21T09:00:00Z",
+ "boards": [
+  {
+   "id": "HubNotify",
+   "title": "ענן Kesher: הגדרות › התראות — \"הודע למכשיר הזה\" דלוק (רק המספר, בלי תוכן)",
+   "route": "#settings",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "push": true
+   },
+   "height": {
+    "desktop": 900,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": "#notify .tog"
+    },
+    {
+     "scroll": "#notify"
+    }
+   ]
+  },
+  {
+   "id": "HubConnector",
+   "title": "ענן Kesher: הגדרות › חיבור ל-Claude (הכתובת, השלבים) ו\"אפליקציות מחוברות\"",
+   "route": "#settings",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "owner": {
+     "connections": [
+      {
+       "id": "k1",
+       "name": "Claude (claude.ai)",
+       "createdAt": {
+        "$agoMs": "6d"
+       },
+       "lastUsed": {
+        "$agoMs": "2h"
+       },
+       "endsAt": {
+        "$inMs": "24d"
+       }
+      },
+      {
+       "id": "k2",
+       "name": "Claude Code",
+       "createdAt": {
+        "$agoMs": "2d"
+       },
+       "lastUsed": {
+        "$agoMs": "1d"
+       },
+       "endsAt": {
+        "$inMs": "28d"
+       }
+      }
+     ]
+    }
+   },
+   "height": {
+    "desktop": 1100,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".mono.grow"
+    },
+    {
+     "scroll": "h3:has-text(\"אפליקציות מחוברות\")"
+    }
+   ]
+  },
+  {
+   "id": "HubConnectApprove",
+   "title": "ענן Kesher: דף האישור לחיבור Claude, עם האזהרה על קישור ששלח מישהו אחר",
+   "route": "/connect?response_type=code&client_id=design&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=x&code_challenge_method=S256&state=s",
+   "hub": {},
+   "height": {
+    "desktop": 800,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": "button.pri"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/oauth/check",
+     "method": "POST",
+     "json": {
+      "clientName": "Claude",
+      "redirectHost": "claude.ai",
+      "loopback": false
+     }
+    }
+   ]
+  },
+  {
+   "id": "HubTasksWrap",
+   "title": "ענן Kesher: משימות — הערות ארוכות נשברות לשורות, והשורה העליונה נשארת למעלה בגלילה",
+   "route": "#tasks",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לבדוק למה ההתחברות נכשלת",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "אימות ההתחברות נכשל בשלב הרביעי: השרת החזיר 401 כי הטוקן פג תוקף לפני שהבקשה הגיעה, ולכן הסוכן ניסה שוב פעמיים עם טוקן חדש והצליח רק בפעם השלישית. כדאי לבדוק את שעון המחשב.",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "runId": "in-t7",
+       "at": {
+        "$agoMs": "20m"
+       }
+      }
+     },
+     {
+      "title": "לסדר את תיקיית ההורדות",
+      "status": "waiting",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "המחשב עסוק: משחק פתוח במסך מלא ולכן המשימה מחכה עד שהוא ייסגר, ואז תתחיל מעצמה בלי שתצטרך ללחוץ שוב.",
+      "createdAt": {
+       "$agoMs": "50m"
+      }
+     },
+     {
+      "title": "סיכום הבדיקות של הלילה",
+      "status": "done",
+      "route": "claude-cloud",
+      "toName": "Claude בענן",
+      "line": "כל 412 הבדיקות עברו. נמצאו שתי אזהרות ישנות בלבד, ואף אחת לא חדשה, והקובץ המלא נשמר בענף של הלילה.",
+      "createdAt": {
+       "$agoMs": "3h"
+      }
+     },
+     {
+      "title": "להעביר את ההגדרות לקובץ אחד",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-laptop",
+      "toName": "Laptop",
+      "line": "Laptop כבוי כרגע ולכן לא הצליח למסור את המשימה, והיא תישלח שוב אוטומטית ברגע שהוא יידלק ויתחבר למרכז.",
+      "createdAt": {
+       "$agoMs": "5h"
+      }
+     },
+     {
+      "title": "לבדוק עדכוני תלויות",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "נמצאו שלושה עדכונים קטנים ואחד גדול; העדכון הגדול דורש שינוי בקוד ולכן לא הותקן.",
+      "createdAt": {
+       "$agoMs": "8h"
+      }
+     },
+     {
+      "title": "לצלם את מסכי האפליקציה",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "צולמו 38 מסכים במחשב ובטלפון, בלי גלישה לצדדים.",
+      "createdAt": {
+       "$agoMs": "1d"
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t7",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "name": "הבודק של ההתחברות",
+       "note": "מחכה לתיקון הטוקן מהשרת. אם נתקע שוב: להעביר ל-Claude ולבקש לבדוק גם את שעון המחשב לפני שמנסים שוב.",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 6,
+       "label": "edit_file",
+       "model": "Gemini",
+       "tokensIn": 8200,
+       "tokensOut": 1900,
+       "files": 2,
+       "labelAt": {
+        "$agoMs": "4m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 6,
+        "label": "read_file"
+       },
+       {
+        "type": "tool",
+        "name": "read_file",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 2,
+        "of": 6,
+        "label": "grep"
+       },
+       {
+        "type": "tool",
+        "name": "grep",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 3,
+        "of": 6,
+        "label": "edit_file"
+       },
+       {
+        "type": "tool",
+        "name": "edit_file",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 1000,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": ".trow"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "waitMs": 800
+    },
+    {
+     "scroll": ".trow:has-text(\"לצלם את מסכי\")"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "HubAgentsNamed",
+   "title": "ענן Kesher: סוכנים — שם והערה משלך על כל סוכן",
+   "route": "#agents",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לבדוק למה ההתחברות נכשלת",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "אימות ההתחברות נכשל בשלב הרביעי: השרת החזיר 401 כי הטוקן פג תוקף לפני שהבקשה הגיעה, ולכן הסוכן ניסה שוב פעמיים עם טוקן חדש והצליח רק בפעם השלישית. כדאי לבדוק את שעון המחשב.",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "runId": "in-t7",
+       "at": {
+        "$agoMs": "20m"
+       }
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t7",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "name": "הבודק של ההתחברות",
+       "note": "מחכה לתיקון הטוקן מהשרת. אם נתקע שוב: להעביר ל-Claude ולבקש לבדוק גם את שעון המחשב לפני שמנסים שוב.",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 6,
+       "label": "edit_file",
+       "model": "Gemini",
+       "tokensIn": 8200,
+       "tokensOut": 1900,
+       "files": 2,
+       "labelAt": {
+        "$agoMs": "4m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 6,
+        "label": "read_file"
+       },
+       {
+        "type": "tool",
+        "name": "read_file",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 2,
+        "of": 6,
+        "label": "grep"
+       },
+       {
+        "type": "tool",
+        "name": "grep",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 3,
+        "of": 6,
+        "label": "edit_file"
+       },
+       {
+        "type": "tool",
+        "name": "edit_file",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "in-t8",
+      "state": {
+       "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+       "source": "inbox",
+       "state": "waiting",
+       "step": 1,
+       "of": 3,
+       "waiting": {
+        "reason": "approval",
+        "requestId": "r1",
+        "conversationId": "c1",
+        "summary": "למחוק 14 קבצים ישנים מתיקיית ההורדות"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+        "source": "inbox"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 6,
+        "label": "list_dir"
+       },
+       {
+        "type": "tool",
+        "name": "list_dir",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "in-t6",
+      "state": {
+       "title": "סיכום הבדיקות של הלילה",
+       "name": "סיכום לילה",
+       "source": "claude-cloud",
+       "state": "done",
+       "step": 5,
+       "of": 5,
+       "summary": "כל 412 הבדיקות עברו. נמצאו שתי אזהרות ישנות בלבד, ואף אחת לא חדשה."
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "סיכום הבדיקות של הלילה",
+        "source": "claude-cloud"
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 850,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".acard"
+    }
+   ]
+  },
+  {
+   "id": "HubAgentCard",
+   "title": "ענן Kesher: כרטיס סוכן — שם והערה, ו\"מי עושה\" (Claude, Antigravity, המודל המקומי, סוכן צ'אט)",
+   "route": "#agents",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לבדוק למה ההתחברות נכשלת",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "line": "אימות ההתחברות נכשל בשלב הרביעי: השרת החזיר 401 כי הטוקן פג תוקף לפני שהבקשה הגיעה, ולכן הסוכן ניסה שוב פעמיים עם טוקן חדש והצליח רק בפעם השלישית. כדאי לבדוק את שעון המחשב.",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "runId": "in-t7",
+       "at": {
+        "$agoMs": "20m"
+       }
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t7",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "name": "הבודק של ההתחברות",
+       "note": "מחכה לתיקון הטוקן מהשרת. אם נתקע שוב: להעביר ל-Claude ולבקש לבדוק גם את שעון המחשב לפני שמנסים שוב.",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 6,
+       "label": "edit_file",
+       "model": "Gemini",
+       "tokensIn": 8200,
+       "tokensOut": 1900,
+       "files": 2,
+       "labelAt": {
+        "$agoMs": "4m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 6,
+        "label": "read_file"
+       },
+       {
+        "type": "tool",
+        "name": "read_file",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 2,
+        "of": 6,
+        "label": "grep"
+       },
+       {
+        "type": "tool",
+        "name": "grep",
+        "ok": true,
+        "ms": 180
+       },
+       {
+        "type": "step",
+        "n": 3,
+        "of": 6,
+        "label": "edit_file"
+       },
+       {
+        "type": "tool",
+        "name": "edit_file",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "in-t8",
+      "state": {
+       "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+       "source": "inbox",
+       "state": "waiting",
+       "step": 1,
+       "of": 3,
+       "waiting": {
+        "reason": "approval",
+        "requestId": "r1",
+        "conversationId": "c1",
+        "summary": "למחוק 14 קבצים ישנים מתיקיית ההורדות"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "ניקוי הקבצים הישנים בתיקיית ההורדות",
+        "source": "inbox"
+       },
+       {
+        "type": "step",
+        "n": 1,
+        "of": 6,
+        "label": "list_dir"
+       },
+       {
+        "type": "tool",
+        "name": "list_dir",
+        "ok": true,
+        "ms": 180
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "in-t6",
+      "state": {
+       "title": "סיכום הבדיקות של הלילה",
+       "name": "סיכום לילה",
+       "source": "claude-cloud",
+       "state": "done",
+       "step": 5,
+       "of": 5,
+       "summary": "כל 412 הבדיקות עברו. נמצאו שתי אזהרות ישנות בלבד, ואף אחת לא חדשה."
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "סיכום הבדיקות של הלילה",
+        "source": "claude-cloud"
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 1000,
+    "phone": 1450
+   },
+   "steps": [
+    {
+     "wait": ".acard"
+    },
+    {
+     "click": ".acard:has-text(\"הבודק של ההתחברות\")"
+    },
+    {
+     "wait": ".assign"
+    },
+    {
+     "click": ".assign button"
+    },
+    {
+     "wait": ".assign-list"
+    }
+   ]
+  }
+ ]
+}

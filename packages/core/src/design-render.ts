@@ -29,6 +29,7 @@ import { join, resolve } from "node:path";
 import { applyBoardNotes, BOARD_WIDTH, boardHtml, diffRenders, mergeCanvas, readCanvas, type RenderDiff, type RenderedBoard } from "./design-canvas.js";
 import { shotsDiffer } from "./design-png.js";
 import { parseScenarios, type DesignJob, type DesignStep } from "./design-scenarios.js";
+import { FAKE_VAPID, HUB_ORIGIN_JS, HUB_PUSH_JS, HUB_SEED_JS, hubOwnerState, hubPlan, hubPublicDir, startHubServer } from "./design-hub.js";
 
 /** Where scenarios live in the repo, and the design-out folder under it. */
 export const SCENARIO_DIR = "tools/design/scenarios";
@@ -106,7 +107,9 @@ async function writeAtomic(file: string, text: string | Buffer): Promise<void> {
 interface PwPage {
   clock: { setFixedTime(t: number): Promise<void> };
   route(url: string, h: (r: PwRoute) => Promise<void>): Promise<void>;
-  addInitScript(fn: (a: { locale: string; phone: boolean }) => void, arg: { locale: string; phone: boolean }): Promise<void>;
+  addInitScript(fn: string | ((a: { locale: string; phone: boolean }) => void), arg?: { locale: string; phone: boolean }): Promise<void>;
+  evaluate(expression: string): Promise<unknown>;
+  routeWebSocket(url: RegExp, handler: (ws: { send(message: string): void }) => void): Promise<void>;
   goto(url: string, o?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
   locator(sel: string): { first(): PwLocator };
@@ -156,35 +159,75 @@ async function runStep(page: PwPage, s: DesignStep): Promise<void> {
   }
 }
 
+/** Adds the job's mocks (the board's own win over the file's: Playwright tries the route added last first). */
+async function addMocks(page: PwPage, mocks: DesignJob["mocks"]): Promise<void> {
+  for (const m of [...mocks].reverse()) {
+    await page.route(m.url, async (r) => {
+      if (m.method && r.request().method() !== m.method) return r.fallback();
+      await r.fulfill({ status: m.status ?? 200, ...(m.json !== undefined ? { json: m.json } : { body: m.body ?? "", contentType: m.contentType ?? "text/plain" }) });
+    });
+  }
+}
+
+/**
+ * Gets a hub board's page ready (design-hub.ts): the browser's device and tasks go into IndexedDB, the PCs' sealed
+ * activity and the hub's own `/api/*` answers are served, and the socket answers with a welcome.
+ */
+async function prepareHub(page: PwPage, hubBase: string, job: DesignJob): Promise<void> {
+  const seed = job.hub!;
+  const plan = hubPlan(seed, job.now);
+  await page.goto(`${hubBase}/__blank`, { waitUntil: "load" });
+  const sealed = (await page.evaluate(`(${HUB_SEED_JS})(${JSON.stringify(plan)})`)) as { presence: Array<{ id: string; name: string; kind: string; online: boolean }>; envs: unknown[]; hubKey: string };
+  // This browser is a device of the hub too (a phone), as the real hub lists it.
+  const me = seed.device ? [{ id: plan.deviceId, name: seed.device.name, kind: "phone", publicKey: "", online: true, busy: false, optIn: plan.optIn, agents: [] }] : [];
+  const presence = [...sealed.presence, ...me];
+  const owner = hubOwnerState(seed, presence);
+  const json = (url: string, body: unknown, method?: "GET" | "POST", status = 200) => ({ url, ...(method ? { method } : {}), status, json: body });
+  // The defaults first, so the board's own mocks win.
+  await addMocks(page, [
+    json("**/api/config", { googleClientId: "", vapidPublicKey: FAKE_VAPID }),
+    seed.signedIn ? json("**/api/state", owner) : json("**/api/state", {}, undefined, 401),
+    json("**/api/ticket", { ticket: "design-ticket" }, "POST"),
+    json("**/api/agents*", { envs: sealed.envs, more: false }),
+    json("**/api/push/*", { ok: true }, "POST"),
+  ]);
+  await page.routeWebSocket(/\/ws\/device/, (ws) => ws.send(JSON.stringify({ t: "welcome", deviceId: plan.deviceId, hubKey: sealed.hubKey, presence, paused: false, rotateDue: false })));
+}
+
 /** Shoots one job; returns the PNG. */
-async function shoot(browser: PwBrowser, base: string, job: DesignJob): Promise<Buffer> {
+async function shoot(browser: PwBrowser, base: string, job: DesignJob, hubBase?: string): Promise<Buffer> {
   const phone = job.viewport === "phone";
+  const hub = job.target === "hub";
   const ctx = await browser.newContext({ viewport: { width: job.width, height: job.height }, locale: job.locale === "he" ? "he-IL" : "en-US", ...(phone ? { deviceScaleFactor: 2, isMobile: true, hasTouch: true } : {}) });
   try {
     const page = await ctx.newPage();
     await page.clock.setFixedTime(job.now);
-    // The version under the sidebar would mark every board changed after each release: only major.minor shows.
-    await page.route("**/api/version", async (r) => {
-      const v = (await (await r.fetch()).json()) as { version?: string };
-      await r.fulfill({ json: { ...v, version: String(v.version ?? "").split(".").slice(0, 2).join("."), commit: undefined } });
-    });
-    // Playwright tries the route added last first: the file's mocks go in first so a board's own win.
-    for (const m of [...job.mocks].reverse()) {
-      await page.route(m.url, async (r) => {
-        if (m.method && r.request().method() !== m.method) return r.fallback();
-        await r.fulfill({ status: m.status ?? 200, ...(m.json !== undefined ? { json: m.json } : { body: m.body ?? "", contentType: m.contentType ?? "text/plain" }) });
+    if (!hub) {
+      // The version under the sidebar would mark every board changed after each release: only major.minor shows.
+      await page.route("**/api/version", async (r) => {
+        const v = (await (await r.fetch()).json()) as { version?: string };
+        await r.fulfill({ json: { ...v, version: String(v.version ?? "").split(".").slice(0, 2).join("."), commit: undefined } });
       });
     }
-    // The phone talks to the PC through a pairing token (remote), as the real phone app does.
+    // The phone talks to the PC through a pairing token (remote), as the real phone app does; the hub keeps its language under another key.
     await page.addInitScript((a) => {
       try {
         localStorage.setItem("locale", a.locale);
+        localStorage.setItem("kh-lang", a.locale);
         if (a.phone) localStorage.setItem("kesher-token", "design-render");
       } catch { /* storage blocked: the page still renders */ }
     }, { locale: job.locale, phone });
-    await page.goto(`${base}/${job.route}`, { waitUntil: "load", timeout: 30_000 });
+    if (hub) {
+      if (job.hub?.push) await page.addInitScript(`window.__pushOn = true; ${HUB_PUSH_JS}`);
+      else await page.addInitScript(HUB_PUSH_JS);
+      await prepareHub(page, hubBase!, job);
+    }
+    // Playwright tries the route added last first: the file's mocks go in first so a board's own win.
+    await addMocks(page, job.mocks);
+    await page.goto(`${hub ? hubBase : base}/${hub && job.route.startsWith("/") ? job.route.slice(1) : job.route}`, { waitUntil: "load", timeout: 30_000 });
     await page.waitForTimeout(1200);
     for (const s of job.steps) await runStep(page, s);
+    if (hub) await page.evaluate(HUB_ORIGIN_JS);
     await page.waitForTimeout(400);
     const o = { animations: "disabled", caret: "hide", type: "png" };
     const take = () => (job.shot ? page.locator(job.shot).first().screenshot(o) : page.screenshot({ ...o, fullPage: job.fullPage }));
@@ -251,6 +294,8 @@ export async function renderDesign(o: RenderOptions): Promise<DesignRenderResult
   // A fresh server with an empty data folder: what is not mocked comes back empty, never from the real install.
   const server = spawn(process.execPath, [main, "--port", String(port), "--data-dir", data, "--no-autodetect", "--web", web], { stdio: "ignore", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, windowsHide: true });
   const shots: Record<string, { png: Buffer; job: DesignJob }> = {};
+  // The hub page's files, served locally, when a board is a hub board.
+  const hub = jobs.some((j) => j.target === "hub") ? await startHubServer(hubPublicDir(o.repo)) : undefined;
   try {
     let up = false;
     for (let i = 0; i < 80 && !up; i++) {
@@ -265,7 +310,7 @@ export async function renderDesign(o: RenderOptions): Promise<DesignRenderResult
       for (const job of jobs) {
         log(`${job.name} (${job.viewport})`);
         try {
-          shots[job.name] = { png: await shoot(browser, base, job), job };
+          shots[job.name] = { png: await shoot(browser, base, job, hub?.base), job };
         } catch (e) {
           errors.push(`${job.name}: ${(e as Error).message.split("\n")[0]}`);
         }
@@ -274,6 +319,7 @@ export async function renderDesign(o: RenderOptions): Promise<DesignRenderResult
       await browser.close();
     }
   } finally {
+    hub?.close();
     server.kill();
     await rm(data, { recursive: true, force: true }).catch(() => undefined);
   }

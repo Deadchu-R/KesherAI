@@ -26,6 +26,7 @@ test("heights per size, phone steps and board mocks before the file's", () => {
 test("relative times become fixed ones from the file's clock", () => {
   const now = Date.parse("2026-11-20T10:00:00Z");
   assert.deepEqual(resolveTimes({ a: [{ at: { $ago: "40m" } }], b: { $agoMs: "1h" }, c: "x" }, now), { a: [{ at: "2026-11-20T09:20:00.000Z" }], b: now - 3_600_000, c: "x" });
+  assert.deepEqual(resolveTimes({ a: { $in: "1d" }, b: { $inMs: "5m" } }, now), { a: "2026-11-21T10:00:00.000Z", b: now + 300_000 });
   const [job] = parseScenarioFile(file({ mocks: [{ url: "**/api/t", json: { t: { $ago: "2d" } } }] }), "f.json");
   assert.deepEqual(job!.mocks[0]!.json, { t: "2026-11-18T10:00:00.000Z" });
   assert.throws(() => resolveTimes({ $ago: "soon" }, now), /40m/);
@@ -52,4 +53,14 @@ test("every scenario file in the repo parses, with no board name used twice", as
   const r = parseScenarios(await Promise.all(names.map(async (name) => ({ name, text: await readFile(new URL(name, dir), "utf8") }))));
   assert.deepEqual(r.errors, []);
   assert.ok(r.jobs.length >= 28);
+});
+
+test("a hub board takes a tab or a path as its route and its own seed; an app route on a hub board (and the reverse) is refused", () => {
+  const hub = parseScenarioFile(JSON.stringify({ group: "האב", target: "hub", boards: [{ id: "S", title: "t", route: "#settings", hub: { push: true, device: { name: "p" } } }, { id: "C", title: "t", route: "/connect?client_id=x" }] }), "hub.json");
+  assert.deepEqual(hub.map((j) => [j.name, j.target]), [["S.dc.html", "hub"], ["SPhone.dc.html", "hub"], ["C.dc.html", "hub"], ["CPhone.dc.html", "hub"]]);
+  assert.equal(hub[0]!.hub?.push, true);
+  assert.equal(hub[2]!.hub?.signedIn, true);
+  assert.throws(() => parseScenarioFile(JSON.stringify({ group: "g", target: "hub", boards: [{ id: "S", title: "t", route: "#/games" }] }), "f.json"), /hub board's route/);
+  assert.throws(() => parseScenarioFile(JSON.stringify({ group: "g", boards: [{ id: "S", title: "t", route: "#settings" }] }), "f.json"), /route/);
+  assert.equal(parseScenarioFile(JSON.stringify({ group: "g", boards: [{ id: "S", title: "t", route: "#/games" }] }), "f.json")[0]!.target, "app");
 });

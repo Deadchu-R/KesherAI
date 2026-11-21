@@ -22,6 +22,8 @@ import shutil
 from PIL import Image  # Pillow: reads the pictures inside the boards
 
 AREA_ORDER = ["סוכנים", "צ'אט", "דפדפן ומחשב", "משחקים", "מודלים", "פתיחה", "זיכרון", "קול", "האב", "עיצוב"]
+# Scenario groups that belong to an area named differently (group text starts with the key -> area title).
+AREA_ALIAS = {"שיחה קולית": "קול · Voice"}
 ROW_W = 7600       # a row of new boards wraps after this width
 SIDE = 380         # room kept beside each board (as design_marks.py)
 GAP = 900          # between rows: room for the newest note (and the area title) above each row
@@ -68,6 +70,14 @@ def note_place(boards, name):
     return b["x"], b["y"] + b["h"] + 40, max(260, b["w"])
 
 
+def area_of(group):
+    """The canvas area of a scenario group: the group itself, or the area it is an alias of (AREA_ALIAS)."""
+    for prefix, area in AREA_ALIAS.items():
+        if group.startswith(prefix):
+            return area
+    return group
+
+
 def scenario_groups(scen_dir):
     """Board file name -> (area group, order index), from the scenario files."""
     out = {}
@@ -77,7 +87,7 @@ def scenario_groups(scen_dir):
         d = json.load(open(os.path.join(scen_dir, f), encoding="utf8"))
         for b in d["boards"]:
             for vp in b.get("viewports", ["desktop", "phone"]):
-                out[f"{b['id']}{'Phone' if vp == 'phone' else ''}.dc.html"] = (d["group"], len(out))
+                out[f"{b['id']}{'Phone' if vp == 'phone' else ''}.dc.html"] = (area_of(d["group"]), len(out))
     return out
 
 
@@ -121,10 +131,10 @@ def main():
 
     # New boards by area: a title, then rows that wrap; each board followed by its phone twin as rendered.
     fresh = [n for n, s in status.items() if s == "new"]
-    areas = sorted({groups.get(n, (state[n]["group"], 0))[0] for n in fresh}, key=lambda g: (area_rank(g), g))
+    areas = sorted({groups.get(n, (area_of(state[n]["group"]), 0))[0] for n in fresh}, key=lambda g: (area_rank(g), g))
     bottom = max(b["y"] + b["h"] for b in cb.values())
     for gi, g in enumerate(areas):
-        names = sorted((n for n in fresh if groups.get(n, (state[n]["group"], 0))[0] == g), key=lambda n: groups.get(n, ("", 0))[1])
+        names = sorted((n for n in fresh if groups.get(n, (area_of(state[n]["group"]), 0))[0] == g), key=lambda n: groups.get(n, ("", 0))[1])
         y = bottom + GAP + 300  # extra room for the area title above the first row
         x, rowh, widest = 0, 0, 0
         for n in names:
@@ -172,7 +182,7 @@ def main():
              f"{sum(s == 'same' for s in status.values())} rendered boards equal the live doc and are left as they are.", ""]
     by = {}
     for n in marked:
-        by.setdefault(groups.get(n, (state[n]["group"], 0))[0], []).append(n)
+        by.setdefault(groups.get(n, (area_of(state[n]["group"]), 0))[0], []).append(n)
     for g in sorted(by, key=lambda g: (area_rank(g), g)):
         lines += [f"## {g}", ""] + [f"- {cb[n]['title']} ({n[:-8]}) — {status[n]}" for n in sorted(by[g], key=lambda n: groups.get(n, ('', 0))[1])] + [""]
     same = [n for n, s in status.items() if s == "same"]

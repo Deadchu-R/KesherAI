@@ -14,7 +14,8 @@
  *                "steps": [{ "wait": ".games-card" }] }] }
  * ```
  * Times in mock data stay the same on every render: `{ "$ago": "40m" }` becomes the ISO time 40 minutes before
- * `now`, `{ "$agoMs": "5m" }` the same time in milliseconds (s, m, h and d work).
+ * `now`, `{ "$agoMs": "5m" }` the same time in milliseconds (s, m, h and d work); `$in` and `$inMs` are the same
+ * counted forward from `now` (a time still to come).
  */
 import { z } from "zod";
 
@@ -50,12 +51,34 @@ const stepSchema = z.union([
   // Selects the element's text (as a user's drag or the phone's handles would), for boards of a selection's tools.
   z.object({ select: selector }).strict(),
 ]);
+/**
+ * What a hub board (`"target": "hub"`) starts from: whether the owner is signed in (and the fields of `/api/state` to
+ * change), whether this browser is a paired device, the PCs the hub lists, the tasks the page keeps, and the runs the
+ * PCs report (`state` and `events` as in packages/shared/src/hub-protocol.ts; times as `{ "$agoMs": "5m" }`). The
+ * missing fields are filled in by design-hub.ts.
+ */
+const hubSeedSchema = z.object({
+  signedIn: z.boolean().default(true),
+  owner: z.record(z.string(), z.unknown()).optional(),
+  device: z.object({ name: z.string().min(1).max(60) }).optional(),
+  pcs: z.array(z.object({ id: z.string().regex(/^[\w-]{1,64}$/), name: z.string().min(1).max(60), online: z.boolean().default(true), kind: z.enum(["pc", "claude-chat"]).default("pc") })).max(8).default([]),
+  tasks: z.array(z.record(z.string(), z.unknown())).max(50).default([]),
+  agents: z.array(z.object({ pc: z.string(), runId: z.string().regex(/^[\w-]{1,64}$/), state: z.record(z.string(), z.unknown()).default({}), events: z.array(z.record(z.string(), z.unknown())).max(50).default([]) })).max(30).default([]),
+  /** The browser is subscribed to Web Push (Settings › Notifications shows its switch on). */
+  push: z.boolean().default(false),
+}).strict();
+/** A hub board's starting state (see {@link hubSeedSchema}). */
+export type HubSeed = z.infer<typeof hubSeedSchema>;
+
 const height = z.number().int().min(200).max(6000);
 const boardSchema = z.object({
   id: z.string().regex(/^[A-Za-z][A-Za-z0-9-]{0,60}$/, "id: letters, digits and '-' (it becomes a file name)"),
   title: z.string().min(1).max(160),
   titleEn: z.string().max(160).optional(),
-  route: z.string().regex(/^#\/[^\s]*$/, "route: a page of the interface, like #/games").max(300),
+  // The interface's page (#/games), or for a hub board the hub's tab (#settings) or page (/connect?client_id=…).
+  route: z.string().regex(/^(#\/|#[a-z]*$|\/)[^\s]*$/, "route: a page of the interface, like #/games (a hub board: #settings or /connect?…)").max(300),
+  target: z.enum(["app", "hub"]).optional(),
+  hub: hubSeedSchema.optional(),
   viewports: z.array(z.enum(["desktop", "phone"])).min(1).max(2).default(["desktop", "phone"]),
   locale: z.enum(["he", "en"]).default("he"),
   height: z.union([height, z.object({ desktop: height.optional(), phone: height.optional() })]).optional(),
@@ -68,6 +91,8 @@ const boardSchema = z.object({
 const fileSchema = z.object({
   group: z.string().min(1).max(80),
   now: z.iso.datetime().optional(),
+  target: z.enum(["app", "hub"]).default("app"),
+  hub: hubSeedSchema.optional(),
   mocks: z.array(mockSchema).max(80).default([]),
   boards: z.array(boardSchema).min(1).max(60),
 });
@@ -100,6 +125,10 @@ export interface DesignJob {
   steps: DesignStep[];
   /** The fixed clock, ms since 1970. */
   now: number;
+  /** `hub`: shot from the hub page's own files (design-hub.ts) instead of the KesherAI interface. */
+  target: "app" | "hub";
+  /** A hub board's starting state (times already fixed). */
+  hub?: HubSeed;
 }
 
 const UNITS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
@@ -115,11 +144,12 @@ export function resolveTimes(value: unknown, now: number): unknown {
   if (!value || typeof value !== "object") return value;
   const o = value as Record<string, unknown>;
   const keys = Object.keys(o);
-  if (keys.length === 1 && (keys[0] === "$ago" || keys[0] === "$agoMs") && typeof o[keys[0]] === "string") {
+  if (keys.length === 1 && (keys[0] === "$ago" || keys[0] === "$agoMs" || keys[0] === "$in" || keys[0] === "$inMs") && typeof o[keys[0]] === "string") {
     const m = /^(\d+(?:\.\d+)?)([smhd])$/.exec(o[keys[0]] as string);
     if (!m) throw new Error(`time "${String(o[keys[0]])}": use a number and s, m, h or d (like 40m)`);
-    const at = now - Number(m[1]) * UNITS[m[2]!]!;
-    return keys[0] === "$ago" ? new Date(at).toISOString() : at;
+    const span = Number(m[1]) * UNITS[m[2]!]!;
+    const at = keys[0]!.startsWith("$in") ? now + span : now - span;
+    return keys[0] === "$ago" || keys[0] === "$in" ? new Date(at).toISOString() : at;
   }
   return Object.fromEntries(keys.map((k) => [k, resolveTimes(o[k], now)]));
 }
@@ -147,6 +177,10 @@ export function parseScenarioFile(text: string, file: string): DesignJob[] {
   const now = Date.parse(f.now ?? DEFAULT_NOW);
   const jobs: DesignJob[] = [];
   for (const b of f.boards) {
+    const target = b.target ?? f.target;
+    // A route fits its target: the interface's pages are #/…, the hub's are a tab (#settings) or a path (/connect).
+    if (target === "app" && !b.route.startsWith("#/")) throw new Error(`${file}: board ${b.id}: route ${b.route} is a hub address; add "target": "hub"`);
+    if (target === "hub" && b.route.startsWith("#/")) throw new Error(`${file}: board ${b.id}: a hub board's route is a tab like #settings or a path like /connect`);
     for (const viewport of b.viewports) {
       const phone = viewport === "phone";
       const h = typeof b.height === "number" ? b.height : b.height?.[viewport];
@@ -165,6 +199,8 @@ export function parseScenarioFile(text: string, file: string): DesignJob[] {
         mocks: [...b.mocks, ...f.mocks].map((m) => (m.json === undefined ? m : { ...m, json: resolveTimes(m.json, now) })),
         steps: (phone && b.phoneSteps) || b.steps,
         now,
+        target,
+        ...(target === "hub" ? { hub: hubSeedSchema.parse(resolveTimes(b.hub ?? f.hub ?? {}, now)) } : {}),
       });
     }
   }
