@@ -1945,8 +1945,19 @@ Scope: `git diff f189a92..HEAD` (225 files).
   desktop app encrypted them). `secret-file.ts`: without the desktop app's box, keys are sealed with AES-256-GCM using a
   random key in `<data folder>.key` (next to the data folder, not in it; created once, mode 0600). `openDataDir` saves
   the config once at start, so existing plain values are migrated. A value sealed by one box is never read by the other
-  (own `f1:` marker; unreadable values are kept as they were). Still plain in config.json: Google refresh tokens,
-  the remote token and `browserKey` (not in the sealed slots) - listed for a later pass. Tests: round trip, 0600, tamper.
+  (own `f1:` marker; unreadable values are kept as they were). Google refresh tokens, the remote token and `browserKey` were
+  still plain then; closed by the follow-up below. Tests: round trip, 0600, tamper.
+- **Follow-up, closed (2026-11-21): Google tokens, the remote (pairing) token and the browser key are sealed too.**
+  `google.refreshToken`, `google.clientSecret`, `remote.guestGoogle.clientSecret`, `remote.token` and `browserKey` are
+  sealed slots in config.ts (the desktop app's box, or the `f1:` key file when headless). Migration is the existing
+  start-up save: the plain value is read, written sealed, the plain text is gone from config.json; nothing is
+  regenerated, so a paired phone (its own `kd_` key, kept as a hash) and the shared token keep working and a Google
+  sign-in stays connected. Routes checked: `/api/settings`, `/api/google`, `/api/remote/devices`, `/api/hf-token`,
+  `/api/guests/google` never return them; only `/api/remote` (the QR pairing token) and `/api/browser` (the
+  extension key) show them, to this computer only (403 from devices, unchanged). No log line prints them. Not
+  covered by this pass: the OneDrive and Copilot refresh tokens (same kind, next in line). Tests:
+  `remote-secrets.test.ts` (migration from plain, round trip, paired device and shared token verify after a
+  restart, no route echoes).
 - **Fixed (low): quadratic regex in `maskSecrets`** (tool cards): `key`×100 000 took ~1.9 s. The name parts around
   the keyword are now at most 40 characters; test added. `bidi.ts` runs and the other tool-card regexes timed linear on
   100 000-character adversarial inputs.

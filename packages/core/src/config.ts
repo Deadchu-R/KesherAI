@@ -663,7 +663,11 @@ export function useSecretBox(box: SecretBox | undefined): void {
 /** Encrypted secrets this run could not read, kept as they were so a save does not lose them (by slot). */
 const unreadable = new Map<string, string>();
 
-/** The secrets in a config: provider keys, the Hugging Face token, the Telegram, Figma, GitHub, CivitAI and cloud hub tokens, and the hub key. */
+/**
+ * The secrets in a config: provider keys, the Hugging Face token, the Telegram, Figma, GitHub, CivitAI and cloud hub
+ * tokens, the hub key, the Google sign-in (refresh token and client secrets), the remote (pairing) token and the
+ * browser extension's key.
+ */
 function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, unknown>; key: string; slot: string }> {
   const slots: Array<{ obj: Record<string, unknown>; key: string; slot: string }> = [];
   for (const p of Array.isArray(c.providers) ? (c.providers as Array<Record<string, unknown>>) : []) if (p && typeof p === "object") slots.push({ obj: p, key: "apiKey", slot: `provider:${String(p.id)}` });
@@ -677,6 +681,15 @@ function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, un
   }
   // The cloud hub's device private key.
   if (c.hub && typeof c.hub === "object") slots.push({ obj: c.hub as Record<string, unknown>, key: "key", slot: "hub:key" });
+  // Google sign-in: the refresh token and the client secret (the guests' Google client is under `remote`).
+  if (c.google && typeof c.google === "object") for (const k of ["refreshToken", "clientSecret"]) slots.push({ obj: c.google as Record<string, unknown>, key: k, slot: `google:${k}` });
+  // The shared remote (pairing) token, and the key the browser extension pairs with.
+  if (c.remote && typeof c.remote === "object") {
+    const r = c.remote as Record<string, unknown>;
+    slots.push({ obj: r, key: "token", slot: "remote:token" });
+    if (r.guestGoogle && typeof r.guestGoogle === "object") slots.push({ obj: r.guestGoogle as Record<string, unknown>, key: "clientSecret", slot: "remote:guestGoogle:clientSecret" });
+  }
+  slots.push({ obj: c, key: "browserKey", slot: "browserKey" });
   return slots;
 }
 
