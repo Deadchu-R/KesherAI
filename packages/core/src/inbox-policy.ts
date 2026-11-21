@@ -154,10 +154,23 @@ export function pathAllowed(path: string, allowed: string[], forbidden: string[]
 export const RESEARCH_READ_COMMANDS = ["Get-ChildItem", "Get-Content", "Select-String", "ls", "dir", "cat", "type", "rg", "grep", "git log", "git show", "git status"];
 
 /**
+ * Formatting commands that may follow a research read command after `|` (`Get-ChildItem x | Select-Object Name`):
+ * they only shape the output. A deep-research run stopped after "Get-ChildItem apps/web/src/pages | Select-Object
+ * -Property Name" was refused. Script blocks (`{…}`) stay refused, so Where-Object and ForEach-Object cannot run code.
+ */
+export const RESEARCH_PIPE_FILTERS = ["Select-Object", "Sort-Object", "Measure-Object", "Format-Table", "Format-List", "Out-String", "Select-String", "head", "sort", "wc"];
+
+/**
  * Whether a command may run without asking: every part of `a && b` starts with an allowed command and has no
  * other shell syntax.
  */
-function commandAllowed(command: string, allowed: string[]): boolean {
+function commandAllowed(command: string, allowed: string[], filters: string[] = []): boolean {
+  // `read | filter | filter`: each pipe stage after the first must be an output filter (research only).
+  if (filters.length && /(^|[^|])\|(?!\|)/.test(command) && !command.includes("&&")) {
+    const stages = command.split("|").map((p) => p.trim());
+    if (stages.some((p) => !p)) return false;
+    return commandAllowed(stages[0], allowed) && stages.slice(1).every((p) => commandAllowed(p, filters));
+  }
   const parts = command.split("&&").map((p) => p.trim()).filter(Boolean);
   // No other shell syntax: PowerShell runs `(…)` and `{…}` as code, and cmd expands `%VAR%` (scan 172).
   if (!parts.length || /[;|<>`$\r\n&(){}%]/.test(command.replace(/&&/g, " "))) return false;
@@ -201,7 +214,7 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     if (SECRET_FILE.test(command.split(/\s+/).find((w) => SECRET_FILE.test(w)) ?? "")) return { verdict: "deny", rule: "secret files", what };
     // Where it runs (cwd) and any path it names must be inside the worktree.
     if (f.paths.some((x) => !insideWorktree(ctx.worktree, x))) return { verdict: "deny", rule: "outside the worktree", what };
-    return commandAllowed(command, ctx.research ? [...ctx.commands, ...RESEARCH_READ_COMMANDS] : ctx.commands) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
+    return (ctx.research ? commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS], RESEARCH_PIPE_FILTERS) : commandAllowed(command, ctx.commands)) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
   if (kind === "fetch") {

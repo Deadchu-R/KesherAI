@@ -872,6 +872,12 @@ export class TaskInbox {
         void agent.cancel().catch(() => undefined);
       }, t.maxMinutes * 60_000);
       if (a.why !== "stop") stop = await agent.prompt(agentPrompt(t, t.branch));
+      // A research agent sometimes gives up after one refused step and writes nothing: ask once more, in the same
+      // session, for the report with what it has (two deep-research runs ended this way).
+      const report = t.kind === "research" ? t.allowedPaths[0] : undefined;
+      if (report && !a.why && stop === "end_turn" && !existsSync(join(worktree, report))) {
+        stop = await agent.prompt(researchNudge(report));
+      }
     } catch (e) {
       error = (e as Error).message || String(e);
     } finally {
@@ -1092,4 +1098,17 @@ export class TaskInbox {
 /** Whether a status is an end. */
 function isEnded(s: InboxStatus): boolean {
   return s === "done" || s === "partial" || s === "failed" || s === "declined" || s === "deferred-quota" || s === "skipped";
+}
+
+/**
+ * The second prompt to a research agent that ended without writing its report.
+ *
+ * @param report - The report's path in the worktree.
+ */
+export function researchNudge(report: string): string {
+  return [
+    `You ended without writing the report file ${report}. Write it now.`,
+    "A refused step is not a reason to stop: use your file tools (read, list, search) and web search instead of shell commands.",
+    "Write everything you found so far, mark the parts you could not finish as \"not done\", and save the file before you end.",
+  ].join("\n");
 }

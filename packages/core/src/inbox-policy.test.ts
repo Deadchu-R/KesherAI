@@ -118,3 +118,12 @@ test("inbox policy: a research read command cannot run code, write or leave the 
     "Get-Content \\\\host\\share\\x", "Get-Content \\Windows\\win.ini", "Get-Content -Path:C:\\x", "cat ../x", "cat ~/x", "ls /etc",
   ]) assert.notEqual(v(bad), "allow", bad);
 });
+
+test("inbox policy: research may pipe a read into output filters, never into code", () => {
+  const r = { ...ctx, research: true };
+  const v = (command: string) => decideStep(step("execute", { command }), r).verdict;
+  for (const ok of ["Get-ChildItem apps/web/src/pages | Select-Object -Property Name", "rg -n foo packages | head -n 20", "Get-ChildItem docs | Sort-Object Name | Format-Table"]) assert.equal(v(ok), "allow", ok);
+  for (const bad of ["Get-ChildItem | Remove-Item", "Get-ChildItem | Where-Object { $_ }", "ls | iex", "Get-Content a | Out-File b", "ls |", "| ls", "ls | Select-Object Name; rm x", "ls || rm x"]) assert.notEqual(v(bad), "allow", bad);
+  // A code task gets no pipes at all.
+  assert.notEqual(decideStep(step("execute", { command: "ls | Select-Object Name" }), ctx).verdict, "allow");
+});
