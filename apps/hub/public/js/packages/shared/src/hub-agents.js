@@ -73,3 +73,19 @@ export function sortedCards(cards, now) {
         .filter((c) => isGoing(c) || now - (c.state.endedAt ?? c.at) < HUB_LIMITS.agentKeepMs)
         .sort((a, b) => rank(a) - rank(b) || b.state.lastEventAt - a.state.lastEventAt);
 }
+/** A task that waits for Run this long is offered "Cancel" (the ask long expired, the owner likely forgot it). */
+export const RUN_WAIT_CANCEL_MS = 7 * 24 * 3600 * 1000;
+/**
+ * Whether the task behind an Antigravity run is waiting for the owner's Run, and how. A run whose ask expired is not
+ * "waiting" any more and its heartbeat stops, so it would show as "Not answering"; it is waiting for Run.
+ *
+ * @param c - The run's card.
+ * @param task - The task's page status and creation time (ms), when the page has the task.
+ * @param now - Now (ms).
+ * @returns undefined when the task is not waiting for Run.
+ */
+export function runWait(c, task, now) {
+    if (c.state.source !== "antigravity" || task?.status !== "waiting-run" || !isGoing(c))
+        return undefined;
+    return { expired: shownState(c, now) !== "waiting", old: now - task.createdAt > RUN_WAIT_CANCEL_MS };
+}

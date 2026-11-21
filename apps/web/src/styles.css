@@ -2249,6 +2249,8 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
   .conv-split { flex-direction: column; }
   .conv-panes { order: -1; width: auto !important; max-height: 45dvh; border-inline-start: 0; border-bottom: 1px solid var(--border); }
   .conv-panes-grip { display: none; }
+  /* The expanded browser is the whole screen on a phone; the button in its header goes back. */
+  .conv-panes.expanded { position: fixed; inset: 0; z-index: 40; max-height: none; border-bottom: 0; }
   .conv-split .chat { flex: 1; min-height: 0; }
 }
 .pane-btn { display: inline-flex; align-items: center; gap: 6px; padding-inline: 10px; }

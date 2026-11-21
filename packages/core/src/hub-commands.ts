@@ -17,6 +17,8 @@ export interface InboxCommandDeps {
   running: (id: string) => Promise<boolean>;
   stop: (id: string) => Promise<boolean>;
   skip: (id: string) => Promise<unknown>;
+  /** Asks "Run this task in Antigravity?" again (inbox-runner.ts askRun); the earlier ask expired. */
+  ask?: (id: string) => Promise<unknown>;
 }
 
 /**
@@ -34,6 +36,11 @@ export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction
   const id = ids.includes(taskId) ? taskId : await d.fromDrive?.(taskId);
   if (!id || !ids.includes(id)) return { ok: false, text: "This PC does not have that task." };
   try {
+    if (action === "inbox-ask") {
+      if (!d.ask) return { ok: false, text: "This PC cannot ask again yet." };
+      await d.ask(id);
+      return { ok: true, text: "Asked again on the PC." };
+    }
     if (action === "inbox-run") {
       await d.run(id, `hub:${from.id}`);
       return { ok: true, text: "Started on the PC." };

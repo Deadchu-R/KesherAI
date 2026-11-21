@@ -70,7 +70,7 @@ export interface ChatToolGroup {
 export const CHAT_TOOL_GROUPS: readonly ChatToolGroup[] = [
   { id: "images", he: "תמונות", en: "Images", about: "draw or edit pictures, photos, logos, illustrations; tileable textures and PBR materials; 2D game or UI sprites and icons", tools: /^(generate_image|animate_picture|edit_image|upscale_image|remove_background|make_pbr_texture|make_ui_sprite)$/, words: ["צייר", "ציור", "תמונ", "איור", "לוגו", "צילום", "תצלום", "טקסטור", "ספרייט", "אייקון", "draw", "picture", "image", "photo", "illustrat", "logo", "paint", "sketch", "wallpaper", "texture", "tileable", "seamless", "pbr", "sprite", "icon"], needs: "image-model" },
   { id: "video", he: "וידאו", en: "Video", about: "make a video or animate a clip", tools: /^generate_video$/, words: ["סרטון", "וידאו", "וידיאו", "קליפ", "אנימצי", "video", "clip", "movie", "animat"], needs: "video-model" },
-  { id: "audio", he: "שמע ומוזיקה", en: "Audio and music", about: "make music, sound effects, speech, or transcribe a recording", tools: /^(make_music|make_sound|speak_text|transcribe_audio)$/, words: ["שיר", "מוזיק", "מנגינ", "צליל", "סאונד", "הקלט", "תמלל", "תמלול", "הקרא", "song", "music", "melody", "sound", "voice", "speak", "read aloud", "transcri", "podcast"] },
+  { id: "audio", he: "שמע ומוזיקה", en: "Audio and music", about: "make music, sound effects, speech, or transcribe a recording", tools: /^(make_music|make_sound|speak_text|transcribe_audio)$/, words: ["שיר", "מוזיק", "מנגינ", "צליל", "סאונד", "הקלט", "תמלל", "תמלול", "הקרא", "אמפי", "מילים ל", "song", "music", "melody", "sound", "voice", "speak", "read aloud", "transcri", "podcast", "mp3", "track", "beat", "lyrics", "tune", "jingle", "sing"] },
   { id: "3d", he: "תלת־ממד", en: "3D", about: "make a 3D model", tools: /^make_3d$/, words: ["תלת", "3d", "mesh", "3-d"] },
   { id: "browser", he: "דפדפן", en: "Browser", about: "open and use a website in the browser (click, type, read the page)", tools: /^(browser_|web_click$|fab_)/, words: ["אתר", "דפדפן", "עמוד", "לינק", "קישור", "website", "site", "browser", "page", "link", "url", "http", "קונסול", "דבג", "צילום מסך", "בקשות רשת", "console", "devtools", "debug the page", "network request", "screenshot of the page", "inspect",
     // Phase 7: natural requests for every browser_* tool ("תלחץ על", "תבדוק למה הכפתור לא עובד", "תמלא את הטופס").
@@ -103,6 +103,22 @@ export function groupOfTool(name: string): string | undefined {
 }
 
 const HEBREW = /[֐-׿]/;
+
+/** A song or music asked for: Hebrew words (with the prefixes ה/ו/ש/ב/ל/כ/מ, not "שירות") and English ones. */
+const MUSIC_WORDS = /(?<![א-ת])[והשבלכמ]{0,2}(?:שיר|שירים|שירה|שירי|מנגינה|מנגינות|מוזיקה|מוזיקת|אמפי\s?3|אמפי)(?![א-ת])|\b(?:songs?|music|melody|melodies|mp3|tracks?|beats?|tunes?|jingles?|lyrics|soundtrack)\b/iu;
+/** A picture asked for, in so many words. */
+const PICTURE_WORDS = /\b(?:pictures?|images?|photos?|drawings?|illustrations?|logos?|covers?|artwork|wallpapers?|posters?)\b|תמונ|תצייר|לצייר|צייר|ציור|איור|לוגו|כריכה|עטיפה|פוסטר|טפט/iu;
+
+/**
+ * Whether a message asks for a song or music (and not for a picture): such a request goes to make_music, never to
+ * web_search or generate_image (a local model once drew "covers" for a song it was asked to write).
+ *
+ * @param text - The user's message.
+ * @returns True for a music request without any picture word.
+ */
+export function asksForMusic(text: string): boolean {
+  return MUSIC_WORDS.test(text) && !PICTURE_WORDS.test(text);
+}
 
 /**
  * The groups a message points at by its words (cheap, no model): Hebrew stems anywhere in a word, English words at a

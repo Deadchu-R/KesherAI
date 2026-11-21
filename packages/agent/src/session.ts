@@ -1633,6 +1633,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       progress: this.liveOutput(call.id),
       jobProgress: this.jobProgress(call.id),
       callId: call.id,
+      ...(this.askedLately().at(-1) ? { lastUser: this.askedLately().at(-1)!.split("\n\n[KesherAI]")[0]! } : {}),
       ...(this.envOf ? { env: this.envOf() } : {}),
       ...(this.webOf?.() ? { web: this.webOf()! } : {}),
       ...(this.torOf?.() ? { viaTor: this.torOf()! } : {}),

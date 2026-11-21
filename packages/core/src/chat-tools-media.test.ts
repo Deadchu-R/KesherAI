@@ -63,3 +63,14 @@ test("englishPromptVia: English as it is, Hebrew through the translator, back to
   assert.equal(await englishPromptVia(undefined, "קוף על עץ"), undefined);
   assert.equal(await englishPromptVia({ englishPrompt: async () => { throw new Error("no model"); } }, "קוף על עץ"), undefined);
 });
+
+test("generate_image refuses a music request (a weak model drew covers for an mp3) and still draws for a picture request", async () => {
+  const { mediaTools } = await import("./chat-tools-media.js");
+  const deps = { config: { activeModels: { image: "comfyui/sdxl.safetensors" }, parts: {} }, registry: { resolve: () => ({ providerModelId: "m", provider: { generateImage: async () => [{ data: new Uint8Array([1]), mimeType: "image/png" }] } }) }, assets: { save: async () => ({ id: "a1" }) }, translator: undefined } as never;
+  const tool = mediaTools(deps).tools.find((t) => t.spec.name === "generate_image")!;
+  const ctx = (lastUser: string) => ({ signal: new AbortController().signal, recordChange: () => undefined, lastUser }) as never;
+  const refused = await tool.run({ prompt: "a colourful cover" }, ctx("ממש שיר אמפי3"));
+  assert.match(refused.output, /^Not generated: the user asked for music; use make_music/);
+  const drawn = await tool.run({ prompt: "a cat" }, ctx("make a song and an album cover picture"));
+  assert.doesNotMatch(drawn.output, /asked for music/);
+});

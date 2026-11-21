@@ -13,7 +13,7 @@
  * model, a video model), so it offers the Install button (offer_install) instead of a workaround.
  */
 import { llamaCppFields } from "@kesher/providers";
-import { CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
+import { asksForMusic, CHAT_TOOL_GROUPS, groupOfTool, groupsByWords } from "./chat-tool-groups.js";
 
 /**
  * Asks a model for JSON held to a schema.
@@ -36,6 +36,8 @@ export interface Route {
   missing: Array<{ group: string; needs: string }>;
   /** A ready flow the message asks for by itself (a tileable PBR texture, a UI sprite), see {@link flowIntent}. */
   intent?: FlowIntent;
+  /** The message asks for a song or music (see {@link asksForMusic}). */
+  music?: boolean;
 }
 
 /** A request that one of KesherAI's one-request flows answers. */
@@ -78,6 +80,20 @@ export function intentNote(intent: FlowIntent | undefined, tools: readonly strin
     return `[KesherAI] This asks for a 2D game or UI sprite: call make_ui_sprite (the picture with its background removed), not generate_image.${unity}`;
   }
   return undefined;
+}
+
+/**
+ * The line the model reads when the message asks for a song or music: make_music, not a search and not a picture; or,
+ * when the chat has no make_music (ComfyUI is not set up), to say so and offer the install, not to draw.
+ *
+ * @param music - From {@link asksForMusic}.
+ * @param tools - The tools routed for this message.
+ * @returns The line, or undefined.
+ */
+export function musicNote(music: boolean | undefined, tools: readonly string[]): string | undefined {
+  if (!music) return undefined;
+  if (tools.includes("make_music")) return "[KesherAI] This asks for a song or music: write the lyrics (in the language the user wants) and call make_music. Do not search the web for the song, and do not call generate_image (a cover picture is made by make_music itself).";
+  return "[KesherAI] This asks for a song or music, but make_music is not available in this chat (ComfyUI is not installed or the Nodes part is off). Say so in one short sentence and call offer_install with \"comfyui\"; do not draw pictures instead and do not search the web for it.";
 }
 
 const SYSTEM = `You route a user's request to tool groups. Answer with JSON only: {"groups": [...]} with 0 to 3 ids from the list, the ones the request needs, most needed first. Requests may be in Hebrew or English. Groups:\n${CHAT_TOOL_GROUPS.map((g) => `- ${g.id}: ${g.about}`).join("\n")}`;
@@ -151,14 +167,21 @@ export class ToolRouter {
   async route(text: string, available: readonly string[], off: readonly string[], useModel: boolean, signal?: AbortSignal): Promise<Route> {
     const intent = flowIntent(text);
     // A flow request routes to its tools by itself (the Unity tools too when it names the selection or Unity).
-    const wanted = intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : [];
-    const groups = [...new Set([...(await this.groups(text, useModel, signal)), ...wanted])].filter((g) => !off.includes(g));
+    const music = asksForMusic(text);
+    const wanted = [...(intent ? ["images", ...(SELECTED_WORDS.test(text) ? ["unity"] : [])] : []), ...(music ? ["audio"] : [])];
+    // A song is not a web search or a picture: the groups a weak model would grab instead stay out (a local model
+    // searched for the song's name and drew covers; make_music was never called).
+    const picked = (await this.groups(text, useModel, signal)).filter((g) => !music || (g !== "images" && g !== "web"));
+    const groups = [...new Set([...picked, ...wanted])].filter((g) => !off.includes(g));
     const tools = available.filter((n) => { const g = groupOfTool(n); return !!g && groups.includes(g); }).sort();
     const missing = groups.flatMap((id) => {
       const g = CHAT_TOOL_GROUPS.find((x) => x.id === id);
       return g?.needs && !available.some((n) => g.tools.test(n)) ? [{ group: id, needs: g.needs }] : [];
     });
-    return { groups, tools, missing, ...(intent ? { intent } : {}) };
+    // Music comes from ComfyUI (ACE-Step): without make_music the install is offered, even when speech tools exist.
+    const noMusic = music && groups.includes("audio") && !available.includes("make_music");
+    if (noMusic) missing.push({ group: "audio", needs: "comfyui" });
+    return { groups, tools, missing, ...(intent ? { intent } : {}), ...(music ? { music } : {}) };
   }
 }
 

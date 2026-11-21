@@ -51,6 +51,8 @@ export interface ToolContext {
   jobProgress?(p: import("@kesher/shared").JobProgress): void;
   /** The model's id for this call (a helper's card in the thread belongs to its `delegate` call). */
   callId?: string;
+  /** The user's latest message as typed (without attached files or KesherAI's routing notes), for tools that check what was asked. */
+  lastUser?: string;
   /** Environment variables for commands (the project's environment). */
   env?: Record<string, string>;
   /** The chat's web search settings (sites, depth). */

@@ -37,6 +37,7 @@ import { SpeakButton, autoSpeak, speak } from "../Speak";
 import { PluginFrame, usePluginUi } from "../plugins";
 import { FilesPanel } from "../FilesPanel";
 import { BrowserPanel } from "../BrowserPanel";
+import { clampPaneWidth, expandedPaneWidth, initialPaneWidth } from "../paneWidth";
 import { SourcesPanel } from "../SourcesPanel";
 import { WebPrefsChip } from "../WebPrefsChip";
 import { answerSources } from "../answerSources";
@@ -509,29 +510,45 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     setContextOpen(false);
     setCoachOpen(false);
   };
-  const [paneWidth, setPaneWidth] = useState(() => {
+  // Two remembered widths on this device: the ordinary panes, and the browser (wider by default, 45% of a wide
+  // window, so it is not a narrow strip on a 4K monitor). "Expand" gives the browser most of the window (paneWidth.ts);
+  // on a phone it is full screen. Closing the browser pane puts it back.
+  const storedWidth = (key: string) => {
     try {
-      return Math.min(720, Math.max(260, Number(localStorage.getItem("kesher.paneWidth")) || 360));
+      return localStorage.getItem(key);
     } catch {
-      return 360;
+      return null;
     }
-  });
+  };
+  const [panesW, setPanesW] = useState(() => initialPaneWidth(storedWidth("kesher.paneWidth"), innerWidth, false));
+  const [browserW, setBrowserW] = useState(() => initialPaneWidth(storedWidth("kesher.browserPaneWidth"), innerWidth, true));
+  const [browserWide, setBrowserWide] = useState(false);
+  useEffect(() => {
+    if (!browserOpen) setBrowserWide(false);
+  }, [browserOpen]);
+  const paneWidth = browserOpen ? (browserWide ? expandedPaneWidth(innerWidth) : clampPaneWidth(browserW, innerWidth, true)) : panesW;
   const startPaneResize = (e: React.PointerEvent<HTMLElement>) => {
     e.preventDefault();
     const start = e.clientX;
     const from = paneWidth;
+    const forBrowser = browserOpen;
     // The column sits at the end of the row: in a right-to-left page that is the left side.
     const sign = getComputedStyle(document.documentElement).direction === "rtl" ? 1 : -1;
     let last = from;
     const move = (ev: PointerEvent) => {
-      last = Math.min(720, Math.max(260, from + (ev.clientX - start) * sign));
-      setPaneWidth(last);
+      last = clampPaneWidth(from + (ev.clientX - start) * sign, innerWidth, forBrowser);
+      if (forBrowser) {
+        setBrowserWide(false);
+        setBrowserW(last);
+      } else {
+        setPanesW(last);
+      }
     };
     const end = () => {
       removeEventListener("pointermove", move);
       removeEventListener("pointerup", end);
       try {
-        localStorage.setItem("kesher.paneWidth", String(Math.round(last)));
+        localStorage.setItem(forBrowser ? "kesher.browserPaneWidth" : "kesher.paneWidth", String(Math.round(last)));
       } catch {
         // only for this visit
       }
@@ -1323,10 +1340,13 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       {/* The panes (Steps, Files, Context, Coach) open beside the chat, like the panes in Claude's sessions: one
           column whose width can be dragged; on a phone, a sheet over the lower part of the chat. Ctrl+\ closes it. */}
       {anyPane && (
-        <aside className="conv-panes" style={{ width: paneWidth }} aria-label={getLocale() === "he" ? "חלוניות" : "Panes"}>
+        <aside className={`conv-panes${browserOpen && browserWide ? " expanded" : ""}`} style={{ width: paneWidth }} aria-label={getLocale() === "he" ? "חלוניות" : "Panes"}>
           <div className="conv-panes-grip" role="separator" aria-orientation="vertical" aria-label={getLocale() === "he" ? "שינוי רוחב החלוניות" : "Resize the panes"} onPointerDown={startPaneResize} />
           <div className="conv-panes-head">
             <span className="muted small grow">{getLocale() === "he" ? "חלוניות" : "Panes"}</span>
+            {browserOpen && (
+              <button type="button" className="icon-btn" aria-pressed={browserWide} title={browserWide ? (getLocale() === "he" ? "החזר את הדפדפן לרוחב הרגיל" : "Back to the normal browser width") : (getLocale() === "he" ? "הרחב את הדפדפן: רוב החלון, והשיחה צרה לידו" : "Expand the browser: most of the window, the chat narrow beside it")} aria-label={browserWide ? (getLocale() === "he" ? "החזר את הדפדפן לרוחב הרגיל" : "Back to the normal browser width") : (getLocale() === "he" ? "הרחב את הדפדפן" : "Expand the browser")} onClick={() => setBrowserWide(!browserWide)}>{browserWide ? "⤡" : "⤢"}</button>
+            )}
             <button type="button" className="icon-btn" title={getLocale() === "he" ? "סגור את כל החלוניות (Ctrl+\\)" : "Close all panes (Ctrl+\\)"} aria-label={getLocale() === "he" ? "סגור את כל החלוניות" : "Close all panes"} onClick={closePanes}>✕</button>
           </div>
           <div className="conv-panes-body">

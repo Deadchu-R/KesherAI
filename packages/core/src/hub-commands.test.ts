@@ -15,6 +15,7 @@ function inbox() {
     running: async (id) => id === "agy-2",
     stop: async (id) => (did.push(`stop ${id}`), true),
     skip: async (id) => void did.push(`skip ${id}`),
+    ask: async (id) => void did.push(`ask ${id}`),
   };
   return { d, did };
 }
@@ -36,4 +37,11 @@ test("Run: an unknown task does nothing; the inbox's refusal comes back as the r
   };
   assert.deepEqual(await inboxCommand(d, "inbox-run", "agy-1", { id: "dphone" }), { ok: false, text: "Today's limit of 3 Antigravity tasks is reached (Settings > Task inbox)." });
   assert.deepEqual(did, []);
+});
+
+test("Ask again: the PC asks \"Run this?\" once more; nothing runs; a PC without it says so", async () => {
+  const { d, did } = inbox();
+  assert.deepEqual(await inboxCommand(d, "inbox-ask", "agy-1", { id: "dphone" }), { ok: true, text: "Asked again on the PC." });
+  assert.deepEqual(did, ["ask agy-1"]);
+  assert.equal((await inboxCommand({ ...d, ask: undefined }, "inbox-ask", "agy-1", { id: "dphone" })).ok, false);
 });

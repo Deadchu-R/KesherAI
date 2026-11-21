@@ -708,6 +708,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           running: async (id) => ["running", "needs-approval"].includes((await taskInbox.task(id)).status),
           stop: (id) => taskInbox.stop(id),
           skip: (id) => taskInbox.skip(id),
+          ask: (id) => taskInbox.askRun(id),
         },
         action,
         taskId,

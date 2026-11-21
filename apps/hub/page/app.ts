@@ -18,7 +18,7 @@ import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
 import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
 import { HubDevice, post, type PageTask } from "./device.js";
-import { agentsSummary, agentsTab, type AgentsView } from "./agents.js";
+import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
@@ -760,8 +760,9 @@ function agentRows(q: string): AgentCard[] {
 /** One agent run in the Tasks list: its state, title and PC; it opens the run's card on the Agents tab. */
 function agentRow(c: AgentCard): HTMLElement {
   const st = shownState(c, Date.now());
+  const rw = runWaitOf(device, c, Date.now());
   const pc = devices().find((d) => d.id === c.deviceId);
-  const tag = st === "waiting" ? h("span", { class: "tag t-ask" }, L("מחכה לך", "Waiting for you")) : st === "running" ? h("span", { class: "tag t-run" }, h("span", { class: "spin", "aria-hidden": "true" }), L(" רץ", " Running")) : st === "done" ? h("span", { class: "tag t-ok" }, L("✓ הסתיים", "✓ Done")) : st === "failed" ? h("span", { class: "tag t-bad" }, L("✕ נכשל", "✕ Failed")) : h("span", { class: "tag t-off" }, st === "stale" ? L("לא עונה", "Not answering") : st === "queued" ? L("בתור", "Queued") : L("נעצר", "Stopped"));
+  const tag = rw ? runWaitTag() : st === "waiting" ? h("span", { class: "tag t-ask" }, L("מחכה לך", "Waiting for you")) : st === "running" ? h("span", { class: "tag t-run" }, h("span", { class: "spin", "aria-hidden": "true" }), L(" רץ", " Running")) : st === "done" ? h("span", { class: "tag t-ok" }, L("✓ הסתיים", "✓ Done")) : st === "failed" ? h("span", { class: "tag t-bad" }, L("✕ נכשל", "✕ Failed")) : h("span", { class: "tag t-off" }, st === "stale" ? L("לא עונה", "Not answering") : st === "queued" ? L("בתור", "Queued") : L("נעצר", "Stopped"));
   const key = `${c.deviceId}/${c.runId}`;
   return h(
     "div",
@@ -770,7 +771,7 @@ function agentRow(c: AgentCard): HTMLElement {
     h("div", { class: "grow min0" }, h("b", { class: "w5 ell1", dir: "auto" }, c.state.title), c.state.label && isGoing(c) ? h("div", { class: "sm sub wrapl", dir: "auto" }, L(`עכשיו: ${c.state.label}`, `Now: ${c.state.label}`)) : c.state.summary ? h("div", { class: "sm sub wrapl", dir: "auto" }, c.state.summary) : null),
     h("span", { class: "c-rt" }, h("span", { class: "ex ex-loc" }, `🖥 ${pc?.name ?? "PC"}`)),
     h("span", { class: "c-when mut sm" }, when(c.state.startedAt || c.at)),
-    h("span", { class: "c-act" }, h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›"))),
+    h("span", { class: "c-act" }, rw ? runWaitActions(device, c, rw) ?? h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›")) : h("span", { class: "mut sm" }, L("כרטיס ›", "Card ›"))),
   );
 }
 

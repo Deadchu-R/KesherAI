@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyAgentBatch, shownState, sortedCards, type AgentCard } from "./hub-agents.js";
+import { applyAgentBatch, runWait, shownState, sortedCards, type AgentCard } from "./hub-agents.js";
 import { cleanAgentPath, cleanOptIn, HUB_LIMITS, parseDeviceFrame, parseEnvelope, parseSealedBody, type AgentRunState, type SealedBody } from "./hub-protocol.js";
 
 const state = (over: Partial<AgentRunState> = {}): AgentRunState => ({ runId: "h-1", title: "Fix the login", source: "chat-helper", state: "running", step: 2, startedAt: 1000, lastEventAt: 2000, files: 0, fileNames: [], ...over });
@@ -64,4 +64,20 @@ test("cards: events once each, newest state wins, stale after 90 s, waiting pinn
   for (let i = 0; i < 60; i++) applyAgentBatch(cards, "pc1", batch(state({ lastEventAt: 3000 + i }), [{ seq: 10 + i, t: i, type: "step", n: i, label: "x" }]), 13_000, 9 + i);
   assert.equal(cards.get("pc1/h-1")!.events.length, HUB_LIMITS.agentEventsPerRun);
   assert.deepEqual(sortedCards(cards.values(), 9000 + HUB_LIMITS.agentKeepMs + 1).map((x) => x.runId).includes("h-3"), false, "ended cards go after 7 days");
+});
+
+test("runWait: an Antigravity run whose Run ask expired is waiting for Run, not \"not answering\"; old ones offer Cancel", () => {
+  const card = (source: "antigravity" | "chat-helper", state: "queued" | "waiting" | "done", at: number): AgentCard => ({ deviceId: "pc1", runId: "in-c-1", at, seq: 1, events: [], state: { runId: "in-c-1", source, title: "Hub README", state, step: 0, startedAt: 0, lastEventAt: at, files: 0 } as AgentCard["state"] });
+  const day = 24 * 3600 * 1000;
+  const now = 10 * day;
+  const task = { status: "waiting-run", createdAt: now - day };
+  const expired = card("antigravity", "queued", now - day);
+  assert.equal(shownState(expired, now), "stale");
+  assert.deepEqual(runWait(expired, task, now), { expired: true, old: false });
+  assert.deepEqual(runWait(card("antigravity", "waiting", now - 1000), task, now), { expired: false, old: false }, "an open ask is not expired");
+  assert.equal(runWait(expired, { status: "waiting-run", createdAt: now - 8 * day }, now)?.old, true);
+  assert.equal(runWait(expired, { status: "running", createdAt: 0 }, now), undefined);
+  assert.equal(runWait(expired, undefined, now), undefined);
+  assert.equal(runWait(card("chat-helper", "queued", 0), task, now), undefined);
+  assert.equal(runWait(card("antigravity", "done", 0), task, now), undefined);
 });

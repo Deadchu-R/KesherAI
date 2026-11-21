@@ -16,7 +16,7 @@
  *
  * Everything shown came sealed from the PC (titles, steps, tool names, counts); the hub cannot read it.
  */
-import { isGoing, shownState, sortedCards, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
+import { isGoing, runWait, shownState, sortedCards, type AgentCard, type RunWait } from "../../../packages/shared/src/hub-agents.js";
 import { agentDoing, AGENT_LABEL_LIMITS, type LabelWords } from "../../../packages/shared/src/agent-label.js";
 import { isSafeLink, type ActivityEvent, type AgentRunStateName, type AgentSource, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, h, L, when } from "./dom.js";
@@ -71,6 +71,46 @@ const tokens = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0
 function stateTag(st: AgentRunStateName): HTMLElement {
   const s = STATE[st];
   return h("span", { class: `tag ${s.tag}` }, st === "running" ? h("span", { class: "spin", "aria-hidden": "true" }) : null, L(s.he, s.en));
+}
+
+/** The inbox task behind a run (an Antigravity task of a PC's task inbox), when the page has it. */
+export function taskOfRun(device: HubDevice, c: AgentCard): PageTask | undefined {
+  return device.tasks.find((t) => t.inbox?.runId === c.runId && t.inbox.deviceId === c.deviceId);
+}
+
+/** How a run's task waits for the owner's Run (agents whose "Run this?" ask expired are not "not answering"). */
+export function runWaitOf(device: HubDevice, c: AgentCard, now: number): RunWait | undefined {
+  return runWait(c, taskOfRun(device, c), now);
+}
+
+/** The tag of a run that waits for Run. */
+export const runWaitTag = (): HTMLElement => h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
+
+/**
+ * "Ask again" (the PC asks "Run this task?" once more; nothing runs until Run is pressed there or here) and, after 7
+ * days, "Cancel", for a run whose task waits for Run. Nothing is offered while no PC that has the task is on.
+ *
+ * @param device - The page's device.
+ * @param c - The run.
+ * @param w - From {@link runWaitOf}.
+ * @returns The buttons, or null when there is nothing to offer.
+ */
+export function runWaitActions(device: HubDevice, c: AgentCard, w: RunWait): HTMLElement | null {
+  const t = taskOfRun(device, c);
+  if (!t) return null;
+  const sent = device.taskActions.get(t.taskId);
+  if (sent && !sent.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
+  const note = sent?.result ? h("span", { class: `xs ${sent.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, sent.result.text) : null;
+  if (!device.canRun(t)) return note;
+  const ask = (e: Event) => {
+    e.stopPropagation();
+    void device.inboxCommand(t, "inbox-ask");
+  };
+  const cancel = (e: Event) => {
+    e.stopPropagation();
+    if (confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`))) void device.inboxCommand(t, "inbox-cancel");
+  };
+  return h("span", { class: "row runacts" }, w.expired ? h("button", { type: "button", class: "btn sm-btn pri", onclick: ask }, L("↻ שאל שוב", "↻ Ask again")) : null, w.old ? h("button", { type: "button", class: "btn sm-btn", onclick: cancel }, L("בטל", "Cancel")) : null, note);
 }
 
 /** The short facts line of a run: step, elapsed, tokens, files. */
@@ -137,17 +177,19 @@ function card(v: AgentsView, c: AgentCard, now: number, pc: HubPresence | undefi
   const { label } = v.device.shownLabel(c);
   const name = label.name || c.state.title;
   const doing = doingOf(c, st);
-  const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : (!isGoing(c) && c.state.summary) || "";
+  const rw = runWaitOf(v.device, c, now);
+  const line = rw?.expired ? L("הבקשה להפעיל פגה. אפשר לשאול שוב.", "The ask to run it expired. You can ask again.") : st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : (!isGoing(c) && c.state.summary) || "";
   return h(
     "div",
     { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": name, onclick: () => v.setOpen(key), onkeydown: (e: Event) => (e as KeyboardEvent).key === "Enter" && v.setOpen(key) },
-    h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: `grow ${label.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, name), stateTag(st)),
+    h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: `grow ${label.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, name), rw ? runWaitTag() : stateTag(st)),
     label.name ? h("div", { class: "xs mut wrapl", dir: "auto" }, c.state.title) : null,
     h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))),
     doing ? doingLine(doing) : null,
     line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null,
     label.note ? noteLine(label.note) : null,
     st === "waiting" ? actions(v, c, pc) : null,
+    rw ? runWaitActions(v.device, c, rw) : null,
   );
 }
 
@@ -352,14 +394,15 @@ function agentDetail(v: AgentsView, c: AgentCard, now: number): HTMLElement {
   const end = s.endedAt ?? (isGoing(c) ? now : s.lastEventAt);
   const name = v.device.shownLabel(c).label.name;
   const doing = doingOf(c, st);
+  const rw = runWaitOf(v.device, c, now);
   return h(
     "main",
     { class: "page" },
     back(v),
-    h("div", { class: "row wrap" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow min0 wrapl", dir: "auto" }, name || s.title), stateTag(st)),
+    h("div", { class: "row wrap" }, h("span", { class: `dot ${rw ? "ask" : STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow min0 wrapl", dir: "auto" }, name || s.title), rw ? runWaitTag() : stateTag(st)),
     name ? h("div", { class: "sm mut wrapl", dir: "auto" }, L("משימה: ", "Task: "), s.title) : null,
     h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `${deviceIcon(pc?.kind)} ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)),
-    st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null,
+    st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : rw ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, rw.expired ? L("הבקשה להפעיל פגה. המשימה ממתינה ל\"הפעל\".", "The ask to run it expired. The task is waiting for Run.") : L("ממתין ל\"הפעל\"", "Waiting for Run")), runWaitActions(v.device, c, rw)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null,
     st !== "waiting" ? actions(v, c, pc) : null,
     h(
       "div",
@@ -415,7 +458,8 @@ export function agentsSummary(v: AgentsView): HTMLElement | null {
     h("div", { class: "row head" }, h("b", null, L("סוכנים עכשיו", "Agents now")), h("span", { class: "tag t-run" }, String(going.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#agents" }, L("הכול ›", "All ›"))),
     going.slice(0, 3).map((c) => {
       const st = shownState(c, now);
-      return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell", dir: "auto" }, v.device.shownLabel(c).label.name || c.state.title), stateTag(st));
+      const rw = runWaitOf(v.device, c, now);
+      return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${rw ? "ask" : STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell", dir: "auto" }, v.device.shownLabel(c).label.name || c.state.title), rw ? runWaitTag() : stateTag(st));
     }),
   );
 }

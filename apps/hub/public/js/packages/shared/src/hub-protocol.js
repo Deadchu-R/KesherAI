@@ -361,7 +361,7 @@ export function parseSealedBody(x, kind) {
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }
         case "command":
-            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label" && b.action !== "assign"))
+            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign"))
                 return null;
             if (b.action === "assign") {
                 const to = parseAssignTo(b.to);

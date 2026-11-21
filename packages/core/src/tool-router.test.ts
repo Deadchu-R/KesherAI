@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { engineAsk, flowIntent, intentNote, isSimpleTurn, missingNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
+import { engineAsk, flowIntent, intentNote, isSimpleTurn, missingNote, musicNote, parseGroups, ToolRouter, type AskJson } from "./tool-router.js";
 
 const available = ["browser_open", "document", "generate_image", "read_file", "unity_scene", "web_search"];
 
@@ -93,4 +93,20 @@ test("a tileable texture or a sprite picks its flow by itself (Hebrew and Englis
   assert.equal(intentNote("pbr", ["generate_image"]), undefined, "no note without the tool");
   assert.match(intentNote("sprite", ["make_ui_sprite", "unity_import_sprite"])!, /make_ui_sprite[\s\S]*unity_import_sprite/);
   assert.deepEqual((await r.route("make a tileable wall texture", tools, ["images"], true)).tools, [], "a group turned off stays off");
+});
+
+test("a song request goes to make_music: no web search or pictures, Hebrew and English; without make_music it offers ComfyUI", async () => {
+  const { asksForMusic } = await import("./chat-tool-groups.js");
+  for (const t of ["תיצור לי שיר על אביר", "ממש שיר אמפי3", "תכתוב מנגינה", "make me a song", "a 30 second mp3", "a lo-fi beat", "write a track about rain", "תעשה לי מוזיקה לרקע"]) assert.ok(asksForMusic(t), t);
+  for (const t of ["תצייר לי שיר ככריכה", "an album cover for my song", "מה שירות הלקוחות שלכם", "draw a cat"]) assert.ok(!asksForMusic(t), t);
+  const tools = ["web_search", "generate_image", "make_music", "speak_text"];
+  const r = new ToolRouter({ ask: () => async () => '{"groups":["web","images"]}' });
+  const ok = await r.route("תיצור לי שיר על האביר החלול וקח השראה מהשיר SELFLESS", tools, [], true);
+  assert.equal(ok.music, true);
+  assert.deepEqual(ok.tools, ["make_music", "speak_text"], "the model's web and images picks are dropped for a song");
+  assert.match(musicNote(ok.music, ok.tools)!, /call make_music[\s\S]*not search the web[\s\S]*not call generate_image/);
+  const none = await r.route("ממש שיר אמפי3", ["web_search", "generate_image", "speak_text"], [], true);
+  assert.deepEqual(none.missing, [{ group: "audio", needs: "comfyui" }]);
+  assert.match(musicNote(none.music, none.tools)!, /not available[\s\S]*offer_install[\s\S]*do not draw/);
+  assert.equal(musicNote(undefined, tools), undefined);
 });

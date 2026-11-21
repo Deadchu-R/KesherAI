@@ -16,7 +16,7 @@
  *
  * Everything shown came sealed from the PC (titles, steps, tool names, counts); the hub cannot read it.
  */
-import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
+import { isGoing, runWait, shownState, sortedCards } from "../../../packages/shared/src/hub-agents.js";
 import { agentDoing, AGENT_LABEL_LIMITS } from "../../../packages/shared/src/agent-label.js";
 import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, h, L, when } from "./dom.js";
@@ -52,6 +52,46 @@ const tokens = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
 function stateTag(st) {
     const s = STATE[st];
     return h("span", { class: `tag ${s.tag}` }, st === "running" ? h("span", { class: "spin", "aria-hidden": "true" }) : null, L(s.he, s.en));
+}
+/** The inbox task behind a run (an Antigravity task of a PC's task inbox), when the page has it. */
+export function taskOfRun(device, c) {
+    return device.tasks.find((t) => t.inbox?.runId === c.runId && t.inbox.deviceId === c.deviceId);
+}
+/** How a run's task waits for the owner's Run (agents whose "Run this?" ask expired are not "not answering"). */
+export function runWaitOf(device, c, now) {
+    return runWait(c, taskOfRun(device, c), now);
+}
+/** The tag of a run that waits for Run. */
+export const runWaitTag = () => h("span", { class: "tag t-ask" }, L("ממתין ל\"הפעל\"", "Waiting for Run"));
+/**
+ * "Ask again" (the PC asks "Run this task?" once more; nothing runs until Run is pressed there or here) and, after 7
+ * days, "Cancel", for a run whose task waits for Run. Nothing is offered while no PC that has the task is on.
+ *
+ * @param device - The page's device.
+ * @param c - The run.
+ * @param w - From {@link runWaitOf}.
+ * @returns The buttons, or null when there is nothing to offer.
+ */
+export function runWaitActions(device, c, w) {
+    const t = taskOfRun(device, c);
+    if (!t)
+        return null;
+    const sent = device.taskActions.get(t.taskId);
+    if (sent && !sent.result)
+        return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
+    const note = sent?.result ? h("span", { class: `xs ${sent.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, sent.result.text) : null;
+    if (!device.canRun(t))
+        return note;
+    const ask = (e) => {
+        e.stopPropagation();
+        void device.inboxCommand(t, "inbox-ask");
+    };
+    const cancel = (e) => {
+        e.stopPropagation();
+        if (confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`)))
+            void device.inboxCommand(t, "inbox-cancel");
+    };
+    return h("span", { class: "row runacts" }, w.expired ? h("button", { type: "button", class: "btn sm-btn pri", onclick: ask }, L("↻ שאל שוב", "↻ Ask again")) : null, w.old ? h("button", { type: "button", class: "btn sm-btn", onclick: cancel }, L("בטל", "Cancel")) : null, note);
 }
 /** The short facts line of a run: step, elapsed, tokens, files. */
 function facts(c, now) {
@@ -116,8 +156,9 @@ function card(v, c, now, pc) {
     const { label } = v.device.shownLabel(c);
     const name = label.name || c.state.title;
     const doing = doingOf(c, st);
-    const line = st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : (!isGoing(c) && c.state.summary) || "";
-    return h("div", { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": name, onclick: () => v.setOpen(key), onkeydown: (e) => e.key === "Enter" && v.setOpen(key) }, h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: `grow ${label.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, name), stateTag(st)), label.name ? h("div", { class: "xs mut wrapl", dir: "auto" }, c.state.title) : null, h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))), doing ? doingLine(doing) : null, line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null, label.note ? noteLine(label.note) : null, st === "waiting" ? actions(v, c, pc) : null);
+    const rw = runWaitOf(v.device, c, now);
+    const line = rw?.expired ? L("הבקשה להפעיל פגה. אפשר לשאול שוב.", "The ask to run it expired. You can ask again.") : st === "waiting" ? waitText(c) : st === "stale" ? L(`אין דופק מ-${when(c.at)}`, `No heartbeat since ${when(c.at)}`) : (!isGoing(c) && c.state.summary) || "";
+    return h("div", { class: `acard${st === "waiting" ? " wait" : ""}`, role: "button", tabindex: 0, "aria-label": name, onclick: () => v.setOpen(key), onkeydown: (e) => e.key === "Enter" && v.setOpen(key) }, h("div", { class: "row" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("b", { class: `grow ${label.name ? "min0 wrapl" : "ell1"}`, dir: "auto" }, name), rw ? runWaitTag() : stateTag(st)), label.name ? h("div", { class: "xs mut wrapl", dir: "auto" }, c.state.title) : null, h("div", { class: "row wrap mut sm" }, h("span", { title: L(src.he, src.en) }, `${src.icon} ${L(src.he, src.en)}`), c.state.model ? h("span", { class: "chip" }, c.state.model) : null, h("span", { class: "grow" }), h("span", { class: "mono xs" }, facts(c, now))), doing ? doingLine(doing) : null, line ? h("div", { class: `sm wrapl${st === "waiting" ? " warn" : ""}`, dir: "auto" }, line) : null, label.note ? noteLine(label.note) : null, st === "waiting" ? actions(v, c, pc) : null, rw ? runWaitActions(v.device, c, rw) : null);
 }
 /** The name-and-note form open on a run's detail (kept across redraws, so typing survives live updates). */
 let edit;
@@ -247,7 +288,8 @@ function agentDetail(v, c, now) {
     const end = s.endedAt ?? (isGoing(c) ? now : s.lastEventAt);
     const name = v.device.shownLabel(c).label.name;
     const doing = doingOf(c, st);
-    return h("main", { class: "page" }, back(v), h("div", { class: "row wrap" }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow min0 wrapl", dir: "auto" }, name || s.title), stateTag(st)), name ? h("div", { class: "sm mut wrapl", dir: "auto" }, L("משימה: ", "Task: "), s.title) : null, h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `${deviceIcon(pc?.kind)} ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)), st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null, st !== "waiting" ? actions(v, c, pc) : null, h("div", { class: "grid4" }, fact("צעדים", "Steps", s.of ? `${s.step}/${s.of}` : String(s.step)), fact("זמן", "Elapsed", s.startedAt ? duration(end - s.startedAt) : "–"), fact("טוקנים", "Tokens", s.tokensIn !== undefined ? tokens(s.tokensIn + (s.tokensOut ?? 0)) : "–"), fact("קבצים", "Files", String(s.files))), doing ? doingLine(doing) : null, labelSection(v, c, pc), 
+    const rw = runWaitOf(v.device, c, now);
+    return h("main", { class: "page" }, back(v), h("div", { class: "row wrap" }, h("span", { class: `dot ${rw ? "ask" : STATE[st].dot}`, "aria-hidden": "true" }), h("h1", { class: "grow min0 wrapl", dir: "auto" }, name || s.title), rw ? runWaitTag() : stateTag(st)), name ? h("div", { class: "sm mut wrapl", dir: "auto" }, L("משימה: ", "Task: "), s.title) : null, h("div", { class: "row wrap mut sm" }, `${src.icon} ${L(src.he, src.en)}`, " · ", `${deviceIcon(pc?.kind)} ${pc?.name ?? L("מחשב", "PC")}`, s.model ? h("span", { class: "chip" }, s.model) : null, " · ", L("התחיל ", "started ") + when(s.startedAt)), st === "waiting" ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, waitText(c)), actions(v, c, pc)) : rw ? h("section", { class: "card pad stack pin" }, h("b", { class: "warn" }, rw.expired ? L("הבקשה להפעיל פגה. המשימה ממתינה ל\"הפעל\".", "The ask to run it expired. The task is waiting for Run.") : L("ממתין ל\"הפעל\"", "Waiting for Run")), runWaitActions(v.device, c, rw)) : st === "stale" ? h("div", { class: "note bad-note" }, s.source === "claude-chat" ? L(`הצ׳אט לא דיווח על הסוכן מאז ${when(c.at)}. ייתכן שהסתיים בלי דיווח.`, `The chat has not reported on this agent since ${when(c.at)}. It may have ended without a report.`) : L(`לא הגיע דופק מהסוכן מאז ${when(c.at)}. ייתכן שנתקע או שהמחשב נרדם.`, `No heartbeat from the agent since ${when(c.at)}. It may be stuck, or the PC is asleep.`)) : null, st !== "waiting" ? actions(v, c, pc) : null, h("div", { class: "grid4" }, fact("צעדים", "Steps", s.of ? `${s.step}/${s.of}` : String(s.step)), fact("זמן", "Elapsed", s.startedAt ? duration(end - s.startedAt) : "–"), fact("טוקנים", "Tokens", s.tokensIn !== undefined ? tokens(s.tokensIn + (s.tokensOut ?? 0)) : "–"), fact("קבצים", "Files", String(s.files))), doing ? doingLine(doing) : null, labelSection(v, c, pc), 
     // An inbox run is a task of its PC's inbox: it can be given to another executor ("Who does it").
     c.runId.startsWith("in-") ? h("section", { class: "card pad" }, assignBox({ device: v.device, render: v.render, taskId: c.runId.slice(3), pcs: pc?.online ? [pc] : [], current: c.state.source === "antigravity" ? "antigravity" : undefined })) : null, s.summary && !isGoing(c) ? h("section", { class: "card pad sm lines" }, s.summary) : null, s.fileNames.length ? h("section", { class: "sec" }, h("h3", { class: "sm" }, L(`קבצים שנגעו בהם (${s.files})`, `Files touched (${s.files})`)), h("ul", { class: "files" }, s.fileNames.map((f) => h("li", { class: "mono xs ell", dir: "ltr" }, f)))) : s.files ? h("div", { class: "mut sm" }, L(`נגע ב-${s.files} קבצים (השמות לא משותפים; במחשב: הגדרות › ענן Kesher).`, `Touched ${s.files} files (names are not shared; on the PC: Settings › Kesher Cloud).`)) : null, s.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono", dir: "ltr" }, s.branch)) : null, s.link && isSafeLink(s.link) ? h("a", { class: "btn", href: s.link, target: "_blank", rel: "noopener noreferrer" }, L("פתח ↗", "Open ↗")) : null, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("ציר זמן", "Timeline")), h("span", { class: "grow" }), h("span", { class: "mut xs" }, L(`${c.events.length} אחרונים`, `last ${c.events.length}`))), c.events.length ? h("ul", { class: "tl" }, [...c.events].reverse().map(eventRow)) : h("div", { class: "trow mut sm" }, L("האירועים הקודמים כבר לא שמורים במרכז.", "Earlier events are no longer kept at the hub."))));
 }
@@ -268,6 +310,7 @@ export function agentsSummary(v) {
         return null;
     return h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("סוכנים עכשיו", "Agents now")), h("span", { class: "tag t-run" }, String(going.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#agents" }, L("הכול ›", "All ›"))), going.slice(0, 3).map((c) => {
         const st = shownState(c, now);
-        return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell", dir: "auto" }, v.device.shownLabel(c).label.name || c.state.title), stateTag(st));
+        const rw = runWaitOf(v.device, c, now);
+        return h("a", { class: "trow sm", href: "#agents", onclick: () => v.setOpen(`${c.deviceId}/${c.runId}`) }, h("span", { class: `dot ${rw ? "ask" : STATE[st].dot}`, "aria-hidden": "true" }), h("span", { class: "grow ell", dir: "auto" }, v.device.shownLabel(c).label.name || c.state.title), rw ? runWaitTag() : stateTag(st));
     }));
 }

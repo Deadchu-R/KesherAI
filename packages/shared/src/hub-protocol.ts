@@ -259,9 +259,10 @@ export interface HubAskNote {
  * Run (as the PC's own Run button, one press one run, within the daily limit), `inbox-cancel` skips a waiting task or
  * stops a running one. The task is named by its inbox id or by its Google Drive record id. `agent-label` renames an
  * agent run and sets its note (agent-label.ts); the PC keeps the label and sends the run's state again. `assign` gives
- * a task or a work-list item to another executor ("Who does it", task-assign.ts).
+ * a task or a work-list item to another executor ("Who does it", task-assign.ts). `inbox-ask` makes the PC ask again
+ * "Run this task in Antigravity?" for a task whose earlier ask expired (one ask, nothing runs until Run is pressed).
  */
-export type HubCommandAction = "inbox-run" | "inbox-cancel" | "agent-label" | "assign";
+export type HubCommandAction = "inbox-run" | "inbox-cancel" | "inbox-ask" | "agent-label" | "assign";
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -665,7 +666,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
     case "command":
-      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "agent-label" && b.action !== "assign")) return null;
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign")) return null;
       if (b.action === "assign") {
         const to = parseAssignTo(b.to);
         return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;

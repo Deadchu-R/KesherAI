@@ -7,6 +7,7 @@ import { randomInt } from "node:crypto";
 import { type AgentTool } from "@kesher/agent";
 import { ComfyUIProvider } from "@kesher/providers";
 import { type JobProgress, APPEARANCE_COLORS, APPEARANCE_FONTS, APPEARANCE_NAV_GROUPS, APPEARANCE_PRESETS, cleanAppearance, type Appearance } from "@kesher/shared";
+import { asksForMusic } from "./chat-tool-groups.js";
 import { LOOK_ICON_PAGES, styleLook } from "./look-pictures.js";
 import type { ConversationDeps } from "./conversation-deps.js";
 import type { Translator } from "./translate.js";
@@ -97,6 +98,10 @@ export function mediaTools(deps: ConversationDeps, quick: () => QuickServices = 
         },
       },
       run: async (input, ctx) => {
+        // A song is not a picture: a weak local model drew "covers" when asked for an mp3. Send it to make_music.
+        if (ctx.lastUser && asksForMusic(ctx.lastUser)) {
+          return { output: "Not generated: the user asked for music; use make_music. If make_music is not available, tell the user that music cannot be made right now (ComfyUI or its music model is missing) and offer to install it; do not draw instead." };
+        }
         // Image models read English only: a Hebrew (or other non-Latin) prompt comes out as an unrelated picture
         // (a "monkey" became an owl). KesherAI's translator puts it into English; without one, it goes back to the
         // chat model to translate, instead of drawing the wrong thing.
