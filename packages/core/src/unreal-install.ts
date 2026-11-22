@@ -4,6 +4,7 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
+import { heavyGate, waitingFor } from "./heavy-gate.js";
 import { unrealSupport } from "./engine-support.js";
 import { writeConvertedMarker, type ConvertedMarker } from "./engine-conversion.js";
 
@@ -519,7 +520,10 @@ export class BridgeInstaller {
       log: [],
     };
     this.job = job;
-    this.running = this.run(job, engine, source, project.dir, copy).catch((err: Error) => {
+    // A build and a copy are heavy: one at a time with the other heavy jobs; the install page's log says what it waits for.
+    const ahead = heavyGate.runningLabel();
+    if (ahead) job.log.push(waitingFor(ahead, false));
+    this.running = heavyGate.run({ en: `installing the Unreal plugin (${engine.version})`, he: `התקנת תוסף Unreal (${engine.version})` }, () => this.run(job, engine, source, project.dir, copy)).catch((err: Error) => {
       job.state = "failed";
       job.message = err.message;
       this.beforeCopy = undefined;

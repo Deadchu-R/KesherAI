@@ -7,6 +7,8 @@ import { modelTurnFor } from "../conversations.js";
 import { branding } from "@kesher/shared";
 import { redact } from "../fault-log.js";
 import { isLocalRequest } from "../auth.js";
+import { heavyGate } from "../heavy-gate.js";
+import { readShutdownInfo } from "../shutdown-info.js";
 import { installNoctaliaPlugin, noctaliaStatus } from "../noctalia.js";
 import { healthDigest, healthItems, healthPrompt, readHealth, type HealthReading } from "../pc-health.js";
 import { fixActions, liveUse, parseGpuApps, processParent, runFixes, type FixContext } from "../pc-fix.js";
@@ -58,7 +60,8 @@ export async function healthRoutes(app: FastifyInstance, s: KesherServices): Pro
     const r = await read(req.query.fresh === "1");
     // The loaded model and what is on the card are live (not part of the cached reading); the phone shows them too.
     const live = liveUse(s.engine.status().modelPath, await gpuApps(), s.guard.ownPids());
-    return { reading: r, items: healthItems(r, req.query.lang === "he"), live };
+    // How the last run ended, and what the heavy-job gate runs and holds back (the phone sees both).
+    return { reading: r, items: healthItems(r, req.query.lang === "he"), live, shutdown: await readShutdownInfo(s.paths.root), heavy: heavyGate.status() };
   });
 
   // "Fix it for me": what KesherAI can safely do itself, then the chosen ones (ids only; looked up again here).

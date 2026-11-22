@@ -9,6 +9,7 @@ import { lintUnrealSource, shortErrors } from "../unreal-lint.js";
 import { applyCodeAnswer, codeEditPrompt, parseCodeErrors, type CodeError } from "../code-errors.js";
 import { modelTurnFor } from "../conversations.js";
 import { runProgram } from "../unreal-tools.js";
+import { heavyGate, waitingFor } from "../heavy-gate.js";
 
 /** What the page edits: C++ and build files under Source/, settings under Config/. */
 const ROOTS = ["Source", "Config"];
@@ -120,9 +121,12 @@ export function unrealSourceRoutes(app: FastifyInstance, s: KesherServices): voi
         if (!e) throw new Error("No Unreal Engine is installed on this computer.");
         const name = proj.file.replace(/^.*[\\/]/, "").replace(/\.uproject$/i, "");
         const bat = join(e.path, "Engine", "Build", "BatchFiles", "Build.bat");
-        void runProgram(bat, [`${name}Editor`, "Win64", "Development", `-Project=${proj.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000 }).then((r) => {
+        const ahead = heavyGate.runningLabel();
+        if (ahead) b.tail = waitingFor(ahead, false);
+        // A full build is heavy: one at a time with the other heavy jobs (the page's status line says what it waits for).
+        void heavyGate.run({ en: `compiling ${name}`, he: `קומפילציה של ${name}` }, () => runProgram(bat, [`${name}Editor`, "Win64", "Development", `-Project=${proj.file}`, "-WaitMutex", "-NoHotReload"], { timeoutMs: 3_600_000 })).then((r) => {
           Object.assign(b, { problems: parseCodeErrors(r.out, p.path), state: r.code === 0 ? "ok" : "failed", tail: r.out.split(/\r?\n/).slice(-30).join("\n"), errors: r.code === 0 ? [] : /Live ?Coding/i.test(r.out) ? ["The project is open in Unreal with Live Coding: compile there (Ctrl+Alt+F11), or close the editor and compile again."] : shortErrors(r.out).lines });
-        });
+        }, (e: Error) => Object.assign(b, { state: "failed", errors: [e.message] }));
       }
       return { build: b };
     } catch (err) {

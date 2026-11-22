@@ -17,6 +17,11 @@ export interface ProviderGate {
   before(providerId: string, signal?: AbortSignal): Promise<void>;
   /** Called once when the call ends, with the provider that ran. */
   after(providerId?: string): void;
+  /**
+   * Optional: runs a heavy job (picture or video generation) when it is its turn, one at a time with the other heavy
+   * jobs on the computer. The call, including its `before` and `after`, runs inside `job`.
+   */
+  heavy?<T>(method: string, providerId: string, job: () => Promise<T>, signal?: AbortSignal): Promise<T>;
 }
 
 /** Methods that put a local model to work; the argument after the request is the abort signal. */
@@ -87,12 +92,16 @@ export class ProviderRegistry {
         return async (...args: unknown[]) => {
           const gate = this.gate;
           if (!gate) return fn.apply(target, args);
-          await gate.before(id, args[1] as AbortSignal | undefined);
-          try {
-            return await fn.apply(target, args);
-          } finally {
-            gate.after(id);
-          }
+          const signal = args[1] as AbortSignal | undefined;
+          const call = async () => {
+            await gate.before(id, signal);
+            try {
+              return await fn.apply(target, args);
+            } finally {
+              gate.after(id);
+            }
+          };
+          return gate.heavy && (prop === "generateImage" || prop === "generateVideo") ? gate.heavy(prop, id, call, signal) : call();
         };
       },
     });

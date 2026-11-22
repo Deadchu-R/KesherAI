@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { heavyGate } from "./heavy-gate.js";
 
 /**
  * Self-work: KesherAI works on a git project by itself (its own code, on the
@@ -268,7 +269,8 @@ export class SelfWork {
     // A new worktree has the code but not its packages: install them the project's own way (from the package
     // manager's store, the lockfile as it is), so the check can build. Fixed commands only; a failure is left to the check to show.
     const install = existsSync(join(worktree, "pnpm-lock.yaml")) ? "pnpm install --frozen-lockfile --prefer-offline" : existsSync(join(worktree, "package-lock.json")) ? "npm ci --prefer-offline --no-audit --no-fund" : existsSync(join(worktree, "yarn.lock")) ? "yarn install --frozen-lockfile" : "";
-    if (install) await this.d.check(worktree, install).catch(() => undefined);
+    // Installing packages is a heavy job: it waits for a running build, and a build waits for it (heavy-gate.ts).
+    if (install) await heavyGate.run({ en: "self-work: installing packages", he: "עבודה עצמית: התקנת חבילות" }, () => this.d.check(worktree, install)).catch(() => undefined);
     const check = (o.check ?? "").trim().slice(0, 300);
     const convId = await this.d.createChat(worktree, `🤖 Self-work · ${goal.slice(0, 50)}`, o.modelId, this.d.shared ? [this.d.shared] : []);
     this.run_ = { id: stamp, repo: o.repo, goal, branch, worktree, check, ...(o.modelId ? { modelId: o.modelId } : {}), convId, status: "running", startedAt: Date.now(), until: Date.now() + hours * 3_600_000, steps: 0, items: [], failures: 0 };

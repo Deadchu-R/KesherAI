@@ -9,6 +9,7 @@ import type { KesherServices } from "../services.js";
 import { Tailscale } from "../tailscale.js";
 import { isLocalRequest } from "../auth.js";
 import { currentBusy } from "../busy.js";
+import { heavyGate } from "../heavy-gate.js";
 
 /** Left by Terminate in the data folder: the next start loads no model and starts no ComfyUI (once). */
 export const TERMINATED_FILE = "terminated";
@@ -39,6 +40,8 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
     ok: true,
     // A long job (reading an Unreal level) can make the server slow: the app says so instead of "not answering".
     ...(currentBusy() ? { busy: currentBusy()!.en, busyHe: currentBusy()!.he } : {}),
+    // Heavy jobs: what runs and what waits ("waiting for <job>"), and whether new ones are refused for low memory.
+    heavy: heavyGate.status(),
     version: CORE_VERSION,
     build: await s.updater.version(),
     productName: branding.productName,

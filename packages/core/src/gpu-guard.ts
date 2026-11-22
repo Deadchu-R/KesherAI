@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { cpus, freemem, setPriority, constants, totalmem } from "node:os";
 import { readFile } from "node:fs/promises";
+import { heavyGate } from "./heavy-gate.js";
 
 /**
  * Keeps the graphics card safe and the computer pleasant to use while local
@@ -587,6 +588,20 @@ export class GpuGuard {
     this.lastActive = Date.now();
     this.markUsed(providerId);
     if (this.running === 0) this.onIdle?.();
+  }
+
+  /**
+   * Picture and video generation is a heavy job: one at a time with the other heavy jobs (builds, installs, big model
+   * loads), the rest wait in the queue (see `heavy-gate.ts`).
+   *
+   * @param method - `generateImage` or `generateVideo`.
+   * @param providerId - The provider that runs it.
+   * @param job - The call.
+   * @param signal - Cancels the wait.
+   */
+  heavy<T>(method: string, providerId: string, job: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const video = method === "generateVideo";
+    return heavyGate.run({ en: `${video ? "making a video" : "making a picture"} (${providerId})`, he: `${video ? "יצירת סרטון" : "יצירת תמונה"} (${providerId})` }, job, signal);
   }
 
   /** @returns What Settings shows. */

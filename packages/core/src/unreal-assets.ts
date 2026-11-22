@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import type { AssetEntry } from "@kesher/agent";
 import { looksCloudOnly } from "./cloud-only.js";
 import { packageNameOf, readUassetFile, uassetSummary } from "./uasset.js";
+import { registerCache } from "./memory-watchdog.js";
 
 /**
  * Unreal assets in the project index (step 7 of the engine-closed plan): each .uasset/.umap's class, parent class and
@@ -29,6 +30,11 @@ const cache = new Map<string, { mtime: number; size: number; at: number; info: U
 /** A file found only in OneDrive is looked at again after this long (downloading it does not change its time). */
 const CLOUD_RECHECK_MS = 10 * 60_000;
 /** Per project folder: how many packages the last index pass found only in OneDrive. */
+/** Empties the header cache (the memory watchdog does this when memory is short; it fills again as files are read). */
+export function clearAssetCache(): void {
+  cache.clear();
+}
+registerCache("unreal-assets", clearAssetCache);
 const cloudCounts = new Map<string, number>();
 const MAX_CACHE = 200_000;
 /** The index reads at most this much of each header (most are a few KB). */

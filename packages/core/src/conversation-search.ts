@@ -1,6 +1,7 @@
 import type { Library } from "./library.js";
 import { rank } from "./knowledge.js";
 import { guestLabelOf, guestUntrusted } from "./shared-chat.js";
+import { registerCache } from "./memory-watchdog.js";
 
 /**
  * Search across every conversation: what the user wrote and the answers,
@@ -35,7 +36,10 @@ export class ConversationSearch {
   private cache = new Map<string, { updatedAt: string; passages: Passage[] }>();
 
   /** @param library - Where conversations are kept. */
-  constructor(private readonly library: Library) {}
+  constructor(private readonly library: Library) {
+    // Rebuilt from the saved chats when needed, so the memory watchdog may empty it.
+    registerCache("conversation-search", () => this.cache.clear());
+  }
 
   private async passages(id: string, updatedAt: string): Promise<Passage[]> {
     const hit = this.cache.get(id);

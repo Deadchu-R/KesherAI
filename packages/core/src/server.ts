@@ -15,7 +15,8 @@ import { constants as zlibConstants } from "node:zlib";
 import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { ensureMemoryWatchdog } from "./memory-watchdog.js";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
 import { ASSIGN_CHOICES, beaconSecret, branding, features, helperHandoff, parseWorkList } from "@kesher/shared";
@@ -368,6 +369,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Tor for blocked pages: downloaded only when the user presses Install, started only when a page does not open.
   const tor = new Tor(join(paths.engines, "tor"));
   const faults = new FaultLog(join(paths.root, "logs", "faults.jsonl"));
+  // The memory watchdog (heap and free memory every 30 s; refuses new heavy jobs when short) writes to the app's log.
+  ensureMemoryWatchdog((line) => {
+    try {
+      appendFileSync(join(paths.root, "logs", "main.log"), `${new Date().toISOString()} ${line}\n`);
+    } catch {
+      // a log that cannot be written never stops the server
+    }
+  });
   const guard = new GpuGuard(
     () => config.guard,
     undefined,

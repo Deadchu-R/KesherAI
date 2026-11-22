@@ -16,6 +16,7 @@ import { join, resolve, sep } from "node:path";
 import { chmod, copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { totalmem } from "node:os";
 import type { KesherServer } from "@kesher/core";
 import { SHORTCUTS, branding, shortcutKey, toAccelerator, type ShortcutMap } from "@kesher/shared";
 import { BrowserPane } from "./browser-pane.js";
@@ -312,6 +313,9 @@ function secretBox(): { seal(text: string): string; unseal(text: string): string
   };
 }
 
+// The server runs inside this process. V8's default heap limit was reached on the PC (heap 457/467 MB, then the
+// computer powered off), so allow up to 4 GB (or half of a small computer's memory). Must be set before the app is ready.
+app.commandLine.appendSwitch("js-flags", `--max-old-space-size=${Math.max(1024, Math.min(4096, Math.floor(totalmem() / 1024 ** 2 / 2)))}`);
 /** `--worker`: the window-less self-work KesherAI (see worker.ts); it has its own profile, so it is not "another window". */
 const workerMode = process.argv.includes("--worker");
 if (workerMode) app.setPath("userData", join(app.getPath("userData"), "worker"));

@@ -1,5 +1,6 @@
 import { freemem, totalmem } from "node:os";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { heavyGate } from "../heavy-gate.js";
 import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js";
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
@@ -98,7 +99,10 @@ export async function loadModel(s: KesherServices, modelPath: string, name?: str
   // Before too: the guard checks every few seconds, and a load takes up to a minute; after a long idle time it
   // stopped the server while it was still loading (found on the PC: "stopped: unused for a while" twice in a row).
   s.guard.touch("llamacpp");
-  await s.engine.load(modelPath);
+  // A big model (8 GB and more) is a heavy job: it waits for a running build or install, and they wait for it.
+  const big = ((await stat(modelPath).catch(() => undefined))?.size ?? 0) >= 8 * 1024 ** 3;
+  if (big) await heavyGate.run({ en: `loading ${basename(modelPath)}`, he: `טעינת המודל ${basename(modelPath)}` }, () => s.engine.load(modelPath));
+  else await s.engine.load(modelPath);
   // A model just loaded is in use: without this, the idle unloader (20 minutes by default) stopped it seconds after
   // loading when nothing had run for a while (found on the PC: Qwen3.6 loaded, then unloaded 3 s later).
   s.guard.touch("llamacpp");

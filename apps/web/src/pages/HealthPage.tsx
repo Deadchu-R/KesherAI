@@ -27,6 +27,10 @@ interface Reading {
   uptimeHours: number;
 }
 interface Live { model?: string; gpuApps: Array<{ pid: number; name: string; bytes: number; own: boolean }> }
+interface Bi { he: string; en: string }
+/** How the last run ended (core: shutdown-info.ts) and the heavy-job gate (core: heavy-gate.ts). */
+interface Shutdown { line?: Bi; windows: Array<{ id: number; at: string; meaning: Bi }> }
+interface Heavy { running?: Bi & { since: number }; waiting: Bi[]; lowMemory?: Bi }
 interface Item { level: "ok" | "warn" | "bad"; title: string; fix: string }
 
 
@@ -55,7 +59,7 @@ function Meter({ label, used, total, note }: { label: string; used: number; tota
  * reads; every fix is a step the user takes. Works from the phone too (it shows the computer).
  */
 export function HealthPage() {
-  const [data, setData] = useState<{ reading: Reading; items: Item[]; live?: Live } | null>(null);
+  const [data, setData] = useState<{ reading: Reading; items: Item[]; live?: Live; shutdown?: Shutdown; heavy?: Heavy } | null>(null);
   const [busy, setBusy] = useState(false);
   const [advice, setAdvice] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -153,6 +157,18 @@ export function HealthPage() {
           ) : (
             <div className="health-advice"><RichText text={advice} /></div>
           )}
+        </section>
+      )}
+      {device === "pc" && tab === "overview" && data && (data.shutdown?.line || data.shutdown?.windows.length || data.heavy?.running || data.heavy?.lowMemory) && (
+        <section className="card stack">
+          <h2>{L("כיבוי ועבודות כבדות", "Shutdown and heavy jobs")}</h2>
+          {data.shutdown?.line && <p className="small" dir="auto">{L(data.shutdown.line.he, data.shutdown.line.en)}</p>}
+          {data.shutdown?.windows.map((e) => (
+            <p key={`${e.id}${e.at}`} className="small muted" dir="auto"><bdi>{new Date(e.at).toLocaleString()}</bdi> · {L("Windows:", "Windows:")} {L(e.meaning.he, e.meaning.en)}</p>
+          ))}
+          {data.heavy?.lowMemory && <p className="small" role="status" dir="auto">{L(data.heavy.lowMemory.he, data.heavy.lowMemory.en)}{L(" — עבודות כבדות חדשות לא יתחילו", " — new heavy jobs will not start")}</p>}
+          {data.heavy?.running && <p className="small" role="status" dir="auto">{L("רץ עכשיו:", "Running now:")} {L(data.heavy.running.he, data.heavy.running.en)}</p>}
+          {data.heavy?.waiting.map((w, n) => <p key={n} className="small muted" dir="auto">{L("ממתין ל:", "Waiting for:")} {L(data.heavy!.running?.he ?? "", data.heavy!.running?.en ?? "")} → {L(w.he, w.en)}</p>)}
         </section>
       )}
       {device === "pc" && tab === "overview" && data?.live && (data.live.model || data.live.gpuApps.length > 0) && (

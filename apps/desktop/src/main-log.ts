@@ -8,7 +8,7 @@ import cp, { execFile } from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { freemem, totalmem } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { crashReporter, type App } from "electron";
 
 /**
@@ -34,19 +34,28 @@ export function startMainLog(app: App, file: string): (line: string) => void {
   }
   // The last run: when its last line is not "exit", it ended without Node knowing (a crash in native code, or ended
   // from outside): say so, so the next lines are read in that light.
+  // `ended` is kept for the computer health page (logs/last-shutdown.json, read by the core: how the last run ended).
+  let ended: boolean | undefined;
   try {
     const last = readFileSync(file, "utf8").trimEnd().split("\n").at(-1) ?? "";
+    if (last) ended = / exit -?\d+$/.test(last);
     if (last && !/ exit -?\d+$/.test(last)) write(`the previous run ended without an exit (crashed in native code or was ended from outside); its last line: ${last.slice(0, 200)}`);
   } catch {
     // no log yet
   }
   // The last moment the previous run was alive (kept every 2 s in a small file beside the log).
   const aliveFile = `${file}.alive`;
+  let was = "";
   try {
-    const was = readFileSync(aliveFile, "utf8").trim();
+    was = readFileSync(aliveFile, "utf8").trim();
     if (was) write(`the previous run was last alive at ${was}`);
   } catch {
     // first run
+  }
+  try {
+    if (ended !== undefined) writeFileSync(join(dirname(file), "last-shutdown.json"), JSON.stringify({ clean: ended, alive: was, recordedAt: new Date().toISOString() }));
+  } catch {
+    // as above
   }
   write(`start ${app.getVersion()} pid ${process.pid}`);
   const started = Date.now();
