@@ -32,6 +32,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - [ ] Web build on the phone (M): serve with COOP/COEP + Brotli headers from the local server, a launcher with touch joystick and a memory gauge (iOS 512 MB limit) — see the not-built line below.
 
 
+- [ ] Live Claude-helper notifications in KesherAI (Roee 12:57): POST /api/agents/external {id,title,status,step,steps} that the lead Claude calls at a helper's start and end; KesherAI watches new commits on origin/main (its existing fetch) and attaches each commit with the trailer `Helper: <id>` to that run as a step; the phone gets the same live per-id progress notification as Antigravity (deacdf7) and a "Claude" curtain in the hub. No Claude tokens for mid-run updates.
+
 ## Waiting on Roee: at home, weekend 👤 (22.11)
 - [ ] Hub secret for storage-free tokens: Claude adds a separate variable (a plain random password, not HUB_PRIVATE_KEY); Roee pastes it in Cloudflare › Workers › kesher-hub › Settings › Variables as a Secret when he is home.
 
