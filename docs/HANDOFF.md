@@ -58,7 +58,15 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
 - Testing on his PC: only through KesherAI itself; close what you open (Unreal etc.), leave KesherAI open.
 - Usage credits: he may spend credits already loaded, never reload or buy more; stop when they run out.
 
-## The design doc (artifact https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U)
+## The design docs (split by category 2026-11-22; each Design canvas holds at most 512 files)
+- General (chat, app, settings, personal): https://claude.ai/artifact/225udEzmNSSZPHUewaCh7U
+- Kesher cloud, tasks and agents (hub, inbox, helpers, computer tasks, free cloud): https://claude.ai/artifact/1MJnsdiaPC1WWwNt75DS1G
+- Study: https://claude.ai/artifact/VmchG2PaCNxb4hzBUAqncE
+- Editors and games: https://claude.ai/artifact/9HE8rw5ZptUf7ftitvTqhd
+- Archive (first redesign mockups): https://claude.ai/artifact/2LQpfCwcC6GaRz7fHtuTgk
+- Publish each rendered board to the doc of its category (scenario group: Hub/Agents/Browser/Free cloud/Computers → cloud,
+  Editors/Games → editors, Updates → general). A newer board of an existing screen replaces the old one in its place
+  (Roee 2026-11-22); old boards are never deleted otherwise.
 - **Every night (Roee 2026-11-21): two design-doc updates — one at 21:00 and one at 07:00** (with the morning report). Schedule both as reminders into the running chat each evening (send_later), and send him the link after each.
 - Every new or changed screen goes in before the build, in the interface's own style, desktop (1280) and phone (390);
   real Playwright screenshots of the built screen are preferred over mockups. No approval needed; open the doc for him
