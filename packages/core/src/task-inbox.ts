@@ -428,6 +428,7 @@ export function researchPrompt(s: InboxTaskSpec, branch: string): string {
     "- Do not download files, install or run anything, sign in anywhere, buy anything, or accept any offer, upgrade or credits. If something asks for payment or a sign-in, stop and say so in your report.",
     "- Do not run git push, git commit, git checkout, git switch, git reset, git rebase or git remote. Do not touch other branches. KesherAI commits and pushes after its own checks.",
     "- Do not read files outside this folder or secret files (.env, keys). To look at the project, use your file tools (read, list, search) or simple read-only commands (Get-ChildItem, Get-Content, rg) without pipes.",
+    "- First read docs/research/INDEX.md (everything KesherAI already researched). Do not repeat a topic that is there: build on that file, cite it, and research only what is new or changed since.",
     "- If a step is refused, do not stop: carry on another way (your file tools, the web). The task is done only when the report file is written.",
     `- Write your findings to exactly one file: ${file}. Change no other file. Write it even if part of the research could not be done, and say what is missing.`,
     "- The file is Markdown: a # title, a short summary, ## sections with the facts, numbers and where sources disagree, a short ## Conclusion, and at the end a numbered ## Sources list (`1. [Title](https://url)`); cite by number in square brackets, like [2]. Only pages you really read.",
