@@ -1,7 +1,7 @@
 import { lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { InboxTaskView } from "@kesher/shared";
-import { convertedCopyPath, parseConvertTitle, type PluginEngine } from "./engine-support.js";
+import { convertedCopyPath, parseConvertTitle, PLUGIN_SOURCES, type PluginEngine } from "./engine-support.js";
 import type { InstallJob } from "./unreal-install.js";
 
 /**
@@ -171,11 +171,12 @@ const safeRel = (p: string) => p.length > 0 && !p.startsWith("/") && !/(^|\/)\.\
  * @param repo - The KesherAI source folder.
  * @param ref - The commit or branch to read.
  * @param copy - The copy's folder in the commit.
- * @param dest - Where the files go (emptied first).
+ * @param dest - Where the files go (emptied first, unless `keep`).
+ * @param keep - Write over what is already in dest instead of emptying it (the converted files over the original's).
  * @returns The commit's full id.
  * @throws Error when the commit or folder is missing, or the copy is not a plain folder of files.
  */
-export async function extractCopy(git: GitBytes, repo: string, ref: string, copy: string, dest: string): Promise<string> {
+export async function extractCopy(git: GitBytes, repo: string, ref: string, copy: string, dest: string, keep = false): Promise<string> {
   if (!/^[\w./-]+$/.test(copy) || copy.includes("..")) throw new Error("The copy's folder name is not valid.");
   // A ref that starts with "-" would be read by git as an option.
   if (ref.startsWith("-")) throw new Error("The converted copy's branch name is not valid.");
@@ -189,7 +190,7 @@ export async function extractCopy(git: GitBytes, repo: string, ref: string, copy
   if (entries.length > MAX_COPY_FILES || entries.reduce((n, e) => n + e.size, 0) > MAX_COPY_BYTES) throw new Error("The converted copy is larger than a plugin should be, so KesherAI did not install it.");
   const bad = entries.find((e) => (e.mode !== "100644" && e.mode !== "100755") || !e.path.startsWith(`${copy}/`) || !safeRel(e.path.slice(copy.length + 1)));
   if (bad) throw new Error(`The converted copy has an entry KesherAI will not install (${bad.path.slice(0, 80)}).`);
-  await rm(dest, { recursive: true, force: true });
+  if (!keep) await rm(dest, { recursive: true, force: true });
   for (const e of entries) {
     const blob = await git(repo, ["cat-file", "blob", e.oid]);
     if (blob.code !== 0) throw new Error(`Could not read ${e.path.slice(copy.length + 1)} from the commit.`);
@@ -279,7 +280,11 @@ export class ConvertedCopies {
     this.job = job;
     try {
       const source = join(this.d.root, `${copy.engine}-${copy.taskId.replace(/[^\w.-]/g, "_")}`);
-      const sha = await extractCopy(this.d.git, repo, copy.sha ?? copy.branch, copy.copy, source);
+      // The original plugin first, then the converted files over it: an agent often writes only the files it changed
+      // (r-20261122-02 wrote 11 of the plugin's files, and the build missed the rest).
+      const ref = copy.sha ?? copy.branch;
+      await extractCopy(this.d.git, repo, ref, PLUGIN_SOURCES[copy.engine].source, source).catch(() => undefined);
+      const sha = await extractCopy(this.d.git, repo, ref, copy.copy, source, true);
       if (await hasLinks(source)) throw new Error("The converted copy has a link inside it, so KesherAI did not install it.");
       const marker: ConvertedMarker = { taskId: copy.taskId, engine: copy.engine, version: copy.version, sha, at: (this.d.now ?? Date.now)() };
       job.state = "installing";
