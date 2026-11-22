@@ -110,7 +110,7 @@ export class HubObject {
     this.hub = new Hub({
       store,
       sockets: socketsOf(ctx),
-      config: { allowedEmail: env.ALLOWED_EMAIL, hubPrivateJwk: env.HUB_PRIVATE_KEY, claude: { triggerId: env.CLAUDE_TRIGGER_ID, token: env.CLAUDE_FIRE_TOKEN }, vapid: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT) },
+      config: { allowedEmail: env.ALLOWED_EMAIL, hubPrivateJwk: env.HUB_PRIVATE_KEY, tokenSecret: env.HUB_TOKEN_SECRET, claude: { triggerId: env.CLAUDE_TRIGGER_ID, token: env.CLAUDE_FIRE_TOKEN }, vapid: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT) },
       verifyIdToken: (t) => verifyGoogleIdToken(t, env.GOOGLE_CLIENT_ID ?? "", keyFor, Date.now()),
       fireClaude: (text, trigger) => fireClaudeTask(text, trigger),
       warn: (message) => this.diag.add({ kind: "storage", where: "bookkeeping", message }),

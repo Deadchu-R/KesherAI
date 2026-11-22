@@ -126,6 +126,9 @@ export interface HubConfig {
   allowedEmail?: string;
   /** The hub's ECDH private key as JWK text (for the Claude cloud path). */
   hubPrivateJwk?: string;
+  /** `HUB_TOKEN_SECRET`: a plain random secret (32+ characters) that device tokens and socket tickets are signed from,
+   * with no storage read at all. Tokens signed before it was set still work and are swapped for new ones. */
+  tokenSecret?: string;
   claude?: { triggerId?: string; token?: string };
   /** Web Push (VAPID keys and contact); without it the page offers no notifications. */
   vapid?: VapidKeys;
@@ -251,6 +254,9 @@ export class Hub {
   private readonly ticketDevices = new Map<string, { row: DeviceRow; until: number }>();
   /** The key `kh2_` device tokens are signed with, per secret text it was derived from. */
   private tokenKey?: { from: string; key: Promise<HubCryptoKey> };
+  private oldTokenKey?: { from: string; key: Promise<HubCryptoKey> };
+  /** Tokens (by hash) that were signed with the legacy key: their next ticket asks the device to rotate. */
+  private readonly legacyTokens = new Set<string>();
   /** Devices revoked (in memory; also saved in the `revokedIds` setting when storage takes it). */
   private readonly revoked = new Set<string>();
   /** When the cleanup last ran (in memory: after a wake it runs on the next cron), and the store's count of rows
@@ -535,7 +541,23 @@ export class Hub {
    * key the hub made and keeps in its settings (read once per wake). Undefined when neither can be had.
    */
   private tokenSecret(): string | undefined {
+    const set = this.deps.config.tokenSecret;
+    return (set && set.length >= 32 ? set : undefined) || this.legacyTokenSecret();
+  }
+
+  /** The secret tokens were signed from before `HUB_TOKEN_SECRET` was set (still accepted, then rotated). */
+  private legacyTokenSecret(): string | undefined {
     return this.deps.config.hubPrivateJwk || this.ownJwk || this.softSetting("hubKey");
+  }
+
+  /** The legacy HMAC key, only when `HUB_TOKEN_SECRET` replaced it (else undefined: the main key is the legacy one). */
+  private legacyTokenKey(): Promise<HubCryptoKey> | undefined {
+    const set = this.deps.config.tokenSecret;
+    if (!set || set.length < 32) return undefined;
+    const from = this.legacyTokenSecret();
+    if (!from) return undefined;
+    if (this.oldTokenKey?.from !== from) this.oldTokenKey = { from, key: deriveHmacKey(from, "device-token-v2") };
+    return this.oldTokenKey.key;
   }
 
   /** The HMAC key for `kh2_` tokens (derived with HKDF; see device-token.ts), or undefined without a secret. */
@@ -577,7 +599,12 @@ export class Hub {
     const hash = await sha256Hex(bearer);
     const t = this.now();
     const key = signed ? this.deviceTokenKey() : undefined;
-    const claims = key ? await verifyDeviceToken(await key, bearer) : undefined;
+    let claims = key ? await verifyDeviceToken(await key, bearer) : undefined;
+    if (!claims && signed) {
+      const old = this.legacyTokenKey();
+      claims = old ? await verifyDeviceToken(await old, bearer) : undefined;
+      if (claims) this.legacyTokens.add(hash);
+    }
     if (claims) {
       if (this.isRevoked(claims.deviceId) || t - claims.issuedAt > HUB_TIMES.tokenMax) return undefined;
       let d: DeviceRow | undefined;
@@ -613,6 +640,8 @@ export class Hub {
    */
   private signingKey(): Promise<HubCryptoKey> {
     // With the HUB_PRIVATE_KEY secret the key is derived from it: nothing to read or write.
+    const set = this.deps.config.tokenSecret;
+    if (set && set.length >= 32) return (this.ticketKey ??= deriveHmacKey(set, "socket-ticket-v1"));
     if (this.deps.config.hubPrivateJwk) return (this.ticketKey ??= deriveHmacKey(this.deps.config.hubPrivateJwk, "socket-ticket-v1"));
     this.ticketKey ??= (async () => {
       let raw = this.softSetting("ticketKey");
@@ -650,7 +679,7 @@ export class Hub {
     const sig = toB64url(await crypto.subtle.sign("HMAC", await this.signingKey(), new TextEncoder().encode(head)));
     for (const [n, x] of this.ticketDevices) if (x.until <= t) this.ticketDevices.delete(n);
     this.ticketDevices.set(nonce, { row: d, until: t + HUB_TIMES.ticket });
-    const upgrade = !bearer!.startsWith(SIGNED_TOKEN_PREFIX) && !!this.deviceTokenKey();
+    const upgrade = (!bearer!.startsWith(SIGNED_TOKEN_PREFIX) && !!this.deviceTokenKey()) || this.legacyTokens.has(await sha256Hex(bearer!));
     return { ticket: `${head}.${sig}`, rotateDue: upgrade || t - d.tokenIssuedAt > HUB_TIMES.rotateAfter };
   }
 

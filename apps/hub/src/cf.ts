@@ -80,6 +80,8 @@ export interface HubEnvBindings {
   GOOGLE_CLIENT_ID?: string;
   /** Optional secret: the hub's own ECDH private key (JWK text); without it the hub makes one and keeps it in storage. */
   HUB_PRIVATE_KEY?: string;
+  /** A plain random secret (32+ characters) device tokens and socket tickets are signed from, with no storage read. */
+  HUB_TOKEN_SECRET?: string;
   /** Secret: the Claude Code scheduled task's trigger id and its per-task API token. */
   CLAUDE_TRIGGER_ID?: string;
   CLAUDE_FIRE_TOKEN?: string;

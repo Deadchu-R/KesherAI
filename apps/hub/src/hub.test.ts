@@ -761,3 +761,23 @@ test("tickets are signed: a changed one is refused, and a PC connects even when 
   await hub.onFrame(pc.id, JSON.stringify({ t: "beat", busy: true, optIn: { appear: true }, agents: [] }));
   assert.equal(hub.presence().find((d) => d.id === pc.id)?.busy, true);
 });
+
+
+test("HUB_TOKEN_SECRET: new tokens come from it; a token signed before it still works and is asked to rotate", async () => {
+  const store = new MemoryStore();
+  const before = await setup({}, undefined, { store });
+  const pc = await pair(before.hub, "pc", "PC");
+  assert.ok(pc.token.startsWith("kh2_"));
+  // The same storage, now with the secret set (as after a redeploy with HUB_TOKEN_SECRET).
+  const after = await setup({ tokenSecret: "s".repeat(40) }, undefined, { store });
+  const t = await after.hub.issueTicket(pc.token);
+  assert.ok(!isHubError(t), "the old token still gets a ticket");
+  assert.equal(t.rotateDue, true, "and is asked to rotate");
+  const phone = await pair(after.hub, "phone", "Phone");
+  const t2 = await after.hub.issueTicket(phone.token);
+  assert.ok(!isHubError(t2) && t2.rotateDue === false, "a new token is signed with the secret and needs no rotation");
+  // A short secret is ignored (the old key stays in use).
+  const short = await setup({ tokenSecret: "short" }, undefined, { store });
+  const t3 = await short.hub.issueTicket(pc.token);
+  assert.ok(!isHubError(t3) && t3.rotateDue === false);
+});
