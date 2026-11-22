@@ -224,3 +224,50 @@ test("the routes run a task from this computer and refuse other devices and bad 
   assert.equal(((await app.inject({ url: "/api/control/tasks" })).json() as { current: { id: string } }).current.id, id);
   await app.close();
 });
+
+const hang: ControlPlanner = (_q, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))));
+const short = { gemini: 30, local: 60, uia: 30 };
+
+test("a planner that hangs: each call is cut at its limit, written in the steps and the log, and twice in a row fails the task with the reason", async () => {
+  const f = fake({ gemini: hang });
+  const tasks = new ControlTasks(f.host, Date.now, instant, short);
+  const { id } = tasks.start(req({ model: "gemini" }), "pc");
+  const v = await until(tasks, id, "failed");
+  const cut = v.steps.filter((s) => s.action === "timed out");
+  assert.equal(cut.length, 2);
+  assert.match(cut[0]!.note, /free Gemini key.*did not answer in 0 s/);
+  assert.match(v.summary, /Twice in a row.*Gemini key/);
+  assert.ok(f.log.some((l) => /timed out/.test(l)));
+});
+
+test("auto mode: a Gemini call that hangs moves on to the local model at once", async () => {
+  const s = script(['{"do":"done","summary":"Chrome is on the page."}']);
+  const f = fake({ gemini: hang, local: s.p });
+  const tasks = new ControlTasks(f.host, Date.now, instant, short);
+  const { id } = tasks.start(req(), "pc");
+  const v = await until(tasks, id, "done");
+  assert.equal(v.planner, "local");
+  assert.equal(v.steps.filter((x) => x.action === "timed out").length, 0);
+});
+
+test("UI Automation that hangs (the window in front) fails the task with the reason instead of sitting at step 1", async () => {
+  const f = fake();
+  f.host.front = () => new Promise(() => undefined);
+  const tasks = new ControlTasks(f.host, Date.now, instant, short);
+  const { id } = tasks.start(req(), "pc");
+  const v = await until(tasks, id, "failed");
+  assert.match(v.summary, /UI Automation.*restart KesherAI/);
+  assert.equal(v.steps.length, 2);
+});
+
+test("a stuck action is cut and listed as failed; the task goes on", async () => {
+  const s = script(['{"do":"invoke","ref":"u2","note":"open the library"}', '{"do":"done","summary":"ok"}']);
+  const f = fake({ gemini: s.p });
+  const base = f.host.tools;
+  f.host.tools = (c) => base(c).map((t) => (t.spec.name === "computer_invoke" ? { ...t, run: () => new Promise<never>(() => undefined) } : t));
+  const tasks = new ControlTasks(f.host, Date.now, instant, short);
+  const { id } = tasks.start(req(), "pc");
+  const v = await until(tasks, id, "done");
+  const act = v.steps.find((x) => x.action.includes("Library"));
+  assert.ok(act && !act.ok && /did not answer/.test(act.note));
+});

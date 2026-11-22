@@ -132,6 +132,56 @@ const THUMB_W = 200;
 /** How long Gemini is skipped after a limit or busy answer (auto mode uses the local model meanwhile). */
 const GEMINI_COOLDOWN_MS = 5 * 60_000;
 
+/**
+ * The longest one call may take before the task gives up on it, so a hung call never leaves a task at "step 1" with no
+ * steps: a planner call (the free Gemini key; the local model gets longer, it may load first and waits for the heavy-job
+ * gate), and one UI Automation call (what is in front, the controls, a screenshot, an action).
+ */
+export const CALL_TIMEOUTS = { gemini: 30_000, local: 120_000, uia: 30_000 } as const;
+/** Each call's time limit in ms (the shape of {@link CALL_TIMEOUTS}). */
+export type CallTimeouts = { [K in keyof typeof CALL_TIMEOUTS]: number };
+
+/** A call that did not answer in time (`what` says which, in words for the step list). */
+export class CallTimeout extends Error {
+  /** @param what - The call, e.g. "The planner (gemini)". @param ms - Its limit. */
+  constructor(readonly what: string, readonly ms: number) {
+    super(`${what} did not answer in ${Math.round(ms / 1000)} s.`);
+    this.name = "CallTimeout";
+  }
+}
+
+/**
+ * Runs one call with a time limit: past it, the call's own signal is aborted and a {@link CallTimeout} is thrown. The
+ * task's Stop still aborts it at once.
+ *
+ * @param what - The call, in words.
+ * @param ms - The limit.
+ * @param parent - The task's signal.
+ * @param fn - The call, given a signal that aborts on Stop or on the limit.
+ * @returns What the call returned.
+ */
+export async function withTimeout<T>(what: string, ms: number, parent: AbortSignal, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const child = new AbortController();
+  const onStop = () => child.abort();
+  parent.addEventListener("abort", onStop, { once: true });
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      fn(child.signal),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new CallTimeout(what, ms));
+          child.abort();
+        }, ms);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    parent.removeEventListener("abort", onStop);
+  }
+}
+
 interface Running {
   view: ControlTaskView;
   abort: AbortController;
@@ -151,11 +201,13 @@ export class ControlTasks {
    * @param host - The app's computer control, planners and log.
    * @param now - The clock (tests).
    * @param sleep - Waiting (tests make it instant).
+   * @param timeouts - Each call's time limit (tests make them short).
    */
   constructor(
     private readonly host: ControlTaskHost,
     private readonly now: () => number = Date.now,
     private readonly sleep: (ms: number, signal: AbortSignal) => Promise<void> = abortableSleep,
+    private readonly timeouts: CallTimeouts = CALL_TIMEOUTS,
   ) {}
 
   /**
@@ -288,17 +340,36 @@ export class ControlTasks {
     let wantLook = false;
     let badAnswers = 0;
     let refusals = 0;
+    /** Calls in a row that timed out (planner or UI Automation); two in a row end the task. */
+    let timeouts = 0;
     const tool = (name: string) => this.host.tools(conv).find((t) => t.spec.name === name);
+    /** One computer-control tool call, with the UI Automation time limit and its own signal. */
+    const runTool = (t: AgentTool, input: Record<string, unknown>) =>
+      withTimeout(`Windows UI Automation (${t.spec.name})`, this.timeouts.uia, signal, (s) => t.run(input, { ...ctx, signal: s } as ToolContext));
     const call = async (name: string, input: Record<string, unknown>) => {
       const t = tool(name);
       if (!t) throw new Error(`${name} is not available on this computer.`);
-      return t.run(input, ctx);
+      return runTool(t, input);
     };
     const add = (step: Omit<ControlTaskStep, "n">) => {
       r.view.steps.push({ n: r.view.step, ...step });
       if (r.view.steps.length > 60) r.view.steps.splice(0, r.view.steps.length - 60);
       this.host.log(scrubLog(`[computer-task] ${r.view.id} step ${r.view.step}: ${step.action}${step.ok ? "" : " (refused or failed)"} — ${step.note}`));
       this.host.changed?.();
+    };
+    /**
+     * A call timed out: it goes into the step list (and main.log) with its reason. The second in a row ends the task as
+     * failed, with what to check; the first lets the loop try the step again.
+     *
+     * @returns Whether the task ended.
+     */
+    const timedOut = (e: CallTimeout): boolean => {
+      add({ action: "timed out", note: e.message, ok: false });
+      history.push(`${r.view.step}. (${e.message} The step was tried again.)`);
+      if (++timeouts < 2) return false;
+      const hint = /planner/i.test(e.what) ? "Check the free Gemini key and the internet (or the local vision model), then try again." : "Windows UI Automation is not answering; restart KesherAI and try again.";
+      this.finish(r, "failed", `${e.message} Twice in a row, so the task stopped. ${hint}`);
+      return true;
     };
     try {
       while (true) {
@@ -311,7 +382,15 @@ export class ControlTasks {
         }
         r.view.step++;
         // 1. What is in front: a UAC or sign-in window is the user's.
-        const fg = await this.host.front();
+        let fg: { app: string; title: string };
+        try {
+          fg = await withTimeout("Windows UI Automation (the window in front)", this.timeouts.uia, signal, () => this.host.front());
+        } catch (e) {
+          if (!(e instanceof CallTimeout) || signal.aborted) throw e;
+          if (timedOut(e)) return;
+          r.view.step--;
+          continue;
+        }
         if (isSecureWindow(fg.app, fg.title)) {
           const t0 = this.now();
           await this.ask(r, "A Windows permission or sign-in window is open (User Account Control). Answer it on the computer, then answer here to go on.");
@@ -327,7 +406,9 @@ export class ControlTasks {
             tree = (await call("computer_tree", { depth: 8, max: 150 })).output;
           } catch (e) {
             tree = "";
-            if (isStop(e)) throw new Stopped();
+            if (isStop(e) || signal.aborted) throw new Stopped();
+            // No controls this turn: the planner goes on without them (a picture is taken instead).
+            if (e instanceof CallTimeout) add({ action: "timed out", note: `${e.message} Going on without the controls.`, ok: false });
           }
         }
         const sense = chooseSense({ uia: this.host.uia(), actionable: actionableCount(tree), wantLook });
@@ -352,7 +433,8 @@ export class ControlTasks {
               } else sameScreen = true;
             }
           } catch (e) {
-            if (isStop(e)) throw new Stopped();
+            if (isStop(e) || signal.aborted) throw new Stopped();
+            if (e instanceof CallTimeout) add({ action: "timed out", note: `${e.message} Going on without a picture.`, ok: false });
           }
         }
         const scale = image && shotWidth > SEND_W ? shotWidth / SEND_W : 1;
@@ -367,7 +449,16 @@ export class ControlTasks {
           image ? `A picture of the screen is attached (${Math.round(shotWidth / scale)} px wide; click in its pixels).` : sameScreen ? "The screen has not changed since the last picture." : "",
           "Answer with one JSON object.",
         ].filter(Boolean).join("\n\n");
-        const text = await this.plan(r, req.model, { system: PLANNER_SYSTEM, user, ...(image ? { image } : {}) }, signal);
+        let text: string;
+        try {
+          text = await this.plan(r, req.model, { system: PLANNER_SYSTEM, user, ...(image ? { image } : {}) }, signal);
+        } catch (e) {
+          if (!(e instanceof CallTimeout) || signal.aborted) throw e;
+          if (timedOut(e)) return;
+          r.view.step--;
+          continue;
+        }
+        timeouts = 0;
         const step = parsePlan(text);
         if (!step) {
           if (++badAnswers >= 3) return this.finish(r, "failed", "The model did not answer with a usable step three times.");
@@ -457,7 +548,7 @@ export class ControlTasks {
         }
         // 6. Act.
         try {
-          const out = await t.run(run.input, ctx);
+          const out = await runTool(t, run.input);
           refusals = 0;
           add({ action: describe(step, target), note, ok: true, ...(thumb ? { shotThumb: thumb } : {}) });
           history.push(`${r.view.step}. ${describe(step, target)} → ${out.output.replace(/\s+/g, " ").slice(0, 200)}`);
@@ -483,16 +574,18 @@ export class ControlTasks {
     const which = choosePlanner(model, { gemini: !!p.gemini, local: !!p.local }, this.now() < this.geminiDownUntil);
     if (!which) throw new Error("No model can plan: set up the free Gemini key or install a local vision model.");
     r.view.planner = which;
+    const ask = (name: "gemini" | "local") => withTimeout(`The planner (${name === "gemini" ? "free Gemini key" : "local vision model"})`, this.timeouts[name], signal, (s) => p[name]!(q, s));
     try {
-      return await p[which]!(q, signal);
+      return await ask(which);
     } catch (e) {
       const msg = (e as Error).message ?? "";
-      const busy = /\b(429|500|502|503|504)\b|quota|rate.?limit|RESOURCE_EXHAUSTED|UNAVAILABLE|overloaded/i.test(msg);
+      // A Gemini call that hangs counts as busy too: auto mode moves on to the local model.
+      const busy = e instanceof CallTimeout || /\b(429|500|502|503|504)\b|quota|rate.?limit|RESOURCE_EXHAUSTED|UNAVAILABLE|overloaded/i.test(msg);
       if (which === "gemini" && busy && !signal.aborted) {
         this.geminiDownUntil = this.now() + GEMINI_COOLDOWN_MS;
         if (model === "auto" && p.local) {
           r.view.planner = "local";
-          return p.local(q, signal);
+          return ask("local");
         }
       }
       throw e;
