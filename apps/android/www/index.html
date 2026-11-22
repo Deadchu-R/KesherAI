@@ -808,10 +808,13 @@
     msgEl.textContent = tr.downloading[lang];
     $("updateBar").style.width = "0%";
     const sub = await Updater.addListener("progress", (p) => {
-      if (p.percent >= 0) {
-        msgEl.textContent = tr.downloading[lang] + p.percent + "%";
-        $("updateBar").style.width = p.percent + "%";
-      }
+      if (p.percent >= 0) $("updateBar").style.width = p.percent + "%";
+      const mb = (b) => (b / 1048576).toFixed(1);
+      const paused = { wifi: ["ממתין ל-Wi-Fi (אנדרואיד עצר הורדה גדולה בסלולר)", "Waiting for Wi-Fi (Android held a large download on mobile data)"],
+        network: ["ממתין לרשת", "Waiting for a network"], retry: ["החיבור נפל, מנסה שוב", "Connection dropped, retrying"], other: ["ההורדה בהמתנה", "Download paused"] }[p.paused];
+      const size = p.total > 0 ? ` · ${mb(p.got)}/${mb(p.total)} MB` : "";
+      const speed = !paused && p.bytesPerSec > 0 ? ` · ${mb(p.bytesPerSec)} MB/s` : "";
+      msgEl.textContent = (paused ? paused[lang === "he" ? 0 : 1] : tr.downloading[lang] + (p.percent >= 0 ? p.percent + "%" : "")) + size + speed;
     });
     try {
       await Updater.install({ url: latest.apkUrl });

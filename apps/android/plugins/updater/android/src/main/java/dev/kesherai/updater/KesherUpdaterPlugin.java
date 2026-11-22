@@ -172,6 +172,8 @@ public class KesherUpdaterPlugin extends Plugin {
         // While the app is on screen: report the percent to the page, and open the installer when done.
         new Thread(() -> {
             int lastPercent = -2;
+            long lastGot = 0, lastAt = System.currentTimeMillis(), lastSent = 0;
+            int lastStatus = -1;
             try {
                 while (true) {
                     Thread.sleep(500);
@@ -181,11 +183,27 @@ public class KesherUpdaterPlugin extends Plugin {
                         long got = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
                         long total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
                         int percent = total > 0 ? (int) (100 * got / total) : -1;
-                        if (percent != lastPercent) {
-                            lastPercent = percent;
+                        long now = System.currentTimeMillis();
+                        // Every 2 seconds (or on a change of state): the speed, the sizes and why it waits, so a
+                        // slow download shows whether the network is slow or Android paused it.
+                        if (percent != lastPercent || status != lastStatus || now - lastSent >= 2000) {
                             JSObject p = new JSObject();
                             p.put("percent", percent);
+                            p.put("got", got);
+                            p.put("total", total);
+                            if (now > lastAt) p.put("bytesPerSec", (got - lastGot) * 1000 / (now - lastAt));
+                            if (status == DownloadManager.STATUS_PAUSED) {
+                                int reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON));
+                                p.put("paused", reason == DownloadManager.PAUSED_QUEUED_FOR_WIFI ? "wifi"
+                                    : reason == DownloadManager.PAUSED_WAITING_FOR_NETWORK ? "network"
+                                    : reason == DownloadManager.PAUSED_WAITING_TO_RETRY ? "retry" : "other");
+                            }
                             notifyListeners("progress", p);
+                            lastPercent = percent;
+                            lastStatus = status;
+                            lastSent = now;
+                            lastGot = got;
+                            lastAt = now;
                         }
                         if (status == DownloadManager.STATUS_SUCCESSFUL) break;
                         if (status == DownloadManager.STATUS_FAILED) {
