@@ -6,14 +6,17 @@ Connects the Unreal Editor to KesherAI on the same computer. In KesherAI (**Crea
 - The editor connects to `ws://127.0.0.1:7420/api/unreal/ws` (set `KESHER_PORT` for another port). Nothing listens inside Unreal, and KesherAI accepts the connection only from the same computer.
 - Licence: Apache-2.0, like KesherAI.
 
-## Limitations (compared to UE 5.x version)
+## Limitations (compared to the Unreal 5 version)
 
-- **Enhanced Input**: not available in UE 4.27. Gameplay test `input` steps (Enhanced Input actions) are not supported; use `key` steps instead.
-- **Gameplay tests**: Play In Editor start is simplified (no FRequestPlaySessionParams), map override is not supported.
-- **World Partition**: not available in UE 4.27.
-- **Live Coding**: not available in UE 4.27.
-- **Mesh description export**: LOD mesh export in `level_mesh` is not available (requires UE 5 MeshDescription API changes).
-- **Asset export/import**: FBX export options are simplified (no UFbxExportOption in 4.27).
+- **Enhanced Input**: Unreal 4.27 has no Enhanced Input plugin. Gameplay test `input` steps answer "Not available in Unreal 4.27"; use `key` or `axis` steps instead.
+- **Live Coding**: `live_coding` starts the compile but cannot wait for it (4.27's Live Coding gives no result back); the outcome shows in Unreal's Live Coding window.
+- **World Partition**: Unreal 5 only, so `level` always reports `partitioned: false` (every 4.27 level is whole).
+- **Headless editor**: Unreal 4.27's command-line editor is `UE4Editor-Cmd` (not `UnrealEditor-Cmd`).
+- Everything else (Blueprints, variables, widgets, levels and meshes, block-outs, Niagara copies, asset export/import, gameplay tests with a map) works as in the Unreal 5 version.
+
+## Source layout
+
+KesherAI lays the Unreal 5 plugin's files first and this folder's files over them, then builds with Unreal 4.27's `RunUAT BuildPlugin`. Every source file of the module is here in its 4.27 form; the comments marked "Unreal 4.27" explain each difference from the Unreal 5 code.
 
 ## Install
 

@@ -1,12 +1,9 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
-// UE 4.27 conversion: FindFirstObject → FindObject, GetClassPathName → GetFName,
-// GetObjectPathString → ObjectPath, FBlueprintTags → FBlueprintTags (same),
-// UAssetEditorSubsystem → FAssetEditorManager, PC_Real/PC_Double → PC_Float,
-// PC_Int64 → PC_Int (no PC_Int64 in 4.27), "collapse" needs FAssetEditorManager.
 
 #include "KesherGraph.h"
 
-#include "AssetRegistry/AssetRegistryModule.h"
+// Unreal 4.27 keeps this header at the module's top level (the AssetRegistry/ folder is 5.0+).
+#include "AssetRegistryModule.h"
 #include "BlueprintEditor.h"
 #include "EdGraph/EdGraph.h"
 #include "EdGraph/EdGraphNode.h"
@@ -38,8 +35,7 @@
 #include "Logging/TokenizedMessage.h"
 #include "Misc/PackageName.h"
 #include "ScopedTransaction.h"
-// UE 4.27: no UAssetEditorSubsystem; use FAssetEditorManager instead.
-#include "Toolkits/AssetEditorManager.h"
+#include "Subsystems/AssetEditorSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "KesherAIBridge"
 
@@ -47,7 +43,9 @@ namespace
 {
 	/**
 	 * Collapse to Function, as the Blueprint editor's own right-click item: Unreal makes the function, its inputs and
-	 * outputs from the wires that cross the chosen nodes, and puts a call in their place.
+	 * outputs from the wires that cross the chosen nodes, and puts a call in their place. The two functions are
+	 * protected members of FBlueprintEditor (in 4.27's BlueprintEditor.h too, with the same signatures); a member
+	 * pointer named through this class is the standard, legal way to call them.
 	 */
 	struct FKesherCollapse : public FBlueprintEditor
 	{
@@ -80,9 +78,10 @@ namespace
 
 	void AllGraphs(UBlueprint* BP, TArray<TPair<UEdGraph*, FString>>& Out)
 	{
-		for (UEdGraph* G : BP->UbergraphPages) { if (G) Out.Add({ G, TEXT("event") }); }
-		for (UEdGraph* G : BP->FunctionGraphs) { if (G) Out.Add({ G, TEXT("function") }); }
-		for (UEdGraph* G : BP->MacroGraphs) { if (G) Out.Add({ G, TEXT("macro") }); }
+		// Emplace with an explicit FString: 4.27's TTuple has no constructor a braced { G, TEXT("…") } converts to (C2665).
+		for (UEdGraph* G : BP->UbergraphPages) { if (G) Out.Emplace(G, FString(TEXT("event"))); }
+		for (UEdGraph* G : BP->FunctionGraphs) { if (G) Out.Emplace(G, FString(TEXT("function"))); }
+		for (UEdGraph* G : BP->MacroGraphs) { if (G) Out.Emplace(G, FString(TEXT("macro"))); }
 	}
 
 	UEdGraph* FindGraph(UBlueprint* BP, const FString& Name)
@@ -105,7 +104,8 @@ namespace
 	}
 
 	/**
-	 * A variable type as KesherAI names it: bool, int, byte, float (real), string, name, text,
+	 * A variable type as KesherAI names it: bool, int, int64, byte, float (in 4.27; "real" and "double" are read as
+	 * float), string, name, text,
 	 * struct:Vector, object:Actor, object:/Game/Enemies/BP_Enemy (a Blueprint), class:Actor;
 	 * a list ends in "[]".
 	 */
@@ -137,7 +137,7 @@ namespace
 			if (Name == TEXT("Rotator")) return TBaseStructure<FRotator>::Get();
 			if (Name == TEXT("Transform")) return TBaseStructure<FTransform>::Get();
 			if (Name == TEXT("LinearColor")) return TBaseStructure<FLinearColor>::Get();
-			// UE 4.27: FindObject instead of FindFirstObject.
+			// Unreal 4.27: FindObject with ANY_PACKAGE (FindFirstObject is 5.1+).
 			return FindObject<UScriptStruct>(ANY_PACKAGE, *Name);
 		}
 		return FindObject<UClass>(ANY_PACKAGE, *Name);
@@ -150,7 +150,7 @@ namespace
 		if (Name.EndsWith(TEXT("[]")))
 		{
 			Out.ContainerType = EPinContainerType::Array;
-			Name.LeftChopInline(2);
+			Name = Name.LeftChop(2);
 		}
 		FString Cat = Name, Sub;
 		Name.Split(TEXT(":"), &Cat, &Sub);
@@ -158,12 +158,12 @@ namespace
 		Cat = Cat.ToLower();
 		if (Cat == TEXT("bool") || Cat == TEXT("boolean")) Out.PinCategory = UEdGraphSchema_K2::PC_Boolean;
 		else if (Cat == TEXT("int")) Out.PinCategory = UEdGraphSchema_K2::PC_Int;
-		// UE 4.27: PC_Int64 does not exist, use PC_Int.
-		else if (Cat == TEXT("int64")) Out.PinCategory = UEdGraphSchema_K2::PC_Int;
+		// Blueprint int64 has existed since 4.22.
+		else if (Cat == TEXT("int64")) Out.PinCategory = UEdGraphSchema_K2::PC_Int64;
 		else if (Cat == TEXT("byte")) Out.PinCategory = UEdGraphSchema_K2::PC_Byte;
-		// UE 4.27: PC_Real/PC_Double do not exist, use PC_Float.
 		else if (Cat == TEXT("real") || Cat == TEXT("float") || Cat == TEXT("double"))
 		{
+			// Unreal 4.27 Blueprints have one float type (PC_Float); "real" with a float/double subcategory is 5.0+.
 			Out.PinCategory = UEdGraphSchema_K2::PC_Float;
 		}
 		else if (Cat == TEXT("string")) Out.PinCategory = UEdGraphSchema_K2::PC_String;
@@ -196,6 +196,7 @@ namespace
 		const FProperty* P = C ? C->FindPropertyByName(V.VarName) : nullptr;
 		if (!CDO || !P) return V.DefaultValue;
 		FString Out;
+		// ExportText_InContainer is the long-standing UE4 form (unlike ImportText_InContainer, which is 5.x only).
 		P->ExportText_InContainer(0, Out, CDO, CDO, CDO, PPF_None);
 		return Out;
 	}
@@ -262,7 +263,6 @@ namespace
 		TArray<UClass*> Classes;
 		if (!ClassName.IsEmpty())
 		{
-			// UE 4.27: FindObject instead of FindFirstObject.
 			UClass* C = ClassName.StartsWith(TEXT("/")) ? LoadObject<UClass>(nullptr, *ClassName) : FindObject<UClass>(ANY_PACKAGE, *ClassName);
 			if (!C && !ClassName.StartsWith(TEXT("U"))) C = FindObject<UClass>(ANY_PACKAGE, *(TEXT("U") + ClassName));
 			if (C) Classes.Add(C);
@@ -321,12 +321,12 @@ namespace KesherGraph
 		// Headless (Unreal closed): the registry may still be scanning; wait, or the list comes back short.
 		if (IsRunningCommandlet() || Registry.IsLoadingAssets()) Registry.SearchAllAssets(true);
 		TArray<FAssetData> Assets;
-		// UE 4.27: GetAssetsByClass takes FName, not FTopLevelAssetPath.
+		// Unreal 4.27: classes are named by FName here (FTopLevelAssetPath is 5.1+).
 		Registry.GetAssetsByClass(UBlueprint::StaticClass()->GetFName(), Assets, true);
 		TArray<TSharedPtr<FJsonValue>> Items;
 		for (const FAssetData& A : Assets)
 		{
-			// UE 4.27: ObjectPath is a FName, not GetObjectPathString().
+			// Unreal 4.27: the object path is the ObjectPath FName (GetObjectPathString is 5.1+).
 			const FString Path = A.ObjectPath.ToString();
 			if (!Path.StartsWith(TEXT("/Game/"))) continue;
 			TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
@@ -509,6 +509,7 @@ namespace KesherGraph
 					N->NodeHeight = FMath::Clamp(JsonInt(Op, TEXT("height"), 200), 64, 8000);
 					Graph->AddNode(N, true, false);
 					N->PostPlacedNewNode();
+					// After PostPlacedNewNode, which puts back the default title and colour (found on 5.8: the text was lost).
 					const FString Text = JsonStr(Op, TEXT("text"));
 					N->NodeComment = Text.IsEmpty() ? TEXT("Comment") : Text;
 					const FString Color = JsonStr(Op, TEXT("color"));
@@ -517,6 +518,7 @@ namespace KesherGraph
 				}
 				else if (Type == TEXT("macro"))
 				{
+					// Unreal's standard macros (hold-a-key nodes): ForEachLoop, Gate, DoOnce, DoN, MultiGate, ForLoop, WhileLoop…
 					static const TCHAR* MacrosPath = TEXT("/Engine/EditorBlueprintResources/StandardMacros.StandardMacros");
 					UBlueprint* Macros = LoadObject<UBlueprint>(nullptr, MacrosPath);
 					const FString Name = JsonStr(Op, TEXT("macro"));
@@ -542,14 +544,13 @@ namespace KesherGraph
 				}
 				else if (Type == TEXT("cast"))
 				{
-					// Cast To <class>: an engine class by name, or a Blueprint by its object path.
+					// Cast To <class> (0.1.26): an engine class by name, or a Blueprint by its object path.
 					const FString ClassName = JsonStr(Op, TEXT("class"));
 					UClass* Target = nullptr;
 					if (ClassName.StartsWith(TEXT("/")))
 					{
 						if (UBlueprint* Other = LoadObject<UBlueprint>(nullptr, *ClassName)) Target = Other->GeneratedClass;
 					}
-					// UE 4.27: FindObject instead of FindFirstObject.
 					else Target = FindObject<UClass>(ANY_PACKAGE, *ClassName);
 					if (!Target)
 					{
@@ -571,7 +572,7 @@ namespace KesherGraph
 				}
 				else if (Type == TEXT("timeline"))
 				{
-					// A Timeline node with its own new timeline (empty; its tracks are made in Unreal).
+					// A Timeline node (0.1.26) with its own new timeline (empty; its tracks are made in Unreal).
 					const FString Want = JsonStr(Op, TEXT("name"));
 					const FName TlName = Want.IsEmpty() ? FBlueprintEditorUtils::FindUniqueTimelineName(BP) : FName(*Want);
 					if (!FBlueprintEditorUtils::DoesSupportTimelines(BP)) Problem = TEXT("This Blueprint cannot have timelines");
@@ -684,6 +685,7 @@ namespace KesherGraph
 				else
 				{
 					N->Modify();
+					// "link" ("node:pin" of the other end): one chosen wire only (0.1.15); else every wire of the pin.
 					const FString Link = JsonStr(Op, TEXT("link"));
 					FString OtherNode, OtherPinName;
 					UEdGraphPin* Other = nullptr;
@@ -709,16 +711,15 @@ namespace KesherGraph
 					// A comment box keeps its title as its text; another node shows it as a bubble.
 					if (!N->IsA<UEdGraphNode_Comment>()) N->bCommentBubbleVisible = !N->NodeComment.IsEmpty();
 					const FString Color = JsonStr(Op, TEXT("color"));
-					// UE 4.27: no C++17 init-statement in if; use separate cast.
-					UEdGraphNode_Comment* CommentNode = Cast<UEdGraphNode_Comment>(N);
-					if (CommentNode && !Color.IsEmpty()) CommentNode->CommentColor = FLinearColor(FColor::FromHex(Color));
+					// No "if (init; condition)": Unreal 4.27 modules compile as C++14.
+					UEdGraphNode_Comment* Box = Cast<UEdGraphNode_Comment>(N);
+					if (Box && !Color.IsEmpty()) Box->CommentColor = FLinearColor(FColor::FromHex(Color));
 				}
 				else Problem = TEXT("Node not found");
 			}
 			else if (Kind == TEXT("resize"))
 			{
-				UEdGraphNode_Comment* C = Cast<UEdGraphNode_Comment>(NodeOf(JsonStr(Op, TEXT("node"))));
-				if (C)
+				if (UEdGraphNode_Comment* C = Cast<UEdGraphNode_Comment>(NodeOf(JsonStr(Op, TEXT("node")))))
 				{
 					C->Modify();
 					C->NodeWidth = FMath::Clamp(JsonInt(Op, TEXT("width"), C->NodeWidth), 64, 8000);
@@ -728,6 +729,7 @@ namespace KesherGraph
 			}
 			else if (Kind == TEXT("copy"))
 			{
+				// Unreal's own clipboard text for the chosen nodes (Ctrl+C in the editor makes the same text).
 				TSet<UObject*> Chosen;
 				const TArray<TSharedPtr<FJsonValue>>* Ids = nullptr;
 				if (Op->TryGetArrayField(TEXT("nodes"), Ids))
@@ -747,6 +749,7 @@ namespace KesherGraph
 			}
 			else if (Kind == TEXT("paste"))
 			{
+				// Ctrl+V: nodes from the clipboard text, their top-left at (x, y), with new ids and their links kept.
 				const FString Text = JsonStr(Op, TEXT("text"));
 				TSet<UEdGraphNode*> Pasted;
 				if (Text.IsEmpty() || !FEdGraphUtilities::CanImportNodesFromText(Graph, Text)) Problem = TEXT("Nothing to paste here");
@@ -773,7 +776,7 @@ namespace KesherGraph
 			}
 			else if (Kind == TEXT("collapse"))
 			{
-				// Collapse to Function: the chosen nodes become a new function of this Blueprint, called here.
+				// Collapse to Function (0.1.17): the chosen nodes become a new function of this Blueprint, called here.
 				TSet<UEdGraphNode*> Chosen;
 				const TArray<TSharedPtr<FJsonValue>>* Ids = nullptr;
 				if (Op->TryGetArrayField(TEXT("nodes"), Ids))
@@ -789,17 +792,18 @@ namespace KesherGraph
 				{
 					if (G && G->GetName().Equals(FnName, ESearchCase::IgnoreCase)) bTaken = true;
 				}
-				// UE 4.27: FAssetEditorManager instead of UAssetEditorSubsystem.
+				UAssetEditorSubsystem* Editors = GEditor ? GEditor->GetEditorSubsystem<UAssetEditorSubsystem>() : nullptr;
 				if (Chosen.Num() == 0) Problem = TEXT("Choose the nodes to collapse");
 				else if (bTaken) Problem = TEXT("The Blueprint already has a function named ") + FnName;
-				else if (IsRunningCommandlet()) Problem = TEXT("Collapse to Function needs the Unreal editor open (not the headless one)");
+				else if (!Editors || IsRunningCommandlet()) Problem = TEXT("Collapse to Function needs the Unreal editor open (not the headless one)");
 				else
 				{
-					// The collapse is the Blueprint editor's: open the Blueprint there.
-					FAssetEditorManager::Get().OpenEditorForAsset(BP);
-					IAssetEditorInstance* Instance = FAssetEditorManager::Get().FindEditorForAsset(BP, false);
+					// The collapse is the Blueprint editor's: open the Blueprint there (it stays open, as after a right-click).
+					Editors->OpenEditorForAsset(BP);
+					IAssetEditorInstance* Instance = Editors->FindEditorForAsset(BP, false);
 					FBlueprintEditor* Editor = Instance && Instance->GetEditorName() == FName(TEXT("BlueprintEditor")) ? static_cast<FBlueprintEditor*>(Instance) : nullptr;
-					TSharedPtr<SGraphEditor> GraphEd = Editor ? Editor->OpenGraphAndBringToFront(Graph, false) : nullptr;
+					// One argument: the form 4.27 surely has (it focuses the graph tab, which the user sees anyway).
+					TSharedPtr<SGraphEditor> GraphEd = Editor ? Editor->OpenGraphAndBringToFront(Graph) : nullptr;
 					if (!Editor || !GraphEd.IsValid()) Problem = TEXT("Could not open the graph in the Blueprint editor");
 					else if (!FKesherCollapse::Can(*Editor, Chosen)) Problem = TEXT("These nodes cannot go into a function (an event, the function's entry, or a latent node like Delay is among them)");
 					else
@@ -846,6 +850,7 @@ namespace KesherGraph
 		BP->Modify();
 
 		auto Exists = [&](const FName& N) { return FBlueprintEditorUtils::FindNewVariableIndex(BP, N) != INDEX_NONE; };
+		// Starting values are set on the default object after the compile, when the property exists.
 		TMap<FName, FString> Defaults;
 		TArray<TSharedPtr<FJsonValue>> Results;
 		int32 Failed = 0;
@@ -876,6 +881,7 @@ namespace KesherGraph
 					if (Exists(FName(*NewName))) Problem = TEXT("There is already a variable ") + NewName;
 					else
 					{
+						// Renames its Get/Set nodes too, like the editor.
 						FBlueprintEditorUtils::RenameMemberVariable(BP, Name, FName(*NewName));
 						Name = FName(*NewName);
 					}
@@ -890,6 +896,7 @@ namespace KesherGraph
 			}
 			else Problem = TEXT("Unknown operation ") + Kind;
 
+			// What add and change share: shown in the level (Instance Editable), tooltip, category, starting value.
 			if (Problem.IsEmpty() && (Kind == TEXT("add") || Kind == TEXT("change")))
 			{
 				bool bEditable = false;
@@ -900,6 +907,7 @@ namespace KesherGraph
 					if (Text.IsEmpty()) FBlueprintEditorUtils::RemoveBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip);
 					else FBlueprintEditorUtils::SetBlueprintVariableMetaData(BP, Name, nullptr, FBlueprintMetadata::MD_Tooltip, Text);
 				}
+				// Private: other Blueprints cannot read or change it (the Details panel's "Private").
 				bool bPrivate = false;
 				if (Op->TryGetBoolField(TEXT("private"), bPrivate))
 				{
@@ -935,7 +943,8 @@ namespace KesherGraph
 				if (CDO && P)
 				{
 					CDO->Modify();
-					if (!P->ImportText_InContainer(*D.Value, CDO, CDO, PPF_None))
+					// Unreal 4.27: ImportText on the value's address; it returns nullptr when the text is not a value.
+					if (!P->ImportText(*D.Value, P->ContainerPtrToValuePtr<void>(CDO), PPF_None, CDO))
 					{
 						TSharedRef<FJsonObject> R = MakeShared<FJsonObject>();
 						R->SetStringField(TEXT("op"), TEXT("default"));
@@ -971,6 +980,7 @@ namespace KesherGraph
 			J->SetStringField(TEXT("text"), M->ToText().ToString());
 			Messages.Add(MakeShared<FJsonValueObject>(J));
 		}
+		// The nodes with a compiler message (0.1.26), so KesherAI marks them as Unreal does ("ERROR!" on the node).
 		TArray<TSharedPtr<FJsonValue>> NodeMessages;
 		TArray<UEdGraph*> Graphs;
 		BP->GetAllGraphs(Graphs);
@@ -999,14 +1009,17 @@ namespace KesherGraph
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
 		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
-		TArray<UPackage*> Packages = { BP->GetPackage() };
+		// GetOutermost() is the package in every engine version (UObject::GetPackage is newer).
+		TArray<UPackage*> Packages = { BP->GetOutermost() };
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), UEditorLoadingAndSavingUtils::SavePackages(Packages, false));
 		return Out;
 	}
 
 	/**
-	 * Whether a pin of type T can take a wire from (or give one to) the dragged pin.
+	 * Whether a pin of type T can take a wire from (or give one to) the dragged pin, as Unreal's "Context Sensitive"
+	 * menu decides: the same type, numbers into numbers (Unreal adds the conversion), an object into its parent class.
+	 * DraggedType is "category[:Sub][[]]" as the graph names pin types.
 	 */
 	bool TypeFits(const FString& DraggedType, const FEdGraphPinType& T, bool DraggedIsOutput)
 	{
@@ -1017,15 +1030,14 @@ namespace KesherGraph
 		FString DCat = D, DSub;
 		D.Split(TEXT(":"), &DCat, &DSub);
 		if (DCat.IsEmpty()) DCat = D;
-		// UE 4.27: float instead of real/double.
 		auto Numeric = [](const FString& C) { return C == TEXT("int") || C == TEXT("int64") || C == TEXT("real") || C == TEXT("float") || C == TEXT("double") || C == TEXT("byte"); };
 		if (Numeric(DCat) && Numeric(Name)) return true;
 		if (DCat != Name) return false;
 		UObject* Sub = T.PinSubCategoryObject.Get();
 		if (DSub.IsEmpty() || !Sub) return true;
 		if (DSub == Sub->GetName()) return true;
+		// An object pin: a child class goes into a parent's pin.
 		const UClass* Other = Cast<UClass>(Sub);
-		// UE 4.27: FindObject instead of FindFirstObject.
 		const UClass* Mine = FindObject<UClass>(ANY_PACKAGE, *DSub);
 		if (Other && Mine) return DraggedIsOutput ? Mine->IsChildOf(Other) : Other->IsChildOf(Mine);
 		return false;
@@ -1035,6 +1047,7 @@ namespace KesherGraph
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
 		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
+		// "Context Sensitive" (0.1.16): dragged from a pin, only what can wire to it.
 		const bool Ctx = !PinType.IsEmpty();
 		const bool Exec = PinType == TEXT("exec");
 		const bool FromOutput = PinDir == TEXT("out");
@@ -1047,6 +1060,7 @@ namespace KesherGraph
 			for (TFieldIterator<FProperty> P(F); P && (P->PropertyFlags & CPF_Parm); ++P)
 			{
 				const bool Out = P->HasAnyPropertyFlags(CPF_ReturnParm) || (P->HasAnyPropertyFlags(CPF_OutParm) && !P->HasAnyPropertyFlags(CPF_ReferenceParm));
+				// From an output the new node needs an input of that type; from an input, an output.
 				if (Out == FromOutput) continue;
 				FEdGraphPinType T;
 				if (K2->ConvertPropertyToPinType(*P, T) && TypeFits(PinType, T, FromOutput)) return true;
@@ -1066,6 +1080,7 @@ namespace KesherGraph
 		};
 		TArray<TSharedPtr<FJsonValue>> Items;
 		const int32 Max = 60;
+		// A function's pins as the graph names them (0.1.26), so KesherAI can add the node with Unreal closed.
 		auto FunctionPins = [&](const UFunction* F)
 		{
 			TArray<TSharedPtr<FJsonValue>> Pins;
@@ -1109,13 +1124,16 @@ namespace KesherGraph
 			}
 			Items.Add(MakeShared<FJsonValueObject>(J));
 		};
+		// Flow control first, like Unreal's own menu.
 		const bool BoolOut = PinType == TEXT("bool") && FromOutput;
 		if ((!Ctx || Exec || BoolOut) && Matches(TEXT("Branch"), TEXT("if"), TEXT("Flow Control"))) Add(TEXT("Branch"), TEXT("Flow Control"), TEXT("branch"), TEXT(""), TEXT(""));
 		if ((!Ctx || Exec) && Matches(TEXT("Sequence"), TEXT(""), TEXT("Flow Control"))) Add(TEXT("Sequence"), TEXT("Flow Control"), TEXT("sequence"), TEXT(""), TEXT(""));
 		if ((!Ctx || (Exec && !FromOutput)) && Matches(TEXT("Add Custom Event"), TEXT(""), TEXT("Add Event"))) Add(TEXT("Add Custom Event…"), TEXT("Add Event"), TEXT("custom_event"), TEXT("name"), TEXT("NewEvent"));
+		// The Blueprint's variables.
 		for (const FBPVariableDescription& V : BP->NewVariables)
 		{
 			const FString Name = V.VarName.ToString();
+			// Get gives the value (fits an input of its type); Set takes it (fits an output) and is a step (fits exec).
 			const bool GetFits = !Ctx || (!Exec && !FromOutput && TypeFits(PinType, V.VarType, false));
 			const bool SetFits = !Ctx || Exec || TypeFits(PinType, V.VarType, FromOutput);
 			if (GetFits && Items.Num() < Max && Matches(TEXT("Get ") + Name, TEXT("variable"), TEXT("Variables"))) Add(TEXT("Get ") + Name, TEXT("Variables"), TEXT("get"), TEXT("variable"), Name);
@@ -1125,6 +1143,7 @@ namespace KesherGraph
 		{
 			return F->HasAnyFunctionFlags(FUNC_BlueprintCallable | FUNC_BlueprintPure) && !F->HasMetaData(TEXT("BlueprintInternalUseOnly")) && !F->HasMetaData(TEXT("DeprecatedFunction"));
 		};
+		// Events the parent class lets Blueprints implement, then its callable functions.
 		if (UClass* Parent = BP->ParentClass)
 		{
 			for (TFieldIterator<UFunction> It(Parent, EFieldIteratorFlags::IncludeSuper); It && Items.Num() < Max; ++It)
@@ -1137,6 +1156,7 @@ namespace KesherGraph
 					Add(Title, F->GetMetaData(TEXT("Category")), TEXT("call"), TEXT("function"), F->GetOwnerClass()->GetName() + TEXT(":") + F->GetName(), F);
 			}
 		}
+		// Function libraries (Print String, math, Gameplay Statics…).
 		for (TObjectIterator<UClass> C; C && Items.Num() < Max; ++C)
 		{
 			if (!C->IsChildOf(UBlueprintFunctionLibrary::StaticClass()) || C->HasAnyClassFlags(CLASS_Deprecated | CLASS_NewerVersionExists | CLASS_Abstract)) continue;
@@ -1166,8 +1186,7 @@ namespace KesherGraph
 	{
 		UBlueprint* BP = LoadBlueprint(Path);
 		if (!BP) return BridgeError(TEXT("No Blueprint at ") + Path);
-		// UE 4.27: FAssetEditorManager instead of UAssetEditorSubsystem.
-		if (GEditor) FAssetEditorManager::Get().OpenEditorForAsset(BP);
+		if (GEditor) GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(BP);
 		TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
 		Out->SetBoolField(TEXT("ok"), true);
 		return Out;

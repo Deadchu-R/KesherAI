@@ -1,6 +1,4 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
-// UE 4.27 conversion: FTSTicker → FTicker, Misc/App.h → Misc/CommandLine.h,
-// FApp::GetProjectName() → FApp::GetProjectName(), FEngineVersion unchanged.
 
 #include "KesherAIBridgeModule.h"
 
@@ -11,6 +9,7 @@
 #include "KesherPlay.h"
 #include "KesherPlayTest.h"
 #include "KesherWidget.h"
+#include "Misc/App.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/Paths.h"
@@ -22,11 +21,14 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "WebSocketsModule.h"
-// UE 4.27: Live Coding is not available.
+#if WITH_LIVE_CODING
+#include "ILiveCodingModule.h"
+#endif
 
 DEFINE_LOG_CATEGORY_STATIC(LogKesherAI, Log, All);
 
 /** The plugin's version, sent to KesherAI so it can say when a newer one is out. */
+// "-ue4.27" tells KesherAI this is the Unreal 4.27 build of the plugin (same commands, a few marked unavailable).
 static const TCHAR* BridgeVersion = TEXT("0.1.33-ue4.27");
 
 void FKesherAIBridgeModule::StartupModule()
@@ -35,7 +37,7 @@ void FKesherAIBridgeModule::StartupModule()
 	// editor works from files and never connects to KesherAI as a second editor.
 	if (IsRunningCommandlet()) return;
 	FModuleManager::LoadModuleChecked<FWebSocketsModule>("WebSockets");
-	// UE 4.27: FTicker instead of FTSTicker.
+	// Unreal 4.27: FTicker (FTSTicker is 5.0+).
 	TickHandle = FTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateRaw(this, &FKesherAIBridgeModule::Tick), 1.0f);
 	// The editor exists only after the engine is up.
 	EngineReadyHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
@@ -50,7 +52,6 @@ void FKesherAIBridgeModule::StartupModule()
 void FKesherAIBridgeModule::ShutdownModule()
 {
 	FCoreDelegates::OnPostEngineInit.Remove(EngineReadyHandle);
-	// UE 4.27: FTicker instead of FTSTicker.
 	if (TickHandle.IsValid()) FTicker::GetCoreTicker().RemoveTicker(TickHandle);
 	KesherPlay::Shutdown();
 	KesherPlayTest::Shutdown();

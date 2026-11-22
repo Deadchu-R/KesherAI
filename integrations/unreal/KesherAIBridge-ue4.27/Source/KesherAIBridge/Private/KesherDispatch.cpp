@@ -1,5 +1,4 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
-// UE 4.27 conversion: Live Coding removed (not available in 4.27).
 
 #include "KesherDispatch.h"
 
@@ -13,7 +12,9 @@
 #include "KesherSpawn.h"
 #include "KesherWidget.h"
 #include "Modules/ModuleManager.h"
-// UE 4.27: no Live Coding module.
+#if WITH_LIVE_CODING
+#include "ILiveCodingModule.h"
+#endif
 
 TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, bool bOffline)
 {
@@ -45,10 +46,27 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 	else if (Cmd == TEXT("compile")) Result = KesherGraph::Compile(Path);
 	else if (Cmd == TEXT("live_coding"))
 	{
-		// UE 4.27: Live Coding is not available.
+		// The editor's Live Coding (Ctrl+Alt+F11) for C++ changed in KesherAI's code editor.
 		Result = MakeShared<FJsonObject>();
+#if WITH_LIVE_CODING
+		ILiveCodingModule* LiveCoding = FModuleManager::GetModulePtr<ILiveCodingModule>(TEXT("LiveCoding"));
+		if (!LiveCoding || !LiveCoding->IsEnabledForSession())
+		{
+			Result->SetBoolField(TEXT("ok"), false);
+			Result->SetStringField(TEXT("result"), TEXT("Live Coding is off in this editor (Editor Preferences → Live Coding), or a header changed: close the editor and compile."));
+		}
+		else
+		{
+			// Unreal 4.27's Live Coding has only Compile(), with no flags and no result (the waiting
+			// Compile(Flags, &Result) is 5.0+): the compile is started, and its outcome shows in the Live Coding window.
+			LiveCoding->Compile();
+			Result->SetBoolField(TEXT("ok"), true);
+			Result->SetStringField(TEXT("result"), TEXT("Live Coding compile started. Unreal 4.27 cannot wait for it: see the Live Coding window for the result."));
+		}
+#else
 		Result->SetBoolField(TEXT("ok"), false);
-		Result->SetStringField(TEXT("result"), TEXT("Live Coding is not available in Unreal Engine 4.27."));
+		Result->SetStringField(TEXT("result"), TEXT("Live Coding is not available here (Windows editor only)."));
+#endif
 	}
 	else if (Cmd == TEXT("save")) Result = KesherGraph::Save(Path);
 	else if (Cmd == TEXT("open")) Result = KesherGraph::Open(Path);

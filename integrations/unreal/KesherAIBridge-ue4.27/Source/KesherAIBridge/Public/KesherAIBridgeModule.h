@@ -1,5 +1,4 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
-// UE 4.27 conversion: FTSTicker → FTicker, no EnhancedInput plugin dependency.
 
 #pragma once
 
@@ -36,13 +35,13 @@ private:
 	void Send(const TSharedRef<FJsonObject>& Message);
 	/** Tells KesherAI a Blueprint changed (compiled), so it can refresh what it shows. */
 	void OnBlueprintCompiled();
-	/** Play In Editor started or ended: tells KesherAI ({ "event": "play", "on": true|false }). */
+	/** Play In Editor started or ended: tells KesherAI ({ "event": "play", "on": true|false }), plugin 0.1.29 and newer. */
 	void OnPlayStarted(const bool bIsSimulating);
 	void OnPlayEnded(const bool bIsSimulating);
 	void SendPlay(bool bOn);
 
 	TSharedPtr<IWebSocket> Socket;
-	// UE 4.27: FTicker instead of FTSTicker.
+	// Unreal 4.27 has FTicker (FTSTicker came in 5.0); its AddTicker returns a plain FDelegateHandle.
 	FDelegateHandle TickHandle;
 	FDelegateHandle CompiledHandle;
 	FDelegateHandle PlayStartHandle;

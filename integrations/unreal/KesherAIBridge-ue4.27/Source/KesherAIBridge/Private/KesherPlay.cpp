@@ -1,6 +1,4 @@
 // Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
-// UE 4.27 conversion: FRequestPlaySessionParams removed (not in 4.27), TArray64 → TArray,
-// PNGCompressImageArray signature adapted, IsPlaySessionInProgress → check PlayWorld.
 
 #include "KesherPlay.h"
 
@@ -152,7 +150,7 @@ namespace
 		const FString Dir = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("KesherAI"));
 		IFileManager::Get().MakeDirectory(*Dir, true);
 		const FString File = Dir / TEXT("test-run.png");
-		// UE 4.27: use TArray<uint8> instead of TArray64<uint8>, and FImageUtils::CompressImageArray.
+		// Unreal 4.27: CompressImageArray (PNG) with 32-bit arrays; the TArray64 PNGCompressImageArray is newer.
 		TArray<uint8> Png;
 		FImageUtils::CompressImageArray(Size.X, Size.Y, Pixels, Png);
 		if (Png.Num() == 0 || !FFileHelper::SaveArrayToFile(Png, *File)) return FString();
@@ -165,7 +163,7 @@ namespace KesherPlay
 	TSharedRef<FJsonObject> Start(const FString& Path, bool bPlace)
 	{
 		if (!GEditor) return PlayError(TEXT("No editor."));
-		// UE 4.27: no IsPlaySessionInProgress(); check PlayWorld directly.
+		// PlayWorld alone (set while Play In Editor runs) is the check every 4.2x engine has.
 		if (GEditor->PlayWorld) return PlayError(TEXT("The game is already playing in the editor. Stop it first (Esc), then test again."));
 
 		TArray<TSharedPtr<FJsonValue>> Compile;
@@ -202,8 +200,10 @@ namespace KesherPlay
 		StartedHandle = FEditorDelegates::PostPIEStarted.AddLambda([](const bool) { PlaceActor(); });
 		EndedHandle = FEditorDelegates::EndPIE.AddLambda([](const bool) { bRunning = false; });
 
-		// UE 4.27: no FRequestPlaySessionParams. Use GEditor->RequestPlaySession directly.
-		GEditor->RequestPlaySession(true, nullptr, false);
+		// FRequestPlaySessionParams (PlayInEditorDataTypes.h, through EditorEngine.h) is in Unreal 4.25 and newer.
+		FRequestPlaySessionParams Params;
+		Params.WorldType = EPlaySessionWorldType::PlayInEditor;
+		GEditor->RequestPlaySession(Params);
 		bRunning = true;
 		StartedAt = FPlatformTime::Seconds();
 		Out->SetBoolField(TEXT("started"), true);
