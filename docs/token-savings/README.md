@@ -9,6 +9,11 @@ Rule (Roee, 22.11.2026): every time we find another way to save tokens, add a ro
 - Research outside Claude: 36 reports (≈22 Antigravity, 14 free Gemini key) by 22.11.2026.
 - Claude helper cost per run (measured 22.11): research/summary ≈ 125K tokens; build helpers 145K–316K.
 
+## Totals for the with/without chart
+- Caching: without 250.2M, with 27.0M (measured)
+- Research: without 4.5M, with ≈0.2M (Claude only writes the task and reads a short summary; estimate)
+- All: without 254.7M, with 27.2M → ≈89% less
+
 ## Estimates
 - Claude tokens not spent on research: 36 × ≈125K ≈ 4.5M.
 

@@ -31,6 +31,10 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - [ ] Generated assets into a closed Unity project (S): write the file plus a `.meta` with a deterministic path-based GUID (c-12 §C), so results land without the editor.
 - [ ] Web build on the phone (M): serve with COOP/COEP + Brotli headers from the local server, a launcher with touch joystick and a memory gauge (iOS 512 MB limit) — see the not-built line below.
 
+
+## Waiting on Roee: at home, weekend 👤 (22.11)
+- [ ] Hub secret for storage-free tokens: Claude adds a separate variable (a plain random password, not HUB_PRIVATE_KEY); Roee pastes it in Cloudflare › Workers › kesher-hub › Settings › Variables as a Secret when he is home.
+
 ## Night 21–22.11 (Roee 19:21–19:58, until 07:00)
 Rules (Roee 20:35: as many tasks as possible until 07:00): at most 2 Claude helpers (Sonnet by default, Opus only for hard code) running all night, plus ONE local agent on the PC (KesherAI self-work on the local model) kept busy with small items, research only on Antigravity/Gemini; a build about every 2 hours (security scan after every 5); the design doc published once at 07:00. Reversible decisions: the recommended option, marked in the morning report; irreversible ones wait for Roee. Approved downloads: Qwen3.5 2B router + Qwen3.6 mmproj (started 20:08).
 Roee's answers for the night (21:20): ForMigration 4.27 → leave to the local model (t203); may open Unity and Unreal on the PC to check plugins/scenes (one project each, no saving in his projects, close after); plugin installs may write into the real projects' Plugins folder only (no level/code/asset changes); after the current items, in this order: D5 parallel download parts, A4 select text in a doc → "edit this", collaborators without engines (plan board + basic sync design, before the research), night builds of his game with a morning scorecard (build + smoke test + phone notification) — feature only, no real game build tonight; collaborators: plan board only, the sync channel is decided after the research.
