@@ -32,3 +32,6 @@ Measured parts: caching numbers and research count/cost. The rest are stated ass
 - 2026-11-22 Logs Claude can read (hub-diag.json, main.log) instead of screenshots from Roee
 - 2026-11-22 Research index (docs/research/INDEX.md) so agents don't repeat research
 - 2026-11-22 Antigravity model fallback and quota memory (Opus → Sonnet → Flash)
+- 2026-11-22 KesherAI: Anthropic prompt caching (cache_control on last tool, static system block, last two user turns); measured: pending (answer footer cache %, usage events `cached` / `cacheWrite`)
+- 2026-11-22 KesherAI: context pruning — superseded file reads as one line, old command/check outputs keep their exit line; measured: pending (usage `pruned`, session `savedTokens`)
+- 2026-11-22 KesherAI: llama.cpp host-RAM prompt cache 20 GB (`--cache-ram`, `--cache-idle-slots`) on 64 GB computers; measured: pending (engine log prompt time / `promptTps` when returning to a chat)

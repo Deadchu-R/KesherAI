@@ -4,6 +4,7 @@ import { createConnection, createServer } from "node:net";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { totalmem } from "node:os";
 import { parseFit, parseFitPrint, type FitPlan } from "./fit-preview.js";
 import { mtpLayers } from "./gguf.js";
 import type { DownloadJob, DownloadManager } from "@kesher/downloads";
@@ -312,7 +313,18 @@ export interface EngineStatus {
   mtpDraft?: number;
   /** Lookup decoding is allowed (the setting; the build may still lack it). */
   lookup?: boolean;
+  /** The host-RAM prompt cache is allowed (the setting; the build may still lack it). */
+  ramCache?: boolean;
 }
+
+/** The first build with `--cache-ram` (checked in its common/arg.cpp; b6710 lacks it). */
+const RAM_CACHE_BUILD = 6730;
+/** The first build checked to have `--cache-idle-slots` (b8850 still had the older `--clear-idle`). */
+const IDLE_SLOTS_BUILD = 8950;
+/** The host-RAM prompt cache KesherAI asks for on a big computer (MiB; llama.cpp's own default is 8192). */
+const RAM_CACHE_MIB = 20_480;
+/** The least RAM (GB) for {@link RAM_CACHE_MIB}: 20 GB is then under a third of it. */
+const RAM_CACHE_MIN_GIB = 63; // 64 GB sticks report a little under 64 GiB to the OS.
 
 /**
  * KesherAI's built-in local engine: installs llama.cpp's `llama-server`
@@ -340,7 +352,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; lookup?: boolean; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; lookup?: boolean; ramCache?: boolean; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
   ) {}
 
   /** @returns The engine's state. */
@@ -362,6 +374,7 @@ export class LlamaEngine {
       ...(this.slotContext() ? { slotTokens: this.slotContext() } : {}),
       ...(this.opts.mtpDraft !== undefined ? { mtpDraft: this.opts.mtpDraft } : {}),
       lookup: this.opts.lookup !== false,
+      ramCache: this.opts.ramCache !== false,
     };
   }
 
@@ -607,11 +620,21 @@ export class LlamaEngine {
    *
    * @param args - The full argument list the server will get.
    * @param version - The build tag, e.g. `b12110`.
+   * - `--cache-ram 20480` (b6730+) when the computer has 64 GB of RAM or more: prompts of chats that left a slot
+   *   (another chat, self-work, a helper) are kept in 20 GB of host RAM instead of llama.cpp's default 8 GB, so
+   *   coming back to one reads its prompt from RAM instead of processing it again. With `--cache-idle-slots`
+   *   (b8950+; llama.cpp's default there, set so it stays on) a finished slot is saved to that cache when a new task
+   *   takes it. The "Keep chats' prompts in RAM" setting off sends `--cache-ram 0` (no host-RAM cache at all).
+   *
+   * @param args - The full argument list the server will get.
+   * @param version - The build tag, e.g. `b12110`.
    * @param opts.lookup - The "Speed up with lookup decoding" setting (default on).
    * @param opts.vision - Whether a vision file (`--mmproj`) is used.
+   * @param opts.ramCache - The "Keep chats' prompts in RAM" setting (default on).
+   * @param opts.ramGiB - The computer's RAM in GB (default: this computer's).
    * @returns The arguments to add and a short list of the features turned on (for the log).
    */
-  static speedArgs(args: readonly string[], version: string | undefined, opts: { lookup?: boolean; vision?: boolean } = {}): { args: string[]; features: string[] } {
+  static speedArgs(args: readonly string[], version: string | undefined, opts: { lookup?: boolean; vision?: boolean; ramCache?: boolean; ramGiB?: number } = {}): { args: string[]; features: string[] } {
     const build = Number(/^b(\d+)$/.exec(version ?? "")?.[1] ?? 0);
     const add: string[] = [];
     const features: string[] = [];
@@ -624,7 +647,29 @@ export class LlamaEngine {
       add.push("--spec-type", "ngram-simple", "--spec-draft-n-max", "16");
       features.push("lookup decoding");
     }
+    const userCache = args.some((a) => a === "--cache-ram" || a === "-cram");
+    if (build >= RAM_CACHE_BUILD && !userCache) {
+      const ramGiB = opts.ramGiB ?? totalmem() / 1024 ** 3;
+      if (opts.ramCache === false) {
+        add.push("--cache-ram", "0");
+        features.push("RAM prompt cache off");
+      } else if (ramGiB >= RAM_CACHE_MIN_GIB) {
+        add.push("--cache-ram", String(RAM_CACHE_MIB));
+        if (build >= IDLE_SLOTS_BUILD && !args.some((a) => a.endsWith("cache-idle-slots"))) add.push("--cache-idle-slots");
+        features.push(`RAM prompt cache ${RAM_CACHE_MIB / 1024} GB`);
+      }
+    }
     return { args: add, features };
+  }
+
+  /**
+   * Turns the host-RAM prompt cache on or off ("Keep chats' prompts in RAM"); takes effect at the next load.
+   *
+   * @param on - False to turn it off; undefined for the default (on, 20 GB when the computer has 64 GB or more).
+   */
+  setRamCache(on: boolean | undefined): void {
+    if (on === undefined) delete this.opts.ramCache;
+    else this.opts.ramCache = on;
   }
 
   /**
@@ -976,7 +1021,7 @@ export class LlamaEngine {
       }
     }
     const vision = args.includes("--mmproj");
-    const fast = speed ? LlamaEngine.speedArgs(args, this.opts.version, { ...(this.opts.lookup !== undefined ? { lookup: this.opts.lookup } : {}), vision }) : { args: [], features: [] };
+    const fast = speed ? LlamaEngine.speedArgs(args, this.opts.version, { ...(this.opts.lookup !== undefined ? { lookup: this.opts.lookup } : {}), ...(this.opts.ramCache !== undefined ? { ramCache: this.opts.ramCache } : {}), vision }) : { args: [], features: [] };
     if (fast.features.length) this.log.push(`KesherAI: speed features on: ${fast.features.join(", ")}.`);
     const plain = args;
     args = [...args, ...fast.args];
@@ -1011,7 +1056,7 @@ export class LlamaEngine {
       if (proc.exitCode !== null) {
         this.proc = undefined;
         this.modelPath = undefined;
-        if (fast.args.length && /cache-reuse|spec-type|spec-draft|ngram|invalid argument|unknown argument/i.test(this.log.slice(-8).join("\n"))) {
+        if (fast.args.length && /cache-reuse|cache-ram|cache-idle|spec-type|spec-draft|ngram|invalid argument|unknown argument/i.test(this.log.slice(-8).join("\n"))) {
           this.log.push("KesherAI: the engine refused a speed feature, starting without them.");
           return this.startOnce(binary, modelPath, plain, timeoutMs, env, false);
         }

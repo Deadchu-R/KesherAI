@@ -38,6 +38,7 @@ interface EngineStatus {
   slotTokens?: number;
   mtpDraft?: number;
   lookup?: boolean;
+  ramCache?: boolean;
 }
 
 /** A newer llama.cpp: shown with an Update button (it downloads only when pressed). */
@@ -129,6 +130,16 @@ function StartHere({ onChange, code }: { onChange: () => void; code?: boolean })
               onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { lookup: e.target.checked } }).then(setEngine, (err: Error) => setError(err.message))}
             />
             <span className="muted small">{L("האץ עם פענוח-חיפוש", "Speed up with lookup decoding")}</span>
+          </label>
+        )}
+        {engine?.installed && (
+          <label className="row parallel-pick" title={L("ההנחיות של שיחות שעזבו את המנוע (שיחה אחרת, עבודה עצמית, עוזר) נשמרות בזיכרון ה-RAM של המחשב, וכשחוזרים אליהן הן נקראות משם במקום להיקרא מחדש. במחשב עם 64GB ומעלה: עד 20GB. כבוי: בלי מטמון כזה בכלל.", "Prompts of chats that left the engine (another chat, self-work, a helper) are kept in the computer's RAM, so coming back to one reads it from there instead of processing it again. On a computer with 64 GB or more: up to 20 GB. Off: no such cache at all.")}>
+            <input
+              type="checkbox"
+              checked={engine.ramCache !== false}
+              onChange={(e) => void api<EngineStatus>("/api/engines/llamacpp/settings", { method: "PUT", body: { ramCache: e.target.checked } }).then(setEngine, (err: Error) => setError(err.message))}
+            />
+            <span className="muted small">{L("שמור הנחיות של שיחות ב-RAM", "Keep chats' prompts in RAM")}</span>
           </label>
         )}
       </div>

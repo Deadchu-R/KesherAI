@@ -164,16 +164,34 @@ test("slots can be saved to disk unless the user set their own folder", () => {
   assert.deepEqual(LlamaEngine.slotSaveArgs(["--slot-save-path", "/mine"], "/e"), ["--slot-save-path", "/mine"]);
 });
 
+/** A computer under 64 GB: no host-RAM cache flags (tested apart below). */
+const small = { ramGiB: 32 };
+
 test("speedArgs: prompt reuse from b3000, lookup decoding from b12000, each only when nothing contradicts it", () => {
-  assert.deepEqual(LlamaEngine.speedArgs([], "b12110"), { args: ["--cache-reuse", "256", "--spec-type", "ngram-simple", "--spec-draft-n-max", "16"], features: ["prompt reuse", "lookup decoding"] });
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", small), { args: ["--cache-reuse", "256", "--spec-type", "ngram-simple", "--spec-draft-n-max", "16"], features: ["prompt reuse", "lookup decoding"] });
   assert.deepEqual(LlamaEngine.speedArgs([], "b5000"), { args: ["--cache-reuse", "256"], features: ["prompt reuse"] });
   assert.deepEqual(LlamaEngine.speedArgs([], "b2000"), { args: [], features: [] });
   assert.deepEqual(LlamaEngine.speedArgs([], undefined), { args: [], features: [] });
 });
 
 test("speedArgs: the setting, vision, multi-token prediction and the user's own arguments win", () => {
-  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { lookup: false }).features, ["prompt reuse"]);
-  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { vision: true }), { args: [], features: [] });
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { lookup: false, ...small }).features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { vision: true, ...small }), { args: [], features: [] });
+
+test("speedArgs: host-RAM prompt cache of 20 GB on a 64 GB computer, on builds that have it; the setting turns it off", () => {
+  const big = { ramGiB: 63.7 };
+  const ram = (a: string[]) => a.slice(a.indexOf("--cache-ram"));
+  assert.deepEqual(ram(LlamaEngine.speedArgs([], "b12110", big).args.slice(-3)), ["--cache-ram", "20480", "--cache-idle-slots"]);
+  assert.ok(LlamaEngine.speedArgs([], "b12110", big).features.includes("RAM prompt cache 20 GB"));
+  // b6730 has --cache-ram but not --cache-idle-slots; b6710 has neither.
+  assert.deepEqual(ram(LlamaEngine.speedArgs([], "b8000", big).args), ["--cache-ram", "20480"]);
+  assert.equal(LlamaEngine.speedArgs([], "b6710", big).args.includes("--cache-ram"), false);
+  // Off: no host-RAM cache at all (also on a smaller computer).
+  assert.deepEqual(ram(LlamaEngine.speedArgs([], "b12110", { ramCache: false, ramGiB: 16 }).args), ["--cache-ram", "0"]);
+  // The user's own --cache-ram wins; vision files still get it (it is not about the picture path).
+  assert.equal(LlamaEngine.speedArgs(["-cram", "4096"], "b12110", big).args.includes("--cache-ram"), false);
+  assert.ok(LlamaEngine.speedArgs([], "b12110", { ...big, vision: true }).args.includes("--cache-ram"));
+});
   assert.deepEqual(LlamaEngine.speedArgs(["--spec-type", "draft-mtp"], "b12110").features, ["prompt reuse"]);
   assert.deepEqual(LlamaEngine.speedArgs(["-md", "small.gguf"], "b12110").features, ["prompt reuse"]);
   assert.deepEqual(LlamaEngine.speedArgs(["--cache-reuse", "0"], "b12110").features, ["lookup decoding"]);
