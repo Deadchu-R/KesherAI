@@ -45,4 +45,6 @@ Everything researched so far (one line each). Read this first so a new research 
 | c-20261122-34 | Research Report: Local Hebrew TTS with Kokoro-82M and Low-Latency Voice Cloning for KesherAI | [c-20261122-34.md](c-20261122-34.md) |
 | c-20261122-35 | Speculative Next-Edit Suggestions and Ghost Diffs via Small Local Draft Models | [c-20261122-35.md](c-20261122-35.md) |
 | c-20261122-36 | KesherAI Sound Design and Foley Generation Pipeline (Late 2026 Specification) | [c-20261122-36.md](c-20261122-36.md) |
+| c-20261122-37 | A Free Backup Path from Phone to PC When the Hub Is Down: Tailscale, Cloudflare Tunnel, and WebRTC P2P | [c-20261122-37.md](c-20261122-37.md) |
+| c-20261122-38 | How to Save More Tokens — Claude Workflow and KesherAI Architecture | [c-20261122-38.md](c-20261122-38.md) |
 | c-20261122-next-1 | What to Research Next: The Next 8 High-Value Research Tasks for KesherAI Usability plus 3 Blind-Spot Innovatio | [c-20261122-next-1.md](c-20261122-next-1.md) |
