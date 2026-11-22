@@ -13,15 +13,18 @@ import { PREFAB_DEPTH, prefabSources } from "../unity-prefabs.js";
  * scene is open (now, if Unity is open with it).
  */
 
-/** The project (it has Assets and ProjectSettings) and a scene in it ("Assets/….unity"), really inside it. */
-async function paths(project: unknown, scene?: unknown): Promise<{ dir: string; file?: string; rel?: string }> {
+/**
+ * The project (it has Assets and ProjectSettings) and a scene in it ("Assets/….unity"), really inside it; with `ext`
+ * "prefab", a prefab instead (the editors' "Open from project" opens one as a model).
+ */
+async function paths(project: unknown, scene?: unknown, ext: "unity" | "prefab" = "unity"): Promise<{ dir: string; file?: string; rel?: string }> {
   const dir = resolve(String(project ?? ""));
   if (!existsSync(join(dir, "Assets")) || !existsSync(join(dir, "ProjectSettings"))) throw Object.assign(new Error("That folder is not a Unity project (no Assets and ProjectSettings)."), { statusCode: 400 });
   if (scene === undefined) return { dir };
   const rel = String(scene).replace(/\\/g, "/");
   const file = resolve(dir, rel);
-  const bad = () => Object.assign(new Error("A .unity scene under Assets/ or Packages/."), { statusCode: 400 });
-  if (!/^(Assets|Packages)\/.+\.unity$/i.test(rel) || rel.split("/").includes("..")) throw bad();
+  const bad = () => Object.assign(new Error(`A .${ext} file under Assets/ or Packages/.`), { statusCode: 400 });
+  if (!new RegExp(`^(Assets|Packages)/.+\\.${ext}$`, "i").test(rel) || rel.split("/").includes("..")) throw bad();
   const real = relative(await realpath(dir), await realpath(file).catch(() => file));
   if (real.startsWith("..") || real.split(sep).includes("..")) throw bad();
   return { dir, file, rel };
@@ -399,11 +402,12 @@ async function readPrefabs(dir: string, text: string, out: Map<string, string>, 
  *
  * @param project - The project's folder.
  * @param scene - "Assets/….unity" (or "Packages/….unity") inside it.
+ * @param ext - "prefab" to read a prefab the same way (its objects, nested prefabs expanded).
  * @returns The objects and the file's time; throws with a statusCode (400 outside, 404 missing, 413 too big, 415
  *   binary, 504 too slow).
  */
-export async function unitySceneOf(project: unknown, scene: unknown): Promise<{ objects: UnityObject[]; mtime: number; partial?: boolean; note?: string } & UnityView> {
-  const { dir, file } = await paths(project, scene);
+export async function unitySceneOf(project: unknown, scene: unknown, ext: "unity" | "prefab" = "unity"): Promise<{ objects: UnityObject[]; mtime: number; partial?: boolean; note?: string } & UnityView> {
+  const { dir, file } = await paths(project, scene, ext);
   const st = await stat(file!).catch(() => undefined);
   if (!st?.isFile()) throw err(404, "No such scene.");
   if (st.size > MAX_SCENE_BYTES) throw err(413, `The scene is too big to read here (${Math.round(st.size / 1048576)} MB; up to ${MAX_SCENE_BYTES / 1048576} MB).`);

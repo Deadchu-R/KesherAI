@@ -10,7 +10,7 @@
   // ---------- words (English / Hebrew) ----------
   const HE = {
     editIn: "ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", make3d: "צור מודל תלת ממד מזה", make3dHint: "חפץ אחד, במחשב שלך", making3d: "יוצר את מודל התלת ממד… (כמה דקות, במחשב שלך)", model3dDownloading: "מודל התלת ממד בהורדה (עיגול ההורדות); נסה שוב כשיסתיים.",
-    new: "חדש…", open: "פתח תמונה…", openRecent: "פתח אחרונים…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
+    new: "חדש…", open: "פתח תמונה…", openRecent: "פתח אחרונים…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", fromProject: "פתח מפרויקט משחק…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
     aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", aiExpand: "⤢ הרחבה ב-AI", expandAll: "‎+25% מכל הצדדים", expandSame: "התמונה כבר בצורה הזאת", hExpand: "הרחבה", expandLayer: "הקצוות שהורחבו", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
@@ -1060,6 +1060,28 @@
     onSave: () => new Promise((resolve) => flatten().toBlob(async (b) => { await of.saveAs(b, `${docName}.png`); resolve(); }, "image/png")),
   }); });
   /**
+   * "Open from project" (open-from-project.js): a picture of a found Unity or Unreal project (TGA and PSD arrive as PNG)
+   * opened as the document, then "Save to project" writes the flattened picture back as PNG.
+   */
+  async function openProject() {
+    const op = await import("./open-from-project.js");
+    op.setHebrew(he);
+    try {
+      const got = await op.openFromProject(["image"]);
+      if (!got) return;
+      const img = await loadImage(URL.createObjectURL(new Blob([got.bytes])));
+      const file = got.asset.path.split("/").pop();
+      docName = file.replace(/\.[^.]+$/, "");
+      $("docTab").textContent = file;
+      newDoc(img.naturalWidth, img.naturalHeight, false);
+      doc.layers[0].name = file;
+      doc.layers[0].ctx.drawImage(img, 0, 0);
+      renderLayers();
+      draw();
+      op.offerSave(got.asset, "png", () => new Promise((resolve, reject) => flatten().toBlob((b) => (b ? resolve(b.arrayBuffer()) : reject(new Error("The picture could not be written."))), "image/png")));
+    } catch (e) { msg(e.message || String(e), true); }
+  }
+  /**
    * A picture from this chat or from the bank as a new layer (Photoshop's "Place"), centred and fitted inside the
    * picture; into an empty document it becomes the document, as Open does.
    */
@@ -1414,6 +1436,7 @@
       ["openRecent", "Open recent…", "", () => void opener?.recent($("recentBtn"))],
       ["placeChat", "Place from this chat…", "", () => void placeFrom("chat")],
       ["placeBank", "Place from everything made…", "", () => void placeFrom("bank")],
+      ["fromProject", "Open from a game project…", "", () => void openProject()],
       ["openProject", "Open project…", "", () => $("projectFile").click()],
       "-",
       ["saveProject", "Save project", "Ctrl+S", () => saveProject()],

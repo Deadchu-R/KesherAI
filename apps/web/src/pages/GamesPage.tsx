@@ -5,6 +5,7 @@ import { toast } from "../library";
 import { GameSearch, type GameHit, type ProjectHits } from "../engine/GameSearch";
 import { GameSource } from "../engine/GameSource";
 import { GameCheckpoints } from "../engine/GameCheckpoints";
+import { ProjectSaves } from "../engine/ProjectSaves";
 import { GameInspector } from "../engine/GameInspector";
 import { DrawChange } from "../DrawChange";
 import { NightBuilds } from "../engine/NightBuilds";
@@ -150,6 +151,7 @@ export function GamesPage({ sync = false }: { sync?: boolean }) {
           <b>{L("פתח", "Open")}</b>
         </button>
       )}
+      <ProjectSaves />
       <NightBuilds />
       {!list ? (
         <p className="muted">…</p>

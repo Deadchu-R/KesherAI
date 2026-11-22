@@ -1,0 +1,393 @@
+{
+ "group": "עורכים · Editors",
+ "now": "2026-11-22T10:00:00Z",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "EditorsProjectBrowser",
+   "title": "עורך התלת ממד: \"הוסף ← מפרויקט משחק\": בוחרים פרויקט Unity או Unreal, מחפשים ומסננים לפי תיקייה, ופותחים מודל או פריפאב",
+   "titleEn": "3D editor: Add → From a game project: pick a Unity or Unreal project, search, filter by folder, open a model or a prefab (built from its meshes)",
+   "route": "#/p/model-editor/editor?c=c1",
+   "mocks": [
+    {
+     "url": "**/api/project-assets/projects",
+     "json": {
+      "projects": [
+       {
+        "engine": "unity",
+        "name": "ForestGame",
+        "path": "D:/Games/ForestGame"
+       },
+       {
+        "engine": "unreal",
+        "name": "Shooter",
+        "path": "D:/Games/Shooter",
+        "plugin": "0.1.33",
+        "canExport": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/project-assets/list?engine=unity*",
+     "json": {
+      "partial": false,
+      "items": [
+       {
+        "path": "Assets/Models/Rock.fbx",
+        "name": "Rock",
+        "kind": "model",
+        "size": 1840000,
+        "mtime": 1,
+        "ext": "fbx"
+       },
+       {
+        "path": "Assets/Models/Tree.glb",
+        "name": "Tree",
+        "kind": "model",
+        "size": 2400000,
+        "mtime": 1,
+        "ext": "glb"
+       },
+       {
+        "path": "Assets/Prefabs/Campfire.prefab",
+        "name": "Campfire",
+        "kind": "model",
+        "size": 12000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Prefabs/Cabin.prefab",
+        "name": "Cabin",
+        "kind": "model",
+        "size": 48000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Props/Barrel.obj",
+        "name": "Barrel",
+        "kind": "model",
+        "size": 610000,
+        "mtime": 1,
+        "ext": "obj"
+       }
+      ]
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text('🎮')"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-pick li button"
+    }
+   ]
+  },
+  {
+   "id": "EditorsProjectUnrealExport",
+   "title": "נכסי Unreal נפתחים כש-Unreal סגור: התוסף מייצא אותם ברקע (\"קורא עם Unreal ברקע…\") ושומר עותק לפתיחה הבאה",
+   "titleEn": "Unreal assets open with Unreal closed: the plugin exports them in the background (\"Reading with Unreal in the background…\"), a copy is kept",
+   "route": "#/p/model-editor/editor?c=c1",
+   "mocks": [
+    {
+     "url": "**/api/project-assets/projects",
+     "json": {
+      "projects": [
+       {
+        "engine": "unity",
+        "name": "ForestGame",
+        "path": "D:/Games/ForestGame"
+       },
+       {
+        "engine": "unreal",
+        "name": "Shooter",
+        "path": "D:/Games/Shooter",
+        "plugin": "0.1.33",
+        "canExport": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/project-assets/list?engine=unity*",
+     "json": {
+      "partial": false,
+      "items": [
+       {
+        "path": "Assets/Models/Rock.fbx",
+        "name": "Rock",
+        "kind": "model",
+        "size": 1840000,
+        "mtime": 1,
+        "ext": "fbx"
+       },
+       {
+        "path": "Assets/Models/Tree.glb",
+        "name": "Tree",
+        "kind": "model",
+        "size": 2400000,
+        "mtime": 1,
+        "ext": "glb"
+       },
+       {
+        "path": "Assets/Prefabs/Campfire.prefab",
+        "name": "Campfire",
+        "kind": "model",
+        "size": 12000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Prefabs/Cabin.prefab",
+        "name": "Cabin",
+        "kind": "model",
+        "size": 48000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Props/Barrel.obj",
+        "name": "Barrel",
+        "kind": "model",
+        "size": 610000,
+        "mtime": 1,
+        "ext": "obj"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/project-assets/list?engine=unreal*",
+     "json": {
+      "partial": false,
+      "plugin": "0.1.33",
+      "canExport": true,
+      "items": [
+       {
+        "path": "Content/Props/SM_Crate.uasset",
+        "name": "SM_Crate",
+        "kind": "model",
+        "size": 420000,
+        "mtime": 1,
+        "ext": "uasset",
+        "className": "StaticMesh",
+        "export": "fbx"
+       },
+       {
+        "path": "Content/Props/SM_Door.uasset",
+        "name": "SM_Door",
+        "kind": "model",
+        "size": 380000,
+        "mtime": 1,
+        "ext": "uasset",
+        "className": "StaticMesh",
+        "export": "fbx"
+       },
+       {
+        "path": "Content/Characters/SK_Guard.uasset",
+        "name": "SK_Guard",
+        "kind": "model",
+        "size": 5600000,
+        "mtime": 1,
+        "ext": "uasset",
+        "className": "SkeletalMesh",
+        "export": "fbx"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/plugins/model-editor/storage/projectAssets.last",
+     "json": {
+      "value": "unreal|D:/Games/Shooter"
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text('🎮')"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-pick li button"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-pick li button:has-text('SM_Crate')"
+    }
+   ]
+  },
+  {
+   "id": "EditorsProjectSaveApproval",
+   "title": "שמירה חזרה לפרויקט: כרטיס אישור עם היעד ונקודת שחזור; מהטלפון השמירה מחכה לאישור במחשב",
+   "titleEn": "Saving back into the project: an approval card with where it goes and a checkpoint kept first; from the phone it waits for the computer",
+   "route": "#/p/model-editor/editor?c=c1",
+   "mocks": [
+    {
+     "url": "**/api/project-assets/projects",
+     "json": {
+      "projects": [
+       {
+        "engine": "unity",
+        "name": "ForestGame",
+        "path": "D:/Games/ForestGame"
+       },
+       {
+        "engine": "unreal",
+        "name": "Shooter",
+        "path": "D:/Games/Shooter",
+        "plugin": "0.1.33",
+        "canExport": true
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/project-assets/list?engine=unity*",
+     "json": {
+      "partial": false,
+      "items": [
+       {
+        "path": "Assets/Models/Rock.fbx",
+        "name": "Rock",
+        "kind": "model",
+        "size": 1840000,
+        "mtime": 1,
+        "ext": "fbx"
+       },
+       {
+        "path": "Assets/Models/Tree.glb",
+        "name": "Tree",
+        "kind": "model",
+        "size": 2400000,
+        "mtime": 1,
+        "ext": "glb"
+       },
+       {
+        "path": "Assets/Prefabs/Campfire.prefab",
+        "name": "Campfire",
+        "kind": "model",
+        "size": 12000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Prefabs/Cabin.prefab",
+        "name": "Cabin",
+        "kind": "model",
+        "size": 48000,
+        "mtime": 1,
+        "ext": "prefab",
+        "prefab": true
+       },
+       {
+        "path": "Assets/Props/Barrel.obj",
+        "name": "Barrel",
+        "kind": "model",
+        "size": 610000,
+        "mtime": 1,
+        "ext": "obj"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/project-assets/file*",
+     "bodyBase64": "Z2xURgIAAAAgAgAA2AEAAEpTT057ImFzc2V0Ijp7InZlcnNpb24iOiIyLjAifSwic2NlbmVzIjpbeyJub2RlcyI6WzBdfV0sInNjZW5lIjowLCJub2RlcyI6W3sibWVzaCI6MCwibmFtZSI6IlRyZWUifV0sIm1lc2hlcyI6W3sicHJpbWl0aXZlcyI6W3siYXR0cmlidXRlcyI6eyJQT1NJVElPTiI6MH0sImluZGljZXMiOjF9XX1dLCJidWZmZXJzIjpbeyJieXRlTGVuZ3RoIjo0NH1dLCJidWZmZXJWaWV3cyI6W3siYnVmZmVyIjowLCJieXRlT2Zmc2V0IjowLCJieXRlTGVuZ3RoIjozNn0seyJidWZmZXIiOjAsImJ5dGVPZmZzZXQiOjM2LCJieXRlTGVuZ3RoIjo2fV0sImFjY2Vzc29ycyI6W3siYnVmZmVyVmlldyI6MCwiY29tcG9uZW50VHlwZSI6NTEyNiwiY291bnQiOjMsInR5cGUiOiJWRUMzIiwibWluIjpbMCwwLDBdLCJtYXgiOlsxLDEsMF19LHsiYnVmZmVyVmlldyI6MSwiY29tcG9uZW50VHlwZSI6NTEyMywiY291bnQiOjMsInR5cGUiOiJTQ0FMQVIifV19ICAgLAAAAEJJTgAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAEAAgAAAA==",
+     "contentType": "application/octet-stream"
+    },
+    {
+     "url": "**/api/project-assets/save*",
+     "method": "POST",
+     "json": {
+      "canApprove": true,
+      "save": {
+       "id": "s1",
+       "engine": "unity",
+       "projectName": "ForestGame",
+       "path": "Assets/Models/Tree.glb",
+       "target": "Assets/Models/Tree.glb",
+       "mode": "replace",
+       "format": "glb",
+       "size": 2400000,
+       "at": "2026-11-22T10:00:00Z",
+       "fromPhone": false,
+       "state": "pending"
+      }
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text('🎮')"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-pick li button"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .op-pick li button:has-text('Tree')"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-save button"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .op-save button"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-card button"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .op-card button"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .op-card code"
+    }
+   ]
+  }
+ ]
+}

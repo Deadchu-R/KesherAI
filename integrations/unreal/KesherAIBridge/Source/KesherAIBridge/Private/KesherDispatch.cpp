@@ -3,6 +3,7 @@
 #include "KesherDispatch.h"
 
 #include "Editor.h"
+#include "KesherAssets.h"
 #include "FileHelpers.h"
 #include "KesherGraph.h"
 #include "KesherLevel.h"
@@ -170,6 +171,20 @@ TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, b
 		if (In->TryGetArrayField(TEXT("actors"), Actors)) Result = KesherSpawn::Spawn(Path, *Actors, bOffline);
 	}
 	else if (Cmd == TEXT("vfx_create")) Result = KesherSpawn::CreateVfx(In, bOffline);
+	// The editors' "Open from project" (0.1.33): an asset exported for KesherAI's editors, and the edited file back.
+	else if (Cmd == TEXT("asset_export"))
+	{
+		FString File;
+		In->TryGetStringField(TEXT("file"), File);
+		Result = KesherAssets::Export(Path, File);
+	}
+	else if (Cmd == TEXT("asset_import"))
+	{
+		FString File, Name;
+		In->TryGetStringField(TEXT("file"), File);
+		In->TryGetStringField(TEXT("name"), Name);
+		Result = KesherAssets::Import(Path, File, Name);
+	}
 	else if (Cmd == TEXT("ping"))
 	{
 		Result = MakeShared<FJsonObject>();

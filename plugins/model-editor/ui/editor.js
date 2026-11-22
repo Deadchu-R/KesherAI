@@ -20,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
   editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editTex: "ערוך טקסטורה בעורך התמונות", editTexHint: "החלק שנבחר, וחוזר לחומר שלו",
-  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
+  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   levelNoModels: "ברמה הזו יש רק אורות והגדרות — אין דגמים", frameAllB: "מסגר הכול (A)",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", follow: "לעקוב אחרי", unfollow: "להפסיק לעקוב", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
@@ -212,8 +212,11 @@ function set2D(on) {
   camera.updateProjectionMatrix();
 }
 /** Puts a GLB in the scene in place of the model there (from the chat, or back from Blender). */
-async function load(bytes) {
-  const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
+async function load(bytes, fileName = "") {
+  // FBX and OBJ too ("Open from project": a Unity model or an Unreal mesh exported as FBX), at their own size.
+  const gltf = /\.fbx$/i.test(fileName) ? { scene: new FBXLoader().parse(bytes, "") }
+    : /\.obj$/i.test(fileName) ? { scene: new OBJLoader().parse(new TextDecoder().decode(bytes)) }
+    : await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
   setModel(gltf.scene);
 }
 /** Puts an object in the scene in place of the model there. */
@@ -2260,6 +2263,29 @@ async function addReference(fileName, bytes) {
   panel.position.z -= fitSize() * 1.5;
   gizmo.detach();
 }
+/**
+ * "Open from project" (ui/open-from-project.js): a model of a found Unity or Unreal project opened as the document (a
+ * Unity prefab put together from its meshes, as the scene stand-in does), then "Save to project" writes it back as GLB.
+ */
+async function openProject() {
+  const op = await import("./open-from-project.js");
+  op.setHebrew(he);
+  try {
+    const got = await op.openFromProject(["model"]);
+    if (!got) return;
+    busy(T("loading", "Loading the model…"));
+    try {
+      if (got.prefab) loadUnityStandIn(got.prefab.objects, got.prefab.view);
+      else await load(got.bytes, got.name);
+      name = got.asset.path.split("/").pop().replace(/\.[^.]+$/, "");
+      $("name").textContent = name;
+      frame(model, (got.prefab && unityBounds(got.prefab.bounds)) || undefined);
+      $("dims").hidden = false;
+      stats();
+      op.offerSave({ ...got.asset, prefab: !!got.prefab }, "glb", async () => (await glb()).arrayBuffer());
+    } finally { busy(""); }
+  } catch (e) { msg(e.message || String(e), true); }
+}
 /** A model or a picture's bytes, added: a model as it is, a picture on a flat panel in its proportions. */
 async function addFile(fileName, bytes) {
   if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName)) {
@@ -2360,6 +2386,7 @@ function addMenu(anchor) {
     { icon: "💻", label: T("fromDevice", "From the computer / phone"), hint: T("dragToo", "drag in too"), run: () => addFrom("device") },
     { icon: "💬", label: T("fromChat", "From this chat's files"), run: () => addFrom("chat") },
     { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
+    { icon: "🎮", label: T("fromProject", "From a game project"), hint: "Unity · Unreal", run: () => void openProject() },
     "-",
     ...["cube", "sphere", "cylinder", "cone", "plane", "torus"].map((k) => ({ icon: { cube: "⬛", sphere: "⚪", cylinder: "🛢", cone: "🔺", plane: "▭", torus: "◯" }[k], label: T(`a${k[0].toUpperCase()}${k.slice(1)}`, k[0].toUpperCase() + k.slice(1)), run: () => addShape(k) })),
     { icon: "💡", label: T("aLight", "Light"), run: addLight },

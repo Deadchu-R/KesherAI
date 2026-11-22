@@ -9,7 +9,7 @@
 
   const HE = {
     musicWords: "מוזיקה ממילים", musicWordsHint: "דרך הצ׳אט", musicAsk: "איזו מוזיקה? (למשל: פופ שמח עם גיטרה, 40 שניות)", musicSent: "ביקשתי מהצ׳אט. כשהשיר מוכן (כמה דקות), הוסף אותו מ״מבנק היצירות״.", trackHere: "לערוץ משלו", trackVol: "עוצמה", trackHint: "אפשר להזיז ולהשתיק", trackN: (n) => `ערוץ ${n}`, mute: "השתק", unmute: "בטל השתקה", mergeT: "מזג לצליל", removeT: "הסר את הערוץ", dragT: "גרירה: מתי הוא מתחיל",
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
     cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiSfx: "אפקט קולי בשבילו (גשם, דלת, צעדים…; כמה שניות עד דקה; נכנס לבד)", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הצליל ייכנס לבד כשיהיה מוכן", aiLate: "הצליל לא הגיע תוך 20 דקות; הוסף אותו מבנק היצירות כשיגיע", aiIn: "הצליל נכנס", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
@@ -630,6 +630,21 @@
       { icon: "☰", label: TT("trackHere", "On a track of its own"), hint: TT("trackHint", "move it and mute it freely"), run: () => { layers.push({ id: nextLayer++, name: fileName, samples: d.samples, at, muted: false }); after(); msg(addedMsg(fileName)); } },
     ]);
   }
+  /**
+   * "Open from project" (open-from-project.js): a sound of a found Unity or Unreal project, then "Save to project"
+   * writes the edited sound back as WAV.
+   */
+  async function openProject(anchor) {
+    const op = await import("./open-from-project.js");
+    op.setHebrew(he);
+    try {
+      const got = await op.openFromProject(["audio"]);
+      if (!got) return;
+      busy(T("loading", "Loading the sound…"));
+      try { await addBytes(got.name, got.bytes, anchor); } finally { busy(""); }
+      op.offerSave(got.asset, "wav", async () => wav().arrayBuffer());
+    } catch (e) { msg(e.message || String(e), true); }
+  }
   async function addFrom(from, anchor) {
     const am = await import("./add-media.js");
     try {
@@ -722,6 +737,7 @@
       { icon: "💻", label: TT("fromDevice", "From the computer / phone"), hint: TT("dragToo", "drag in too"), run: () => addFrom("device", anchor) },
       { icon: "💬", label: TT("fromChat", "From this chat's files"), run: () => addFrom("chat", anchor) },
       { icon: "🗂", label: TT("fromBank", "From everything made"), run: () => addFrom("bank", anchor) },
+      { icon: "🎮", label: TT("fromProject", "From a game project"), hint: "Unity · Unreal", run: () => void openProject(anchor) },
       "-",
       { icon: "⏺", label: TT("recHere", "Record here"), hint: TT("micToo", "from the microphone"), run: () => { recordInto = true; record(); } },
       { icon: "🗣", label: TT("voiceWords", "A voice from words"), run: () => $("toVoice").click() },

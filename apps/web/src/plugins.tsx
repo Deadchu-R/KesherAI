@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { refreshParts } from "./parts";
 import type { GodotSceneInput, PageInput, UnitySceneInput, UnrealLevelInput } from "./page-input";
 import { api, withToken } from "./api";
+import { projectAssetCall, type OpenedProject } from "./project-assets-host";
 import { createConversation, toast } from "./library";
 import { getLocale } from "./i18n";
 import { requestInstall } from "./InstallWindow";
@@ -283,9 +284,12 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
       if (!id) throw new Error("No picture model is chosen yet (Models → Pictures).");
       return id;
     };
+    // "Open from project": the game project this page opened last (a prefab's meshes are read from it).
+    const opened: OpenedProject = {};
     const handle = async (msg: Call): Promise<unknown> => {
       const p = msg.params ?? {};
       if (guest) return guestCall(guest, pluginId, uses, msg.method, p);
+      if (msg.method.startsWith("project.")) return projectAssetCall(pluginId, msg.method, p, opened);
       switch (msg.method) {
         case "info":
           return { pluginId, locale: getLocale(), conversationId: conversationId ?? input?.conversationId ?? null, uses, apiVersion: 3 };
@@ -486,8 +490,10 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           need("model");
           // An Unreal mesh's shape: its triangles as JSON (corners in cm, base64 float32).
           if (unreal) return meshSlot(() => api(`/api/unreal/level/mesh?path=${encodeURIComponent(String(p.path ?? ""))}${unreal.project ? `&project=${encodeURIComponent(unreal.project)}` : ""}`));
-          if (!godot && !unity) throw new Error("This page was not opened with a game scene.");
-          const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)!.project)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
+          // A prefab opened from a Unity project ("Open from project"): its meshes come from that project.
+          const fromProject = !godot && !unity && opened.engine === "unity" ? opened.project : undefined;
+          if (!godot && !unity && !fromProject) throw new Error("This page was not opened with a game scene.");
+          const res = await fetch(withToken(`/api/${godot ? "godot" : "unity"}/asset?project=${encodeURIComponent((godot ?? unity)?.project ?? fromProject!)}&path=${encodeURIComponent(String(p.path ?? ""))}`));
           if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? String(res.status));
           return res.arrayBuffer();
         }

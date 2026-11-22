@@ -245,6 +245,27 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await godotSceneRoutes(app, services.godot, services.gameCheckpoints);
   await unitySceneRoutes(app, services.gameCheckpoints);
   await unrealLevelRoutes(app, services.unreal);
+  // The editors' "Open from project": a found Unity/Unreal project's assets opened in the editors, saved back with approval.
+  {
+    const { findGameProjects } = await import("../game-projects.js");
+    const { projectAssetRoutes } = await import("../routes/project-assets.js");
+    const { dirname: dirOf } = await import("node:path");
+    let found: { at: number; list: ReturnType<typeof findGameProjects> } | undefined;
+    await projectAssetRoutes(app, {
+      found: () => {
+        if (!found || Date.now() - found.at > 30_000) {
+          const godotFile = services.godot.status().editor?.projectFile;
+          found = { at: Date.now(), list: findGameProjects({ unity: services.config.unity.projects, ...(services.unreal.projectFile ? { unrealFile: services.unreal.projectFile } : {}), ...(godotFile ? { godot: [dirOf(godotFile)] } : {}) }) };
+          found.list.catch(() => { found = undefined; });
+        }
+        return found.list;
+      },
+      dataDir: services.paths.root,
+      unreal: (projectFile, cmd, args) => services.unreal.assetCommand(cmd, args, projectFile),
+      checkpoints: services.gameCheckpoints,
+      notify: (title, body) => void services.notifier.send({ title, body, path: "#/games?saves=1", tags: ["floppy_disk"], computerOnly: true }).catch(() => undefined),
+    });
+  }
   // The Game projects home: every engine project, its waiting changes, sync and clashes.
   await gamesRoutes(app, services);
   // Night builds of the games with a morning scorecard (off by default, per project).

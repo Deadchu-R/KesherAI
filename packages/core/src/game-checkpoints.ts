@@ -23,7 +23,7 @@ import { Transform } from "node:stream";
 /** The engines a project can belong to. */
 export type GameEngine = "unity" | "unreal" | "godot";
 /** What took the checkpoint. */
-export type CheckpointSource = "chat" | "sync" | "source" | "stand-in" | "restore";
+export type CheckpointSource = "chat" | "sync" | "source" | "stand-in" | "editor" | "restore";
 
 /** One file in a checkpoint, as it was before the write. */
 export interface GameCheckpointFile {

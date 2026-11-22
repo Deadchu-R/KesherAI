@@ -22,7 +22,7 @@ export interface GameCheckpointView {
   engine: "unity" | "unreal" | "godot";
   name: string;
   project: string;
-  source: "chat" | "sync" | "source" | "stand-in" | "restore";
+  source: "chat" | "sync" | "source" | "stand-in" | "editor" | "restore";
   label: string;
   at: string;
   chatId?: string;
@@ -37,6 +37,7 @@ const SOURCE: Record<GameCheckpointView["source"], [string, string]> = {
   sync: ["סנכרון", "Sync"],
   source: ["שמירת קוד", "Code save"],
   "stand-in": ["סצנה", "Scene"],
+  editor: ["שמירה מעורך", "Editor save"],
   restore: ["לפני שחזור", "Before restore"],
 };
 const when = (iso: string) => new Date(iso).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { dateStyle: "short", timeStyle: "short" });

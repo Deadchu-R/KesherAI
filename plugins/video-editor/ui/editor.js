@@ -10,7 +10,7 @@
   // ---------- words (English / Hebrew) ----------
   const HE = {
     editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editAudio: "ערוך סאונד בעורך הסאונד", editAudioHint: "חוזר אל ציר הזמן",
-    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiContinue: "המשך את השוט הזה (הפריים האחרון שלו בתנועה, דרך הצ׳אט; נכנס אחריו)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
+    addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", picClip: "תמונה כקליפ", speedL: "מהירות", clipVol: "עוצמה", picWords: "תמונה ממילים", picWordsHint: "מודל התמונות, 5 שנ׳", picWordsAsk: "מה לצייר? (למשל: שקיעה מעל הים, בסגנון קולנועי)", picMaking: "מצייר… (דקה-שתיים)", textOver: "טקסט על הסרטון", textHint: "מהסמן, 3 שנ׳", textAsk: "מה לכתוב?", textLane: "🔤 טקסט", textDrag: "גרירה: מתי הוא מופיע · לחיצה כפולה: עריכה", textStyle: "סגנון", sBox: "רקע כהה", sPlain: "קו מתאר", sBig: "גדול", pBottom: "למטה", pCenter: "באמצע", pTop: "למעלה", textDel: "מחיקת הטקסט", textPos: "מיקום", noMusicYet: "קודם בוחרים מוזיקה (מוזיקה בצד)", musicHere: "המוזיקה מתחילה כאן", kMusic: "מוזיקה מכאן", dip: "דהייה לשחור בין הקליפים", titleCard: "כרטיס כותרת", freeze: "הקפאת פריים", aiClip: "✦ עם AI…", aiH: "הקליפ הזה, עם AI", aiPicture: "תמונה ממילים במקומו (מודל התמונות, דקה-שתיים)", aiRestyle: "השוט הזה בסגנון אחר (הפריים שלו, מצויר מחדש)", aiContinue: "המשך את השוט הזה (הפריים האחרון שלו בתנועה, דרך הצ׳אט; נכנס אחריו)", aiVideo: "קליפ וידאו ממילים במקומו (דרך הצ׳אט, כמה דקות; נכנס לבד)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הקליפ ייכנס לבד כשיהיה מוכן (כמה דקות)", aiLate: "הקליפ לא הגיע תוך 20 דקות; הוסף אותו מקבצי הצ׳אט כשיגיע", saveFrame: "שמירת הפריים כתמונה", saveFrameHint: "לצ׳אט ולבנק", frameSaved: "הפריים נשמר בקבצי הצ׳אט (ובבנק)", freezeHint: "הפריים כאן, 2 שנ׳", freezeNone: "קודם שמים את הסמן על קליפ וידאו", titleHint: "טקסט על רקע, 3 שנ׳", titleAsk: "מה לכתוב בכרטיס?", picHint: "5 שנ׳, מקצרים בקיצוץ", addedClip: (n) => `נוסף: ${n}`, needChat: "כדי להוסיף קליפים, פתח את עורך הווידאו מצ׳אט", startVideo: "התחל מסרטון: תמונה נכנסת אחרי שיש וידאו", cantPlay: "את הסרטון הזה אי אפשר לנגן כאן",
     export: "ייצוא", toChat: "שלח לצ'אט", empty: "פתח וידאו מצ'אט: \"עריכה בעורך הווידאו\" בתצוגה שלו.", clipH: "הקליפ הנבחר",
     split: "✂ פיצול", delete: "⌫ מחיקה", trimStart: "⇤ קיצוץ התחלה", trimEnd: "קיצוץ סוף ⇥", moveLeft: "◀ הזזה", moveRight: "הזזה ▶",
     soonH: "בקרוב", soon: "התמלול (מוחקים מילים כדי לחתוך), כתוביות מהדיבור, ו\"מה לעשות כאן?\" עם מודל הווידאו.",
@@ -701,6 +701,21 @@
     void saveEdit();
     msg(addedMsg(fileName));
   }
+  /**
+   * "Open from project" (open-from-project.js): a movie of a found Unity or Unreal project, added as a clip (copied into
+   * the chat like a file from the computer, so the export can use it). Saving a video back is not offered.
+   */
+  async function openProject() {
+    const am = await import("./add-media.js");
+    const op = await import("./open-from-project.js");
+    op.setHebrew(he);
+    try {
+      const got = await op.openFromProject(["video"]);
+      if (!got) return;
+      busy(T("loading", "Loading the video…"));
+      try { const { path, bytes } = await am.uploadMedia(new File([got.bytes], got.name, { type: "video/mp4" })); await addClip(got.name, path, bytes); } finally { busy(""); }
+    } catch (e) { msg(e.message || String(e), true); }
+  }
   async function addFrom(from) {
     const am = await import("./add-media.js");
     try {
@@ -987,6 +1002,7 @@
       { icon: "💻", label: T("fromDevice", "From the computer / phone"), hint: T("dragToo", "drag in too"), run: () => addFrom("device") },
       { icon: "💬", label: T("fromChat", "From this chat's files"), run: () => addFrom("chat") },
       { icon: "🗂", label: T("fromBank", "From everything made"), run: () => addFrom("bank") },
+      { icon: "🎮", label: T("fromProject", "From a game project"), hint: "Unity · Unreal", run: () => void openProject() },
       "-",
       { icon: "🖼", label: T("picClip", "A picture as a clip"), hint: T("picHint", "5 s, shorten it with trim"), run: () => addFrom("picture") },
       { icon: "✨", label: T("picWords", "A picture from words"), hint: T("picWordsHint", "the picture model, 5 s"), run: () => void addPictureFromWords() },

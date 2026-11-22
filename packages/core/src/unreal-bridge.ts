@@ -19,7 +19,7 @@ import { applyBpOps, bpNodeTemplate, COMMON_BP_ACTIONS, diffBpGraphs, mapCompile
  */
 
 /** The plugin version this KesherAI ships (integrations/unreal/KesherAIBridge). */
-export const BRIDGE_VERSION = "0.1.32";
+export const BRIDGE_VERSION = "0.1.33";
 
 /** What the editor said when it connected. */
 export interface EditorInfo {
@@ -87,13 +87,13 @@ export interface HeadlessAnswer {
 }
 
 /** Commands the headless editor (the editor closed) can run. */
-const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move", "level_material", "level_spawn", "vfx_create"]);
+const OFFLINE_COMMANDS = new Set(["list", "graph", "apply", "vars", "compile", "save", "actions", "widget", "create", "import_texture", "widget_apply", "levels", "level", "level_mesh", "level_move", "level_material", "level_spawn", "vfx_create", "asset_export", "asset_import"]);
 
 /** A stand-in answer kept on disk, unless it is an empty level list (a scan that was not ready, kept by 0.6.383). */
 const usable = <T>(cmd: string, v: T | undefined): T | undefined => (cmd === "levels" && v && !(v as { levels?: unknown[] }).levels?.length ? undefined : v);
 
 /** Commands that only read: no "changed" after them. */
-const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "level", "level_mesh"]);
+const READ_ONLY = new Set(["list", "graph", "actions", "widget", "levels", "level", "level_mesh", "asset_export"]);
 
 const slug = (s: string) => s.replace(/[^\w.-]+/g, "_").slice(0, 80) || "project";
 const fileFor = (path: string) => `${createHash("sha256").update(path).digest("hex").slice(0, 24)}.json`;
@@ -596,6 +596,24 @@ export class UnrealBridge {
     // An empty list is not kept (a scan that was not ready would stick): the next read asks again.
     if (!(cmd === "levels" && !(answer as { levels?: unknown[] }).levels?.length)) await this.writeJson(file, answer);
     return answer as T;
+  }
+
+  /**
+   * The editors' "Open from project" (plugin 0.1.33+): an asset exported to a file (asset_export: a mesh as FBX, a
+   * texture as PNG, a sound as WAV) or an edited file imported over an asset (asset_import, saved). In the open editor
+   * when it has this project, else in a headless one on the project's .uproject.
+   *
+   * @param cmd - asset_export or asset_import.
+   * @param args - { path: "/Game/…", file, name? } (files under the project's Saved/KesherAI/).
+   * @param projectFile - The project's .uproject.
+   * @returns The plugin's answer.
+   */
+  async assetCommand<T = unknown>(cmd: "asset_export" | "asset_import", args: Record<string, unknown>, projectFile: string): Promise<T> {
+    const open = this.connected && !!this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase();
+    if (open) return this.request<T>(cmd, args, 900_000);
+    const [a] = await this.offline([{ cmd, ...args }], projectFile);
+    if (!a?.ok) throw new Error(a?.error ?? `The ${this.editor} could not do that.`);
+    return a.result as T;
   }
 
   /**

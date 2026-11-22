@@ -4500,6 +4500,9 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 }
 
 /* Game projects home and its Sync and conflicts sheet (GamesPage.tsx) */
+.project-saves { display: grid; gap: 8px; margin: 10px 0; }
+.project-save p { margin: 4px 0; overflow-wrap: anywhere; }
+.project-save button { min-height: 40px; }
 .games-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .games-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .games-head strong { overflow-wrap: anywhere; }
