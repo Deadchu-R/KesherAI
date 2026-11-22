@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| c-20261121-15 | Research before building — full design refresh (colour-coded, light theme, one unified menu) | [c-20261121-15.md](c-20261121-15.md) |
 | browser-computer-control | Browser and computer control: how others do it, and the plan for KesherAI | [browser-computer-control.md](browser-computer-control.md) |
 | c-20261121-04 | Review of UI Texts in Hebrew and English | [c-20261121-04.md](c-20261121-04.md) |
 | c-20261121-14 | Daily Review vs Competitors — Game Engines & KesherAI | [c-20261121-14.md](c-20261121-14.md) |
