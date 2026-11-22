@@ -112,3 +112,6 @@ Use the Claude desktop app's built-in browser (remote-devices Claude_Browser too
 
 ## Standing rule (Roee, 22.11 10:04): move work to KesherAI
 Where KesherAI supports it, send work to it instead of Claude helpers, to save Claude usage: research → Antigravity/Gemini inbox tasks; code tasks → Antigravity inbox tasks with a model (Claude Opus 4.6 via Antigravity for conversions/builds, Flash for small); PC actions → POST /api/control/tasks (computer tasks) instead of Claude screenshots. Claude keeps: leading, task writing, review of agy/* branches, merges, releases, Roee's updates. Claude helpers only for what KesherAI cannot do yet.
+
+## Standing rule (Roee, 22.11 11:25): "what to research next" results
+Every time an Antigravity "what to research next" task finishes (c-20261122-16 and the standing c-<date>-next-N copies), Claude reads its report, writes Roee the insights in Hebrew in the chat (industry moves, what we are missing, the proposed tasks), and adds the proposed tasks to the inbox (oldest-first order).
