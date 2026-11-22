@@ -3,10 +3,10 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, isModelUnavailable, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
-import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
+import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { freedSlotNote, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
@@ -81,6 +81,8 @@ interface Saved {
   /** The models Antigravity listed in its last session, and when (the per-task picker shows the available ones). */
   models?: InboxModel[];
   modelsAt?: number;
+  /** A model family whose quota ran out, and until when (ms): later tasks start on the next model of their chain. */
+  familyUntil?: Partial<Record<ModelFamily, number>>;
 }
 
 /** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
@@ -1039,6 +1041,15 @@ export class TaskInbox {
       const chain = modelChain(agent.models, t.model || s.model, defaultFamilyFor(t));
       const tried: string[] = [];
       let at = 0;
+      // Skip models whose quota is known to be spent (from an earlier task today): start on the next one at once.
+      const spent = (i: number) => {
+        const f = chain[i] ? familyOf(chain[i]!.name) : undefined;
+        return f !== undefined && (this.saved.familyUntil?.[f] ?? 0) > this.now();
+      };
+      while (at + 1 < chain.length && spent(at)) {
+        tried.push(`${chain[at]!.name} (quota)`);
+        at++;
+      }
       const use = async (): Promise<void> => {
         const m = chain[at];
         if (m) await agent.setModel(m.id).catch(() => undefined);
@@ -1063,6 +1074,12 @@ export class TaskInbox {
           const msg = (e as Error).message || String(e);
           if (a.why || at + 1 >= chain.length || !isModelUnavailable(msg)) throw e;
           tried.push(`${t.modelUsed ?? chain[at]!.name} (${isQuotaError(msg) ? "quota" : "unavailable"})`);
+          const fam = chain[at] ? familyOf(chain[at]!.name) : undefined;
+          if (fam && isQuotaError(msg)) {
+            // Opus and Sonnet share Antigravity's "Claude and GPT models" quota: one spent means both are.
+            const until = quotaUntil(msg, this.now()).until;
+            this.saved.familyUntil = { ...this.saved.familyUntil, ...(fam === "flash" ? { flash: until } : { opus: until, sonnet: until }) };
+          }
           at++;
           await use();
           t.modelFallback = `${tried.join(" → ")} → ${t.modelUsed ?? chain[at]!.name}`;
@@ -1446,11 +1463,40 @@ export class TaskInbox {
     return t;
   }
 
+  /**
+   * Redacts the research reports (`docs/research/*.md`) a change adds or edits: this computer's home folder becomes
+   * `~` and its user name in a path `<user>` (see {@link redactReport}). The privacy scan then runs on the result, so
+   * a report still blocks for an email address, a key or a token.
+   *
+   * @param worktree - The task's worktree.
+   * @param paths - The changed paths (relative, `/`).
+   * @returns The reports that changed.
+   */
+  private async redactReports(worktree: string, paths: string[]): Promise<string[]> {
+    const changed: string[] = [];
+    for (const rel of paths.map((p) => p.trim()).filter(isResearchReport)) {
+      const file = join(worktree, ...rel.split("/"));
+      const text = await readFile(file, "utf8").catch(() => undefined);
+      if (text === undefined) continue;
+      const r = redactReport(text, this.d.me);
+      if (!r.count) continue;
+      await writeFile(file, r.text, "utf8");
+      changed.push(rel);
+    }
+    return changed;
+  }
+
   /** After the turn: KesherAI's own checks, commit, push of that one branch, the result file and the board. */
   private async finish(t: InboxTaskView, worktree: string, base: string, repo: string, ok: boolean, why: string, forced?: InboxStatus): Promise<void> {
     const git = (args: string[]) => this.d.git(worktree, args);
     const checks: InboxCheck[] = [];
     await git(["add", "-A"]);
+    // A research report is redacted, not blocked, for this computer's paths and user name (code files still block).
+    const redacted = await this.redactReports(worktree, (await git(["diff", "--cached", "--name-only", base])).out.split(/\r?\n/));
+    if (redacted.length) {
+      await git(["add", "-A"]);
+      checks.push({ name: "report redaction", ok: true, note: `personal paths and the user name replaced with ~ and <user> in ${redacted.slice(0, 5).join(", ")}` });
+    }
     const numstat = await git(["diff", "--cached", "--numstat", base]);
     const files = numstat.out.split(/\r?\n/).filter((l) => l.trim()).map((l) => {
       const [a, r, ...p] = l.split("\t");

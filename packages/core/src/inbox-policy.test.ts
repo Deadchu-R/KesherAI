@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import type { AcpPermission } from "./acp.js";
-import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
+import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { INBOX_DEFAULTS } from "./task-inbox.js";
 
 const WT = join("/", "w", "repo", ".kesher", "worktrees", "agy-c-1-1");
@@ -135,4 +135,34 @@ test("a read naming the worktree by its full path is read as inside it; other ab
   assert.equal(relativeToWorktree(`Select-String -Path ${wt.toLowerCase()}/docs/x.md -Pattern a`, wt), "Select-String -Path ./docs/x.md -Pattern a");
   assert.equal(relativeToWorktree("Get-ChildItem C:\\Windows", wt), "Get-ChildItem C:\\Windows");
   assert.equal(relativeToWorktree(`Get-ChildItem ${wt}-other\\x`, wt), `Get-ChildItem ${wt}-other\\x`);
+});
+
+test("research reports: the home folder becomes ~ and the user name in a path <user>, in every slash form and case; emails stay", () => {
+  const me = { username: "jdoe", home: "C:\\Users\\jdoe" };
+  const text = [
+    "Log: C:\\Users\\JDoe\\AppData\\kesher.log",
+    "Also c:/users/jdoe/Desktop and \"C:\\\\Users\\\\jdoe\\\\x\" in JSON",
+    "WSL: /mnt/c/Users/jdoe/b; another: /home/alice/x; placeholder C:\\Users\\<name>\\y and /home/user/z",
+    "Repo: D:\\Work\\jdoe\\kesher; jdoe wrote it; mail jdoe@gmail.com",
+  ].join("\n");
+  const r = redactReport(text, me);
+  assert.equal(r.text, [
+    "Log: ~\\AppData\\kesher.log",
+    "Also ~/Desktop and \"~\\\\x\" in JSON",
+    "WSL: ~/b; another: ~/x; placeholder C:\\Users\\<name>\\y and /home/user/z",
+    "Repo: D:\\Work\\<user>\\kesher; jdoe wrote it; mail jdoe@gmail.com",
+  ].join("\n"));
+  assert.equal(r.count, 6);
+  // After redaction only the email is left for the scan.
+  assert.deepEqual(scanDiff(`+++ b/docs/research/r.md\n${r.text.split("\n").map((l) => `+${l}`).join("\n")}\n`, me), [{ file: "docs/research/r.md", kind: "email address" }]);
+  assert.equal(redactReport("nothing personal here", me).count, 0);
+  assert.equal(redactReport("/home/jdoe/code", { username: "jdoe", home: "/home/jdoe" }).text, "~/code");
+});
+
+test("only docs/research/*.md counts as a research report", () => {
+  assert.ok(isResearchReport("docs/research/r-20261122-01.md"));
+  assert.ok(!isResearchReport("docs/research/sub/x.md"));
+  assert.ok(!isResearchReport("docs/RESEARCH_LOG.md"));
+  assert.ok(!isResearchReport("apps/x.ts"));
+  assert.ok(!isResearchReport("docs/research/x.ts"));
 });

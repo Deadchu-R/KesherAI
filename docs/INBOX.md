@@ -10,6 +10,8 @@ Rules that the code enforces:
 - KesherAI pushes only `agy/*` branches and `kesher-inbox`. Never `main`, tags, deletes or force.
 - The task's text is data. Its `check` runs only in parts that are on Settings > Task inbox > commands.
 - No secrets, emails, Windows user names or personal paths in a task or a result (a scan refuses them).
+  A research report (`docs/research/*.md`) is redacted instead: the home folder becomes `~` and the user name in a
+  path `<user>`; it is still refused for an email, a key or a token. Code files are never redacted, only refused.
 
 ## Template (`tasks/c-YYYYMMDD-NN.md`)
 

@@ -378,6 +378,37 @@ test("inbox: a new task's replaces list skips the old ones that have not started
   }
 });
 
+test("inbox run: a research report's personal paths are redacted (~ and <user>) and it is pushed; the same path in code still blocks", async () => {
+  const { root, origin, repo } = await setup({ "c-20261122-30": TASK("c-20261122-30", "[docs/research/**]"), "c-20261122-31": TASK("c-20261122-31", "[docs/research/**, apps/**]") });
+  const home = join(root, "home", "someone");
+  const report = `# Findings\n\nThe log is at ${home}/AppData/kesher.log (also ${home.replace(/\//g, "\\")}\\AppData).\nOn Windows: C:\\Users\\Someone\\Desktop and D:/work/someone/notes.\n`;
+  try {
+    const a = await inboxFor(repo, root, { "docs/research/r-20261122-30.md": report }, { prompts: 0 });
+    await a.inbox.sync();
+    await a.inbox.run("c-20261122-30", { here: true });
+    const t = await settle(a.inbox, "c-20261122-30");
+    assert.equal(t.pushed, true, t.note);
+    assert.ok(t.checks?.some((c) => c.name === "report redaction" && c.ok));
+    assert.ok(t.checks?.some((c) => c.name === "secrets and privacy" && c.ok));
+    const pushed = await sh(origin, "show", `${t.branch}:docs/research/r-20261122-30.md`);
+    assert.ok(!pushed.toLowerCase().includes("someone"), pushed);
+    assert.match(pushed, /~\/AppData\/kesher\.log/);
+    assert.match(pushed, /D:\/work\/<user>\/notes/);
+
+    // A report with an email still blocks; a code file with the home path still blocks (nothing is redacted there).
+    const b = await inboxFor(repo, root, { "docs/research/r-20261122-31.md": `${report}Contact: someone@gmail.com\n`, "apps/p.ts": `export const p = "${home}/x";\n` }, { prompts: 0 });
+    await b.inbox.sync();
+    await b.inbox.run("c-20261122-31", { here: true });
+    const u = await settle(b.inbox, "c-20261122-31");
+    assert.equal(u.status, "failed");
+    assert.equal(u.pushed, false);
+    const scan = u.checks?.find((c) => c.name === "secrets and privacy");
+    assert.ok(scan && !scan.ok && /email address in docs\/research/.test(scan.note) && /personal path in apps\/p\.ts/.test(scan.note), scan?.note);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("inbox run: work outside the allowed paths or with a secret is never committed or pushed", async () => {
   const { root, origin, repo } = await setup({ "c-20261119-04": TASK("c-20261119-04") });
   const seen = { prompts: 0 };

@@ -300,6 +300,51 @@ export function scanDiff(diff: string, me: { username?: string; home?: string } 
   return out;
 }
 
+/** A research report an agent wrote: the only kind of file the privacy scan redacts instead of blocking. */
+const REPORT_PATH = /^docs\/research\/[\w.-]+\.md$/;
+
+/**
+ * Whether a changed path is an agent's research report (`docs/research/*.md`).
+ *
+ * @param path - A changed path (relative, `/`).
+ */
+export function isResearchReport(path: string): boolean {
+  return REPORT_PATH.test(path) && !path.includes("..");
+}
+
+const escapeRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Takes this computer's personal paths out of a research report, so a report is not blocked from push for them: the
+ * home folder becomes `~`, any other `C:\Users\<name>`, `/home/<name>` or `/Users/<name>` becomes `~` too, and the
+ * user name inside a path becomes `<user>`. Backslash, forward-slash and doubled-backslash forms, any case. Emails,
+ * keys and tokens are left alone (the scan still blocks them).
+ *
+ * @param text - The report.
+ * @param me - This computer's user name and home folder.
+ * @returns The redacted text and how many places changed.
+ */
+export function redactReport(text: string, me: { username?: string; home?: string } = {}): { text: string; count: number } {
+  let count = 0;
+  /** Replaces each match with what `to` gives (undefined keeps the match), counting the changes. */
+  const sub = (re: RegExp, to: (match: string, group: string) => string | undefined) => {
+    text = text.replace(re, (match: string, group: string) => {
+      const out = to(match, group);
+      if (out === undefined) return match;
+      count++;
+      return out;
+    });
+  };
+  const sep = "[\\\\/]+";
+  const home = me.home && me.home.length > 3 ? me.home.split(/[\\/]+/).filter(Boolean) : undefined;
+  if (home?.length) sub(new RegExp(`(${/^[\\/]/.test(me.home!) ? sep : ""}${home.map(escapeRe).join(sep)})(?![\\w.-])`, "gi"), () => "~");
+  // Anyone's home folder (placeholders such as C:\Users\<name> or /home/user stay).
+  sub(/\b[a-z]:[\\/]+users[\\/]+([^\\/"'`\s<>]+)/gi, (_m, user) => (OK_USER.test(user) ? undefined : "~"));
+  sub(/(?:\/mnt\/[a-z])?\/(?:home|Users)\/([^/"'`\s<>]+)/gi, (_m, user) => (OK_USER.test(user) ? undefined : "~"));
+  if (me.username && me.username.length >= 2) sub(new RegExp(`([\\\\/])${escapeRe(me.username)}(?![\\w.-])`, "gi"), (_m, slash) => `${slash}<user>`);
+  return { text, count };
+}
+
 /**
  * Checks the files a change touched against the task's limits.
  *
