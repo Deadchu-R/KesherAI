@@ -40,6 +40,18 @@ export function assignBox(o) {
             return h("button", { type: "button", class: `chip${on ? " chip-on" : ""}`, "aria-pressed": String(on), onclick: () => { open = { key, pc: p.id }; render(); } }, `🖥 ${p.name}`);
         }))
         : null, isOpen
-        ? h("div", { class: "assign-list", role: "group", "aria-label": L("למי לתת את המשימה", "Who to give the task to") }, ASSIGN_CHOICES.map((c) => h("button", { type: "button", class: `trow assign-opt${c.to === o.current ? " sel" : ""}`, "aria-pressed": String(c.to === o.current), onclick: () => send(c.to) }, h("span", { "aria-hidden": "true" }, c.icon), h("span", { class: "grow min0" }, h("b", { class: "wrapl" }, L(c.he, c.en)), h("span", { class: "xs mut wrapl" }, c.to === o.current ? L("אצלו עכשיו", "Has it now") : L(c.noteHe, c.noteEn))))))
+        ? h("div", { class: "assign-list", role: "group", "aria-label": L("למי לתת את המשימה", "Who to give the task to") }, o.model && o.current === "antigravity" ? modelRow(o.model, (name) => void device.assign(taskId, pcs, "antigravity", false, name).then(() => { open = undefined; render(); })) : null, ASSIGN_CHOICES.map((c) => h("button", { type: "button", class: `trow assign-opt${c.to === o.current ? " sel" : ""}`, "aria-pressed": String(c.to === o.current), onclick: () => send(c.to) }, h("span", { "aria-hidden": "true" }, c.icon), h("span", { class: "grow min0" }, h("b", { class: "wrapl" }, L(c.he, c.en)), h("span", { class: "xs mut wrapl" }, c.to === o.current ? L("אצלו עכשיו", "Has it now") : L(c.noteHe, c.noteEn))))))
         : null, answer);
+}
+/**
+ * The model chips of an Antigravity task (inbox-models.ts): "Auto" (the default for its kind) and each model the PC's
+ * Antigravity offers. A tap sends an `assign` with `model`; the PC answers like any assign.
+ *
+ * @param m - The models and the task's pick.
+ * @param pick - Sends the choice.
+ * @returns The row.
+ */
+function modelRow(m, pick) {
+    const chip = (name, text) => h("button", { type: "button", class: `chip${m.pick === name ? " chip-on" : ""}`, "aria-pressed": String(m.pick === name), dir: name ? "ltr" : "auto", onclick: () => pick(name) }, text);
+    return h("div", { class: "row wrap assign-models", role: "group", "aria-label": L("מודל ב-Antigravity", "Model in Antigravity") }, h("span", { class: "sm mut" }, L("מודל:", "Model:")), chip("", L("אוטומטי", "Auto")), m.list.map((n) => chip(n, n)));
 }

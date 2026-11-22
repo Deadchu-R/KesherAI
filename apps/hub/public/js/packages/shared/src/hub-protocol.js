@@ -391,7 +391,8 @@ export function parseSealedBody(x, kind) {
             }
             if (b.action === "assign") {
                 const to = parseAssignTo(b.to);
-                return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
+                const model = to === "antigravity" && typeof b.model === "string" && /^[\w .:/()-]{0,80}$/.test(b.model) ? b.model : undefined;
+                return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}), ...(model !== undefined ? { model } : {}) } : null;
             }
             if (b.action === "agent-label")
                 return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
@@ -435,7 +436,7 @@ export function parseSealedBody(x, kind) {
             // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
             const executor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(Array.isArray(b.models) ? { models: b.models.filter((m) => typeof m === "string" && m.length > 0).slice(0, 12).map((m) => m.slice(0, HUB_LIMITS.nameChars)) } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
         }
         case "ask_note": {
             const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;

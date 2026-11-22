@@ -33,6 +33,7 @@ export function inboxMetaOf(r, deviceId) {
         ...(r.queuePos ? { queuePos: r.queuePos } : {}),
         ...(r.lineAt ? { lineAt: r.lineAt } : {}),
         ...(r.askNext !== undefined ? { askNext: r.askNext } : {}),
+        ...(r.models?.length ? { models: r.models } : {}),
         ...(r.standing ? { standing: true } : {}),
         ...(r.kind ? { kind: r.kind } : {}),
         ...(r.startedAt ? { startedAt: r.startedAt } : {}),

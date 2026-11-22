@@ -718,16 +718,17 @@ export class HubDevice {
      * @param pcs - The PCs to send it to.
      * @param to - Who does it now.
      * @param confirm - The user's yes to the PC's question (stop a running task, run a finished one again).
+     * @param model - Only picks the model of an Antigravity task (a name the PC sent, "" = the default for its kind).
      * @returns Whether it was sent.
      */
-    async assign(taskId, pcs, to, confirm = false) {
+    async assign(taskId, pcs, to, confirm = false, model) {
         const id = this.ident;
         if (!id || !this.connected || !pcs.length)
             return false;
         const commandId = randomB64url(12);
         let sent = 0;
         for (const pc of pcs) {
-            const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "assign", taskId, to, ...(confirm ? { confirm: true } : {}) }, id.privateKey, pc.publicKey);
+            const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "assign", taskId, to, ...(confirm ? { confirm: true } : {}), ...(model !== undefined ? { model } : {}) }, id.privateKey, pc.publicKey);
             if (this.sendFrame({ t: "send", env }))
                 sent++;
         }
