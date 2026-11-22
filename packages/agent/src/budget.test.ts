@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentMessage } from "@kesher/shared";
-import { PRUNED_MARK, capTools, isTurnStart, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs, summaryLine } from "./budget.js";
+import { PRUNED_MARK, capTools, isTurnStart, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs, statusSummary, summaryLine, supersededReads } from "./budget.js";
 
 const long = (tag: string) => `${tag} first line\n${"x".repeat(2000)}`;
 /** A turn: the user's message, one tool call and its result, an answer. */
@@ -55,6 +55,47 @@ describe("pruneToolOutputs", () => {
     const more: AgentMessage[] = [...msgs, { role: "assistant", content: "", toolCalls: [{ id: "c9", name: "read_file", arguments: {} }] }, { role: "tool", toolCallId: "c9", toolName: "read_file", content: long("out9") }];
     const b = pruneToolOutputs(more).messages;
     assert.deepEqual(b.slice(0, a.length), a);
+  });
+
+  /** A read_file call and its numbered result. */
+  const read = (id: string, args: Record<string, unknown>, body = `    1  ${"y".repeat(800)}`): AgentMessage[] => [
+    { role: "assistant", content: "", toolCalls: [{ id, name: "read_file", arguments: args }] },
+    { role: "tool", toolCallId: id, toolName: "read_file", content: body },
+  ];
+
+  test("an older read of the same file becomes a superseded line, even inside the kept turns", () => {
+    const msgs: AgentMessage[] = [{ role: "user", content: "go" }, ...read("r1", { path: "src/a.ts" }), ...read("r2", { path: "./src/a.ts" }), { role: "assistant", content: "done" }];
+    const r = pruneToolOutputs(msgs);
+    assert.deepEqual(r.ids, ["r1"]);
+    assert.equal(r.superseded, 1);
+    assert.equal(r.messages[2]!.content, '[read_file src/a.ts superseded by a later read] (id "r1")');
+    assert.equal(r.messages[4]!.content, msgs[4]!.content);
+    assert.ok(r.prunedChars > 700);
+  });
+
+  test("partial reads only supersede the same range; a cut-off plain read covers no other range", () => {
+    const tail = `    1  a\n… 900 more lines: read on with offset 2`;
+    const msgs: AgentMessage[] = [
+      { role: "user", content: "go" },
+      ...read("p1", { path: "b.ts", offset: 100, limit: 50 }),
+      ...read("p2", { path: "b.ts", offset: 300, limit: 50 }),
+      ...read("p3", { path: "b.ts" }, tail),
+      ...read("p4", { path: "b.ts", offset: 300, limit: 50 }),
+      ...read("e1", { path: "c.ts" }),
+      ...read("e2", { path: "c.ts" }, "Error: c.ts does not exist."),
+    ];
+    assert.deepEqual([...supersededReads(msgs).keys()], ["p2"]);
+  });
+
+  test("command and check summaries keep the last line (exit code, pass/fail)", () => {
+    assert.equal(statusSummary("> npm test\nlots\nof\noutput\n\nexit code 1"), "> npm test … exit code 1");
+    assert.equal(statusSummary("only line"), "only line");
+    const out = `> pnpm test\n${"z".repeat(900)}\n# fail 2`;
+    const msgs: AgentMessage[] = [
+      { role: "user", content: "1" }, { role: "assistant", content: "", toolCalls: [{ id: "k", name: "run_command", arguments: {} }] }, { role: "tool", toolCallId: "k", toolName: "run_command", content: out },
+      ...turn(2), ...turn(3),
+    ];
+    assert.match(pruneToolOutputs(msgs).messages[2]!.content, /run_command: > pnpm test … # fail 2/);
   });
 });
 

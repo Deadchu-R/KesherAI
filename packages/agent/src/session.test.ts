@@ -893,10 +893,12 @@ test("a tool's gate decides: its card carries card v2, Always counts as once, an
 test("token budget: tool results from before the last two turns go as a summary line, tool_output opens them, usage counts it", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "kesher-agent-pr-"));
   await writeFile(join(workspace, "big.txt"), `big file first line\n${"z".repeat(3000)}`);
+  await writeFile(join(workspace, "other.txt"), "other");
   const { model, seen } = scripted([
     { calls: [{ name: "read_file", arguments: { path: "big.txt" } }] },
     { text: "read it" },
-    { calls: [{ name: "read_file", arguments: { path: "big.txt" } }] },
+    // Another file: a second read of big.txt would make the first one a superseded line instead (budget.test.ts).
+    { calls: [{ name: "read_file", arguments: { path: "other.txt" } }] },
     { text: "second" },
     { calls: [{ name: "tool_output", arguments: { id: "c1_0" } }] },
     { text: "third" },
@@ -916,6 +918,8 @@ test("token budget: tool results from before the last two turns go as a summary 
   assert.ok(third.tools.some((t) => t.name === "tool_output"));
   assert.match(seen[5]!.messages.at(-1)!.content, /z{100}/, "tool_output gave the full text back");
   assert.ok(session.events.some((e) => e.type === "usage" && (e.pruned ?? 0) > 500));
+  const saved = session.events.reduce((n, e) => (e.type === "usage" ? n + (e.pruned ?? 0) : n), 0);
+  assert.equal(session.info().savedTokens, saved, "the session's total of tokens not sent");
   // Pinned: sent in full again.
   session.pinOutput("c1_0", true);
   assert.equal(session.contextView().messages.find((m) => m.toolName === "read_file")!.pruned, undefined);

@@ -8,6 +8,13 @@ import type { AgentMessage } from "@kesher/shared";
  * full output stays in the saved conversation and the model opens it again with `tool_output`. The line between
  * pruned and full moves only when a new turn starts, so within a turn the prompt's start stays the same and the
  * engine keeps its cache. The latest result and results the user pinned are never pruned.
+ *
+ * Superseded reads: when the same file range is read again, every older read of it is sent as one marker line,
+ * in any turn (the newer read has the fresher text). This changes the prompt once, at the older read, when the
+ * newer read arrives; every later call then sends less.
+ *
+ * Command and check outputs (`run_command`, `check_code`) keep their last line too in the summary, since that is
+ * where the exit code or the pass/fail count is.
  */
 
 /** The tool that opens a pruned tool output again by its id. */
@@ -18,6 +25,10 @@ export const KEEP_TURNS = 2;
 const MIN_PRUNE_CHARS = 400;
 /** The start of a pruned output's line (also how the context explorer recognises one). */
 export const PRUNED_MARK = "[pruned output";
+/** The start of a superseded read's line. */
+export const SUPERSEDED_MARK = "[read_file";
+/** Tools whose summary line also keeps the output's last line (the exit code, the pass/fail count). */
+const STATUS_LAST_TOOLS = new Set(["run_command", "check_code"]);
 /** The most characters one `tool_output` call returns. */
 export const OPEN_CHARS = 20_000;
 
@@ -43,18 +54,75 @@ export function summaryLine(content: string): string {
   return first.length > 160 ? `${first.slice(0, 157)}…` : first;
 }
 
+/**
+ * The summary of a command or check output: its first meaningful line and its last one (where the exit code is).
+ *
+ * @param content - The full output.
+ * @returns At most about 250 characters.
+ */
+export function statusSummary(content: string): string {
+  const lines = content.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^[-=`*#\s]+$/.test(l));
+  const first = summaryLine(content);
+  const last = lines[lines.length - 1] ?? "";
+  if (!last || last === first || lines.length < 2) return first;
+  return `${first} … ${last.length > 80 ? `${last.slice(0, 77)}…` : last}`;
+}
+
+/**
+ * The read_file results that a later read of the same file range makes stale: a later read covers an older one
+ * when it is of the same path and either got the whole file (no offset and limit, and no "read on" tail) or used
+ * the same offset and limit.
+ *
+ * @param messages - The conversation (tool calls are matched to their results by id).
+ * @returns The call ids of the stale reads, each with the path it read.
+ */
+export function supersededReads(messages: readonly AgentMessage[]): Map<string, string> {
+  const calls = new Map<string, { path: string; range: string }>();
+  for (const m of messages) {
+    for (const c of m.toolCalls ?? []) {
+      if (c.name !== "read_file" || typeof c.arguments.path !== "string") continue;
+      const path = c.arguments.path.replace(/\\/g, "/").replace(/^\.\//, "");
+      const range = c.arguments.offset === undefined && c.arguments.limit === undefined ? "" : `${String(c.arguments.offset ?? 1)}:${String(c.arguments.limit ?? "")}`;
+      calls.set(c.id, { path, range });
+    }
+  }
+  const out = new Map<string, string>();
+  // Walk from the newest: a read is stale when a newer successful read of the same path covers its range.
+  const whole = new Set<string>();
+  const ranges = new Set<string>();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (m.role !== "tool" || !m.toolCallId) continue;
+    const call = calls.get(m.toolCallId);
+    if (!call) continue;
+    if (whole.has(call.path) || ranges.has(`${call.path}#${call.range}`)) {
+      out.set(m.toolCallId, call.path);
+      continue;
+    }
+    // Only a read that returned numbered lines supersedes (not an error or a refusal).
+    if (!/^\s*\d+ {2}/.test(m.content)) continue;
+    ranges.add(`${call.path}#${call.range}`);
+    // A plain read that ended without "read on with offset" had the whole file: it covers every range of it.
+    if (!call.range && !/\n… \d+ more lines: read on with offset \d+$/.test(m.content)) whole.add(call.path);
+  }
+  return out;
+}
+
 /** What {@link pruneToolOutputs} sends instead of the conversation. */
 export interface Pruned {
   /** A copy of the messages, with old outputs as summary lines (same length and order as the input). */
   messages: AgentMessage[];
   /** Characters left out (pictures count 6000 each, as in sizeOf). */
   prunedChars: number;
-  /** The call ids whose outputs were pruned. */
+  /** The call ids whose outputs were pruned (superseded reads included). */
   ids: string[];
+  /** Of `ids`, the reads a later read of the same file made stale. */
+  superseded: number;
 }
 
 /**
- * Replaces tool results older than the last `keepTurns` turns by a summary line with their id.
+ * Replaces tool results older than the last `keepTurns` turns by a summary line with their id, and reads that a
+ * later read of the same file covers by a marker line (in any turn).
  *
  * @param messages - The stored conversation (not changed).
  * @param opts.keepTurns - Turns whose results stay in full (default {@link KEEP_TURNS}).
@@ -67,20 +135,33 @@ export function pruneToolOutputs(messages: readonly AgentMessage[], opts: { keep
   // Everything before the start of the oldest kept turn may be pruned; with fewer turns than that, nothing is.
   const line = starts.length >= keep ? starts[starts.length - keep]! : 0;
   const lastTool = messages.findLastIndex((m) => m.role === "tool");
+  const stale = supersededReads(messages);
   let prunedChars = 0;
+  let superseded = 0;
   const ids: string[] = [];
   const out = messages.map((m, i) => {
-    if (i >= line || i === lastTool || m.role !== "tool" || !m.toolCallId || opts.pinned?.has(m.toolCallId)) return m;
+    if (i === lastTool || m.role !== "tool" || !m.toolCallId || opts.pinned?.has(m.toolCallId)) return m;
+    const stalePath = stale.get(m.toolCallId);
+    if (stalePath !== undefined) {
+      const content = `${SUPERSEDED_MARK} ${stalePath} superseded by a later read] (id "${m.toolCallId}")`;
+      if (content.length >= m.content.length) return m;
+      prunedChars += m.content.length - content.length;
+      superseded++;
+      ids.push(m.toolCallId);
+      return { ...m, content };
+    }
+    if (i >= line) return m;
     const pictures = m.images?.length ?? 0;
     if (m.content.length < MIN_PRUNE_CHARS && !pictures) return m;
-    const content = `${PRUNED_MARK} ${m.toolCallId}] ${m.toolName ?? "tool"}: ${summaryLine(m.content)} (${m.content.length} characters${pictures ? `, ${pictures} picture(s)` : ""}; open it again with ${TOOL_OUTPUT_TOOL} id "${m.toolCallId}")`;
+    const summary = STATUS_LAST_TOOLS.has(m.toolName ?? "") ? statusSummary(m.content) : summaryLine(m.content);
+    const content = `${PRUNED_MARK} ${m.toolCallId}] ${m.toolName ?? "tool"}: ${summary} (${m.content.length} characters${pictures ? `, ${pictures} picture(s)` : ""}; open it again with ${TOOL_OUTPUT_TOOL} id "${m.toolCallId}")`;
     prunedChars += m.content.length - content.length + pictures * 6000;
     ids.push(m.toolCallId);
     const { images: _drop, ...rest } = m;
     void _drop;
     return { ...rest, content };
   });
-  return { messages: out, prunedChars: Math.max(0, prunedChars), ids };
+  return { messages: out, prunedChars: Math.max(0, prunedChars), ids, superseded };
 }
 
 /**

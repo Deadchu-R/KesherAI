@@ -20,7 +20,7 @@ import { takeSteers } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
-import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
+import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
 import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
@@ -412,6 +412,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.events = [...(opts.events ?? [])];
     this.messages = [...(opts.messages ?? [])];
     this.turn = this.events.reduce((n, e) => (e.type === "assistant" ? Math.max(n, e.turn) : n), 0);
+    this.savedTokens = this.events.reduce((n, e) => (e.type === "usage" && e.pruned ? n + e.pruned : n), 0);
     this.expireUnanswered();
   }
 
@@ -431,6 +432,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       ...(this.queuePaused ? { queuePaused: true } : {}),
       ...(this.external ? { canSteer: false } : {}),
       contextTokens: this.contextTokens,
+      ...(this.savedTokens > 0 ? { savedTokens: this.savedTokens } : {}),
     };
   }
 
@@ -908,8 +910,12 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const cacheWrite = result.usage?.cacheWriteTokens;
     // What the token budget left out of this call (main model only; teammates get their own short prompts).
     const pruned = role === "main" ? Math.round((this.lastPrunedChars + this.lastCappedChars) / this.charsPerToken) : 0;
+    this.savedTokens += pruned;
     this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(typeof cacheWrite === "number" && cacheWrite > 0 ? { cacheWrite: Math.min(cacheWrite, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
   }
+
+  /** Tokens the token budget left out of all main-model calls of this conversation (the usage events' `pruned`). */
+  private savedTokens = 0;
 
   /** Characters the last fitted prompt left out (pruned tool outputs), for the usage event. */
   private lastPrunedChars = 0;
@@ -1038,7 +1044,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       ...(m.toolName ? { toolName: m.toolName } : {}),
       ...(m.images?.length ? { images: m.images.length } : {}),
       ...(m.content.length !== (this.messages[i]?.content.length ?? 0) ? { shortened: true } : {}),
-      ...(m.role === "tool" && m.content.startsWith(PRUNED_MARK) ? { pruned: true } : {}),
+      ...(m.role === "tool" && (m.content.startsWith(PRUNED_MARK) || m.content.startsWith(SUPERSEDED_MARK)) ? { pruned: true } : {}),
       ...(i < cut ? { summarized: true } : {}),
     }));
     const sent = messages.filter((m) => !m.summarized).reduce((n, m) => n + m.tokens, 0);

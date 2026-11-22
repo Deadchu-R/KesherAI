@@ -423,6 +423,11 @@ export interface AgentSessionInfo {
   canSteer?: false;
   /** Tokens the model can read (its context window as the session uses it), for the composer's context ring. */
   contextTokens?: number;
+  /**
+   * Tokens the token budget did not send, all main-model calls of this conversation together: older tool results
+   * as summary lines, reads superseded by a later read, tools over the cap. Estimated from the text; only when any.
+   */
+  savedTokens?: number;
 }
 
 /**
