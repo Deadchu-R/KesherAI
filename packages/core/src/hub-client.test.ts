@@ -217,7 +217,7 @@ test("a free-Gemini task keeps its own executor; a quota deferral carries the re
 
 test("inbox tasks map to the hub's states and executors, metadata only", () => {
   const w = hubInboxTask(inboxTask({}), 1)!;
-  assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", estSteps: 3 + 15 + 1, runId: "in-c-1120-01", at: 1 });
+  assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", estSteps: 3 + 15 + 1, runId: "in-c-1120-01", kind: "code", at: 1 });
   assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1 }), 1)!.branch, "agy/c-1120-01-fix");
   const done = hubInboxTask(inboxTask({ status: "done", startedAt: 1, summary: "Fixed the dot.\nAll checks pass." }), 1)!;
   assert.equal(done.state, "done");
@@ -230,6 +230,27 @@ test("inbox tasks map to the hub's states and executors, metadata only", () => {
   assert.equal(hubInboxTask(inboxTask({ status: "queued", runBy: "opus" }), 1)!.executor, "claude");
   assert.equal(hubInboxTask(inboxTask({ from: "hub" }), 1), undefined, "the hub page already lists its own tasks");
   for (const st of ["waiting", "running", "done", "failed"] as const) assert.ok(!JSON.stringify(hubInboxTask(inboxTask({ status: st }), 1)).includes("SECRET"), "never the task's text");
+});
+
+test("inbox reports carry who works on what: model, priority, queue place, kind, times and the cause", () => {
+  const w = hubInboxTask(inboxTask({ boardId: "t12", model: "Gemini 3 Pro" }), 5, { priority: 2, queuePos: 3 })!;
+  assert.equal(w.model, "Gemini 3 Pro");
+  assert.equal(w.boardId, "t12");
+  assert.equal(w.priority, 2);
+  assert.equal(w.queuePos, 3);
+  // The queue place only means something while it waits; a model the agent named wins over the one asked for.
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 7, model: "a", modelUsed: "b" }), 5, { queuePos: 1 })!.queuePos, undefined);
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 7, model: "a", modelUsed: "b" }), 5)!.model, "b");
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 7 }), 5)!.startedAt, 7);
+  assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 7, endedAt: 9 }), 5)!.endedAt, undefined, "not ended yet");
+  const failed = hubInboxTask(inboxTask({ status: "failed", startedAt: 7, endedAt: 9, note: "The check failed:\n lint has 2 errors." }), 5)!;
+  assert.equal(failed.endedAt, 9);
+  assert.equal(failed.cause, "The check failed: lint has 2 errors.");
+  assert.equal(hubInboxTask(inboxTask({ status: "done", startedAt: 7, endedAt: 9, summary: "ok" }), 5)!.cause, undefined, "a done task has no cause");
+  assert.equal(hubInboxTask(inboxTask({ kind: "research" }), 5)!.kind, "research");
+  assert.equal(hubInboxTask(inboxTask({ title: "Convert the Unity bridge to 2020.3" }), 5)!.kind, "conversion");
+  assert.equal(hubInboxTask(inboxTask({ boardId: "../x" }), 5)!.boardId, undefined, "an odd board id is dropped");
+  assert.ok(!JSON.stringify(w).includes("SECRET"), "never the task's text");
 });
 
 test("inbox reports go sealed to each phone, only when a task changed", async (t) => {

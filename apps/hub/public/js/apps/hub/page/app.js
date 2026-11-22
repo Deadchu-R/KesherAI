@@ -24,6 +24,8 @@ import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag } from 
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup } from "./board.js";
+import { failedBlock, doneLine, foldingRows, leavingRow, loadWorkFilters, nowNextSections, workState, workTabs } from "./work.js";
+import { listOrder, passes, runToWorkTask, toWorkTask } from "../../../packages/shared/src/hub-work.js";
 import { waitingEntries, waitingSection } from "./waiting.js";
 import { dismissPc, reviewPcs } from "./pc-updated.js";
 import { clearShown, notifySection, startPush } from "./push.js";
@@ -50,7 +52,6 @@ const app = {
     draft: "",
     executor: "auto",
     ifOffline: "cloud",
-    filter: "all",
     search: "",
     openTask: undefined,
     /** Claude's work list: the statuses shown (done is hidden at first) and the items opened to their full text. */
@@ -469,7 +470,7 @@ function dashboard() {
     const on = devices().filter((d) => d.online).length;
     const off = devices().length - on;
     const open = allTasks().filter(isOpen);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), ...updatedCards(), waitingSection(waitingView), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("שלום", "Hello")), h("span", { class: "mut" }, L(`· ${on} מחוברים, ${off} כבויים · ${open.length} משימות פתוחות`, `· ${on} online, ${off} off · ${open.length} open tasks`)), h("span", { class: "grow" }), h("a", { class: "btn pri big hide-sm", href: "#new" }, L("＋ שלח משימה", "＋ Send a task"))), relay(), ...updatedCards(), waitingSection(waitingView), ...nowNextSections(workView).slice(0, 1), h("div", { class: "grid2" }, h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("מכשירים וסוכנים", "Devices and agents")), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#devices" }, L("הכול ›", "All ›"))), deviceRows(false), cloudRow()), h("div", { class: "stack" }, agentsSummary(agentsView), h("section", { class: "card pad stack" }, h("b", null, L("שליחה מהירה", "Quick send")), draftBox(2), routeBox(true), h("div", { class: "row" }, h("span", { class: "mut sm grow" }, cloudWarning() ? L("המסלול הזה מראה את המשימה לענן של Claude.", "This route shows the task to Claude's cloud.") : ""), h("button", { type: "button", class: "btn pri", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח", "Send")))), h("section", { class: "card clip" }, h("div", { class: "row head" }, h("b", null, L("משימות פתוחות", "Open tasks")), h("span", { class: "tag t-run" }, String(open.length)), h("span", { class: "grow" }), h("a", { class: "mut sm", href: "#tasks" }, L("הכול ›", "All ›"))), open.length ? open.slice(0, 5).map((t) => h("a", { class: "trow sm", href: "#tasks", onclick: () => { app.openTask = t.taskId; } }, statusTag(t), h("span", { class: "grow ell" }, t.title), routeChip(t))) : h("div", { class: "trow mut sm" }, L("אין משימות פתוחות.", "No open tasks."))))));
 }
 /** The devices tab (HubDevices). */
 function devicesTab() {
@@ -480,17 +481,32 @@ function newTask() {
     const opt = (group, value, cur, set, title, sub) => h("label", { class: `opt${cur === value ? " sel2" : ""}` }, h("input", { type: "radio", name: group, value, checked: cur === value, onchange: () => { set(value); render(); } }), h("span", { class: "grow" }, title, sub ? h("div", { class: "mut xs" }, sub) : null));
     return h("main", { class: "page" }, h("h1", null, L("משימה חדשה", "New task")), h("div", { class: "grid2 wide-first" }, h("div", { class: "stack" }, h("section", { class: "sec" }, h("span", { class: "mut sm" }, L("מה לעשות", "What to do")), draftBox(5)), h("section", { class: "sec" }, h("h3", null, L("מי יבצע", "Who does it")), h("div", { class: "opts", role: "radiogroup" }, opt("ex", "auto", app.executor, (v) => (app.executor = v), L("אוטומטי", "Automatic"), L("לפי המשימה ומי מחובר", "By the task and who is on")), opt("ex", "pc-any", app.executor, (v) => (app.executor = v), L("🖥 מחשב", "🖥 A PC"), L("מודל מקומי או Antigravity", "Local model or Antigravity")), opt("ex", "claude-cloud", app.executor, (v) => (app.executor = v), L("✷ Claude בענן", "✷ Claude cloud"), L("מהמנוי שלך", "From your subscription")))), h("section", { class: "sec" }, h("h3", null, L("אם המחשב כבוי", "If the PC is off")), h("div", { class: "opts", role: "radiogroup" }, opt("off", "wait", app.ifOffline, (v) => (app.ifOffline = v), L("לחכות לו", "Wait for it")), opt("off", "cloud", app.ifOffline, (v) => (app.ifOffline = v), L("לשלוח לענן", "Send to the cloud"))), h("span", { class: "mut sm" }, L("משימה שמחכה נמחקת מהמרכז אחרי 24 שעות אם לא נמסרה.", "A waiting task is deleted from the hub after 24 hours if it was not delivered.")))), h("div", { class: "stack" }, routeBox(false), cloudWarning(), h("section", { class: "sec" }, h("h3", { class: "sm" }, L("מה נשמר איפה", "What is kept where")), h("div", { class: "sm lines" }, L("📱 המשימה והתשובה: במכשיר הזה וב-Google Drive שלך (נעולות)", "📱 The task and the answer: on this device and in your Google Drive (sealed)"), h("br"), L("☁ המרכז: רק מזהה, יעד ושעה, עד שהמשימה נמסרה", "☁ The hub: only an id, a recipient and a time, until delivered"), h("br"), L("🔀 הקוד: בענף ב-GitHub, כמו תמיד", "🔀 The code: in a branch on GitHub, as always"))), h("div", { class: "row end" }, h("span", { class: "grow" }), h("a", { class: "btn", href: "#tasks" }, L("ביטול", "Cancel")), h("button", { type: "button", class: "btn pri big", disabled: !device.paired || !app.draft.trim(), onclick: () => void sendDraft() }, L("שלח משימה", "Send the task"))))));
 }
-/** The tasks tab (HubTasks / PhoneHubTasks). */
+/** Every page task as a work task (with the PCs' board priorities filled in), for the work views. */
+function workTasks() {
+    const board = new Map();
+    for (const snap of device.boards.values())
+        for (const i of snap.items)
+            board.set(i.id, i);
+    return allTasks().map((task) => ({ task, work: toWorkTask(task, !task.inbox && HubDevice.expired(task), board) }));
+}
+/** What the work views need from the page (work.ts). */
+const workView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key), tasks: workTasks };
+/** The tasks tab (HubTasks / PhoneHubTasks and the HubNowNext / HubWorkTabs boards). */
 function tasksTab() {
-    const all = allTasks();
+    loadWorkFilters(render);
     drive.preload();
-    const pick = (t) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : app.filter === "expired" ? HubDevice.expired(t) : true);
+    const pairs = workTasks();
+    const byId = new Map(pairs.map((p) => [p.task.taskId, p]));
+    const now = Date.now();
+    const runs = sortedCards(device.agents.values(), now);
+    // Everything the tabs count: the page's tasks and the PCs' live runs, each as a work task.
+    const items = [...pairs.map((p) => p.work), ...runs.map(runToWorkTask)];
     const q = app.search.trim().toLowerCase();
-    const list = all.filter(pick).filter((t) => !q || `${t.title}\n${t.spec}`.toLowerCase().includes(q));
-    const count = (f) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : HubDevice.expired(t))).length;
-    const chip = (f, he, en) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
-    const open = all.find((t) => t.taskId === app.openTask);
-    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip" }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, boardGroup(boardParts, q), workListGroup(q));
+    const phase = workState.phase;
+    const f = workState.filters;
+    const list = pairs.filter((p) => p.work.phase === phase && passes(p.work, f) && (!q || `${p.task.title}\n${p.task.spec}`.toLowerCase().includes(q))).sort((a, b) => listOrder(phase)(a.work, b.work)).map((p) => p.task);
+    const open = app.openTask ? byId.get(app.openTask)?.task : undefined;
+    return h("main", { class: "page" }, h("div", { class: "row wrap" }, h("h1", null, L("משימות", "Tasks")), h("span", { class: "mut sm" }, L("מכל המכשירים שלך (המרכז לא שומר משימות)", "From all your devices (the hub keeps no tasks)")), h("span", { class: "grow" }), h("a", { class: "btn pri", href: "#new" }, L("＋ משימה", "＋ Task"))), driveLine(), !device.paired ? pairThisCard() : null, waitingSection(waitingView), ...nowNextSections(workView), workTabs(workView, items), h("div", { class: "row wrap filters" }, h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = e.target.value; renderSoon(); } })), h("section", { class: "card clip", role: "tabpanel", "aria-live": phase === "active" ? "polite" : undefined }, h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })), ...taskGroups(list, q, byId), list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, items.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet."))), open ? taskDetail(open) : null, boardGroup(boardParts, q), workListGroup(q));
 }
 /**
  * Claude's work list (HubWorkList / PhoneHubWorkList): the items the PC copies from docs/WORK_LIST.md to Drive,
@@ -574,11 +590,15 @@ function groupOf(t) {
         return "claude";
     return "pc";
 }
-/** The agent runs of the PCs that fit the filter and the search (the Agents group), newest state first. */
+/** The agent runs of the PCs that fit the tab, the filters and the search (the Agents group), newest state first. */
 function agentRows(q) {
     const now = Date.now();
-    const fits = (c) => (app.filter === "open" ? isGoing(c) : app.filter === "done" ? c.state.state === "done" : app.filter === "failed" ? c.state.state === "failed" : app.filter !== "expired");
-    return sortedCards(device.agents.values(), now).filter((c) => fits(c) && (!q || c.state.title.toLowerCase().includes(q))).slice(0, 10);
+    return sortedCards(device.agents.values(), now)
+        .filter((c) => {
+        const w = runToWorkTask(c);
+        return w.phase === workState.phase && passes(w, workState.filters) && (!q || c.state.title.toLowerCase().includes(q));
+    })
+        .slice(0, 10);
 }
 /** One agent run in the Tasks list: its state, title and PC; it opens the run's card on the Agents tab. */
 function agentRow(c) {
@@ -592,16 +612,22 @@ function agentRow(c) {
 }
 /**
  * The task list in groups: Agents (the PCs' agent runs), Antigravity, Gemini, Local, PC and Claude, each with a head and a count;
- * an empty group is left out.
+ * an empty group is left out. In the Active tab a task that ended while it was shown stays a moment, then folds away in place.
  *
- * @param list - The tasks that fit the filter and the search.
+ * @param list - The tasks that fit the tab, the filters and the search.
  * @param q - The search text (lower case).
+ * @param byId - The page's tasks with their work view, by id.
  */
-function taskGroups(list, q) {
+function taskGroups(list, q, byId) {
     const agents = agentRows(q);
     const out = [];
+    const entry = (g, t) => ({ id: t.taskId, group: g, build: () => taskRow(t, byId.get(t.taskId)?.work) });
+    const all = GROUPS.flatMap(([g]) => (g === "agents" ? agents.map((c) => ({ id: `${c.deviceId}/${c.runId}`, group: g, build: () => agentRow(c) })) : list.filter((t) => groupOf(t) === g).map((t) => entry(g, t))));
+    const folding = workState.phase === "active" ? foldingRows(`${workState.phase}|${JSON.stringify(workState.filters)}|${q}`, all, render) : [];
     for (const [g, icon, he, en] of GROUPS) {
-        const rows = g === "agents" ? agents.map(agentRow) : list.filter((t) => groupOf(t) === g).map(taskRow);
+        const rows = all.filter((r) => r.group === g).map((r) => r.build());
+        for (const l of folding.filter((x) => x.group === g).sort((x, y) => x.index - y.index))
+            rows.splice(Math.min(l.index, rows.length), 0, leavingRow(l.build()));
         if (!rows.length)
             continue;
         out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs grow" }, String(rows.length)), g === "agy" ? runAllButton(device) : null), ...rows);
@@ -609,7 +635,7 @@ function taskGroups(list, q) {
     return out;
 }
 /** One row of the task list. */
-function taskRow(t) {
+function taskRow(t, work) {
     const expired = !t.inbox && HubDevice.expired(t);
     const live = liveCard(t);
     const run = runButtons(t);
@@ -635,7 +661,7 @@ function taskRow(t) {
     return h("div", { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if (e.key === "Enter") {
             app.openTask = t.taskId;
             render();
-        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
+        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, work?.phase === "failed" ? failedBlock(workView, t, work) : work?.phase === "done" ? doneLine(t) : t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
 }
 /** The open task, with its answer and timeline. */
 function taskDetail(t) {

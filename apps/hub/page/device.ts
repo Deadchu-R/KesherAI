@@ -12,6 +12,7 @@ import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger, type HubApproval, type HubBoard
 import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
+import { inboxMetaOf, type InboxMeta } from "../../../packages/shared/src/hub-work.js";
 import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import type { DriveMark } from "./drive-view.js";
@@ -60,7 +61,7 @@ export interface PageTask {
    * A task of a PC's task inbox (Claude's `kesher-inbox` branch), reported by that PC: who wrote it, who runs it,
    * the PC, and its live agent run while it has one. Not sent from here, so it cannot be resent or cancelled here.
    */
-  inbox?: { from: HubInboxTask["from"]; executor: HubInboxTask["executor"]; deviceId: string; runId?: string; at: number; estSteps?: number; steps?: number; retryAt?: number };
+  inbox?: InboxMeta;
   /** Where Google Drive has this task (drive-view.ts sets it on the rows it shows; never saved here). */
   drive?: DriveMark;
 }
@@ -883,7 +884,7 @@ export class HubDevice {
     if (sent?.action === "inbox-run" && sent.result?.ok) this.taskActions.delete(r.taskId);
     task.title = r.title;
     task.status = status;
-    task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at, ...(r.estSteps ? { estSteps: r.estSteps } : {}), ...(r.steps ? { steps: r.steps } : {}), ...(r.retryAt ? { retryAt: r.retryAt } : {}) };
+    task.inbox = inboxMetaOf(r, from);
     if (r.result) task.line = r.result;
     else delete task.line;
     if (r.branch) task.branch = r.branch;

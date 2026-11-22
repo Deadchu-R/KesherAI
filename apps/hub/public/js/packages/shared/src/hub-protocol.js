@@ -125,6 +125,8 @@ export function cleanApproval(x) {
         at: num(a.at),
     };
 }
+/** The kinds a report may carry (anything else is dropped). */
+export const HUB_WORK_KINDS = ["research", "code", "conversion"];
 /** Which body type each envelope kind must hold (checked after opening, so a kind cannot be swapped). */
 export const BODY_FOR_KIND = {
     task: "task",
@@ -425,7 +427,7 @@ export function parseSealedBody(x, kind) {
             // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
             const executor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
         }
         case "ask_note": {
             const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;
@@ -555,6 +557,8 @@ const RUN_STATES = ["queued", "running", "waiting", "done", "failed", "cancelled
 const FILE_OPS = ["read", "edit", "create", "delete"];
 const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const optNum = (k, v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
+/** A string on one line (whitespace runs become one space), or undefined for anything else. */
+const oneLine = (v) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : undefined);
 const optStr = (k, v, max) => (typeof v === "string" && v ? { [k]: v.slice(0, max) } : {});
 /**
  * A file path as an event may carry it: relative, forward slashes, no `..`, no drive or home prefix, at most 160

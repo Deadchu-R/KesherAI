@@ -15,7 +15,7 @@
  * offers pairing by code there instead, plus a button that opens the hub in the phone's own browser.
  */
 import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
-import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
+import { isSafeLink, type HubBoardItem, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
 import { HubDevice, post, type PageTask } from "./device.js";
 import { RUN_ALL_KEY } from "../../../packages/shared/src/run-undo.js";
@@ -24,6 +24,8 @@ import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type A
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
 import { boardGroup, type BoardView } from "./board.js";
+import { failedBlock, doneLine, foldingRows, leavingRow, loadWorkFilters, nowNextSections, workState, workTabs, type WorkView } from "./work.js";
+import { listOrder, passes, runToWorkTask, toWorkTask, type WorkTask } from "../../../packages/shared/src/hub-work.js";
 import { waitingEntries, waitingSection, type WaitingView } from "./waiting.js";
 import { dismissPc, reviewPcs, type SeenVersions } from "./pc-updated.js";
 import { clearShown, notifySection, startPush, type PushView } from "./push.js";
@@ -72,7 +74,6 @@ const app = {
   draft: "",
   executor: "auto" as HubExecutor,
   ifOffline: "cloud" as HubIfOffline,
-  filter: "all" as "all" | "open" | "done" | "failed" | "expired",
   search: "",
   openTask: undefined as string | undefined,
   /** Claude's work list: the statuses shown (done is hidden at first) and the items opened to their full text. */
@@ -609,6 +610,7 @@ function dashboard(): HTMLElement {
     relay(),
     ...updatedCards(),
     waitingSection(waitingView),
+    ...nowNextSections(workView).slice(0, 1),
     h(
       "div",
       { class: "grid2" },
@@ -666,16 +668,31 @@ function newTask(): HTMLElement {
   );
 }
 
-/** The tasks tab (HubTasks / PhoneHubTasks). */
+/** Every page task as a work task (with the PCs' board priorities filled in), for the work views. */
+function workTasks(): Array<{ task: PageTask; work: WorkTask }> {
+  const board = new Map<string, HubBoardItem>();
+  for (const snap of device.boards.values()) for (const i of snap.items) board.set(i.id, i);
+  return allTasks().map((task) => ({ task, work: toWorkTask(task, !task.inbox && HubDevice.expired(task), board) }));
+}
+
+/** What the work views need from the page (work.ts). */
+const workView: WorkView = { device, render: () => render(), openAgent: (key) => agentsView.setOpen(key), tasks: workTasks };
+
+/** The tasks tab (HubTasks / PhoneHubTasks and the HubNowNext / HubWorkTabs boards). */
 function tasksTab(): HTMLElement {
-  const all = allTasks();
+  loadWorkFilters(render);
   drive.preload();
-  const pick = (t: PageTask) => (app.filter === "open" ? isOpen(t) : app.filter === "done" ? t.status === "done" : app.filter === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : app.filter === "expired" ? HubDevice.expired(t) : true);
+  const pairs = workTasks();
+  const byId = new Map(pairs.map((p) => [p.task.taskId, p]));
+  const now = Date.now();
+  const runs = sortedCards(device.agents.values(), now);
+  // Everything the tabs count: the page's tasks and the PCs' live runs, each as a work task.
+  const items: WorkTask[] = [...pairs.map((p) => p.work), ...runs.map(runToWorkTask)];
   const q = app.search.trim().toLowerCase();
-  const list = all.filter(pick).filter((t) => !q || `${t.title}\n${t.spec}`.toLowerCase().includes(q));
-  const count = (f: typeof app.filter) => all.filter((t) => (f === "all" ? true : f === "open" ? isOpen(t) : f === "done" ? t.status === "done" : f === "failed" ? t.status === "failed" || t.status === "blocked" || t.status === "partial" : HubDevice.expired(t))).length;
-  const chip = (f: typeof app.filter, he: string, en: string) => h("button", { type: "button", class: `chip${app.filter === f ? " chip-on" : ""}`, "aria-pressed": app.filter === f, onclick: () => { app.filter = f; render(); } }, `${L(he, en)} ${count(f)}`);
-  const open = all.find((t) => t.taskId === app.openTask);
+  const phase = workState.phase;
+  const f = workState.filters;
+  const list = pairs.filter((p) => p.work.phase === phase && passes(p.work, f) && (!q || `${p.task.title}\n${p.task.spec}`.toLowerCase().includes(q))).sort((a, b) => listOrder(phase)(a.work, b.work)).map((p) => p.task);
+  const open = app.openTask ? byId.get(app.openTask)?.task : undefined;
   return h(
     "main",
     { class: "page" },
@@ -683,13 +700,15 @@ function tasksTab(): HTMLElement {
     driveLine(),
     !device.paired ? pairThisCard() : null,
     waitingSection(waitingView),
-    h("div", { class: "row wrap filters" }, chip("all", "הכול", "All"), chip("open", "פתוחות", "Open"), chip("done", "הסתיימו", "Done"), chip("failed", "נכשלו", "Failed"), chip("expired", "פג תוקף", "Expired"), h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),
+    ...nowNextSections(workView),
+    workTabs(workView, items),
+    h("div", { class: "row wrap filters" }, h("span", { class: "grow" }), h("input", { class: "inp search", type: "search", placeholder: L("🔍 חיפוש", "🔍 Search"), "aria-label": L("חיפוש", "Search"), value: app.search, oninput: (e) => { app.search = (e.target as HTMLInputElement).value; renderSoon(); } })),
     h(
       "section",
-      { class: "card clip" },
+      { class: "card clip", role: "tabpanel", "aria-live": phase === "active" ? "polite" : undefined },
       h("div", { class: "trow thead mut xs hide-sm" }, h("span", { class: "c-st" }, L("מצב", "Status")), h("span", { class: "grow" }, L("משימה ותוצאה", "Task and result")), h("span", { class: "c-rt" }, L("מסלול", "Route")), h("span", { class: "c-when" }, L("מתי", "When")), h("span", { class: "c-act" })),
-      ...taskGroups(list, q),
-      list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, all.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
+      ...taskGroups(list, q, byId),
+      list.length || agentRows(q).length ? null : h("div", { class: "trow mut sm" }, items.length ? L("אין משימות כאלה.", "No such tasks.") : L("עוד אין משימות.", "No tasks yet.")),
     ),
     open ? taskDetail(open) : null,
     boardGroup(boardParts, q),
@@ -794,11 +813,15 @@ function groupOf(t: PageTask): Exclude<TaskGroup, "agents"> {
   return "pc";
 }
 
-/** The agent runs of the PCs that fit the filter and the search (the Agents group), newest state first. */
+/** The agent runs of the PCs that fit the tab, the filters and the search (the Agents group), newest state first. */
 function agentRows(q: string): AgentCard[] {
   const now = Date.now();
-  const fits = (c: AgentCard) => (app.filter === "open" ? isGoing(c) : app.filter === "done" ? c.state.state === "done" : app.filter === "failed" ? c.state.state === "failed" : app.filter !== "expired");
-  return sortedCards(device.agents.values(), now).filter((c) => fits(c) && (!q || c.state.title.toLowerCase().includes(q))).slice(0, 10);
+  return sortedCards(device.agents.values(), now)
+    .filter((c) => {
+      const w = runToWorkTask(c);
+      return w.phase === workState.phase && passes(w, workState.filters) && (!q || c.state.title.toLowerCase().includes(q));
+    })
+    .slice(0, 10);
 }
 
 /** One agent run in the Tasks list: its state, title and PC; it opens the run's card on the Agents tab. */
@@ -821,16 +844,21 @@ function agentRow(c: AgentCard): HTMLElement {
 
 /**
  * The task list in groups: Agents (the PCs' agent runs), Antigravity, Gemini, Local, PC and Claude, each with a head and a count;
- * an empty group is left out.
+ * an empty group is left out. In the Active tab a task that ended while it was shown stays a moment, then folds away in place.
  *
- * @param list - The tasks that fit the filter and the search.
+ * @param list - The tasks that fit the tab, the filters and the search.
  * @param q - The search text (lower case).
+ * @param byId - The page's tasks with their work view, by id.
  */
-function taskGroups(list: PageTask[], q: string): HTMLElement[] {
+function taskGroups(list: PageTask[], q: string, byId: Map<string, { task: PageTask; work: WorkTask }>): HTMLElement[] {
   const agents = agentRows(q);
   const out: HTMLElement[] = [];
+  const entry = (g: TaskGroup, t: PageTask) => ({ id: t.taskId, group: g, build: () => taskRow(t, byId.get(t.taskId)?.work) });
+  const all = GROUPS.flatMap(([g]) => (g === "agents" ? agents.map((c) => ({ id: `${c.deviceId}/${c.runId}`, group: g as TaskGroup, build: () => agentRow(c) })) : list.filter((t) => groupOf(t) === g).map((t) => entry(g, t))));
+  const folding = workState.phase === "active" ? foldingRows(`${workState.phase}|${JSON.stringify(workState.filters)}|${q}`, all, render) : [];
   for (const [g, icon, he, en] of GROUPS) {
-    const rows = g === "agents" ? agents.map(agentRow) : list.filter((t) => groupOf(t) === g).map(taskRow);
+    const rows = all.filter((r) => r.group === g).map((r) => r.build());
+    for (const l of folding.filter((x) => x.group === g).sort((x, y) => x.index - y.index)) rows.splice(Math.min(l.index, rows.length), 0, leavingRow(l.build()));
     if (!rows.length) continue;
     out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs grow" }, String(rows.length)), g === "agy" ? runAllButton(device) : null), ...rows);
   }
@@ -838,7 +866,7 @@ function taskGroups(list: PageTask[], q: string): HTMLElement[] {
 }
 
 /** One row of the task list. */
-function taskRow(t: PageTask): HTMLElement {
+function taskRow(t: PageTask, work?: WorkTask): HTMLElement {
   const expired = !t.inbox && HubDevice.expired(t);
   const live = liveCard(t);
   const run = runButtons(t);
@@ -865,7 +893,7 @@ function taskRow(t: PageTask): HTMLElement {
     "div",
     { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if ((e as KeyboardEvent).key === "Enter") { app.openTask = t.taskId; render(); } } },
     h("span", { class: "c-st" }, statusTag(t)),
-    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
+    h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, work?.phase === "failed" ? failedBlock(workView, t, work) : work?.phase === "done" ? doneLine(t) : t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null),
     h("span", { class: "c-rt" }, routeChip(t)),
     h("span", { class: "c-when mut sm" }, when(t.createdAt)),
     h("span", { class: "c-act" }, action),

@@ -24,6 +24,7 @@ import {
   ReplayGuard,
   sealMessage,
   syncPinger,
+  workKindOf,
   type HubAgent,
   cleanAwayNote,
   type AwayNote,
@@ -198,9 +199,11 @@ const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
  *
  * @param t - The task as the inbox keeps it.
  * @param now - The report time (ms).
+ * @param order - Where it stands in the queue: its board item's priority (lower is more urgent) and its place among
+ *   the waiting tasks (1 = next). Both optional; an older page ignores them.
  * @returns The report, or undefined when it is not reported.
  */
-export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | undefined {
+export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number } = {}): HubInboxTask | undefined {
   if (t.from === "hub" || !/^[\w-]{1,64}$/.test(t.id)) return undefined;
   let state = INBOX_STATE[t.status];
   // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
@@ -226,6 +229,16 @@ export function hubInboxTask(t: InboxTaskView, now: number): HubInboxTask | unde
     ...(state === "running" && t.steps ? { steps: t.steps } : {}),
     ...(state === "deferred" && t.retryAt ? { retryAt: t.retryAt } : {}),
     ...(going ? { runId: inboxRunId(t.id) } : {}),
+    // The hub's "who works on what": the model, the board item and its priority, the queue place, what it is, when it
+    // started and ended, and the one-line cause of a stop (never the task's text).
+    ...(t.modelUsed || t.model ? { model: (t.modelUsed || t.model)!.slice(0, 60) } : {}),
+    ...(t.boardId && /^[\w-]{1,64}$/.test(t.boardId) ? { boardId: t.boardId } : {}),
+    ...(order.priority !== undefined ? { priority: order.priority } : {}),
+    ...(order.queuePos && (state === "waiting" || state === "waiting-run") ? { queuePos: order.queuePos } : {}),
+    kind: workKindOf({ kind: t.kind, title: t.title, goal: t.goal }),
+    ...(t.startedAt ? { startedAt: t.startedAt } : {}),
+    ...(ended && t.endedAt ? { endedAt: t.endedAt } : {}),
+    ...((state === "failed" || state === "deferred" || state === "partial") && result ? { cause: result.slice(0, 160) } : {}),
     at: now,
   };
 }
@@ -956,10 +969,15 @@ export class HubClient {
     if (!phones.length) return;
     const now = Date.now();
     const tasks = (await this.deps.inboxTasks()).slice(-INBOX_REPORTED);
+    // The board's priorities, and the queue order of the tasks that wait (the inbox lists them oldest first).
+    const prio = new Map((await this.deps.board?.read().catch(() => undefined))?.tasks.map((b) => [b.id, b.priority]) ?? []);
+    let place = 0;
     const sent = { ...this.s.inboxSent };
     let changed = false;
     for (const t of tasks) {
-      const report = hubInboxTask(t, now);
+      const base = hubInboxTask(t, now);
+      const waits = base?.state === "waiting" || base?.state === "waiting-run";
+      const report = base && hubInboxTask(t, now, { ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
       if (!report) continue;
       const { at: _at, ...shape } = report;
       const hash = createHash("sha256").update(JSON.stringify(shape)).digest("base64url").slice(0, 16);

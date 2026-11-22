@@ -1087,6 +1087,632 @@
      }
     ]
    }
+  },
+  {
+   "id": "HubNowNext",
+   "title": "ענן Kesher: משימות — עובדים עכשיו (שורה לכל סוכן, צעד, מודל ומתי התחיל) והבא בתור לפי עדיפות, עם הרץ ו\"הבא בתור: להתחיל?\"",
+   "titleEn": "Kesher Cloud: Tasks — Working now (a row per agent: step, model, since) and Next in line by priority, with Run and \"Next in line: Start?\"",
+   "route": "#tasks",
+   "height": {
+    "desktop": 900,
+    "phone": 1200
+   },
+   "steps": [
+    {
+     "wait": ".nowstrip .nowrow"
+    },
+    {
+     "wait": ".nextlist .nl-item"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "priority": 1,
+       "boardId": "t30"
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "priority": 1,
+       "queuePos": 1
+      }
+     },
+     {
+      "title": "להמיר את חבילת Unity ל-2020.3",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 12,
+       "kind": "conversion",
+       "priority": 2,
+       "queuePos": 2
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 4,
+       "model": "qwen3-8b",
+       "kind": "code",
+       "priority": 4,
+       "queuePos": 3
+      }
+     },
+     {
+      "title": "לבדוק מתחרים בעורך וידאו",
+      "status": "deferred",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "15m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 5,
+       "kind": "research"
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t1",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 8,
+       "model": "Gemini 3 Pro",
+       "startedAt": {
+        "$agoMs": "7m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       }
+      ]
+     }
+    ],
+    "boards": [
+     {
+      "pc": "pc-studio",
+      "rev": 4,
+      "doneTotal": 1,
+      "at": {
+       "$agoMs": "1m"
+      },
+      "items": [
+       {
+        "id": "t31",
+        "title": "לנקות אזהרות לינט בחבילת ה-core",
+        "status": "claimed",
+        "owner": "kesher",
+        "size": "small",
+        "priority": 3,
+        "forKesher": true,
+        "at": {
+         "$agoMs": "12m"
+        }
+       },
+       {
+        "id": "t32",
+        "title": "להוסיף בדיקות לממיר ה-glTF",
+        "status": "open",
+        "size": "small",
+        "priority": 2,
+        "at": {
+         "$agoMs": "30m"
+        }
+       },
+       {
+        "id": "t33",
+        "title": "לתקן את גלילת רשימת ההורדות",
+        "status": "open",
+        "size": "big",
+        "priority": 1,
+        "at": {
+         "$agoMs": "40m"
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "HubWorkTabs",
+   "title": "ענן Kesher: משימות — לשוניות פעילות · הושלמו · נכשלו עם ספירה; נכשלו מראה סיבה, נסה שוב והעבר ל-Antigravity; משימה שמסתיימת נעלמת במקומה",
+   "titleEn": "Kesher Cloud: Tasks — Active · Done · Failed tabs with counts; Failed shows the cause, Retry and Move to Antigravity; a finished task folds away in place",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".worktabs"
+    },
+    {
+     "click": ".wtab.w-failed"
+    },
+    {
+     "wait": ".wfail"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את גלילת ההורדות",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "3h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code",
+       "model": "Gemini 3 Pro",
+       "startedAt": {
+        "$agoMs": "3h"
+       },
+       "endedAt": {
+        "$agoMs": "2h"
+       },
+       "branch": "agy/c-1122-01-fix"
+      },
+      "line": "הסתיים, כל הבדיקות עוברות."
+     },
+     {
+      "title": "מחקר: עורכי ציור עם AI",
+      "status": "done",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "5h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "research",
+       "model": "gemini-flash",
+       "endedAt": {
+        "$agoMs": "4h"
+       }
+      },
+      "line": "דוח של 6 עמודים נשמר."
+     },
+     {
+      "title": "להמיר את תוסף Unreal ל-5.3",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "2h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "conversion",
+       "model": "Gemini 3 Pro",
+       "endedAt": {
+        "$agoMs": "1h"
+       },
+       "cause": "הבדיקה נכשלה: 2 שגיאות לינט"
+      }
+     },
+     {
+      "title": "לסכם את מתחרי העורך",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "1h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "research",
+       "model": "gemini-flash",
+       "endedAt": {
+        "$agoMs": "30m"
+       },
+       "cause": "מכסת Gemini החינמית נגמרה"
+      }
+     },
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "priority": 1,
+       "boardId": "t30"
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "HubWorkFilters",
+   "title": "ענן Kesher: משימות — סינון לפי סוכן (Antigravity, Gemini, מקומי, Claude), לפי מודל ולפי סוג (מחקר, קוד, המרה); נזכר במכשיר",
+   "titleEn": "Kesher Cloud: Tasks — filter by agent (Antigravity, Gemini, local, Claude), by model and by kind (research, code, conversion); remembered on the device",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 1000
+   },
+   "steps": [
+    {
+     "wait": ".wfilters"
+    },
+    {
+     "click": ".wfilters .chip:nth-child(2)"
+    },
+    {
+     "wait": ".wfilters .chip-on"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "priority": 1,
+       "boardId": "t30"
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "priority": 1,
+       "queuePos": 1
+      }
+     },
+     {
+      "title": "להמיר את חבילת Unity ל-2020.3",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 12,
+       "kind": "conversion",
+       "priority": 2,
+       "queuePos": 2
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 4,
+       "model": "qwen3-8b",
+       "kind": "code",
+       "priority": 4,
+       "queuePos": 3
+      }
+     },
+     {
+      "title": "לבדוק מתחרים בעורך וידאו",
+      "status": "deferred",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "15m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 5,
+       "kind": "research"
+      }
+     }
+    ],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "in-t1",
+      "state": {
+       "title": "בדיקת מסך ההתחברות",
+       "source": "antigravity",
+       "state": "running",
+       "step": 3,
+       "of": 8,
+       "model": "Gemini 3 Pro",
+       "startedAt": {
+        "$agoMs": "7m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בדיקת מסך ההתחברות",
+        "source": "antigravity"
+       }
+      ]
+     }
+    ]
+   }
   }
  ]
 }

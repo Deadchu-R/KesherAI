@@ -12,6 +12,7 @@ import { DEFAULT_OPT_IN, HUB_LIMITS, syncPinger } from "../../../packages/shared
 import { chooseRoute } from "../../../packages/shared/src/hub-route.js";
 import { applyAgentBatch, RUN_STARTING_MS, runStarting } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel } from "../../../packages/shared/src/agent-label.js";
+import { inboxMetaOf } from "../../../packages/shared/src/hub-work.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
@@ -853,7 +854,7 @@ export class HubDevice {
             this.taskActions.delete(r.taskId);
         task.title = r.title;
         task.status = status;
-        task.inbox = { from: r.from, executor: r.executor, deviceId: from, ...(r.runId ? { runId: r.runId } : {}), at: r.at, ...(r.estSteps ? { estSteps: r.estSteps } : {}), ...(r.steps ? { steps: r.steps } : {}), ...(r.retryAt ? { retryAt: r.retryAt } : {}) };
+        task.inbox = inboxMetaOf(r, from);
         if (r.result)
             task.line = r.result;
         else

@@ -263,3 +263,33 @@ button.chip { cursor: pointer; min-height: 30px; }
 .runcount { gap: 6px; flex-wrap: nowrap; }
 .runacts { min-height: 34px; align-items: center; }
 .ghead .runbtn { min-width: 0; }
+
+/* Who works on what (work.ts): the Now strip, the Next list, the Active · Done · Failed tabs and the filters. */
+.nowstrip .head, .nextlist .head { padding: 12px 14px 6px; gap: 8px; }
+.nowrow { display: block; width: 100%; padding: 9px 14px; border: 0; border-top: 1px solid #222226; background: none; color: inherit; font: inherit; text-align: start; }
+button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
+.nowrow.free { opacity: .75; }
+.nw-top { gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.nw-who { min-width: 7.5em; white-space: nowrap; }
+.nw-title { font-size: 13.5px; overflow-wrap: anywhere; }
+.nw-facts { gap: 8px; margin-top: 3px; }
+.nl { list-style: none; margin: 0; padding: 0; }
+.nl-item { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid #222226; }
+.nl-item.deferred { opacity: .7; }
+.nl-n { width: 1.6em; height: 1.6em; border-radius: 50%; background: #2a2a33; color: #c9c9ce; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+.worktabs { display: flex; flex-direction: column; gap: 8px; }
+.wtabs { gap: 6px; }
+.wtab { flex: 1; min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: #c9c9ce; font: inherit; cursor: pointer; }
+.wtab.on { background: #2e2e3a; color: var(--text); border-color: #3a3a48; }
+.wtab.w-failed .wcount { color: #f08a8a; }
+.wcount { font-variant-numeric: tabular-nums; opacity: .85; }
+.wfilters { align-items: center; }
+.wmodel { max-width: 12em; min-height: 30px; padding: 2px 8px; }
+.wdone { color: #b9b9c0; }
+.wfail { gap: 6px; margin-top: 4px; }
+/* A task that ends while it is shown stays as it ended for a moment, then folds away in place (no jump). */
+.leaving { display: grid; grid-template-rows: 1fr; pointer-events: none; animation: wleave .4s ease 1.2s forwards; }
+.leaving-in { overflow: hidden; min-height: 0; }
+@keyframes wleave { to { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .leaving { animation: none; } }
+@media (max-width: 640px) { .nowrow, .nl-item { padding-inline: 12px; } .nw-who { min-width: 0; } }

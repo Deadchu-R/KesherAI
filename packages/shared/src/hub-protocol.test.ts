@@ -113,6 +113,21 @@ test("inbox_task: the gemini executor, the deferred state with its reset time, s
   assert.equal(parseSealedBody({ ...base, state: "unknown-state" }, "inbox_task"), null);
 });
 
+test("inbox_task: the who-works-on-what fields are kept when valid and dropped when odd (an older PC sends none)", () => {
+  const base = { type: "inbox_task", taskId: "c-1121-02", title: "Fix it", state: "failed", executor: "antigravity", from: "claude", at: 5 };
+  assert.deepEqual(parseSealedBody(base, "inbox_task"), base, "an older PC's report is unchanged");
+  const full = parseSealedBody({ ...base, model: "Gemini 3", boardId: "t9", priority: 0, queuePos: 2, kind: "conversion", startedAt: 3, endedAt: 4, cause: `  Lint\n failed ${"x".repeat(300)}` }, "inbox_task") as Record<string, unknown>;
+  assert.equal(full.model, "Gemini 3");
+  assert.equal(full.boardId, "t9");
+  assert.equal(full.priority, 0, "priority 0 is the most urgent, not missing");
+  assert.equal(full.kind, "conversion");
+  assert.equal(full.endedAt, 4);
+  assert.equal((full.cause as string).length, 160);
+  assert.ok(!(full.cause as string).includes("\n"), "the cause is one line");
+  const odd = parseSealedBody({ ...base, kind: "magic", boardId: "../x", priority: -1, startedAt: "now", model: 5 }, "inbox_task") as Record<string, unknown>;
+  for (const k of ["kind", "boardId", "priority", "startedAt", "model"]) assert.equal(odd[k], undefined, k);
+});
+
 test("board: caps (active and the last 20 done), the text limit, bad items and commands", () => {
   const item = (n: number, x: Partial<HubBoardItem> = {}): HubBoardItem => ({ id: `t${n}`, title: `Task ${n} ${"x".repeat(190)}`, status: "open", size: "big", priority: 5, at: n, ...x });
   const all = [

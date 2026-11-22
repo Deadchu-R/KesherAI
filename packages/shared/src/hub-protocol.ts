@@ -377,9 +377,29 @@ export interface HubInboxTask {
   retryAt?: number;
   /** The live agent run (the Agents tab's card), while it has one. */
   runId?: string;
+  /**
+   * The hub's "who works on what" (hub-work.ts), all optional so an older PC and an older page keep working: the
+   * model that runs (or ran) it as the agent named it, the board item it sits on, that item's priority (lower is more
+   * urgent) and its place in the queue (1 = next), what it is, when it started and ended (ms since epoch) and, for a
+   * failed, declined, skipped or deferred task, the one-line cause.
+   */
+  model?: string;
+  boardId?: string;
+  priority?: number;
+  queuePos?: number;
+  kind?: HubWorkKind;
+  startedAt?: number;
+  endedAt?: number;
+  cause?: string;
   /** When this state was reported (ms since epoch). */
   at: number;
 }
+
+/** What a task is, for the hub's filter: a research report, a code change, or a version/engine conversion. */
+export type HubWorkKind = "research" | "code" | "conversion";
+
+/** The kinds a report may carry (anything else is dropped). */
+export const HUB_WORK_KINDS: readonly HubWorkKind[] = ["research", "code", "conversion"];
 
 // ---- live agent activity (docs/RESEARCH_LOG.md, "Live agent activity in the Kesher Cloud hub") ----
 
@@ -728,7 +748,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
       const executor: HubInboxExecutor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
       const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), at: num(b.at) };
+      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...(HUB_WORK_KINDS.includes(b.kind as HubWorkKind) ? { kind: b.kind as HubWorkKind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
     }
     case "ask_note": {
       const a = b.ask && typeof b.ask === "object" ? (b.ask as Record<string, unknown>) : undefined;
@@ -883,6 +903,8 @@ const RUN_STATES: readonly AgentRunState["state"][] = ["queued", "running", "wai
 const FILE_OPS: readonly AgentFile["op"][] = ["read", "edit", "create", "delete"];
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
 const optNum = (k: string, v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
+/** A string on one line (whitespace runs become one space), or undefined for anything else. */
+const oneLine = (v: unknown): string | undefined => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : undefined);
 const optStr = (k: string, v: unknown, max: number) => (typeof v === "string" && v ? { [k]: v.slice(0, max) } : {});
 
 /**
