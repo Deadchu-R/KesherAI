@@ -288,8 +288,8 @@ export const KesherConfigSchema = z.object({
       opencode: z
         .object({
           enabled: z.boolean().default(true),
-          small: z.string().max(120).default("opencode-go/glm-5.3-flash"),
-          strong: z.string().max(120).default("opencode-go/kimi-k3"),
+          small: z.string().max(120).default("opencode-go/mimo-v2.6-flash"),
+          strong: z.string().max(120).default("opencode-go/mimo-v2.6-pro"),
           dailyCap: z.number().int().min(0).max(100).default(15),
         })
         .prefault({}),

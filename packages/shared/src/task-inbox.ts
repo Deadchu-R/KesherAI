@@ -32,8 +32,10 @@ export interface OpencodeSettings {
   dailyCap: number;
 }
 
-/** The defaults (Roee, 2026-11-22: GLM 5.3 Flash for small work, Kimi K3 for the rest, 15 a day). */
-export const OPENCODE_DEFAULTS: OpencodeSettings = { enabled: true, small: "opencode-go/glm-5.3-flash", strong: "opencode-go/kimi-k3", dailyCap: 15 };
+/** The defaults: a cheap model for small work, a stronger (still cheap) one for the rest, 15 a day. */
+// Defaults by cost (Go plan, 2026-11-22, requests a month): Kimi K3 ~98 (44 requests spent a 5-hour window and 20% of
+// the month), MiMo-V2.6-Pro ~3,260, MiMo-V2.6-Flash ~30,100. An agent task makes tens of requests, so the cheap pair.
+export const OPENCODE_DEFAULTS: OpencodeSettings = { enabled: true, small: "opencode-go/mimo-v2.6-flash", strong: "opencode-go/mimo-v2.6-pro", dailyCap: 15 };
 
 /**
  * The OpenCode Go model for a task, by its size: the cheap one for S, the strong one for M and L (like OpenCode's own
