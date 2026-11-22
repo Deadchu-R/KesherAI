@@ -1,3 +1,4 @@
+# Bindings (the HUB Durable Object, the assets) come from this file on every deploy from main.
 # Kesher Cloud hub (Cloudflare Worker + one Durable Object). Generic and self-hostable: no account id, domain, email or
 # secret lives here. Everything owner-specific is set in the Cloudflare dashboard (see README.md).
 name = "kesher-hub"
