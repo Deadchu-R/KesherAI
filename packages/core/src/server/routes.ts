@@ -106,6 +106,7 @@ import { generateRoutes } from "../routes/generate.js";
 import { downloadRoutes } from "../routes/downloads.js";
 import { openAIRoutes } from "../routes/openai.js";
 import { libraryRoutes } from "../routes/library.js";
+import { editorUploadRoutes } from "../routes/editor-upload.js";
 import { helperRoutes } from "../routes/helpers.js";
 import { resumeRoutes } from "../routes/resume.js";
 import { taskInboxRoutes } from "../routes/task-inbox.js";
@@ -204,6 +205,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await githubRoutes(app, services);
   await deviceRoutes(app, services);
   await libraryRoutes(app, services);
+  await editorUploadRoutes(app, async (id) => { const c = await services.library.getConversation(id); return c ? services.conversations.workspaceOf(c) : undefined; });
   await helperRoutes(app, services);
   await resumeRoutes(app, services);
   if (services.taskInbox) await taskInboxRoutes(app, services, services.taskInbox);

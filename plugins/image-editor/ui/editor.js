@@ -10,7 +10,7 @@
   // ---------- words (English / Hebrew) ----------
   const HE = {
     editIn: "ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", make3d: "צור מודל תלת ממד מזה", make3dHint: "חפץ אחד, במחשב שלך", making3d: "יוצר את מודל התלת ממד… (כמה דקות, במחשב שלך)", model3dDownloading: "מודל התלת ממד בהורדה (עיגול ההורדות); נסה שוב כשיסתיים.",
-    new: "חדש…", open: "פתח תמונה…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
+    new: "חדש…", open: "פתח תמונה…", openRecent: "פתח אחרונים…", placeChat: "הוסף מהקבצים של הצ׳אט…", placeBank: "הוסף מבנק היצירות…", hPlace: "הוספת תמונה", openProject: "פתח פרויקט…", saveProject: "שמור פרויקט", export: "ייצא PNG", fit: "התאם",
     brushH: "מברשת", hardness: "קשיחות", flow: "אטימות", selectionH: "בחירה", selAll: "הכל", selNone: "בטל", selInvert: "הפוך", clear: "נקה",
     aiH: "AI (מודל התמונות שלך)", promptPh: "תאר מה לצייר…", aiLayer: "שכבה חדשה ממילים", aiInpaint: "צייר מחדש את הבחירה", strength: "כמה לשנות", aiUpscale: "הגדל פי 4", aiNoBg: "✂ הסרת רקע", aiExpand: "⤢ הרחבה ב-AI", expandAll: "‎+25% מכל הצדדים", expandSame: "התמונה כבר בצורה הזאת", hExpand: "הרחבה", expandLayer: "הקצוות שהורחבו", tapSel: "🎯 בחירה בהקשה", tapWorking: "מחפש את האובייקט… (Segment Anything במחשב)", tapNone: "לא נמצא שם כלום; הקש באמצע האובייקט", tapDone: "נבחר. Shift והקשה מוסיפים; שורת המשימות עובדת עליו.", maskH: "מסכה", maskApply: "החל", maskInvert: "הפוך", maskDelete: "מחק", hMask: "הוספת מסכה", hMaskApply: "החלת מסכה", hMaskInvert: "היפוך מסכה", hMaskDelete: "מחיקת מסכה", maskThumb: "המסכה: לבן מראה, שקוף מסתיר. הקש כדי לצייר עליה", maskHint: "מציירים עכשיו על המסכה: המכחול מראה, המחק מסתיר. הקש על התמונה הקטנה כדי לחזור לצייר על השכבה.", noBgWorking: "מסיר את הרקע… (BiRefNet במחשב)", noBgSetup: "מתקין את מסיר הרקע… (פעם אחת)", noBgLayer: "בלי רקע", hNoBg: "הסרת רקע",
     filtersH: "פילטרים (לשכבה הפעילה)", apply: "החל", layersH: "שכבות", layerOpacity: "אטימות שכבה",
@@ -1010,26 +1010,55 @@
   $("newDialog").addEventListener("close", () => {
     if ($("newDialog").returnValue === "ok") newDoc(Math.max(16, Math.min(8192, +$("newW").value)), Math.max(16, Math.min(8192, +$("newH").value)), $("newWhite").checked);
   });
+  /**
+   * A picture file as the document (Open, into an empty document or when `replace`) or as a new layer (a drop on a picture).
+   *
+   * @param f - The File (PNG, JPG, WebP, GIF or BMP).
+   * @param replace - True to make it the document.
+   */
+  async function openPicture(f, replace) {
+    const url = URL.createObjectURL(f);
+    try {
+      const img = await loadImage(url);
+      if (replace || !doc.layers.some((l) => !isEmpty(l))) {
+        docName = f.name.replace(/\.[^.]+$/, "");
+        $("docTab").textContent = f.name;
+        newDoc(img.naturalWidth, img.naturalHeight, false);
+        doc.layers[0].name = f.name;
+        doc.layers[0].ctx.drawImage(img, 0, 0);
+      } else {
+        remember(T("hOpenPic", "Open picture"));
+        const l = makeLayer(f.name);
+        l.ctx.drawImage(img, 0, 0);
+        addLayer(l);
+      }
+      renderLayers();
+      draw();
+    } finally { URL.revokeObjectURL(url); }
+  }
   $("file").onchange = async () => {
     const f = $("file").files[0];
-    if (!f) return;
-    const img = await loadImage(URL.createObjectURL(f));
-    if (!doc.layers.some((l) => !isEmpty(l))) {
-      docName = f.name.replace(/\.[^.]+$/, "");
-      $("docTab").textContent = f.name;
-      newDoc(img.naturalWidth, img.naturalHeight, false);
-      doc.layers[0].name = f.name;
-      doc.layers[0].ctx.drawImage(img, 0, 0);
-    } else {
-      remember(T("hOpenPic", "Open picture"));
-      const l = makeLayer(f.name);
-      l.ctx.drawImage(img, 0, 0);
-      addLayer(l);
-    }
-    renderLayers();
-    draw();
     $("file").value = "";
+    if (!f) return;
+    try { await openPicture(f, false); } catch (e) { msg(e.message, true); }
   };
+  // Open… / Ctrl+O replace the document with the picture; a drop on an empty document opens it, on a picture adds a layer.
+  let opener = null; // open-file.js's api, once loaded
+  let openFile = null; // open-file.js
+  void import("./open-file.js").then((of) => { openFile = of; of.setHebrew(he); opener = of.wireOpen({
+    editor: "image-editor",
+    kinds: ["image"],
+    target: stage,
+    openBtn: $("openBtn"),
+    recentBtn: $("recentBtn"),
+    saveBtn: $("saveAsBtn"),
+    hasWork: () => doc.layers.some((l) => !isEmpty(l)),
+    dropHint: () => T("openHint", "PNG, JPG, WebP, GIF or BMP"),
+    say: (text, error) => msg(text, error),
+    onOpen: async (files) => { await openPicture(files[0], true); },
+    onDrop: async (files) => { for (const f of files) await openPicture(f, false); },
+    onSave: () => new Promise((resolve) => flatten().toBlob(async (b) => { await of.saveAs(b, `${docName}.png`); resolve(); }, "image/png")),
+  }); });
   /**
    * A picture from this chat or from the bank as a new layer (Photoshop's "Place"), centred and fitted inside the
    * picture; into an empty document it becomes the document, as Open does.
@@ -1381,7 +1410,8 @@
   const MENUS = () => [
     ["mFile", "File", [
       ["new", "New…", "Ctrl+N", () => $("newDialog").showModal()],
-      ["open", "Open picture…", "Ctrl+O", () => $("file").click()],
+      ["open", "Open picture…", "Ctrl+O", () => (opener ? opener.pick() : $("file").click())],
+      ["openRecent", "Open recent…", "", () => void opener?.recent($("recentBtn"))],
       ["placeChat", "Place from this chat…", "", () => void placeFrom("chat")],
       ["placeBank", "Place from everything made…", "", () => void placeFrom("bank")],
       ["openProject", "Open project…", "", () => $("projectFile").click()],
@@ -1525,7 +1555,7 @@
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
     if (e.altKey && k === "i") { e.preventDefault(); return openSize(); }
-    const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), o: () => $("file").click(), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined), enter: () => fromChat && ($("chatDialog").open ? $("chatDialog").close("ok") : sendToChat()) };
+    const map = { n: () => (e.shiftKey ? $("addLayer").click() : $("newDialog").showModal()), s: saveProject, j: () => $("dupLayer").click(), e: () => (e.shiftKey ? exportPng() : $("mergeDown").click()), 0: fit, 1: () => zoomBy(1 / cam.scale), "=": () => zoomBy(1.25), "+": () => zoomBy(1.25), "-": () => zoomBy(0.8), i: () => (e.shiftKey ? $("selInvert").click() : undefined), enter: () => fromChat && ($("chatDialog").open ? $("chatDialog").close("ok") : sendToChat()) };
     if (map[k]) { e.preventDefault(); map[k](); }
   });
 
@@ -1714,6 +1744,7 @@
   kesher.call("storage.get", { key: "persona" }).then((p) => p && setPersona(p)).catch(() => undefined);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
+    openFile?.setHebrew(he);
     if (!he) return;
     buildMenus();
     renderHistory();

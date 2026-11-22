@@ -770,34 +770,61 @@
       return row;
     }));
   }
-  $("wrap").addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
-  $("wrap").addEventListener("drop", async (e) => {
-    const f = e.dataTransfer?.files?.[0];
-    if (!f) return;
-    e.preventDefault();
-    const am = await import("./add-media.js");
-    busy(T("loading", "Loading the sound…"));
-    try { const { bytes } = await am.uploadMedia(f); await addBytes(f.name, bytes, $("addBtn")); } catch (err) { msg(err.message || String(err), true); } finally { busy(""); }
-  });
+  // Open… / Ctrl+O replace the sound with the file; a drop on an empty editor opens it, on a sound adds it at the playhead.
+  let openFile = null; // open-file.js, once loaded
+  void import("./open-file.js").then((of) => { openFile = of; of.setHebrew(he); of.wireOpen({
+    editor: "sound-editor",
+    kinds: ["audio"],
+    target: $("wrap"),
+    openBtn: $("openBtn"),
+    recentBtn: $("recentBtn"),
+    saveBtn: $("saveAsBtn"),
+    hasWork: () => length() > 0,
+    dropHint: () => T("openHint", "WAV, MP3, OGG, FLAC or M4A"),
+    say: (text, error) => msg(text, error),
+    onOpen: async (files, ctx) => {
+      busy(T("loading", "Loading the sound…"));
+      try { await loadSound(files[0].name, await ctx.read(files[0])); } finally { busy(""); }
+    },
+    onDrop: async (files, ctx) => {
+      busy(T("loading", "Loading the sound…"));
+      try { await addBytes(files[0].name, await ctx.read(files[0]), $("addBtn")); } finally { busy(""); }
+    },
+    onSave: async () => { if (length()) await of.saveAs(wav(), `${base()}.wav`); },
+  }); });
 
   // ---------- open ----------
   let busyCount = 0;
   function busy(text) { busyCount = Math.max(0, busyCount + (text ? 1 : -1)); $("busy").hidden = busyCount <= 0; if (text) $("busyText").textContent = text; }
   let msgTimer;
   function msg(text, error) { const m = $("msg"); m.textContent = text; m.className = `status show${error ? " error" : ""}`; clearTimeout(msgTimer); msgTimer = setTimeout(() => (m.className = "status"), error ? 6000 : 3500); }
+  /**
+   * Puts a sound's bytes in the editor in place of what is there (the editor's own start, and Open).
+   *
+   * @param fileName - Its name.
+   * @param bytes - The file's bytes (any format the browser decodes).
+   */
+  async function loadSound(fileName, bytes) {
+    ctx ??= new AudioContext();
+    let audio;
+    try { audio = await ctx.decodeAudioData(bytes.slice(0)); } catch { throw new Error(T("cantDecode", "This sound could not be read (is the file damaged?)")); }
+    name = fileName;
+    $("name").textContent = fileName;
+    rate = audio.sampleRate;
+    chans = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i).slice());
+    sel = null;
+    undoStack.length = redoStack.length = 0;
+    $("empty").hidden = true;
+    firstLength = length();
+    fitZoom();
+    after();
+  }
   async function open() {
     busy(T("loading", "Loading the sound…"));
     try {
       const input = await kesher.call("editor.input");
       if (!input?.bytes) { $("empty").textContent = T("emptyRec", "Open a sound from a chat, or press ● Record and hum or whistle."); return; }
-      name = input.name;
-      $("name").textContent = input.name;
-      ctx = new AudioContext();
-      const audio = await ctx.decodeAudioData(input.bytes.slice(0));
-      rate = audio.sampleRate;
-      chans = Array.from({ length: Math.min(2, audio.numberOfChannels) }, (_, i) => audio.getChannelData(i).slice());
-      $("empty").hidden = true;
-      firstLength = length();
+      await loadSound(input.name, input.bytes);
       if (input.returnVideo) { $("toVideo").hidden = false; $("toChat").classList.remove("primary"); msg(T("fromVideo", "The video's sound. When you are done: \"Back to the video\".")); }
       fitZoom();
     } catch (e) { msg(e.message || "The sound could not be read.", true); } finally { busy(""); }
@@ -857,6 +884,7 @@
   new ResizeObserver(() => draw()).observe(wrap);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
+    openFile?.setHebrew(he);
     if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); $("speedBox").title = T("speedHint", "Faster or slower; without \"keep pitch\" also higher or lower"); }
     draw();
   }).catch(() => undefined);

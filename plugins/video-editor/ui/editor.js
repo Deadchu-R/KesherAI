@@ -998,19 +998,47 @@
     ]);
   }
   $("addBtn").onclick = () => addMenu($("addBtn"));
-  for (const zone of [$("tracks"), video.parentElement]) {
-    zone.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
-    zone.addEventListener("drop", async (e) => {
-      const files = [...(e.dataTransfer?.files ?? [])];
-      if (!files.length) return;
-      e.preventDefault();
-      const am = await import("./add-media.js");
+  // Open… / Ctrl+O replace the project with the video; a drop on an empty editor opens it, on a project adds the clips.
+  // The video is copied into the chat's folder first (in pieces): the cut is made there, on the computer.
+  let openFile = null; // open-file.js, once loaded
+  /** Empties the editor, as it is before a video is opened. */
+  function resetProject() {
+    play(false);
+    source = null; media = []; clips = []; texts = []; chosen = -1; chosenText = null; nextId = 1; nextText = 1; loadedM = 0; soundPath = null;
+    undoStack.length = redoStack.length = 0;
+    video.removeAttribute("src");
+    video.load();
+    $("empty").hidden = false;
+  }
+  void import("./open-file.js").then((of) => { openFile = of; of.setHebrew(he); of.wireOpen({
+    editor: "video-editor",
+    kinds: ["video"],
+    target: video.parentElement,
+    openBtn: $("openBtn"),
+    recentBtn: $("recentBtn"),
+    saveBtn: $("saveAsBtn"),
+    hasWork: () => !!source,
+    dropHint: () => T("openHint", "MP4, WebM or MOV; a picture goes in as a clip"),
+    say: (text, error) => msg(text, error),
+    onOpen: async (files, ctx) => {
+      busy(T("loading", "Loading the video…"));
+      try {
+        const f = files[0];
+        const path = await ctx.keep(f);
+        if (!path) throw new Error(T("needChat", "To add clips, open the video editor from a chat"));
+        resetProject();
+        await addClip(f.name, path, f);
+        $("name").textContent = f.name;
+      } finally { busy(""); }
+    },
+    onDrop: async (files, ctx) => {
       for (const f of files) {
         busy(T("loading", "Loading the video…"));
-        try { const { path, bytes } = await am.uploadMedia(f); await addClip(f.name, path, bytes); } catch (err) { msg(err.message || String(err), true); } finally { busy(""); }
+        try { const path = await ctx.keep(f); await addClip(f.name, path, f); } finally { busy(""); }
       }
-    });
-  }
+    },
+    onSave: () => exportCut(false, "", true),
+  }); });
   let busyCount = 0;
   function busy(text) {
     busyCount += text ? 1 : -1;
@@ -1094,14 +1122,18 @@
     });
     return { segments, ...(used.length ? { clips: used.map((m) => ({ path: media[m].path })) } : {}) };
   }
-  async function exportCut(send, text) {
+  async function exportCut(send, text, saveAs) {
     if (!source) return;
     play(false);
     busy(T("cutting", "Cutting on your computer… (FFmpeg)"));
     try {
       const withCaptions = parts.length > 0 && $("withCaptions").checked;
       const r = await kesher.call("video.cut", { ...cutPlan(), ...(await textPlan()), send, text, ...(withCaptions ? { captions: captions(), burn: $("burnCaptions").checked } : {}), ...($("shape").value ? { shape: $("shape").value } : {}), ...($("trans").value === "dip" ? { fade: Number($("transSec").value) } : $("trans").value ? { transition: { kind: $("trans").value, seconds: Number($("transSec").value) } } : {}), ...($("outSize").value ? { size: Number($("outSize").value) } : {}), quality: $("outQuality").value, ...(music ? { music: { path: music.path, start: music.start, ...musicSettings() } } : {}) });
-      if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
+      if (saveAs) {
+        // "Save as…": the cut copied out where the person chooses (on a phone: Downloads).
+        const bytes = await kesher.call("media.bytes", { id: `chat:${r.path}` });
+        await openFile.saveAs(new Blob([bytes], { type: "video/mp4" }), r.path.split(/[\\/]/).pop());
+      } else if (!send) msg(`${T("saved", "Saved in the chat's folder:")} ${r.path}`);
     } catch (e) {
       msg(e.message, true);
     } finally {
@@ -1189,6 +1221,7 @@
   new ResizeObserver(() => drawHead()).observe(tracks);
   kesher.call("info").then((i) => {
     he = i.locale === "he";
+    openFile?.setHebrew(he);
     if (he) {
       document.documentElement.dir = "rtl";
       document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent)));

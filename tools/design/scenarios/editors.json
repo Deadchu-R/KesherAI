@@ -173,6 +173,144 @@
      "wait": ".install-dialog"
     }
    ]
+  },
+  {
+   "id": "EditorsOpenModel",
+   "title": "עורך התלת ממד: כפתורי \"פתח…\" ו\"שמור בשם…\" (Ctrl+O), גרירת קובץ או תיקייה אל התצוגה, ותפריט \"אחרונים\" (10)",
+   "titleEn": "3D editor: Open… and Save as… buttons (Ctrl+O), a file or folder dropped on the view, and the Recent menu (last 10); glTF, FBX, OBJ, STL, PLY",
+   "route": "#/p/model-editor/editor?c=c1",
+   "mocks": [
+    {
+     "url": "**/api/plugins/model-editor/storage/recent",
+     "json": {
+      "value": [
+       {
+        "name": "chair.glb",
+        "size": 2400000,
+        "kind": "model",
+        "at": 1,
+        "chat": "c1",
+        "files": [
+         {
+          "name": "chair.glb",
+          "path": "shared/chair.glb"
+         }
+        ]
+       },
+       {
+        "name": "house.obj",
+        "size": 900000,
+        "kind": "model",
+        "at": 2,
+        "chat": "c1",
+        "files": [
+         {
+          "name": "house.obj",
+          "path": "shared/house.obj"
+         },
+         {
+          "name": "house.mtl",
+          "path": "shared/house.mtl"
+         }
+        ]
+       },
+       {
+        "name": "scan.ply",
+        "size": 58000000,
+        "kind": "model",
+        "at": 3,
+        "chat": null,
+        "files": [
+         {
+          "name": "scan.ply"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #recentBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #recentBtn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    }
+   ]
+  },
+  {
+   "id": "EditorsOpenSound",
+   "title": "עורך הסאונד: אותו \"פתח…\", גרירה ו\"אחרונים\" (WAV, MP3, OGG, FLAC, M4A); בטלפון הבחירה מעלה את הקובץ למחשב",
+   "titleEn": "Sound editor: the same Open…, drop and Recent (WAV, MP3, OGG, FLAC, M4A); on the phone the pick uploads the file to the computer",
+   "route": "#/p/sound-editor/editor?c=c1",
+   "mocks": [
+    {
+     "url": "**/api/plugins/sound-editor/storage/recent",
+     "json": {
+      "value": [
+       {
+        "name": "chair.wav",
+        "size": 2400000,
+        "kind": "audio",
+        "at": 1,
+        "chat": "c1",
+        "files": [
+         {
+          "name": "x"
+         }
+        ]
+       },
+       {
+        "name": "house.mp3",
+        "size": 900000,
+        "kind": "audio",
+        "at": 2,
+        "chat": "c1",
+        "files": [
+         {
+          "name": "x"
+         }
+        ]
+       },
+       {
+        "name": "scan.flac",
+        "size": 58000000,
+        "kind": "audio",
+        "at": 3,
+        "chat": null,
+        "files": [
+         {
+          "name": "x"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #recentBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #recentBtn"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
+    }
+   ]
   }
  ]
 }

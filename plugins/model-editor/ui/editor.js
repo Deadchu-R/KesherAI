@@ -13,6 +13,8 @@ import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { brushBox, classifyActor, levelFrame, unrealToThree } from "./unreal-frame.js";
 import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } from "./add-media.js";
+import { kindOfName, saveAs, setHebrew as setOpenHebrew, wireOpen } from "./open-file.js";
+import { applyImportOptions, importModel, NEEDS_OPTIONS } from "./import-model.js";
 
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
@@ -212,8 +214,12 @@ function set2D(on) {
 /** Puts a GLB in the scene in place of the model there (from the chat, or back from Blender). */
 async function load(bytes) {
   const gltf = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject));
+  setModel(gltf.scene);
+}
+/** Puts an object in the scene in place of the model there. */
+function setModel(root) {
   if (model) { choose(null); model.removeFromParent(); }
-  model = gltf.scene; isolated = null; $("isolate").classList.remove("on");
+  model = root; isolated = null; $("isolate").classList.remove("on");
   scene.add(model);
   // Each mesh gets its own material, so changing one part does not change others that shared it.
   meshes = [];
@@ -2265,10 +2271,12 @@ async function addFile(fileName, bytes) {
     addAndSay(panel, fileName.replace(/\.[^.]+$/, ""));
     return;
   }
-  if (!/\.(glb|gltf|fbx|obj)$/i.test(fileName)) throw new Error(T("notModel", "A model (GLB, GLTF, FBX, OBJ) or a picture can be added here"));
-  const shape = /\.fbx$/i.test(fileName) ? new FBXLoader().parse(bytes, "")
-    : /\.obj$/i.test(fileName) ? new OBJLoader().parse(new TextDecoder().decode(bytes))
-    : (await new Promise((resolve, reject) => new GLTFLoader().parse(bytes, "", resolve, reject))).scene;
+  if (!/\.(glb|gltf|fbx|obj|stl|ply)$/i.test(fileName)) throw new Error(T("notModel", "A model (GLB, GLTF, FBX, OBJ, STL, PLY) or a picture can be added here"));
+  const shape = (await importModel([new File([bytes], fileName)], async () => bytes)).root;
+  placeShape(shape, fileName);
+}
+/** A loaded object added to the scene: scaled to the view (a model in centimetres would be huge), standing on the point the view looks at. */
+function placeShape(shape, fileName) {
   shape.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); });
   // Scaled to the view (a model in centimetres would be huge), standing on the point the view looks at.
   const box = new THREE.Box3().setFromObject(shape);
@@ -2284,7 +2292,7 @@ async function addFile(fileName, bytes) {
 async function addFrom(from) {
   try {
     if (from === "device" || from === "reference") {
-      for (const f of await pickDevice(from === "reference" ? "image/*" : ".glb,.gltf,.fbx,.obj,image/*")) {
+      for (const f of await pickDevice(from === "reference" ? "image/*" : ".glb,.gltf,.fbx,.obj,.stl,.ply,image/*")) {
         busy(T("loading", "Loading the model…"));
         // A reference stays here only (it is not part of the model); a model or a picture goes into the chat too.
         try { if (from === "reference") await addReference(f.name, await f.arrayBuffer()); else { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } } finally { busy(""); }
@@ -2364,16 +2372,93 @@ function addMenu(anchor) {
   ]);
 }
 $("addBtn").onclick = () => addMenu($("addBtn"));
-// A model or a picture dropped on the view is added too (Spline, Blender).
-host.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault(); });
-host.addEventListener("drop", async (e) => {
-  const files = [...(e.dataTransfer?.files ?? [])];
-  if (!files.length || guestRole) return;
-  e.preventDefault();
-  for (const f of files) {
-    busy(T("loading", "Loading the model…"));
-    try { const { bytes } = await uploadMedia(f); await addFile(f.name, bytes); } catch (err) { msg(err.message, true); } finally { busy(""); }
+// ---------- open a file from the computer or the phone ----------
+// Open… / Ctrl+O replace the scene with the file; a drop on an empty scene opens it, on a scene with a model adds to it
+// (Spline, Blender). The files may come with their companions (a glTF's .bin and pictures, an OBJ's .mtl): picked together
+// or dropped as a folder, they are found by name (model-resolve.js). A picture goes on the chosen part as its texture.
+const L = (h, e) => (he ? h : e);
+/** The chosen part's first mesh (a picture's texture goes there), when there is one. */
+const chosenMesh = () => { let m = null; chosen?.traverse((o) => { if (!m && o.isMesh && !isGenerated(o)) m = o; }); return m; };
+/** Puts a picture on the chosen part as the texture of the kind picked in the texture box. */
+async function textureFromFile(file, ctx) {
+  const mesh = chosenMesh();
+  const bytes = await ctx.read(file);
+  const dataUrl = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(new Error(L("התמונה לא נקראה", "The picture could not be read"))); r.readAsDataURL(new Blob([bytes], { type: file.type || "image/png" })); });
+  remember();
+  await setTexture(mesh, dataUrl, kind());
+  msg(`${L("התמונה על החלק", "The picture is on the part")}: ${label(mesh)}`);
+}
+/** The units / up-axis bar after a format that does not say them. */
+function showImportBar(r) {
+  const bar = $("importBar");
+  if (!NEEDS_OPTIONS.includes(r.format)) { bar.hidden = true; return; }
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+  const big = Math.max(size.x, size.y, size.z);
+  $("impNote").textContent = L(`${r.format.toUpperCase()} לא אומר באיזה כיוון למעלה ובאיזו יחידה. אם המודל שוכב או ענק:`, `${r.format.toUpperCase()} does not say its up direction or unit. If the model lies down or is huge:`);
+  $("impZl").textContent = L("Z למעלה → Y למעלה", "Z up → Y up");
+  $("impCml").textContent = L("ס״מ → מטר", "cm → m");
+  // STL and PLY usually come from CAD and scanners (Z up); a model over 50 units is most likely in centimetres.
+  $("impZ").checked = r.format === "stl" || r.format === "ply";
+  $("impCm").checked = big > 50;
+  const apply = () => { applyImportOptions(r.root, { zUp: $("impZ").checked, cm: $("impCm").checked }); const box = new THREE.Box3().setFromObject(model); grid.position.y = box.min.y; frame(model); };
+  $("impZ").onchange = $("impCm").onchange = apply;
+  $("impClose").onclick = () => (bar.hidden = true);
+  bar.hidden = false;
+  apply();
+}
+/** Opens the files as the scene: a model with its companions, or a picture on the chosen part. */
+async function openFiles(files, ctx) {
+  if (guestRole) return;
+  const pictures = files.filter((f) => kindOfName(f.name) === "image");
+  if (pictures.length === files.length) {
+    // Only pictures: a texture on the chosen part, else a flat panel in the scene.
+    for (const f of pictures) {
+      if (chosenMesh()) await textureFromFile(f, ctx);
+      else { const bytes = await ctx.read(f); await addFile(f.name, bytes); }
+    }
+    return;
   }
+  busy(L("טוען את המודל…", "Loading the model…"));
+  try {
+    const r = await importModel(files, ctx.read);
+    if (!r) throw new Error(L("לא נמצא מודל בין הקבצים", "No model among the files"));
+    const wrap = new THREE.Group();
+    wrap.add(r.root);
+    setModel(wrap);
+    undoStack.length = 0; $("undo").disabled = true;
+    name = r.name;
+    $("name").textContent = name;
+    showImportBar(r);
+    frame(model);
+    stats();
+    if (r.missing.length) msg(`${L("חסרים קבצים שהמודל צריך", "Files this model needs were not found")}: ${[...new Set(r.missing)].slice(0, 4).join(", ")}. ${L("בחר אותם יחד עם המודל, או גרור את התיקייה שלו", "Pick them together with the model, or drop its folder")}`, true);
+    else msg(`${L("נפתח", "Opened")}: ${r.name}`);
+  } finally { busy(""); }
+}
+wireOpen({
+  editor: "model-editor",
+  kinds: ["model", "part", "image"],
+  target: host,
+  openBtn: $("openBtn"),
+  recentBtn: $("recentBtn"),
+  saveBtn: $("saveAsBtn"),
+  hasWork: () => !!model && meshes.some((p) => !isGenerated(p.mesh)),
+  canDrop: () => !guestRole,
+  dropHint: () => L("GLB, glTF, FBX, OBJ, STL, PLY, או תמונה לטקסטורה. גרור תיקייה כדי להביא גם את הטקסטורות", "GLB, glTF, FBX, OBJ, STL, PLY, or a picture for a texture. Drop a folder to bring its textures too"),
+  say: (text, error) => msg(text, error),
+  onOpen: openFiles,
+  // A drop on a scene that has a model adds the model to it, as before.
+  onDrop: async (files, ctx) => {
+    busy(L("טוען את המודל…", "Loading the model…"));
+    try {
+      const pics = files.filter((f) => kindOfName(f.name) === "image");
+      if (pics.length === files.length && chosenMesh()) { for (const f of pics) await textureFromFile(f, ctx); return; }
+      const r = await importModel(files, ctx.read);
+      if (r) { placeShape(r.root, r.name); if (r.missing.length) msg(`${L("חסרים קבצים", "Files not found")}: ${[...new Set(r.missing)].slice(0, 4).join(", ")}`, true); return; }
+      for (const f of pics) await addFile(f.name, await ctx.read(f));
+    } finally { busy(""); }
+  },
+  onSave: async () => { if (model) await saveAs(await glb(), `${base()}.glb`); },
 });
 let busyCount = 0;
 $("busyStop").onclick = () => kesher.call("model.parts.cancel").catch(() => undefined);
@@ -2385,6 +2470,7 @@ $("keymap").onchange = () => kesher.call("storage.set", { key: "keymap", value: 
 kesher.call("info").then((i) => {
   he = i.locale === "he";
   setHebrew(he);
+  setOpenHebrew(he);
   if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); document.querySelectorAll("[data-ta]").forEach((el) => el.setAttribute("aria-label", T(el.dataset.ta, el.getAttribute("aria-label")))); }
 }).catch(() => undefined);
 open();

@@ -134,3 +134,9 @@ body.guest .app { grid-template-rows: 42px 1fr; }
 
 /* A level with no models: the note sits at the bottom and lets the view be turned under it. */
 .empty.note { pointer-events: none; align-items: flex-end; }
+
+/* The import bar: Z up and centimetres switches after opening an FBX, OBJ, STL or PLY. */
+.importbar { position: absolute; top: 8px; inset-inline-start: 8px; inset-inline-end: 8px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 13px; max-width: 560px; }
+.importbar[hidden] { display: none; }
+.importbar label { display: inline-flex; align-items: center; gap: 4px; }
+.importbar #impClose { margin-inline-start: auto; }

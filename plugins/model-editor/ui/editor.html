@@ -17,6 +17,7 @@
       <button id="inactive" hidden data-t="inactiveB" title="Show the objects that are off in Unity" aria-pressed="false">◌ Inactive</button>
       <button id="uiLayer" hidden data-t="uiLayerB" title="Show or hide the UI layer (canvases)" aria-pressed="true" class="on">▣ UI</button>
       <span class="people" id="people" hidden aria-label="Who else is in this scene"></span>
+      <button id="openBtn"></button><button id="recentBtn"></button>
       <button id="addBtn" class="primary" data-t="addB" title="Add a model, a picture, a shape, a light or a camera">＋ Add</button>
       <div class="seg" id="modes" title="Move / rotate / scale">
         <button data-mode="translate" class="on" title="Move">✥</button><button data-mode="rotate" title="Rotate">⟳</button><button data-mode="scale" title="Scale">⤢</button>
@@ -33,6 +34,7 @@
       <button id="editIn" data-t="editIn" title="Edit in…">✎ Edit in…</button>
       <button id="blender" data-t="blender" title="Each save in Blender comes back here">Open in Blender</button>
       <button id="export" data-t="export">Export GLB</button>
+      <button id="saveAsBtn"></button>
       <button id="toGodot" hidden class="primary" data-t="toGodot">Save to the scene</button>
       <button id="toChat" class="primary" data-t="toChat">Send to the chat</button>
     </header>
@@ -45,6 +47,8 @@
       <section class="view" id="view">
         <div class="empty" id="empty" data-t="empty">Open a model from a chat ("Edit in the 3D editor" on its preview), or press ＋ Add: a model, a picture, a shape, a light.</div>
         <div class="stats muted small" id="stats"></div>
+        <!-- After opening an FBX, OBJ, STL or PLY: those files do not say their up axis or unit. -->
+        <div class="importbar" id="importBar" hidden role="group"><span id="impNote"></span><label><input type="checkbox" id="impZ" /> <span id="impZl"></span></label><label><input type="checkbox" id="impCm" /> <span id="impCml"></span></label><button type="button" id="impClose">✕</button></div>
         <!-- Following someone's view (Figma's "Stop following"): whose, and a way out. -->
         <div class="followbar" id="followBar" hidden role="status"><span class="dot" id="followDot"></span><span id="followName"></span><button type="button" id="followStop" data-t="stopFollow">Stop</button></div>
         <!-- A guest: waiting for the owner to open this scene, or the scene is full. -->

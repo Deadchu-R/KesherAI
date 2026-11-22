@@ -611,7 +611,7 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
             return r.items.filter((i) => !input || i.chat?.id !== input.conversationId).slice(0, 500);
           }
           if (!input) return [];
-          const KIND: Record<string, RegExp> = { image: /\.(png|jpe?g|webp|gif|bmp)$/i, video: /\.(mp4|webm|mov|m4v|mkv)$/i, audio: /\.(mp3|wav|m4a|flac|ogg|opus|aac)$/i, model: /\.(glb|gltf|fbx|obj|stl)$/i };
+          const KIND: Record<string, RegExp> = { image: /\.(png|jpe?g|webp|gif|bmp)$/i, video: /\.(mp4|webm|mov|m4v|mkv)$/i, audio: /\.(mp3|wav|m4a|flac|ogg|opus|aac)$/i, model: /\.(glb|gltf|fbx|obj|stl|ply)$/i };
           const r = await api<{ files: Array<{ path: string; size: number; modifiedAt: string }> }>(`/api/conversations/${encodeURIComponent(input.conversationId)}/files`);
           return r.files
             .map((f) => ({ id: `chat:${f.path}`, name: f.path.split("/").pop() ?? f.path, path: f.path, size: f.size, createdAt: f.modifiedAt, kind: Object.keys(KIND).find((k) => KIND[k]!.test(f.path)) }))
@@ -643,11 +643,23 @@ export function PluginFrame({ pluginId, file, title, conversationId, onInsertPro
           const bytes = p.bytes as ArrayBuffer;
           if (!(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 300 * 1024 ** 2) throw new Error("A file up to 300 MB.");
           const name = String(p.name ?? "file").replace(/[\\/]/g, "-").slice(0, 120);
-          if (!/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v|mkv|mp3|wav|m4a|flac|ogg|opus|aac|glb|gltf|fbx|obj|stl)$/i.test(name)) throw new Error("A picture, video, sound or 3D model file.");
+          if (!/\.(png|jpe?g|webp|gif|bmp|mp4|webm|mov|m4v|mkv|mp3|wav|m4a|flac|ogg|opus|aac|glb|gltf|fbx|obj|stl|ply|mtl|bin)$/i.test(name)) throw new Error("A picture, video, sound or 3D model file.");
           const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
           const j = (await res.json()) as { name?: string; error?: string };
           if (!res.ok) throw new Error(j.error ?? String(res.status));
           return { path: `shared/${j.name}` };
+        }
+        // A big file from the computer or the phone, one piece at a time (editor-upload.ts checks type and size).
+        case "media.uploadPiece": {
+          if (!["video", "sound", "model", "image"].some((u) => uses.includes(u))) need("video");
+          if (!input) throw new Error("This page was not opened from a chat.");
+          const bytes = p.bytes as ArrayBuffer;
+          if (!(bytes instanceof ArrayBuffer) || !bytes.byteLength || bytes.byteLength > 16 * 1024 ** 2) throw new Error("A piece up to 16 MB.");
+          const q = new URLSearchParams({ name: String(p.name ?? "file").slice(0, 200), upload: String(p.upload ?? ""), index: String(Number(p.index)), total: String(Number(p.total)), size: String(Number(p.size)) });
+          const res = await fetch(withToken(`/api/conversations/${encodeURIComponent(input.conversationId)}/files/piece?${q}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: bytes });
+          const j = (await res.json()) as { done?: boolean; name?: string; error?: string };
+          if (!res.ok) throw new Error(j.error ?? String(res.status));
+          return j.done ? { done: true, path: `shared/${j.name}` } : { done: false };
         }
         // Where the video the page was opened with changes shot, in seconds (FFmpeg's scene score, on the computer).
         case "video.scenes": {
