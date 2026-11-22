@@ -1,5 +1,6 @@
 import { basename } from "node:path";
 import type { ProviderRegistry } from "@kesher/providers";
+import { type GpuPlan } from "./gpus.js";
 import { LlamaEngine, freePort } from "./llamacpp.js";
 import { engineAsk, type AskJson } from "./tool-router.js";
 
@@ -21,7 +22,7 @@ export class SideEngine {
    * @param deps.args - The main engine's extra arguments.
    * @param deps.registry - Where the model is offered to the chats.
    */
-  constructor(private readonly deps: { dir: string; binary: () => string | undefined; version?: string; args: string[]; registry: ProviderRegistry }) {}
+  constructor(private readonly deps: { dir: string; binary: () => string | undefined; version?: string; args: string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; registry: ProviderRegistry }) {}
 
   /** @returns Whether a model is loaded, and which. */
   status(): { running: boolean; modelPath?: string; modelId?: string; job?: { phase: string; message: string } } {
@@ -48,7 +49,7 @@ export class SideEngine {
     const binary = this.deps.binary();
     if (!binary) throw new Error("Install the engine first (Models → Chat).");
     await this.stop();
-    this.engine = new LlamaEngine({ dir: this.deps.dir, binaryPath: binary, ...(this.deps.version ? { version: this.deps.version } : {}), port: await freePort(), args: this.deps.args, parallel: 1 });
+    this.engine = new LlamaEngine({ dir: this.deps.dir, binaryPath: binary, ...(this.deps.version ? { version: this.deps.version } : {}), port: await freePort(), args: this.deps.args, parallel: 1, ...(this.deps.gpuPlan ? { gpuPlan: this.deps.gpuPlan } : {}) });
     await this.engine.load(modelPath);
     this.deps.registry.remove(SIDE_PROVIDER);
     this.deps.registry.add({ id: SIDE_PROVIDER, type: "openai-compatible", name: "KesherAI engine, beside (llama.cpp)", location: "local", baseUrl: this.engine.baseUrl, apiKey: this.engine.apiKey, options: { llamaCpp: { slots: () => this.engine?.slots() ?? 0 } } });

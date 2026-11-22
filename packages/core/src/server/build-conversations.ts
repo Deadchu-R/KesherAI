@@ -30,6 +30,8 @@ import { setAppearance } from "../routes/parts.js";
 import { queueUnityMoves, unitySceneOf, unityScenes } from "../routes/unity-scene.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
 import { readMedia, speechTools } from "../speech-tools.js";
+import { planGpus } from "../gpus.js";
+import { modelSize, nvidiaGpus } from "./build-engines.js";
 import { SideEngine, sideEngineOf, smallerBeside, translatorModelId } from "../side-engine.js";
 import { parkChatFor, vramShort } from "../slot-park.js";
 import { type AgentTool } from "@kesher/agent";
@@ -192,7 +194,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // Routing by meaning: a tiny call to the model the engine has loaded (never in a self-work worker: not its engine).
     routeAsk: () => (worker ? undefined : engineAsk({ baseUrl: () => engine.baseUrl, apiKey: engine.apiKey, ready: () => engine.status().running && !!engine.status().modelPath, slots: () => engine.slots(), parallelChats: () => engine.parallelChats() })),
     // "Auto": the router's tiny call goes to the small model beside the main one when one is loaded.
-    besideAsk: () => (worker ? undefined : sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })).asker()),
+    besideAsk: () => (worker ? undefined : sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)), registry })).asker()),
     saveConfig: () => persist(),
     ...(helperEngine ? { helperEngine } : {}),
     ...(translator ? { translator } : {}),
@@ -202,9 +204,9 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     // "+" → a recording or a video: its speech as text and a few frames, before the model answers.
     ...(config.parts.voice === false ? {} : { readMedia: (path: string) => readMedia({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) }, path) }),
     // Model size per turn: a small model the user loaded beside the main one answers simple messages.
-    smallModel: () => smallerBeside(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })).status(), engine.status().modelPath, fileSize),
+    smallModel: () => smallerBeside(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)), registry })).status(), engine.status().modelPath, fileSize),
     // The translator, when it is a GGUF file (Settings → Chats → Model team): loaded beside the main model.
-    translatorModel: (pick: string) => translatorModelId(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, registry })), pick),
+    translatorModel: (pick: string) => translatorModelId(sideEngineOf(registry, () => new SideEngine({ dir: paths.engines, binary: () => engine.status().binaryPath, ...(config.engines.llamaVersion ? { version: config.engines.llamaVersion } : {}), args: config.engines.llamaServerArgs, gpuPlan: async (modelPath) => planGpus(await nvidiaGpus(), config.engines.gpus, await modelSize(modelPath)), registry })), pick),
     tor,
     faults,
     doctorState: async () => {
