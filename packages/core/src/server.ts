@@ -64,6 +64,7 @@ import { managedPolicy, policyCheck } from "./business.js";
 import { ProjectFacts } from "./project-facts.js";
 import { ModelUse } from "./pc-fix.js";
 import { TaskBoard } from "./task-board.js";
+import { saveHubDiag } from "./hub-diag.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
@@ -775,6 +776,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     busy: () => services.selfWork?.current?.status === "running",
     // Another device wrote to the user's Google Drive: pull now (tasks-sync.ts).
     onSync: () => services.tasksSync?.onPing(),
+    // The hub's own problem log goes to logs/hub-diag.json (and its newest error to main.log): hub-diag.ts.
+    saveDiag: (snap, reason) => void saveHubDiag(join(paths.root, "logs"), snap, reason),
     approvals: {
       pending: () => [
         // A chat's own steps and its sub-agents' steps (`helper` names who asks; the hub page shows it as "who").

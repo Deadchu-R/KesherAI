@@ -12,6 +12,7 @@
  *   `POST /api/pair/check`, `POST /api/pair/approve`, `POST /api/devices/:id/revoke`, `POST /api/kill`.
  * - The Claude connector (connector.ts): `/.well-known/oauth-*`, `/oauth/*`, `/mcp`; and, signed in,
  *   `POST /api/oauth/check`, `POST /api/oauth/decide`, `POST /api/connections/:id/revoke`.
+ * - Device token (Bearer), read-only: `GET /api/diag`, the in-memory diagnostics ring (diag.ts; rate limited, never writes).
  * - Internal (cron only): `POST /internal/cleanup`.
  *
  * When storage refuses (Cloudflare's daily quota of rows written is used up), an HTTP call answers 503 with
@@ -21,9 +22,11 @@ import type { HubFrame } from "../../../packages/shared/src/hub.js";
 import { fireClaudeTask } from "./claude-cloud.js";
 import { connectorOwnerRoute, connectorRoute, isConnectorPath } from "./connector.js";
 import { cfGlobals, upgradeResponse, type CfWebSocket, type DurableObjectState, type HubEnvBindings } from "./cf.js";
+import { DiagRing, diagPath } from "./diag.js";
 import { googleKeys, verifyGoogleIdToken } from "./google.js";
 import { bearer, cookie, json, readJson, sameOrigin, SESSION_COOKIE, sessionCookie } from "./http.js";
 import { Hub, isHubError, type DeviceSockets } from "./hub.js";
+import { LIMITS } from "./rate-limit.js";
 import { SqlStore } from "./sql-store.js";
 import { guardStore, secondsToUtcMidnight, storageCode } from "./storage-guard.js";
 import { vapidFromEnv } from "./web-push.js";
@@ -68,6 +71,8 @@ function socketsOf(ctx: DurableObjectState): DeviceSockets {
 /** The hub's Durable Object (bound as `HUB` in wrangler.toml). */
 export class HubObject {
   private readonly hub: Hub;
+  /** Recent problems, in memory only (diag.ts); read by the PC through `GET /api/diag`. */
+  private readonly diag = new DiagRing();
 
   /**
    * @param ctx - The object's state.
@@ -81,6 +86,7 @@ export class HubObject {
       config: { allowedEmail: env.ALLOWED_EMAIL, hubPrivateJwk: env.HUB_PRIVATE_KEY, claude: { triggerId: env.CLAUDE_TRIGGER_ID, token: env.CLAUDE_FIRE_TOKEN }, vapid: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT) },
       verifyIdToken: (t) => verifyGoogleIdToken(t, env.GOOGLE_CLIENT_ID ?? "", keyFor, Date.now()),
       fireClaude: (text, trigger) => fireClaudeTask(text, trigger),
+      warn: (message) => this.diag.add({ kind: "storage", where: "bookkeeping", message }),
     });
     // Pings are answered without waking the object (free while it hibernates).
     const { WebSocketRequestResponsePair } = cfGlobals();
@@ -94,14 +100,38 @@ export class HubObject {
    * @returns The answer.
    */
   async fetch(req: Request): Promise<Response> {
+    const t0 = Date.now();
+    const path = diagPath(new URL(req.url).pathname);
     try {
-      return await this.route(req);
+      const res = await this.route(req);
+      // Every answer that is not a success is kept with its reason (the socket upgrade's 101 is a success).
+      if (res.status !== 101 && (res.status < 200 || res.status >= 300)) {
+        const body = (await res.clone().json().catch(() => undefined)) as { error?: unknown; message?: unknown } | undefined;
+        this.diag.add({ kind: "http", where: "http", method: req.method, path, status: res.status, ...(typeof body?.error === "string" ? { code: body.error } : {}), ...(typeof body?.message === "string" ? { message: body.message } : {}), ms: Date.now() - t0 });
+      }
+      return res;
     } catch (e) {
       const code = storageCode(e);
-      if (!code) throw e;
+      if (!code) {
+        this.diag.error("http", e, { method: req.method, path, ms: Date.now() - t0 });
+        throw e;
+      }
       console.warn(`hub: storage refused a request (${code})`);
-      return json({ error: code, message: e instanceof Error ? e.message : code }, 503, { "retry-after": String(secondsToUtcMidnight(Date.now())) });
+      const message = e instanceof Error ? e.message : code;
+      this.diag.add({ kind: "storage", where: "http", method: req.method, path, status: 503, code, message, ms: Date.now() - t0 });
+      return json({ error: code, message }, 503, { "retry-after": String(secondsToUtcMidnight(Date.now())) });
     }
+  }
+
+  /**
+   * `GET /api/diag`: the diagnostics ring, for a paired device. Read-only: the token is looked up (a read), the rate
+   * limit lives in memory, and nothing is written.
+   */
+  private async diagRoute(req: Request): Promise<Response> {
+    const d = await this.hub.deviceForToken(bearer(req));
+    if (!d) return json({ error: "Unknown device." }, 401);
+    if (!this.hub.limits.take(`diag:${d.id}`, LIMITS.diag)) return json({ error: "Too many tries." }, 429);
+    return json(this.diag.snapshot());
   }
 
   /** {@link fetch}'s routing (storage errors are turned into 503 answers there). */
@@ -111,7 +141,15 @@ export class HubObject {
     const ip = req.headers.get("x-kh-ip") ?? "unknown";
     const answer = (r: unknown) => (isHubError(r) ? json({ error: r.error }, r.status) : json(r));
 
-    if (path === "/internal/cleanup" && req.method === "POST") return json({ expired: this.hub.cleanup() });
+    if (path === "/internal/cleanup" && req.method === "POST") {
+      try {
+        return json({ expired: this.hub.cleanup() });
+      } catch (e) {
+        this.diag.error("cleanup", e);
+        throw e;
+      }
+    }
+    if (path === "/api/diag" && req.method === "GET") return this.diagRoute(req);
 
     if (path === "/ws/device") {
       if (req.headers.get("upgrade")?.toLowerCase() !== "websocket") return json({ error: "Expected a WebSocket." }, 426);
@@ -124,9 +162,15 @@ export class HubObject {
       this.ctx.acceptWebSocket(server, [device.id]);
       server.serializeAttachment({ deviceId: device.id });
       // The socket opens even when storage refuses writes (the daily quota): the open's bookkeeping is skipped.
+      // Any other failure there is recorded too, and the socket still opens: the PC's hello and beats carry the state.
       await this.hub.onOpen(device.id).catch((e: unknown) => {
-        if (!storageCode(e)) throw e;
-        console.warn("hub: open bookkeeping skipped (storage refused)");
+        if (storageCode(e)) {
+          console.warn("hub: open bookkeeping skipped (storage refused)");
+          this.diag.add({ kind: "storage", where: "open", message: e instanceof Error ? e.message : "storage refused" });
+        } else {
+          console.warn("hub: open bookkeeping failed");
+          this.diag.error("open", e);
+        }
       });
       return upgradeResponse(pair[0]);
     }
@@ -214,6 +258,7 @@ export class HubObject {
       await this.hub.onFrame(id, typeof message === "string" ? message : null);
     } catch (e) {
       // The frame is dropped; the device stays connected (the next snapshot or beat carries the state again).
+      this.recordSocketError("socket-message", e);
       if (!storageCode(e)) throw e;
     }
   }
@@ -228,8 +273,15 @@ export class HubObject {
     try {
       if (id) this.hub.onClose(id);
     } catch (e) {
+      this.recordSocketError("socket-close", e);
       if (!storageCode(e)) throw e;
     }
+  }
+
+  /** Puts a socket handler's failure in the diagnostics ring (a refused write as a storage warning). */
+  private recordSocketError(where: string, e: unknown): void {
+    if (storageCode(e)) this.diag.add({ kind: "storage", where, code: storageCode(e), message: e instanceof Error ? e.message : "storage refused" });
+    else this.diag.error(where, e);
   }
 
   /**

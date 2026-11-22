@@ -17,6 +17,8 @@ export const LIMITS = {
   pairPoll: { burst: 40, perMs: 60_000 },
   pairApprove: { burst: 10, perMs: 60_000 },
   ticket: { burst: 10, perMs: 60_000 },
+  /** `GET /api/diag` per device: the PC reads it on a failed connect and every 10 minutes. */
+  diag: { burst: 6, perMs: 60_000 },
   /** Tasks (to a PC or the cloud) per sending device: matches the scheduled task's 30 fires an hour. */
   task: { burst: 30, perMs: 3_600_000 },
   /** Any socket frame per device. */

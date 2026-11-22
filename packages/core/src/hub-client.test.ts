@@ -528,3 +528,100 @@ test("going to sleep: the hub gets one clean away frame on a live link, nothing 
     { t: "away", state: "awake", note: {} },
   ]);
 });
+
+test("a failed ticket names the step, the status and the reason, and the hub's diagnostics are fetched and saved", async () => {
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  const saved: Array<{ reason: string; entries: number }> = [];
+  const paths: string[] = [];
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    saveDiag: (snap, reason) => saved.push({ reason, entries: snap.entries.length }),
+    fetch: (async (url: string) => {
+      const path = new URL(url).pathname;
+      paths.push(path);
+      if (path === "/api/diag") return new Response(JSON.stringify({ now: "n", startedAt: "s", total: 1, entries: [{ at: "2026-11-22T10:00:00.000Z", kind: "error", where: "http", message: "boom" }] }), { status: 200 });
+      return new Response(JSON.stringify({ error: "hub-unavailable", message: "The hub could not answer (boom)" }), { status: 503 });
+    }) as unknown as typeof fetch,
+    openSocket: () => assert.fail("no socket without a ticket"),
+  });
+  client.start();
+  await wait(30);
+  const st = client.status();
+  assert.equal(st.errorCode, "hub-error");
+  assert.equal(st.lastError, "ticket 503 hub-unavailable: The hub could not answer (boom)");
+  assert.deepEqual(paths, ["/api/ticket", "/api/diag"]);
+  assert.deepEqual(saved, [{ reason: st.lastError, entries: 1 }]);
+  client.stop();
+});
+
+test("a plain 500 from the ticket route (not JSON) is shown as 'ticket 500: <text>'", async () => {
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    fetch: (async () => new Response("<html><h1>Error 1101</h1> Worker threw</html>", { status: 500 })) as unknown as typeof fetch,
+    openSocket: () => assert.fail("no socket without a ticket"),
+  });
+  client.start();
+  await wait(30);
+  assert.equal(client.status().lastError, "ticket 500: Error 1101 Worker threw");
+  client.stop();
+});
+
+test("a refused socket upgrade says 'socket upgrade 500: <message>' and fetches the diagnostics", async () => {
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  const reasons: string[] = [];
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    saveDiag: (_snap, reason) => reasons.push(reason),
+    fetch: (async (url: string) => (new URL(url).pathname === "/api/ticket" ? new Response(JSON.stringify({ ticket: "t1", rotateDue: false }), { status: 200 }) : new Response(JSON.stringify({ now: "", startedAt: "", total: 0, entries: [] }), { status: 200 }))) as unknown as typeof fetch,
+    openSocket: (_url, on) => {
+      queueMicrotask(() => on.error?.('Unexpected server response: 500 {"error":"x"}'));
+      return { send: () => undefined, close: () => undefined };
+    },
+  });
+  client.start();
+  await wait(30);
+  assert.equal(client.status().lastError, 'socket upgrade 500: {"error":"x"}');
+  assert.deepEqual(reasons, ['socket upgrade 500: {"error":"x"}']);
+  client.stop();
+});
+
+test("while connected the diagnostics are fetched on the 10-minute timer", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  const reasons: string[] = [];
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    saveDiag: (_snap, reason) => reasons.push(reason),
+    fetch: (async (url: string) => (new URL(url).pathname === "/api/ticket" ? new Response(JSON.stringify({ ticket: "t1", rotateDue: false }), { status: 200 }) : new Response(JSON.stringify({ now: "", startedAt: "", total: 0, entries: [] }), { status: 200 }))) as unknown as typeof fetch,
+    openSocket: (_url, on) => {
+      queueMicrotask(() => on.open());
+      return { send: () => undefined, close: () => undefined };
+    },
+  });
+  client.start();
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(client.status().connected, true);
+  t.mock.timers.tick(10 * 60_000);
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(reasons, ["every 10 minutes"]);
+  client.stop();
+});

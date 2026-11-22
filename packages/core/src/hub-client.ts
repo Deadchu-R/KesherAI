@@ -48,6 +48,7 @@ import {
 import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
 import { hubBoardSnapshot } from "./hub-board.js";
+import { parseHubDiag, type HubDiagSnapshot } from "./hub-diag.js";
 import type { TaskBoard } from "./task-board.js";
 
 /** The hub part of KesherAI's config. */
@@ -141,6 +142,11 @@ export interface HubClientDeps {
   boardCommand?: (taskId: string, cmd: HubBoardCommand) => Promise<{ ok: boolean; text: string }>;
   /** Another device wrote to the owner's Google Drive (a bare `sync` ping): pull now (tasks-sync.ts). */
   onSync?: () => void;
+  /**
+   * The hub's diagnostics (`GET /api/diag`), fetched after a failed connect and every 10 minutes while connected;
+   * the app saves them to `logs/hub-diag.json` and the newest error to `main.log` (hub-diag.ts).
+   */
+  saveDiag?: (snap: HubDiagSnapshot, reason: string) => void;
 }
 
 /**
@@ -195,6 +201,9 @@ const PING_MS = 30_000;
 const DEAD_MS = 100_000;
 /** How often the approvals waiting on this PC are compared with the last snapshot sent (in memory; sent only on change). */
 const APPROVALS_MS = 3000;
+/** The hub's diagnostics are read this often while connected, and never more often than {@link DIAG_GAP_MS} after a failure. */
+const DIAG_MS = 10 * 60_000;
+const DIAG_GAP_MS = 60_000;
 const MARK = /hub-task:([\w-]{1,64}):([\w-]{1,64})/;
 
 /** How many of the newest inbox tasks are reported (older ones were reported when they changed). */
@@ -293,6 +302,19 @@ function wsSocket(url: string, on: HubSocketEvents): HubSocket {
   ws.on("open", () => on.open());
   ws.on("message", (data) => on.message(String(data)));
   ws.on("close", () => on.close());
+  // A refused upgrade (a 500 from the hub, say): its status and the start of its body say why, instead of a bare status.
+  ws.on("unexpected-response", (_req, res) => {
+    let body = "";
+    res.on("data", (c: Buffer) => {
+      if (body.length < 300) body += c.toString("utf8");
+    });
+    const done = () => {
+      on.error?.(`Unexpected server response: ${res.statusCode} ${body.replace(/\s+/g, " ").slice(0, 160)}`.trim());
+      ws.terminate();
+    };
+    res.on("end", done);
+    res.on("error", done);
+  });
   ws.on("error", (e) => on.error?.(e.message));
   return { send: (t) => ws.send(t), close: () => ws.close(), kill: () => ws.terminate() };
 }
@@ -306,6 +328,8 @@ export class HubClient {
   private retry = 0;
   private retryTimer?: NodeJS.Timeout;
   private beatTimer?: NodeJS.Timeout;
+  private diagTimer?: NodeJS.Timeout;
+  private diagAt = 0;
   private pingTimer?: NodeJS.Timeout;
   private pollTimer?: NodeJS.Timeout;
   private approvalsTimer?: NodeJS.Timeout;
@@ -453,14 +477,54 @@ export class HubClient {
     return this.key;
   }
 
-  private async post(path: string, body: unknown, token?: string): Promise<{ status: number; data: Record<string, unknown> }> {
+  private async post(path: string, body: unknown, token?: string): Promise<{ status: number; data: Record<string, unknown>; note?: string }> {
     const r = await this.fetch(`${this.s.url}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body ?? {}),
       signal: AbortSignal.timeout(15_000),
     });
-    return { status: r.status, data: ((await r.json().catch(() => ({}))) ?? {}) as Record<string, unknown> };
+    const text = await r.text().catch(() => "");
+    try {
+      return { status: r.status, data: (JSON.parse(text) ?? {}) as Record<string, unknown> };
+    } catch {
+      // Not JSON (Cloudflare's own error page, say): its first words go into the error text.
+      return { status: r.status, data: {}, ...(text ? { note: text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 100) } : {}) };
+    }
+  }
+
+  /**
+   * The exact failing step as the error text: `ticket 503 hub-storage-limit`, `ticket 500 hub-unavailable: <message>`.
+   *
+   * @param step - What was being done (`ticket`, `rotate`, `ticket after rotate`).
+   * @param r - The answer.
+   * @returns The text.
+   */
+  private stepText(step: string, r: { status: number; data: Record<string, unknown>; note?: string }): string {
+    const code = typeof r.data.error === "string" ? r.data.error.slice(0, 80) : "";
+    const message = typeof r.data.message === "string" && !code.startsWith("hub-storage") ? r.data.message : (r.note ?? "");
+    return `${step} ${r.status}${code ? ` ${code}` : ""}${message ? `: ${message.slice(0, 160)}` : ""}`;
+  }
+
+  /**
+   * Fetches the hub's diagnostics (`GET /api/diag`) and hands them to the app to save. Quiet on any failure; after a
+   * failed connect it runs at most once a minute (the hub limits it too).
+   *
+   * @param reason - Why now (`ticket 500 …`, `every 10 minutes`).
+   * @param force - Skip the one-a-minute gap (the 10-minute timer).
+   */
+  private async fetchDiag(reason: string, force = false): Promise<void> {
+    if (!this.deps.saveDiag || !this.s.token || !this.s.url) return;
+    if (!force && Date.now() - this.diagAt < DIAG_GAP_MS) return;
+    this.diagAt = Date.now();
+    try {
+      const r = await this.fetch(`${this.s.url}/api/diag`, { headers: { authorization: `Bearer ${this.s.token}` }, signal: AbortSignal.timeout(15_000) });
+      if (r.status !== 200) return;
+      const snap = parseHubDiag(await r.json().catch(() => undefined));
+      if (snap) this.deps.saveDiag(snap, reason);
+    } catch {
+      // The hub is not answering: the failure itself is in lastError.
+    }
   }
 
   /**
@@ -542,6 +606,7 @@ export class HubClient {
     this.gen++;
     clearTimeout(this.retryTimer);
     clearInterval(this.beatTimer);
+    clearInterval(this.diagTimer);
     clearInterval(this.pingTimer);
     clearInterval(this.approvalsTimer);
     clearTimeout(this.boardTimer);
@@ -596,11 +661,13 @@ export class HubClient {
       if (this.stopped) return;
       if (r.status === 401 || r.status === 403) return this.lost("The hub no longer knows this PC. Pair it again.");
       if (r.status === 503 && r.data.error === "hub-storage-limit") {
-        this.fail("hub-limit", "The hub reached Cloudflare's daily limit; it comes back at midnight UTC.");
+        this.fail("hub-limit", this.stepText("ticket", r));
+        void this.fetchDiag(this.stepText("ticket", r));
         return this.laterAt(afterUtcMidnight(Date.now()));
       }
-      if (r.status === 503 && r.data.error === "hub-storage-error") {
-        this.fail("hub-error", "The hub's storage failed.");
+      if (r.status === 503 && (r.data.error === "hub-storage-error" || r.data.error === "hub-unavailable")) {
+        this.fail("hub-error", this.stepText("ticket", r));
+        void this.fetchDiag(this.stepText("ticket", r));
         return this.later();
       }
       if (r.status === 503) {
@@ -612,7 +679,8 @@ export class HubClient {
         return this.later();
       }
       if (r.status !== 200 || typeof r.data.ticket !== "string") {
-        this.fail("hub-error", `The hub answered ${r.status}${typeof r.data.error === "string" ? `: ${r.data.error.slice(0, 120)}` : ""}.`);
+        this.fail("hub-error", this.stepText("ticket", r));
+        void this.fetchDiag(this.stepText("ticket", r));
         return this.later();
       }
       if (r.data.rotateDue === true) {
@@ -622,7 +690,8 @@ export class HubClient {
           await this.deps.persist();
           r = await this.post("/api/ticket", {}, this.s.token);
           if (r.status !== 200 || typeof r.data.ticket !== "string") {
-            this.fail("hub-error", `The hub answered ${r.status} after the token rotated.`);
+            this.fail("hub-error", this.stepText("ticket after rotate", r));
+            void this.fetchDiag(this.stepText("ticket after rotate", r));
             return this.later();
           }
         }
@@ -652,6 +721,10 @@ export class HubClient {
         clearInterval(this.beatTimer);
         this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
         this.beatTimer.unref?.();
+        // The hub's own problem log, read every 10 minutes while connected.
+        clearInterval(this.diagTimer);
+        this.diagTimer = setInterval(() => void this.fetchDiag("every 10 minutes", true), DIAG_MS);
+        this.diagTimer.unref?.();
         clearInterval(this.pingTimer);
         this.pingTimer = setInterval(() => this.ping(), PING_MS);
         this.pingTimer.unref?.();
@@ -670,14 +743,23 @@ export class HubClient {
         void this.onMessage(text).catch(() => undefined);
       },
       error: (message) => {
-        if (!opened) this.fail("socket", `The live link did not open: ${message.slice(0, 120)}`);
+        if (opened) return;
+        // "Unexpected server response: 500 {…}" is the upgrade being refused: name the step and the status.
+        const m = /^Unexpected server response: (\d{3})\s*(.*)$/.exec(message);
+        const text = m ? `socket upgrade ${m[1]}${m[2] ? `: ${m[2]}` : ""}` : `socket open failed: ${message.slice(0, 120)}`;
+        this.fail("socket", text.slice(0, 220));
+        void this.fetchDiag(text);
       },
       close: () => {
         if (this.gen !== gen) return;
         if (opened && !this.errorCode) this.fail("socket", "The live link was cut; reconnecting.");
-        else if (!opened && !this.errorCode) this.fail("socket", "The live link did not open.");
+        else if (!opened && !this.errorCode) {
+          this.fail("socket", "socket closed before it opened");
+          void this.fetchDiag("socket closed before it opened");
+        }
         this.connected = false;
         clearInterval(this.beatTimer);
+        clearInterval(this.diagTimer);
         clearInterval(this.pingTimer);
         clearInterval(this.approvalsTimer);
         clearTimeout(this.boardTimer);

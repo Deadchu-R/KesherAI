@@ -128,6 +128,8 @@ export interface HubDeps {
   now?: () => number;
   /** Runs a function later (default: an unref'd setTimeout; tests pass their own). */
   schedule?: (fn: () => void, ms: number) => void;
+  /** Told about each skipped best-effort write (the Durable Object puts it in its diagnostics ring). */
+  warn?: (message: string) => void;
 }
 
 /** An HTTP-style failure: the status and a short message (never echoing input). */
@@ -261,7 +263,9 @@ export class Hub {
     try {
       write();
     } catch (e) {
-      console.warn(`hub: a write was skipped (${e instanceof Error ? e.message : String(e)})`.slice(0, 300));
+      const text = `a write was skipped (${e instanceof Error ? e.message : String(e)})`.slice(0, 300);
+      console.warn(`hub: ${text}`);
+      this.deps.warn?.(text);
     }
   }
 
@@ -282,8 +286,10 @@ export class Hub {
         if (this.deps.config.hubPrivateJwk) return await importPrivateJwk(this.deps.config.hubPrivateJwk);
         let jwk = this.store.getSetting("hubKey");
         if (!jwk) {
-          jwk = await exportPrivateJwk((await generateHubKeys(true)).privateKey);
-          this.store.setSetting("hubKey", jwk);
+          const made = await exportPrivateJwk((await generateHubKeys(true)).privateKey);
+          jwk = made;
+          // A refused write (the daily quota) keeps the key in memory until the hub sleeps: the welcome still carries it.
+          this.bestEffort(() => this.store.setSetting("hubKey", made));
         }
         return await importPrivateJwk(jwk);
       } catch {

@@ -7,6 +7,7 @@
  */
 import type { ExecutionContext, HubEnvBindings } from "./cf.js";
 import { isConnectorPath } from "./connector.js";
+import { scrub } from "./diag.js";
 import { json } from "./http.js";
 import { vapidFromEnv } from "./web-push.js";
 
@@ -41,7 +42,8 @@ export default {
       } catch (e) {
         // A Durable Object that cannot start or answer gives a clear JSON 503 instead of Cloudflare's Error 1101 page.
         console.error(`hub: the object failed (${e instanceof Error ? e.message : String(e)})`);
-        return json({ error: "hub-unavailable", message: "The hub could not answer; it tries again shortly." }, 503, { "retry-after": "120" });
+        // The reason rides along (scrubbed), so the PC's log shows what failed instead of a bare 503.
+        return json({ error: "hub-unavailable", message: `The hub could not answer; it tries again shortly. (${scrub(e instanceof Error ? e.message : String(e))})` }, 503, { "retry-after": "120" });
       }
     }
     return json({ error: "Not found." }, 404);
