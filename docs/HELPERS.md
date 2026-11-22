@@ -79,3 +79,39 @@ then finds them by what they show.
 
 Next to each model on the Models page: what llama.cpp will put on the graphics card, the context it can keep, and
 how much system memory the rest needs next to what is free now; a warning when the model would be read from the disk.
+
+## Claude helpers: live progress on the phone and in the hub
+
+When the lead Claude starts an outside helper (a Claude helper agent that KesherAI does not run itself), it tells
+KesherAI, and the phone shows one live notification for it ("Claude: <title>", the latest step, steps so far, the
+time; replaced by a summary when it ends). The same run is a row in the hub's **Claude** curtain. No Claude tokens go
+into the mid-run updates: the steps come from git.
+
+**The lead calls** (from this computer, or a paired device), at the helper's start and its end:
+
+```
+POST /api/agents/external
+{ "id": "claude-live-notify", "title": "Live Claude-helper notifications", "status": "running", "steps": 4 }
+{ "id": "claude-live-notify", "status": "done", "result": "Route, watcher and tests are in." }   (or "failed")
+```
+
+`id` is letters, digits, `.`, `_`, `-` (at most 40); `status` is `running`, `done` or `failed`; `title` (120), `step` (a
+step the lead wants to add, 120), `steps` (how many are expected, 1 to 200) and `result` (400) are optional and are cut
+to those limits. `GET /api/agents/external` lists the runs. A run nobody reports on or commits for during 3 hours is
+closed as failed.
+
+**The helper adds a trailer line** to each of its commits, with the same id (before the Co-Authored-By lines):
+
+```
+Helper: claude-live-notify
+```
+
+While a run is open, KesherAI runs `git fetch origin main` every minute in the task inbox's git project (Settings >
+Task inbox) and every new commit on `origin/main` with that trailer becomes a step of the run (its subject and short
+sha). Commits without the trailer, or for a run that is not open, are ignored. Code: `packages/core/src/external-agents.ts`.
+
+**While KesherAI is off** the lead cannot call the route. When KesherAI starts (about 20 s later), it looks at git from
+the last `origin/main` commit it saw (kept in `external-agents.json`; with none, the last 12 hours): every `Helper: <id>`
+commit that belongs to no known run makes a finished "Claude: <id>" run with those commits as steps, with one summary
+note on the phone (none when the run ended more than 12 hours ago). KesherAI only reads git; it never sends a helper's
+progress back to Claude.

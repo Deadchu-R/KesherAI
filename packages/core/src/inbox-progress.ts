@@ -19,7 +19,7 @@ export const progressRef = (taskId: string): string => `agy-${taskId}`;
 /** Updates at most this often, unless the step changed. */
 export const PROGRESS_EVERY_MS = 20_000;
 /** Even a step change waits this long after the last update (a burst of tool calls is one update). */
-const MIN_GAP_MS = 3_000;
+export const MIN_GAP_MS = 3_000;
 /** Cells of the text bar. */
 const CELLS = 5;
 

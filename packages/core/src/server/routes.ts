@@ -28,6 +28,7 @@ import { installableRoutes } from "../routes/installables.js";
 import { pipelineRoutes } from "../routes/pipelines.js";
 import { notificationRoutes } from "../routes/notifications.js";
 import { inboxRoutes } from "../routes/inbox.js";
+import { externalAgentRoutes } from "../routes/external-agents.js";
 import { promptRoutes } from "../routes/prompts.js";
 import { personaRoutes } from "../routes/personas.js";
 import { civitaiRoutes } from "../routes/civitai.js";
@@ -204,6 +205,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await installableRoutes(app, services);
   await notificationRoutes(app, services);
   await inboxRoutes(app, services);
+  await externalAgentRoutes(app, services);
   await mcpServerRoutes(app, services);
   await phoneRoutes(app, services);
   await githubRoutes(app, services);

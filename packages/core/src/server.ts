@@ -16,6 +16,7 @@ import cors from "@fastify/cors";
 import compress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import { appendFileSync, existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { ensureMemoryWatchdog } from "./memory-watchdog.js";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
@@ -75,6 +76,7 @@ import { nextInLineTitle } from "./inbox-runner.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
 import { boardCommand } from "./hub-board.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
+import { ExternalAgents, gitIn } from "./external-agents.js";
 import { AgentActivity, HELPER_ASKS, helperSnapshot, INBOX_APPROVALS, inboxRunId, inboxSnapshot, type RunSnapshot } from "./agent-activity.js";
 import { AgentLabels } from "./agent-labels.js";
 import { assignTask, type AssignDeps } from "./task-assign.js";
@@ -696,6 +698,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     movedOut: (id, where) => taskInbox.movedOut(id, where),
   };
   services.assignTask = (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm);
+  // Outside Claude helpers the lead reports (POST /api/agents/external): hub row, phone progress note, commit steps (external-agents.ts).
+  services.externalAgents = new ExternalAgents({
+    observe: (snap) => activity.observe(snap),
+    phone: (n) => void notifier.phone({ title: n.title, body: n.body, ref: n.ref, path: "#/task-inbox", tags: ["robot"], ...(n.progress ? { progress: n.progress } : {}) }).catch(() => undefined),
+    git: () => (config.taskInbox.repo ? gitIn(config.taskInbox.repo) : undefined),
+    // The last origin/main commit looked at, kept across restarts, so a catch-up starts where the app stopped.
+    store: {
+      load: async () => (JSON.parse(await readFile(join(paths.root, "external-agents.json"), "utf8")) as { base?: string }).base,
+      save: (base) => void writeFile(join(paths.root, "external-agents.json"), JSON.stringify({ base })).catch(() => undefined),
+    },
+  });
   // A chat's helper that ended in the background or waits for an answer: on this computer and the phone (notify.ts).
   const chatTitle = (id: string) => library.summary(id)?.title ?? "KesherAI";
   helperRuns.on("end", (r: HelperRunInfo & { chatId: string }) => notifier.onHelperEnd(r, chatTitle(r.chatId)));
@@ -1012,6 +1025,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       helloAgain = hub;
       if (!options.worker && features.remote) void tailscaleWatch.start().catch((err: Error) => console.warn(`[tailscale] ${err.message}`));
       if (!options.worker) hub.start();
+      if (!options.worker) setTimeout(() => void services.externalAgents?.catchUp().catch(() => undefined), 20_000).unref();
       if (!options.worker) services.tasksSync?.start();
       // Helpers a restart stopped continue (and the ended ones show again); the main app only, never a worker.
       // Then the "Continue what was running" card reads the record of the last close (it lists those helpers too).
@@ -1047,6 +1061,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       // A restart (from the phone, or to install an update) keeps the tunnel, so its address stays the same.
       if (services.restarting) services.tunnel.detach();
       else services.tunnel.stop();
+      services.externalAgents?.close();
       mcp.close();
       devices.close();
       journal.close();
