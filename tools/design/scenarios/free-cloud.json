@@ -1,0 +1,626 @@
+{
+ "group": "ענן חינמי · Free cloud",
+ "now": "2026-11-22T09:00:00Z",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "FreeCloudList",
+   "title": "הגדרות › חשבונות: ספקי ענן חינמיים (Groq, OpenRouter, Cloudflare, Mistral, GLM): מצב כל ספק, סדר הניסיון ושני מתגים — רקע ועוזרים, וצ'אט כשהמודל כבוי",
+   "titleEn": "Settings › Accounts: Free cloud helpers: state of each provider, the order tried, and two switches (background work, chat when the local model is off)",
+   "route": "#/settings/accounts",
+   "height": {
+    "desktop": 1500,
+    "phone": 2600
+   },
+   "steps": [
+    {
+     "wait": "#free-cloud"
+    },
+    {
+     "scroll": "#free-cloud"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/free-cloud",
+     "json": {
+      "settings": {
+       "order": [
+        "fc-groq",
+        "fc-openrouter",
+        "fc-cloudflare",
+        "fc-mistral",
+        "fc-zhipu"
+       ],
+       "disabled": [
+        "fc-zhipu"
+       ],
+       "chatFallback": false,
+       "backgroundFallback": true,
+       "models": {
+        "fc-openrouter": "meta-llama/llama-3.3-70b-instruct:free"
+       },
+       "cloudflareAccountId": "",
+       "zhipuRegion": "cn"
+      },
+      "providers": [
+       {
+        "id": "fc-groq",
+        "name": "Groq",
+        "free": {
+         "he": "שכבה חינמית קבועה, בלי כרטיס אשראי: כ-30 בקשות בדקה ו-1,000 עד 2,000 ביום.",
+         "en": "A permanent free tier, no card: about 30 requests a minute and 1,000 to 2,000 a day."
+        },
+        "privacy": {
+         "he": "לא מאמנים מודלים על הפרומפטים. נשמר עד 30 יום רק לאבחון תקלות ולמניעת ניצול לרעה.",
+         "en": "Prompts are not used to train models. Kept up to 30 days for troubleshooting and abuse checks only."
+        },
+        "link": "https://console.groq.com/docs/rate-limits",
+        "keyLink": "https://console.groq.com/keys",
+        "defaultModel": "llama-3.3-70b-versatile",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 4,
+          "limit": 30
+         },
+         "day": {
+          "used": 212,
+          "limit": 1000
+         },
+         "model": "llama-3.3-70b-versatile"
+        }
+       },
+       {
+        "id": "fc-openrouter",
+        "name": "OpenRouter (:free)",
+        "free": {
+         "he": "רק מודלים שמסתיימים ב-:free: 20 בקשות בדקה ו-50 ביום בלי רכישה. KesherAI לא משתמש באף מודל בתשלום.",
+         "en": "Only models ending in :free: 20 requests a minute and 50 a day without a purchase. KesherAI never uses a paid model."
+        },
+        "privacy": {
+         "he": "לא נשמרים גופי הפרומפטים כברירת מחדל. בחשבון יש מתג שמונע ספקים שמאמנים על הפרומפטים: כדאי להפעיל אותו.",
+         "en": "Prompt bodies are not logged by default. The account has a switch that avoids providers that train on prompts: turn it on."
+        },
+        "link": "https://openrouter.ai/docs/api-reference/limits",
+        "keyLink": "https://openrouter.ai/keys",
+        "defaultModel": "openrouter/free",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "limited",
+         "minute": {
+          "used": 20,
+          "limit": 20
+         },
+         "day": {
+          "used": 50,
+          "limit": 50
+         },
+         "model": "openrouter/free",
+         "until": {
+          "$inMs": "7m"
+         }
+        }
+       },
+       {
+        "id": "fc-cloudflare",
+        "name": "Cloudflare Workers AI",
+        "free": {
+         "he": "10,000 Neurons ביום בחינם (מתאפס ב-00:00 UTC), בלי כרטיס. מעבר לזה הבקשה נכשלת ואין חיוב.",
+         "en": "10,000 Neurons a day free (resets at 00:00 UTC), no card. Beyond that the request fails and nothing is charged."
+        },
+        "privacy": {
+         "he": "אין שמירת נתונים בהסקה, ולא מאמנים מודלים על הנתונים שלך.",
+         "en": "No data is kept for inference, and your data is not used to train models."
+        },
+        "link": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "keyLink": "https://dash.cloudflare.com/profile/api-tokens",
+        "defaultModel": "@cf/meta/llama-3.1-8b-instruct",
+        "needsAccountId": true,
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 0,
+          "limit": 0
+         },
+         "day": {
+          "used": 0,
+          "limit": 0
+         },
+         "model": "@cf/meta/llama-3.1-8b-instruct"
+        }
+       },
+       {
+        "id": "fc-mistral",
+        "name": "Mistral (free plan)",
+        "free": {
+         "he": "התוכנית החינמית (Experiment): בערך בקשה או שתיים בשנייה ומכסת טוקנים חודשית. נדרש אימות בטלפון, בלי כרטיס.",
+         "en": "The free Experiment plan: about one or two requests a second and a monthly token limit. Phone verification, no card."
+        },
+        "privacy": {
+         "he": "בתוכנית החינמית הפרומפטים משמשים לאימון המודלים של Mistral. אפשר לכבות בהגדרות הפרטיות של Mistral.",
+         "en": "On the free plan your prompts are used to train Mistral's models. You can turn that off in Mistral's privacy settings."
+        },
+        "link": "https://docs.mistral.ai/deployment/laplateforme/tier/",
+        "keyLink": "https://console.mistral.ai/api-keys",
+        "defaultModel": "mistral-small-latest",
+        "trains": true,
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "paused",
+         "minute": {
+          "used": 0,
+          "limit": 30
+         },
+         "day": {
+          "used": 31,
+          "limit": 0
+         },
+         "model": "mistral-small-latest",
+         "until": {
+          "$inMs": "7m"
+         },
+         "lastError": "POST /v1/chat/completions → 503 Service unavailable"
+        }
+       },
+       {
+        "id": "fc-zhipu",
+        "name": "Zhipu GLM-4-Flash",
+        "free": {
+         "he": "glm-4-flash בחינם: כ-3 בקשות בדקה ו-1,000 ביום. העברית חלשה. ההרשמה בסין דורשת מספר טלפון סיני; הפורטל הבינלאומי z.ai פתוח יותר.",
+         "en": "glm-4-flash is free: about 3 requests a minute and 1,000 a day. Hebrew is weak. Signing up in China needs a Chinese phone number; the international z.ai portal is more open."
+        },
+        "privacy": {
+         "he": "כפוף לתקנות רישום ותקשורת לפי הפורטל. אל תשלחו לשם מידע רגיש.",
+         "en": "Subject to the logging rules of the portal you use. Do not send sensitive data there."
+        },
+        "link": "https://open.bigmodel.cn/pricing",
+        "keyLink": "https://open.bigmodel.cn/usercenter/apikeys",
+        "defaultModel": "glm-4-flash",
+        "status": {
+         "configured": true,
+         "enabled": false,
+         "state": "off",
+         "minute": {
+          "used": 0,
+          "limit": 3
+         },
+         "day": {
+          "used": 0,
+          "limit": 1000
+         },
+         "model": "glm-4-flash"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "FreeCloudCard",
+   "title": "ספק חינמי אחד: מה חינם (עם קישור לעמוד הספק), פרטיות, מונים לדקה וליום, שדה מפתח, בדיקה ורשימת מודלים חינמיים בלבד (בתשלום חסום)",
+   "titleEn": "One free provider: what is free (linked to the provider's page), privacy, minute and day counters, key field, Test, and a free-only model list (paid blocked)",
+   "route": "#/settings/accounts",
+   "height": {
+    "desktop": 1100,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": "#free-cloud .free-card"
+    },
+    {
+     "click": "#free-cloud .free-card:nth-of-type(2) button:has-text(\"הצג מודלים\")"
+    },
+    {
+     "waitMs": 400
+    },
+    {
+     "scroll": "#free-cloud .free-card:nth-of-type(2)"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/free-cloud",
+     "json": {
+      "settings": {
+       "order": [
+        "fc-groq",
+        "fc-openrouter",
+        "fc-cloudflare",
+        "fc-mistral",
+        "fc-zhipu"
+       ],
+       "disabled": [
+        "fc-zhipu"
+       ],
+       "chatFallback": false,
+       "backgroundFallback": true,
+       "models": {
+        "fc-openrouter": "meta-llama/llama-3.3-70b-instruct:free"
+       },
+       "cloudflareAccountId": "",
+       "zhipuRegion": "cn"
+      },
+      "providers": [
+       {
+        "id": "fc-groq",
+        "name": "Groq",
+        "free": {
+         "he": "שכבה חינמית קבועה, בלי כרטיס אשראי: כ-30 בקשות בדקה ו-1,000 עד 2,000 ביום.",
+         "en": "A permanent free tier, no card: about 30 requests a minute and 1,000 to 2,000 a day."
+        },
+        "privacy": {
+         "he": "לא מאמנים מודלים על הפרומפטים. נשמר עד 30 יום רק לאבחון תקלות ולמניעת ניצול לרעה.",
+         "en": "Prompts are not used to train models. Kept up to 30 days for troubleshooting and abuse checks only."
+        },
+        "link": "https://console.groq.com/docs/rate-limits",
+        "keyLink": "https://console.groq.com/keys",
+        "defaultModel": "llama-3.3-70b-versatile",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 4,
+          "limit": 30
+         },
+         "day": {
+          "used": 212,
+          "limit": 1000
+         },
+         "model": "llama-3.3-70b-versatile"
+        }
+       },
+       {
+        "id": "fc-openrouter",
+        "name": "OpenRouter (:free)",
+        "free": {
+         "he": "רק מודלים שמסתיימים ב-:free: 20 בקשות בדקה ו-50 ביום בלי רכישה. KesherAI לא משתמש באף מודל בתשלום.",
+         "en": "Only models ending in :free: 20 requests a minute and 50 a day without a purchase. KesherAI never uses a paid model."
+        },
+        "privacy": {
+         "he": "לא נשמרים גופי הפרומפטים כברירת מחדל. בחשבון יש מתג שמונע ספקים שמאמנים על הפרומפטים: כדאי להפעיל אותו.",
+         "en": "Prompt bodies are not logged by default. The account has a switch that avoids providers that train on prompts: turn it on."
+        },
+        "link": "https://openrouter.ai/docs/api-reference/limits",
+        "keyLink": "https://openrouter.ai/keys",
+        "defaultModel": "openrouter/free",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "limited",
+         "minute": {
+          "used": 20,
+          "limit": 20
+         },
+         "day": {
+          "used": 50,
+          "limit": 50
+         },
+         "model": "openrouter/free",
+         "until": {
+          "$inMs": "7m"
+         }
+        }
+       },
+       {
+        "id": "fc-cloudflare",
+        "name": "Cloudflare Workers AI",
+        "free": {
+         "he": "10,000 Neurons ביום בחינם (מתאפס ב-00:00 UTC), בלי כרטיס. מעבר לזה הבקשה נכשלת ואין חיוב.",
+         "en": "10,000 Neurons a day free (resets at 00:00 UTC), no card. Beyond that the request fails and nothing is charged."
+        },
+        "privacy": {
+         "he": "אין שמירת נתונים בהסקה, ולא מאמנים מודלים על הנתונים שלך.",
+         "en": "No data is kept for inference, and your data is not used to train models."
+        },
+        "link": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "keyLink": "https://dash.cloudflare.com/profile/api-tokens",
+        "defaultModel": "@cf/meta/llama-3.1-8b-instruct",
+        "needsAccountId": true,
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 0,
+          "limit": 0
+         },
+         "day": {
+          "used": 0,
+          "limit": 0
+         },
+         "model": "@cf/meta/llama-3.1-8b-instruct"
+        }
+       },
+       {
+        "id": "fc-mistral",
+        "name": "Mistral (free plan)",
+        "free": {
+         "he": "התוכנית החינמית (Experiment): בערך בקשה או שתיים בשנייה ומכסת טוקנים חודשית. נדרש אימות בטלפון, בלי כרטיס.",
+         "en": "The free Experiment plan: about one or two requests a second and a monthly token limit. Phone verification, no card."
+        },
+        "privacy": {
+         "he": "בתוכנית החינמית הפרומפטים משמשים לאימון המודלים של Mistral. אפשר לכבות בהגדרות הפרטיות של Mistral.",
+         "en": "On the free plan your prompts are used to train Mistral's models. You can turn that off in Mistral's privacy settings."
+        },
+        "link": "https://docs.mistral.ai/deployment/laplateforme/tier/",
+        "keyLink": "https://console.mistral.ai/api-keys",
+        "defaultModel": "mistral-small-latest",
+        "trains": true,
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "paused",
+         "minute": {
+          "used": 0,
+          "limit": 30
+         },
+         "day": {
+          "used": 31,
+          "limit": 0
+         },
+         "model": "mistral-small-latest",
+         "until": {
+          "$inMs": "7m"
+         },
+         "lastError": "POST /v1/chat/completions → 503 Service unavailable"
+        }
+       },
+       {
+        "id": "fc-zhipu",
+        "name": "Zhipu GLM-4-Flash",
+        "free": {
+         "he": "glm-4-flash בחינם: כ-3 בקשות בדקה ו-1,000 ביום. העברית חלשה. ההרשמה בסין דורשת מספר טלפון סיני; הפורטל הבינלאומי z.ai פתוח יותר.",
+         "en": "glm-4-flash is free: about 3 requests a minute and 1,000 a day. Hebrew is weak. Signing up in China needs a Chinese phone number; the international z.ai portal is more open."
+        },
+        "privacy": {
+         "he": "כפוף לתקנות רישום ותקשורת לפי הפורטל. אל תשלחו לשם מידע רגיש.",
+         "en": "Subject to the logging rules of the portal you use. Do not send sensitive data there."
+        },
+        "link": "https://open.bigmodel.cn/pricing",
+        "keyLink": "https://open.bigmodel.cn/usercenter/apikeys",
+        "defaultModel": "glm-4-flash",
+        "status": {
+         "configured": true,
+         "enabled": false,
+         "state": "off",
+         "minute": {
+          "used": 0,
+          "limit": 3
+         },
+         "day": {
+          "used": 0,
+          "limit": 1000
+         },
+         "model": "glm-4-flash"
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/free-cloud/fc-openrouter/models",
+     "json": {
+      "models": [
+       {
+        "id": "meta-llama/llama-3.3-70b-instruct:free",
+        "free": true
+       },
+       {
+        "id": "deepseek/deepseek-r1:free",
+        "free": true
+       },
+       {
+        "id": "qwen/qwen-2.5-72b-instruct:free",
+        "free": true
+       },
+       {
+        "id": "openai/gpt-4o",
+        "free": false,
+        "reason": "not :free"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "FreeCloudOrder",
+   "title": "סדר הגיבוי של הענן החינמי: מי ראשון, מי מדולג כשהוא במגבלה או מושהה אחרי שגיאות, וכשכולם במגבלה המשימה ממתינה לאיפוס — אף פעם לא בתשלום",
+   "titleEn": "Free cloud fallback order: who goes first, who is skipped at a limit or paused after errors; when all are limited the task waits for the reset, never paid",
+   "route": "#/settings/accounts",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": "#free-cloud .free-order"
+    },
+    {
+     "scroll": "#free-cloud .free-order"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/free-cloud",
+     "json": {
+      "settings": {
+       "order": [
+        "fc-groq",
+        "fc-openrouter",
+        "fc-cloudflare",
+        "fc-mistral",
+        "fc-zhipu"
+       ],
+       "disabled": [],
+       "chatFallback": false,
+       "backgroundFallback": true,
+       "models": {},
+       "cloudflareAccountId": "",
+       "zhipuRegion": "cn"
+      },
+      "providers": [
+       {
+        "id": "fc-groq",
+        "name": "Groq",
+        "free": {
+         "he": "שכבה חינמית קבועה, בלי כרטיס אשראי: כ-30 בקשות בדקה ו-1,000 עד 2,000 ביום.",
+         "en": "A permanent free tier, no card: about 30 requests a minute and 1,000 to 2,000 a day."
+        },
+        "privacy": {
+         "he": "לא מאמנים מודלים על הפרומפטים. נשמר עד 30 יום רק לאבחון תקלות ולמניעת ניצול לרעה.",
+         "en": "Prompts are not used to train models. Kept up to 30 days for troubleshooting and abuse checks only."
+        },
+        "link": "https://console.groq.com/docs/rate-limits",
+        "keyLink": "https://console.groq.com/keys",
+        "defaultModel": "llama-3.3-70b-versatile",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 1,
+          "limit": 30
+         },
+         "day": {
+          "used": 12,
+          "limit": 1000
+         },
+         "model": "llama-3.3-70b-versatile"
+        }
+       },
+       {
+        "id": "fc-openrouter",
+        "name": "OpenRouter (:free)",
+        "free": {
+         "he": "רק מודלים שמסתיימים ב-:free: 20 בקשות בדקה ו-50 ביום בלי רכישה. KesherAI לא משתמש באף מודל בתשלום.",
+         "en": "Only models ending in :free: 20 requests a minute and 50 a day without a purchase. KesherAI never uses a paid model."
+        },
+        "privacy": {
+         "he": "לא נשמרים גופי הפרומפטים כברירת מחדל. בחשבון יש מתג שמונע ספקים שמאמנים על הפרומפטים: כדאי להפעיל אותו.",
+         "en": "Prompt bodies are not logged by default. The account has a switch that avoids providers that train on prompts: turn it on."
+        },
+        "link": "https://openrouter.ai/docs/api-reference/limits",
+        "keyLink": "https://openrouter.ai/keys",
+        "defaultModel": "openrouter/free",
+        "status": {
+         "configured": true,
+         "enabled": true,
+         "state": "ready",
+         "minute": {
+          "used": 0,
+          "limit": 20
+         },
+         "day": {
+          "used": 3,
+          "limit": 50
+         },
+         "model": "openrouter/free"
+        }
+       },
+       {
+        "id": "fc-cloudflare",
+        "name": "Cloudflare Workers AI",
+        "free": {
+         "he": "10,000 Neurons ביום בחינם (מתאפס ב-00:00 UTC), בלי כרטיס. מעבר לזה הבקשה נכשלת ואין חיוב.",
+         "en": "10,000 Neurons a day free (resets at 00:00 UTC), no card. Beyond that the request fails and nothing is charged."
+        },
+        "privacy": {
+         "he": "אין שמירת נתונים בהסקה, ולא מאמנים מודלים על הנתונים שלך.",
+         "en": "No data is kept for inference, and your data is not used to train models."
+        },
+        "link": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+        "keyLink": "https://dash.cloudflare.com/profile/api-tokens",
+        "defaultModel": "@cf/meta/llama-3.1-8b-instruct",
+        "needsAccountId": true,
+        "status": {
+         "configured": false,
+         "enabled": true,
+         "state": "nokey",
+         "minute": {
+          "used": 0,
+          "limit": 0
+         },
+         "day": {
+          "used": 0,
+          "limit": 0
+         },
+         "model": "@cf/meta/llama-3.1-8b-instruct"
+        }
+       },
+       {
+        "id": "fc-mistral",
+        "name": "Mistral (free plan)",
+        "free": {
+         "he": "התוכנית החינמית (Experiment): בערך בקשה או שתיים בשנייה ומכסת טוקנים חודשית. נדרש אימות בטלפון, בלי כרטיס.",
+         "en": "The free Experiment plan: about one or two requests a second and a monthly token limit. Phone verification, no card."
+        },
+        "privacy": {
+         "he": "בתוכנית החינמית הפרומפטים משמשים לאימון המודלים של Mistral. אפשר לכבות בהגדרות הפרטיות של Mistral.",
+         "en": "On the free plan your prompts are used to train Mistral's models. You can turn that off in Mistral's privacy settings."
+        },
+        "link": "https://docs.mistral.ai/deployment/laplateforme/tier/",
+        "keyLink": "https://console.mistral.ai/api-keys",
+        "defaultModel": "mistral-small-latest",
+        "trains": true,
+        "status": {
+         "configured": false,
+         "enabled": true,
+         "state": "nokey",
+         "minute": {
+          "used": 0,
+          "limit": 30
+         },
+         "day": {
+          "used": 0,
+          "limit": 0
+         },
+         "model": "mistral-small-latest"
+        }
+       },
+       {
+        "id": "fc-zhipu",
+        "name": "Zhipu GLM-4-Flash",
+        "free": {
+         "he": "glm-4-flash בחינם: כ-3 בקשות בדקה ו-1,000 ביום. העברית חלשה. ההרשמה בסין דורשת מספר טלפון סיני; הפורטל הבינלאומי z.ai פתוח יותר.",
+         "en": "glm-4-flash is free: about 3 requests a minute and 1,000 a day. Hebrew is weak. Signing up in China needs a Chinese phone number; the international z.ai portal is more open."
+        },
+        "privacy": {
+         "he": "כפוף לתקנות רישום ותקשורת לפי הפורטל. אל תשלחו לשם מידע רגיש.",
+         "en": "Subject to the logging rules of the portal you use. Do not send sensitive data there."
+        },
+        "link": "https://open.bigmodel.cn/pricing",
+        "keyLink": "https://open.bigmodel.cn/usercenter/apikeys",
+        "defaultModel": "glm-4-flash",
+        "status": {
+         "configured": false,
+         "enabled": true,
+         "state": "nokey",
+         "minute": {
+          "used": 0,
+          "limit": 3
+         },
+         "day": {
+          "used": 0,
+          "limit": 1000
+         },
+         "model": "glm-4-flash"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

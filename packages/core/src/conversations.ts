@@ -16,7 +16,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { branding, editQueued, moveQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate, type StopAfter } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
@@ -181,6 +181,20 @@ export class ConversationManager {
   /** The ready ComfyUI flows' runner (music, sound, 3D), for the editors' routes; undefined when it is not set up. */
   get flows(): ConversationDeps["flows"] {
     return this.deps.flows;
+  }
+
+  /**
+   * What a chat's main model turn needs for the free cloud helpers: a chat marked "never to the cloud" (incognito) is
+   * never sent there, and when the local model is off and the user allowed it (Settings › Free cloud helpers), the
+   * turn goes to the pool instead of failing.
+   *
+   * @param id - The chat.
+   */
+  private freeOpts(id: string): { noCloud: () => boolean; fallback: () => ModelTurn | undefined } {
+    return {
+      noCloud: () => !!this.deps.library.summary(id)?.incognito,
+      fallback: () => (this.deps.config.freeCloud.chatFallback && this.deps.freeCloud?.candidates("chat").length ? this.deps.freeCloud.turn("chat") : undefined),
+    };
   }
 
   /** @param deps - Services the manager needs. */
@@ -903,7 +917,7 @@ export class ConversationManager {
       id,
       modelId: conversation.modelId,
       ...(outside ? { external: outside } : {}),
-      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params, "main", { thinking: () => this.deps.library.summary(id)?.thinking }),
+      model: modelTurnFor(this.deps.registry, conversation.modelId, this.deps.personas?.get(conversation.personaId)?.params, "main", { thinking: () => this.deps.library.summary(id)?.thinking, ...this.freeOpts(id) }),
       mode: conversation.mode,
       ...(workspace ? { workspace } : {}),
       tools,
@@ -1539,7 +1553,7 @@ export class ConversationManager {
       session.setTools(tools);
       session.systemPrompt = await this.promptFor(next, notes);
     }
-    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main", { thinking: () => this.deps.library.summary(id)?.thinking }));
+    if (patch.modelId && patch.modelId !== session.modelId) session.setModel(patch.modelId, modelTurnFor(this.deps.registry, patch.modelId, undefined, "main", { thinking: () => this.deps.library.summary(id)?.thinking, ...this.freeOpts(id) }));
     if (patch.mode) session.setMode(patch.mode);
     const saved = await this.deps.library.saveConversation({
       ...next,

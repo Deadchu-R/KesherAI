@@ -18,10 +18,13 @@ import type { UnrealBridge } from "./unreal-bridge.js";
 import type { PluginHost } from "./plugins.js";
 import type { Library } from "./library.js";
 import type { HelperEngine } from "./chat-helpers.js";
+import type { FreeCloudPool } from "./free-cloud.js";
 
 /** Services the conversation manager needs. */
 export interface ConversationDeps {
   registry: ProviderRegistry;
+  /** Free cloud helpers: a chat's fallback when its local model is off, if the user allowed it (free-cloud.ts). */
+  freeCloud?: FreeCloudPool;
   library: Library;
   assets: AssetStore;
   plugins: PluginHost;

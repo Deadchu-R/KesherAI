@@ -7,6 +7,7 @@ import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
 import { OTHER_SCRIPTS_BIAS, thinkingLevels, type ThinkingLevel } from "@kesher/shared";
 import type { ProviderRegistry, SlotKind } from "@kesher/providers";
+import { isFreeCloudModel } from "./free-cloud.js";
 
 /**
  * The most tokens one turn of a local (llama.cpp) model may write, reasoning included. A thinking model once wrote
@@ -40,9 +41,11 @@ export function onModelSpeed(fn: typeof speedRecorder): void {
  * @param opts.thinking - The chat's thinking level, read at each call (it can change mid-chat; thinking.ts).
  * @returns The turn function.
  */
-export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined } = {}): ModelTurn {
+export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined; noCloud?: () => boolean; fallback?: () => ModelTurn | undefined } = {}): ModelTurn {
   const inner = rawTurnFor(registry, modelId, params, slotKind, opts.thinking);
   return async (req, signal, onText) => {
+    // A chat marked "never to the cloud" (incognito) is never sent to a free cloud provider, even when it is picked.
+    if (isFreeCloudModel(modelId) && opts.noCloud?.()) throw new Error("This chat is private (incognito): it is never sent to the cloud. Choose a local model.");
     let first = 0;
     let chars = 0;
     const once = () =>
@@ -59,6 +62,11 @@ export function modelTurnFor(registry: ProviderRegistry, modelId: string, params
       // Nothing listens there at all (LM Studio or Ollama not running): say so, not "the conversation is too long"
       // (found on the PC: a night routine on an LM Studio model, with LM Studio closed).
       const code = (err as { cause?: { code?: string } }).cause?.code;
+      if ((code === "ECONNREFUSED" || /ECONNREFUSED/.test(msg)) && !signal?.aborted && chars === 0) {
+        // The user allowed free cloud helpers when the local model is off (Settings), and this chat may go to the cloud.
+        const alt = opts.noCloud?.() ? undefined : opts.fallback?.();
+        if (alt) return alt(req, signal, onText);
+      }
       if (code === "ECONNREFUSED" || /ECONNREFUSED/.test(msg)) {
         throw new Error(`The model server for ${modelId} is not running (nothing answers at its address). Start it (e.g. LM Studio or Ollama), or choose another model for this chat or routine.`);
       }

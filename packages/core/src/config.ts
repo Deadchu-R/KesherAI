@@ -26,6 +26,25 @@ export const KesherConfigSchema = z.object({
   providers: z.array(StoredProviderSchema).default([]),
   /** Hugging Face access token, for gated repos. */
   huggingFaceToken: z.string().optional(),
+  /**
+   * Free cloud helpers (free-cloud.ts): Groq, OpenRouter (:free), Cloudflare Workers AI, Mistral and Zhipu with keys the
+   * user enters (kept as the connections' sealed `apiKey`). The order they are tried in, which are switched off, whether
+   * a chat may use them when its local model is busy (off by default) and background work may (on), and the model each
+   * one uses (empty: its free default).
+   */
+  freeCloud: z
+    .object({
+      order: z.array(z.string().max(40)).max(20).default([]),
+      disabled: z.array(z.string().max(40)).max(20).default([]),
+      chatFallback: z.boolean().default(false),
+      backgroundFallback: z.boolean().default(true),
+      models: z.record(z.string().max(40), z.string().max(120)).default({}),
+      /** Cloudflare's account id (part of its address; not a secret). */
+      cloudflareAccountId: z.string().max(64).optional(),
+      /** Zhipu: the mainland portal or the international z.ai. */
+      zhipuRegion: z.enum(["cn", "global"]).default("cn"),
+    })
+    .prefault({}),
   comfyui: z
     .object({
       /** ComfyUI's `models` folder. When set, image downloads go to its sub-folders. */

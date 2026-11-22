@@ -10,9 +10,10 @@ import { agyPath } from "../agy-path.js";
 import type { KesherConfig } from "../config.js";
 import { modelTurnFor, withFilter } from "../conversations.js";
 import { researchReport } from "../deep-research.js";
+import type { FreeCloudPool } from "../free-cloud.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
-import { TaskInbox, type RunCmd } from "../inbox-runner.js";
+import { TaskInbox, isQuotaError, type RunCmd } from "../inbox-runner.js";
 import type { Notifier } from "../notify.js";
 import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
@@ -70,7 +71,7 @@ function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
  *   tasks run on its "gemini" provider).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry }): TaskInbox {
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool }): TaskInbox {
   const git = runner("git", false);
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
@@ -100,11 +101,27 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     },
     // Small research tasks (route B) run by themselves on the user's free "gemini" provider (a free AI Studio key).
     // That key must stay without a billing account, so it can never charge; a limit error defers the task.
+    // Generalized to the free cloud: the Gemini key first, and when it is at its limit or busy, the free cloud helpers
+    // (Groq, OpenRouter :free, Cloudflare, Mistral, Zhipu) in the user's order, inside their free limits.
     research: {
-      ready: () => !!p.registry.get("gemini"),
+      ready: () => !!p.registry.get("gemini") || !!p.freeCloud?.candidates("background").length,
       run: async (question, signal) => {
+        const prefs = withFilter(undefined, p.config.webFilter, false);
+        const tools = { search: (q: string, sig: AbortSignal) => searchWeb(q, prefs, sig), read: async (url: string, sig: AbortSignal) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output };
+        const viaPool = () => researchReport(question, { model: p.freeCloud!.turn("background"), ...tools }, signal);
         const provider = p.registry.get("gemini");
-        if (!provider) throw new Error("No Gemini connection.");
+        if (!provider) {
+          if (!p.freeCloud) throw new Error("No Gemini connection.");
+          return viaPool();
+        }
+        try {
+          return await geminiResearch(provider);
+        } catch (e) {
+          // Gemini's limit or a busy answer is not the end: the free cloud helpers go on (never a paid one).
+          if (signal.aborted || !p.freeCloud || !p.freeCloud.candidates("background").length || !(isQuotaError((e as Error).message) || /\b(500|502|503|504)\b|UNAVAILABLE|overloaded/i.test((e as Error).message))) throw e;
+          return viaPool();
+        }
+        async function geminiResearch(provider: NonNullable<ReturnType<typeof p.registry.get>>): Promise<string> {
         const models = await provider.listModels(signal);
         // Google keeps listing retired models (Gemini 2.5 answers 404 since Oct 2026), and the free tier's busiest model
         // often answers 503 "overloaded": try, in order, flash-latest, the newest numbered Flash, flash-lite-latest and the
@@ -121,14 +138,12 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
           chat[0],
         ].filter((m, i, all): m is NonNullable<typeof m> => !!m && all.findIndex((x) => x?.id === m.id) === i);
         if (!order.length) throw new Error("The Gemini connection lists no chat model.");
-        const prefs = withFilter(undefined, p.config.webFilter, false);
         let last: Error | undefined;
         for (const pick of order) {
           try {
             return await researchReport(question, {
               model: modelTurnFor(p.registry, pick.id, undefined, "helper"),
-              search: (q, sig) => searchWeb(q, prefs, sig),
-              read: async (url, sig) => (await webFetchTool.run({ url }, { signal: sig, web: prefs } as unknown as ToolContext)).output,
+              ...tools,
             }, signal);
           } catch (e) {
             last = e as Error;
@@ -136,6 +151,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
           }
         }
         throw last ?? new Error("Gemini is busy.");
+        }
       },
     },
     board: p.board,

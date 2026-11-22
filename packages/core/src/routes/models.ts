@@ -409,7 +409,8 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
    */
   app.get("/api/providers/sync", async () =>
     s.config.providers
-      .filter((p) => (p.location ?? s.registry.list().find((r) => r.config.id === p.id)?.provider.location) === "cloud" && p.apiKey)
+      // The free cloud helpers' keys stay on this computer (their own card), like the other account keys.
+      .filter((p) => p.type !== "free-cloud" && (p.location ?? s.registry.list().find((r) => r.config.id === p.id)?.provider.location) === "cloud" && p.apiKey)
       .map(({ id, type, name, baseUrl, apiKey }) => ({ id, type, name: name ?? id, ...(baseUrl ? { baseUrl } : {}), apiKey })),
   );
   app.put<{ Body: { providers?: Array<{ id: string; type?: string; name?: string; baseUrl?: string; apiKey?: string }> } }>("/api/providers/sync", async (req, reply) => {

@@ -3,6 +3,7 @@
  * app (provider registry, conversation manager, engine, guard, notifier, downloads, config…), so a route never
  * creates its own and everything shares one state.
  */
+import type { FreeCloudPool } from "./free-cloud.js";
 import type { ModelUse } from "./pc-fix.js";
 import type { ControlWatchers } from "./control-live.js";
 import type { MemoryStore } from "./memory-store.js";
@@ -66,6 +67,8 @@ export interface KesherServices {
   config: KesherConfig;
   paths: DataPaths;
   registry: ProviderRegistry;
+  /** The free cloud helpers pool (free-cloud.ts); absent in tests that do not need it. */
+  freeCloud?: FreeCloudPool;
   assets: AssetStore;
   downloads: DownloadManager;
   plugins: PluginHost;

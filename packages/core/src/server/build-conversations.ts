@@ -4,6 +4,7 @@
  * timers, memory), and what a chat reports back (notifications, Telegram). Built once by createKesherServer from the
  * services made before it; the body is the same as when it stood in server.ts.
  */
+import type { FreeCloudPool } from "../free-cloud.js";
 import { shotSaver, withShotAssets } from "../shot-store.js";
 import { aboutUserNote } from "../user-profile.js";
 import { engineAsk } from "../tool-router.js";
@@ -84,6 +85,7 @@ const fileSize = (path: string): number | undefined => {
 
 /** The services the conversation manager is built from (all made earlier in createKesherServer). */
 export interface ConversationParts {
+  freeCloud?: FreeCloudPool;
   taskBoard: TaskBoard;
   registry: ProviderRegistry;
   library: Library;
@@ -172,6 +174,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     }
   };
   return new ConversationManager({
+    ...(p.freeCloud ? { freeCloud: p.freeCloud } : {}),
     board: taskBoard,
     registry,
     library,

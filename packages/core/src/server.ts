@@ -66,6 +66,9 @@ import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFactory } from "./free-cloud.js";
+import { FREE_PROVIDER_IDS } from "./free-cloud-catalog.js";
+import { freeCloudFileStore } from "./routes/free-cloud.js";
 import { nextInLineTitle } from "./inbox-runner.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
 import { boardCommand } from "./hub-board.js";
@@ -146,6 +149,11 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const registry = new ProviderRegistry();
   const downloads = new DownloadManager(config.maxConcurrentDownloads);
   for (const factory of BUILT_IN_FACTORIES) registry.registerFactory(factory);
+  // Free cloud helpers (Groq, OpenRouter :free, Cloudflare, Mistral, Zhipu): keys the user enters, rate-limit aware, never paid.
+  registry.registerFactory(freeCloudFactory);
+  const freeCloud = new FreeCloudPool({ registry, settings: () => ({ ...config.freeCloud, order: config.freeCloud.order.length ? config.freeCloud.order : [...FREE_PROVIDER_IDS] }), store: freeCloudFileStore(join(paths.root, "free-cloud.json")) });
+  registry.registerFactory({ type: "free-cloud-pool", displayName: "Free cloud helpers", categories: ["chat"], create: () => new FreeCloudPoolProvider(freeCloud) });
+  registry.add({ id: FREE_POOL_PROVIDER, type: "free-cloud-pool", name: "Free cloud helpers", location: "cloud" });
   // The built-in image engine (stable-diffusion.cpp), shown as the "sdcpp" connection.
   const coach = new Coach(paths.root);
   const memory = new MemoryStore(join(paths.root, "memory.json"));
@@ -524,6 +532,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         },
       };
   const services: KesherServices = {
+    freeCloud,
     localModels: localGgufs,
     browser,
     controlWatchers,
@@ -538,7 +547,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
+    conversations: buildConversations({ freeCloud, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
     coach,
     memory,
     computer,
@@ -608,7 +617,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.workerHost = options.workerHost;
   services.board = taskBoard;
   // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
-  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard, registry });
+  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud });
   services.taskInbox = taskInbox;
   // "Continue what was running" after a restart (resume-board.ts): the main app only; a worker has no card.
   if (!options.worker) services.resume = buildResume(paths.root, services);
