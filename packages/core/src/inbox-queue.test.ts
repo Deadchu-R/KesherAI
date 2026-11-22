@@ -60,3 +60,12 @@ test("standing task: only when Antigravity is idle, one at a time, quiet for a d
   assert.equal(standingPlan({ ...base, busy: true }), "none");
   assert.equal(standingId(Date.UTC(2026, 10, 22), 2), "c-20261122-next-2");
 });
+
+test("periodic standing task: due when none is open and the last ended a period ago", async () => {
+  const { periodicDue } = await import("./inbox-queue.js");
+  const day = 86_400_000;
+  assert.equal(periodicDue([], 7, 10 * day), true);
+  assert.equal(periodicDue([{ ended: false, at: 9 * day }], 7, 10 * day), false);
+  assert.equal(periodicDue([{ ended: true, at: 5 * day }], 7, 10 * day), false);
+  assert.equal(periodicDue([{ ended: true, at: 2 * day }], 7, 10 * day), true);
+});

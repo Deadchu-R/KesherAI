@@ -172,6 +172,28 @@ export const STANDING_TEMPLATE_ID = "c-20261122-16";
 /** A standing copy that ended less than this ago keeps the next one away (its report is still to be read). */
 export const STANDING_QUIET_MS = 24 * 60 * 60_000;
 
+/**
+ * Standing tasks that come back on a schedule, whether or not Antigravity is busy (they wait in line for Run like any
+ * task): the template id, how often, and a short tag for the copies' ids. "How to save tokens" (Roee, 22.11.2026).
+ */
+export const PERIODIC_STANDING: ReadonlyArray<{ template: string; everyDays: number; tag: string; note: string }> = [
+  { template: "c-20261122-38", everyDays: 7, tag: "tokens", note: "Standing task: how to save tokens (weekly). Run starts it." },
+];
+
+/**
+ * Whether a periodic standing task needs a new copy: none is open and the last one ended (or was made) at least
+ * `everyDays` ago.
+ *
+ * @param copies - Its copies so far: ended or not, and when ended or made.
+ * @param everyDays - The period.
+ * @param now - Now (ms).
+ */
+export function periodicDue(copies: Array<{ ended: boolean; at?: number | undefined }>, everyDays: number, now: number): boolean {
+  if (copies.some((c) => !c.ended)) return false;
+  const last = Math.max(0, ...copies.map((c) => c.at ?? 0));
+  return now - last >= everyDays * 24 * 60 * 60_000;
+}
+
 /** What the inbox looks at to decide about the standing task. */
 export interface StandingInput {
   /** Real (not standing) Antigravity tasks that wait, run, wait for an approval, or are queued. */

@@ -9,7 +9,7 @@ import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
-import { freedSlotNote, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
+import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
@@ -1407,7 +1407,8 @@ export class TaskInbox {
     const tasks = this.saved.tasks;
     const real = tasks.filter((t) => t.runBy === "antigravity" && !t.standing);
     const busy = real.some((t) => t.status === "waiting" || t.status === "running" || t.status === "needs-approval") || this.lines.size("antigravity") > 0;
-    const copies = tasks.filter((t) => t.standing);
+    await this.syncPeriodic();
+    const copies = tasks.filter((t) => t.standing && !t.standingOf);
     const tpl = tasks.find((t) => t.id === STANDING_TEMPLATE_ID);
     const plan = standingPlan({ busy, copies: copies.map((c) => ({ ended: isEnded(c.status), ...(c.endedAt !== undefined ? { endedAt: c.endedAt } : {}) })), hasTemplate: !!tpl, now: this.now() });
     if (plan === "withdraw") {
@@ -1420,6 +1421,30 @@ export class TaskInbox {
       if (!validTaskId(id) || tasks.some((t) => t.id === id)) return;
       const { diff: _d, runAsk: _a, ...spec } = tpl;
       const copy: InboxTaskView = { ...spec, id, standing: true, from: "self-work", status: "waiting", runBy: "antigravity", executor: "antigravity", branch: branchFor({ id, title: tpl.title }, "antigravity"), note: "Standing task: what to research next. Run starts it." };
+      for (const k of ["startedAt", "endedAt", "summary", "plan", "steps", "decisions", "checks", "files", "headSha", "pushed", "boardId", "boardState", "resultWritten", "modelUsed", "modelFallback", "researchReport", "retryAt", "autoRetried", "pending"] as const) delete (copy as unknown as Record<string, unknown>)[k];
+      this.saved.tasks.push(copy);
+      await this.save();
+    }
+  }
+
+  /**
+   * Periodic standing tasks ({@link PERIODIC_STANDING}): a fresh copy of each template once per period, waiting for
+   * Run in the normal line (made even while Antigravity is busy). Never runs it.
+   */
+  private async syncPeriodic(): Promise<void> {
+    for (const p of PERIODIC_STANDING) {
+      const tasks = this.saved.tasks;
+      const tpl = tasks.find((t) => t.id === p.template);
+      if (!tpl) continue;
+      const copies = tasks.filter((t) => t.standingOf === p.template);
+      // The template's own run counts as the first copy.
+      const seen = [tpl, ...copies].map((c) => ({ ended: isEnded(c.status) || (c === tpl && c.status === "waiting" && copies.length > 0), at: c.endedAt ?? c.startedAt }));
+      if (tpl.status === "waiting" && !copies.length) continue;
+      if (!periodicDue(seen, p.everyDays, this.now())) continue;
+      const id = `c-${new Date(this.now()).toISOString().slice(0, 10).replace(/-/g, "")}-${p.tag}-${copies.length + 1}`;
+      if (!validTaskId(id) || tasks.some((t) => t.id === id)) continue;
+      const { diff: _d, runAsk: _a, ...spec } = tpl;
+      const copy: InboxTaskView = { ...spec, id, standing: true, standingOf: p.template, from: "self-work", status: "waiting", runBy: "antigravity", executor: "antigravity", branch: branchFor({ id, title: tpl.title }, "antigravity"), note: p.note };
       for (const k of ["startedAt", "endedAt", "summary", "plan", "steps", "decisions", "checks", "files", "headSha", "pushed", "boardId", "boardState", "resultWritten", "modelUsed", "modelFallback", "researchReport", "retryAt", "autoRetried", "pending"] as const) delete (copy as unknown as Record<string, unknown>)[k];
       this.saved.tasks.push(copy);
       await this.save();

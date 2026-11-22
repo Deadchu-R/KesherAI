@@ -57,6 +57,8 @@ export interface InboxTaskSpec {
   replaces?: string[];
   /** The standing "what to research next" task (a fresh copy of a template, shown while Antigravity is idle; inbox-queue.ts). */
   standing?: boolean;
+  /** For a standing copy: the template task it was copied from (none: the "what to research next" template). */
+  standingOf?: string;
   goal: string;
   readFirst?: string;
   acceptance?: string;
