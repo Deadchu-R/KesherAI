@@ -431,7 +431,7 @@ export function researchPrompt(s: InboxTaskSpec, branch: string): string {
     "- First read docs/research/INDEX.md (everything KesherAI already researched). Do not repeat a topic that is there: build on that file, cite it, and research only what is new or changed since.",
     "- If a step is refused, do not stop: carry on another way (your file tools, the web). The task is done only when the report file is written.",
     `- Write your findings to exactly one file: ${file}. Change no other file. Write it even if part of the research could not be done, and say what is missing.`,
-    "- The file is Markdown: a # title, a short summary, ## sections with the facts, numbers and where sources disagree, a short ## Conclusion, and at the end a numbered ## Sources list (`1. [Title](https://url)`); cite by number in square brackets, like [2]. Only pages you really read.",
+    "- The file is Markdown: a # title, a short summary, ## sections with the facts, numbers and where sources disagree, a short ## Conclusion, a ## Tasks section (every finding KesherAI should act on, as tasks: for each an id like T1, a title, what to build in 2-5 lines with the files or modules it touches, size S/M/L, and whether it already exists in the code — search first; write `no tasks` with the reason only if nothing applies), and at the end a numbered ## Sources list (`1. [Title](https://url)`); cite by number in square brackets, like [2]. Only pages you really read.",
     "- No emails, user names, personal paths, keys or tokens in the file.",
     "- When done, end with a short report: the main finding in 2-3 lines and anything left open.",
     "",

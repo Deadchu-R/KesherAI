@@ -88,6 +88,12 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
   base_version = BASE_VERSION; 4) write the new version to BASE_VERSION (that tells KesherAI it was published: the
   newest marks and publish.json start over at the next render). New boards: add a scenario, not a one-off script.
 
+## Research → tasks (Roee 2026-11-22)
+- Every research report must end in tasks: the research prompt asks for a `## Tasks` section. When a report is merged,
+  Claude checks its tasks against the code and WORK_LIST and adds the real ones to docs/WORK_LIST.md (with the report's
+  file name), then hands them out: S and precise → local self-work, M code → Antigravity (Opus), L → Claude.
+- docs/research/SYNTHESIS-2026-11-22.md holds the breakdown of all research up to that day, with a coverage table.
+
 ## Permissions Roee already gave (and limits)
 - Push to main; release by `git push -qf origin HEAD:release` (never force-push main). Commit without asking.
 - Use his Chrome / the built-in browser for his own accounts when he asks (Cloudflare, Google Cloud, claude.ai): no
