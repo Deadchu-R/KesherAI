@@ -4,6 +4,9 @@ import { getLocale, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { cmpVersion, installOf, orderProjects, pluginAtLeast, type InstallPoll, type StandInProject } from "./standin-levels";
 
+/** A file size on disk, short: 1.2 GB, 340 MB, 85 KB (levels and scenes show how heavy they are). */
+const fileSize = (b: number) => (b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : b >= 1024 ** 2 ? `${Math.round(b / 1024 ** 2)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
 /** Each engine's words and addresses for the stand-in. */
@@ -40,6 +43,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
   const remembered = () => { try { return localStorage.getItem(key) ?? ""; } catch { return ""; } };
   const [project, setProject] = useState(remembered() || connectedProject || "");
   const [scenes, setScenes] = useState<string[] | null>(null);
+  const [sceneSizes, setSceneSizes] = useState<Record<string, number>>({});
   // Why a project shows no scenes (the server says: empty Assets, no .unity files…).
   const [note, setNote] = useState("");
   // The engine's projects found on the computer (its own project list, Unity Hub, the usual folders): one tap shows
@@ -52,7 +56,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
   const list = (dir: string) => {
     if (!dir.trim()) return;
     try { localStorage.setItem(key, dir); } catch { /* private window: only remembered for next time */ }
-    void api<{ scenes: string[]; note?: string; reason?: "empty" | "none"; files?: number }>(`${e.list}?project=${encodeURIComponent(dir)}`).then((r) => { setScenes(r.scenes); setNote(r.reason === "empty" ? L("תיקיית Assets ריקה: ייתכן שהקבצים עוד יורדים, או שהם בתיקייה אחרת.", "Assets is empty: the files may still be downloading, or they are in another folder.") : r.reason === "none" ? L(`אין קובצי סצנה (.unity) ב-Assets או ב-Packages (נבדקו ${r.files ?? 0} קבצים). סצנה שלא נשמרה ב-Unity עדיין אין לה קובץ.`, `No .unity scene files under Assets or Packages (${r.files ?? 0} files looked at). A scene never saved in Unity has no file yet.`) : (r.note ?? "")); }, (er: Error) => { setScenes(null); setNote(""); toast(er.message); });
+    void api<{ scenes: string[]; sizes?: Record<string, number>; note?: string; reason?: "empty" | "none"; files?: number }>(`${e.list}?project=${encodeURIComponent(dir)}`).then((r) => { setScenes(r.scenes); setSceneSizes(r.sizes ?? {}); setNote(r.reason === "empty" ? L("תיקיית Assets ריקה: ייתכן שהקבצים עוד יורדים, או שהם בתיקייה אחרת.", "Assets is empty: the files may still be downloading, or they are in another folder.") : r.reason === "none" ? L(`אין קובצי סצנה (.unity) ב-Assets או ב-Packages (נבדקו ${r.files ?? 0} קבצים). סצנה שלא נשמרה ב-Unity עדיין אין לה קובץ.`, `No .unity scene files under Assets or Packages (${r.files ?? 0} files looked at). A scene never saved in Unity has no file yet.`) : (r.note ?? "")); }, (er: Error) => { setScenes(null); setNote(""); toast(er.message); });
   };
   const pick = async () => {
     const dir = await desktop()?.pickFolder();
@@ -83,7 +87,7 @@ export function StandInScenes({ engine, connectedProject }: { engine: keyof type
       )}
       {scenes && (scenes.length ? (
         <div className="standin-scenes">
-          {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={e.open(project, sc)}>{e.label(sc)}</a>)}
+          {scenes.map((sc) => <a key={sc} className="button" dir="ltr" href={e.open(project, sc)}>{e.label(sc)}{sceneSizes[sc] ? <span className="muted small"> · {fileSize(sceneSizes[sc]!)}</span> : null}</a>)}
         </div>
       ) : <p className="muted small">{L("אין סצנות בפרויקט.", "No scenes in this project.")}{note && <span dir="auto"> {note}</span>}</p>)}
     </section>
@@ -116,6 +120,7 @@ export function StandInLevels() {
   const [fromDisk, setFromDisk] = useState(false);
   /** How many assets a project with no levels has (the server counted them), when it said. */
   const [assets, setAssets] = useState<number | undefined>();
+  const [levelSizes, setLevelSizes] = useState<Record<string, number>>({});
   const [busy, setBusy] = useState("");
   /** The project whose plugin is being installed now (the engines answer is polled until it finishes). */
   const [installing, setInstalling] = useState("");
@@ -139,9 +144,9 @@ export function StandInLevels() {
     setAssets(undefined);
     setNeed("");
     setBusy(path);
-    void api<{ levels: string[]; fromDisk?: boolean; assets?: number }>(`/api/unreal/levels?project=${encodeURIComponent(path)}`).then((r) => {
+    void api<{ levels: string[]; sizes?: Record<string, number>; fromDisk?: boolean; assets?: number }>(`/api/unreal/levels?project=${encodeURIComponent(path)}`).then((r) => {
       // A slower answer for a project the person has left does not replace the one on screen.
-      if (chosenRef.current === path) { setLevels(r.levels ?? []); setFromDisk(!!r.fromDisk); setAssets(r.assets); }
+      if (chosenRef.current === path) { setLevels(r.levels ?? []); setLevelSizes(r.sizes ?? {}); setFromDisk(!!r.fromDisk); setAssets(r.assets); }
       knownLevels.set(path, r.levels?.length ?? 0);
       bump((n) => n + 1);
     }, (er: Error) => toast(er.message)).finally(() => setBusy((b) => (b === path ? "" : b)));
@@ -203,7 +208,7 @@ export function StandInLevels() {
           <div className="standin-scenes">
             {levels.map((l) => (
               // Without the plugin (or an old one) the tap asks for the install instead of failing in the editor later.
-              <a key={l} className="button" dir="ltr" href={levelHref(l)} onClick={(ev) => { if (!chosenReady) { ev.preventDefault(); setNeed(l); } }}>{l.replace(/^\/Game\//, "")}</a>
+              <a key={l} className="button" dir="ltr" href={levelHref(l)} onClick={(ev) => { if (!chosenReady) { ev.preventDefault(); setNeed(l); } }}>{l.replace(/^\/Game\//, "")}{levelSizes[l] ? <span className="muted small"> · {fileSize(levelSizes[l]!)}</span> : null}</a>
             ))}
           </div>
         </>

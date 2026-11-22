@@ -255,9 +255,10 @@ const err = (statusCode: number, message: string) => Object.assign(new Error(mes
  * @param project - The project's folder.
  * @returns The scenes, sorted, and when there are none a note on why (so the page can say more than "none").
  */
-export async function unitySceneList(project: unknown): Promise<{ scenes: string[]; note?: string; reason?: "empty" | "none"; files?: number }> {
+export async function unitySceneList(project: unknown): Promise<{ scenes: string[]; sizes?: Record<string, number>; note?: string; reason?: "empty" | "none"; files?: number }> {
   const { dir } = await paths(project);
   const out = new Set<string>();
+  const sizes: Record<string, number> = {};
   const seen = new Set<string>();
   let folders = 0, files = 0;
   const walk = async (d: string, depth: number): Promise<void> => {
@@ -272,7 +273,13 @@ export async function unitySceneList(project: unknown): Promise<{ scenes: string
       if (isDir) await walk(f, depth + 1);
       else {
         files++;
-        if (/\.unity$/i.test(e.name)) out.add(relative(dir, f).split(sep).join("/"));
+        if (/\.unity$/i.test(e.name)) {
+          const rel = relative(dir, f).split(sep).join("/");
+          out.add(rel);
+          // The scene file's size, so the list shows how heavy each scene is (Roee 2026-11-22).
+          const n = (await stat(f).catch(() => undefined))?.size;
+          if (n) sizes[rel] = n;
+        }
       }
     }
   };
@@ -286,7 +293,7 @@ export async function unitySceneList(project: unknown): Promise<{ scenes: string
     if (!m[1]!.split("/").includes("..") && existsSync(join(dir, m[1]!))) out.add(m[1]!);
   }
   const scenes = [...out].sort();
-  if (scenes.length) return { scenes };
+  if (scenes.length) return { scenes, sizes: Object.fromEntries(scenes.filter((x) => sizes[x]).map((x) => [x, sizes[x]!])) };
   const empty = !existsSync(join(dir, "Assets")) || files === 0;
   const note = empty
     ? "Assets is empty: the project's files may still be downloading, or they are in another folder."

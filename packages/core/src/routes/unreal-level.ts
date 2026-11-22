@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { findGameProjects } from "../game-projects.js";
 import { JobQueue, withBusy } from "../busy.js";
@@ -96,6 +96,24 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
     return found ? join(found.path, `${found.name}.uproject`) : null;
   };
   const bad = (reply: { code: (n: number) => { send: (b: unknown) => unknown } }) => reply.code(403).send({ error: "Choose one of the Unreal projects found on the computer." });
+  /**
+   * Each level's size on disk (its .umap plus its _BuiltData.uasset, the baked lighting), so the list shows how heavy
+   * every level is (Roee 2026-11-22). Levels without a file under Content (another plugin's) get no size.
+   */
+  const withSizes = async <T extends { levels?: string[] }>(r: T, dir: string | undefined): Promise<T & { sizes?: Record<string, number> }> => {
+    if (!dir || !r.levels?.length) return r;
+    const sizes: Record<string, number> = {};
+    for (const l of r.levels.slice(0, 2000)) {
+      const rel = l.replace(/^\/Game\//, "");
+      if (rel === l || rel.includes("..")) continue;
+      const base = join(dir, "Content", ...rel.split("/"));
+      let n = 0;
+      for (const f of [`${base}.umap`, `${base}_BuiltData.uasset`]) n += (await stat(f).catch(() => undefined))?.size ?? 0;
+      if (n) sizes[l] = n;
+    }
+    return { ...r, sizes };
+  };
+
   app.get<{ Querystring: { project?: string } }>("/api/unreal/levels", async (req, reply) => {
     const pf = await projectFile(req.query.project);
     if (pf === null) return bad(reply);
@@ -107,17 +125,17 @@ export async function unrealLevelRoutes(app: FastifyInstance, b: UnrealBridge): 
       const scan = dir ? await scanContent(dir) : { levels: [], assets: 0 };
       return { levels: scan.levels, fromDisk: true, assets: scan.assets, ...(note ? { note } : {}) };
     };
-    if (pf && dir && !hasPlugin(dir)) return fromFiles();
+    if (pf && dir && !hasPlugin(dir)) return withSizes(await fromFiles(), dir);
     try {
       const r = await b.standIn<{ levels: string[] }>("levels", "", pf);
       if (!r.levels?.length && dir) {
         const scan = await scanContent(dir);
-        return scan.levels.length ? { ...r, levels: scan.levels, fromDisk: true } : { ...r, assets: scan.assets };
+        return scan.levels.length ? withSizes({ ...r, levels: scan.levels, fromDisk: true }, dir) : { ...r, assets: scan.assets };
       }
-      return r;
+      return withSizes(r, dir);
     } catch (e) {
       const disk = await fromFiles((e as Error).message);
-      if (disk.levels.length || (dir && disk.assets > 0)) return disk;
+      if (disk.levels.length || (dir && disk.assets > 0)) return withSizes(disk, dir);
       return fail(reply, e);
     }
   });
