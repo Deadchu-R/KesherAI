@@ -952,6 +952,11 @@ function askNextToggle(g: "agy" | "local", list: PageTask[]): HTMLElement | null
  *
  * @param t - A task of a PC's inbox that waits, failed, ended partly or was deferred.
  */
+/** The model picker's part of "Who does it" for an Antigravity task that has not started (its PC sent the models). */
+function inboxModel(t: PageTask): { model?: { list: string[]; pick: string } } {
+  return t.inbox?.executor === "antigravity" && t.inbox.models?.length ? { model: { list: t.inbox.models, pick: t.inbox.model ?? "" } } : {};
+}
+
 function taskControls(t: PageTask): HTMLElement | null {
   if (!t.inbox || !CHOOSABLE.has(t.status)) return null;
   const ex = t.inbox.executor;
@@ -963,7 +968,7 @@ function taskControls(t: PageTask): HTMLElement | null {
   return h(
     "div",
     { class: "row wrap tctl", onclick: stop },
-    assignBox({ device, render, taskId: t.taskId, pcs, current: assignOfExecutor(ex === "claude" ? "opus" : ex) }),
+    assignBox({ device, render, taskId: t.taskId, pcs, current: assignOfExecutor(ex === "claude" ? "opus" : ex), ...inboxModel(t) }),
     queueable ? (place ? h("span", { class: "row" }, h("span", { class: "tag t-run" }, L(`בתור #${place}`, `Queued #${place}`)), h("button", { type: "button", class: "btn sm-btn", onclick: () => void device.inboxCommand(t, "inbox-unqueue") }, L("הסר מהתור", "Take out"))) : h("button", { type: "button", class: "btn sm-btn", onclick: () => void device.inboxCommand(t, "inbox-queue") }, L("＋ הוסף לתור", "＋ Add to queue"))) : null,
     a && (a.action === "inbox-queue" || a.action === "inbox-unqueue") && a.result && !a.result.ok ? h("span", { class: "xs warn wrapl", dir: "auto" }, a.result.text) : null,
   );
@@ -1012,7 +1017,7 @@ function taskDetail(t: PageTask): HTMLElement {
     h("div", { class: "row wrap" }, statusTag(t), h("b", { class: "grow" }, t.title), sourceChip(t), deviceChip(t), routeChip(t), t.inbox ? h("span", { class: "mut sm" }, `${L("במחשב", "on")} ${t.toName}`) : null, stepsLine(t) ? h("span", { class: "chip steps" }, stepsLine(t)) : null, liveCard(t) ? h("button", { type: "button", class: "btn", onclick: () => agentsView.setOpen(liveCard(t)) }, L("● כרטיס הסוכן החי ›", "● Live agent card ›")) : null, t.link && isSafeLink(t.link) ? h("a", { class: "btn", href: t.link, target: "_blank", rel: "noopener noreferrer" }, t.route === "claude-cloud" ? L("פתח ב-Claude ↗", "Open in Claude ↗") : L("פתח ↗", "Open ↗")) : null, h("button", { type: "button", class: "btn", onclick: () => void navigator.clipboard?.writeText(t.line ?? t.spec) }, L("העתק", "Copy"))),
     t.line || t.spec ? h("div", { class: "sm answer" }, t.line ?? t.spec) : h("div", { class: "sm mut" }, t.inbox ? L("משימה מתיבת המשימות במחשב (ענף kesher-inbox). התוכן שלה נשאר במחשב.", "A task from the PC's task inbox (the kesher-inbox branch). Its text stays on the PC.") : ""),
     t.branch ? h("div", { class: "sm" }, L("ענף ", "Branch "), h("span", { class: "mono" }, t.branch)) : null,
-    t.inbox || t.drive ? assignBox({ device, render, taskId: t.taskId, pcs: device.assignTargets(t), current: t.inbox ? assignOfExecutor(t.inbox.executor === "claude" ? "opus" : t.inbox.executor) : undefined }) : null,
+    t.inbox || t.drive ? assignBox({ device, render, taskId: t.taskId, pcs: device.assignTargets(t), current: t.inbox ? assignOfExecutor(t.inbox.executor === "claude" ? "opus" : t.inbox.executor) : undefined, ...inboxModel(t) }) : null,
     h("div", { class: "pl" }, t.history.map((x) => `${when(x.t)} ${L(x.he, x.en)}`).join(" · ")),
   );
 }

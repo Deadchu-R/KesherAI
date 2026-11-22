@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, isModelUnavailable, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
@@ -72,6 +72,9 @@ interface Saved {
   geminiUntil?: number;
   lastFetch?: number;
   lastError?: string;
+  /** The models Antigravity listed in its last session, and when (the per-task picker shows the available ones). */
+  models?: InboxModel[];
+  modelsAt?: number;
 }
 
 /** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
@@ -294,6 +297,7 @@ export class TaskInbox {
       ...(quota ? { quota } : {}),
       runHere: here,
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
+      models: pickableModels(this.saved.models),
     };
   }
 
@@ -1018,17 +1022,36 @@ export class TaskInbox {
       a.agent = agent;
       await agent.newSession(worktree);
       await agent.setMode("accept-edits").catch(() => false);
-      const model = agent.options.find((o) => o.category === "model" || /model/i.test(o.id));
-      const want = (t.model || s.model).trim().toLowerCase();
-      const pick = want && model?.choices.find((c) => c.value.toLowerCase() === want || c.name.toLowerCase().includes(want));
-      if (model && pick) await agent.setOption(model.id, pick.value).catch(() => undefined);
-      const chosen = agent.options.find((o) => o.id === model?.id);
-      t.modelUsed = chosen?.choices.find((c) => c.value === chosen.current)?.name ?? (chosen?.current || undefined);
+      this.keepModels(agent);
+      // The task's model (frontmatter or the picker), else the inbox's, else the default for its kind; on a quota or
+      // unavailable answer the next one of the chain (Opus → Sonnet → Flash). Only models the plan lists.
+      const chain = modelChain(agent.models, t.model || s.model, defaultFamilyFor(t));
+      const tried: string[] = [];
+      let at = 0;
+      const use = async (): Promise<void> => {
+        const m = chain[at];
+        if (m) await agent.setModel(m.id).catch(() => undefined);
+        t.modelUsed = agent.models.find((x) => x.id === agent.model)?.name ?? (agent.model || undefined);
+        void this.save();
+      };
+      await use();
       timer = setTimeout(() => {
         a.why = "time";
         void agent.cancel().catch(() => undefined);
       }, t.maxMinutes * 60_000);
-      if (a.why !== "stop") stop = await agent.prompt(agentPrompt(t, t.branch));
+      while (a.why !== "stop") {
+        try {
+          stop = await agent.prompt(agentPrompt(t, t.branch));
+          break;
+        } catch (e) {
+          const msg = (e as Error).message || String(e);
+          if (a.why || at + 1 >= chain.length || !isModelUnavailable(msg)) throw e;
+          tried.push(`${t.modelUsed ?? chain[at]!.name} (${isQuotaError(msg) ? "quota" : "unavailable"})`);
+          at++;
+          await use();
+          t.modelFallback = `${tried.join(" → ")} → ${t.modelUsed ?? chain[at]!.name}`;
+        }
+      }
       // A research agent sometimes gives up after one refused step and writes nothing: ask once more, in the same
       // session, for the report with what it has (two deep-research runs ended this way).
       const report = t.kind === "research" ? t.allowedPaths[0] : undefined;
@@ -1051,6 +1074,47 @@ export class TaskInbox {
     const ok = !error && stop === "end_turn" && !a.why;
     const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? "Stopped by you." : a.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
     await this.finish(t, worktree, base, repo, ok, why, quota ? "deferred-quota" : undefined);
+  }
+
+  /** Keeps the models the agent listed (for the pickers) and logs what its session sent, to see a new agy's shape. */
+  private keepModels(agent: AcpAgent): void {
+    if (!agent.models.length) {
+      console.info(`[task-inbox] Antigravity's session lists no models (keys: ${agent.sessionKeys.join(", ") || "none"}).`);
+      return;
+    }
+    const list = agent.models.map((m) => ({ id: m.id, name: m.name, available: m.available }));
+    if (JSON.stringify(list) !== JSON.stringify(this.saved.models)) {
+      console.info(`[task-inbox] Antigravity models (${agent.models[0]!.via}): ${list.map((m) => `${m.name}${m.available ? "" : " [unavailable]"}`).join("; ")}`);
+    }
+    this.saved.models = list;
+    this.saved.modelsAt = this.now();
+  }
+
+  /** The names of the models the pickers offer (see {@link InboxState.models}), for the hub page. */
+  modelNames(): string[] {
+    return pickableModels(this.saved.models).map((m) => m.name);
+  }
+
+  /**
+   * Picks the model a task runs on ("Who does it" → model, on the PC, the phone or the hub page). Empty: the default
+   * for its kind. Only a model Antigravity lists as available (or a known name before it was asked once).
+   *
+   * @param id - The task (waiting, queued or ended; a running task keeps its model).
+   * @param model - A model's name or id from {@link InboxState.models}, or "" for the default.
+   * @returns The task.
+   */
+  async setModel(id: string, model: string): Promise<InboxTaskView> {
+    await this.load();
+    const t = this.find(id);
+    if (t.status === "running" || t.status === "needs-approval") throw fail("The task is running; its model cannot change now.", 409);
+    const want = model.trim();
+    if (want) {
+      const m = pickableModels(this.saved.models).find((x) => x.id === want || x.name === want);
+      if (!m) throw fail("Antigravity does not offer that model.", 400);
+      t.model = m.name;
+    } else delete t.model;
+    await this.save();
+    return t;
   }
 
   /** One permission request: the policy decides, or the user does (the task waits; denied after 30 minutes). */
@@ -1321,7 +1385,7 @@ export class TaskInbox {
       if (!validTaskId(id) || tasks.some((t) => t.id === id)) return;
       const { diff: _d, runAsk: _a, ...spec } = tpl;
       const copy: InboxTaskView = { ...spec, id, standing: true, from: "self-work", status: "waiting", runBy: "antigravity", executor: "antigravity", branch: branchFor({ id, title: tpl.title }, "antigravity"), note: "Standing task: what to research next. Run starts it." };
-      for (const k of ["startedAt", "endedAt", "summary", "plan", "steps", "decisions", "checks", "files", "headSha", "pushed", "boardId", "boardState", "resultWritten", "modelUsed", "researchReport", "retryAt", "autoRetried", "pending"] as const) delete (copy as unknown as Record<string, unknown>)[k];
+      for (const k of ["startedAt", "endedAt", "summary", "plan", "steps", "decisions", "checks", "files", "headSha", "pushed", "boardId", "boardState", "resultWritten", "modelUsed", "modelFallback", "researchReport", "retryAt", "autoRetried", "pending"] as const) delete (copy as unknown as Record<string, unknown>)[k];
       this.saved.tasks.push(copy);
       await this.save();
     }

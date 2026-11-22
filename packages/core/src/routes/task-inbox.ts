@@ -102,6 +102,11 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     if (!ok || !s.agentLabels) return reply.code(404).send({ error: "No such task" });
     return { label: s.agentLabels.set(inboxRunId(req.params.id), { name: req.body?.name, note: req.body?.note }) };
   });
+  /** The model an Antigravity task runs on (one of the state's `models`; "" = the default for its kind). */
+  app.put<{ Params: { id: string }; Body: { model?: unknown } }>("/api/task-inbox/tasks/:id/model", async (req, reply) => {
+    const model = typeof req.body?.model === "string" ? req.body.model.slice(0, 80) : "";
+    return inbox.setModel(req.params.id, model).catch((e) => failed(reply, e));
+  });
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {

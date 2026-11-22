@@ -28,6 +28,8 @@ export interface InboxMeta {
   /** The place in its executor's line (1 = next) while queued, and that executor's "ask before the next task" switch. */
   lineAt?: number;
   askNext?: boolean;
+  /** The models the PC's Antigravity offers (names), sent only while the task has not started. */
+  models?: string[];
   standing?: boolean;
   kind?: HubWorkKind;
   startedAt?: number;
@@ -59,6 +61,7 @@ export function inboxMetaOf(r: HubInboxTask, deviceId: string): InboxMeta {
     ...(r.queuePos ? { queuePos: r.queuePos } : {}),
     ...(r.lineAt ? { lineAt: r.lineAt } : {}),
     ...(r.askNext !== undefined ? { askNext: r.askNext } : {}),
+    ...(r.models?.length ? { models: r.models } : {}),
     ...(r.standing ? { standing: true } : {}),
     ...(r.kind ? { kind: r.kind } : {}),
     ...(r.startedAt ? { startedAt: r.startedAt } : {}),

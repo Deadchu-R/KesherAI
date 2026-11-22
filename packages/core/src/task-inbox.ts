@@ -339,6 +339,7 @@ export function resultFileText(t: InboxTaskView, checkTail = ""): string {
     `head_sha: ${t.headSha ?? ""}`,
     ...(minutes !== undefined ? [`minutes: ${minutes}`] : []),
     ...(t.modelUsed ? [`model: ${t.modelUsed.replace(/[\r\n]/g, " ")}`] : []),
+    ...(t.modelFallback ? [`model_fallback: ${t.modelFallback.replace(/[\r\n]/g, " ")}`] : []),
     "---",
     "",
     "## Summary",

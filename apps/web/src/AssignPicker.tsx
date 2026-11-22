@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ASSIGN_CHOICES, assignQuestion, type AssignResult, type AssignTo } from "@kesher/shared";
+import { ASSIGN_CHOICES, assignQuestion, KNOWN_MODELS, type AssignResult, type AssignTo, type InboxModel, type ModelFamily } from "@kesher/shared";
 import { api } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
@@ -18,8 +18,10 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  * @param p.current - Who has it now (marked in the list).
  * @param p.label - The button's text (default "Who does it").
  * @param p.onDone - Called after a change (to load the list again).
+ * @param p.model - For an Antigravity task that has not started: the models to offer, the task's pick ("" = the
+ *   default) and the default's family (inbox-models.ts). Shown under the list as "Model".
  */
-export function AssignPicker({ id, current, label, onDone }: { id: string; current?: AssignTo; label?: string; onDone?: () => void }) {
+export function AssignPicker({ id, current, label, onDone, model }: { id: string; current?: AssignTo; label?: string; onDone?: () => void; model?: { list: InboxModel[]; pick: string; auto: ModelFamily } }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const send = async (to: AssignTo, confirm = false): Promise<void> => {
@@ -42,6 +44,18 @@ export function AssignPicker({ id, current, label, onDone }: { id: string; curre
       setBusy(false);
     }
   };
+  const pickModel = async (name: string): Promise<void> => {
+    setBusy(true);
+    try {
+      await api(`/api/task-inbox/tasks/${encodeURIComponent(id)}/model`, { method: "PUT", body: { model: name } });
+      toast(name ? L(`ירוץ על ${name}`, `Runs on ${name}`) : L("ירוץ על ברירת המחדל לסוג המשימה", "Runs on the default for its kind"));
+      onDone?.();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <span className="assign">
       <button type="button" aria-expanded={open} aria-haspopup="true" disabled={busy} onClick={() => setOpen((o) => !o)}>
@@ -58,6 +72,19 @@ export function AssignPicker({ id, current, label, onDone }: { id: string; curre
               </span>
             </button>
           ))}
+          {model && current === "antigravity" && (
+            <span className="assign-models" role="group" aria-label={L("מודל ב-Antigravity", "Model in Antigravity")}>
+              <span className="small muted">{L("מודל", "Model")}</span>
+              <button type="button" className={`chip-text${!model.pick ? " on" : ""}`} aria-pressed={!model.pick} disabled={busy} onClick={() => void pickModel("")}>
+                {L("אוטומטי", "Auto")} <span className="muted">({KNOWN_MODELS[model.auto].replace(/\s*\(.*\)$/, "")})</span>
+              </button>
+              {model.list.map((m) => (
+                <button type="button" key={m.id} className={`chip-text${model.pick === m.name ? " on" : ""}`} aria-pressed={model.pick === m.name} disabled={busy} onClick={() => void pickModel(m.name)} dir="ltr">
+                  {m.name}
+                </button>
+              ))}
+            </span>
+          )}
         </span>
       )}
     </span>

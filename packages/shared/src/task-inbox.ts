@@ -4,6 +4,7 @@
  * names, checks the work itself and returns it as a branch for Claude to review. These are the shapes the server
  * sends to the page (`GET /api/task-inbox`), shared so the page and the server agree.
  */
+import type { InboxModel } from "./inbox-models.js";
 import type { AgentLabel } from "./agent-label.js";
 
 /** Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts). */
@@ -115,6 +116,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   boardState?: "open" | "claimed";
   /** The model it ran on, as the agent named it. */
   modelUsed?: string;
+  /** Set when the chosen model could not run (quota, unavailable) and another took over, e.g. "Claude Opus 4.6 → Claude Sonnet 4.6 (quota)". */
+  modelFallback?: string;
   plan?: Array<{ content: string; status: string }>;
   steps?: number;
   decisions?: InboxDecision[];
@@ -226,6 +229,8 @@ export interface InboxState {
   runHere: boolean;
   /** The project's folder name (never its full path), for the ask card. */
   project?: string;
+  /** The models Antigravity offered in its last session (inbox-models.ts); empty before it was asked once. */
+  models?: InboxModel[];
 }
 
 /** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */

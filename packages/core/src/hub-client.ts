@@ -131,6 +131,10 @@ export interface HubClientDeps {
   inboxCommand?: (action: HubCommandAction, taskId: string, from: { id: string; kind: string }, on?: boolean) => Promise<{ ok: boolean; text: string }>;
   /** "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts). */
   assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
+  /** The models Antigravity offers (names, inbox-models.ts `pickableModels`), sent with tasks that have not started. */
+  inboxModels?: () => string[];
+  /** Picks the model of an Antigravity task ("" = the default for its kind), from the owner's phone or hub page. */
+  inboxModel?: (taskId: string, model: string) => Promise<AssignResult>;
   /** Renames an agent run and sets its note, from the owner's phone or hub page (agent-labels.ts). */
   agentLabel?: (runId: string, label: AgentLabel, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
   /** Applies a board command (reopen, a higher priority, for self-work, a note) from the owner's phone or hub page (hub-board.ts). */
@@ -205,7 +209,7 @@ const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
  *   the waiting tasks (1 = next). Both optional; an older page ignores them.
  * @returns The report, or undefined when it is not reported.
  */
-export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number; askNext?: { antigravity: boolean; local: boolean } } = {}): HubInboxTask | undefined {
+export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number; askNext?: { antigravity: boolean; local: boolean }; models?: string[] } = {}): HubInboxTask | undefined {
   if (t.from === "hub" || !/^[\w-]{1,64}$/.test(t.id)) return undefined;
   let state = INBOX_STATE[t.status];
   // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
@@ -239,6 +243,8 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     ...(order.queuePos && (state === "waiting" || state === "waiting-run") ? { queuePos: order.queuePos } : {}),
     ...(t.queued ? { lineAt: t.queued } : {}),
     ...(t.standing ? { standing: true } : {}),
+    // The model picker's choices, only for an Antigravity task that has not started (a running one keeps its model).
+    ...(order.models?.length && t.runBy === "antigravity" && !t.startedAt && (state === "waiting" || state === "waiting-run") ? { models: order.models.slice(0, 12) } : {}),
     ...(order.askNext && (t.runBy === "antigravity" || t.runBy === "local") ? { askNext: order.askNext[t.runBy] } : {}),
     kind: workKindOf({ kind: t.kind, title: t.title, goal: t.goal }),
     ...(t.startedAt ? { startedAt: t.startedAt } : {}),
@@ -850,6 +856,10 @@ export class HubClient {
         const r: AssignResult =
           kind !== "phone"
             ? { ok: false, text: "Only your phone or the hub page can do this." }
+            : body.action === "assign" && body.model !== undefined
+              ? !this.deps.inboxModel
+                ? { ok: false, text: "This PC cannot pick a model from here yet." }
+                : await this.deps.inboxModel(body.taskId, body.model).catch(failed)
             : body.action === "assign"
               ? !this.deps.assign || !body.to
                 ? { ok: false, text: "This PC cannot give tasks to others yet." }
@@ -983,7 +993,8 @@ export class HubClient {
       const base = hubInboxTask(t, now);
       const waits = base?.state === "waiting" || base?.state === "waiting-run";
       const askNext = this.deps.inboxAskNext?.();
-      const report = base && hubInboxTask(t, now, { ...(askNext ? { askNext } : {}), ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
+      const models = this.deps.inboxModels?.();
+      const report = base && hubInboxTask(t, now, { ...(askNext ? { askNext } : {}), ...(models?.length ? { models } : {}), ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
       if (!report) continue;
       const { at: _at, ...shape } = report;
       const hash = createHash("sha256").update(JSON.stringify(shape)).digest("base64url").slice(0, 16);

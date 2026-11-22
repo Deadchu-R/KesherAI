@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { agent } from "@agentclientprotocol/sdk";
 import { INBOX_GIT_MISSING } from "@kesher/shared";
 import { AcpAgent } from "./acp.js";
+import { modelAgent } from "./acp-models.test.js";
 import { TaskInbox, isQuotaError, nextInLineTitle, quotaUntil, type RunCmd } from "./inbox-runner.js";
 import { TaskBoard } from "./task-board.js";
 
@@ -784,6 +785,40 @@ test("inbox queue: the freed-slot note's Run button starts the next task once; a
     // The slot freed again: a new code. Starting another task by hand voids the old buttons.
     const next = h.inbox.queues();
     assert.deepEqual(next.antigravity, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox models: the default for its kind (Opus for code with a check), Opus out of quota falls back to Sonnet, noted in the result", async () => {
+  const { root, repo } = await setup({ "c-20261122-40": TASK("c-20261122-40") });
+  const seen = { prompts: [] as string[] } as { setModel?: string; prompts: string[] };
+  const inbox = new TaskInbox({
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox", dailyCap: 5 }),
+    file: join(root, "inbox.json"),
+    git,
+    run: async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }),
+    startAgent: (_cwd, h) => AcpAgent.connect(modelAgent(seen, "claude-opus-4.6"), h),
+    notify: () => undefined,
+    busy: async () => ({ free: true, reasons: [] }),
+    approvalMs: 300,
+  });
+  try {
+    await inbox.sync();
+    const before = await inbox.state(true);
+    assert.deepEqual(before.models?.map((m) => m.name), ["Claude Opus 4.6 (Thinking)", "Claude Sonnet 4.6 (Thinking)", "Gemini 3.8 Flash (Medium)"], "known names before Antigravity was asked");
+    await inbox.run("c-20261122-40", { here: true });
+    const t = await settle(inbox, "c-20261122-40");
+    assert.equal(seen.prompts[0], "claude-opus-4.6", "a code task with a check starts on Opus");
+    assert.equal(seen.prompts[1], "claude-sonnet-4.6", `then Sonnet, by itself (${t.note})`);
+    assert.equal(t.modelUsed, "Claude Sonnet 4.6 (Thinking)");
+    assert.match(t.modelFallback ?? "", /Opus 4\.6.*quota.*→ Claude Sonnet/);
+    const after = await inbox.state(true);
+    assert.ok(!after.models?.some((m) => /Neon/.test(m.name)), "an unavailable model is not offered");
+    assert.ok(after.models?.some((m) => /GPT-OSS/.test(m.name)), "the agent's own list after a run");
+    await assert.rejects(inbox.setModel("c-20261122-40", "Gemini 4 Neon"), /does not offer/);
+    assert.equal((await inbox.setModel("c-20261122-40", "GPT-OSS 120B (Medium)")).model, "GPT-OSS 120B (Medium)");
+    assert.equal((await inbox.setModel("c-20261122-40", "")).model, undefined, "empty: back to the default");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

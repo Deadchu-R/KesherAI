@@ -52,6 +52,52 @@ export function flattenOptions(list: SessionConfigOption[] | null | undefined): 
   });
 }
 
+/** A model the agent offers, from either the session's model choice or ACP's `models` state (see {@link readModels}). */
+export interface AcpModel {
+  id: string;
+  name: string;
+  description?: string;
+  /** False when the agent marks it unavailable for the user's plan (shown greyed, never picked). */
+  available: boolean;
+  /** Where it came from: a `configOptions` model select (set with `set_config_option`) or `models` (`set_model`). */
+  via: "option" | "models";
+}
+
+/** Words an agent uses for a model the user's plan cannot use (Antigravity lists e.g. "Gemini 4 Neon (Unavailable)"). */
+const UNAVAILABLE = /\b(unavailable|not available|upgrade|requires? (a )?(higher|paid|ultra|pro\+)|disabled)\b/i;
+
+/**
+ * The session's models, from whatever the agent sent at `session/new`: ACP's `models` state (`availableModels`,
+ * `currentModelId`; set with `session/set_model`) and/or a `configOptions` select of category `model` (set with
+ * `session/set_config_option`). Both are read so it works with either shape; `models` wins when both list one id.
+ *
+ * @param raw - The `session/new` (or `session/resume`) result, as untrusted JSON.
+ * @param options - The flattened config options of the same result.
+ * @returns The models and the current one (by id).
+ */
+export function readModels(raw: unknown, options: AcpOption[]): { models: AcpModel[]; current?: string } {
+  const out = new Map<string, AcpModel>();
+  const flag = (x: Record<string, unknown>): boolean => {
+    const meta = (x._meta && typeof x._meta === "object" ? x._meta : {}) as Record<string, unknown>;
+    if (x.available === false || x.disabled === true || meta.available === false || meta.disabled === true) return false;
+    return !UNAVAILABLE.test(`${String(x.name ?? "")} ${String(x.description ?? "")}`);
+  };
+  const opt = options.find((o) => o.category === "model" || /model/i.test(o.id));
+  for (const c of opt?.choices ?? []) out.set(c.value, { id: c.value, name: c.name, ...(c.description ? { description: c.description } : {}), available: flag(c as unknown as Record<string, unknown>), via: "option" });
+  const st = raw && typeof raw === "object" ? ((raw as Record<string, unknown>).models as Record<string, unknown> | undefined) : undefined;
+  const list = st && Array.isArray(st.availableModels) ? (st.availableModels as unknown[]) : [];
+  for (const m of list) {
+    if (!m || typeof m !== "object") continue;
+    const r = m as Record<string, unknown>;
+    const id = typeof r.modelId === "string" ? r.modelId : typeof r.id === "string" ? r.id : "";
+    if (!id) continue;
+    const name = typeof r.name === "string" && r.name ? r.name : id;
+    out.set(id, { id, name: name.slice(0, 80), ...(typeof r.description === "string" && r.description ? { description: r.description.slice(0, 200) } : {}), available: flag(r), via: "models" });
+  }
+  const current = typeof st?.currentModelId === "string" ? st.currentModelId : opt?.current;
+  return { models: [...out.values()].slice(0, 30), ...(current ? { current } : {}) };
+}
+
 /** What KesherAI does with an agent's updates and permission questions. */
 export interface AcpHandlers {
   update: (u: AcpUpdate) => void;
@@ -211,6 +257,7 @@ export class AcpAgent {
     this.modes = (r.modes?.availableModes ?? []).map((m) => m.id);
     this.options = flattenOptions(r.configOptions);
     this.mode = r.modes?.currentModeId;
+    this.setModels(r);
     return r.sessionId;
   }
 
@@ -226,6 +273,43 @@ export class AcpAgent {
     this.modes = (r.modes?.availableModes ?? []).map((m) => m.id);
     this.mode = r.modes?.currentModeId;
     this.options = flattenOptions(r.configOptions);
+    this.setModels(r);
+  }
+
+  /** The models the agent offers (see {@link readModels}) and the one in use. */
+  models: AcpModel[] = [];
+  model?: string | undefined;
+  /** The top-level keys of the last `session/new` result (logged by the inbox, to see what an agent version sends). */
+  sessionKeys: string[] = [];
+
+  private setModels(r: unknown): void {
+    const m = readModels(r, this.options);
+    this.models = m.models;
+    this.model = m.current;
+    this.sessionKeys = r && typeof r === "object" ? Object.keys(r).slice(0, 20) : [];
+  }
+
+  /**
+   * Switches the session's model: through `session/set_model` when the agent listed it in `models`, otherwise
+   * through its model choice (`session/set_config_option`). Only a model the agent listed as available.
+   *
+   * @param id - A model id from {@link models}.
+   * @returns The model now in use.
+   */
+  async setModel(id: string): Promise<string | undefined> {
+    if (!this.sessionId) throw new Error("No session yet.");
+    const m = this.models.find((x) => x.id === id);
+    if (!m || !m.available) throw new Error("The agent does not offer that model.");
+    if (this.model === id) return id;
+    if (m.via === "models") {
+      await this.ctx.request("session/set_model", { sessionId: this.sessionId, modelId: id });
+    } else {
+      const opt = this.options.find((o) => o.category === "model" || /model/i.test(o.id));
+      if (!opt) throw new Error("The agent has no model choice.");
+      await this.setOption(opt.id, id);
+    }
+    this.model = id;
+    return id;
   }
 
   /** The session's choices (model, thinking level…), as the agent last sent them. */

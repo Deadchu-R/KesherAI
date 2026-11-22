@@ -751,6 +751,13 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       ),
     // "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts).
     assign: (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm),
+    // The model an Antigravity task runs on, picked on the phone or the hub page (inbox-models.ts).
+    inboxModels: () => taskInbox.modelNames(),
+    inboxModel: (taskId, model) =>
+      taskInbox.setModel(taskId, model).then(
+        (t) => ({ ok: true, text: t.model ? `It runs on ${t.model}.` : "It runs on the default model for its kind." }),
+        (e: Error) => ({ ok: false, text: e.message }),
+      ),
     // Reopen, a higher priority, "for self-work" and a note on a board task, from the owner's phone or hub page (hub-board.ts).
     boardCommand: (taskId, cmd) => boardCommand(taskBoard, taskId, cmd),
     // A name and note for an agent, from the owner's phone or hub page (hub-commands.ts).

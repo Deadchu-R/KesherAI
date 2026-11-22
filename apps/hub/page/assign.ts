@@ -27,6 +27,8 @@ export interface AssignBoxOptions {
   current?: AssignTo;
   /** The button's words (default "Who does it"). */
   label?: { he: string; en: string };
+  /** An Antigravity task that has not started: the models its PC offers and the task's pick ("" = the default). */
+  model?: { list: string[]; pick: string };
 }
 
 /**
@@ -78,6 +80,7 @@ export function assignBox(o: AssignBoxOptions): HTMLElement {
       ? h(
           "div",
           { class: "assign-list", role: "group", "aria-label": L("למי לתת את המשימה", "Who to give the task to") },
+          o.model && o.current === "antigravity" ? modelRow(o.model, (name) => void device.assign(taskId, pcs, "antigravity", false, name).then(() => { open = undefined; render(); })) : null,
           ASSIGN_CHOICES.map((c) =>
             h(
               "button",
@@ -90,4 +93,17 @@ export function assignBox(o: AssignBoxOptions): HTMLElement {
       : null,
     answer,
   );
+}
+
+/**
+ * The model chips of an Antigravity task (inbox-models.ts): "Auto" (the default for its kind) and each model the PC's
+ * Antigravity offers. A tap sends an `assign` with `model`; the PC answers like any assign.
+ *
+ * @param m - The models and the task's pick.
+ * @param pick - Sends the choice.
+ * @returns The row.
+ */
+function modelRow(m: { list: string[]; pick: string }, pick: (name: string) => void): HTMLElement {
+  const chip = (name: string, text: string) => h("button", { type: "button", class: `chip${m.pick === name ? " chip-on" : ""}`, "aria-pressed": String(m.pick === name), dir: name ? "ltr" : "auto", onclick: () => pick(name) }, text);
+  return h("div", { class: "row wrap assign-models", role: "group", "aria-label": L("מודל ב-Antigravity", "Model in Antigravity") }, h("span", { class: "sm mut" }, L("מודל:", "Model:")), chip("", L("אוטומטי", "Auto")), m.list.map((n) => chip(n, n)));
 }

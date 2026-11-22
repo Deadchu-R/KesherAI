@@ -4344,6 +4344,11 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* .assign-list prefix: row-action rules like .tinbox-actions button (height: 30px) and html.handheld button (min-height) outrank a bare class and cut the option, so the note spilled over its borders. */
 .assign-list .assign-opt { display: flex; gap: 8px; align-items: flex-start; text-align: start; height: auto; min-height: 44px; padding: 8px 10px; white-space: normal; line-height: 1.35; width: 100%; box-sizing: border-box; }
 .assign-list .assign-opt.on { outline: 1px solid var(--accent); }
+/* The model picker under "Who does it" (an Antigravity task that has not started; inbox-models.ts). Wraps on a 390 px phone. */
+.assign-list .assign-models { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 4px 2px; border-top: 1px solid var(--border); }
+.assign-list .assign-models .chip-text { height: auto; min-height: 32px; padding: 4px 10px; white-space: normal; text-align: start; }
+.assign-list .assign-models .chip-text.on { outline: 1px solid var(--accent); }
+.tinbox-model { display: block; overflow-wrap: anywhere; margin-top: 2px; }
 .assign-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .assign-t > span { display: block; line-height: 1.35; } /* the grey sub-line sat on the title (button line-height) */
 .tinbox-wl-item { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 8px; }

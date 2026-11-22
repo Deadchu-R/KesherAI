@@ -239,9 +239,10 @@ export type SealedBody =
    * The owner's press on the hub page or the phone, for a task of a PC's task inbox (see {@link HubCommandAction}).
    * `agent-label`: `taskId` is an agent run's id and `label` its new name and note (empty fields clear them).
    * `assign`: `taskId` is an inbox task (or its Drive record) or a work-list item, `to` who does it now, `confirm` the
-   * user's yes to stopping a running task or running a finished one again (task-assign.ts).
+   * user's yes to stopping a running task or running a finished one again (task-assign.ts). An `assign` with `model`
+   * (to `antigravity`) only picks the model the task runs on ("" = the default for its kind; inbox-models.ts).
    */
-  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean; on?: boolean; board?: HubBoardCommand }
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean; on?: boolean; board?: HubBoardCommand; model?: string }
   /** The PC's answer to a command: done, or why not (a short line); `ask`: an `assign` that needs the user's yes. */
   | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string; ask?: "running" | "finished" }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
@@ -397,6 +398,8 @@ export interface HubInboxTask {
   /** The place in its executor's line while the user has it queued (1 = next), and that executor's "ask before the next task" setting. */
   lineAt?: number;
   askNext?: boolean;
+  /** An Antigravity task that has not started: the models the PC's Antigravity offers (names), for the model picker. */
+  models?: string[];
   /** The standing "what to research next" task: last in the Antigravity curtain. */
   standing?: boolean;
   kind?: HubWorkKind;
@@ -726,7 +729,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       }
       if (b.action === "assign") {
         const to = parseAssignTo(b.to);
-        return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
+        const model = to === "antigravity" && typeof b.model === "string" && /^[\w .:/()-]{0,80}$/.test(b.model) ? b.model : undefined;
+        return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}), ...(model !== undefined ? { model } : {}) } : null;
       }
       if (b.action === "agent-label") return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
       return { type: "command", commandId: b.commandId, action: b.action as HubCommandAction, taskId: b.taskId };
@@ -761,7 +765,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
       const executor: HubInboxExecutor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
       const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind as HubWorkKind) ? { kind: b.kind as HubWorkKind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
+      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(Array.isArray(b.models) ? { models: b.models.filter((m): m is string => typeof m === "string" && m.length > 0).slice(0, 12).map((m) => m.slice(0, HUB_LIMITS.nameChars)) } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind as HubWorkKind) ? { kind: b.kind as HubWorkKind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
     }
     case "ask_note": {
       const a = b.ask && typeof b.ask === "object" ? (b.ask as Record<string, unknown>) : undefined;

@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -22,6 +22,19 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  * The step line: "~N steps" from the estimate made when the task was queued (no model call), "step X of ~N" while it
  * runs. The count keeps going past the estimate. The free-Gemini route runs as one call, so it has no live count.
  */
+/** The model on a task's row: the one it ran on (with a fallback mark), or its pick before it runs. */
+function modelLine(t: InboxTaskView): string | null {
+  if (t.runBy !== "antigravity") return null;
+  if (t.modelUsed) return `${t.modelFallback ? "↘ " : ""}${t.modelUsed}`;
+  return t.model ?? null;
+}
+
+/** The model picker's part of "Who does it", for an Antigravity task that has not started. */
+function modelProp(t: InboxTaskView, state: InboxState): { model?: { list: InboxModel[]; pick: string; auto: ModelFamily } } {
+  if (t.runBy !== "antigravity" || t.startedAt || !["waiting", "queued", "deferred-quota"].includes(t.status)) return {};
+  return { model: { list: state.models ?? [], pick: t.model ?? "", auto: defaultFamilyFor(t) } };
+}
+
 function stepsText(t: InboxTaskView): string | null {
   if (t.status === "skipped" || t.status === "declined") return null;
   const est = estimateTaskSteps(t);
@@ -348,7 +361,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}</div>
         {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
       </div>
-      <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span></span>
+      <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span>{modelLine(t) && <span className="small muted tinbox-model" dir="ltr" title={t.modelFallback}>{modelLine(t)}</span>}</span>
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>
       <span className="tinbox-branch small muted" dir="ltr" title={t.branch}>{t.branch}</span>
       <span className="row tinbox-actions">
@@ -367,7 +380,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}
         {["running", "needs-approval", "partial", "failed", "deferred-quota", "declined"].includes(t.status) && <button type="button" onClick={open}>{L("פתח", "Open")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} onDone={onAssigned} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} onDone={onAssigned} {...modelProp(t, state)} />}
       </span>
     </div>
   );
@@ -480,8 +493,9 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} {...modelProp(t, state)} />}
       </div>
+      {t.modelFallback && <p className="small warn" dir="auto">↘ {L("המודל שנבחר לא היה זמין (מכסה), עבר אוטומטית:", "The chosen model could not run (quota), switched by itself:")} <span dir="ltr">{t.modelFallback}</span></p>}
       <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
       {editing && (
         <AgentLabelEditor

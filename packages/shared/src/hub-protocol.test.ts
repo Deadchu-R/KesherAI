@@ -185,3 +185,14 @@ test("queue commands: add, take out, and the ask-before-next switch of a named e
   const t = parseSealedBody({ type: "inbox_task", taskId: "c-1", title: "T", state: "waiting-run", executor: "antigravity", from: "claude", lineAt: 2, askNext: false, at: 1 }, "inbox_task");
   assert.ok(t && t.type === "inbox_task" && t.lineAt === 2 && t.askNext === false);
 });
+
+test("inbox models over the hub: the model list on a task, and `assign` with a model only for Antigravity", () => {
+  const base = { type: "inbox_task", taskId: "c-1122-40", title: "Fix it", state: "waiting-run", executor: "antigravity", from: "claude", at: 5 };
+  const r = parseSealedBody({ ...base, models: ["Claude Opus 4.6 (Thinking)", 7, "", "Gemini 3.8 Flash (Medium)"] }, "inbox_task") as Record<string, unknown>;
+  assert.deepEqual(r.models, ["Claude Opus 4.6 (Thinking)", "Gemini 3.8 Flash (Medium)"], "strings only");
+  const cmd = { type: "command", commandId: "cmd-12345678", action: "assign", taskId: "c-1122-40", to: "antigravity" };
+  assert.equal((parseSealedBody({ ...cmd, model: "Claude Opus 4.6 (Thinking)" }, "command") as Record<string, unknown>).model, "Claude Opus 4.6 (Thinking)");
+  assert.equal((parseSealedBody({ ...cmd, model: "" }, "command") as Record<string, unknown>).model, "", "empty = the default");
+  assert.equal((parseSealedBody({ ...cmd, model: "<script>" }, "command") as Record<string, unknown>).model, undefined, "odd characters are dropped");
+  assert.equal((parseSealedBody({ ...cmd, to: "local", model: "x" }, "command") as Record<string, unknown>).model, undefined, "a model only goes with Antigravity");
+});
