@@ -111,6 +111,14 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     needsApiKey: true,
   },
   {
+    // A flat monthly plan ($10; per-model 5-hour, weekly and monthly limits), not pay-per-token: the fallback coder when
+    // Antigravity's weekly quota is out (docs/WORK_LIST.md, 2026-11-22). Keep "Use balance" off in its console so it
+    // never bills past the plan.
+    config: { id: "opencode-go", type: "openai-compatible", name: "OpenCode Go", baseUrl: "https://opencode.ai/zen/go/v1", location: "cloud" },
+    description: "Open coding models (Kimi, GLM, DeepSeek, Qwen, MiniMax, MiMo) on a flat $10/month plan with usage limits.",
+    needsApiKey: true,
+  },
+  {
     config: { id: "groq", type: "openai-compatible", name: "Groq", baseUrl: "https://api.groq.com/openai/v1", location: "cloud" },
     description: "Fast inference for open-weight models.",
     needsApiKey: true,
