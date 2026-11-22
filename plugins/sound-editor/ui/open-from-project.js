@@ -248,6 +248,16 @@ export function offerSave(asset, format, make) {
   document.body.append(bar);
 }
 
+/**
+ * Opens the save's approval card for another file made from the opened asset (the 3D editor's material graph as a
+ * Unity .shadergraph next to the model): the same staging, checkpoint and approval as "Save to project".
+ *
+ * @param asset - From openFromProject.
+ * @param format - What is saved ("shadergraph").
+ * @param make - Makes the file: `async () => ArrayBuffer`.
+ */
+export function saveToProject(asset, format, make) { style(); void saveCard(asset, format, make); }
+
 /** Removes "Save to project" (the editor opened something that is not from a project). */
 export function clearSave() { bar?.remove(); bar = null; }
 

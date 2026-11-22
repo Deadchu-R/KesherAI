@@ -100,6 +100,11 @@ test("where a save goes: in place only for the same format, else a new asset nex
   assert.equal(sniffSave(GLB), "glb");
   assert.equal(sniffSave(WAV), "wav");
   assert.equal(sniffSave(Buffer.from("<script>alert(1)</script>")), undefined);
+  // The 3D editor's material graph: Unity only, always a new asset next to the model.
+  assert.equal(sniffSave(Buffer.from('{\n    "m_SGVersion": 3,\n')), "shadergraph");
+  assert.equal(planSave("unity", "Assets/M/Rock.fbx", "shadergraph", "new", (r) => r === "Assets/M/Rock.shadergraph"), "Assets/M/Rock-2.shadergraph");
+  assert.throws(() => planSave("unity", "Assets/M/Rock.fbx", "shadergraph", "replace", () => false), /new asset/);
+  assert.throws(() => planSave("unreal", "Content/P/SM_Rock.uasset", "shadergraph", "new", () => false, "StaticMesh"), /come next/);
 });
 
 test("a save waits for approval, keeps a checkpoint first, writes Unity's file in place (never .meta)", async () => {

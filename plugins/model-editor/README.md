@@ -19,6 +19,14 @@ and Meshy's studio (docs/RESEARCH_LOG.md → "The 3D editor's screen"; design Mo
 - **Modifiers** (3ds Max's stack, Blender's modifiers): Mirror (an axis), Array (an axis, a count, a gap) and Smooth
   shading, each on or off, moved up, or removed; they never change the object itself, stack in order, are exported
   with the model, and undo with the rest. An object with modifiers shows ⚙ in the tree.
+- **Material graph** (Unity's Shader Graph, Unreal's Material Editor, Blender's shader nodes; research c-20261122-14):
+  ◇ opens the chosen part's material as nodes under the view, which stays its live preview (the graph compiled to GLSL
+  inside three.js's standard material). About 30 nodes: constants, UV, tiling, panner, time, textures of the part,
+  normal unpack and strength, math, fresnel, split / combine, and the PBR output. Tap an output, then an input, to
+  connect (a phone too); the graph is kept in the material (glTF extras), so it goes with the GLB. Export: a Unity
+  Shader Graph (URP Lit) into the opened Unity project with approval and a checkpoint, or as a file; nodes Unity lacks
+  block it with a list. Unreal: the command is ready (`unrealMaterialCommand`), the plugin side comes next. "Describe
+  the material" asks the chat model for `material_graph` ops, shown live, then kept or discarded.
 - **Views and shading:** front / right / top / perspective (3ds Max's ViewCube faces, Blender's 1 / 3 / 7), wireframe /
   solid / material (Maya's 4 / 5 / 6).
 - **Versions:** "Keep a version" saves the state as a thumbnail in the strip at the bottom; a click goes back to it.

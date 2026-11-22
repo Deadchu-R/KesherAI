@@ -140,3 +140,64 @@ body.guest .app { grid-template-rows: 42px 1fr; }
 .importbar[hidden] { display: none; }
 .importbar label { display: inline-flex; align-items: center; gap: 4px; }
 .importbar #impClose { margin-inline-start: auto; }
+
+/* The material graph dock (ui/material-graph.js; Unity Shader Graph, Unreal's Material Editor, Blender's shader
+   nodes): under the view, which stays the live preview; nodes as Blueprint-style cards, wires coloured by type. */
+.app.mat { grid-template-rows: 42px minmax(140px, 1fr) minmax(260px, 46%) 74px; }
+.matdock { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; background: var(--panel); border-top: 1px solid #111; position: relative; }
+.md-top { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid var(--line); min-width: 0; overflow-x: auto; }
+.md-top .md-part { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.md-top button { padding: 3px 9px; flex: none; }
+.md-body { flex: 1; display: flex; min-height: 0; }
+.md-canvas { flex: 1; position: relative; overflow: hidden; min-width: 0; touch-action: none; outline: none; cursor: grab;
+  background: var(--well) radial-gradient(circle, #2a2c33 1px, transparent 1px) 0 0 / 20px 20px; }
+.md-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.md-wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.md-wires path { fill: none; stroke-width: 2.2; }
+.md-hint { position: absolute; bottom: 6px; inset-inline-start: 8px; pointer-events: none; }
+.mn { position: absolute; background: #2b2d33ee; border: 1px solid #44474f; border-radius: 8px; box-shadow: 0 2px 8px #0008; font-size: 11.5px; cursor: move; }
+.mn.on { border-color: var(--accent); box-shadow: 0 0 0 2px #8fa2ff55, 0 2px 8px #0008; }
+.mn.new { border-style: dashed; border-color: #ffd36b; }
+.mn-head { height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 7px 7px 0 0; font-weight: 600; background: #3a3d46; white-space: nowrap; overflow: hidden; }
+.mn.cat-input .mn-head { background: #3b4a2e; } .mn.cat-coords .mn-head { background: #2e4150; } .mn.cat-texture .mn-head { background: #4f3426; }
+.mn.cat-math .mn-head { background: #2f3550; } .mn.cat-vector .mn-head { background: #3f2f50; } .mn.cat-output .mn-head { background: #5a2f3a; }
+.mn-warn { margin-inline-start: auto; font-size: 10px; font-weight: 600; color: #1d1400; background: #ffb340; border-radius: 4px; padding: 0 4px; }
+.mn-prop { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.mn-prop i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0006; flex: none; }
+.mp { position: absolute; height: 20px; display: flex; align-items: center; gap: 5px; padding: 0 6px; border: 0; background: none; border-radius: 4px; font-size: 11px; color: var(--text); cursor: pointer; max-width: 50%; }
+.mp:hover { background: #ffffff12; }
+.mp.in { left: -6px; } .mp.out { right: -6px; flex-direction: row-reverse; }
+.mp span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--pc); background: transparent; flex: none; }
+.mp.wired i { background: var(--pc); }
+.mp.armed { background: #ffffff22; } .mp.armed i { box-shadow: 0 0 0 3px #fff8; background: var(--pc); }
+.md-side { width: 230px; padding: 8px 10px; border-inline-start: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.md-side p { margin: 0; }
+.md-warn { color: #ffcf7a; }
+.md-field { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+.md-field input, .md-field select { background: var(--well); border: 1px solid var(--line); border-radius: 5px; color: inherit; padding: 3px 6px; font: inherit; min-width: 0; }
+.md-nums { display: flex; gap: 4px; } .md-nums input { width: 100%; }
+.md-chat { display: flex; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--line); }
+.md-chat input { flex: 1; min-width: 0; background: var(--well); border: 1px solid var(--line); border-radius: 6px; color: inherit; padding: 5px 8px; font: inherit; }
+.md-approve { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #3a3420; border-top: 1px solid #ffd36b66; }
+.md-approve span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md-add { position: absolute; inset-inline-start: 8px; z-index: 8; width: min(300px, calc(100% - 16px)); max-height: min(380px, 70vh); display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px #000a; }
+.md-add input { background: var(--well); border: 1px solid var(--line); border-radius: 6px; color: inherit; padding: 5px 8px; font: inherit; }
+.md-add-list { overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.md-add-list button { text-align: start; border: 0; background: none; padding: 5px 8px; }
+.md-add-list button:hover, .md-add-list button:focus { background: #ffffff14; }
+.md-add-list small { color: #ffb340; }
+.md-add-cat { color: var(--muted); font-size: 11px; padding: 6px 8px 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+.md-dialog ul { padding-inline-start: 18px; display: flex; flex-direction: column; gap: 8px; }
+.md-dialog h3 { margin: 0 0 6px; }
+body.guest #matBtn, body.guest .phonebar [data-do="graph"], body.guest .matdock { display: none !important; }
+
+@media (max-width: 760px) {
+  #matBtn { display: none; }
+  /* Phone: the view keeps the top third as the preview; the graph below it; the side panel under the canvas. */
+  .app.mat { grid-template-rows: 46px minmax(120px, 1fr) 58% 56px; }
+  .app.mat .versions { display: none; }
+  .md-body { flex-direction: column; }
+  .md-side { width: auto; max-height: 34%; border-inline-start: 0; border-top: 1px solid var(--line); }
+  .md-top .md-title { display: none; }
+}

@@ -31,6 +31,7 @@
       <button id="turn" title="A turntable video: once around the model (6 s)">🎞</button>
       <button id="keysBtn" title="Shortcuts (?)">?</button>
       <button id="fromBlender" hidden class="primary" data-t="fromBlender">⟲ Bring back from Blender</button>
+      <button id="matBtn" data-t="matB" title="The chosen part's material as nodes (Shader Graph / Material Editor)" aria-pressed="false">◇ Material graph</button>
       <button id="editIn" data-t="editIn" title="Edit in…">✎ Edit in…</button>
       <button id="blender" data-t="blender" title="Each save in Blender comes back here">Open in Blender</button>
       <button id="export" data-t="export">Export GLB</button>
@@ -119,6 +120,8 @@
         <div class="row"><select id="split"><option value="" data-t="splitH">✂ Split into parts…</option><option value="loose" data-t="sLoose">By loose pieces</option><option value="material" data-t="sMaterial">By material</option><option value="ai" data-t="sAi">By meaning (AI)…</option></select></div>
       </aside>
     </main>
+    <!-- The chosen part's material as nodes (ui/material-graph.js): the view above is its live preview -->
+    <section class="matdock" id="matDock" hidden aria-label="Material graph"></section>
     <footer class="versions">
       <button id="keep" data-t="keep">＋ Keep a version</button>
       <div class="strip" id="strip"></div>
@@ -127,6 +130,7 @@
       <button data-do="add"><span>＋</span><b data-t="addS">Add</b></button>
       <button data-do="parts"><span>☰</span><b data-t="partsH">Parts</b></button>
       <button data-do="inspector"><span>🎨</span><b data-t="paintS">Material</b></button>
+      <button data-do="graph"><span>◇</span><b data-t="graphS">Graph</b></button>
       <button data-do="frame"><span>⊕</span><b data-t="frameS">Frame</b></button>
       <button data-do="undo"><span>↶</span><b data-t="undoS">Undo</b></button>
       <button data-do="keep"><span>＋</span><b data-t="keepS">Version</b></button>

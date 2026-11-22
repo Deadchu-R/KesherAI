@@ -1,8 +1,8 @@
 {
   "id": "model-editor",
   "name": "3D editor",
-  "version": "0.15.0",
-  "description": "A 3D model editor after Blender, Spline and Meshy's studio: turn and zoom, the model's parts as a list (hide, pick by a click), each part's colour, roughness and metalness, measurements, light setups, versions of your changes, and the model exported as GLB and sent back to the chat.",
+  "version": "0.16.0",
+  "description": "A 3D model editor after Blender, Spline and Meshy's studio: turn and zoom, the model's parts as a list (hide, pick by a click), each part's colour, roughness and metalness, its material as a node graph (live preview, Unity Shader Graph export), measurements, light setups, versions of your changes, and the model exported as GLB and sent back to the chat.",
   "author": "KesherAI contributors",
   "kesher": {
     "apiVersion": 1

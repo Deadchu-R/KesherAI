@@ -224,14 +224,15 @@ export async function listUnrealAssets(dir: string, kinds: readonly AssetKind[],
  * @param engine - The project's engine.
  * @param project - The project folder (one found on this computer).
  * @param path - The asked path.
+ * @param shader - Also allow a Unity Shader Graph (only a save's target, made by {@link planSave}).
  * @returns The full path and the clean relative one.
  * @throws With statusCode 400 for anything else.
  */
-export async function safeAssetPath(engine: AssetEngine, project: string, path: unknown): Promise<{ abs: string; rel: string }> {
+export async function safeAssetPath(engine: AssetEngine, project: string, path: unknown, shader = false): Promise<{ abs: string; rel: string }> {
   const bad = (why: string) => Object.assign(new Error(why), { statusCode: 400 });
   const rel = String(path ?? "").replace(/\\/g, "/");
   if (!rel || rel.length > 600 || rel.includes("\0") || /^([a-z]:|\/)/i.test(rel) || rel.split("/").some((p) => p === ".." || p === "." || p === "")) throw bad("Give a path inside the project.");
-  const allowed = engine === "unity" ? /^Assets\//.test(rel) && !!unityKind(rel) : /^Content\//.test(rel) && (/\.uasset$/i.test(rel) || UNREAL_RAW_VIDEO.test(rel));
+  const allowed = engine === "unity" ? /^Assets\//.test(rel) && (!!unityKind(rel) || (shader && /\.shadergraph$/i.test(rel))) : /^Content\//.test(rel) && (/\.uasset$/i.test(rel) || UNREAL_RAW_VIDEO.test(rel));
   if (!allowed) throw bad(engine === "unity" ? "A model, picture, sound or video under Assets/." : "A mesh, texture, sound or movie under Content/.");
   let p: { abs: string; rel: string };
   try {
@@ -316,28 +317,31 @@ export async function unrealExport(o: { cacheDir: string; project: string; proje
 }
 
 /** What an editor saves: the formats the editors write. */
-export type SaveFormat = "glb" | "png" | "wav";
+export type SaveFormat = "glb" | "png" | "wav" | "shadergraph";
 
 /**
  * What a file's first bytes say it is.
  *
- * @param head - The first 12+ bytes.
- * @returns glb, png or wav; undefined for anything else.
+ * @param head - The first 12+ bytes (32 for a Shader Graph).
+ * @returns glb, png, wav or shadergraph (the 3D editor's material graph export: Unity's JSON, starting with its version
+ *   key); undefined for anything else.
  */
 export function sniffSave(head: Uint8Array): SaveFormat | undefined {
   const s = (a: number, b: number) => String.fromCharCode(...head.subarray(a, b));
   if (head.length >= 8 && head[0] === 0x89 && s(1, 4) === "PNG") return "png";
   if (head.length >= 12 && s(0, 4) === "glTF") return "glb";
   if (head.length >= 12 && s(0, 4) === "RIFF" && s(8, 12) === "WAVE") return "wav";
+  if (/^\{\s*"m_SGVersion"/.test(s(0, Math.min(head.length, 32)))) return "shadergraph";
   return undefined;
 }
 
 /** The kind of asset each save format is. */
-const FORMAT_KIND: Record<SaveFormat, AssetKind> = { glb: "model", png: "image", wav: "audio" };
+const FORMAT_KIND: Record<Exclude<SaveFormat, "shadergraph">, AssetKind> = { glb: "model", png: "image", wav: "audio" };
 
 /**
  * Where a save goes: over the original when its format matches (Unity: the same extension; Unreal: the same kind of
- * asset), or a new asset next to it ("Rock-edited.glb", "SM_Rock_Edited") not yet taken.
+ * asset), or a new asset next to it ("Rock-edited.glb", "SM_Rock_Edited") not yet taken. A Shader Graph (the 3D
+ * editor's material) always goes in new, next to the model it was made on ("Rock.shadergraph"); Unity only.
  *
  * @param engine - The project's engine.
  * @param rel - The original asset's path.
@@ -350,6 +354,16 @@ const FORMAT_KIND: Record<SaveFormat, AssetKind> = { glb: "model", png: "image",
  */
 export function planSave(engine: AssetEngine, rel: string, format: SaveFormat, mode: "replace" | "new", taken: (rel: string) => boolean, className?: string): string {
   const bad = (why: string) => Object.assign(new Error(why), { statusCode: 400 });
+  if (format === "shadergraph") {
+    if (engine !== "unity") throw bad("Unreal materials from the 3D editor come next.");
+    if (mode !== "new") throw bad("A material graph is saved as a new asset.");
+    const stem = `${posix.dirname(rel)}/${nameOf(rel).replace(/[-_]edited(-\d+)?$/i, "")}`;
+    for (let i = 1; i < 1000; i++) {
+      const next = `${stem}${i > 1 ? `-${i}` : ""}.shadergraph`;
+      if (!taken(next)) return next;
+    }
+    throw bad("Too many material graphs here already.");
+  }
   const kind = engine === "unity" ? unityKind(rel) : ASSET_KINDS.find((k) => className && UNREAL_CLASS[k].includes(className));
   if (kind !== FORMAT_KIND[format]) throw bad("This editor's file is not the same kind of asset.");
   if (mode === "replace") {
@@ -471,13 +485,13 @@ export class ProjectSaves {
     try {
       await pipeline(body instanceof Readable ? body : Readable.from([Buffer.from(body)]), cap, createWriteStream(tmp));
       const h = await open(tmp, "r");
-      const head = Buffer.alloc(16);
-      await h.read(head, 0, 16, 0).finally(() => h.close());
-      const format = sniffSave(head);
-      if (!format) throw Object.assign(new Error("Only a GLB model, a PNG picture or a WAV sound can be saved into a project."), { statusCode: 415 });
+      const head = Buffer.alloc(32);
+      const { bytesRead } = await h.read(head, 0, 32, 0).finally(() => h.close());
+      const format = sniffSave(head.subarray(0, bytesRead));
+      if (!format) throw Object.assign(new Error("Only a GLB model, a PNG picture, a WAV sound or a Shader Graph can be saved into a project."), { statusCode: 415 });
       const taken = (r: string) => existsSync(join(input.project, r));
       const target = planSave(input.engine, rel, format, input.mode, taken, className);
-      await safeAssetPath(input.engine, input.project, target);
+      await safeAssetPath(input.engine, input.project, target, format === "shadergraph");
       const s = { id, engine: input.engine, project: input.project, projectName: input.projectName, path: rel, target, mode: input.mode, format, size, at: new Date().toISOString(), fromPhone: input.fromPhone, state: "pending" as const, ...(input.projectFile ? { projectFile: input.projectFile } : {}), ...(className ? { className } : {}) };
       this.saves.set(id, s);
       if (s.fromPhone) this.o.onStaged?.(this.view(s));
@@ -532,7 +546,7 @@ export class ProjectSaves {
     const staged = this.file(id);
     try {
       if (s.engine === "unity") {
-        const { abs, rel } = await safeAssetPath("unity", s.project, s.target);
+        const { abs, rel } = await safeAssetPath("unity", s.project, s.target, s.format === "shadergraph");
         s.checkpoint = (await this.o.checkpoints?.beforeSave("unity", s.project, "editor", `Editor: ${rel}`, [abs]))?.id;
         // Write then rename: Unity never reads half a file.
         await copyFile(staged, `${abs}.kesher-tmp`);

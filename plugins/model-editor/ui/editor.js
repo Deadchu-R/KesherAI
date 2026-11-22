@@ -15,12 +15,13 @@ import { brushBox, classifyActor, levelFrame, unrealToThree } from "./unreal-fra
 import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } from "./add-media.js";
 import { kindOfName, saveAs, setHebrew as setOpenHebrew, wireOpen } from "./open-file.js";
 import { applyImportOptions, importModel, NEEDS_OPTIONS } from "./import-model.js";
+import * as matGraph from "./material-graph.js";
 
 const $ = (id) => document.getElementById(id);
 const kesher = window.kesher;
 const HE = {
   editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editTex: "ערוך טקסטורה בעורך התמונות", editTexHint: "החלק שנבחר, וחוזר לחומר שלו",
-  addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
+  matB: "◇ גרף חומר", graphS: "גרף", addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
   levelNoModels: "ברמה הזו יש רק אורות והגדרות — אין דגמים", frameAllB: "מסגר הכול (A)",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", follow: "לעקוב אחרי", unfollow: "להפסיק לעקוב", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
@@ -142,6 +143,7 @@ function setQuad(on) {
 }
 (function loop() {
   controls.update();
+  matGraph.tick(performance.now() / 1000);
   if (!quad) renderer.render(scene, camera);
   else {
     aimFlat();
@@ -223,6 +225,7 @@ async function load(bytes, fileName = "") {
 function setModel(root) {
   if (model) { choose(null); model.removeFromParent(); }
   model = root; isolated = null; $("isolate").classList.remove("on");
+  projectAsset = null;
   scene.add(model);
   // Each mesh gets its own material, so changing one part does not change others that shared it.
   meshes = [];
@@ -412,6 +415,7 @@ function loadStandIn(nodes) {
   }
   is2dScene = !nodes.some((n) => n.transform) && nodes.some((n) => n.position2d || /2D$/.test(n.type ?? ""));
   model = root; isolated = null; $("isolate").classList.remove("on");
+  projectAsset = null;
   scene.add(model);
   meshes = [];
   rebuild();
@@ -800,6 +804,7 @@ function loadUnityStandIn(objects, view, canvas) {
   $("inactive").classList.toggle("on", showInactive);
   $("inactive").title = T("inactiveT", "Show the objects that are off in Unity");
   model = root; isolated = null; $("isolate").classList.remove("on");
+  projectAsset = null;
   scene.add(model);
   meshes = [];
   rebuild();
@@ -931,6 +936,7 @@ function loadUnrealStandIn(u) {
   for (const a of u.actors) (byId.get(a.parent) ?? folder(a.folder)).add(byId.get(a.id));
   is2dScene = u.actors.some((a) => /^Paper/.test(a.class)) && !u.actors.some((a) => a.mesh && !/^Paper/.test(a.class));
   model = root; isolated = null; $("isolate").classList.remove("on");
+  projectAsset = null;
   scene.add(model);
   rebuild();
   $("empty").hidden = true;
@@ -1044,6 +1050,7 @@ const label = (o) => o.name || (o.isMesh ? T("unnamed", "Part") : "·");
 function rebuild() {
   meshes = [];
   model?.traverse((o) => { if (o.isMesh) meshes.push({ mesh: o, name: label(o) }); });
+  matGraph.restoreGraphs(model); // graphs kept in a GLB's materials, and on duplicated parts
   // A click on a piece a modifier made chooses the object it belongs to.
   renderParts();
 }
@@ -1111,7 +1118,7 @@ function choose(obj) {
   gizmo.detach();
   renderParts();
   $("partName").textContent = chosen ? label(chosen) : T("noPart", "Choose a part");
-  if (!chosen) { document.querySelectorAll("[data-ch]").forEach((inp) => (inp.value = "")); $("size").textContent = ""; renderMods(); return; }
+  if (!chosen) { document.querySelectorAll("[data-ch]").forEach((inp) => (inp.value = "")); $("size").textContent = ""; renderMods(); if (matGraph.isOpen()) matGraph.setTarget(null); return; }
   // The chosen object is outlined by a box (Blender's orange outline, simply) and gets the gizmo.
   glow = new THREE.BoxHelper(chosen, 0xffa040);
   scene.add(glow);
@@ -1125,6 +1132,7 @@ function choose(obj) {
   showChannels();
   renderMods();
   showTexture();
+  if (matGraph.isOpen()) matGraph.setTarget(mesh);
   $("hidePart").textContent = chosen.visible ? T("hide", "Hide") : T("show", "Show");
 }
 /** The Channel Box: the chosen object's position, rotation (degrees) and scale, and its size. */
@@ -2192,8 +2200,28 @@ addEventListener("keydown", (e) => {
 document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => {
   const d = b.dataset.do, app = $("app");
   if (d === "parts" || d === "inspector") { const on = app.classList.contains(`sheet-${d}`); app.classList.remove("sheet-parts", "sheet-inspector"); if (!on) app.classList.add(`sheet-${d}`); }
-  else ({ frame: () => $("frame").click(), undo, keep: keepVersion, add: () => addMenu(b) })[d]();
+  else ({ frame: () => $("frame").click(), undo, keep: keepVersion, add: () => addMenu(b), graph: toggleGraph })[d]();
 }));
+
+// ---------- the material graph (ui/material-graph.js): the chosen part's material as nodes, under the view ----------
+let projectAsset = null; // the Unity / Unreal asset the model was opened from (the graph's Unity export goes next to it)
+/** Opens or closes the material graph dock for the chosen part. */
+async function toggleGraph() {
+  if (matGraph.isOpen()) return matGraph.close();
+  const op = await import("./open-from-project.js");
+  op.setHebrew(he);
+  $("app").classList.remove("sheet-parts", "sheet-inspector");
+  $("app").classList.add("mat");
+  $("matBtn").classList.add("on");
+  $("matBtn").setAttribute("aria-pressed", "true");
+  const mesh = chosen && (chosen.isMesh ? chosen : chosen.getObjectByProperty("isMesh", true));
+  matGraph.open(mesh ?? null, {
+    msg, busy, call: (m, p) => kesher.call(m, p), asset: () => projectAsset, saveToProject: op.saveToProject,
+    partName: () => (chosen ? label(chosen) : ""),
+    onClose: () => { $("app").classList.remove("mat"); $("matBtn").classList.remove("on"); $("matBtn").setAttribute("aria-pressed", "false"); },
+  });
+}
+$("matBtn").onclick = () => void toggleGraph();
 
 // ---------- ＋ Add (RESEARCH_LOG "Adding files and objects to the editors"): a model or a picture from the device,
 // this chat or the bank, and Blender's Shift+A shapes, a light and a camera, at the middle of the view ----------
@@ -2283,6 +2311,7 @@ async function openProject() {
       $("dims").hidden = false;
       stats();
       op.offerSave({ ...got.asset, prefab: !!got.prefab }, "glb", async () => (await glb()).arrayBuffer());
+      projectAsset = { ...got.asset, prefab: !!got.prefab };
     } finally { busy(""); }
   } catch (e) { msg(e.message || String(e), true); }
 }
@@ -2498,6 +2527,7 @@ kesher.call("info").then((i) => {
   he = i.locale === "he";
   setHebrew(he);
   setOpenHebrew(he);
+  matGraph.setHebrew(he);
   if (he) { document.documentElement.dir = "rtl"; document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = T(el.dataset.t, el.textContent))); document.querySelectorAll("[data-tp]").forEach((el) => (el.placeholder = T(el.dataset.tp, el.placeholder))); document.querySelectorAll("[data-ta]").forEach((el) => el.setAttribute("aria-label", T(el.dataset.ta, el.getAttribute("aria-label")))); }
 }).catch(() => undefined);
 open();

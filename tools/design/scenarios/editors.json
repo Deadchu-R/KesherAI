@@ -311,6 +311,175 @@
      "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu"
     }
    ]
+  },
+  {
+   "id": "MaterialGraphEditor",
+   "title": "עורך התלת ממד: \"גרף חומר\" – החומר של החלק כנודים מתחת לתצוגה החיה; הקשה על יציאה ואז על כניסה מחברת, ערכי הנוד בצד",
+   "titleEn": "3D editor: Material graph – the part's material as nodes under the live preview; tap an output, then an input, to connect; values at the side",
+   "route": "#/p/model-editor/editor",
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text(\"קובייה\")"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #matBtn",
+     "optional": true
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .phonebar [data-do=\"graph\"]",
+     "optional": true
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .mn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .mn.cat-output .mn-head"
+    },
+    {
+     "waitMs": 400
+    }
+   ]
+  },
+  {
+   "id": "MaterialGraphUnsupported",
+   "title": "גרף חומר: ייצוא ל-Unity Shader Graph נחסם כשיש נוד שאין ב-Unity (Panner), עם רשימה ברורה ומה לשים במקומו",
+   "titleEn": "Material graph: the Unity Shader Graph export is blocked by a node Unity lacks (Panner), with a clear list and what to use instead",
+   "route": "#/p/model-editor/editor",
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text(\"קובייה\")"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #matBtn",
+     "optional": true
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .phonebar [data-do=\"graph\"]",
+     "optional": true
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .mn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .mn.cat-output .mn-head"
+    },
+    {
+     "waitMs": 400
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #mdAdd"
+    },
+    {
+     "fill": "iframe.plugin-frame >> internal:control=enter-frame >> .md-add input",
+     "value": "panner"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .md-add-list button[data-cls=\"Panner\"]"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #mdExport"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text(\"Shader Graph\")"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .md-dialog"
+    }
+   ]
+  },
+  {
+   "id": "MaterialGraphChat",
+   "title": "גרף חומר מהצ'אט: \"ברזל חלוד עם זוהר כתום בשוליים\" – המודל בונה נודים (material_graph), מוצג חי, ואז \"השאר\" או \"בטל\"",
+   "titleEn": "Material graph from the chat: \"rusty iron, orange glow at the edges\" – the model builds nodes (material_graph), shown live, then Keep or Discard",
+   "route": "#/p/model-editor/editor",
+   "mocks": [
+    {
+     "url": "**/api/settings",
+     "json": {
+      "activeModels": {
+       "chat": "demo-model"
+      }
+     }
+    },
+    {
+     "url": "**/v1/chat/completions",
+     "json": {
+      "choices": [
+       {
+        "message": {
+         "role": "assistant",
+         "content": "{\"tool\": \"material_graph\", \"summary\": \"Rusty iron with an orange glow at the edges\", \"ops\": [{\"op\": \"add\", \"cls\": \"Color\", \"id\": \"rust\", \"x\": 0, \"y\": 160, \"props\": {\"value\": \"#7a3412\"}}, {\"op\": \"add\", \"cls\": \"Color\", \"id\": \"iron\", \"x\": 0, \"y\": 20, \"props\": {\"value\": \"#5b5f66\"}}, {\"op\": \"add\", \"cls\": \"UV\", \"id\": \"uv\", \"x\": 0, \"y\": 300}, {\"op\": \"add\", \"cls\": \"Split\", \"id\": \"split\", \"x\": 180, \"y\": 300}, {\"op\": \"add\", \"cls\": \"Lerp\", \"id\": \"mix\", \"x\": 360, \"y\": 60}, {\"op\": \"add\", \"cls\": \"Fresnel\", \"id\": \"rim\", \"x\": 180, \"y\": 460, \"values\": {\"Power\": 3}}, {\"op\": \"add\", \"cls\": \"Multiply\", \"id\": \"glow\", \"x\": 360, \"y\": 420}, {\"op\": \"connect\", \"from\": \"iron\", \"to\": \"mix\", \"in\": \"A\"}, {\"op\": \"connect\", \"from\": \"rust\", \"to\": \"mix\", \"in\": \"B\"}, {\"op\": \"connect\", \"from\": \"uv\", \"to\": \"split\", \"in\": \"In\"}, {\"op\": \"connect\", \"from\": \"split\", \"out\": \"G\", \"to\": \"mix\", \"in\": \"T\"}, {\"op\": \"connect\", \"from\": \"mix\", \"to\": \"out\", \"in\": \"BaseColor\"}, {\"op\": \"connect\", \"from\": \"rim\", \"to\": \"glow\", \"in\": \"A\"}, {\"op\": \"connect\", \"from\": \"rust\", \"to\": \"glow\", \"in\": \"B\"}, {\"op\": \"connect\", \"from\": \"glow\", \"to\": \"out\", \"in\": \"Emissive\"}, {\"op\": \"set\", \"node\": \"out\", \"pin\": \"Metallic\", \"value\": 0.8}, {\"op\": \"set\", \"node\": \"out\", \"pin\": \"Roughness\", \"value\": 0.75}]}"
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "height": {
+    "desktop": 760,
+    "phone": 844
+   },
+   "steps": [
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #addBtn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .am-menu button:has-text(\"קובייה\")"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #matBtn",
+     "optional": true
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .phonebar [data-do=\"graph\"]",
+     "optional": true
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> .mn"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> .mn.cat-output .mn-head"
+    },
+    {
+     "waitMs": 400
+    },
+    {
+     "fill": "iframe.plugin-frame >> internal:control=enter-frame >> #mdWords",
+     "value": "ברזל חלוד עם זוהר כתום בשוליים"
+    },
+    {
+     "click": "iframe.plugin-frame >> internal:control=enter-frame >> #mdGo"
+    },
+    {
+     "wait": "iframe.plugin-frame >> internal:control=enter-frame >> #mdApprove:not([hidden])"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
   }
  ]
 }
