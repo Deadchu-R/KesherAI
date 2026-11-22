@@ -11,6 +11,7 @@ import { createSessionWorktree, excludeWorktrees, type Git } from "./session-wor
 import { heavyGate } from "./heavy-gate.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
+import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
@@ -83,6 +84,8 @@ interface Saved {
   modelsAt?: number;
   /** A model family whose quota ran out, and until when (ms): later tasks start on the next model of their chain. */
   familyUntil?: Partial<Record<ModelFamily, number>>;
+  /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
+  research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
 }
 
 /** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
@@ -438,6 +441,8 @@ export class TaskInbox {
     await this.closeReplaced();
     await this.followBoard();
     await this.syncStanding().catch(() => undefined);
+    await this.importResearch().catch(() => undefined);
+    await this.feedFromResearch().catch(() => undefined);
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
@@ -1425,6 +1430,73 @@ export class TaskInbox {
       this.saved.tasks.push(copy);
       await this.save();
     }
+  }
+
+  /**
+   * Reads the task lists of research reports on origin/main (docs/research/*.md, each report once per version) into
+   * the backlog, skipping tasks the report marks DONE and ones already in the inbox or the backlog. At most every 30 min.
+   */
+  private async importResearch(): Promise<void> {
+    if (this.s.loop === false) return;
+    const r = (this.saved.research ??= { seen: {}, backlog: [], made: [] });
+    if (r.at && this.now() - r.at < 30 * 60_000) return;
+    r.at = this.now();
+    const repo = this.repo();
+    const ref = "refs/remotes/origin/main";
+    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/main:${ref}`], 60_000);
+    const ls = await this.d.git(repo, ["ls-tree", ref, "docs/research/"]);
+    if (ls.code !== 0) return;
+    for (const line of ls.out.split(/\r?\n/)) {
+      const m = /^\d+ blob ([0-9a-f]{7,64})\t(docs\/research\/[\w.-]+\.md)$/.exec(line.trim());
+      if (!m || /\/(INDEX|BACKLOG)\.md$/.test(m[2]!) || r.seen[m[2]!] === m[1]) continue;
+      const size = await this.d.git(repo, ["cat-file", "-s", m[1]!]);
+      if (size.code !== 0 || Number(size.out.trim()) > 512 * 1024) continue;
+      const body = await this.d.git(repo, ["show", m[1]!]);
+      if (body.code !== 0) continue;
+      r.seen[m[2]!] = m[1]!;
+      for (const t of parseResearchTasks(body.out, m[2]!.slice("docs/research/".length))) {
+        if (t.status === "done" || r.made.includes(t.key) || r.backlog.some((b) => b.key === t.key || sameTask(b.title, t.title))) continue;
+        if (this.saved.tasks.some((x) => sameTask(x.title, t.title))) continue;
+        r.backlog.push(t);
+      }
+    }
+    await this.save();
+  }
+
+  /**
+   * Keeps the lines fed from the research backlog: while an executor has fewer than 3 tasks in line (and, for
+   * Antigravity, today's cap and the model quota allow it), the next backlog task becomes an inbox task and is queued.
+   * Lead tasks (size L) stay in the backlog for Claude and Roee. Settings › Task inbox › loop: false turns it off.
+   */
+  private async feedFromResearch(): Promise<void> {
+    const r = this.saved.research;
+    if (this.s.loop === false || !r?.backlog.length) return;
+    const quotaOut = (["opus", "sonnet", "flash"] as ModelFamily[]).every((f) => (this.saved.familyUntil?.[f] ?? 0) > this.now());
+    for (const ex of ["antigravity", "local"] as const) {
+      for (let n = 0; n < 3 && this.lines.size(ex) < 3; n++) {
+        if (ex === "antigravity" && (quotaOut || this.today().used >= this.s.dailyCap)) break;
+        const next = nextForExecutor(r.backlog, ex);
+        if (!next) break;
+        r.backlog = r.backlog.filter((b) => b !== next);
+        r.made.push(next.key);
+        try {
+          const t = await this.add({ title: next.title, goal: goalFor(next), executor: ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint" });
+          if (ex === "antigravity") await this.setModel(t.id, "Claude Opus 4.6 (Thinking)").catch(() => undefined);
+          await this.queueAdd(t.id, "research loop");
+        } catch {
+          // A task that cannot be made or queued stays made (no retry storm); the backlog moves on.
+        }
+      }
+    }
+    await this.save();
+  }
+
+  /** The research backlog for the hub and the phone: counts by executor, and the lead tasks waiting for a decision. */
+  researchBacklog(): { byWho: Record<string, number>; lead: Array<{ key: string; title: string; source: string }>; made: number } {
+    const r = this.saved.research ?? { seen: {}, backlog: [], made: [] };
+    const byWho: Record<string, number> = {};
+    for (const t of r.backlog) byWho[t.who] = (byWho[t.who] ?? 0) + 1;
+    return { byWho, lead: r.backlog.filter((t) => t.who === "lead").map((t) => ({ key: t.key, title: t.title, source: t.source })), made: r.made.length };
   }
 
   /**

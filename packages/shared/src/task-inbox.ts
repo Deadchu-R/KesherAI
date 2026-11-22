@@ -178,6 +178,8 @@ export interface InboxSettings {
   fetchMinutes: number;
   /** Antigravity tasks a day (default 10). */
   dailyCap: number;
+  /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
+  loop?: boolean;
   maxMinutes: number;
   /** The model inside Antigravity (empty: Gemini's default). */
   model: string;

@@ -140,6 +140,9 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   });
 
   /** Settings > Task inbox. */
+  // The research backlog (research-tasks.ts): what the loop will feed next, and the lead tasks waiting for a decision.
+  app.get("/api/task-inbox/research", async () => inbox.researchBacklog());
+
   app.put<{ Body: Record<string, unknown> }>("/api/task-inbox/settings", async (req, reply) => {
     const b = req.body ?? {};
     const cur = s.config.taskInbox;
@@ -164,6 +167,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
       bool("paused");
       bool("notWhileGame");
       bool("notWhileEditor");
+      if (typeof b.loop === "boolean") cur.loop = b.loop;
       // "Ask before the next task" per executor (inbox-queue.ts).
       if (b.askBeforeNext && typeof b.askBeforeNext === "object") {
         const a = b.askBeforeNext as Record<string, unknown>;
