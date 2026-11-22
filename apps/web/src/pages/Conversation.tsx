@@ -983,7 +983,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   // after the group, so "the last block" missed a build that was running after its approval).
                   live={busy && (bi === blocks.length - 1 || b.steps.some((st) => !st.result))}
                   convId={id}
-                  renderStep={(s) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} convId={id} pinned={pinnedResults.has(s.call.callId)} />}
+                  renderStep={(s, acted) => <ToolCard call={s.call} {...(s.result ? { result: s.result } : {})} {...(acted ? { acted } : {})} convId={id} pinned={pinnedResults.has(s.call.callId)} />}
                   liveOutput={liveOut}
                   // A delegate call's sub-agents show as their own cards under the group, not folded inside it.
                   after={[

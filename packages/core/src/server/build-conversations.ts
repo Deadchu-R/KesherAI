@@ -4,6 +4,7 @@
  * timers, memory), and what a chat reports back (notifications, Telegram). Built once by createKesherServer from the
  * services made before it; the body is the same as when it stood in server.ts.
  */
+import { shotSaver, withShotAssets } from "../shot-store.js";
 import { aboutUserNote } from "../user-profile.js";
 import { engineAsk } from "../tool-router.js";
 import { ConversationManager } from "../conversations.js";
@@ -226,11 +227,11 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     },
     ensureImageModel: () => ensureImageModel({ sd, downloads, config, modelsDir: () => paths.models, save: persist }),
     // Parts the user turned off (Settings → Parts) give no tools.
-    computerTools: (id) => (config.parts.watch === false ? [] : computer.tools(id)),
+    computerTools: (id) => (config.parts.watch === false ? [] : withShotAssets(computer.tools(id), shotSaver(async (data, mimeType) => (await assets.save(data, mimeType)).id))),
     mcpTools: () => [
       ...googleTools(google),
       ...(config.parts.knowledge === false ? [] : knowledgeTools(knowledge)),
-      ...(config.parts.browser === false ? [] : browserTools(browser, async (data, mimeType) => (await assets.save(data, mimeType)).id, { ffmpeg: () => findFfmpeg(paths.engines), vision: () => visionServiceOf(config) })),
+      ...(config.parts.browser === false ? [] : browserTools(browser, shotSaver(async (data, mimeType) => (await assets.save(data, mimeType)).id), { ffmpeg: () => findFfmpeg(paths.engines), vision: () => visionServiceOf(config) })),
       ...(config.parts.browser === false || !browser.status().pane ? [] : fabTools(browser)),
       ...(config.parts.voice === false ? [] : speechTools({ whisper, speech: () => config.speech, providers: () => config.providers, ffmpeg: () => ensureFfmpeg({ dir: paths.engines, downloads }) })),
       ...mcp.tools().map(({ server, tool, spec }): AgentTool => ({

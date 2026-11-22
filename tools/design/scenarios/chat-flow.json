@@ -1344,9 +1344,6 @@
      "click": ".tool-run > summary"
     },
     {
-     "click": ".activity >> nth=1 >> summary >> nth=0"
-    },
-    {
      "wait": ".tool-card"
     }
    ],
@@ -1359,9 +1356,6 @@
     },
     {
      "click": ".tool-run > summary"
-    },
-    {
-     "click": ".activity >> nth=1 >> summary >> nth=0"
     },
     {
      "wait": ".tool-card"
@@ -1720,6 +1714,688 @@
    "phoneSteps": [
     {
      "wait": ".md-table"
+    }
+   ]
+  },
+  {
+   "id": "ChatStepFoldLive",
+   "title": "צ'אט: התור רץ — ▾ \"עובד… צעד 5: לחיצה\" פתוח עם צילומי מסך קטנים בין הצעדים (הקשה מגדילה)",
+   "titleEn": "Chat: a running turn — ▾ \"Working… step 5: click\" open, small screenshots between the steps (tap to enlarge)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 820,
+    "phone": 1100
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בדיקת שליטה במחשב",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 10,
+      "session": {
+       "id": "c1",
+       "status": "running",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "230s"
+        },
+        "type": "user",
+        "text": "תפתח את המחברת, תכתוב שלום ותשמור"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "200s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "196s"
+        },
+        "type": "tool_result",
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "5f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "190s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c2",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 180
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "188s"
+        },
+        "type": "tool_result",
+        "callId": "c2",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Done: click at 640,180 in Notepad."
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "180s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c3",
+        "name": "computer_type",
+        "input": {
+         "text": "שלום"
+        }
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "178s"
+        },
+        "type": "tool_result",
+        "callId": "c3",
+        "name": "computer_type",
+        "ok": true,
+        "output": "Done: typed 4 characters."
+       },
+       {
+        "seq": 8,
+        "at": {
+         "$ago": "170s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 9,
+        "at": {
+         "$ago": "166s"
+        },
+        "type": "tool_result",
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "6f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 10,
+        "at": {
+         "$ago": "160s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c5",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 288
+        }
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    },
+    {
+     "url": "**/api/assets/5f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/6f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad - שלום</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".shot-thumb"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".shot-thumb"
+    }
+   ]
+  },
+  {
+   "id": "ChatStepFoldDone",
+   "title": "צ'אט: התור הסתיים — ▸ \"מה המודל עשה · 5 צעדים · 1:42\" סגור, התשובה הסופית מחוץ לקיפול",
+   "titleEn": "Chat: a finished turn — ▸ \"What the model did · 5 steps · 1:42\" collapsed, the final answer outside the fold",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 820,
+    "phone": 1100
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בדיקת שליטה במחשב",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 12,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "230s"
+        },
+        "type": "user",
+        "text": "תפתח את המחברת, תכתוב שלום ותשמור"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "200s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "196s"
+        },
+        "type": "tool_result",
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "5f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "190s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c2",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 180
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "188s"
+        },
+        "type": "tool_result",
+        "callId": "c2",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Done: click at 640,180 in Notepad."
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "180s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c3",
+        "name": "computer_type",
+        "input": {
+         "text": "שלום"
+        }
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "178s"
+        },
+        "type": "tool_result",
+        "callId": "c3",
+        "name": "computer_type",
+        "ok": true,
+        "output": "Done: typed 4 characters."
+       },
+       {
+        "seq": 8,
+        "at": {
+         "$ago": "170s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 9,
+        "at": {
+         "$ago": "166s"
+        },
+        "type": "tool_result",
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "6f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 10,
+        "at": {
+         "$ago": "160s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c5",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 288
+        }
+       },
+       {
+        "seq": 11,
+        "at": {
+         "$ago": "98s"
+        },
+        "type": "tool_result",
+        "callId": "c5",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Done: click at 640,288 in Notepad."
+       },
+       {
+        "seq": 12,
+        "at": {
+         "$ago": "90s"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "שמרתי את הקובץ עם המילה \"שלום\"."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    },
+    {
+     "url": "**/api/assets/5f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/6f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad - שלום</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".activity-sum"
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".activity-sum"
+    }
+   ]
+  },
+  {
+   "id": "ChatShotLightbox",
+   "title": "צ'אט: הגדלת צילום מסך — עיגול בנקודת הלחיצה, טקסט שהוקלד וחץ גלילה, Esc או הקשה בחוץ סוגרים",
+   "titleEn": "Chat: enlarged screenshot — ring at the click point, typed text and scroll arrow, Esc or a tap outside closes",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 820,
+    "phone": 1100
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "בדיקת שליטה במחשב",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 12,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "230s"
+        },
+        "type": "user",
+        "text": "תפתח את המחברת, תכתוב שלום ותשמור"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "200s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "196s"
+        },
+        "type": "tool_result",
+        "callId": "c1",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "5f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "190s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c2",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 180
+        }
+       },
+       {
+        "seq": 5,
+        "at": {
+         "$ago": "188s"
+        },
+        "type": "tool_result",
+        "callId": "c2",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Done: click at 640,180 in Notepad."
+       },
+       {
+        "seq": 6,
+        "at": {
+         "$ago": "180s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c3",
+        "name": "computer_type",
+        "input": {
+         "text": "שלום"
+        }
+       },
+       {
+        "seq": 7,
+        "at": {
+         "$ago": "178s"
+        },
+        "type": "tool_result",
+        "callId": "c3",
+        "name": "computer_type",
+        "ok": true,
+        "output": "Done: typed 4 characters."
+       },
+       {
+        "seq": 8,
+        "at": {
+         "$ago": "170s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "input": {}
+       },
+       {
+        "seq": 9,
+        "at": {
+         "$ago": "166s"
+        },
+        "type": "tool_result",
+        "callId": "c4",
+        "name": "computer_screenshot",
+        "ok": true,
+        "output": "Screenshot 1280×720. In front: Notepad \"Untitled\" (app).",
+        "assetIds": [
+         "6f8fad5b-d9cb-469f-a165-70867728950e"
+        ]
+       },
+       {
+        "seq": 10,
+        "at": {
+         "$ago": "160s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "c5",
+        "name": "computer_click",
+        "input": {
+         "x": 640,
+         "y": 288
+        }
+       },
+       {
+        "seq": 11,
+        "at": {
+         "$ago": "98s"
+        },
+        "type": "tool_result",
+        "callId": "c5",
+        "name": "computer_click",
+        "ok": true,
+        "output": "Done: click at 640,288 in Notepad."
+       },
+       {
+        "seq": 12,
+        "at": {
+         "$ago": "90s"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "שמרתי את הקובץ עם המילה \"שלום\"."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    },
+    {
+     "url": "**/api/comfy/live",
+     "json": {
+      "installed": false,
+      "up": false,
+      "managed": false,
+      "running": 0,
+      "pending": 0
+     }
+    },
+    {
+     "url": "**/api/assets/5f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/6f8fad5b-d9cb-469f-a165-70867728950e*",
+     "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1280\" height=\"720\" viewBox=\"0 0 1280 720\"><rect width=\"1280\" height=\"720\" fill=\"#f4f4f6\"/><rect width=\"1280\" height=\"44\" fill=\"#2b2b33\"/><text x=\"20\" y=\"29\" font-size=\"20\" fill=\"#fff\" font-family=\"sans-serif\">Notepad - שלום</text><rect x=\"80\" y=\"120\" width=\"1120\" height=\"480\" rx=\"12\" fill=\"#fff\" stroke=\"#ccc\"/><rect x=\"560\" y=\"260\" width=\"160\" height=\"56\" rx=\"10\" fill=\"#2b7fff\"/><text x=\"610\" y=\"296\" font-size=\"24\" fill=\"#fff\" font-family=\"sans-serif\">Save</text></svg>",
+     "contentType": "image/svg+xml"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "click": ".activity > details > summary"
+    },
+    {
+     "click": ".step-thumbs >> nth=1 >> .shot-thumb"
+    },
+    {
+     "wait": ".shot-lightbox"
+    }
+   ],
+   "steps": [
+    {
+     "click": ".activity > details > summary"
+    },
+    {
+     "click": ".step-thumbs >> nth=1 >> .shot-thumb"
+    },
+    {
+     "wait": ".shot-lightbox"
     }
    ]
   }

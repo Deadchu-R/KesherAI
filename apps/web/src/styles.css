@@ -878,7 +878,7 @@ a.btn.primary { background: var(--accent); color: var(--accent-ink); }
 .activity > details[open] > summary .activity-thumbs { display: none; }
 .activity-kinds { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 /* Screenshots between the steps: a small thumbnail (tap to enlarge) with the step's click, typing or scroll drawn on it. */
-.shot-thumb { padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: zoom-in; display: block; max-width: min(240px, 100%); overflow: hidden; }
+.shot-thumb { height: auto; min-height: 0; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: none; cursor: zoom-in; display: block; max-width: min(240px, 100%); overflow: hidden; }
 .shot-thumb:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
 .shot-frame { position: relative; display: block; line-height: 0; }
 .shot-frame img { display: block; width: 100%; height: auto; }

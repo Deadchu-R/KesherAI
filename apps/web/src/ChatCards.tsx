@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { explainCommand, parseScenePreview } from "@kesher/shared";
-import { api, withToken } from "./api";
+import { api } from "./api";
 import { callDuration, errorLine, formatDuration, paramSummary, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
 import { FileChips } from "./MediaView";
+import { ShotThumb } from "./chat/ShotView";
+import type { ActedOn } from "./chat/step-fold";
 import { mediaKindOf } from "./chat/chat-inline";
 import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
@@ -71,7 +73,7 @@ export function summary(name: string, input: Record<string, unknown>): string {
 }
 
 /** One tool call in the chat, with its result once it comes (a group member's part shows as that member's answer). */
-export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call">; result?: Ev<"tool_result">; /** With it, the result can be pinned. */ convId?: string; pinned?: boolean }) {
+export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"tool_call">; result?: Ev<"tool_result">; /** With it, the result can be pinned. */ convId?: string; pinned?: boolean; /** The screenshot this step acted on, with its click, typing or scroll to draw on it. */ acted?: ActedOn }) {
   if (call.name === "ask_user") return null;
   // Agent group: a member's part, shown as that member's answer.
   if (call.name === "ask_member") {
@@ -110,17 +112,6 @@ export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call
       </summary>
       {result && convId && <PinResult convId={convId} callId={call.callId} pinned={!!pinned} />}
       {result?.diff && <Diff diff={result.diff} />}
-      {/* Pictures the step made (a browser or screen shot, a render) as small thumbnails: the full-size ones and the
-          players show under the whole group (Activity.tsx), so the open step stays short. Tap opens the picture. */}
-      {!!result?.assetIds?.length && (
-        <div className="step-thumbs">
-          {result.assetIds.map((id) => (
-            <a key={id} href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer">
-              <img src={withToken(`/api/assets/${id}`)} alt={summary(call.name, call.input)} loading="lazy" />
-            </a>
-          ))}
-        </div>
-      )}
       {/* Search hits: a list of titles that open the page. */}
       {hits.length > 0 && (
         <ol className="tool-hits">
@@ -147,12 +138,22 @@ export function ToolCard({ call, result, convId, pinned }: { call: Ev<"tool_call
       ) : <pre className="code" dir="ltr">{out}</pre>)}
     </details>
   );
+  // Pictures the step made (a browser or screen shot, a render) as small thumbnails under the card, so they show
+  // while the fold is open without opening each step; tap opens the picture large. A step that clicked, typed or
+  // scrolled shows the screenshot it acted on with the action drawn on it.
+  const own = result?.assetIds ?? [];
+  const thumbs = own.length || acted ? (
+    <div className="step-thumbs">
+      {own.map((id) => <ShotThumb key={id} id={id} alt={summary(call.name, call.input) || toolLabel(call.name, he)} />)}
+      {!own.length && acted && <ShotThumb id={acted.assetId} acted={acted} alt={`${toolLabel(call.name, he)} ${summary(call.name, call.input)}`.trim()} />}
+    </div>
+  ) : null;
   // MCP Apps: the tool's own view, open under the step (text it sends goes into the message box).
-  if (!result?.app) return card;
   return (
     <>
       {card}
-      <McpAppView app={result.app} onMessage={composeText} />
+      {thumbs}
+      {result?.app && <McpAppView app={result.app} onMessage={composeText} />}
     </>
   );
 }

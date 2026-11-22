@@ -11,6 +11,7 @@ import { api, withToken } from "./api";
 import { desktop } from "./library";
 import { getLocale, t, type StringKey } from "./i18n";
 import { callDuration, formatDuration, groupCalls, groupTitle, maskSecrets, toolInfo, type ToolRun } from "./chat/tool-cards";
+import { actedOnShots, foldHeader, turnDuration, type ActedOn } from "./chat/step-fold";
 
 type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
 
@@ -101,18 +102,40 @@ export function groupSummary(steps: Step[]): string {
   return parts.join(", ");
 }
 
+/** Folds the user opened or closed by hand, per group (kept while the page lives): without an entry a group is open while it works and closes when it ends. */
+const foldChoice = new Map<string, boolean>();
+
 /**
- * The agent's work between two messages, folded into one line like
- * "Edited 2 files, ran 3 commands ▾". Open it to see every step; while the
- * agent works, the line shows what it is doing right now. Pictures the
- * tools made stay visible below it.
+ * The fold's header: "What the model did · 12 steps · 1:42", or while it works "Working… step 5: click 'Save'". It
+ * has its own clock, so the chat around it does not render again for the time alone.
+ */
+function FoldHeader({ steps, live, current }: { steps: Step[]; live: boolean; current: Step | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [live]);
+  const ms = turnDuration(steps, now);
+  return <span className="activity-sum" dir="auto">{foldHeader({ steps: steps.length, ms, running: live, current: current ? stepLabel(current) : undefined }, getLocale() === "he")}</span>;
+}
+
+/**
+ * The agent's work between two messages, folded under one line: "▸ What the model did · 12 steps · 1:42". It is
+ * open while the agent works (the line then says "Working… step 5: click 'Save'") and closes by itself when the
+ * turn ends; a tap or Enter on the line opens or closes it and that choice is remembered for this group. Open, it
+ * lists every step as its card, with the screenshots between them. Pictures the tools made stay visible below it.
  *
  * @param props.steps - The steps, in order.
  * @param props.live - Whether the agent is still working on this group.
- * @param props.renderStep - Draws one step when the group is open.
+ * @param props.renderStep - Draws one step when the group is open (with the screenshot it acted on, when it has one).
  */
-export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after }: { steps: Step[]; live: boolean; renderStep: (s: Step) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[] }) {
+export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, after }: { steps: Step[]; live: boolean; renderStep: (s: Step, acted?: ActedOn) => React.ReactNode; convId?: string; liveOutput?: Record<string, string>; /** Shown under the group, never folded (a delegate call's sub-agent cards). */ after?: React.ReactNode[] }) {
   const current = live ? [...steps].reverse().find((s) => !s.result) ?? steps.at(-1) : undefined;
+  const acted = actedOnShots(steps);
+  const foldKey = `${convId ?? ""}:${steps[0]?.call.callId ?? ""}`;
+  const [, redraw] = useState(0);
+  const open = foldChoice.get(foldKey) ?? live;
   const failed = steps.filter((s) => s.result && !s.result.ok).length;
   // A song's cover picture shows beside its player, not again as a picture.
   const images = steps.flatMap((s) => (SCREEN.test(s.call.name) || s.result?.audioIds?.length ? [] : s.result?.assetIds ?? []));
@@ -159,10 +182,22 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
   const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
   return (
     <div className="activity">
-      <details>
+      <details
+        open={open}
+        onToggle={(e) => {
+          // Only a change the user made counts: the browser also reports the open state we set ourselves.
+          const now = e.currentTarget.open;
+          if (now !== open) {
+            foldChoice.set(foldKey, now);
+            redraw((n) => n + 1);
+          }
+        }}
+      >
         <summary>
+          <span className="chev" aria-hidden />
           {live && <span className="spinner" aria-hidden />}
-          <span className="activity-sum">{groupSummary(steps)}</span>
+          <FoldHeader steps={steps} live={live} current={current} />
+          {!live && <span className="activity-kinds muted small" dir="auto">{groupSummary(steps)}</span>}
           {failed > 0 && <span className="pill bad">{t("stepsFailed", { n: failed })}</span>}
           {shots.length > 0 && (
             <span className="activity-thumbs" aria-label={t("sumShots", { n: shots.length })}>
@@ -170,28 +205,18 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
               {shots.length > 4 && <span className="muted small">+{shots.length - 4}</span>}
             </span>
           )}
-          <span className="chev" aria-hidden />
         </summary>
         <ol className="steps">
           {groupCalls(steps).map((run) => run.steps.length === 1 ? (
             <li key={run.steps[0]!.call.callId} className={!run.steps[0]!.result ? "pending" : run.steps[0]!.result!.ok ? "ok" : "fail"}>
-              {renderStep(run.steps[0]!)}
+              {renderStep(run.steps[0]!, acted.get(run.steps[0]!.call.callId))}
             </li>
           ) : (
             <li key={run.steps[0]!.call.callId} className="tool-run-item">
-              <ToolRunCard run={run} renderStep={renderStep} />
+              <ToolRunCard run={run} renderStep={renderStep} acted={acted} />
             </li>
           ))}
         </ol>
-        {shots.length > 0 && (
-          <div className="activity-shots">
-            {shots.map((id) => (
-              <a key={id} href={withToken(`/api/assets/${id}`)} target="_blank" rel="noreferrer">
-                <img src={withToken(`/api/assets/${id}`)} alt="" loading="lazy" />
-              </a>
-            ))}
-          </div>
-        )}
       </details>
       {/* What failed and why, without opening the group (only the first line of each error). */}
       {failed > 0 && (
@@ -206,11 +231,6 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
               </li>
             ))}
         </ul>
-      )}
-      {current && (
-        <p className="activity-now" dir="auto">
-          {stepLabel(current)}
-        </p>
       )}
       {current && !current.result && liveOutput?.[current.call.callId] && <LiveOutput text={liveOutput[current.call.callId]!} />}
       {current && !current.result && (current.call.name === "generate_image" || current.call.name === "generate_video") && <ImageProgressLine />}
@@ -274,7 +294,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
  * Several consecutive calls of one tool as one card ("3 web searches"): the header shows the state of the whole
  * run (spinner while any runs, failures counted) and the total time; open it for each call's own card.
  */
-function ToolRunCard({ run, renderStep }: { run: ToolRun<Step>; renderStep: (s: Step) => React.ReactNode }) {
+function ToolRunCard({ run, renderStep, acted }: { run: ToolRun<Step>; renderStep: (s: Step, acted?: ActedOn) => React.ReactNode; acted: Map<string, ActedOn> }) {
   const he = getLocale() === "he";
   const running = run.steps.some((s) => !s.result);
   const failed = run.steps.filter((s) => s.result && !s.result.ok).length;
@@ -295,7 +315,7 @@ function ToolRunCard({ run, renderStep }: { run: ToolRun<Step>; renderStep: (s: 
         <span className="chev" aria-hidden />
       </summary>
       <ol className="tool-run-list">
-        {run.steps.map((s) => <li key={s.call.callId} className={!s.result ? "pending" : s.result.ok ? "ok" : "fail"}>{renderStep(s)}</li>)}
+        {run.steps.map((s) => <li key={s.call.callId} className={!s.result ? "pending" : s.result.ok ? "ok" : "fail"}>{renderStep(s, acted.get(s.call.callId))}</li>)}
       </ol>
     </details>
   );
