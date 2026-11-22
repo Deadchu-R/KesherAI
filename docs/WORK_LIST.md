@@ -34,6 +34,13 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 
 - [ ] Live Claude-helper notifications in KesherAI (Roee 12:57): POST /api/agents/external {id,title,status,step,steps} that the lead Claude calls at a helper's start and end; KesherAI watches new commits on origin/main (its existing fetch) and attaches each commit with the trailer `Helper: <id>` to that run as a step; the phone gets the same live per-id progress notification as Antigravity (deacdf7) and a "Claude" curtain in the hub. No Claude tokens for mid-run updates.
 
+## Three relays (Roee 2026-11-22) 🔁
+- Goal: three providers carry the hub's traffic and take over from each other: the Kesher hub (Cloudflare), Ably
+  (free 6M messages/month, no card) and Supabase Realtime (free 2M/month, no card); Tailscale direct stays a 4th path.
+- [ ] a-20261122-06 transport (Ably + Supabase adapters, keys in Settings) · [ ] -07 failover PC + phone · [ ] -08 hub page
+  loads when Cloudflare is down. In the inbox for Antigravity (Opus), from about 29.11.
+- [ ] Roee: open free Ably and Supabase accounts and keep the keys until the Settings field exists.
+
 ## Waiting on Roee: at home, weekend 👤 (22.11)
 - [ ] Hub secret for storage-free tokens: built (HUB_TOKEN_SECRET, hub.ts; old tokens still work and rotate). Roee pastes a random 48-character secret in Cloudflare › Workers › kesher-hub › Settings › Variables and Secrets (type Secret).
 
