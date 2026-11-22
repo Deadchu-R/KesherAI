@@ -2,8 +2,8 @@
  * "Install when the computer is free": the update waits until nothing would be
  * cut off by the restart (no chat working, self-work not running, no download),
  * then installs by itself. Like an OS's "update outside active hours", but the
- * signal is KesherAI's own work instead of a clock. Kept in memory only: a
- * restart (the install itself) turns it off.
+ * signal is KesherAI's own work instead of a clock. On by default; the choice is
+ * kept in config (taskInbox.installWhenFree), so it is on again after the restart.
  */
 
 /** What is busy now; any of these holds the install back. */

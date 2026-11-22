@@ -273,6 +273,8 @@ export const KesherConfigSchema = z.object({
       askBeforeNext: z.object({ antigravity: z.boolean().default(true), local: z.boolean().default(false) }).prefault({}),
       // Research → tasks loop (research-tasks.ts): on unless turned off.
       loop: z.boolean().optional(),
+      // Install a ready update by itself when nothing would be cut off (install-when-free.ts): on unless turned off.
+      installWhenFree: z.boolean().optional(),
       notWhileGame: z.boolean().default(true),
       notWhileEditor: z.boolean().default(true),
       gpuBusyPercent: z.number().int().min(0).max(100).default(40),

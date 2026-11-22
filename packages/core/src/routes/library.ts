@@ -1159,9 +1159,16 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   };
   const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, beforeApply: async () => s.resume?.save("update"), apply: () => s.updater.apply() });
   app.addHook("onClose", async () => whenFree.stop());
+  // On by default (Roee 2026-11-22): every start waits for a free moment again, so updates keep coming by themselves.
+  if (s.config.taskInbox?.enabled && s.config.taskInbox.installWhenFree !== false) whenFree.set(true);
   app.get("/api/updates/ready", async () => ({ ...(await freeState()), whenFree: whenFree.on }));
   app.post<{ Body: { on?: boolean } | undefined }>("/api/updates/when-free", async (req) => {
     whenFree.set(req.body?.on === true);
+    // Remembered across restarts (the install itself restarts KesherAI).
+    if (s.config.taskInbox) {
+      s.config.taskInbox.installWhenFree = req.body?.on === true;
+      await s.saveConfig().catch(() => undefined);
+    }
     return { whenFree: whenFree.on };
   });
   app.post<{ Body: { force?: boolean } | undefined }>("/api/updates/apply", async (req, reply) => {
