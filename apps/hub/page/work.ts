@@ -56,6 +56,7 @@ function setFilters(v: Pick<WorkView, "render">, f: WorkFilters): void {
 const WORKER: Record<string, [string, string]> = {
   antigravity: ["✦ Antigravity", "✦ Antigravity"],
   gemini: ["✧ Gemini (חינמי)", "✧ Gemini (free)"],
+  opencode: ["◈ OpenCode Go", "◈ OpenCode Go"],
   local: ["◆ סוכן מקומי", "◆ Local agent"],
   claude: ["✷ Claude", "✷ Claude"],
 };

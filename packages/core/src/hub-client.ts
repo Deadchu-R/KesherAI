@@ -269,7 +269,7 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
   if (state === "waiting" && t.runBy === "local" && t.boardState === "claimed") state = "running";
   const ended = state === "done" || state === "partial" || state === "failed";
   const result = (ended ? (t.status === "skipped" ? "Skipped." : t.status === "declined" ? t.note : (t.summary ?? t.note)) : t.status === "needs-approval" ? "Waits for an approval on the PC or the phone." : t.note)?.replace(/\s+/g, " ").trim().slice(0, 300);
-  const going = t.runBy === "antigravity" && (state === "running" || state === "waiting-run");
+  const going = (t.runBy === "antigravity" && (state === "running" || state === "waiting-run")) || (t.runBy === "opencode" && state === "running");
   return {
     taskId: t.id,
     title: (t.title || t.id).slice(0, 200),

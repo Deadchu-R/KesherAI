@@ -41,6 +41,7 @@ function setFilters(v, f) {
 const WORKER = {
     antigravity: ["✦ Antigravity", "✦ Antigravity"],
     gemini: ["✧ Gemini (חינמי)", "✧ Gemini (free)"],
+    opencode: ["◈ OpenCode Go", "◈ OpenCode Go"],
     local: ["◆ סוכן מקומי", "◆ Local agent"],
     claude: ["✷ Claude", "✷ Claude"],
 };

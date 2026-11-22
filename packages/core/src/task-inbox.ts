@@ -1,4 +1,4 @@
-import type { InboxExecutor, InboxFrom, InboxKind, InboxRisk, InboxSettings, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
+import type { InboxExecutor, InboxFrom, InboxKind, InboxRisk, InboxSettings, InboxSize, InboxStatus, InboxTaskSpec, InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox's files and rules (docs/RESEARCH_LOG.md, "A task inbox"; docs/INBOX.md has the template Claude
@@ -32,7 +32,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
   gpuBusyPercent: 40,
 };
 
-const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini"]);
+const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini", "opencode"]);
 const RISKS = new Set<InboxRisk>(["low", "medium", "high"]);
 const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub", "device"]);
 /** The biggest task file read (bigger ones are refused, not cut). */
@@ -70,7 +70,8 @@ export function validBranchName(name: string): boolean {
 export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
   if (typeof ref !== "string" || !validBranchName(ref)) return false;
   if (ref === inboxBranch && validBranchName(inboxBranch) && !inboxBranch.includes("/") && inboxBranch !== "main" && inboxBranch !== "master" && inboxBranch !== "release") return true;
-  return /^agy\/[a-z0-9][a-z0-9._-]*$/.test(ref);
+  // agy/*: Antigravity's work; ocgo/*: OpenCode Go's. Both wait for Claude's review, never merged here.
+  return /^(agy|ocgo)\/[a-z0-9][a-z0-9._-]*$/.test(ref);
 }
 
 /**
@@ -99,7 +100,7 @@ export function slugOf(text: string): string {
 }
 
 /**
- * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `local/<id>-<slug>` (self-work, never pushed) or
+ * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `ocgo/<id>-<slug>` (OpenCode Go), `local/<id>-<slug>` (self-work, never pushed) or
  * `helper/<id>-<slug>` (Claude's Opus agent, in the cloud); `-partial` when the work was kept unfinished.
  *
  * @param spec - The task.
@@ -107,7 +108,7 @@ export function slugOf(text: string): string {
  * @param partial - Unfinished work.
  */
 export function branchFor(spec: Pick<InboxTaskSpec, "id" | "title">, runBy: Exclude<InboxExecutor, "auto">, partial = false): string {
-  const prefix = runBy === "antigravity" ? "agy" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
+  const prefix = runBy === "antigravity" ? "agy" : runBy === "opencode" ? "ocgo" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
   const name = `${prefix}/${spec.id}-${slugOf(spec.title)}${partial ? "-partial" : ""}`;
   if (!validBranchName(name)) throw new Error("Bad branch name.");
   return name;
@@ -128,6 +129,18 @@ export function boardSizeFor(spec: Pick<InboxTaskSpec, "title" | "goal" | "maxFi
   if (runBy !== "local") return "big";
   const copies = (spec.allowedPaths ?? []).some((p) => p.startsWith("integrations/"));
   return CONVERSION.test(`${spec.title}\n${spec.goal.slice(0, 400)}`) || copies || spec.maxFiles > 15 ? "big" : "small";
+}
+
+/**
+ * A task's size: its own `size`, else a guess from its limits (at most 3 files and low risk: S; over 30 files: L; else M).
+ *
+ * @param spec - The task.
+ * @returns S, M or L.
+ */
+export function taskSize(spec: Pick<InboxTaskSpec, "size" | "maxFiles" | "risk">): InboxSize {
+  if (spec.size) return spec.size;
+  if (spec.maxFiles <= 3 && spec.risk === "low") return "S";
+  return spec.maxFiles > 30 ? "L" : "M";
 }
 
 /** Text the routing reads as security or infrastructure (always Claude's Opus agent). */
@@ -211,10 +224,13 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
   const title = str("title", 200);
   if (!title) return { error: "The task has no title." };
   const executor = (str("executor", 20) || "auto") as InboxExecutor;
-  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus or gemini." };
+  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus, gemini or opencode." };
   const kind = (str("kind", 10) || "code") as InboxKind;
   if (kind !== "code" && kind !== "research") return { error: "kind must be code or research." };
   if (executor === "gemini" && kind !== "research") return { error: "executor gemini is only for kind: research." };
+  if (executor === "opencode" && kind !== "code") return { error: "executor opencode is only for code tasks." };
+  const size = str("size", 2).toUpperCase();
+  if (size && size !== "S" && size !== "M" && size !== "L") return { error: "size must be S, M or L." };
   const risk = (str("risk", 10) || "medium") as InboxRisk;
   if (!RISKS.has(risk)) return { error: "risk must be low, medium or high." };
   const from = (str("from", 20) || "claude") as InboxFrom;
@@ -257,6 +273,7 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     title,
     executor,
     ...(kind === "research" ? { kind } : {}),
+    ...(size ? { size: size as InboxSize } : {}),
     risk,
     from,
     base,
@@ -295,6 +312,7 @@ export function taskFileText(s: InboxTaskSpec): string {
     `from: ${s.from}`,
     `executor: ${s.executor}`,
     ...(s.kind === "research" ? ["kind: research"] : []),
+    ...(s.size ? [`size: ${s.size}`] : []),
     `risk: ${s.risk}`,
     `base: ${s.base}`,
     `allowed_paths: ${list(s.allowedPaths)}`,

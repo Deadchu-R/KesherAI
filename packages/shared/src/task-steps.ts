@@ -7,7 +7,7 @@
 /** What the estimate needs from a task (a subset of an inbox task, so the hub page and the PC card share it). */
 export interface StepEstimateInput {
   /** Who runs it after routing. */
-  runBy: "antigravity" | "local" | "opus" | "gemini";
+  runBy: "antigravity" | "local" | "opus" | "gemini" | "opencode";
   /** `research` tasks are estimated by their parts; anything else is code work. */
   kind?: string;
   /** The most files the task may touch. */

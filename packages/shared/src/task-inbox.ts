@@ -7,8 +7,50 @@
 import type { InboxModel } from "./inbox-models.js";
 import type { AgentLabel } from "./agent-label.js";
 
-/** Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts). */
-export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini";
+/**
+ * Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts).
+ * `opencode`: a code task on the user's flat OpenCode Go plan, run by itself in a code chat (no Run press: it is the
+ * user's own API key, not an agent's account), on a cheap model for size S and a strong one for M and L.
+ */
+export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini" | "opencode";
+
+/** How big a task is (research reports' "Size S/M/L"; picks the OpenCode Go model). */
+export type InboxSize = "S" | "M" | "L";
+
+/** The connection id of the user's OpenCode Go plan (packages/providers/src/presets.ts). */
+export const OPENCODE_PROVIDER = "opencode-go";
+
+/** Settings > Task inbox > OpenCode Go (config `taskInbox.opencode`). */
+export interface OpencodeSettings {
+  /** Off: no task goes to OpenCode Go, by hand or as the gap filler. */
+  enabled: boolean;
+  /** The model for small (S) tasks: cheap and fast. */
+  small: string;
+  /** The model for medium and large (M, L) tasks: strong. */
+  strong: string;
+  /** OpenCode Go tasks a day (its plan has one shared monthly allowance; this keeps a day from eating it). */
+  dailyCap: number;
+}
+
+/** The defaults (Roee, 2026-11-22: GLM 5.3 Flash for small work, Kimi K3 for the rest, 15 a day). */
+export const OPENCODE_DEFAULTS: OpencodeSettings = { enabled: true, small: "opencode-go/glm-5.3-flash", strong: "opencode-go/kimi-k3", dailyCap: 15 };
+
+/**
+ * The OpenCode Go model for a task, by its size: the cheap one for S, the strong one for M and L (like OpenCode's own
+ * `small_model` beside `model`, and Cline's separate Plan and Act models). A task's own `model` that names an OpenCode
+ * Go model wins.
+ *
+ * @param t - The task's size and model.
+ * @param s - The OpenCode Go settings.
+ * @returns The KesherAI model id (`opencode-go/<model>`).
+ */
+export function opencodeModelFor(t: { size?: InboxSize; model?: string }, s: Pick<OpencodeSettings, "small" | "strong">): string {
+  if (t.model?.startsWith(`${OPENCODE_PROVIDER}/`)) return t.model;
+  return t.size === "S" ? s.small || OPENCODE_DEFAULTS.small : s.strong || OPENCODE_DEFAULTS.strong;
+}
+
+/** A model id without its connection (`opencode-go/kimi-k3` → `kimi-k3`), for cards. */
+export const opencodeModelName = (id: string): string => id.replace(new RegExp(`^${OPENCODE_PROVIDER}/`), "");
 
 /**
  * What a task is: `code` (the default) changes the project; `research` only writes one report, either with Antigravity
@@ -39,6 +81,8 @@ export interface InboxTaskSpec {
   executor: InboxExecutor;
   /** `research`: the task writes one report (`docs/research/<id>.md`) and nothing else; absent = `code`. */
   kind?: InboxKind;
+  /** `size: S|M|L` (absent: guessed from its limits, see `sizeOf` in packages/core/src/task-inbox.ts). */
+  size?: InboxSize;
   risk: InboxRisk;
   from: InboxFrom;
   /** The branch or commit to start from (default `origin/main`). */
@@ -180,6 +224,8 @@ export interface InboxSettings {
   fetchMinutes: number;
   /** Antigravity tasks a day (default 10). */
   dailyCap: number;
+  /** OpenCode Go: the flat coding plan that takes S/M code tasks while Antigravity is out (absent: the defaults). */
+  opencode?: OpencodeSettings;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
   loop?: boolean;
   maxMinutes: number;
@@ -237,6 +283,20 @@ export interface InboxState {
   project?: string;
   /** The models Antigravity offered in its last session (inbox-models.ts); empty before it was asked once. */
   models?: InboxModel[];
+  /** OpenCode Go now: its connection is set up with a key, today's count, and its limit's end when it answered 429. */
+  opencode?: OpencodeState;
+}
+
+/** OpenCode Go's state for the settings card and the queue. */
+export interface OpencodeState {
+  /** The `opencode-go` connection exists and has a key. */
+  ready: boolean;
+  /** Tasks started today. */
+  used: number;
+  /** Its plan's limit was reached: no task starts before this (ms since epoch). */
+  until?: number;
+  /** The models its connection lists (`opencode-go/<model>`), for the pickers; empty when it could not be asked. */
+  models: string[];
 }
 
 /** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */

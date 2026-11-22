@@ -24,6 +24,8 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  */
 /** The model on a task's row: the one it ran on (with a fallback mark), or its pick before it runs. */
 function modelLine(t: InboxTaskView): string | null {
+  // OpenCode Go: the runner and its model ("OpenCode Go · kimi-k3"), set when the task starts.
+  if (t.runBy === "opencode") return t.modelUsed?.replace(/^OpenCode Go · /, "") ?? null;
   if (t.runBy !== "antigravity") return null;
   if (t.modelUsed) return `${t.modelFallback ? "↘ " : ""}${t.modelUsed}`;
   return t.model ?? null;
@@ -47,7 +49,7 @@ function stepsText(t: InboxTaskView): string | null {
 function statusChip(t: InboxTaskView): { text: string; cls: string } {
   const step = t.plan?.length ? ` · ${L("שלב", "step")} ${Math.min(t.plan.filter((p) => p.status === "completed").length + 1, t.plan.length)}/${t.plan.length}` : "";
   const m: Record<InboxStatus, [string, string, string]> = {
-    waiting: [t.runBy === "antigravity" ? 'ממתין ל"הפעל"' : "ממתין", t.runBy === "antigravity" ? "Waiting for Run" : "Waiting", ""],
+    waiting: [t.runBy === "antigravity" ? 'ממתין ל"הפעל"' : t.runBy === "opencode" ? "ממתין ל-OpenCode Go" : "ממתין", t.runBy === "antigravity" ? "Waiting for Run" : t.runBy === "opencode" ? "Waiting for OpenCode Go" : "Waiting", ""],
     queued: [t.runBy === "opus" ? "בתור" : t.boardState === "claimed" ? "הסוכן המקומי עובד עליה" : "ממתין לסוכן המקומי", t.runBy === "opus" ? "Queued" : t.boardState === "claimed" ? "The local agent is on it" : "Waiting for the local agent", t.boardState === "claimed" ? "run" : ""],
     running: [`רץ${step}`, `Running${step}`, "run"],
     "needs-approval": ["🔔 צריך אישור", "🔔 Needs approval", "ask"],
@@ -70,6 +72,7 @@ function executorChip(runBy: InboxTaskView["runBy"], kind?: InboxTaskView["kind"
   if (kind === "research" && runBy === "antigravity") return { text: L("✦ מחקר · צריך הפעלה", "✦ Research · needs Run"), cls: "agy" };
   if (runBy === "gemini") return { text: L("✧ מחקר · אוטומטי (Gemini חינם)", "✧ Research · automatic (free Gemini)"), cls: "local" };
   if (runBy === "antigravity") return { text: "✦ Antigravity", cls: "agy" };
+  if (runBy === "opencode") return { text: "◈ OpenCode Go", cls: "ocgo" };
   if (runBy === "local") return { text: L("◆ מודל מקומי", "◆ Local model"), cls: "local" };
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
 }
@@ -204,6 +207,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
           {s.quota.taskId && (
             <div className="row wrap">
               <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${s.quota!.taskId}/reassign`, { to: "local" })}>{L("◆ העבר למודל המקומי", "◆ Move to the local model")}</button>
+              {s.opencode?.ready && s.settings.opencode?.enabled && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${s.quota!.taskId}/reassign`, { to: "opencode" })}>{L("◈ העבר ל-OpenCode Go", "◈ Move to OpenCode Go")}</button>}
               <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${s.quota!.taskId}/reassign`, { to: "opus" })}>{L("✷ החזר ל-Claude (סוכן Opus)", "✷ Give back to Claude (Opus agent)")}</button>
             </div>
           )}
@@ -446,6 +450,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
             <option value="auto">{L("אוטומטי", "Auto")}</option>
             <option value="antigravity">✦ Antigravity</option>
             <option value="local">{L("◆ מודל מקומי", "◆ Local model")}</option>
+            <option value="opencode">◈ OpenCode Go</option>
             <option value="opus">{L("✷ סוכן Opus", "✷ Opus agent")}</option>
           </select>
         </label>

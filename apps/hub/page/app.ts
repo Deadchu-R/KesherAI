@@ -256,7 +256,7 @@ function routeChip(t: PageTask): HTMLElement {
     if (ex === "claude") return h("span", { class: "ex ex-opus" }, "✷ Claude");
     if (ex === "gemini") return h("span", { class: "ex ex-gem", title: t.toName }, L("✧ Gemini (חינמי)", "✧ Gemini (free)"));
     // An executor this page does not know yet (a newer PC) is shown as written.
-    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "local" ? L("מקומי", "Local") : ex;
+    const name = ex === "antigravity" ? "✦ Antigravity" : ex === "opencode" ? "◈ OpenCode Go" : ex === "local" ? L("מקומי", "Local") : ex;
     return h("span", { class: "ex ex-loc", title: t.toName }, `🖥 ${name}`);
   }
   return t.route === "claude-cloud" ? h("span", { class: "ex ex-opus" }, L("✷ Claude בענן", "✷ Claude cloud")) : h("span", { class: "ex ex-loc" }, `🖥 ${t.toName}`);

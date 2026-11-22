@@ -20,7 +20,8 @@ Rules that the code enforces:
 id: c-20261119-04
 title: Settings search
 from: claude
-executor: auto            # auto | antigravity | local | opus
+executor: auto            # auto | antigravity | local | opus | opencode (OpenCode Go, code only)
+size: M                   # optional: S | M | L (OpenCode Go: S on the small model, M/L on the strong one)
 risk: low                 # low | medium | high (security, git, auth, releases: high)
 base: origin/main
 allowed_paths: [apps/web/src/settings/**, apps/web/src/i18n.ts]

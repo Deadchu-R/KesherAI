@@ -3,18 +3,19 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, opencodeModelFor, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
+import { retryAfterMs } from "./free-cloud.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import { publishResearch } from "./research-publish.js";
 import type { TaskBoard } from "./task-board.js";
-import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
+import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, taskSize, validBranchName, validTaskId } from "./task-inbox.js";
 
 /**
  * The task inbox on the PC (docs/RESEARCH_LOG.md, "A task inbox", plan steps 2, 4 and 6): fetches the `kesher-inbox`
@@ -61,6 +62,17 @@ export interface TaskInboxDeps {
    * the provider's own error, so a quota or billing error can be told apart here.
    */
   research?: { ready: () => boolean; run: (question: string, signal: AbortSignal) => Promise<string> };
+  /**
+   * Code tasks on the user's flat OpenCode Go plan (absent: none can run). `ready`: its connection exists and has a key.
+   * `models`: the models its connection lists. `run`: one task in a self-work style code chat (auto mode, unattended) in
+   * the worktree, on the model; it resolves with the model's last answer, or throws the provider's error (a 429 carries
+   * `retryAfterMs` when the answer said how long to wait).
+   */
+  coder?: {
+    ready: () => boolean;
+    models: () => Promise<string[]>;
+    run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number) => void }) => Promise<{ text: string }>;
+  };
   now?: () => number;
   /** The heavy job that runs now (default: the app's heavy-job gate); a queued task waits while there is one. */
   heavy?: () => string | undefined;
@@ -85,6 +97,8 @@ interface Saved {
   modelsAt?: number;
   /** A model family whose quota ran out, and until when (ms): later tasks start on the next model of their chain. */
   familyUntil?: Partial<Record<ModelFamily, number>>;
+  /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
+  opencode?: { date: string; used: number; until?: number };
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
   research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
 }
@@ -177,6 +191,9 @@ export class TaskInbox {
   /** The free-Gemini research loop (one task at a time) and the stop for its current model call. */
   private geminiRun?: Promise<void>;
   private geminiStop?: AbortController;
+  /** The OpenCode Go loop (one task at a time) and the stop for its running task. */
+  private opencodeRun?: Promise<void>;
+  private opencodeStop?: { id: string; ctl: AbortController; why?: "stop" | "time" };
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TaskInboxDeps) {}
@@ -189,7 +206,55 @@ export class TaskInbox {
     // Unset fields (lists the user never changed) keep the defaults.
     const given = Object.fromEntries(Object.entries(this.d.settings()).filter(([, v]) => v !== undefined));
     const ask = { ...INBOX_DEFAULTS.askBeforeNext, ...((given.askBeforeNext as Partial<InboxSettings["askBeforeNext"]> | undefined) ?? {}) };
-    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask } as InboxSettings;
+    const opencode = { ...OPENCODE_DEFAULTS, ...((given.opencode as Partial<OpencodeSettings> | undefined) ?? {}) };
+    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode } as InboxSettings;
+  }
+
+  /** The OpenCode Go settings, with the defaults filled in. */
+  private get oc(): OpencodeSettings {
+    return this.s.opencode ?? OPENCODE_DEFAULTS;
+  }
+
+  /** Today's OpenCode Go count, reset at midnight (UTC, like Antigravity's). */
+  private ocToday(): { date: string; used: number; until?: number } {
+    const date = new Date(this.now()).toISOString().slice(0, 10);
+    if (this.saved.opencode?.date !== date) this.saved.opencode = { date, used: 0, ...(this.saved.opencode?.until ? { until: this.saved.opencode.until } : {}) };
+    return this.saved.opencode;
+  }
+
+  /**
+   * Whether Antigravity cannot take a task now: every model family's quota is spent, its plan's quota ran out, or
+   * today's cap is reached.
+   */
+  private antigravityOut(): boolean {
+    const now = this.now();
+    const families = (["opus", "sonnet", "flash"] as ModelFamily[]).every((f) => (this.saved.familyUntil?.[f] ?? 0) > now);
+    return families || (this.saved.quota?.until ?? 0) > now || this.today().used >= this.s.dailyCap;
+  }
+
+  /**
+   * Why OpenCode Go cannot take a task now, or undefined when it can: turned off, no connection with a key, today's cap
+   * reached, or its plan's limit (a 429) not over yet.
+   */
+  private opencodeBlocked(): string | undefined {
+    if (!this.oc.enabled) return "OpenCode Go is off (Settings > Task inbox).";
+    if (!this.d.coder?.ready()) return "Waiting for the OpenCode Go connection: add it with your key (Settings > Connections).";
+    const day = this.ocToday();
+    if ((day.until ?? 0) > this.now()) return `OpenCode Go limit reached until ${new Date(day.until!).toISOString()}.`;
+    if (day.used >= this.oc.dailyCap) return `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached (Settings > Task inbox).`;
+    return undefined;
+  }
+
+  /**
+   * The executor for a new task: the routing table, then the gap filler: an S/M code task that would wait for
+   * Antigravity goes to OpenCode Go while Antigravity is out (quota or cap) and OpenCode Go can take it. L tasks stay.
+   *
+   * @param spec - The task.
+   */
+  private routeFor(spec: InboxTaskSpec): Exclude<InboxTaskSpec["executor"], "auto"> {
+    const runBy = routeTask(spec);
+    if (spec.executor === "auto" && runBy === "antigravity" && spec.kind !== "research" && taskSize(spec) !== "L" && this.antigravityOut() && !this.opencodeBlocked()) return "opencode";
+    return runBy;
   }
 
   /** Reads the queue file once; a run cut off by a restart is marked failed (its worktree stays for a look). */
@@ -198,7 +263,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -206,7 +271,7 @@ export class TaskInbox {
       if (t.status === "running" || t.status === "needs-approval") {
         // Cut off by a restart, not by the agent: back in line where it was (creation order), ready for Run again.
         t.status = t.runBy === "local" ? "queued" : "waiting";
-        t.note = "KesherAI restarted during the run; it is back in line — press Run again.";
+        t.note = t.runBy === "opencode" ? "KesherAI restarted during the run; it starts again by itself." : "KesherAI restarted during the run; it is back in line — press Run again.";
         delete t.pending;
       } else if (t.note?.startsWith("Queued") && RUNNABLE.has(t.status)) {
         // The line was in memory only: it is gone, the task waits for Run again.
@@ -311,13 +376,24 @@ export class TaskInbox {
       runHere: here,
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
+      opencode: await this.opencodeState(),
     };
+  }
+
+  /** OpenCode Go's state for the settings card (its models are asked from the connection, never more than 5 s). */
+  private async opencodeState(): Promise<OpencodeState> {
+    const c = this.d.coder;
+    const day = this.ocToday();
+    const ready = !!c?.ready();
+    const models = ready ? await Promise.race([c!.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]) : [];
+    return { ready, used: day.used, ...((day.until ?? 0) > this.now() ? { until: day.until } : {}), models: models.slice(0, 100) };
   }
 
   /** Resolves when no run is going on (its result written). */
   async idle(): Promise<void> {
     await this.active?.done;
     await this.geminiRun;
+    await this.opencodeRun;
   }
 
   /**
@@ -354,6 +430,10 @@ export class TaskInbox {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     this.geminiStop?.abort();
+    if (this.opencodeStop) {
+      this.opencodeStop.why = "stop";
+      this.opencodeStop.ctl.abort();
+    }
     if (this.active) await this.stop(this.active.id).catch(() => undefined);
   }
 
@@ -448,6 +528,7 @@ export class TaskInbox {
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
+    void this.pumpOpencode().catch(() => undefined);
     void this.pump().catch(() => undefined);
   }
 
@@ -472,17 +553,17 @@ export class TaskInbox {
 
   /** Adds a checked task to the queue and the board. */
   private async enqueue(spec: InboxTaskSpec, boardId?: string): Promise<InboxTaskView> {
-    const runBy = routeTask(spec);
+    const runBy = this.routeFor(spec);
     const t: InboxTaskView = {
       ...spec,
       runBy,
       branch: branchFor(spec, runBy),
-      status: runBy === "antigravity" || runBy === "gemini" ? "waiting" : "queued",
-      ...(runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : {}),
+      status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" ? "waiting" : "queued",
+      ...(runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : {}),
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
-      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: boardSizeFor(spec, runBy) }]).catch(() => undefined);
+      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : runBy === "opencode" ? ` (automatic, OpenCode Go · ${opencodeModelName(opencodeModelFor({ ...spec, size: taskSize(spec) }, this.oc))})` : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: boardSizeFor(spec, runBy) }]).catch(() => undefined);
       const added = b?.tasks.at(-1);
       if (added) {
         t.boardId = added.id;
@@ -568,7 +649,7 @@ export class TaskInbox {
    * @param input - Title, goal and the rest; paths and limits default to Settings. `extraPaths`: more folders the task
    *   may change, only `integrations/<engine>/<folder>/**` (an engine plugin's AI-converted copy, engine-support.ts). `maxFiles`: 1–60 (default 15).
    */
-  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number }): Promise<InboxTaskView> {
+  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number; size?: string }): Promise<InboxTaskView> {
     await this.load();
     const s = this.s;
     const title = String(input.title ?? "").trim().slice(0, 200);
@@ -577,15 +658,17 @@ export class TaskInbox {
     const day = new Date(this.now()).toISOString().slice(0, 10).replace(/-/g, "");
     let n = 1;
     while (this.saved.tasks.some((t) => t.id === `r-${day}-${String(n).padStart(2, "0")}`)) n++;
-    const executor = ["auto", "antigravity", "local", "opus"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
+    const executor = ["auto", "antigravity", "local", "opus", "opencode"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
+    const size = ["S", "M", "L"].includes(String(input.size)) ? (input.size as InboxTaskSpec["size"]) : undefined;
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
-    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
+    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
     // The same checks as a file from git (the text is data either way).
     const parsed = parseTaskFile(taskFileText(spec), spec.id, s);
     if ("error" in parsed) throw fail(parsed.error, 400);
     const t = await this.enqueue(parsed.spec);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
+    void this.pumpOpencode().catch(() => undefined);
     if (s.enabled && s.repo) await this.commitToInbox([[`tasks/${spec.id}.md`, taskFileText(parsed.spec)]], `inbox: task ${spec.id}`).catch((e) => {
       this.saved.lastError = `Could not write the task to ${s.branch}: ${(e as Error).message.slice(0, 160)}`;
     });
@@ -714,6 +797,104 @@ export class TaskInbox {
     });
     await this.save();
     this.d.notify(`${status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : "✕"} ${t.id} ${status}`, t.title);
+  }
+
+  /**
+   * Runs the OpenCode Go code tasks by themselves, one at a time: no Run press is needed, because OpenCode Go is the
+   * user's own flat-plan API key in KesherAI's own code chat, not an outside agent's account. A task waits with a note
+   * while OpenCode Go is off, has no key, is at today's cap or at its plan's limit (after a 429, until the reset).
+   *
+   * @returns Resolves when no task is left to run now.
+   */
+  pumpOpencode(): Promise<void> {
+    this.opencodeRun ??= this.doOpencode().finally(() => {
+      this.opencodeRun = undefined;
+    });
+    return this.opencodeRun;
+  }
+
+  private async doOpencode(): Promise<void> {
+    await this.load();
+    const s = this.s;
+    if (!s.enabled || s.paused || !s.repo) return;
+    for (;;) {
+      // A task its plan's limit cut off goes again by itself once the limit is over (opencodeBlocked holds it until then).
+      const t = this.saved.tasks.find((x) => x.runBy === "opencode" && (x.status === "waiting" || x.status === "deferred-quota"));
+      if (!t) return;
+      const no = this.opencodeBlocked();
+      if (no) {
+        if (t.note !== no) {
+          t.note = no;
+          await this.save();
+        }
+        return;
+      }
+      await this.runOpencode(t, this.d.coder!);
+    }
+  }
+
+  /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
+  private async runOpencode(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
+    const model = opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
+    const repo = this.repo();
+    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
+    const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    const attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
+    const branch = `${branchFor(t, "opencode")}${attempt > 1 ? `-r${attempt}` : ""}`;
+    let wt: Awaited<ReturnType<typeof createSessionWorktree>>;
+    try {
+      if (!validBranchName(branch)) throw new Error("Bad branch name.");
+      wt = await createSessionWorktree(repo, `ocgo-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
+    } catch (e) {
+      Object.assign(t, { status: "failed" as InboxStatus, endedAt: this.now(), note: `Could not make the work folder: ${(e as Error).message.slice(0, 200)}` });
+      await this.save();
+      return;
+    }
+    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: `OpenCode Go · ${opencodeModelName(model)}` });
+    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "retryAt", "plan", "decisions"] as const) delete t[k];
+    this.ocToday().used++;
+    await this.save();
+    this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
+    if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
+    const run: { id: string; ctl: AbortController; why?: "stop" | "time" } = { id: t.id, ctl: new AbortController() };
+    this.opencodeStop = run;
+    const timer = setTimeout(() => {
+      run.why ??= "time";
+      run.ctl.abort();
+    }, t.maxMinutes * 60_000);
+    let text = "";
+    let error = "";
+    let wait: number | undefined;
+    try {
+      const stopped = new Promise<never>((_, rej) => run.ctl.signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
+      const r = await Promise.race([
+        c.run({
+          worktree: wt.path,
+          title: `◈ OpenCode Go · ${t.title}`.slice(0, 120),
+          prompt: agentPrompt(t, t.branch),
+          model,
+          signal: run.ctl.signal,
+          onStep: (n) => {
+            t.steps = n;
+            void this.save();
+          },
+        }),
+        stopped,
+      ]);
+      text = r.text;
+    } catch (e) {
+      error = (e as Error).message || String(e);
+      if (isQuotaError(error)) wait = retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now());
+    } finally {
+      clearTimeout(timer);
+      this.opencodeStop = undefined;
+    }
+    t.summary = text.trim().slice(-2000) || undefined;
+    const limited = !run.why && !!error && isQuotaError(error);
+    // Like Antigravity's familyUntil: no OpenCode Go task starts before the window resets (Retry-After, else 5 hours).
+    if (limited) this.ocToday().until = this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS);
+    const why = limited ? `OpenCode Go limit reached until ${new Date(this.ocToday().until!).toISOString()}.` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
+    await this.finish(t, wt.path, wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
   }
 
   /** Writes a task's result file to the inbox branch. */
@@ -1212,6 +1393,13 @@ export class TaskInbox {
   /** Stops a running task: the agent's turn is cancelled, the work so far is kept as a `-partial` branch. */
   async stop(id: string): Promise<boolean> {
     await this.load();
+    const oc = this.opencodeStop;
+    if (oc?.id === id) {
+      oc.why = "stop";
+      oc.ctl.abort();
+      await this.opencodeRun;
+      return true;
+    }
     const a = this.active;
     if (!a || a.id !== id) return false;
     a.why = "stop";
@@ -1522,16 +1710,20 @@ export class TaskInbox {
   private async feedFromResearch(): Promise<void> {
     const r = this.saved.research;
     if (this.s.loop === false || !r?.backlog.length) return;
-    const quotaOut = (["opus", "sonnet", "flash"] as ModelFamily[]).every((f) => (this.saved.familyUntil?.[f] ?? 0) > this.now());
     for (const ex of ["antigravity", "local"] as const) {
-      for (let n = 0; n < 3 && this.lines.size(ex) < 3; n++) {
-        if (ex === "antigravity" && (quotaOut || this.today().used >= this.s.dailyCap)) break;
+      // The gap filler: while Antigravity is out (quota or today's cap), its S/M tasks go to OpenCode Go when it can
+      // take them (on, a key, under its own cap and limit); otherwise they wait in the backlog as before.
+      const gap = ex === "antigravity" && this.antigravityOut();
+      if (gap && this.opencodeBlocked()) continue;
+      const waiting = () => (gap ? this.saved.tasks.filter((t) => t.runBy === "opencode" && t.status === "waiting").length : this.lines.size(ex));
+      for (let n = 0; n < 3 && waiting() < 3; n++) {
         const next = nextForExecutor(r.backlog, ex);
         if (!next) break;
         r.backlog = r.backlog.filter((b) => b !== next);
         r.made.push(next.key);
         try {
-          const t = await this.add({ title: next.title, goal: goalFor(next), executor: ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint" });
+          const t = await this.add({ title: next.title, goal: goalFor(next), executor: gap ? "opencode" : ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size });
+          if (gap) continue;
           if (ex === "antigravity") await this.setModel(t.id, "Claude Opus 4.6 (Thinking)").catch(() => undefined);
           await this.queueAdd(t.id, "research loop");
         } catch {
@@ -1684,7 +1876,7 @@ export class TaskInbox {
     t.note = blocked ? `${why ? `${why} ` : ""}Not committed or pushed: ${checks.filter((c) => !c.ok).map((c) => c.note).join("; ")}. The work stays on this PC only (${t.branch}).` : why || (files.length ? undefined : "The agent changed no files.");
     if (!t.note) delete t.note;
     if (files.length && !blocked) {
-      const msg = [`Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by Antigravity${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
+      const msg = [`Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by ${t.runBy === "opencode" ? "OpenCode Go" : "Antigravity"}${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
       const c = await git([...AUTHOR, "commit", "--quiet", "--no-verify", "-m", msg]);
       if (c.code === 0) {
         t.headSha = (await git(["rev-parse", "HEAD"])).out.trim().slice(0, 40);
@@ -1712,7 +1904,8 @@ export class TaskInbox {
     await this.save();
     const icon = status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕";
     // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
-    if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
+    if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
   }
 
   /**
@@ -1724,27 +1917,29 @@ export class TaskInbox {
    * @param to - The local model (self-work, through the board), Claude's Opus agent, or Antigravity (waits for Run).
    * @param o.again - Run a finished task again with the new executor (the user confirmed).
    */
-  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini", o: { again?: boolean } = {}): Promise<InboxTaskView> {
+  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini" | "opencode", o: { again?: boolean } = {}): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
     if ((t.status === "done" || t.status === "partial") && !o.again) throw fail("It is done.", 409);
     if (to === "gemini" && t.kind !== "research") throw fail("Free Gemini does only research tasks.", 409);
+    if (to === "opencode" && t.kind === "research") throw fail("OpenCode Go does only code tasks.", 409);
     this.lines.remove(id);
     delete t.boardState;
     t.runBy = to;
     t.executor = to;
-    t.status = to === "antigravity" || to === "gemini" ? "waiting" : "queued";
+    t.status = to === "antigravity" || to === "gemini" || to === "opencode" ? "waiting" : "queued";
     t.branch = branchFor(t, to);
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;
-    t.note = to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
+    t.note = to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
     await this.save();
     // Antigravity asks "Run this?" on the PC and the phone, as for a new task.
     if (to === "antigravity") this.makeAsk(t);
     if (to === "gemini") void this.pumpGemini().catch(() => undefined);
+    if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
     return t;
   }
 
@@ -1766,6 +1961,24 @@ export class TaskInbox {
     await this.save();
     return t;
   }
+}
+
+/** How long OpenCode Go waits after a 429 that does not say (its plan's shortest window is 5 hours). */
+export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
+
+/** An OpenCode Go task's end, in Hebrew, for the notification. */
+const OPENCODE_END_HE: Partial<Record<InboxStatus, string>> = { done: "סיים משימה", partial: "סיים חלקית", failed: "נכשל", "deferred-quota": "הגיע למגבלה" };
+
+/**
+ * The note an OpenCode Go task shows in the queue: the model it runs on, and why it went there.
+ *
+ * @param t - The task (its size and model).
+ * @param oc - The OpenCode Go settings.
+ * @param gap - It was routed there because Antigravity is out.
+ */
+export function opencodeNote(t: Pick<InboxTaskSpec, "size" | "model" | "maxFiles" | "risk">, oc: OpencodeSettings, gap: boolean): string {
+  const name = opencodeModelName(opencodeModelFor({ ...t, size: taskSize(t) }, oc));
+  return `Runs by itself on OpenCode Go · ${name}${gap ? " (Antigravity is out)" : ""}.`;
 }
 
 /** Whether a status is an end. */

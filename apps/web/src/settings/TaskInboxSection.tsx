@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { InboxState } from "@kesher/shared";
+import { OPENCODE_DEFAULTS, opencodeModelName, type InboxState } from "@kesher/shared";
 import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -19,6 +19,48 @@ function ListBox({ label, value, onSave }: { label: string; value: string[]; onS
       <span className="small muted">{label}</span>
       <textarea dir="ltr" rows={Math.min(8, Math.max(3, list.length + 1))} value={text} onChange={(e) => setText(e.target.value)} onBlur={() => list.join("\n") !== value.join("\n") && onSave(list)} />
     </label>
+  );
+}
+
+/**
+ * Settings → Task inbox → OpenCode Go: the flat coding plan that takes S/M code tasks by itself while Antigravity is out
+ * (its quota or today's cap). On/off, the model for small tasks and the one for medium and large ones (from the
+ * connection's own list), its daily limit with today's count, and its plan's limit after a 429. Works from the phone.
+ *
+ * @param p - The inbox's state and the settings writer.
+ */
+function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string, unknown>) => void }) {
+  const c = { ...OPENCODE_DEFAULTS, ...s.settings.opencode };
+  const st = s.opencode;
+  const models = [...new Set([...(st?.models ?? []), c.small, c.strong])];
+  const set = (v: Record<string, unknown>) => put({ opencode: v });
+  const pick = (key: "small" | "strong", he: string, en: string) => (
+    <label className="row wrap small">
+      <span className="grow">{L(he, en)}</span>
+      <select dir="ltr" value={c[key]} disabled={!c.enabled} onChange={(e) => set({ [key]: e.target.value })} aria-label={L(he, en)}>
+        {models.map((m) => <option key={m} value={m}>{opencodeModelName(m)}</option>)}
+      </select>
+    </label>
+  );
+  const when = (ms: number) => new Date(ms).toLocaleString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <div className="stack tinbox-ocgo">
+      <div className="row">
+        <h3 className="grow">◈ OpenCode Go</h3>
+        <label className="row small"><input type="checkbox" checked={c.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> {L("פעיל", "On")}</label>
+      </div>
+      <p className="small muted">{L("כש-Antigravity נגמר (מכסה או סף יומי), משימות קוד קטנות ובינוניות עוברות לכאן ורצות לבד. משימות גדולות נשארות ל-Claude. העבודה בענף ocgo/*, אף פעם לא ב-main, ומחכה לבדיקה של Claude.", "When Antigravity is out (quota or daily limit), small and medium code tasks come here and run by themselves. Big tasks stay with Claude. The work goes to an ocgo/* branch, never main, and waits for Claude's review.")}</p>
+      {!st?.ready && <p className="small tinbox-err">{L("אין חיבור OpenCode Go עם מפתח: הוסף אותו בהגדרות › חיבורים.", "No OpenCode Go connection with a key: add it in Settings › Connections.")}</p>}
+      {st?.until && <p className="small tinbox-err">⏸ {L(`הגעת למגבלה של OpenCode Go עד ${when(st.until)}`, `OpenCode Go limit reached until ${when(st.until)}`)}</p>}
+      {pick("small", "מודל למשימות קטנות (S): זול ומהיר", "Model for small tasks (S): cheap and fast")}
+      {pick("strong", "מודל למשימות בינוניות וגדולות (M/L): חזק", "Model for medium and large tasks (M/L): strong")}
+      <label className="row wrap small">
+        <span className="grow">{L(`סף יומי (היום ${st?.used ?? 0})`, `Daily limit (today ${st?.used ?? 0})`)}</span>
+        <select value={c.dailyCap} disabled={!c.enabled} onChange={(e) => set({ dailyCap: Number(e.target.value) })} aria-label={L("סף יומי ל-OpenCode Go", "OpenCode Go daily limit")}>
+          {[...new Set([5, 10, 15, 20, 30, 50, c.dailyCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+    </div>
   );
 }
 
@@ -83,16 +125,19 @@ export function TaskInboxSection() {
         <input dir="ltr" defaultValue={c.model} placeholder="Gemini" maxLength={80} onBlur={(e) => e.target.value.trim() !== c.model && put({ model: e.target.value.trim() })} aria-label={L("מודל", "Model")} />
       </label>
 
+      <OpencodeSettings s={s} put={put} />
+
       <h3>{L("מבצע לכל סוג משימה", "Who does each kind of task")}</h3>
       <div className="small stack">
         <span><span className="tinbox-ex local">{L("◆ מודל מקומי", "◆ Local model")}</span> {L("עבודה עצמית לוקחת אותן מלוח המשימות כשהמחשב פנוי.", "Self-work takes them from the task board when the PC is free.")}</span>
         <span><span className="tinbox-ex agy">✦ Antigravity</span> {L('רק ב"הפעל".', "Only on Run.")}</span>
+        <span><span className="tinbox-ex ocgo">◈ OpenCode Go</span> {L("רץ לבד, משימות קוד קטנות ובינוניות כש-Antigravity נגמר.", "Runs by itself: small and medium code tasks while Antigravity is out.")}</span>
         <span><span className="tinbox-ex opus">{L("✷ סוכן Opus", "✷ Opus agent")}</span> {L("של Claude, לא רץ במחשב. Claude מחליט.", "Claude's own, not on this PC. Claude decides.")}</span>
         <span className="locked"><span className="tinbox-ex">Jules</span> {L("בהמשך (API רשמי של Google לעבודה בלי השגחה).", "Later (Google's official API for unattended work).")}</span>
       </div>
 
       <h3>Git</h3>
-      <p className="small">{L(`KesherAI דוחף רק ענפי agy/* ואת ${c.branch}.`, `KesherAI pushes only agy/* branches and ${c.branch}.`)}</p>
+      <p className="small">{L(`KesherAI דוחף רק ענפי agy/* ו-ocgo/* ואת ${c.branch}.`, `KesherAI pushes only agy/* and ocgo/* branches and ${c.branch}.`)}</p>
       <p className="small">✕ {L("אף פעם לא: main, תגיות, מחיקת ענפים, force push.", "Never: main, tags, deleting branches, force push.")}</p>
       <p className="small">✕ {L("לסוכן עצמו אין הרשאת push: רק KesherAI, אחרי הבדיקות.", "The agent itself cannot push: only KesherAI, after its checks.")}</p>
 

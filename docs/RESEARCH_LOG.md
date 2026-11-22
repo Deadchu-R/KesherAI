@@ -4542,3 +4542,8 @@ Report: [c-20261122-15](research/c-20261122-15.md). Unverified claims (Flash): c
 - **Already built**: UIA-first control task, vision pointer (vision-ground.ts), per-card GPU numbering. **Not built**: overlay window, engine point endpoints, proactive bubble, cheap change detection, a card setting for vision.
 - **Taken**: WORK_LIST "Morning 22.11" overlay items.
 
+## 2026-11-22 — Cheap vs strong model routing for OpenCode Go tasks (Claude helper, brief)
+- **Found**: OpenCode keeps a `model` and a separate `small_model` for light jobs; Cline has separate Plan and Act models; community routers (opencode-model-router, oh-my-openagent configs for OpenCode Go) pick a tier per task size so the flat allowance lasts.
+- **Taken**: the inbox's `opencode` executor picks by task size: S → a cheap fast model (default glm-5.3-flash), M/L → a strong one (default kimi-k3), both settings; a task file's own `opencode-go/…` model wins. A daily cap and a 429 back-off (Retry-After, else 5 h) keep one day from eating the monthly allowance.
+- **Left**: no per-step routing inside one task (plan on the strong model, edits on the cheap one), as Cline does; worth a look if the allowance runs short.
+- Stopped at: done (built the same day; WORK_LIST T2).

@@ -284,6 +284,15 @@ export const KesherConfigSchema = z.object({
       branch: z.string().max(60).default("kesher-inbox"),
       fetchMinutes: z.number().int().min(1).max(120).default(5),
       dailyCap: z.number().int().min(0).max(100).default(10),
+      // OpenCode Go (inbox-runner.ts): the flat coding plan that takes S/M code tasks while Antigravity is out.
+      opencode: z
+        .object({
+          enabled: z.boolean().default(true),
+          small: z.string().max(120).default("opencode-go/glm-5.3-flash"),
+          strong: z.string().max(120).default("opencode-go/kimi-k3"),
+          dailyCap: z.number().int().min(0).max(100).default(15),
+        })
+        .prefault({}),
       maxMinutes: z.number().int().min(1).max(60).default(15),
       model: z.string().max(80).default(""),
       allowedPaths: z.array(z.string().max(120)).max(40).optional(),

@@ -110,8 +110,8 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {
-    const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : undefined;
-    if (!to) return reply.code(400).send({ error: "to is local or opus." });
+    const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : req.body?.to === "opencode" ? "opencode" : undefined;
+    if (!to) return reply.code(400).send({ error: "to is local, opus or opencode." });
     return inbox.reassign(req.params.id, to).catch((e) => failed(reply, e));
   });
 
@@ -180,6 +180,24 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
       list("allowedPaths", 40);
       list("forbiddenPaths", 60);
       list("commands", 40);
+      // OpenCode Go (Settings > Task inbox card): on/off, the two models (only the connection's own `opencode-go/…` ids), the daily cap.
+      if (b.opencode && typeof b.opencode === "object") {
+        const o = b.opencode as Record<string, unknown>;
+        const oc = { ...cur.opencode };
+        if (typeof o.enabled === "boolean") oc.enabled = o.enabled;
+        for (const k of ["small", "strong"] as const) {
+          if (o[k] === undefined) continue;
+          const m = String(o[k]).trim();
+          if (m.length > 120 || !/^opencode-go\/[\w.:-]+$/.test(m)) throw new Error("Pick an OpenCode Go model (opencode-go/…).");
+          oc[k] = m;
+        }
+        if (o.dailyCap !== undefined) {
+          const n = Number(o.dailyCap);
+          if (!Number.isInteger(n) || n < 0 || n > 100) throw new Error("The OpenCode Go daily limit must be 0–100.");
+          oc.dailyCap = n;
+        }
+        cur.opencode = oc;
+      }
       if (typeof b.model === "string") {
         if (b.model.length > 80 || !/^[\w .:/()-]*$/.test(b.model)) throw new Error("The model name has odd characters.");
         cur.model = b.model.trim();
@@ -202,6 +220,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     await s.saveConfig();
     if (!cur.enabled) await inbox.stopAll();
     inbox.start();
+    void inbox.pumpOpencode().catch(() => undefined);
     return inbox.state(isLocalRequest(req));
   });
 }

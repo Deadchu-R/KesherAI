@@ -4454,6 +4454,9 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-ex { display: inline-block; padding: 2px 9px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12px; white-space: nowrap; border: 1px solid var(--border-strong); }
 .tinbox-ex.agy { color: #8fd0ff; border-color: rgb(143 208 255 / 0.35); }
 .tinbox-ex.local { color: var(--good); border-color: rgb(111 211 165 / 0.35); }
+.tinbox-ex.ocgo { color: #c9a6ff; border-color: rgb(201 166 255 / 0.35); }
+/* OpenCode Go's card in Settings > Task inbox: long model names never push the phone layout (390 px) wider. */
+.tinbox-ocgo select { max-width: 100%; min-width: 0; }
 .tinbox-ex.opus { color: #e8b4ff; border-color: rgb(232 180 255 / 0.35); }
 .tinbox-st { display: inline-block; padding: 2px 9px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12px; background: var(--panel-2); color: var(--text-2); }
 .tinbox-st.run { color: var(--accent); }

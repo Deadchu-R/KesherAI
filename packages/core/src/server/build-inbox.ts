@@ -4,16 +4,16 @@ import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
 import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ToolContext } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
-import type { InboxBusy } from "@kesher/shared";
+import { OPENCODE_PROVIDER, type InboxBusy } from "@kesher/shared";
 import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
 import type { KesherConfig } from "../config.js";
-import { modelTurnFor, withFilter } from "../conversations.js";
+import { modelTurnFor, withFilter, type ConversationManager } from "../conversations.js";
 import { researchReport } from "../deep-research.js";
 import type { FreeCloudPool } from "../free-cloud.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import { busyPrograms, gameFoldersForBusy, inboxBusy, runningPrograms } from "../inbox-busy.js";
-import { TaskInbox, isQuotaError, type RunCmd } from "../inbox-runner.js";
+import { TaskInbox, isQuotaError, type RunCmd, type TaskInboxDeps } from "../inbox-runner.js";
 import type { Notifier } from "../notify.js";
 import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
@@ -64,14 +64,68 @@ function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
 }
 
 /**
+ * OpenCode Go code tasks for the inbox (the `opencode` executor): each task runs in its own code chat the way
+ * self-work's do (auto mode, unattended, in the task's worktree), on an `opencode-go/<model>` model through the
+ * user's saved connection. No key passes through here: the chat uses the connection as any chat does.
+ *
+ * @param p - The config, the provider registry and the chats.
+ * @returns The inbox's `coder`.
+ */
+export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegistry; chats: () => ConversationManager }): NonNullable<TaskInboxDeps["coder"]> {
+  let cache: { at: number; list: string[] } | undefined;
+  return {
+    ready: () => !!p.registry.get(OPENCODE_PROVIDER) && !!p.config.providers.find((x) => x.id === OPENCODE_PROVIDER)?.apiKey,
+    // The connection's chat models, asked at most every 10 minutes (the settings card's pickers).
+    models: async () => {
+      if (cache && Date.now() - cache.at < 10 * 60_000) return cache.list;
+      const provider = p.registry.get(OPENCODE_PROVIDER);
+      if (!provider) return [];
+      const list = (await provider.listModels(AbortSignal.timeout(5000))).filter((m) => m.category === "chat").map((m) => m.id);
+      cache = { at: Date.now(), list };
+      return list;
+    },
+    run: async ({ worktree, title, prompt, model, signal, onStep }) => {
+      const chats = p.chats();
+      const c = await chats.create({ kind: "code", workspace: worktree, mode: "auto", title, modelId: model });
+      const session = async () => (await chats.open(c.id))?.session;
+      // No one watches it: its questions and access requests are answered at once, as for self-work.
+      (await session())?.setUnattended(true);
+      signal.addEventListener("abort", () => chats.stop(c.id), { once: true });
+      await chats.send(c.id, prompt);
+      const startedAt = Date.now();
+      let steps = -1;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if (signal.aborted) throw new Error("Stopped.");
+        const s = await session();
+        if (!s) throw new Error("The OpenCode Go chat is gone.");
+        const status = s.info().status;
+        const events = s.events;
+        const n = events.reduce((k, e) => (e.type === "tool_call" ? k + 1 : k), 0);
+        if (n !== steps) onStep((steps = n));
+        if (status === "running" || status === "waiting") continue;
+        // The turn may not have started yet right after the send.
+        if (status === "idle" && !events.some((e) => e.type === "assistant") && Date.now() - startedAt < 15_000) continue;
+        if (status === "error") {
+          const last = [...events].reverse().find((e) => e.type === "status" && e.status === "error");
+          throw new Error((last && last.type === "status" && last.message) || "The OpenCode Go model failed.");
+        }
+        const answer = [...events].reverse().find((e) => e.type === "assistant");
+        return { text: answer && answer.type === "assistant" ? answer.text : "" };
+      }
+    },
+  };
+}
+
+/**
  * Builds the task inbox: git and checks as argument lists, the unmodified `agy acp` (it signs in by itself), the
  * shared board, notifications to this PC and the phone, and the busy check (games, editors, the graphics card).
  *
  * @param p - The config, data folder, board, notifier, the graphics card guard and the provider registry (small research
- *   tasks run on its "gemini" provider).
+ *   tasks run on its "gemini" provider), and the chats (OpenCode Go code tasks run in code chats).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool }): TaskInbox {
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager }): TaskInbox {
   const git = runner("git", false);
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
@@ -154,6 +208,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
         }
       },
     },
+    ...(p.chats ? { coder: opencodeCoder({ config: p.config, registry: p.registry, chats: p.chats }) } : {}),
     board: p.board,
     notify: (title, body, opts) => void p.notifier.send({ title, body, path: opts?.path ?? "#/task-inbox", tags: ["inbox_tray"], ...(opts?.actions ? { actions: opts.actions } : {}), ...(opts?.ref ? { ref: opts.ref } : {}) }).catch(() => undefined),
     // A running Antigravity task's live progress: the phone app only (one notification per task, updated in place).
