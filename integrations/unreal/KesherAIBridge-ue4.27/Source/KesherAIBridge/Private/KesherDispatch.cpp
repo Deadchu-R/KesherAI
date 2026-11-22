@@ -1,0 +1,192 @@
+// Copyright KesherAI contributors. Licensed under the Apache License, Version 2.0.
+// UE 4.27 conversion: Live Coding removed (not available in 4.27).
+
+#include "KesherDispatch.h"
+
+#include "Editor.h"
+#include "KesherAssets.h"
+#include "FileHelpers.h"
+#include "KesherGraph.h"
+#include "KesherLevel.h"
+#include "KesherPlay.h"
+#include "KesherPlayTest.h"
+#include "KesherSpawn.h"
+#include "KesherWidget.h"
+#include "Modules/ModuleManager.h"
+// UE 4.27: no Live Coding module.
+
+TSharedPtr<FJsonObject> KesherDispatch::Run(const TSharedPtr<FJsonObject>& In, bool bOffline)
+{
+	FString Cmd, Path, Graph;
+	In->TryGetStringField(TEXT("cmd"), Cmd);
+	In->TryGetStringField(TEXT("path"), Path);
+	In->TryGetStringField(TEXT("graph"), Graph);
+
+	TSharedPtr<FJsonObject> Result;
+	// With the editor closed (the KesherBridge commandlet), only what needs no open editor window runs.
+	if (bOffline && (Cmd == TEXT("live_coding") || Cmd == TEXT("open") || Cmd == TEXT("undo") || Cmd == TEXT("redo") || Cmd == TEXT("quit_for_update") || Cmd == TEXT("close_editor") || Cmd.StartsWith(TEXT("play"))))
+	{
+		Result = MakeShared<FJsonObject>();
+		Result->SetStringField(TEXT("error"), TEXT("This needs the open Unreal Editor."));
+		return Result;
+	}
+	if (Cmd == TEXT("list")) Result = KesherGraph::List();
+	else if (Cmd == TEXT("graph")) Result = KesherGraph::Read(Path);
+	else if (Cmd == TEXT("apply"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
+		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherGraph::Apply(Path, Graph, *Ops);
+	}
+	else if (Cmd == TEXT("vars"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
+		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherGraph::EditVariables(Path, *Ops);
+	}
+	else if (Cmd == TEXT("compile")) Result = KesherGraph::Compile(Path);
+	else if (Cmd == TEXT("live_coding"))
+	{
+		// UE 4.27: Live Coding is not available.
+		Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("ok"), false);
+		Result->SetStringField(TEXT("result"), TEXT("Live Coding is not available in Unreal Engine 4.27."));
+	}
+	else if (Cmd == TEXT("save")) Result = KesherGraph::Save(Path);
+	else if (Cmd == TEXT("open")) Result = KesherGraph::Open(Path);
+	else if (Cmd == TEXT("actions"))
+	{
+		FString Query, PinType, PinDir;
+		In->TryGetStringField(TEXT("query"), Query);
+		In->TryGetStringField(TEXT("pinType"), PinType);
+		In->TryGetStringField(TEXT("pinDir"), PinDir);
+		Result = KesherGraph::Actions(Path, Query, PinType, PinDir);
+	}
+	else if (Cmd == TEXT("widget")) Result = KesherWidget::Read(Path);
+	else if (Cmd == TEXT("create"))
+	{
+		FString Parent;
+		In->TryGetStringField(TEXT("parent"), Parent);
+		Result = KesherWidget::CreateBlueprint(Path, Parent);
+	}
+	else if (Cmd == TEXT("import_texture"))
+	{
+		FString File, Folder, Name;
+		In->TryGetStringField(TEXT("file"), File);
+		In->TryGetStringField(TEXT("folder"), Folder);
+		In->TryGetStringField(TEXT("name"), Name);
+		Result = KesherWidget::ImportTexture(File, Folder, Name);
+	}
+	else if (Cmd == TEXT("widget_apply"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Ops = nullptr;
+		if (In->TryGetArrayField(TEXT("ops"), Ops)) Result = KesherWidget::Apply(Path, *Ops);
+	}
+	else if (Cmd == TEXT("undo") || Cmd == TEXT("redo")) Result = KesherGraph::Undo(Cmd == TEXT("redo"));
+	else if (Cmd == TEXT("quit_for_update"))
+	{
+		// The user pressed "Update the plugin": the editor asks to save unsaved work (the user's choice), then closes;
+		// KesherAI replaces the plugin and opens the project again.
+		const bool bSaved = FEditorFileUtils::SaveDirtyPackages(true, true, true);
+		Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("ok"), bSaved);
+		if (bSaved) FPlatformMisc::RequestExit(false);
+	}
+	else if (Cmd == TEXT("close_editor"))
+	{
+		// The user pressed Close in KesherAI and already chose there: save everything first, or throw unsaved
+		// changes away. Unreal asks nothing either way.
+		bool bSave = false;
+		In->TryGetBoolField(TEXT("save"), bSave);
+		Result = MakeShared<FJsonObject>();
+		if (bSave && GEditor && GEditor->PlayWorld)
+		{
+			Result->SetStringField(TEXT("error"), TEXT("The game is playing in the editor. Stop it, then close with saving."));
+		}
+		else if (bSave && !FEditorFileUtils::SaveDirtyPackages(false, true, true))
+		{
+			Result->SetStringField(TEXT("error"), TEXT("Some files could not be saved, so Unreal stays open."));
+		}
+		else
+		{
+			Result->SetBoolField(TEXT("ok"), true);
+			Result->SetBoolField(TEXT("saved"), bSave);
+			FPlatformMisc::RequestExit(false);
+		}
+	}
+	else if (Cmd == TEXT("play"))
+	{
+		bool bPlace = true;
+		In->TryGetBoolField(TEXT("place"), bPlace);
+		Result = KesherPlay::Start(Path, bPlace);
+	}
+	else if (Cmd == TEXT("play_status")) Result = KesherPlay::Status();
+	else if (Cmd == TEXT("play_stop")) Result = KesherPlay::Stop();
+	// Gameplay tests (0.1.25): a plan of steps in Play In Editor, read step by step while it runs.
+	else if (Cmd == TEXT("play_test"))
+	{
+		const TSharedPtr<FJsonObject>* Plan = nullptr;
+		Result = In->TryGetObjectField(TEXT("plan"), Plan) ? KesherPlayTest::Start(*Plan) : KesherPlayTest::Start(nullptr);
+	}
+	else if (Cmd == TEXT("play_test_status")) Result = KesherPlayTest::Status();
+	else if (Cmd == TEXT("play_test_stop")) Result = KesherPlayTest::Stop();
+	// The stand-in (a level shown in KesherAI's 3D editor): levels, a level's actors, a mesh's shape, the moves back.
+	else if (Cmd == TEXT("levels")) Result = KesherLevel::Levels();
+	else if (Cmd == TEXT("level")) Result = KesherLevel::Read(Path);
+	else if (Cmd == TEXT("level_mesh")) Result = KesherLevel::Mesh(Path);
+	else if (Cmd == TEXT("level_move"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Moves = nullptr;
+		if (In->TryGetArrayField(TEXT("moves"), Moves)) Result = KesherLevel::Move(Path, *Moves, bOffline);
+	}
+	else if (Cmd == TEXT("level_material"))
+	{
+		FString Actor, Component, Slot, Material;
+		In->TryGetStringField(TEXT("actor"), Actor);
+		In->TryGetStringField(TEXT("component"), Component);
+		In->TryGetStringField(TEXT("slot"), Slot);
+		In->TryGetStringField(TEXT("material"), Material);
+		Result = KesherLevel::SetMaterial(Path, Actor, Component, Slot.IsEmpty() ? FString(TEXT("0")) : Slot, Material, bOffline);
+	}
+	// The engine specialists (engine-build-tools.ts): a block-out's actors, and a Niagara effect from a template.
+	else if (Cmd == TEXT("level_spawn"))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Actors = nullptr;
+		if (In->TryGetArrayField(TEXT("actors"), Actors)) Result = KesherSpawn::Spawn(Path, *Actors, bOffline);
+	}
+	else if (Cmd == TEXT("vfx_create")) Result = KesherSpawn::CreateVfx(In, bOffline);
+	// The editors' "Open from project" (0.1.33): an asset exported for KesherAI's editors, and the edited file back.
+	else if (Cmd == TEXT("asset_export"))
+	{
+		FString File;
+		In->TryGetStringField(TEXT("file"), File);
+		Result = KesherAssets::Export(Path, File);
+	}
+	else if (Cmd == TEXT("asset_import"))
+	{
+		FString File, Name;
+		In->TryGetStringField(TEXT("file"), File);
+		In->TryGetStringField(TEXT("name"), Name);
+		Result = KesherAssets::Import(Path, File, Name);
+	}
+	else if (Cmd == TEXT("ping"))
+	{
+		Result = MakeShared<FJsonObject>();
+		Result->SetBoolField(TEXT("ok"), true);
+	}
+
+	return Result;
+}
+
+TSharedRef<FJsonObject> KesherDispatch::Answer(const TSharedPtr<FJsonObject>& In, bool bOffline)
+{
+	FString Cmd;
+	In->TryGetStringField(TEXT("cmd"), Cmd);
+	TSharedPtr<FJsonObject> Result = Run(In, bOffline);
+	TSharedRef<FJsonObject> Out = MakeShared<FJsonObject>();
+	FString Problem;
+	if (!Result.IsValid()) Problem = TEXT("Unknown command: ") + Cmd;
+	else if (Result->TryGetStringField(TEXT("error"), Problem)) {}
+	Out->SetBoolField(TEXT("ok"), Problem.IsEmpty());
+	if (Problem.IsEmpty()) Out->SetObjectField(TEXT("result"), Result);
+	else Out->SetStringField(TEXT("error"), Problem);
+	return Out;
+}
