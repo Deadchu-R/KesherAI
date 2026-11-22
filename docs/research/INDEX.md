@@ -2,6 +2,8 @@
 
 Everything researched so far (one line each). Read this first so a new research task does not repeat a topic; open the file for details.
 
+Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one chat, game engines, everything else) with a per-report coverage table: [SYNTHESIS-2026-11-22.md](SYNTHESIS-2026-11-22.md)
+
 | Id | Topic | File |
 |---|---|---|
 | browser-computer-control | Browser and computer control: how others do it, and the plan for KesherAI | [browser-computer-control.md](browser-computer-control.md) |
