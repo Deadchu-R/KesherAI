@@ -72,7 +72,7 @@ export function buildSdEngine(paths: DataPaths, downloads: DownloadManager, conf
  * @param modelPath - A GGUF file (the first part of a split model).
  * @returns Its size in bytes, adding the other parts of a split model.
  */
-async function modelSize(modelPath: string): Promise<number> {
+export async function modelSize(modelPath: string): Promise<number> {
   const split = /^(.*)-00001-of-(\d{5})\.gguf$/i.exec(basename(modelPath));
   if (!split) return (await stat(modelPath).catch(() => ({ size: 0 }))).size;
   const files = (await readdir(dirname(modelPath)).catch(() => [])).filter((f) => f.startsWith(`${split[1]}-`) && f.endsWith(`-of-${split[2]}.gguf`));
