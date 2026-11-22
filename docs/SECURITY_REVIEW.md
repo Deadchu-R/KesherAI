@@ -1974,3 +1974,8 @@ Scope: `git diff f189a92..HEAD` (225 files).
   ranges checked. Presence/away notes carry counts only.
 - **Privacy grep:** no personal e-mail, Windows user name or personal path in the diff or the new docs (only fixtures
   like `C:\Users\someone`, and public `roeetal.com`).
+
+## Scan 2026-11-22 (after 0.6.447; 37 commits since 0.6.445)
+- `pnpm audit --prod`: no known vulnerabilities.
+- New code: no personal paths, emails or keys (only fake ones in redaction tests); no new `eval`, shell spawning or `innerHTML` in app code (one `innerHTML` is a code sample inside a research report).
+- Fixed in this round: context pruning crashed on a tool call without parsed arguments; hub showed Claude helpers twice.
