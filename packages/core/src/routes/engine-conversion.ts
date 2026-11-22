@@ -100,13 +100,15 @@ export async function engineConversionRoutes(app: FastifyInstance, s: KesherServ
     if (job && (job.state === "reading" || job.state === "installing")) return;
     for (const copy of readyCopies(await s.taskInbox.list())) {
       for (const p of await projectsOf(copy.engine)) {
-        const key = `${copy.taskId}|${p.path}`;
-        if (tried.has(key)) continue;
         const want = majorMinor(copy.version);
         const have = majorMinor(copy.engine === "unity" ? await readUnityVersion(p.path) : p.engine);
         if (!want || !have || want[0] !== have[0] || want[1] !== have[1]) continue;
+        // The newest fix commit on the copy's branch (a failed build is tried again once a fix is pushed).
+        const ref = await copies.newestRef(copy);
+        const key = `${copy.taskId}|${p.path}|${ref}`;
+        if (tried.has(key)) continue;
         const marker = await readConvertedMarker(copy.engine, p.path);
-        if (marker && copy.sha && marker.sha.startsWith(copy.sha.slice(0, 7))) {
+        if (marker && marker.sha.startsWith(ref.slice(0, 7))) {
           tried.add(key);
           continue;
         }

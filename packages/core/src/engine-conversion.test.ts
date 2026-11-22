@@ -151,3 +151,25 @@ test("install state machine, Unreal: follows the build job to done or failed", a
   job = { ...job!, state: "done", message: "Installed in X." };
   assert.deepEqual({ s: c.current()?.state, m: c.current()?.message }, { s: "done", m: "Installed in X." });
 });
+
+test("newestRef: a fix commit after the task's commit is used; a rewritten branch is not", async () => {
+  const A = "a".repeat(40);
+  const B = "b".repeat(40);
+  const make = (ancestor: boolean) => {
+    const calls: string[][] = [];
+    const git: GitBytes = async (_cwd, args) => {
+      calls.push(args);
+      if (args[0] === "rev-parse") return { code: 0, out: Buffer.from(`${B}\n`) };
+      if (args[0] === "merge-base") return { code: ancestor ? 0 : 1, out: Buffer.alloc(0) };
+      return { code: 0, out: Buffer.alloc(0) };
+    };
+    return { calls, copies: new ConvertedCopies({ repo: () => "/repo", git, root: "/r", installUnity: async () => "", installUnreal: async () => undefined, unrealJob: () => undefined }) };
+  };
+  const copy = { taskId: "r-1", engine: "unreal", version: "4.27", copy: "integrations/unreal/X", branch: "agy/r-1-x", sha: A } as unknown as ReadyCopy;
+  const fixed = make(true);
+  assert.equal(await fixed.copies.newestRef(copy), B);
+  assert.equal(await fixed.copies.newestRef(copy), B);
+  assert.equal(fixed.calls.filter((c) => c[0] === "fetch").length, 1, "fetched once per 10 minutes");
+  assert.equal(await make(false).copies.newestRef(copy), A);
+  assert.equal(await make(true).copies.newestRef({ ...copy, branch: "-x" }), A);
+});

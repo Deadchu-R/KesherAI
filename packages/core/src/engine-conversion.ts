@@ -247,6 +247,8 @@ export interface CopiesDeps {
  */
 export class ConvertedCopies {
   private job?: CopyJob;
+  /** When each copy branch was last fetched: the every-minute auto-install fetches a branch at most every 10 minutes. */
+  private readonly fetchedAt = new Map<string, number>();
 
   /** @param d - What the installer needs. */
   constructor(private readonly d: CopiesDeps) {}
@@ -261,6 +263,31 @@ export class ConvertedCopies {
       if (u?.state === "failed") return { ...j, state: "failed", message: u.message ?? "The build failed.", ...(u.errors?.length ? { errors: u.errors } : {}) };
     }
     return { ...j };
+  }
+
+  /**
+   * The commit to install a copy from: the newest commit on its branch when that commit follows the one the task
+   * finished on (a fix pushed after a failed build: r-20261122-02's 4.27 copy did not compile, and the fix went onto
+   * the same branch), else the task's own commit. A branch that was rewritten (the task's commit is not in it) is not
+   * trusted, so the reviewed commit is used.
+   * @param copy - The ready copy.
+   * @returns A full commit id or ref.
+   */
+  async newestRef(copy: ReadyCopy): Promise<string> {
+    const repo = this.d.repo();
+    const pinned = copy.sha ?? copy.branch;
+    if (!repo || !copy.sha || !/^[\w./-]+$/.test(copy.branch) || copy.branch.includes("..") || copy.branch.startsWith("-")) return pinned;
+    const remote = `refs/remotes/origin/${copy.branch}`;
+    const now = (this.d.now ?? Date.now)();
+    if (now - (this.fetchedAt.get(copy.branch) ?? 0) >= 10 * 60_000) {
+      this.fetchedAt.set(copy.branch, now);
+      await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin", `+refs/heads/${copy.branch}:${remote}`]).catch(() => undefined);
+    }
+    const tip = await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `${remote}^{commit}`]).catch(() => undefined);
+    const sha = tip?.code === 0 ? tip.out.toString("utf8").trim() : "";
+    if (!/^[0-9a-f]{40,64}$/.test(sha) || sha.startsWith(copy.sha)) return pinned;
+    const after = await this.d.git(repo, ["merge-base", "--is-ancestor", copy.sha, sha]).catch(() => undefined);
+    return after?.code === 0 ? sha : pinned;
   }
 
   /**
@@ -282,7 +309,7 @@ export class ConvertedCopies {
       const source = join(this.d.root, `${copy.engine}-${copy.taskId.replace(/[^\w.-]/g, "_")}`);
       // The original plugin first, then the converted files over it: an agent often writes only the files it changed
       // (r-20261122-02 wrote 11 of the plugin's files, and the build missed the rest).
-      const ref = copy.sha ?? copy.branch;
+      const ref = await this.newestRef(copy);
       await extractCopy(this.d.git, repo, ref, PLUGIN_SOURCES[copy.engine].source, source).catch(() => undefined);
       const sha = await extractCopy(this.d.git, repo, ref, copy.copy, source, true);
       if (await hasLinks(source)) throw new Error("The converted copy has a link inside it, so KesherAI did not install it.");
