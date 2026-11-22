@@ -9,10 +9,16 @@ Rule (Roee, 22.11.2026): every time we find another way to save tokens, add a ro
 - Research outside Claude: 36 reports (≈22 Antigravity, 14 free Gemini key) by 22.11.2026.
 - Claude helper cost per run (measured 22.11): research/summary ≈ 125K tokens; build helpers 145K–316K.
 
-## Totals for the with/without chart
-- Caching: without 250.2M, with 27.0M (measured)
-- Research: without 4.5M, with ≈0.2M (Claude only writes the task and reads a short summary; estimate)
-- All: without 254.7M, with 27.2M → ≈89% less
+## Scenario chart (same work, different setups; effective M tokens, % less than "Nothing")
+| Column | M | % less | Basis |
+|---|---|---|---|
+| Everything | 27.2 | 93% | measured chat (27.0) + research summaries (0.2) |
+| Without research offload | 31.5 | 92% | + 36 × 125K − 0.2M summaries (measured count × measured helper cost) |
+| Without new chat + handoff | 32.2 | 91% | + ≈5M: context ≈20% larger without fresh chats (assumption) |
+| Without agent split | 34.0 | 91% | + ≈6.8M: 9 helpers × ≈50K tokens of file output kept in the main chat × ≈150 later requests × 0.1 cache (assumption) |
+| Caching only | 43.3 | 88% | all three above added |
+| Nothing | 372.2 | baseline | no cache: main chat 250.2 + research 4.5 + agent-split 67.5 + handoff 50 (×10 without cache) |
+Measured parts: caching numbers and research count/cost. The rest are stated assumptions; replace them as real measurements arrive.
 
 ## Estimates
 - Claude tokens not spent on research: 36 × ≈125K ≈ 4.5M.
