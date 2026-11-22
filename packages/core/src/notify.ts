@@ -35,6 +35,8 @@ export interface Note {
   test?: boolean;
   /** Only on this computer: not to the phone (the app or ntfy), e.g. a study reminder with phone reminders off. */
   computerOnly?: boolean;
+  /** A progress bar for the phone app (see PhoneMessage `pg`); sent with {@link Notifier.phone}. */
+  progress?: { v: number; max: number };
 }
 
 /** Downloads smaller than this (200 MB) end quietly: a notification is only worth it for a long wait. */
@@ -139,6 +141,18 @@ export class Notifier {
   /** @returns A new long random topic, hard to guess. */
   static newTopic(): string {
     return `kesher-${randomBytes(12).toString("base64url")}`;
+  }
+
+  /**
+   * Updates one notification in the KesherAI phone app only (live, or UnifiedPush when the phone is away): not the PC,
+   * not ntfy, not the notifications list. For a note that changes often under the same `ref` (a task's progress).
+   *
+   * @param n - The note; `ref` is its id on the phone.
+   * @returns Whether a phone got it.
+   */
+  async phone(n: Note): Promise<boolean> {
+    if (!this.opts.app || !this.opts.app.hasReceivers()) return false;
+    return this.opts.app.deliver(phoneMessage(n)).catch(() => false);
   }
 
   /**

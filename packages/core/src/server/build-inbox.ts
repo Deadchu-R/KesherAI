@@ -155,7 +155,9 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       },
     },
     board: p.board,
-    notify: (title, body, opts) => void p.notifier.send({ title, body, path: opts?.path ?? "#/task-inbox", tags: ["inbox_tray"], ...(opts?.actions ? { actions: opts.actions } : {}) }).catch(() => undefined),
+    notify: (title, body, opts) => void p.notifier.send({ title, body, path: opts?.path ?? "#/task-inbox", tags: ["inbox_tray"], ...(opts?.actions ? { actions: opts.actions } : {}), ...(opts?.ref ? { ref: opts.ref } : {}) }).catch(() => undefined),
+    // A running Antigravity task's live progress: the phone app only (one notification per task, updated in place).
+    progress: (n) => void p.notifier.phone({ title: n.title, body: n.body, ref: n.ref, path: `#/task-inbox/${n.taskId}`, tags: ["inbox_tray"], progress: n.progress }).catch(() => undefined),
     busy,
     me: { username: (() => {
       try {

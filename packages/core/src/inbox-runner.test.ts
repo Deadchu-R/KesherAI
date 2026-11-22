@@ -793,13 +793,16 @@ test("inbox queue: the freed-slot note's Run button starts the next task once; a
 test("inbox models: the default for its kind (Opus for code with a check), Opus out of quota falls back to Sonnet, noted in the result", async () => {
   const { root, repo } = await setup({ "c-20261122-40": TASK("c-20261122-40") });
   const seen = { prompts: [] as string[] } as { setModel?: string; prompts: string[] };
+  const refs: Array<string | undefined> = [];
+  const progress: Array<{ ref: string; body: string }> = [];
   const inbox = new TaskInbox({
     settings: () => ({ enabled: true, repo, branch: "kesher-inbox", dailyCap: 5 }),
     file: join(root, "inbox.json"),
     git,
     run: async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }),
     startAgent: (_cwd, h) => AcpAgent.connect(modelAgent(seen, "claude-opus-4.6"), h),
-    notify: () => undefined,
+    notify: (_t, _b, o) => void refs.push(o?.ref),
+    progress: (n) => void progress.push(n),
     busy: async () => ({ free: true, reasons: [] }),
     approvalMs: 300,
   });
@@ -813,6 +816,9 @@ test("inbox models: the default for its kind (Opus for code with a check), Opus 
     assert.equal(seen.prompts[1], "claude-sonnet-4.6", `then Sonnet, by itself (${t.note})`);
     assert.equal(t.modelUsed, "Claude Sonnet 4.6 (Thinking)");
     assert.match(t.modelFallback ?? "", /Opus 4\.6.*quota.*→ Claude Sonnet/);
+    assert.equal(progress[0]?.ref, "agy-c-20261122-40", "a live progress note while it runs");
+    assert.match(progress[0]!.body, /^[▓░]{5} \d+\/\d+/);
+    assert.equal(refs.at(-1), "agy-c-20261122-40", "the freed-slot note replaces it (same id)");
     const after = await inbox.state(true);
     assert.ok(!after.models?.some((m) => /Neon/.test(m.name)), "an unavailable model is not offered");
     assert.ok(after.models?.some((m) => /GPT-OSS/.test(m.name)), "the agent's own list after a run");

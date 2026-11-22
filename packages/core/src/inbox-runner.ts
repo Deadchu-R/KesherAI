@@ -10,6 +10,7 @@ import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { freedSlotNote, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
+import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
@@ -43,7 +44,12 @@ export interface TaskInboxDeps {
   startAgent: (cwd: string, h: AcpHandlers) => Promise<AcpAgent>;
   board?: TaskBoard;
   /** Tells the user (PC and phone); `path` is where a tap on it goes in the app (default Settings). */
-  notify: (title: string, body: string, opts?: { path?: string; actions?: Array<{ label: string; path: string }> }) => void;
+  notify: (title: string, body: string, opts?: { path?: string; actions?: Array<{ label: string; path: string }>; ref?: string }) => void;
+  /**
+   * The live progress notification of a running Antigravity task, to the phone app only (inbox-progress.ts); the same
+   * `ref` as the task's started and freed-slot notifications, so each one replaces the last. Absent: none.
+   */
+  progress?: (n: ProgressNote) => void;
   busy: () => Promise<InboxBusy>;
   /** This computer's user name and home folder, which the privacy scan looks for. */
   me?: { username?: string; home?: string };
@@ -985,7 +991,7 @@ export class TaskInbox {
     delete t.diff;
     today.used++;
     await this.save();
-    if (!active.quiet) this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`);
+    if (!active.quiet) this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`, { path: `#/task-inbox/${t.id}`, ref: progressRef(t.id) });
     void this.work(t, active, wt.path, wt.base, repo).finally(async () => {
       this.active = undefined;
       // The next task of the line is asked about or started by the user's own queue tap (the ask is made before `idle` resolves).
@@ -1005,6 +1011,8 @@ export class TaskInbox {
     let text = "";
     let error = "";
     let stop = "";
+    const progress = this.d.progress;
+    const ticker = progress ? new ProgressTicker(() => ({ t, past: this.saved.tasks }), progress, () => this.now()) : undefined;
     const handlers: AcpHandlers = {
       update: (u) => {
         if (u.kind === "plan") t.plan = u.entries.slice(0, 40).map((e) => ({ content: e.content.slice(0, 200), status: e.status }));
@@ -1012,6 +1020,7 @@ export class TaskInbox {
           toolIds.add(u.id);
           t.steps = toolIds.size;
         } else if (u.kind === "text") text = (text + u.text).slice(-6000);
+        if (u.kind !== "text") ticker?.tick();
         void this.save();
       },
       permission: (p) => this.permission(t, a, p, ctx),
@@ -1021,6 +1030,7 @@ export class TaskInbox {
       const agent = await this.d.startAgent(worktree, handlers);
       a.agent = agent;
       await agent.newSession(worktree);
+      ticker?.start();
       await agent.setMode("accept-edits").catch(() => false);
       this.keepModels(agent);
       // The task's model (frontmatter or the picker), else the inbox's, else the default for its kind; on a quota or
@@ -1066,6 +1076,7 @@ export class TaskInbox {
       error = (e as Error).message || String(e);
     } finally {
       if (timer) clearTimeout(timer);
+      ticker?.stop();
       a.agent?.close();
     }
     t.summary = text.trim().slice(-2000) || undefined;
@@ -1322,7 +1333,8 @@ export class TaskInbox {
     const target = r.asked ? this.saved.tasks.find((x) => x.runAsk?.next && x.title === r.asked) : waiting;
     // The phone app's notification gets a Run button (it POSTs to this computer, also from anywhere): one code, one task, this slot.
     const run = target && target.status === "waiting" ? this.quickRunCode(target.id) : undefined;
-    this.d.notify(n.title, n.body, { path: target ? `#/task-inbox/${target.id}` : "#/task-inbox", ...(run ? { actions: [{ label: "▶ Run", path: `api/quick-run/${run}` }] } : {}) });
+    // The same id as the ended task's progress notification: this one replaces it on the phone.
+    this.d.notify(n.title, n.body, { path: target ? `#/task-inbox/${target.id}` : "#/task-inbox", ...(run ? { actions: [{ label: "▶ Run", path: `api/quick-run/${run}` }] } : {}), ref: progressRef(ended.id) });
   }
 
   /**

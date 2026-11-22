@@ -82,7 +82,9 @@ public final class Notes {
     }
 
     /**
-     * Handles one message from the computer: {t: show|clear, id, ch, title, body, path, actions}.
+     * Handles one message from the computer: {t: show|clear, id, ch, title, body, path, actions, pg}.
+     * pg {v, max}: a running task's progress (Antigravity on the PC): Android's own bar, updated quietly in place
+     * under the same id (max 0 = going, length unknown); the next note without pg (the freed-slot one) replaces it.
      */
     static void handle(Context c, JSONObject m) {
         String id = m.optString("id", "kesher");
@@ -99,6 +101,7 @@ public final class Notes {
         String channel = "waiting".equals(ch) ? WAITING : "downloads".equals(ch) ? DOWNLOADS : DONE;
         String path = m.has("path") ? m.optString("path") : null;
         int code = id.hashCode();
+        JSONObject pg = m.optJSONObject("pg");
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, channel)
             .setSmallIcon("downloads".equals(ch) ? android.R.drawable.stat_sys_download_done : brandIcon(c))
             .setContentTitle(m.optString("title", "KesherAI"))
@@ -110,6 +113,13 @@ public final class Notes {
             .setCategory("waiting".equals(ch) ? NotificationCompat.CATEGORY_REMINDER : NotificationCompat.CATEGORY_STATUS)
             .setPriority("waiting".equals(ch) ? NotificationCompat.PRIORITY_HIGH : "downloads".equals(ch) ? NotificationCompat.PRIORITY_LOW : NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(open(c, path, code));
+        if (pg != null) {
+            int max = Math.max(0, pg.optInt("max", 0));
+            int v = Math.max(0, Math.min(pg.optInt("v", 0), max));
+            // Quiet updates: no sound or pop-up for each step; it stays until the end note replaces it.
+            b.setProgress(max, v, max == 0).setOnlyAlertOnce(true).setAutoCancel(false).setSilent(true)
+                .setSmallIcon(android.R.drawable.stat_sys_upload);
+        }
         JSONArray actions = m.optJSONArray("actions");
         if (actions != null) {
             for (int k = 0; k < actions.length() && k < 3; k++) {
