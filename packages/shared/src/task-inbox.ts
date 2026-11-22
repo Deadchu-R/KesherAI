@@ -138,6 +138,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   endedAt?: number;
   /** A free-Gemini research task's report (the result file carries it whole; the page shows it). */
   researchReport?: string;
+  /** The research report is on main (its commit, short), merged by KesherAI itself (research-publish.ts). */
+  merged?: string;
   /** For a free-Gemini task deferred by its quota: when it may try once more by itself (ms since epoch). */
   retryAt?: number;
   /** The one automatic retry after the quota reset was used (a second quota stop waits for the user). */

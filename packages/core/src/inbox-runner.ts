@@ -12,6 +12,7 @@ import { heavyGate } from "./heavy-gate.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
+import { publishResearch } from "./research-publish.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
@@ -441,6 +442,7 @@ export class TaskInbox {
     await this.closeReplaced();
     await this.followBoard();
     await this.syncStanding().catch(() => undefined);
+    await this.publishDoneResearch().catch(() => undefined);
     await this.importResearch().catch(() => undefined);
     await this.feedFromResearch().catch(() => undefined);
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
@@ -1430,6 +1432,55 @@ export class TaskInbox {
       this.saved.tasks.push(copy);
       await this.save();
     }
+  }
+
+  /**
+   * Merges finished research reports into main by themselves (research-publish.ts): a free-Gemini report from the
+   * task, an Antigravity report from its pushed branch. Each once (`merged` on the task); a failure is noted and tried
+   * again at the next sync. Settings › Task inbox › loop: false turns it off.
+   */
+  private async publishDoneResearch(): Promise<void> {
+    if (this.s.loop === false) return;
+    const repo = this.repo();
+    for (const t of this.saved.tasks) {
+      if (t.kind !== "research" || t.status !== "done" || t.merged || t.standing) continue;
+      // Already on main (merged by hand before this existed): note it and leave the file as it is.
+      if ((await this.d.git(repo, ["cat-file", "-e", `refs/remotes/origin/main:docs/research/${t.id}.md`])).code === 0) {
+        t.merged = "main";
+        continue;
+      }
+      let text = t.researchReport;
+      if (!text && t.pushed && t.branch) {
+        const shown = await this.d.git(repo, ["show", `refs/remotes/origin/${t.branch}:docs/research/${t.id}.md`]);
+        if (shown.code === 0) text = shown.out;
+      }
+      if (!text?.trim()) continue;
+      const wt = join(repo, ".kesher", "worktrees", "research-main");
+      if (!existsSync(wt)) {
+        await excludeWorktrees(repo, this.gitStrict);
+        await mkdir(dirname(wt), { recursive: true });
+        await this.d.git(repo, ["worktree", "prune"]);
+        const made = await this.d.git(repo, ["worktree", "add", "--detach", wt, "refs/remotes/origin/main"]);
+        if (made.code !== 0) return;
+      }
+      try {
+        const sha = await publishResearch(
+          this.d.git,
+          wt,
+          { id: t.id, title: t.title, text: redactReport(text, this.d.me).text },
+          AUTHOR,
+          async (rel, body) => {
+            await mkdir(dirname(join(wt, ...rel.split("/"))), { recursive: true });
+            await writeFile(join(wt, ...rel.split("/")), body, "utf8");
+          },
+          async (rel) => readFile(join(wt, ...rel.split("/")), "utf8").catch(() => ""),
+        );
+        t.merged = sha.slice(0, 12);
+      } catch (e) {
+        t.note = `The report is not on main yet: ${(e as Error).message.slice(0, 160)}`;
+      }
+    }
+    await this.save();
   }
 
   /**
