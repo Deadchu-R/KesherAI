@@ -335,7 +335,8 @@ export async function renderDesign(o: RenderOptions): Promise<DesignRenderResult
     if (!up) throw new Error("The render's own KesherAI server did not start.");
     // Past the welcome, with every part shown.
     await fetch(base + "/api/onboarding", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ done: true, simple: false }) });
-    const browser = await pw.chromium.launch();
+    // KESHER_CHROME: an installed Chrome when Playwright's own browser is not downloaded (CI, a cloud workspace).
+    const browser = await pw.chromium.launch(process.env.KESHER_CHROME ? { executablePath: process.env.KESHER_CHROME } : {});
     try {
       for (const job of jobs) {
         log(`${job.name} (${job.viewport})`);

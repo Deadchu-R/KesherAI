@@ -345,7 +345,8 @@ export function agentsTab(v: AgentsView): HTMLElement {
     waiting.length ? h("section", { class: "card clip pin" }, h("div", { class: "row head" }, h("b", null, L("⏳ מחכים לך", "⏳ Waiting for you")), h("span", { class: "grow" }), h("span", { class: "tag t-ask" }, String(waiting.length))), h("div", { class: "alist" }, waiting.map((c) => card(v, c, now, pcOf(c.deviceId))))) : null,
     ...ids.map((id) => {
       const pc = pcOf(id);
-      const list = rest.filter((c) => c.deviceId === id);
+      // Claude's helpers report through the PC they run on, but they are shown once, in the Claude curtain.
+      const list = rest.filter((c) => c.deviceId === id && !isChat(c));
       return h(
         "section",
         { class: "card clip" },

@@ -2103,6 +2103,79 @@
      }
     ]
    }
+  },
+  {
+   "id": "HubClaudeHelpers",
+   "title": "ענן Kesher: וילון Claude — הצ׳אט והעוזרים שלו חיים: התחלה וסיום מהמוביל, ההתקדמות באמצע מהקומיטים של כל עוזר",
+   "titleEn": "Kesher cloud: the Claude curtain — the chat and its helpers live: start and end from the lead, progress in between from each helper's commits",
+   "route": "#agents",
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [],
+    "agents": [
+     {
+      "pc": "pc-studio",
+      "runId": "ext-h1",
+      "state": {
+       "title": "מחקר: שכבת עזר על המסך (מסגרת כתומה וסמן)",
+       "name": "עוזר מחקר 1",
+       "source": "claude-chat",
+       "state": "running",
+       "step": 2,
+       "of": 4,
+       "label": "קומיט: סקירת Copilot ו-Cursor",
+       "model": "Sonnet",
+       "labelAt": {
+        "$agoMs": "6m"
+       }
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "מחקר: שכבת עזר על המסך",
+        "source": "claude-chat"
+       }
+      ]
+     },
+     {
+      "pc": "pc-studio",
+      "runId": "ext-h2",
+      "state": {
+       "title": "בנייה: התראות חיות לעוזרים",
+       "name": "עוזר בנייה 2",
+       "source": "claude-chat",
+       "state": "done",
+       "step": 3,
+       "of": 3,
+       "summary": "נבנה ונבדק: POST /api/agents/external, מעקב קומיטים עם Helper: והתראה בטלפון. 12 בדיקות עברו."
+      },
+      "events": [
+       {
+        "type": "started",
+        "title": "בנייה: התראות חיות לעוזרים",
+        "source": "claude-chat"
+       }
+      ]
+     }
+    ]
+   },
+   "height": {
+    "desktop": 700,
+    "phone": 1100
+   },
+   "steps": [
+    {
+     "wait": ".acard"
+    }
+   ]
   }
  ]
 }
