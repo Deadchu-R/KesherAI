@@ -127,3 +127,12 @@ test("inbox policy: research may pipe a read into output filters, never into cod
   // A code task gets no pipes at all.
   assert.notEqual(decideStep(step("execute", { command: "ls | Select-Object Name" }), ctx).verdict, "allow");
 });
+
+test("a read naming the worktree by its full path is read as inside it; other absolute paths stay outside", async () => {
+  const { relativeToWorktree } = await import("./inbox-policy.js");
+  const wt = "C:\\Users\\u\\source\\repos\\K\\.kesher\\worktrees\\agy-c-1";
+  assert.equal(relativeToWorktree(`Get-ChildItem -Path "${wt}\\packages\\core\\src" -Recurse | Select-Object FullName`, wt), "Get-ChildItem -Path .\\packages\\core\\src -Recurse | Select-Object FullName");
+  assert.equal(relativeToWorktree(`Select-String -Path ${wt.toLowerCase()}/docs/x.md -Pattern a`, wt), "Select-String -Path ./docs/x.md -Pattern a");
+  assert.equal(relativeToWorktree("Get-ChildItem C:\\Windows", wt), "Get-ChildItem C:\\Windows");
+  assert.equal(relativeToWorktree(`Get-ChildItem ${wt}-other\\x`, wt), `Get-ChildItem ${wt}-other\\x`);
+});

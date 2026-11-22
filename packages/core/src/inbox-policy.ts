@@ -214,9 +214,12 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     if (SECRET_FILE.test(command.split(/\s+/).find((w) => SECRET_FILE.test(w)) ?? "")) return { verdict: "deny", rule: "secret files", what };
     // Where it runs (cwd) and any path it names must be inside the worktree.
     if (f.paths.some((x) => !insideWorktree(ctx.worktree, x))) return { verdict: "deny", rule: "outside the worktree", what };
+    // Agents often name the worktree by its full path ("C:\\…\\worktrees\\agy-x\\packages"): read it as "." so a read
+    // inside the worktree is not refused as "outside" (two research runs ended after such reads were denied).
+    const local = relativeToWorktree(command, ctx.worktree);
     // Read-only listing/reading commands are safe for every task (a 4.27 plugin conversion stopped after a refused
     // "Get-ChildItem -Recurse"); only research tasks may pipe into output filters.
-    return (ctx.research ? commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS], RESEARCH_PIPE_FILTERS) : commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS])) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
+    return (ctx.research ? commandAllowed(local, [...ctx.commands, ...RESEARCH_READ_COMMANDS], RESEARCH_PIPE_FILTERS) : commandAllowed(local, [...ctx.commands, ...RESEARCH_READ_COMMANDS])) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
   if (kind === "fetch") {
@@ -320,4 +323,16 @@ export function changesVersion(diff: string): boolean {
     else if (pkg && /^[+-]\s*"version"\s*:/.test(line)) return true;
   }
   return false;
+}
+
+/**
+ * A command with the worktree's own absolute path (either slash, any letter case, quoted or not) written as ".".
+ * @param command - The command as the agent sent it.
+ * @param worktree - The task's worktree.
+ */
+export function relativeToWorktree(command: string, worktree: string): string {
+  if (!worktree) return command;
+  const root = worktree.replace(/[\\/]+$/, "");
+  const esc = root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\\|\//g, "[\\\\/]");
+  return command.replace(new RegExp(`"${esc}([\\\\/][^"]*)?"|${esc}(?=[\\\\/\\s]|$)`, "gi"), (_m, rest: string | undefined) => (rest === undefined && _m.startsWith('"') ? "." : _m.startsWith('"') ? `.${rest}` : "."));
 }
