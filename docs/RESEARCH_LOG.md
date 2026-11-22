@@ -4534,3 +4534,11 @@ Unverified claims (Flash): check the source before building on a specific fact.
 - **Free cloud models + work split** ([c-20261122-13](research/c-20261122-13.md)): safe card-free: Groq, Cloudflare Workers AI, OpenRouter `:free`, Mistral free plan, Hugging Face free credits, Zhipu GLM-4-Flash, Google AI Studio; speech/embeddings: ElevenLabs, Deepgram, AssemblyAI, Voyage, Jina. Avoid/changed: Cerebras, SambaNova, Together, Alibaba (cards or auto-billing); GitHub Models retired 30.7.2026 (verify). Work split: no layer sharding over home networks (slow, ggml-rpc unauthenticated) — route whole jobs by hardware (PC heavy, laptop light/client), with a capability-aware orchestrator and circuit breakers.
 - **Node material editor** ([c-20261122-14](research/c-20261122-14.md)): extend our own BlueprintCanvas + VsDoc into a `MaterialDoc` (OpenPBR/MaterialX vocabulary), preview with three.js TSL `MeshPhysicalNodeMaterial`, export Unity `.shadergraph` (JSON) and Unreal materials via the commandlet + `UMaterialEditingLibrary`; 40-node mapping table inside.
 - **Taken**: WORK_LIST items below.
+
+## 2026-11-22 — Live co-developer overlay (Antigravity, c-20261122-15)
+Report: [c-20261122-15](research/c-20261122-15.md). Unverified claims (Flash): check the source before building on a specific fact.
+- **Found**: Claude, Operator, Mariner and Copilot Vision all show the agent (frame, glide cursor, step caption, take-over); none points at objects inside a 3D viewport or Blueprint graph. Cursor Tab shows the proactive pattern (pause 250-500 ms, ghost text, one key to accept).
+- **Plan it gives**: ground in this order: engine bridge (Unity `WorldToScreenPoint`, Unreal `WorldToPixel`, exact) > Windows UI Automation > small local vision model (Florence-2, Moondream, Qwen2.5-VL 3B). Click-through overlay window with a dynamic hit region. Watch cheaply (frame hash, activity pause >1.5 s) and pin vision to a second card (`CUDA_VISIBLE_DEVICES`) when there is one.
+- **Already built**: UIA-first control task, vision pointer (vision-ground.ts), per-card GPU numbering. **Not built**: overlay window, engine point endpoints, proactive bubble, cheap change detection, a card setting for vision.
+- **Taken**: WORK_LIST "Morning 22.11" overlay items.
+
