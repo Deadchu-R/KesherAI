@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, webcrypto } from "node:crypto";
 import type { AgentTool } from "@kesher/agent";
 import { UiaWorker, powershellWorker, releaseHeld, type UiaClient } from "./uia-worker.js";
 import { uiaTools, type UiaRef } from "./computer-uia-tools.js";
@@ -97,6 +97,8 @@ export interface Backend {
   drag?(x1: number, y1: number, x2: number, y2: number): Promise<void>;
   /** Brings an app to the front, starting it when it is not running. Returns false when it could not. */
   activate?(app: string): Promise<boolean>;
+  /** A cheap hash of the current screen frame (e.g. a small thumbnail hash). Returns undefined when not supported. */
+  frameHash?(): Promise<string | undefined>;
   foreground(): Promise<Foreground>;
   click(
     x: number,
@@ -250,6 +252,20 @@ Write-Output "$scale $w $h $($b.Left) $($b.Top)"`);
       left: left || 0,
       top: top || 0,
     };
+  },
+  async frameHash() {
+    // Capture a tiny 32x32 thumbnail and return a hex hash of its PNG bytes — cheap enough to call every throttle cycle.
+    const file = join(tmpdir(), `kesher-hash-${randomUUID()}.png`);
+    await ps(`
+  $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+  $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+  $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size); $g.Dispose()
+  $small = New-Object System.Drawing.Bitmap $bmp, 32, 32
+  $small.Save(${psStr(file)}, [System.Drawing.Imaging.ImageFormat]::Png)`);
+    const png = await readFile(file);
+    await rm(file, { force: true });
+    const hash = await webcrypto.subtle.digest('SHA-1', png);
+    return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
   },
   async zoom(x, y, w, h, maxWidth) {
     const file = join(tmpdir(), `kesher-zoom-${randomUUID()}.png`);
