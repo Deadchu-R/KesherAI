@@ -136,7 +136,7 @@ Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @'
 using System; using System.Runtime.InteropServices; using System.Text;
 public static class K {
-  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("shcore.dll")] public static extern int SetProcessDpiAwareness(int awareness);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, int dx, int dy, int d, UIntPtr e);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
@@ -146,7 +146,7 @@ public static class K {
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int c);
 }
 '@
-[K]::SetProcessDPIAware() | Out-Null
+[K]::SetProcessDpiAwareness(2) | Out-Null
 `;
 const ps = (script: string) =>
   run("powershell.exe", [
@@ -806,24 +806,35 @@ export class ComputerControl {
         height: 0,
       };
     // Screenshot pixels → desktop pixels: undo the shrink, then add where the picture starts (other monitors).
-    const toScreen = (x: unknown, y: unknown) => {
-      const X = Number(x),
-        Y = Number(y);
+    type CoordFormat = 'shot' | 'rel1000' | 'abs28';
+    const toScreenPoint = (x: unknown, y: unknown, format: CoordFormat = 'shot') => {
+      const X = Number(x), Y = Number(y);
       if (!Number.isFinite(X) || !Number.isFinite(Y))
-        throw new Error(
-          "Give x and y in screenshot pixels (from the last computer_screenshot).",
-        );
+        throw new Error("Give x and y in screenshot pixels (from the last computer_screenshot).");
       const v = view();
-      if (
-        v.width &&
-        (X < 0 || Y < 0 || X > v.width || (v.height && Y > v.height))
-      )
-        throw new Error(
-          `(${X},${Y}) is outside the last screenshot (${v.width}×${v.height}).`,
-        );
-      return { x: X / v.scale + v.left, y: Y / v.scale + v.top };
+      if (!v.width || !v.height) return { x: Math.round(X), y: Math.round(Y) };
+
+      let xShot = X, yShot = Y;
+      if (format === 'rel1000') {
+        xShot = (X / 1000) * v.width;
+        yShot = (Y / 1000) * v.height;
+      } else if (format === 'abs28') {
+        xShot = X * v.scale;
+        yShot = Y * v.scale;
+      }
+
+      let xDesk = xShot / v.scale + v.left;
+      let yDesk = yShot / v.scale + v.top;
+
+      const vWidth = v.left + v.width / v.scale;
+      const vHeight = v.top + v.height / v.scale;
+      xDesk = Math.max(v.left, Math.min(vWidth, xDesk));
+      yDesk = Math.max(v.top, Math.min(vHeight, yDesk));
+
+      return { x: Math.round(xDesk), y: Math.round(yDesk) };
     };
-    const pt = (input: Record<string, unknown>) => toScreen(input.x, input.y);
+    const toScreen = (x: unknown, y: unknown) => toScreenPoint(x, y, 'shot');
+    const pt = (input: Record<string, unknown>, format: CoordFormat = 'shot') => toScreenPoint(input.x, input.y, format);
     const shoot = async () => {
       const shot = await this.be.screenshot(1280);
       this.scales.set(conversationId, {
