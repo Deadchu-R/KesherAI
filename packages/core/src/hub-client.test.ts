@@ -670,3 +670,39 @@ test("a due rotate stores the hub's signed kh2_ token and uses it for the next t
   assert.ok(persisted >= 1, "and is saved");
   assert.deepEqual(auths.slice(0, 3), [["/api/ticket", "Bearer kh_old"], ["/api/rotate", "Bearer kh_old"], ["/api/ticket", `Bearer ${signed}`]]);
 });
+
+test("backup relays: keys are checked, never in the status, and go sealed to the online phones only", async (t) => {
+  const r = await rig();
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  await assert.rejects(r.client.setRelays({ supabaseUrl: "https://evil.example.com" }), /Supabase project URL/);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const presence = [
+    { id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} },
+    { id: "dphone2", name: "Phone 2", kind: "phone", publicKey: phone.publicKey, online: false, busy: false, agents: [], optIn: {} },
+    { id: "dchat", name: "Claude", kind: "claude-chat", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} },
+  ];
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence }));
+  const sentRelays = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "relays").map((f) => f.env as SealedEnvelope);
+  assert.equal(sentRelays().length, 0, "no keys: nothing sent");
+  const ably = "appId1.keyId1:SECRETSECRETSECRET";
+  await r.client.setRelays({ ablyKey: ably, supabaseUrl: "https://abcdefghijklmnop.supabase.co", supabaseKey: "sb_publishable_SECRETSECRETSECRETSECRET" });
+  for (let i = 0; i < 50 && !sentRelays().length; i++) await wait(10);
+  assert.deepEqual(r.client.status().relays, { ably: true, supabase: true, supabaseUrl: "https://abcdefghijklmnop.supabase.co" });
+  assert.ok(!JSON.stringify(r.client.status()).includes("SECRET"));
+  assert.deepEqual(sentRelays().map((e) => e.to), ["dphone"]);
+  assert.ok(!JSON.stringify(sentRelays()).includes("SECRET"), "the hub sees only ciphertext");
+  const body = (await openEnvelope(sentRelays()[0]!, phone.privateKey, pcPub)) as Extract<SealedBody, { type: "relays" }>;
+  assert.deepEqual(body.keys.ably, { key: ably });
+  await r.client.sendRelays();
+  assert.equal(sentRelays().length, 1, "the same keys go once per phone");
+  await r.client.setRelays({ ablyKey: "" });
+  for (let i = 0; i < 50 && sentRelays().length < 2; i++) await wait(10);
+  assert.equal(r.client.status().relays.ably, false);
+  assert.equal(sentRelays().length, 2, "a change goes again");
+});

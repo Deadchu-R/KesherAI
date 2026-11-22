@@ -7,9 +7,15 @@
  * receiving side keeps the ids it has seen (`ReplayGuard` in hub-crypto.ts). So when the same message comes through two
  * relays, the second copy is acknowledged and dropped. A new relay provider must pass envelopes through unchanged.
  */
+import type { BackupRelayKind } from "@kesher/shared";
 
-/** The kinds of relay KesherAI can use. Only the Kesher Cloud hub exists today; a new provider adds its kind here. */
-export type RelayKind = "kesher-hub";
+
+/**
+ * The kinds of relay KesherAI can use: the Kesher Cloud hub (presence, pairing, queues for offline devices, sealed
+ * envelopes) and the backup relays Ably and Supabase Realtime (sealed envelopes only, @kesher/shared
+ * relay-transport.ts), tried in this order (relay-failover.ts).
+ */
+export type RelayKind = "kesher-hub" | BackupRelayKind;
 
 /** One relay the PC can reach its phones through. */
 export interface RelayProvider {

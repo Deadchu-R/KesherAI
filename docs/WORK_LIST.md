@@ -37,9 +37,14 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 ## Three relays (Roee 2026-11-22) 🔁
 - Goal: three providers carry the hub's traffic and take over from each other: the Kesher hub (Cloudflare), Ably
   (free 6M messages/month, no card) and Supabase Realtime (free 2M/month, no card); Tailscale direct stays a 4th path.
-- [ ] a-20261122-06 transport (Ably + Supabase adapters, keys in Settings) · [ ] -07 failover PC + phone · [ ] -08 hub page
-  loads when Cloudflare is down. In the inbox for Antigravity (Opus), from about 29.11.
-- [ ] Roee: open free Ably and Supabase accounts and keep the keys until the Settings field exists.
+- [x] a-20261122-06 transport: packages/shared/src/relay-transport.ts (Ably realtime WS + REST publish, Supabase
+  Phoenix WS + REST broadcast; plain fetch/WebSocket, no new dependency), pair channel = HKDF of the pair's ECDH secret;
+  Settings › Kesher Cloud › Backup relays (keys encrypted on the PC, `PUT /api/hub/relays`); the phones get them in a
+  sealed `relays` message (PC → phone only).
+- [ ] -07 failover PC + phone · [ ] -08 hub page loads when Cloudflare is down.
+- [x] Roee: Ably app and Supabase project "kesher-relay" (EU) opened.
+- [ ] Roee: paste the Ably API key and the Supabase URL + anon key in Settings › Kesher Cloud › Backup relays (after
+  the next build). Supabase: Realtime › Settings must allow public channels (the default).
 
 ## Waiting on Roee: at home, weekend 👤 (22.11)
 - [ ] Hub secret for storage-free tokens: built (HUB_TOKEN_SECRET, hub.ts; old tokens still work and rotate). Roee pastes a random 48-character secret in Cloudflare › Workers › kesher-hub › Settings › Variables and Secrets (type Secret).

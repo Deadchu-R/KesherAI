@@ -11,6 +11,7 @@ import { cleanAgentLabel, type AgentLabel } from "./agent-label.js";
 import { parseAssignTo, type AssignTo } from "./task-assign.js";
 import { cleanAwayNote, type AwayNote } from "./device-status.js";
 import { cleanTailscaleDirect, type TailscaleDirect } from "./direct-path.js";
+import { cleanRelayKeys, type RelayKeys } from "./relay-keys.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -90,9 +91,9 @@ export function cleanDeviceKind(x: unknown): HubDeviceKind {
 }
 
 /** What a sealed envelope carries (the hub routes by this; the content stays sealed). */
-export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board";
+export type SealedKind = "task" | "progress" | "result" | "cancel" | "approval_request" | "approval_answer" | "cloud" | "cloud_started" | "agent_event" | "inbox_task" | "approvals" | "command" | "command_result" | "ask_note" | "board" | "relays";
 
-const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board"];
+const SEALED_KINDS: readonly SealedKind[] = ["task", "progress", "result", "cancel", "approval_request", "approval_answer", "cloud", "cloud_started", "agent_event", "inbox_task", "approvals", "command", "command_result", "ask_note", "board", "relays"];
 
 /** A message the hub relays without reading: `ct` is AES-GCM under a key only the two devices can derive. */
 export interface SealedEnvelope {
@@ -256,7 +257,13 @@ export type SealedBody =
   /** The PC's shared task board, whole (the newest snapshot replaces the last; see {@link fitBoard}). */
   | { type: "board"; rev: number; items: HubBoardItem[]; doneTotal: number; at: number }
   /** The newest ask, for the phone's notification with buttons (see {@link SealedEnvelope.note}); `waiting`: the whole count. */
-  | { type: "ask_note"; ask: HubAskNote; waiting: number };
+  | { type: "ask_note"; ask: HubAskNote; waiting: number }
+  /**
+   * PC to its owner's phones only: the backup relays' keys (relay-transport.ts), so the phone can listen and send
+   * through Ably / Supabase when the hub is down. Sealed like everything else: the hub never sees the keys. An empty
+   * `keys` tells the phone to forget them.
+   */
+  | { type: "relays"; keys: RelayKeys; at: number };
 
 /**
  * One ask as the phone's notification shows it, with the answer it needs: Run / Not now (`run`, an Antigravity Run
@@ -507,6 +514,7 @@ export const BODY_FOR_KIND: Record<SealedKind, SealedBody["type"]> = {
   command_result: "command_result",
   ask_note: "ask_note",
   board: "board",
+  relays: "relays",
 };
 
 const ID = /^[\w-]{1,64}$/;
@@ -586,7 +594,7 @@ export function cleanAgents(x: unknown, reportLinks: boolean): HubAgent[] {
  * @returns Seconds, at least 60.
  */
 export function ttlFor(kind: SealedKind, asked: unknown): number {
-  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
+  const max = kind === "approval_request" || kind === "approval_answer" || kind === "approvals" || kind === "board" || kind === "command" || kind === "command_result" || kind === "ask_note" || kind === "relays" ? HUB_LIMITS.approvalTtl : HUB_LIMITS.maxTtl;
   const n = typeof asked === "number" && Number.isFinite(asked) ? Math.floor(asked) : HUB_LIMITS.defaultTtl;
   return Math.max(60, Math.min(max, n));
 }
@@ -749,6 +757,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       const items = b.items.slice(0, HUB_LIMITS.boardActive + HUB_LIMITS.boardDone).map(cleanBoardItem).filter((i): i is HubBoardItem => !!i);
       return { type: "board", rev: num(b.rev), items, doneTotal: Math.max(num(b.doneTotal), items.filter((i) => i.status === "done").length), at: num(b.at) };
     }
+    case "relays":
+      return { type: "relays", keys: cleanRelayKeys(b.keys), at: num(b.at) };
     case "cloud_started": {
       if (!isHubId(b.taskId)) return null;
       const error = str(b.error, 300);

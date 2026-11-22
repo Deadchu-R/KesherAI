@@ -27,6 +27,11 @@ import {
   workKindOf,
   type HubAgent,
   cleanAwayNote,
+  cleanAblyKey,
+  cleanRelayKeys,
+  cleanSupabaseKey,
+  cleanSupabaseUrl,
+  type RelayKeys,
   type AwayNote,
   type AgentLabel,
   type AssignResult,
@@ -201,6 +206,17 @@ export interface HubStatus {
   /** ISO times: when the live link last opened, and when the next try is (while it is down). */
   lastConnectedAt?: string;
   nextRetryAt?: string;
+  /** The backup relays (Settings › Kesher Cloud › Backup relays): which have keys (never the keys themselves). */
+  relays: { ably: boolean; supabase: boolean; supabaseUrl?: string };
+}
+
+/**
+ * A change to the backup relays' keys from Settings: a text sets a field, "" or null clears it, a missing field stays.
+ */
+export interface RelayKeysChange {
+  ablyKey?: string | null;
+  supabaseUrl?: string | null;
+  supabaseKey?: string | null;
 }
 
 const BEAT_MS = 45_000;
@@ -353,6 +369,8 @@ export class HubClient {
   private hubKey = "";
   private key?: Promise<{ privateKey: HubCryptoKey; publicKey: string }>;
   private readonly replay = new ReplayGuard();
+  /** The hash of the relay keys last sent to each phone (in memory: each phone gets them again after a restart). */
+  private readonly relaysSent = new Map<string, string>();
   /** The last approvals snapshot sent (its request ids), and the online phones it went to. */
   private approvalsKey = "";
   private approvalsTo = new Set<string>();
@@ -390,6 +408,11 @@ export class HubClient {
 
   private get s(): HubSettings {
     return this.deps.settings();
+  }
+
+  /** The backup relays' settings (filled in for a config saved before they existed). */
+  private get relaysCfg(): HubSettings["relays"] {
+    return (this.s.relays ??= {});
   }
 
   /** The relay in use now: the first in priority order that has not failed (today the one hub). */
@@ -436,6 +459,7 @@ export class HubClient {
       ...(this.errorCode ? { errorCode: this.errorCode } : {}),
       ...(this.connectedAt ? { lastConnectedAt: new Date(this.connectedAt).toISOString() } : {}),
       ...(!this.connected && !this.stopped && this.retryAt ? { nextRetryAt: new Date(this.retryAt).toISOString() } : {}),
+      relays: { ably: !!this.relaysCfg.ablyKey, supabase: !!(this.relaysCfg.supabaseUrl && this.relaysCfg.supabaseKey), ...(this.relaysCfg.supabaseUrl ? { supabaseUrl: this.relaysCfg.supabaseUrl } : {}) },
     };
   }
 
@@ -486,6 +510,53 @@ export class HubClient {
     this.s.optIn = cleanOptIn({ ...this.s.optIn, ...change });
     await this.deps.persist();
     this.beat();
+  }
+
+  /**
+   * Sets or clears the backup relays' keys (checked first; a bad one is refused with a short reason and nothing is
+   * saved), then sends them sealed to the owner's phones, so they can use the same relays.
+   *
+   * @param change - The fields to set ("" or null clears one).
+   */
+  async setRelays(change: RelayKeysChange): Promise<void> {
+    const next = { ...this.relaysCfg };
+    const field = (name: keyof RelayKeysChange, clean: (v: unknown) => string | undefined, what: string) => {
+      const v = change[name];
+      if (v === undefined) return;
+      if (v === null || v.trim() === "") return void delete next[name];
+      const c = clean(v);
+      if (!c) throw new Error(`That is not ${what}.`);
+      next[name] = c;
+    };
+    field("ablyKey", cleanAblyKey, "an Ably API key (app.key:secret)");
+    field("supabaseUrl", cleanSupabaseUrl, "a Supabase project URL (https://<project>.supabase.co)");
+    field("supabaseKey", cleanSupabaseKey, "a Supabase anon key");
+    this.s.relays = next;
+    await this.deps.persist();
+    this.relaysSent.clear();
+    void this.sendRelays(true).catch(() => undefined);
+  }
+
+  /** The backup relays' keys as the transports and the phones use them (only complete, well-formed ones). */
+  relayKeys(): RelayKeys {
+    const r = this.relaysCfg;
+    return cleanRelayKeys({ ably: { key: r.ablyKey }, supabase: { url: r.supabaseUrl, anonKey: r.supabaseKey } });
+  }
+
+  /**
+   * Sends the backup relays' keys, sealed, to each of the owner's online phones that has not had these keys yet (the hub
+   * relays the envelope without being able to read it). Never to other kinds of device. Without keys nothing goes,
+   * unless `force` (the keys were just cleared: the phones forget theirs).
+   *
+   * @param force - Send even when there are no keys.
+   */
+  async sendRelays(force = false): Promise<void> {
+    if (!this.connected || !this.s.deviceId) return;
+    const keys = this.relayKeys();
+    if (!force && !Object.keys(keys).length) return;
+    const hash = createHash("sha256").update(JSON.stringify(keys)).digest("base64url").slice(0, 16);
+    const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId && this.relaysSent.get(d.id) !== hash);
+    for (const p of phones) if (await this.sendSealed(p.id, "relays", { type: "relays", keys, at: Date.now() }, HUB_LIMITS.approvalTtl)) this.relaysSent.set(p.id, hash);
   }
 
   /** Forgets the pairing, the token and this PC's key (the device should also be revoked on the hub page). */
@@ -891,6 +962,9 @@ export class HubClient {
         this.paused = f.paused === true;
         void this.reportInbox().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
+        // Each new link sends the relay keys again to the phones that are on (in case one lost its storage).
+        this.relaysSent.clear();
+        void this.sendRelays().catch(() => undefined);
         return;
       case "presence":
         this.presence = Array.isArray(f.presence) ? f.presence : [];
@@ -898,6 +972,7 @@ export class HubClient {
         void this.reportInbox().catch(() => undefined);
         void this.sendApprovals().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
+        void this.sendRelays().catch(() => undefined);
         return;
       case "pause":
         this.paused = f.paused === true;

@@ -17,6 +17,14 @@ import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import type { DriveMark } from "./drive-view.js";
 import { rememberDirect } from "./direct.js";
+import type { RelayKeys } from "../../../packages/shared/src/relay-keys.js";
+
+/** The backup relays' keys as this browser keeps them (from the PC's sealed `relays` message). */
+interface StoredRelayKeys {
+  from: string;
+  keys: RelayKeys;
+  at: number;
+}
 
 /** This browser's identity at the hub. */
 interface Identity {
@@ -621,6 +629,22 @@ export class HubDevice {
   }
 
   /**
+   * The backup relays' keys from a paired PC (sealed to this browser, so the hub never saw them): kept in this
+   * browser's IndexedDB (kv `relays`), the newest wins; empty keys forget them. Only a PC may send them.
+   *
+   * @param from - The PC (its envelope opened with its key).
+   * @param keys - The checked keys.
+   * @param at - When the PC sent them (ms).
+   */
+  private async onRelayKeys(from: string, keys: RelayKeys, at: number): Promise<void> {
+    if (this.presence.find((d) => d.id === from)?.kind !== "pc") return;
+    const old = await get<StoredRelayKeys>("relays").catch(() => undefined);
+    if (old && old.at > at) return;
+    await put("relays", { from, keys, at } satisfies StoredRelayKeys).catch(() => undefined);
+    this.changed();
+  }
+
+  /**
    * Keeps the paired PCs' public keys and names for the service worker (kv `pcKeys`), so a notification's ask can be
    * opened and answered with the page closed. The same keys the page itself uses from presence; written only on change.
    */
@@ -653,6 +677,7 @@ export class HubDevice {
     if (body.type === "board") return this.onBoard(env.from, body.items, body.doneTotal, body.rev, body.at);
     if (body.type === "command_result") return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
     if (body.type === "inbox_task") return this.onInboxTask(env.from, body);
+    if (body.type === "relays") return this.onRelayKeys(env.from, body.keys, body.at);
     const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
     if (!task) return;
     const now = Date.now();

@@ -49,3 +49,11 @@ test("the cloud hub's device token and private key are secrets too", () => {
   assert.equal(back.token, "kh_tok");
   assert.equal(back.key, '{"d":"x"}');
 });
+
+test("the backup relays' keys are secrets (the Supabase URL is not)", () => {
+  const sealed = withSecrets({ hub: { relays: { ablyKey: "a.b:ablysecret", supabaseUrl: "https://abcdefghijkl.supabase.co", supabaseKey: "sbsecret" } } }, "seal", box);
+  const text = JSON.stringify(sealed);
+  assert.ok(!text.includes("ablysecret") && !text.includes("sbsecret"));
+  assert.ok(text.includes("https://abcdefghijkl.supabase.co"));
+  assert.deepEqual((withSecrets(sealed, "unseal", box).hub as { relays: unknown }).relays, { ablyKey: "a.b:ablysecret", supabaseUrl: "https://abcdefghijkl.supabase.co", supabaseKey: "sbsecret" });
+});

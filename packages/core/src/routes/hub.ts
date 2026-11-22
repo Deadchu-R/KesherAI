@@ -25,6 +25,21 @@ export async function hubRoutes(app: FastifyInstance, hub: HubClient): Promise<v
     return hub.status();
   });
 
+  /**
+   * The backup relays' keys (Settings › Kesher Cloud › Backup relays). Body: `{ ablyKey?, supabaseUrl?, supabaseKey? }`
+   * ("" or null clears a field). The answer is the status, which says which relays have keys, never the keys.
+   */
+  app.put<{ Body: { ablyKey?: unknown; supabaseUrl?: unknown; supabaseKey?: unknown } }>("/api/hub/relays", async (req, reply) => {
+    const b = req.body ?? {};
+    const pick = (v: unknown) => (typeof v === "string" || v === null ? v : undefined);
+    try {
+      await hub.setRelays({ ablyKey: pick(b.ablyKey), supabaseUrl: pick(b.supabaseUrl), supabaseKey: pick(b.supabaseKey) });
+    } catch (e) {
+      return reply.code(400).send({ error: (e as Error).message });
+    }
+    return hub.status();
+  });
+
   /** Starts pairing: returns the code to approve on the hub page and this PC's key fingerprint. */
   app.post("/api/hub/pair", async (_req, reply) => {
     try {

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, appHome } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
+import { BackupRelays, type RelaysStatus } from "./BackupRelays";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -42,6 +43,8 @@ interface HubStatus {
   errorCode?: "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped" | "hub-limit";
   lastConnectedAt?: string;
   nextRetryAt?: string;
+  /** Which backup relays have keys (older servers leave it out). */
+  relays?: RelaysStatus;
 }
 
 /**
@@ -187,6 +190,7 @@ export function CloudHubSection() {
           {opt("reportActivity", "לשתף מה הסוכנים עושים עכשיו (לשונית סוכנים בענן: כותרת, צעדים ושמות כלים, נעול לטלפון)", "Share what the agents do now (the cloud's Agents tab: title, steps and tool names, sealed to the phone)")}
           {opt("reportFileNames", "גם שמות הקבצים שהסוכנים נוגעים בהם (בלי התוכן)", "Also the names of the files the agents touch (never their content)", !s.optIn.reportActivity)}
           <small className="muted">{L("מחשב חדש לא מקבל משימות עד שמסמנים כאן.", "A new PC takes no tasks until you tick it here.")}</small>
+          {s.relays && <BackupRelays relays={s.relays} onSaved={load} />}
           {s.devices.length > 0 && (
             <>
               <h3>{L("מכשירים אחרים במרכז", "Other devices in the hub")}</h3>

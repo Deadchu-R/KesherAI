@@ -246,6 +246,25 @@ export const KesherConfigSchema = z.object({
           reportFileNames: z.boolean().default(false),
         })
         .prefault({}),
+      /**
+       * Backup relays (Settings › Kesher Cloud › Backup relays; @kesher/shared relay-transport.ts): the Ably API key,
+       * and the Supabase project URL and anon key. The two keys are secrets: written encrypted, never sent to a page,
+       * the hub or a log; the paired phones get them only inside a sealed `relays` message.
+       */
+      relays: z
+        .object({
+          ablyKey: z.string().max(300).optional(),
+          supabaseUrl: z.string().max(200).optional(),
+          supabaseKey: z.string().max(1200).optional(),
+        })
+        .prefault({}),
+      /**
+       * The paired devices' public keys (not secrets), kept from presence so the backup relays work when the PC starts
+       * while the hub is down (relay-failover.ts).
+       */
+      peers: z.array(z.object({ id: z.string().max(64), kind: z.string().max(20), publicKey: z.string().max(200) })).max(20).default([]),
+      /** Each backup relay's messages this month (counted locally, for the 80% rule; `month` is "2026-11", UTC). */
+      relayUse: z.object({ month: z.string().max(7).default(""), ably: z.number().default(0), supabase: z.number().default(0) }).prefault({}),
       /** Hub task ids whose result was already sent back. */
       reported: z.array(z.string().max(64)).default([]),
       /** Task-inbox reports already sent, as "<phone>/<task>" → a short hash of what was sent (only changes go again). */
@@ -713,7 +732,12 @@ function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, un
     if (o && typeof o === "object") slots.push({ obj: o as Record<string, unknown>, key: "token", slot: k });
   }
   // The cloud hub's device private key.
-  if (c.hub && typeof c.hub === "object") slots.push({ obj: c.hub as Record<string, unknown>, key: "key", slot: "hub:key" });
+  if (c.hub && typeof c.hub === "object") {
+    const hub = c.hub as Record<string, unknown>;
+    slots.push({ obj: hub, key: "key", slot: "hub:key" });
+    // The backup relays' keys (Ably, Supabase).
+    if (hub.relays && typeof hub.relays === "object") for (const k of ["ablyKey", "supabaseKey"]) slots.push({ obj: hub.relays as Record<string, unknown>, key: k, slot: `hub:relays:${k}` });
+  }
   // Google sign-in: the refresh token and the client secret (the guests' Google client is under `remote`).
   if (c.google && typeof c.google === "object") for (const k of ["refreshToken", "clientSecret"]) slots.push({ obj: c.google as Record<string, unknown>, key: k, slot: `google:${k}` });
   // The shared remote (pairing) token, and the key the browser extension pairs with.
