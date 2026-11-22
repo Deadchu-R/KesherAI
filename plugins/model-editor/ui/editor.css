@@ -131,3 +131,6 @@ body.guest .app { grid-template-rows: 42px 1fr; }
   .followbar { top: 6px; }
   .guestnote { bottom: 12px; }
 }
+
+/* A level with no models: the note sits at the bottom and lets the view be turned under it. */
+.empty.note { pointer-events: none; align-items: flex-end; }

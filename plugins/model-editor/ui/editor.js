@@ -11,6 +11,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { SimplifyModifier } from "three/addons/modifiers/SimplifyModifier.js";
 import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { brushBox, classifyActor, levelFrame, unrealToThree } from "./unreal-frame.js";
 import { openMenu, pickDevice, pickMedia, setHebrew, takeMedia, uploadMedia } from "./add-media.js";
 
 const $ = (id) => document.getElementById(id);
@@ -19,6 +20,7 @@ const HE = {
   editIn: "✎ ערוך ב…", editInT: "פותח את העורך השני; \"חזרה ל…\" שם מחזירה אותך", editTex: "ערוך טקסטורה בעורך התמונות", editTexHint: "החלק שנבחר, וחוזר לחומר שלו",
   addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס למרכז התצוגה, נבחר", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", dragToo: "גם גרירה", aCube: "קובייה", aSphere: "כדור", aCylinder: "גליל", aCone: "חרוט", aPlane: "מישור", aTorus: "טבעת", aLight: "אור", aCamera: "מצלמה", aRef: "תמונת רפרנס", aRefHint: "מאחורי המודל, לא נשמרת", aWords: "מודל ממילים, צורה בלבד", aWordsHint: "Hunyuan3D 2, מהיר יותר", aWordsColour: "מודל ממילים, עם צבעים", aWordsColourHint: "TRELLIS.2, במחשב שלך", aFromPic: "מודל מתמונה, עם צבעים", aFromPicHint: "חפץ אחד בתמונה", wordsPainting: "בונה וצובע את המודל… (כמה דקות, במחשב שלך)", added: (n) => `נוסף: ${n}`, notModel: "אפשר להוסיף כאן מודל (GLB, GLTF, FBX, OBJ) או תמונה", wordsDrawing: "מצייר את החפץ… (דקה-שתיים)", wordsModelling: "הופך את התמונה למודל… (כמה דקות, במחשב שלך)", wordsDownload: "מודל התלת-ממד עוד לא במחשב הזה. להוריד אותו עכשיו?", wordsPicKept: "התמונה בקבצי הצ׳אט; אפשר ליצור ממנה מודל אחר כך", wordsDownloading: "מודל התלת-ממד יורד (בעיגול ההורדות); נסה שוב כשיסתיים. התמונה בקבצי הצ׳אט.", needChat: "פתח את עורך התלת-ממד מצ׳אט כדי ליצור כאן מודל", wordsAsk: "מה לבנות? (למשל: כיסא עץ עתיק)", wordsSent: "ביקשתי מהצ׳אט. כשהמודל מוכן (כמה דקות), הוסף אותו מ״מהקבצים של הצ׳אט״.", scene: "סצנה",
   export: "ייצוא GLB", toChat: "שלח לצ'אט", empty: "פתח מודל מצ'אט: \"עריכה בעורך התלת ממד\" בתצוגה שלו.", partsH: "חלקים", noPart: "בחר חלק",
+  levelNoModels: "ברמה הזו יש רק אורות והגדרות — אין דגמים", frameAllB: "מסגר הכול (A)",
   color: "צבע", rough: "חספוס", metal: "מתכתיות", hide: "הסתר", show: "הצג", frameBtn: "מסגר (F)", isoBtn: "בודד (/)", kShot: "תמונה של התצוגה", follow: "לעקוב אחרי", unfollow: "להפסיק לעקוב", paintAsk: "איך הוא צריך להיראות? (עץ אלון ישן עם פליז, קטיפה אדומה שחוקה…)", painting: "צובע אותו מארבעה צדדים… (כמה דקות, במחשב שלך)", paintDownload: "לצביעה צריך את Stable Diffusion 1.5 ו-ControlNet עומק, שעוד לא במחשב הזה. להוריד אותם עכשיו?", painted: "העותק הצבוע לצד המקור (אפשר להסתיר כל אחד ב-👁)", noRecord: "הדפדפן הזה לא יכול להקליט את התצוגה", turning: "מקליט סיבוב סביב המודל…", turnH: "סרטון סיבוב, לצ׳אט", sec: "שנ׳", turnView: "בגודל התצוגה", turnSaved: "סרטון הסיבוב נשמר בקבצי הצ׳אט (ובבנק)", shotSaved: "התמונה נשמרה בקבצי הצ׳אט (ובבנק)", kIso: "רק החלק הנבחר (שוב: הכל)", soon: "בקרוב: לסמן חלק ו\"מה לעשות כאן?\" עם מודלי התלת ממד.",
   keep: "＋ שמור גרסה", lStudio: "סטודיו", lSun: "שמש", lEvening: "ערב", paintS: "חומר", frameS: "מסגור", undoS: "ביטול", keepS: "גרסה",
   toChatH: "שליחה לצ'אט", toChatMsg: "הודעה איתו (לא חובה)", cancel: "ביטול", send: "שלח", keysH: "קיצורים (כמו ב-Blender)", close: "סגור",
@@ -807,7 +809,7 @@ function unityBounds(b) {
 // ---------- an Unreal level without Unreal ----------
 // Unreal: centimetres, Z up, left-handed; three.js: metres, Y up, right-handed. Swapping Y and Z does both turns, and
 // is its own inverse (the same mapping goes back).
-const fromUnreal = (p, q, s) => ({ p: new THREE.Vector3(p[0], p[2], p[1]).multiplyScalar(0.01), q: new THREE.Quaternion(-q[0], -q[2], -q[1], q[3]), s: new THREE.Vector3(s[0], s[2], s[1]) });
+const fromUnreal = (p, q, s) => { const t = unrealToThree(p, q, s); return { p: new THREE.Vector3(...t.p), q: new THREE.Quaternion(...t.q), s: new THREE.Vector3(...t.s) }; };
 function toUnreal(o) {
   const p = o.position, q = o.quaternion, s = o.scale;
   return { position: [p.x * 100, p.z * 100, p.y * 100], rotation: [-q.x, -q.z, -q.y, q.w], scale: [s.x, s.z, s.y] };
@@ -843,17 +845,48 @@ function unrealMesh(path) {
   }
   return unrealMeshes.get(path);
 }
+const iconTextures = new Map();
+/** A small picture of an emoji for the lights, PlayerStart and cameras (drawn on top, so it shows through walls). */
+function iconSprite(emoji) {
+  if (!iconTextures.has(emoji)) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.font = "48px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(emoji, 32, 36);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    iconTextures.set(emoji, tex);
+  }
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: iconTextures.get(emoji), depthTest: false, transparent: true }));
+  sprite.userData.generated = true;
+  sprite.renderOrder = 10;
+  return sprite;
+}
 function loadUnrealStandIn(u) {
   if (model) { choose(null); model.removeFromParent(); }
   const root = new THREE.Group();
   root.name = "Level";
   const byId = new Map();
+  const kinds = new Map(), icons = [], localBoxes = new Map(), loading = [];
   // Both sides: a mesh's winding is not always what the mirror makes of it, and a shape seen from inside still reads.
   const look = new THREE.MeshStandardMaterial({ color: 0xc8ccd6, roughness: 0.8, side: THREE.DoubleSide });
   for (const a of u.actors) {
     const marker = /Light/.test(a.class) ? 0xffd25a : /Camera|PlayerStart/.test(a.class) ? 0x6aa8ff : 0x8a8e99;
     const o = new THREE.Mesh(a.mesh ? new THREE.BoxGeometry(0.5, 0.5, 0.5) : new THREE.BoxGeometry(0.15, 0.15, 0.15), a.mesh ? new THREE.MeshBasicMaterial({ visible: false }) : new THREE.MeshStandardMaterial({ color: marker }));
     o.name = a.name || a.id;
+    const kind = classifyActor(a);
+    kinds.set(a.id, kind);
+    // A BSP brush: the bridge sends no geometry, so its bounds are drawn as a translucent box (and it can be chosen).
+    if (kind === "brush") {
+      const b = brushBox(a);
+      o.geometry = new THREE.BoxGeometry(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]).translate((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+      o.material = new THREE.MeshStandardMaterial({ color: 0x6aa8ff, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide });
+    }
+    if (kind === "light" || kind === "marker" || kind === "other") {
+      const icon = iconSprite(kind === "light" ? "💡" : /Camera/.test(a.class) ? "🎥" : kind === "marker" ? "🎯" : "◆");
+      o.add(icon); icons.push({ o, icon });
+    }
     const t = fromUnreal(a.position, a.rotation, a.scale);
     o.position.copy(t.p); o.quaternion.copy(t.q); o.scale.copy(t.s);
     o.userData.unreal = { id: a.id, from: { position: a.position, rotation: a.rotation }, scale: a.scale };
@@ -862,13 +895,15 @@ function loadUnrealStandIn(u) {
     o.userData.attached = (a.components ?? []).map((c) => (c.startsWith("Blueprint:") ? ["📘", c.slice(10), "Blueprint"] : [iconOf(c), c, c === "StaticMeshComponent" && a.mesh ? a.mesh.split("/").pop().split(".")[0] : ""]));
     byId.set(a.id, o);
     if (a.mesh) {
-      void unrealMesh(a.mesh).then((g) => {
+      loading.push(unrealMesh(a.mesh).then((g) => {
         const m = new THREE.Mesh(g, look);
         m.userData.generated = true;
         if (a.meshAt) { const at = fromUnreal(a.meshAt.position, a.meshAt.rotation, a.meshAt.scale); m.position.copy(at.p); m.quaternion.copy(at.q); m.scale.copy(at.s); }
         o.add(m);
+        g.computeBoundingBox();
+        localBoxes.set(a.id, { min: g.boundingBox.min.toArray(), max: g.boundingBox.max.toArray() });
         stats();
-      }, (e) => msg(`${a.mesh}: ${e.message}`, true));
+      }, (e) => msg(`${a.mesh}: ${e.message}`, true)));
     }
   }
   // The Outliner's folders (not saved: only a way to find things), then each actor under its parent or its folder.
@@ -894,6 +929,36 @@ function loadUnrealStandIn(u) {
   $("toGodot").textContent = T("toUnreal", "Save to the level");
   $("toChat").hidden = true;
   $("toGodot").onclick = saveUnreal;
+  // The first view frames what is visible (models and brushes; not the sky, lights or settings), once now (what is
+  // known: brushes, icons) and again when the shapes have come in, unless something is chosen by then. Frame all (A)
+  // and the Frame button without a choice go back to this box.
+  const refit = () => {
+    const f = levelFrame(u.actors, (a) => localBoxes.get(a.id) ?? null);
+    const box = f.box ? new THREE.Box3(new THREE.Vector3(...f.box.min), new THREE.Vector3(...f.box.max)) : null;
+    model.userData.frameBox = box;
+    // Icons and the chosen-by-click boxes of lights and markers: a small part of the level's size, never a speck.
+    const size = box ? Math.max(0.3, box.getSize(new THREE.Vector3()).length() * 0.02) : 0.5;
+    for (const { o, icon } of icons) {
+      const k = (Math.abs(o.scale.x) + Math.abs(o.scale.y) + Math.abs(o.scale.z)) / 3 || 1;
+      icon.scale.setScalar(size / k);
+      o.geometry.dispose();
+      o.geometry = new THREE.BoxGeometry(size / k, size / k, size / k);
+      o.material.visible = false;
+    }
+    return { f, box };
+  };
+  const first = refit();
+  if (first.box) frame(model, first.box);
+  // A level of lights and settings: said on the screen, not left as an empty view.
+  const note = $("empty");
+  note.classList.toggle("note", !first.f.visual);
+  note.hidden = first.f.visual;
+  if (!first.f.visual) note.textContent = T("levelNoModels", "This level has only lights/settings — no models");
+  void Promise.allSettled(loading).then(() => {
+    if (model !== root || chosen) return;
+    const again = refit();
+    if (again.box) frame(model, again.box);
+  });
   msg(u.cached ? T("standInUnrealKept", "The level as last read (Unreal is closed): move things, then \"Save to the level\"") : T("standInUnreal", "A stand-in of the Unreal level: move things, then \"Save to the level\""));
 }
 async function saveUnreal() {
@@ -1851,7 +1916,11 @@ function isolate() {
 }
 $("isolate").onclick = isolate;
 $("hidePart").onclick = () => { if (!chosen) return; remember(); chosen.visible = !chosen.visible; choose(chosen); };
-$("frame").onclick = () => frame(chosen ?? model ?? scene);
+/** Frame all: the level's visible models when it has such a box (Unreal), else everything drawn. */
+function frameAll() { if (model) frame(model, model.userData.frameBox ?? undefined); }
+$("frame").onclick = () => (chosen || !model ? frame(chosen ?? model ?? scene) : frameAll());
+$("frameAll").onclick = frameAll;
+$("frameAll").title = $("frameAll").ariaLabel = T("frameAllB", "Frame all (A)");
 /**
  * A picture of this view (Blender's F12 Render, Spline's Export Image): twice the screen's sharpness, see-through where
  * there is no model (for a game's icons or a page), without the grid, the gizmo, the chosen part's box or reference
@@ -2105,7 +2174,7 @@ addEventListener("keydown", (e) => {
   if (["x", "y", "z"].includes(k) && lastTool) { e.preventDefault(); lockAxis(k); return; }
   lastTool = false;
   const map = {
-    f: () => $("frame").click(), "/": isolate, home: () => model && frame(model), a: () => model && frame(model), h: () => $("hidePart").click(),
+    f: () => $("frame").click(), "/": isolate, home: frameAll, a: frameAll, h: () => $("hidePart").click(),
     delete: remove, ...(blender ? { x: remove } : {}), escape: () => choose(null),
     f12: () => void viewPicture(), 1: () => view("front"), 3: () => view("right"), 7: () => view("top"), 4: () => shade("wire"), 5: () => shade("solid"), 6: () => shade("material"), "?": showKeys,
   };
