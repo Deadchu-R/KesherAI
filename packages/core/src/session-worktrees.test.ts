@@ -23,6 +23,10 @@ test(".worktreeinclude picks only the ignored files it names", () => {
   assert.deepEqual(includedFiles("", [".env"]), []);
 });
 
+test(".worktreeinclude normalizes Windows backslashes in ignored files", () => {
+  assert.deepEqual(includedFiles(".env\nbuild\\output.txt", [".env", "build\\output.txt", "src\\main.js"]), [".env", "build/output.txt"]);
+});
+
 test("a session worktree: own folder and branch, .env copied, user's status clean, removed only without work", async () => {
   const repo = await mkdtemp(join(tmpdir(), "kesher-wt-"));
   await git(repo, ["init", "-q", "-b", "main"]);
