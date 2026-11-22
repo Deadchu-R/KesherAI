@@ -98,6 +98,15 @@ export interface ControlTaskView {
   endedAt?: number;
   /** Who started it ("pc" or a paired device's id). */
   by: string;
+  /** Overlay state for the phone mirror (cursor, caption, yes/no bubble). */
+  overlay?: {
+    /** Short text describing the current action. */
+    caption: string;
+    /** Target cursor position in OS pixels (for the phone to show a marker). */
+    cursor?: { x: number; y: number };
+    /** Yes/no confirmation waiting for the user. */
+    bubble?: { text: string; pending: boolean };
+  };
 }
 
 /** The planner's instructions (English: for the model). */
@@ -227,7 +236,7 @@ export class ControlTasks {
       throw Object.assign(new Error(req.model === "local" ? "No local vision model is installed (Settings → Privacy → vision models)." : "No free Gemini key is set up (Settings → Connections → Google Gemini), and no local vision model is installed."), { code: 503 });
     const id = `ct-${randomUUID().slice(0, 8)}`;
     const r: Running = {
-      view: { id, goal: req.goal, apps: req.apps, model: req.model, status: "running", step: 0, maxSteps: req.maxSteps, steps: [], summary: "", startedAt: this.now(), by },
+      view: { id, goal: req.goal, apps: req.apps, model: req.model, status: "running", step: 0, maxSteps: req.maxSteps, steps: [], summary: "", startedAt: this.now(), by, overlay: { caption: "starting…" } },
       abort: new AbortController(),
     };
     this.tasks.set(id, r);
@@ -286,6 +295,7 @@ export class ControlTasks {
     r.view.status = status;
     r.view.summary = summary.slice(0, 1200);
     delete r.view.question;
+    r.view.overlay = undefined;
     r.view.endedAt = this.now();
     this.host.log(scrubLog(`[computer-task] ${r.view.id} ${status} after ${r.view.step} steps: ${summary}`));
     this.host.changed?.();
