@@ -222,8 +222,10 @@ export class VisionService implements Grounding {
           ...(this.d.config.engines.llamaVersion ? { version: this.d.config.engines.llamaVersion } : {}),
           port,
           // One request at a time, a screenshot's worth of context, the projector named (no guessing).
-          args: ["-c", "8192", "--mmproj", files.mmproj],
+          // Flash attention and small ubatch for vision speed; no speculative decoding with projector (MTP doesn't work with images).
+          args: ["-c", "8192", "--flash-attn", "on", "--ubatch-size", "512", "--mmproj", files.mmproj],
           parallel: 1,
+          mtpDraft: 0,
         });
       await engine.load(files.model);
       this.engine = engine;
