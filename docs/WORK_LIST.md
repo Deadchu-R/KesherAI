@@ -35,7 +35,7 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - [ ] Live Claude-helper notifications in KesherAI (Roee 12:57): POST /api/agents/external {id,title,status,step,steps} that the lead Claude calls at a helper's start and end; KesherAI watches new commits on origin/main (its existing fetch) and attaches each commit with the trailer `Helper: <id>` to that run as a step; the phone gets the same live per-id progress notification as Antigravity (deacdf7) and a "Claude" curtain in the hub. No Claude tokens for mid-run updates.
 
 ## Waiting on Roee: at home, weekend 👤 (22.11)
-- [ ] Hub secret for storage-free tokens: Claude adds a separate variable (a plain random password, not HUB_PRIVATE_KEY); Roee pastes it in Cloudflare › Workers › kesher-hub › Settings › Variables as a Secret when he is home.
+- [ ] Hub secret for storage-free tokens: built (HUB_TOKEN_SECRET, hub.ts; old tokens still work and rotate). Roee pastes a random 48-character secret in Cloudflare › Workers › kesher-hub › Settings › Variables and Secrets (type Secret).
 
 ## Night 21–22.11 (Roee 19:21–19:58, until 07:00)
 Rules (Roee 20:35: as many tasks as possible until 07:00): at most 2 Claude helpers (Sonnet by default, Opus only for hard code) running all night, plus ONE local agent on the PC (KesherAI self-work on the local model) kept busy with small items, research only on Antigravity/Gemini; a build about every 2 hours (security scan after every 5); the design doc published once at 07:00. Reversible decisions: the recommended option, marked in the morning report; irreversible ones wait for Roee. Approved downloads: Qwen3.5 2B router + Qwen3.6 mmproj (started 20:08).
