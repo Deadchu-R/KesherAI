@@ -13,6 +13,7 @@ import { chooseRoute, type RouteDecision } from "../../../packages/shared/src/hu
 import { applyAgentBatch, RUN_STARTING_MS, runStarting, type AgentCard } from "../../../packages/shared/src/hub-agents.js";
 import { sameLabel, type AgentLabel } from "../../../packages/shared/src/agent-label.js";
 import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
+import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import type { DriveMark } from "./drive-view.js";
 
 /** This browser's identity at the hub. */
@@ -198,6 +199,67 @@ export class HubDevice {
 
   private changed(): void {
     for (const cb of this.listeners) cb();
+  }
+
+  /** Run taps that are in their 5-second undo window, and what each sends when it ends (nothing is sent before). */
+  private readonly runUndo = new RunUndo();
+  private readonly runSends = new Map<string, () => void>();
+  private undoTimer?: number;
+
+  /**
+   * A tap on Run (or Start, or Run all): the button turns into "Starting in 5… Undo" and `send` runs only when the 5
+   * seconds are over. A second tap while it counts changes nothing.
+   *
+   * @param key - The task id, the approval's request id, or {@link RUN_ALL_KEY}.
+   * @param send - Sends the command (called once, after the window).
+   */
+  armRun(key: string, send: () => void): void {
+    if (this.runUndo.left(key, Date.now()) === undefined) this.runSends.set(key, send);
+    this.runUndo.arm(key, Date.now());
+    this.tickUndo();
+  }
+
+  /** Undo: the window closes and nothing is sent. */
+  undoRun(key: string): void {
+    this.runUndo.cancel(key);
+    this.runSends.delete(key);
+    this.tickUndo();
+  }
+
+  /** The seconds "Starting in N…" shows for a key, or undefined when no window is open. */
+  runCountdown(key: string): number | undefined {
+    return this.runUndo.left(key, Date.now());
+  }
+
+  /** Sends what is due and redraws; ticks every 250 ms only while a window is open. */
+  private tickUndo(): void {
+    for (const k of this.runUndo.due(Date.now())) {
+      const send = this.runSends.get(k);
+      this.runSends.delete(k);
+      send?.();
+    }
+    if (this.runUndo.active && this.undoTimer === undefined) this.undoTimer = window.setInterval(() => this.tickUndo(), 250);
+    else if (!this.runUndo.active && this.undoTimer !== undefined) {
+      window.clearInterval(this.undoTimer);
+      this.undoTimer = undefined;
+    }
+    this.changed();
+  }
+
+  /** The tasks "Run all" would run: waiting for Run on a PC that is on, not already starting or sent. */
+  runnableTasks(): PageTask[] {
+    return this.tasks.filter((t) => this.canRun(t) && !this.runStarting(t) && !this.taskActions.get(t.taskId));
+  }
+
+  /**
+   * Run all, after its undo window: sends Run for every task that waits for it. The PC runs the first and queues the
+   * rest; after each it asks "Next in line — Start?", so nothing runs without its own Start.
+   */
+  async runAll(): Promise<void> {
+    const all = this.runnableTasks();
+    // A task whose own 5 seconds are still counting goes with this one: its window closes so it is not sent twice.
+    for (const t of all) this.undoRun(t.taskId);
+    for (const t of all) await this.inboxCommand(t, "inbox-run");
   }
 
   /**
@@ -789,7 +851,7 @@ export class HubDevice {
    * @param forMinutes - "Allow for a while", in minutes (allow only).
    * @returns Whether it was sent.
    */
-  async answerApproval(pcId: string, a: HubApproval, decision: "allow" | "deny", forMinutes?: number): Promise<boolean> {
+  async answerApproval(pcId: string, a: HubApproval, decision: "allow" | "deny" | "clear", forMinutes?: number): Promise<boolean> {
     const id = this.ident;
     const pc = this.presence.find((d) => d.id === pcId && d.kind === "pc");
     if (!id || !pc?.online || !this.connected) return false;

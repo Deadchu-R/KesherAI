@@ -895,6 +895,198 @@
      }
     ]
    }
+  },
+  {
+   "id": "HubRunUndo",
+   "title": "ענן Kesher: משימות — לחיצה על \"הפעל\" נספרת 5 שניות (\"מתחיל בעוד 5… בטל\") ורק אחרי זה נשלחת; הכרטיסים לא קופצים",
+   "titleEn": "Kesher Cloud: Tasks — Run counts 5 seconds (\"Starting in 5… Undo\") and is sent only after that; cards do not jump",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".runacts .runbtn"
+    },
+    {
+     "click": ".runacts .runbtn >> nth=0"
+    },
+    {
+     "wait": ".runcount"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "tasks": [
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "4m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "9m"
+      }
+     },
+     {
+      "title": "לתקן את גלילת רשימת ההורדות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "8m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "18m"
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "12m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "27m"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "HubRunAll",
+   "title": "ענן Kesher: משימות — \"הפעל הכל (3)\" על כל המשימות שממתינות, גם עם 5 שניות לביטול; במחשב כל אחת נשאלת בתורה",
+   "titleEn": "Kesher Cloud: Tasks — \"Run all (3)\" for every waiting task, also with the 5-second undo; on the PC each is asked in turn",
+   "route": "#tasks",
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".ghead .runbtn"
+    },
+    {
+     "click": ".ghead .runbtn"
+    },
+    {
+     "wait": ".ghead .runcount"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     },
+     {
+      "id": "pc-laptop",
+      "name": "Laptop",
+      "online": false
+     }
+    ],
+    "tasks": [
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "4m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "9m"
+      }
+     },
+     {
+      "title": "לתקן את גלילת רשימת ההורדות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "8m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "18m"
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "estSteps": 8,
+       "at": {
+        "$agoMs": "12m"
+       }
+      },
+      "createdAt": {
+       "$agoMs": "27m"
+      }
+     }
+    ]
+   }
   }
  ]
 }

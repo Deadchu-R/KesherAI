@@ -26,6 +26,7 @@ forbidden_paths: []       # added to the standing list (.github/**, .env*, lockf
 check: pnpm -s typecheck && node --test
 max_minutes: 15
 max_files: 8
+replaces: []              # optional: ids of older tasks this one supersedes (see below)
 ---
 
 ## Goal
@@ -43,6 +44,15 @@ What not to touch.
 ## Report
 What to say at the end.
 ```
+
+`replaces: [c-20261119-02, c-20261119-03]` closes the old tasks the new one makes obsolete: when the PC reads the new
+task it skips each listed task that has not started yet (waiting, queued or deferred), with the note "Replaced by
+<new id>". A task already running or ended is left alone; unknown ids are ignored (at most 20 ids).
+
+After a task ends and others are in line, Antigravity does not start the next one by itself: the PC asks "Done: X. Next
+in line: Y — Start?" (Start / Skip / Clear the queue) on the PC and the phone. "Run all" on the hub queues every task
+that waits for Run; each then asks in turn. The hub's Run button counts 5 seconds ("Starting in 5… Undo") before it
+sends the command.
 
 `auto` routes: 1–2 files, low risk, with a check → the local model (self-work, through the board); 3–15 files, with
 acceptance and a check, not security → Antigravity; anything else → Claude's own Opus agent.

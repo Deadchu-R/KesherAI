@@ -66,6 +66,7 @@ import { TaskBoard } from "./task-board.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { nextInLineTitle } from "./inbox-runner.js";
 import { answerFromHub, isDangerousReason } from "./hub-approvals.js";
 import { boardCommand } from "./hub-board.js";
 import { agentLabelCommand, inboxCommand } from "./hub-commands.js";
@@ -749,7 +750,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           return { conversationId: a.conversationId, requestId: a.requestId, title: helper ? `${helper} (sub-agent) · ${a.title}`.slice(0, 200) : a.title, tool: a.tool, preview: a.preview, reason: a.purpose ? `${a.reason} ${a.purpose}`.trim() : a.reason, ...(helper ? { who: helper } : {}), forWhile: !isDangerousReason(a.reason), at: a.at };
         }),
         // The PC's "Run this task in Antigravity?" asks, so the phone can answer away from home.
-        ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: `Run in Antigravity? ${title}`.slice(0, 200), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes.", who: "Antigravity", kind: "run" as const, at: new Date(ask.at).toISOString(), until: new Date(ask.until).toISOString() })),
+        ...taskInbox.openAsks().map(({ title, text, where, ask }) => ({ conversationId: INBOX_ASKS, requestId: ask.requestId, title: ask.next ? nextInLineTitle(ask.next.done, title) : `Run in Antigravity? ${title}`.slice(0, 200), ...(ask.next ? { next: true as const } : {}), tool: "antigravity", preview: [text.slice(0, 1200), "", `Project: ${config.taskInbox.repo ? basename(config.taskInbox.repo) : "?"} · ${where} · Left today: ${ask.left}`].join("\n"), reason: "One tap runs this once. The ask expires in 30 minutes.", who: "Antigravity", kind: "run" as const, at: new Date(ask.at).toISOString(), until: new Date(ask.until).toISOString() })),
       ],
       answer: async (conversationId, requestId, decision, from, forMinutes) => {
         // An agent card's yes/no (a helper's ask) or an Antigravity step's approval: only from a paired phone.
@@ -757,12 +758,12 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
         if (conversationId === INBOX_APPROVALS) {
           if (from?.kind !== "phone") return false;
           const t = (await taskInbox.list()).find((x) => x.pending?.requestId === requestId);
-          return !!t && (await taskInbox.answer(t.id, requestId, decision));
+          return !!t && (await taskInbox.answer(t.id, requestId, decision === "allow" ? "allow" : "deny"));
         }
         // A run answer counts only from a paired phone (its sealed, signed message); one answer is one task.
         if (conversationId === INBOX_ASKS) {
           if (from?.kind !== "phone") return false;
-          if (await taskInbox.answerMessage(requestId, decision, `hub:${from.id}`)) return true;
+          if (await taskInbox.answerMessage(requestId, decision === "allow" ? "allow" : "deny", `hub:${from.id}`)) return true;
           return !!(await taskInbox.answerRun(requestId, decision, `hub:${from.id}`).catch(() => undefined));
         }
         // A chat's step: as its own card answers it ("Allow for a while" keeps a timed rule for the chat's tool).
@@ -779,7 +780,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           },
           conversationId,
           requestId,
-          decision,
+          decision === "allow" ? "allow" : "deny",
           forMinutes,
         );
       },

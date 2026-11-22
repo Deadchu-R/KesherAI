@@ -18,6 +18,8 @@ import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
 import { isSafeLink, type HubExecutor, type HubIfOffline, type HubPresence } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } from "./dom.js";
 import { HubDevice, post, type PageTask } from "./device.js";
+import { RUN_ALL_KEY } from "../../../packages/shared/src/run-undo.js";
+import { runAllButton, runWithUndo } from "./run-button.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
@@ -755,16 +757,19 @@ function workListGroup(q: string): HTMLElement | null {
  */
 function runButtons(t: PageTask): HTMLElement | null {
   const a = device.taskActions.get(t.taskId);
-  if (device.runStarting(t)) return h("span", { class: "tag t-run" }, L("מתחיל…", "Starting…"));
-  if (a && !a.result) return h("span", { class: "tag t-run" }, L("נשלח למחשב…", "Sent to the PC…"));
+  if (device.runStarting(t)) return h("span", { class: "tag t-run runbtn" }, L("מתחיל…", "Starting…"));
+  if (a && !a.result) return h("span", { class: "tag t-run runbtn" }, L("נשלח למחשב…", "Sent to the PC…"));
   const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, a.result.text) : null;
   if (!device.canRun(t)) return note;
-  const press = (action: "inbox-run" | "inbox-cancel") => (e: Event) => {
+  // A tap on Run counts 5 seconds first ("Starting in 5… Undo"); the command is sent only after that.
+  const counting = device.runCountdown(t.taskId) !== undefined;
+  const allLeft = device.runCountdown(RUN_ALL_KEY);
+  if (allLeft !== undefined) return h("span", { class: "tag t-run runbtn" }, L(`מתחיל בעוד ${allLeft}…`, `Starting in ${allLeft}…`));
+  const cancel = (e: Event) => {
     e.stopPropagation();
-    if (action === "inbox-cancel" && !confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`))) return;
-    void device.inboxCommand(t, action);
+    if (confirm(L(`לבטל את "${t.title}"?`, `Cancel "${t.title}"?`))) void device.inboxCommand(t, "inbox-cancel");
   };
-  return h("span", { class: "row runacts" }, h("button", { type: "button", class: "btn sm-btn pri", onclick: press("inbox-run") }, L("▶ הרץ", "▶ Run")), h("button", { type: "button", class: "btn sm-btn", onclick: press("inbox-cancel") }, L("בטל", "Cancel")), note);
+  return h("span", { class: "row runacts" }, runWithUndo(device, t.taskId, L("▶ הרץ", "▶ Run"), () => void device.inboxCommand(t, "inbox-run")), counting ? null : h("button", { type: "button", class: "btn sm-btn runbtn", onclick: cancel }, L("בטל", "Cancel")), note);
 }
 
 /** The task list's groups, in this order. */
@@ -827,7 +832,7 @@ function taskGroups(list: PageTask[], q: string): HTMLElement[] {
   for (const [g, icon, he, en] of GROUPS) {
     const rows = g === "agents" ? agents.map(agentRow) : list.filter((t) => groupOf(t) === g).map(taskRow);
     if (!rows.length) continue;
-    out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs" }, String(rows.length))), ...rows);
+    out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs grow" }, String(rows.length)), g === "agy" ? runAllButton(device) : null), ...rows);
   }
   return out;
 }

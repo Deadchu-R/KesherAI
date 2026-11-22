@@ -52,6 +52,8 @@ export interface InboxTaskSpec {
   model?: string;
   /** `local_ok: true`: the local model may carry it while Claude cools down (never an Antigravity task). */
   localOk?: boolean;
+  /** `replaces: [ids]`: older tasks this one supersedes; the PC skips those that have not started, with a note. */
+  replaces?: string[];
   goal: string;
   readFirst?: string;
   acceptance?: string;
@@ -148,6 +150,11 @@ export interface InboxRunAsk {
   until: number;
   /** Antigravity tasks left today when it was asked. */
   left: number;
+  /**
+   * Set when this is the "Next in line — Start?" ask after a task ended (the queue never starts a task by itself):
+   * `done` is the title of the task that ended, `more` how many are in line behind this one.
+   */
+  next?: { done: string; more: number };
 }
 
 /** Settings > Task inbox (config `taskInbox`). */

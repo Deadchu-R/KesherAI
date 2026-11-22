@@ -7,13 +7,14 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { RUN_ALL_KEY, agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
 import { AssignPicker } from "../AssignPicker";
+import { RunUndoButton } from "./RunUndoButton";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -146,6 +147,9 @@ export function TaskInboxPage({ id }: { id?: string }) {
   const shown = s.tasks.filter((t) => filter === "all" || (filter === "waiting" ? t.status === "waiting" || t.status === "queued" : filter === "running" ? t.status === "running" : filter === "ask" ? t.status === "needs-approval" || !!t.runAsk : ["done", "partial", "failed", "declined", "skipped", "deferred-quota"].includes(t.status)));
   const asks = s.tasks.filter((t) => t.runAsk && t.runAsk.until > Date.now());
   const local = s.tasks.filter((t) => t.runBy === "local").length;
+  // "Run all (N)": the Antigravity tasks that wait for Run, from two up, on this computer (the first runs, the rest queue
+  // and the PC then asks "Next in line — Start?" for each: nothing starts without its own Start).
+  const runAll = s.runHere ? s.tasks.filter((t) => t.runBy === "antigravity" && t.status === "waiting" && !t.runAsk?.next && !startingNow(t) && !/^Queued/.test(t.note ?? "")) : [];
   const put = (body: Record<string, unknown>) => void api("/api/task-inbox/settings", { method: "PUT", body }).then(load, (e) => toast((e as Error).message));
 
   return (
@@ -195,6 +199,13 @@ export function TaskInboxPage({ id }: { id?: string }) {
       {s.tasks.some((t) => t.runBy === "local" && t.status === "queued") && <LocalAgentNotice className="tinbox-local-off" />}
 
       {asks.map((t) => <RunAsk key={t.id} t={t} state={s} act={act} busy={busy} />)}
+
+      {runAll.length > 1 && (
+        <div className="row wrap tinbox-runall">
+          <RunUndoButton id={RUN_ALL_KEY} primary={false} disabled={busy} label={<>▶ {L(`הפעל הכל (${runAll.length})`, `Run all (${runAll.length})`)}</>} send={() => void (async () => { for (const t of runAll) await act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id); })()} />
+          <span className="small muted">{L("הראשונה רצה, השאר ממתינות וכל אחת נשאלת בתורה.", "The first runs, the rest wait and are asked one by one.")}</span>
+        </div>
+      )}
 
       {adding && <AddTask onDone={() => { setAdding(false); load(); }} />}
 
@@ -270,13 +281,19 @@ function TermsNote() {
 
 type Act = (path: string, body?: unknown, runOf?: string) => Promise<void>;
 
-/** The PC's question "Run this task in Antigravity?", with what the user needs to decide. */
+/**
+ * The PC's question "Run this task in Antigravity?", with what the user needs to decide. After a task ended and others
+ * are in line it reads "Done: X. Next in line: Y — Start?" with Start / Skip / Clear the queue (nothing starts by itself).
+ */
 function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean }) {
   const ask = t.runAsk!;
+  const answer = (decision: string, runOf?: string) => act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision }, runOf);
   return (
     <section className="card tinbox-ask" aria-live="polite">
       <div className="row wrap">
-        <b className="grow">✦ {L("להריץ את המשימה ב-Antigravity?", "Run this task in Antigravity?")}</b>
+        <b className="grow">{ask.next
+          ? <>✦ {L(`הסתיים: ${ask.next.done.slice(0, 60)}. הבא בתור: ${t.title.slice(0, 60)} — להתחיל?`, `Done: ${ask.next.done.slice(0, 60)}. Next in line: ${t.title.slice(0, 60)} — Start?`)}</>
+          : <>✦ {L("להריץ את המשימה ב-Antigravity?", "Run this task in Antigravity?")}</>}</b>
         <span className="small muted">{L(`פג תוקף ${ago(Date.now() - ask.until)}`, `Expires ${ago(Date.now() - ask.until)}`)}</span>
       </div>
       <p><b>{t.title}</b> <span className="small muted" dir="ltr">{t.id}</span></p>
@@ -285,17 +302,24 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
         <span>{L("פרויקט:", "Project:")} <b dir="ltr">{state.project ?? "?"}</b></span>
         <span>{L("ענף:", "Branch:")} <b dir="ltr">{t.branch}</b></span>
         <span>{L("נשארו היום:", "Left today:")} <b>{ask.left}</b></span>
+        {ask.next && ask.next.more > 0 && <span>{L(`עוד בתור: ${ask.next.more}`, `More in line: ${ask.next.more}`)}</span>}
         <span>{L("מאת", "From")} {fromName(t.from)}</span>
       </div>
-      <div className="row wrap">
+      <div className="row wrap tinbox-askbtns">
         {startingNow(t)
           ? <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>
           : <>
-              <button type="button" className="primary" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "allow" }, t.id)}>▶ {L("הפעל", "Run")}</button>
-              <button type="button" disabled={busy} onClick={() => void act("/api/task-inbox/run-answer", { requestId: ask.requestId, decision: "deny" })}>{L("לא עכשיו", "Not now")}</button>
+              {/* Run / Start counts 5 seconds first ("Starting in 5… Undo"); the answer is sent only after that. */}
+              <RunUndoButton id={ask.requestId} disabled={busy} send={() => void answer("allow", t.id)} label={<>▶ {ask.next ? L("התחל", "Start") : L("הפעל", "Run")}</>} />
+              {ask.next
+                ? <>
+                    <button type="button" disabled={busy} onClick={() => void answer("skip")}>{L("דלג", "Skip")}</button>
+                    <button type="button" disabled={busy} onClick={() => void answer("clear")}>{L("נקה את התור", "Clear the queue")}</button>
+                  </>
+                : <button type="button" disabled={busy} onClick={() => void answer("deny")}>{L("לא עכשיו", "Not now")}</button>}
             </>}
       </div>
-      <p className="small muted">{L("לחיצה אחת מריצה את המשימה הזו בלבד. השאלה פגה אחרי 30 דקות.", "One tap runs this one task only. The ask expires after 30 minutes.")}</p>
+      <p className="small muted">{ask.next ? L("דילוג שואל על המשימה שאחריה; ניקוי מחזיר את כולן להמתנה. שום דבר לא מתחיל לבד.", "Skip asks about the one after; Clear puts them all back to waiting. Nothing starts by itself.") : L("לחיצה אחת מריצה את המשימה הזו בלבד. השאלה פגה אחרי 30 דקות.", "One tap runs this one task only. The ask expires after 30 minutes.")}</p>
     </section>
   );
 }
@@ -325,7 +349,7 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
         {t.status === "needs-approval" && <button type="button" onClick={open}>{L("אשר / דחה", "Allow / Deny")}</button>}
         {runnable && state.runHere && (startingNow(t)
           ? <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>
-          : <button type="button" className="primary" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id)}>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</button>)}
+          : <RunUndoButton id={t.id} disabled={busy} send={() => void act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id)} label={<>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</>} />)}
         {runnable && !state.runHere && startingNow(t) && <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>}
         {runnable && !state.runHere && !t.runAsk && !startingNow(t) && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/ask`)}>▶ {L("הפעל", "Run")}</button>}
         {t.status === "waiting" && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/skip`)}>{L("דלג", "Skip")}</button>}

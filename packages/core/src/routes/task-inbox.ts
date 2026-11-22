@@ -64,10 +64,11 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     const by = verifiedBy(req);
     if (!by) return reply.code(403).send({ error: "Only your paired phone or this computer can answer." });
     const requestId = String(req.body?.requestId ?? "");
-    const decision = req.body?.decision === "allow" ? "allow" : "deny";
+    const d = req.body?.decision;
+    const decision = d === "allow" || d === "skip" || d === "clear" ? d : "deny";
     try {
       // A chat agent's message to Antigravity, or an inbox task.
-      if (await inbox.answerMessage(requestId, decision, by)) return { ok: true };
+      if (await inbox.answerMessage(requestId, decision === "allow" ? "allow" : "deny", by)) return { ok: true };
       const t = await inbox.answerRun(requestId, decision, by);
       return t ?? reply.code(410).send({ error: "That ask has expired or was already answered. Ask again." });
     } catch (e) {

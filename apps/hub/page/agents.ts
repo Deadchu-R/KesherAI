@@ -24,6 +24,7 @@ import { deviceIcon, getLocale, h, L, when } from "./dom.js";
 import type { HubDevice, PageTask } from "./device.js";
 import { SNAPSHOT_SOURCE, type SyncedAgent } from "./drive-view.js";
 import { assignBox } from "./assign.js";
+import { runWithUndo } from "./run-button.js";
 
 /** What the agents view needs from the page. */
 export interface AgentsView {
@@ -151,7 +152,8 @@ function actions(v: AgentsView, c: AgentCard, pc: HubPresence | undefined): HTML
   const w = c.state.state === "waiting" ? c.state.waiting : undefined;
   const answer = w
     ? w.reason === "run-press"
-      ? [btn(L("▶ הרץ", "▶ Run"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("לא עכשיו", "Not now"), "", () => v.device.answerAgent(c, "deny"))]
+      ? // Run counts 5 seconds first ("Starting in 5… Undo"); the answer is sent only after that.
+        [runWithUndo(v.device, w.requestId, L("▶ הרץ", "▶ Run"), () => void v.device.answerAgent(c, "allow"), { off }), ...(v.device.runCountdown(w.requestId) === undefined ? [btn(L("לא עכשיו", "Not now"), "", () => v.device.answerAgent(c, "deny"))] : [])]
       : w.reason === "ask"
         ? [btn(L("כן", "Yes"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("לא", "No"), "", () => v.device.answerAgent(c, "deny"))]
         : [btn(L("✓ אשר", "✓ Approve"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("דחה", "Deny"), "", () => v.device.answerAgent(c, "deny"))]

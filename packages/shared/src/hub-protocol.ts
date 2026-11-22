@@ -232,7 +232,7 @@ export type SealedBody =
    * The answer to an approval. `forMinutes` (allow only): "Allow for a while", a rule for that chat's tool that ends by
    * itself, as the PC's own card makes it; a PC that does not know it allows once.
    */
-  | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny"; forMinutes?: number }
+  | { type: "approval_answer"; requestId: string; conversationId: string; decision: "allow" | "deny" | "clear"; forMinutes?: number }
   /** Everything waiting for the user's approval on a PC, whole (the newest snapshot replaces the last). */
   | { type: "approvals"; items: HubApproval[]; at: number }
   /**
@@ -296,6 +296,8 @@ export interface HubApproval {
   preview: string;
   /** `tool`: a step of an agent; `run`: run a task in Antigravity (one press is one run). */
   kind: "tool" | "run";
+  /** A `run` that is the "Next in line — Start?" ask after a task ended: Start / Skip (deny) / Clear the queue. */
+  next?: boolean;
   /** Whether "Allow for a while" applies (a chat's own tool step that is not dangerous or limited to one site). */
   forWhile: boolean;
   /** When it was asked (ms since epoch). */
@@ -332,12 +334,13 @@ export function cleanApproval(x: unknown): HubApproval | null {
   return {
     requestId: a.requestId,
     conversationId: a.conversationId,
-    title: str(a.title, 120).trim(),
+    title: str(a.title, 160).trim(),
     tool: str(a.tool, 80),
     ...optStr("who", a.who, 80),
     reason: str(a.reason, 300),
     preview: str(a.preview, 600),
     kind,
+    ...(kind === "run" && a.next === true ? { next: true } : {}),
     forWhile: kind === "tool" && a.forWhile === true,
     at: num(a.at),
   };
@@ -677,7 +680,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_request", requestId: b.requestId, conversationId: b.conversationId, title: str(b.title, HUB_LIMITS.titleChars), tool: str(b.tool, 80), preview: str(b.preview, 2000), reason: str(b.reason, 500) };
     case "approval_answer": {
       if (!isHubId(b.requestId) || !isHubId(b.conversationId)) return null;
-      const decision = b.decision === "allow" ? "allow" : "deny";
+      // "clear" is only for the "Next in line" ask of the task queue; elsewhere it counts as "deny".
+      const decision = b.decision === "allow" ? "allow" : b.decision === "clear" ? "clear" : "deny";
       const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }

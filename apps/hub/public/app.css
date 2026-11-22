@@ -257,3 +257,9 @@ button.chip { cursor: pointer; min-height: 30px; }
 .assign-opt:first-child { border-top: 0; }
 .assign-opt.sel { background: #a5b4ff1a; }
 .wl-assign { padding: 4px 12px 10px; }
+
+/* Run with a 5-second undo: every state of the button has the same size, so a card does not move under the finger. */
+.runbtn { min-height: 34px; min-width: 96px; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.runcount { gap: 6px; flex-wrap: nowrap; }
+.runacts { min-height: 34px; align-items: center; }
+.ghead .runbtn { min-width: 0; }

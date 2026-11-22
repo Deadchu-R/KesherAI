@@ -111,7 +111,7 @@ export interface HubClientDeps {
      * `from`: the device whose signed, sealed message carried the answer, and its kind as the hub lists it.
      * `forMinutes`: "Allow for a while" from the hub page (the app decides whether it applies; otherwise once).
      */
-    answer(conversationId: string, requestId: string, decision: "allow" | "deny", from?: { id: string; kind?: string }, forMinutes?: number): Promise<boolean>;
+    answer(conversationId: string, requestId: string, decision: "allow" | "deny" | "clear", from?: { id: string; kind?: string }, forMinutes?: number): Promise<boolean>;
   };
   fetch?: typeof fetch;
   openSocket?: (url: string, on: HubSocketEvents) => HubSocket;

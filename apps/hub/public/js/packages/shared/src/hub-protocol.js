@@ -114,12 +114,13 @@ export function cleanApproval(x) {
     return {
         requestId: a.requestId,
         conversationId: a.conversationId,
-        title: str(a.title, 120).trim(),
+        title: str(a.title, 160).trim(),
         tool: str(a.tool, 80),
         ...optStr("who", a.who, 80),
         reason: str(a.reason, 300),
         preview: str(a.preview, 600),
         kind,
+        ...(kind === "run" && a.next === true ? { next: true } : {}),
         forWhile: kind === "tool" && a.forWhile === true,
         at: num(a.at),
     };
@@ -366,7 +367,8 @@ export function parseSealedBody(x, kind) {
         case "approval_answer": {
             if (!isHubId(b.requestId) || !isHubId(b.conversationId))
                 return null;
-            const decision = b.decision === "allow" ? "allow" : "deny";
+            // "clear" is only for the "Next in line" ask of the task queue; elsewhere it counts as "deny".
+            const decision = b.decision === "allow" ? "allow" : b.decision === "clear" ? "clear" : "deny";
             const mins = decision === "allow" && typeof b.forMinutes === "number" && Number.isFinite(b.forMinutes) ? Math.floor(b.forMinutes) : 0;
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }

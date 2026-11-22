@@ -232,6 +232,8 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     const n = Number(str(k, 10));
     return Number.isFinite(n) && n > 0 ? Math.min(max, Math.max(min, Math.round(n))) : def;
   };
+  // `replaces: [ids]` (or one id): older tasks this one supersedes. Only valid ids count; at most 20.
+  const replaces = [...new Set(listOf(fm["replaces"]).map((x) => x.trim()).filter((x) => validTaskId(x) && x !== id))].slice(0, 20);
   const model = str("model", 80);
   if (model && !/^[\w .:/()-]+$/.test(model)) return { error: "model has odd characters." };
   // Sections: "## Goal" and the others; anything before the first heading counts as the goal.
@@ -265,6 +267,7 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
     maxMinutes: num("max_minutes", defaults.maxMinutes, 1, 60),
     maxFiles: kind === "research" ? 1 : num("max_files", 15, 1, 60),
     ...(model ? { model } : {}),
+    ...(replaces.length ? { replaces } : {}),
     // The local model may carry it while Claude cools down (cooldown-handoff.ts); never for Antigravity tasks.
     ...(/^(true|yes)$/i.test(str("local_ok", 10)) && executor !== "antigravity" ? { localOk: true } : {}),
     goal,

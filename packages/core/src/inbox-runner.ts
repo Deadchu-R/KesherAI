@@ -116,13 +116,29 @@ export function isQuotaError(msg: string): boolean {
   return /quota|rate.?limit|resource.?exhausted|\b429\b|usage limit|limit reached|exceeded your|ai credits?|(buy|purchase|top.?up|add|get)\s+(more\s+)?credits?|\bpurchase\b|upgrade\s+(your\s+|to\s+|the\s+)?(a\s+)?(plan|subscription|pro|ultra|tier)|\bbilling\b/i.test(msg);
 }
 
+/**
+ * The title of the ask after a task ended ("Done: X. Next in line: Y — Start?"), at most 160 characters: each title is
+ * cut so the sentence always fits.
+ *
+ * @param done - The title of the task that ended.
+ * @param next - The title of the task that is next in line.
+ */
+export function nextInLineTitle(done: string, next: string): string {
+  const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
+  return `Done: ${cut(done, 60)}. Next in line: ${cut(next, 60)} — Start?`;
+}
+
 /** The queue, its runs and the inbox branch. */
 export class TaskInbox {
   private saved: Saved = { tasks: [], today: { date: "", used: 0 } };
   private loaded = false;
   private active?: Active;
-  /** Tasks the user pressed Run on while another ran: each starts, in order, when the one before ends (one press each). */
-  private queue: Array<{ id: string; how: { here: boolean } | { approvedBy: string } }> = [];
+  /**
+   * Tasks the user pressed Run on while another ran, in order. Nothing in it starts by itself: when the running task
+   * ends, the first one gets the ask "Next in line — Start?" and starts only on the user's own Start. Kept in memory:
+   * a restart empties it (see {@link load}), the safe choice since nothing may start without a fresh answer.
+   */
+  private queue: string[] = [];
   private timer?: ReturnType<typeof setInterval>;
   /** Asks for one message to Antigravity from a chat's agent (kept in memory: a restart drops them, nothing runs). */
   private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
@@ -160,7 +176,12 @@ export class TaskInbox {
         t.status = "failed";
         t.note = "KesherAI restarted during the run.";
         delete t.pending;
+      } else if (t.note?.startsWith("Queued") && RUNNABLE.has(t.status)) {
+        // The line was in memory only: it is gone, the task waits for Run again.
+        t.note = "The queue was cleared when KesherAI restarted; press Run again.";
       }
+      // An open ask does not survive a restart either (its answer would start a task nobody is waiting on).
+      if (t.runAsk?.next) delete t.runAsk;
     }
   }
 
@@ -365,10 +386,25 @@ export class TaskInbox {
         else await this.enqueue(parsed.spec);
       }
     }
+    await this.closeReplaced();
     await this.followBoard();
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
+  }
+
+  /**
+   * Skips the tasks a newer task `replaces` (its frontmatter list), with a note naming the new one. Only a task that has
+   * not started (waiting, queued, deferred) is closed; a running or ended one is left alone. Safe to repeat.
+   */
+  private async closeReplaced(): Promise<void> {
+    for (const n of this.saved.tasks) {
+      for (const oldId of n.replaces ?? []) {
+        const old = this.saved.tasks.find((x) => x.id === oldId);
+        if (!old || old.id === n.id || !(old.status === "waiting" || old.status === "queued" || old.status === "deferred-quota")) continue;
+        await this.skip(old.id, `Replaced by ${n.id}.`).catch(() => undefined);
+      }
+    }
   }
 
   /** A task file that could not be read: shown as declined, with why. */
@@ -632,20 +668,38 @@ export class TaskInbox {
    *
    * @param t - The task.
    */
-  /** Starts the next task the user already pressed Run on, if any (a stopped or limited one is skipped with its reason). */
-  private async runNext(): Promise<void> {
+  /**
+   * After a task ended: asks "Done: X. Next in line: Y — Start?" for the first task in line (a stopped or limited one
+   * is dropped from the line with its reason). It never starts the task: only the user's Start does (answerRun).
+   *
+   * @param done - The title of the task that just ended.
+   */
+  private async askNext(done: string): Promise<void> {
     while (this.queue.length && !this.active) {
-      const next = this.queue.shift()!;
-      try {
-        await this.run(next.id, next.how);
-        return;
-      } catch (e) {
-        const t = this.saved.tasks.find((x) => x.id === next.id);
-        if (t) {
-          t.note = `Not started from the queue: ${(e as Error).message}`;
-          await this.save();
-        }
+      const id = this.queue.shift()!;
+      const t = this.saved.tasks.find((x) => x.id === id);
+      if (!t) continue;
+      const no = this.cannotRun(t);
+      if (no) {
+        t.note = `Not asked from the queue: ${no.msg}`;
+        await this.save();
+        continue;
       }
+      this.makeAsk(t, { done, more: this.queue.length });
+      await this.save();
+      return;
+    }
+  }
+
+  /**
+   * Empties the line: every queued task goes back to waiting for Run (the user's "Clear the queue").
+   *
+   * @param why - The note the tasks get.
+   */
+  private clearQueue(why = "The queue was cleared; press Run when you want it."): void {
+    for (const id of this.queue.splice(0)) {
+      const t = this.saved.tasks.find((x) => x.id === id);
+      if (t && t.note?.startsWith("Queued")) t.note = why;
     }
   }
 
@@ -664,15 +718,26 @@ export class TaskInbox {
 
   /** Drops asks whose 30 minutes are over. */
   private expireAsks(): void {
-    for (const t of this.saved.tasks) if (t.runAsk && t.runAsk.until <= this.now()) delete t.runAsk;
+    for (const t of this.saved.tasks) {
+      if (!t.runAsk || t.runAsk.until > this.now()) continue;
+      // An unanswered "Next in line" ask leaves nothing running on its own: the rest of the line is cleared too.
+      if (t.runAsk.next) this.clearQueue("The ask expired and the queue was cleared; press Run when you want it.");
+      delete t.runAsk;
+    }
   }
 
-  /** Makes a fresh ask for a task and tells the phone; false when the task cannot run now. */
-  private makeAsk(t: InboxTaskView): boolean {
+  /**
+   * Makes a fresh ask for a task and tells the phone; false when the task cannot run now.
+   *
+   * @param t - The task.
+   * @param next - For the ask after a finished task: its title and how many more are in line.
+   */
+  private makeAsk(t: InboxTaskView, next?: { done: string; more: number }): boolean {
     if (this.cannotRun(t)) return false;
     const now = this.now();
-    t.runAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + (this.d.approvalMs ?? 30 * 60_000), left: Math.max(0, this.s.dailyCap - this.today().used) };
-    this.d.notify("✦ Run this task in Antigravity?", `${t.id}: ${t.title} · ${t.runAsk.left} left today`);
+    t.runAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + (this.d.approvalMs ?? 30 * 60_000), left: Math.max(0, this.s.dailyCap - this.today().used), ...(next ? { next } : {}) };
+    if (next) this.d.notify("✦ Next in line — Start?", nextInLineTitle(next.done, t.title));
+    else this.d.notify("✦ Run this task in Antigravity?", `${t.id}: ${t.title} · ${t.runAsk.left} left today`);
     return true;
   }
 
@@ -761,16 +826,30 @@ export class TaskInbox {
    * expired or unknown ask starts nothing.
    *
    * @param requestId - The ask.
-   * @param decision - Run, or Not now.
+   * @param decision - `allow`: Run / Start. `deny`: Not now (for a "Next in line" ask the same as `skip`). `skip`: leave
+   *   this one and ask about the one after. `clear`: empty the queue (its tasks wait for Run again).
    * @param by - Who answered, as verified by the caller (the paired device's id or name, or "pc").
    * @returns The task, or undefined when no such ask is open.
    */
-  async answerRun(requestId: string, decision: "allow" | "deny", by: string): Promise<InboxTaskView | undefined> {
+  async answerRun(requestId: string, decision: "allow" | "deny" | "skip" | "clear", by: string): Promise<InboxTaskView | undefined> {
     await this.load();
     this.expireAsks();
     const t = this.saved.tasks.find((x) => x.runAsk?.requestId === requestId);
     if (!t || !by) return undefined;
+    const next = t.runAsk?.next;
     delete t.runAsk;
+    if (next && decision !== "allow") {
+      if (decision === "clear") {
+        t.note = "The queue was cleared; press Run when you want it.";
+        this.clearQueue();
+      } else {
+        t.note = "Skipped for now; press Run when you want it.";
+        // The one after it gets its own ask ("asks again").
+        await this.askNext(next.done);
+      }
+      await this.save();
+      return t;
+    }
     if (decision !== "allow") {
       t.note = "Not now.";
       await this.save();
@@ -797,14 +876,14 @@ export class TaskInbox {
       delete t.runAsk;
       return t;
     }
-    // Another task is running: this press is kept and the task starts by itself when that one ends (each task still
-    // runs only from the user's own press; nothing runs that was not pressed).
-    if (this.active && this.active.id !== id && !this.queue.some((q) => q.id === id)) {
+    // Another task is running: the task joins the line. When that one ends the PC asks "Next in line — Start?" and
+    // the task starts only on that Start (Antigravity runs only on the user's own press, one press per task).
+    if (this.active && this.active.id !== id && !this.queue.includes(id)) {
       const wait = this.cannotRun(t, true);
       if (wait) throw fail(wait.msg, wait.code);
-      this.queue.push({ id, how });
+      this.queue.push(id);
       delete t.runAsk;
-      t.note = `Queued: starts by itself after the task now running (${this.queue.length} in line).`;
+      t.note = `Queued: the PC asks "Start?" after the task now running (${this.queue.length} in line).`;
       await this.save();
       return t;
     }
@@ -860,10 +939,11 @@ export class TaskInbox {
     today.used++;
     await this.save();
     this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`);
-    void this.work(t, active, wt.path, wt.base, repo).finally(() => {
+    void this.work(t, active, wt.path, wt.base, repo).finally(async () => {
       this.active = undefined;
+      // The next task in line is only asked about, never started (the ask is made before `idle` resolves).
+      await this.askNext(t.title).catch(() => undefined);
       end();
-      void this.runNext();
     });
     return t;
   }
@@ -989,15 +1069,22 @@ export class TaskInbox {
     return true;
   }
 
-  /** Skips a waiting task (its board item is blocked with why). */
-  async skip(id: string): Promise<InboxTaskView> {
+  /**
+   * Skips a waiting task (its board item is blocked with why).
+   *
+   * @param id - The task.
+   * @param note - What the task shows (default: skipped by the user; a replaced task names its replacement).
+   */
+  async skip(id: string, note = "Skipped by you."): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
     if (isEnded(t.status) && t.status !== "deferred-quota" && t.status !== "failed") throw fail("It has already ended.", 409);
     t.status = "skipped";
     t.endedAt = this.now();
-    t.note = "Skipped by you.";
+    t.note = note;
+    this.queue = this.queue.filter((q) => q !== id);
+    delete t.runAsk;
     t.resultWritten = false;
     if (t.boardId) await this.d.board?.change("roee", [{ op: "block", id: t.boardId, result: "Skipped in the task inbox." }]).catch(() => undefined);
     await this.save();

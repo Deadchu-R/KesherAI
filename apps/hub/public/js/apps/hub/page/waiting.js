@@ -13,6 +13,7 @@
  */
 import { isGoing } from "../../../packages/shared/src/hub-agents.js";
 import { h, L, when } from "./dom.js";
+import { runWithUndo } from "./run-button.js";
 /**
  * Everything waiting for the owner on the PCs that are on: the PCs' approval snapshots, then waiting agent cards that
  * no snapshot lists (by request id), newest first.
@@ -50,12 +51,23 @@ function buttons(v, e) {
         const c = e.card;
         const w = c.state.waiting;
         const [yes, no] = w.reason === "run-press" ? [L("▶ הרץ", "▶ Run"), L("לא עכשיו", "Not now")] : w.reason === "ask" ? [L("כן", "Yes"), L("לא", "No")] : [L("✓ אשר פעם אחת", "✓ Approve once"), L("דחה", "Deny")];
-        return h("div", { class: "row wrap acts" }, btn(yes, "pri", () => v.device.answerAgent(c, "allow")), btn(no, "", () => v.device.answerAgent(c, "deny")), h("button", { type: "button", class: "btn sm-btn", onclick: () => v.openAgent(`${c.deviceId}/${c.runId}`) }, L("כרטיס ›", "Card ›")));
+        // Run counts 5 seconds first ("Starting in 5… Undo"); the answer is sent only after that.
+        const first = w.reason === "run-press" ? runWithUndo(v.device, w.requestId, yes, () => void v.device.answerAgent(c, "allow"), { off }) : btn(yes, "pri", () => v.device.answerAgent(c, "allow"));
+        const counting = w.reason === "run-press" && v.device.runCountdown(w.requestId) !== undefined;
+        return h("div", { class: "row wrap acts" }, first, counting ? null : btn(no, "", () => v.device.answerAgent(c, "deny")), h("button", { type: "button", class: "btn sm-btn", onclick: () => v.openAgent(`${c.deviceId}/${c.runId}`) }, L("כרטיס ›", "Card ›")));
     }
     const a = e.item;
     const pc = e.pc.id;
-    if (a.kind === "run")
-        return h("div", { class: "row wrap acts" }, btn(L("▶ הרץ", "▶ Run"), "pri", () => v.device.answerApproval(pc, a, "allow")), btn(L("לא עכשיו", "Not now"), "", () => v.device.answerApproval(pc, a, "deny")));
+    if (a.kind === "run") {
+        // Run / Start counts 5 seconds first ("Starting in 5… Undo"); the answer is sent only after that.
+        const go = runWithUndo(v.device, a.requestId, a.next ? L("▶ התחל", "▶ Start") : L("▶ הרץ", "▶ Run"), () => void v.device.answerApproval(pc, a, "allow"), { off });
+        if (v.device.runCountdown(a.requestId) !== undefined)
+            return h("div", { class: "row wrap acts" }, go);
+        // "Next in line": Start / Skip (the PC asks about the one after) / Clear the queue (its tasks wait for Run again).
+        if (a.next)
+            return h("div", { class: "row wrap acts" }, go, btn(L("דלג", "Skip"), "", () => v.device.answerApproval(pc, a, "deny")), btn(L("נקה את התור", "Clear the queue"), "", () => v.device.answerApproval(pc, a, "clear")));
+        return h("div", { class: "row wrap acts" }, go, btn(L("לא עכשיו", "Not now"), "", () => v.device.answerApproval(pc, a, "deny")));
+    }
     const label = FOR.find(([m]) => m === forMinutes) ?? FOR[1];
     return h("div", { class: "row wrap acts" }, btn(L("✓ אשר פעם אחת", "✓ Approve once"), "pri", () => v.device.answerApproval(pc, a, "allow")), a.forWhile
         ? h("span", { class: "row wfor" }, btn(L(`אשר ל${label[1]}`, `Allow for ${label[2].toLowerCase()}`), "", () => v.device.answerApproval(pc, a, "allow", forMinutes), L(`בלי לשאול שוב על ${a.tool} בצ׳אט הזה`, `No more asking for ${a.tool} in this chat`)), h("select", { class: "inp wsel", "aria-label": L("לכמה זמן לאשר", "Allow for how long"), onchange: (ev) => { forMinutes = Number(ev.target.value); v.render(); } }, FOR.map(([m, he, en]) => h("option", { value: m, selected: m === forMinutes }, L(he, en)))))
@@ -65,9 +77,9 @@ function buttons(v, e) {
 function entry(v, e) {
     const a = e.item;
     const c = e.card;
-    const what = a ? (a.kind === "run" ? a.title.replace(/^Run in Antigravity\? /, "") : a.title || a.tool) : c.state.title;
+    const what = a ? (a.kind === "run" ? (a.next ? a.title : a.title.replace(/^Run in Antigravity\? /, "")) : a.title || a.tool) : c.state.title;
     const icon = a ? (a.kind === "run" ? "✦" : a.who ? "🤖" : "💬") : c.state.waiting?.reason === "run-press" ? "✦" : "🤖";
-    const who = a ? (a.kind === "run" ? L("להריץ ב-Antigravity?", "Run in Antigravity?") : a.who ? L(`סוכן משנה: ${a.who}`, `Sub-agent: ${a.who}`) : L("הסוכן של הצ׳אט", "The chat's agent")) : L("סוכן", "Agent");
+    const who = a ? (a.kind === "run" ? (a.next ? L("הבא בתור: להתחיל?", "Next in line: start?") : L("להריץ ב-Antigravity?", "Run in Antigravity?")) : a.who ? L(`סוכן משנה: ${a.who}`, `Sub-agent: ${a.who}`) : L("הסוכן של הצ׳אט", "The chat's agent")) : L("סוכן", "Agent");
     const why = a ? a.reason : (c.state.waiting?.summary ?? "");
     const reqId = a ? a.requestId : c?.state.waiting?.requestId;
     const shown = reqId ? fromNotification(reqId) : false;

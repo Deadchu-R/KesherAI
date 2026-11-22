@@ -159,6 +159,253 @@
      "wait": ".tinbox-wl-item"
     }
    ]
+  },
+  {
+   "id": "InboxNextInLine",
+   "title": "תיבת משימות: אחרי שמשימה הסתיימה — \"הסתיים: X. הבא בתור: Y — להתחיל?\" עם התחל / דלג / נקה את התור",
+   "titleEn": "Task inbox: after a task ends — \"Done: X. Next in line: Y — Start?\" with Start / Skip / Clear the queue",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 800,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/task-inbox",
+     "json": {
+      "settings": {
+       "enabled": true,
+       "paused": false,
+       "repo": "D:/Projects/KesherAI",
+       "branch": "kesher-inbox",
+       "fetchMinutes": 10,
+       "dailyCap": 10,
+       "maxMinutes": 30,
+       "model": "",
+       "allowedPaths": [],
+       "forbiddenPaths": [],
+       "commands": [
+        "pnpm -s typecheck"
+       ],
+       "notWhileGame": true,
+       "notWhileEditor": false,
+       "gpuBusyPercent": 0
+      },
+      "today": {
+       "date": "2026-11-20",
+       "used": 2
+      },
+      "busy": {
+       "free": true,
+       "reasons": []
+      },
+      "runHere": true,
+      "project": "KesherAI",
+      "lastFetch": {
+       "$agoMs": "2m"
+      },
+      "tasks": [
+       {
+        "id": "t-0422",
+        "title": "להוסיף חיפוש להגדרות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "להוסיף חיפוש להגדרות",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0422",
+        "runAsk": {
+         "requestId": "ask1",
+         "at": {
+          "$agoMs": "1m"
+         },
+         "until": {
+          "$inMs": "29m"
+         },
+         "left": 7,
+         "next": {
+          "done": "לתקן את גלילת רשימת ההורדות",
+          "more": 1
+         }
+        }
+       },
+       {
+        "id": "t-0423",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לעדכן את תיעוד ההתקנה",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0423",
+        "note": "Queued: the PC asks \"Start?\" after the task now running (1 in line)."
+       },
+       {
+        "id": "t-0421",
+        "title": "לתקן את גלילת רשימת ההורדות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לתקן את גלילת רשימת ההורדות",
+        "status": "done",
+        "runBy": "antigravity",
+        "branch": "agy/t-0421"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".tinbox-ask"
+    }
+   ]
+  },
+  {
+   "id": "InboxRunUndo",
+   "title": "תיבת משימות: \"הפעל\" נספר 5 שניות (\"מתחיל בעוד 5… בטל\") ורק אחרי זה נשלח, ו\"הפעל הכל (3)\" לכל הממתינות",
+   "titleEn": "Task inbox: Run counts 5 seconds (\"Starting in 5… Undo\") before it is sent, and \"Run all (3)\" for all that wait",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 800,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/task-inbox",
+     "json": {
+      "settings": {
+       "enabled": true,
+       "paused": false,
+       "repo": "D:/Projects/KesherAI",
+       "branch": "kesher-inbox",
+       "fetchMinutes": 10,
+       "dailyCap": 10,
+       "maxMinutes": 30,
+       "model": "",
+       "allowedPaths": [],
+       "forbiddenPaths": [],
+       "commands": [
+        "pnpm -s typecheck"
+       ],
+       "notWhileGame": true,
+       "notWhileEditor": false,
+       "gpuBusyPercent": 0
+      },
+      "today": {
+       "date": "2026-11-20",
+       "used": 2
+      },
+      "busy": {
+       "free": true,
+       "reasons": []
+      },
+      "runHere": true,
+      "project": "KesherAI",
+      "lastFetch": {
+       "$agoMs": "2m"
+      },
+      "tasks": [
+       {
+        "id": "t-0430",
+        "title": "להוסיף חיפוש להגדרות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "להוסיף חיפוש להגדרות",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0430"
+       },
+       {
+        "id": "t-0431",
+        "title": "לתקן את גלילת רשימת ההורדות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לתקן את גלילת רשימת ההורדות",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0431"
+       },
+       {
+        "id": "t-0432",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לעדכן את תיעוד ההתקנה",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0432"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".tinbox-runall .tinbox-runbtn"
+    },
+    {
+     "click": ".tinbox-runall .tinbox-runbtn"
+    },
+    {
+     "wait": ".tinbox-runcount"
+    }
+   ]
   }
  ]
 }

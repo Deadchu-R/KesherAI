@@ -23,6 +23,7 @@ import { awayText } from "../../../packages/shared/src/device-status.js";
 import { deviceIcon, getLocale, h, L, when } from "./dom.js";
 import { SNAPSHOT_SOURCE } from "./drive-view.js";
 import { assignBox } from "./assign.js";
+import { runWithUndo } from "./run-button.js";
 const STATE = {
     queued: { dot: "off", tag: "t-off", he: "בתור", en: "Queued" },
     running: { dot: "on", tag: "t-run", he: "רץ", en: "Running" },
@@ -135,7 +136,8 @@ function actions(v, c, pc) {
     const w = c.state.state === "waiting" ? c.state.waiting : undefined;
     const answer = w
         ? w.reason === "run-press"
-            ? [btn(L("▶ הרץ", "▶ Run"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("לא עכשיו", "Not now"), "", () => v.device.answerAgent(c, "deny"))]
+            ? // Run counts 5 seconds first ("Starting in 5… Undo"); the answer is sent only after that.
+                [runWithUndo(v.device, w.requestId, L("▶ הרץ", "▶ Run"), () => void v.device.answerAgent(c, "allow"), { off }), ...(v.device.runCountdown(w.requestId) === undefined ? [btn(L("לא עכשיו", "Not now"), "", () => v.device.answerAgent(c, "deny"))] : [])]
             : w.reason === "ask"
                 ? [btn(L("כן", "Yes"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("לא", "No"), "", () => v.device.answerAgent(c, "deny"))]
                 : [btn(L("✓ אשר", "✓ Approve"), "pri", () => v.device.answerAgent(c, "allow")), btn(L("דחה", "Deny"), "", () => v.device.answerAgent(c, "deny"))]

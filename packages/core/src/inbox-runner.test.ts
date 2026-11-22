@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { agent } from "@agentclientprotocol/sdk";
 import { INBOX_GIT_MISSING } from "@kesher/shared";
 import { AcpAgent } from "./acp.js";
-import { TaskInbox, isQuotaError, quotaUntil, type RunCmd } from "./inbox-runner.js";
+import { TaskInbox, isQuotaError, nextInLineTitle, quotaUntil, type RunCmd } from "./inbox-runner.js";
 import { TaskBoard } from "./task-board.js";
 
 // The tester's own git identity, as a user's global config would have it: the inbox must never commit with it.
@@ -242,6 +242,129 @@ test("inbox run: a second Run on a task that is already starting is a quiet no-o
     assert.equal(b.status, "running");
     await settle(inbox, "c-20261121-02");
     assert.equal(seen.prompts, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** Three Antigravity tasks: A runs, B and C are pressed Run while A runs (they queue). */
+async function queuedThree() {
+  const ids = ["c-20261122-01", "c-20261122-02", "c-20261122-03"];
+  const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  await h.inbox.sync();
+  await h.inbox.run(ids[0]!, { here: true });
+  await h.inbox.run(ids[1]!, { here: true });
+  await h.inbox.run(ids[2]!, { here: true });
+  await h.inbox.idle();
+  return { ...h, ids, root, seen };
+}
+
+test("inbox queue: after a finish it stops and asks \"Next in line — Start?\"; nothing starts by itself", async () => {
+  const { inbox, notes, ids, root, seen } = await queuedThree();
+  try {
+    const [a, b, c] = await Promise.all(ids.map((id) => inbox.task(id)));
+    assert.equal(a!.status, "done");
+    assert.equal(seen.prompts, 1, "only the first task ran");
+    assert.equal(b!.status, "waiting");
+    assert.deepEqual([b!.runAsk?.next?.done, b!.runAsk?.next?.more], [a!.title, 1]);
+    assert.equal(c!.runAsk, undefined, "the third is not asked yet");
+    assert.ok(notes.some((n) => n.startsWith("✦ Next in line — Start?") && n.includes("Next in line:")));
+    assert.equal(inbox.openAsks().length, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: Start runs the asked task (and the next one is asked after it); the answer needs a verified sender", async () => {
+  const { inbox, ids, root, seen } = await queuedThree();
+  try {
+    const ask = (await inbox.task(ids[1]!)).runAsk!;
+    assert.equal(await inbox.answerRun(ask.requestId, "allow", ""), undefined, "no sender, nothing starts");
+    const started = await inbox.answerRun(ask.requestId, "allow", "hub:dphone");
+    assert.equal(started?.status, "running");
+    await inbox.idle();
+    assert.equal(seen.prompts, 2);
+    assert.equal((await inbox.task(ids[1]!)).status, "done");
+    const third = await inbox.task(ids[2]!);
+    assert.equal(third.status, "waiting");
+    assert.equal(third.runAsk?.next?.more, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: Skip leaves the task waiting and asks about the one after; Skip on the last asks nothing", async () => {
+  const { inbox, ids, root, seen } = await queuedThree();
+  try {
+    const first = (await inbox.task(ids[1]!)).runAsk!;
+    await inbox.answerRun(first.requestId, "deny", "pc"); // a phone's "No" on this ask is a Skip
+    const b = await inbox.task(ids[1]!);
+    assert.deepEqual([b.status, b.runAsk, /Skipped for now/.test(b.note ?? "")], ["waiting", undefined, true]);
+    const second = (await inbox.task(ids[2]!)).runAsk!;
+    assert.ok(second, "asks again for the one after");
+    await inbox.answerRun(second.requestId, "skip", "pc");
+    assert.equal((await inbox.task(ids[2]!)).runAsk, undefined);
+    assert.equal(inbox.openAsks().length, 0);
+    assert.equal(seen.prompts, 1, "nothing ran");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: Clear empties the line, its tasks go back to waiting for Run, and a Run press starts one", async () => {
+  const { inbox, ids, root, seen } = await queuedThree();
+  try {
+    const ask = (await inbox.task(ids[1]!)).runAsk!;
+    await inbox.answerRun(ask.requestId, "clear", "pc");
+    for (const id of [ids[1]!, ids[2]!]) {
+      const t = await inbox.task(id);
+      assert.deepEqual([t.status, t.runAsk, /queue was cleared/.test(t.note ?? "")], ["waiting", undefined, true]);
+    }
+    assert.equal(inbox.openAsks().length, 0);
+    assert.equal(seen.prompts, 1);
+    assert.equal((await inbox.run(ids[2]!, { here: true })).status, "running");
+    await inbox.idle();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: an ask nobody answers expires and clears the line (nothing starts later)", async () => {
+  const { inbox, ids, root } = await queuedThree();
+  try {
+    assert.ok((await inbox.task(ids[1]!)).runAsk);
+    await new Promise((r) => setTimeout(r, 350)); // approvalMs is 300 in these tests
+    assert.equal(inbox.openAsks().length, 0);
+    assert.match((await inbox.task(ids[2]!)).note ?? "", /queue was cleared/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: the ask's title fits 160 characters, however long the titles are", () => {
+  const t = nextInLineTitle("x".repeat(300), "y".repeat(300));
+  assert.ok(t.length <= 160);
+  assert.match(t, /^Done: x+….*Next in line: y+… — Start\?$/);
+  assert.equal(nextInLineTitle("A", "B"), "Done: A. Next in line: B — Start?");
+});
+
+test("inbox: a new task's replaces list skips the old ones that have not started, with a note", async () => {
+  const old = TASK("c-20261122-10");
+  const keep = TASK("c-20261122-11");
+  const fresh = `${TASK("c-20261122-12").replace("max_files: 5", "max_files: 5\nreplaces: [c-20261122-10, c-20261122-99, ../x]")}`;
+  const { root, repo } = await setup({ "c-20261122-10": old, "c-20261122-11": keep, "c-20261122-12": fresh });
+  const { inbox } = await inboxFor(repo, root, {}, { prompts: 0 });
+  try {
+    await inbox.sync();
+    const [o, k, f] = await Promise.all(["c-20261122-10", "c-20261122-11", "c-20261122-12"].map((id) => inbox.task(id)));
+    assert.deepEqual([o.status, o.note, o.runAsk], ["skipped", "Replaced by c-20261122-12.", undefined]);
+    assert.equal(k.status, "waiting");
+    assert.equal(f.status, "waiting");
+    assert.deepEqual(f.replaces, ["c-20261122-10", "c-20261122-99"], "only valid ids are kept");
+    assert.equal(inbox.openAsks().some((a) => a.title === o.title && a.ask.requestId === o.runAsk?.requestId), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
