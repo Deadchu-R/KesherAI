@@ -7,6 +7,7 @@
  */
 import { choosePath, cleanTailscaleDirect, directUrls, hubUsable, PATH_LABELS, TAILSCALE_HINT, type HubProbe, type TailscaleDirect } from "../../../packages/shared/src/direct-path.js";
 import type { HubPresence } from "../../../packages/shared/src/hub-protocol.js";
+import { RELAY_PATH_LABELS, type RelayPath } from "../../../packages/shared/src/relay-failover.js";
 import { h, L } from "./dom.js";
 
 const KEY = "kh-direct";
@@ -78,4 +79,17 @@ export function pathLine(probe: HubProbe | undefined, appOrigin: string | undefi
     }
   }
   return !hintNow ? null : h("div", { class: "off-banner", role: "status" }, h("span", null, L(TAILSCALE_HINT.he, TAILSCALE_HINT.en)));
+}
+
+/**
+ * The path line while a backup relay carries the messages (relay-failover.ts): "The hub is unavailable · via Ably".
+ * Shown instead of the Tailscale line, since tasks and answers still go through.
+ *
+ * @param path - The path in use.
+ * @returns The line, or null while the hub carries them.
+ */
+export function relayLine(path: RelayPath): HTMLElement | null {
+  if (path === "hub") return null;
+  const label = RELAY_PATH_LABELS[path];
+  return h("div", { class: "off-banner", role: "status" }, h("span", null, L(`ההאב לא זמין · ${label.he}`, `The hub is unavailable · ${label.en}`)));
 }

@@ -31,7 +31,19 @@ import {
   cleanRelayKeys,
   cleanSupabaseKey,
   cleanSupabaseUrl,
+  configuredRelays,
+  countUse,
+  DEFAULT_OPT_IN,
+  makeTransports,
+  pairChannel,
+  RelayRouter,
+  useThisMonth,
+  type BackupRelayKind,
+  type RelayHealth,
   type RelayKeys,
+  type RelayPath,
+  type RelaySocket,
+  type RelayTransport,
   type AwayNote,
   type AgentLabel,
   type AssignResult,
@@ -160,6 +172,10 @@ export interface HubClientDeps {
    * directly when the hub is down (direct-path.ts). Undefined without Tailscale.
    */
   direct?: () => TailscaleDirect | undefined;
+  /** Opens a backup relay's WebSocket (relay-transport.ts); by default the `ws` package. A fake in tests. */
+  openRelaySocket?: (url: string) => RelaySocket;
+  /** The clock for the relay failover (a fake in tests). */
+  now?: () => number;
 }
 
 /**
@@ -208,6 +224,13 @@ export interface HubStatus {
   nextRetryAt?: string;
   /** The backup relays (Settings › Kesher Cloud › Backup relays): which have keys (never the keys themselves). */
   relays: { ably: boolean; supabase: boolean; supabaseUrl?: string };
+  /**
+   * Where this PC's sealed messages go now (relay-failover.ts), each backup relay's health, and this month's messages
+   * per relay (counted here, for the 80% rule).
+   */
+  path: RelayPath;
+  relayHealth: Partial<Record<BackupRelayKind, RelayHealth>>;
+  relayUse: { month: string; ably: number; supabase: number };
 }
 
 /**
@@ -369,6 +392,17 @@ export class HubClient {
   private hubKey = "";
   private key?: Promise<{ privateKey: HubCryptoKey; publicKey: string }>;
   private readonly replay = new ReplayGuard();
+  /** The failover between the hub and the backup relays (relay-failover.ts). */
+  private readonly router: RelayRouter;
+  /** The backup relays' transports (one per configured relay, in failover order) and the keys they were made with. */
+  private transports: RelayTransport[] = [];
+  private transportsKey = "";
+  /** Each paired phone's channel on the backup relays, and back (a channel only carries its own pair's messages). */
+  private channelOf = new Map<string, string>();
+  private peerOf = new Map<string, string>();
+  private relaySyncing?: Promise<void>;
+  /** When the relay use was last saved (it is counted on every message, saved at most every few minutes). */
+  private useSavedAt = 0;
   /** The hash of the relay keys last sent to each phone (in memory: each phone gets them again after a restart). */
   private readonly relaysSent = new Map<string, string>();
   /** The last approvals snapshot sent (its request ids), and the online phones it went to. */
@@ -395,6 +429,7 @@ export class HubClient {
 
   /** @param deps - Config, board, notifications and the outside calls. */
   constructor(private readonly deps: HubClientDeps) {
+    this.router = new RelayRouter(deps.now ?? Date.now);
     this.fetch = deps.fetch ?? fetch;
   }
 
@@ -459,6 +494,9 @@ export class HubClient {
       ...(this.errorCode ? { errorCode: this.errorCode } : {}),
       ...(this.connectedAt ? { lastConnectedAt: new Date(this.connectedAt).toISOString() } : {}),
       ...(!this.connected && !this.stopped && this.retryAt ? { nextRetryAt: new Date(this.retryAt).toISOString() } : {}),
+      path: this.relayOrder()[0] ?? "hub",
+      relayHealth: Object.fromEntries(this.transports.map((t) => [t.kind, t.health()])),
+      relayUse: useThisMonth(this.s.relayUse, this.now()),
       relays: { ably: !!this.relaysCfg.ablyKey, supabase: !!(this.relaysCfg.supabaseUrl && this.relaysCfg.supabaseKey), ...(this.relaysCfg.supabaseUrl ? { supabaseUrl: this.relaysCfg.supabaseUrl } : {}) },
     };
   }
@@ -535,6 +573,7 @@ export class HubClient {
     await this.deps.persist();
     this.relaysSent.clear();
     void this.sendRelays(true).catch(() => undefined);
+    await this.syncRelays();
   }
 
   /** The backup relays' keys as the transports and the phones use them (only complete, well-formed ones). */
@@ -557,6 +596,121 @@ export class HubClient {
     const hash = createHash("sha256").update(JSON.stringify(keys)).digest("base64url").slice(0, 16);
     const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId && this.relaysSent.get(d.id) !== hash);
     for (const p of phones) if (await this.sendSealed(p.id, "relays", { type: "relays", keys, at: Date.now() }, HUB_LIMITS.approvalTtl)) this.relaysSent.set(p.id, hash);
+  }
+
+  // ---- backup relays (relay-transport.ts, relay-failover.ts) ----
+
+  private now(): number {
+    return (this.deps.now ?? Date.now)();
+  }
+
+  /** Whether sealed messages can go out now: the hub's live link, or a healthy backup relay. */
+  private get linked(): boolean {
+    return this.connected || this.transports.some((t) => t.health().healthy);
+  }
+
+  /**
+   * The devices to send to: the hub's presence while it is up; while it is down, the paired phones kept from it
+   * (their keys), counted as on (the backup relays do not know who is on).
+   */
+  private get devices(): HubPresence[] {
+    if (this.connected || this.presence.length) return this.presence;
+    return (this.s.peers ?? []).map((p) => ({ id: p.id, name: "", kind: p.kind === "pc" ? "pc" : "phone", publicKey: p.publicKey, online: true, busy: false, agents: [], optIn: DEFAULT_OPT_IN }) as HubPresence);
+  }
+
+  /** The paths to try for the next message, best first. */
+  private relayOrder(): RelayPath[] {
+    return this.router.order(this.transports.map((t) => ({ kind: t.kind, healthy: t.health().healthy })), this.s.relayUse);
+  }
+
+  /** Counts messages on a backup relay (for the 80% rule) and saves the count at most every 5 minutes. */
+  private countRelay(kind: BackupRelayKind, n: number): void {
+    this.s.relayUse = countUse(this.s.relayUse, kind, n, this.now());
+    if (this.now() - this.useSavedAt > 5 * 60_000) {
+      this.useSavedAt = this.now();
+      void this.deps.persist().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Brings the backup relays in line with the settings and the paired phones: makes (or closes) the transports when
+   * the keys change, keeps the phones' keys for a start while the hub is down, and listens on each pair's channel.
+   * Runs once at a time; a call while it runs runs it again after.
+   */
+  syncRelays(): Promise<void> {
+    const run = async () => {
+      const keys = this.relayKeys();
+      const on = !this.stopped && this.s.enabled && !!this.s.deviceId && configuredRelays(keys).length > 0;
+      const key = on ? createHash("sha256").update(JSON.stringify(keys)).digest("base64url") : "";
+      if (key !== this.transportsKey) {
+        for (const t of this.transports) t.close();
+        this.transports = [];
+        this.transportsKey = key;
+        if (on) {
+          const openSocket = this.deps.openRelaySocket ?? ((url: string) => new WebSocket(url, { handshakeTimeout: 15_000, maxPayload: 128 * 1024 }) as unknown as RelaySocket);
+          this.transports = makeTransports(keys, { openSocket, fetch: this.fetch, now: () => this.now() });
+          for (const t of this.transports) t.onEnvelope((env, channel) => void this.fromRelay(t.kind, env, channel).catch(() => undefined));
+        }
+      }
+      if (!on) return;
+      // The phones' keys, kept while the hub lists them (not secret), so a start while the hub is down still works.
+      if (this.presence.length) {
+        const peers = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId).slice(0, 20).map((d) => ({ id: d.id, kind: d.kind, publicKey: d.publicKey }));
+        if (JSON.stringify(peers) !== JSON.stringify(this.s.peers ?? [])) {
+          this.s.peers = peers;
+          await this.deps.persist();
+        }
+      }
+      const own = (await this.ownKey()).privateKey;
+      const channelOf = new Map<string, string>();
+      for (const p of this.devices.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId)) channelOf.set(p.id, this.channelOf.get(p.id) ?? (await pairChannel(own, p.publicKey)));
+      this.channelOf = channelOf;
+      this.peerOf = new Map([...channelOf].map(([id, ch]) => [ch, id]));
+      for (const t of this.transports) {
+        t.setChannels([...channelOf.values()]);
+        t.connect();
+      }
+    };
+    const next = (this.relaySyncing ?? Promise.resolve()).then(run, run);
+    this.relaySyncing = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * An envelope from a backup relay: only one addressed to this PC, from the phone the channel belongs to, is opened
+   * (and dropped by its id when the same one already came through another path).
+   */
+  private async fromRelay(kind: BackupRelayKind, env: SealedEnvelope, channel: string): Promise<void> {
+    if (env.to !== this.s.deviceId || this.peerOf.get(channel) !== env.from) return;
+    this.countRelay(kind, 1);
+    await this.onEnvelope(env, false);
+  }
+
+  /**
+   * Sends one sealed envelope on the best path now: the hub's live link, or a backup relay (the next one when a
+   * publish fails).
+   *
+   * @param env - The envelope.
+   * @returns The path it went on, or undefined when nothing took it.
+   */
+  private async route(env: SealedEnvelope): Promise<RelayPath | undefined> {
+    for (const path of this.relayOrder()) {
+      if (path === "hub") {
+        if (!this.socket) continue;
+        this.send({ t: "send", env });
+        return "hub";
+      }
+      const t = this.transports.find((x) => x.kind === path);
+      const channel = this.channelOf.get(env.to);
+      if (!t || !channel) continue;
+      // The ask note rides in the hub's Web Push only; the relays carry the envelope itself.
+      const { note: _note, waiting: _waiting, ...plain } = env;
+      if (await t.publish(channel, plain)) {
+        this.countRelay(path, 2);
+        return path;
+      }
+    }
+    return undefined;
   }
 
   /** Forgets the pairing, the token and this PC's key (the device should also be revoked on the hub page). */
@@ -707,6 +861,7 @@ export class HubClient {
     }
     this.stopped = false;
     void this.connect();
+    void this.syncRelays().catch(() => undefined);
   }
 
   /** Disconnects and stops reconnecting. */
@@ -727,7 +882,9 @@ export class HubClient {
     this.socket?.close();
     this.socket = undefined;
     this.connected = false;
+    this.router.hubClosed();
     this.retryAt = undefined;
+    void this.syncRelays().catch(() => undefined);
   }
 
   /** Reconnects later: 1 s doubling to 5 minutes, with jitter. */
@@ -771,6 +928,7 @@ export class HubClient {
       if (r.status === 401 || r.status === 403) return this.lost("The hub no longer knows this PC. Pair it again.");
       if (r.status === 503 && r.data.error === "hub-storage-limit") {
         this.relayDown();
+        this.router.hubFailed();
         this.fail("hub-limit", this.stepText("ticket", r));
         void this.fetchDiag(this.stepText("ticket", r));
         return this.laterAt(afterUtcMidnight(Date.now()));
@@ -789,6 +947,8 @@ export class HubClient {
         return this.later();
       }
       if (r.status !== 200 || typeof r.data.ticket !== "string") {
+        // Cloudflare's 1101 (the Worker threw): fail over to the backup relays at once.
+        if (/\b1101\b/.test(this.stepText("ticket", r))) this.router.hubFailed();
         this.fail("hub-error", this.stepText("ticket", r));
         void this.fetchDiag(this.stepText("ticket", r));
         return this.later();
@@ -829,6 +989,7 @@ export class HubClient {
         this.errorCode = undefined;
         this.connectedAt = this.heardAt = Date.now();
         this.relayFailed.clear();
+        this.router.hubOpen();
         this.send(this.helloFrame());
         clearInterval(this.beatTimer);
         this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
@@ -852,6 +1013,7 @@ export class HubClient {
       },
       message: (text) => {
         this.heardAt = Date.now();
+        this.router.hubHeard();
         void this.onMessage(text).catch(() => undefined);
       },
       error: (message) => {
@@ -870,6 +1032,7 @@ export class HubClient {
           void this.fetchDiag("socket closed before it opened");
         }
         this.connected = false;
+        this.router.hubClosed();
         clearInterval(this.beatTimer);
         clearInterval(this.diagTimer);
         clearInterval(this.pingTimer);
@@ -965,6 +1128,7 @@ export class HubClient {
         // Each new link sends the relay keys again to the phones that are on (in case one lost its storage).
         this.relaysSent.clear();
         void this.sendRelays().catch(() => undefined);
+        void this.syncRelays().catch(() => undefined);
         return;
       case "presence":
         this.presence = Array.isArray(f.presence) ? f.presence : [];
@@ -973,6 +1137,7 @@ export class HubClient {
         void this.sendApprovals().catch(() => undefined);
         void this.reportBoard().catch(() => undefined);
         void this.sendRelays().catch(() => undefined);
+        void this.syncRelays().catch(() => undefined);
         return;
       case "pause":
         this.paused = f.paused === true;
@@ -1029,7 +1194,7 @@ export class HubClient {
   /** The sender's public key (a paired device, or the hub itself). */
   private senderKey(from: string): string | undefined {
     if (from === "hub") return this.hubKey || undefined;
-    return this.presence.find((d) => d.id === from)?.publicKey;
+    return this.devices.find((d) => d.id === from)?.publicKey;
   }
 
   /** Seals and sends a message to a device. */
@@ -1043,13 +1208,20 @@ export class HubClient {
     // `approvals` only: the newest ask sealed to the same phone, for its notification with buttons (the hub copies
     // it into the push unread).
     if (note) env.note = await sealMessage({ from: this.s.deviceId, to, kind: "ask_note", ttl: HUB_LIMITS.approvalTtl }, { type: "ask_note", ask: note, waiting: waiting ?? 1 }, own, pub);
-    this.send({ t: "send", env });
-    return true;
+    return (await this.route(env)) !== undefined;
   }
 
-  private async onEnvelope(env: SealedEnvelope): Promise<void> {
+  /**
+   * One sealed envelope for this PC, from the hub or a backup relay.
+   *
+   * @param env - The envelope.
+   * @param fromHub - It came from the hub (which waits for an ack); a relay's needs none.
+   */
+  private async onEnvelope(env: SealedEnvelope, fromHub = true): Promise<void> {
     if (!env || typeof env.id !== "string") return;
-    const ack = () => this.send({ t: "ack", id: env.id });
+    const ack = () => {
+      if (fromHub) this.send({ t: "ack", id: env.id });
+    };
     const pub = this.senderKey(env.from);
     let body: SealedBody;
     try {
@@ -1074,7 +1246,7 @@ export class HubClient {
       case "approval_answer": {
         // The envelope opened with the sender's own key, so `from` is that paired device. Only the owner's phones (the
         // phone app and the hub page, both paired by a code the signed-in owner approved) answer approvals.
-        const kind = this.presence.find((d) => d.id === env.from)?.kind;
+        const kind = this.devices.find((d) => d.id === env.from)?.kind;
         if (kind === "phone") await this.deps.approvals?.answer(body.conversationId, body.requestId, body.decision, { id: env.from, kind }, body.forMinutes).catch(() => false);
         // The answered approval leaves the snapshot at once (not at the next check).
         void this.sendApprovals().catch(() => undefined);
@@ -1082,7 +1254,7 @@ export class HubClient {
       }
       case "command": {
         // Run / Cancel from the owner's paired phone or hub page only (the same check as an approval answer).
-        const kind = this.presence.find((d) => d.id === env.from)?.kind;
+        const kind = this.devices.find((d) => d.id === env.from)?.kind;
         const failed = (e: Error) => ({ ok: false, text: e.message || "It did not work." });
         const r: AssignResult =
           kind !== "phone"
@@ -1149,7 +1321,7 @@ export class HubClient {
 
   /** Sends back the result of hub tasks whose board item is now done or blocked (once each). */
   async reportResults(): Promise<void> {
-    if (!this.deps.board || !this.connected) return;
+    if (!this.deps.board || !this.linked) return;
     const reported = new Set(this.s.reported);
     let changed = false;
     for (const t of (await this.deps.board.read()).tasks) {
@@ -1210,8 +1382,8 @@ export class HubClient {
   private inboxAgain = false;
 
   private async reportInboxOnce(): Promise<void> {
-    if (!this.deps.inboxTasks || !this.connected || !this.s.deviceId) return;
-    const phones = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
+    if (!this.deps.inboxTasks || !this.linked || !this.s.deviceId) return;
+    const phones = this.devices.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
     if (!phones.length) return;
     const now = Date.now();
     const tasks = (await this.deps.inboxTasks()).slice(-INBOX_REPORTED);
@@ -1250,7 +1422,7 @@ export class HubClient {
    * Called by the board's change listener: the board is never polled.
    */
   scheduleBoard(): void {
-    if (this.boardTimer || !this.connected) return;
+    if (this.boardTimer || !this.linked) return;
     this.boardTimer = setTimeout(() => {
       this.boardTimer = undefined;
       void this.reportBoard().catch(() => undefined);
@@ -1283,8 +1455,8 @@ export class HubClient {
   }
 
   private async reportBoardOnce(): Promise<void> {
-    if (!this.deps.board || !this.connected || !this.s.deviceId || this.boardOff) return;
-    const phones = this.presence.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
+    if (!this.deps.board || !this.linked || !this.s.deviceId || this.boardOff) return;
+    const phones = this.devices.filter((d) => d.kind === "phone" && d.online && d.id !== this.s.deviceId);
     if (!phones.length) {
       this.boardTo.clear();
       return;
@@ -1310,8 +1482,8 @@ export class HubClient {
    * to a phone whose page is closed.
    */
   async sendApprovals(): Promise<void> {
-    if (!this.deps.approvals || !this.connected || !this.s.deviceId) return;
-    const allPhones = this.presence.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
+    if (!this.deps.approvals || !this.linked || !this.s.deviceId) return;
+    const allPhones = this.devices.filter((d) => d.kind === "phone" && d.id !== this.s.deviceId);
     const phones = allPhones.filter((d) => d.online);
     const pending = this.deps.approvals.pending();
     const items = fitApprovals(pending.map(toHubApproval));

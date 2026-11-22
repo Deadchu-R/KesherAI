@@ -1,7 +1,7 @@
 # Headers for the hub page's static files (Workers static assets). The CSP must equal SECURITY_HEADERS in src/http.ts
 # (a test checks it).
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/ https://www.googleapis.com; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/ https://www.googleapis.com https://rest.ably.io wss://realtime.ably.io https://*.supabase.co wss://*.supabase.co; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: no-referrer

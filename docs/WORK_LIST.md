@@ -41,7 +41,14 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   Phoenix WS + REST broadcast; plain fetch/WebSocket, no new dependency), pair channel = HKDF of the pair's ECDH secret;
   Settings › Kesher Cloud › Backup relays (keys encrypted on the PC, `PUT /api/hub/relays`); the phones get them in a
   sealed `relays` message (PC → phone only).
-- [ ] -07 failover PC + phone · [ ] -08 hub page loads when Cloudflare is down.
+- [x] a-20261122-07 failover (packages/shared/src/relay-failover.ts): hub → Ably → Supabase on the PC (hub-client.ts)
+  and the hub page (device.ts); fails over after 20 s without a socket, 503 hub-storage-limit, 1101 or 60 s without a
+  pong; back to the hub after 2 minutes of answers; listens on all relays at once, copies dropped by envelope id; use
+  counted locally (80% of the free plan → last fallback); the phone shows "ההאב לא זמין · דרך Ably"; Settings shows
+  the path, each relay's health and its % of the free plan. CSP allows rest.ably.io / realtime.ably.io / *.supabase.co.
+- Left: live agent activity (`agents` frames) and Drive `sync` pings stay hub-only; a relay does not queue for an
+  offline device (the hub does); a hub page opened while the hub is down has no presence, so it cannot send until
+  -08. [ ] -08 hub page loads when Cloudflare is down.
 - [x] Roee: Ably app and Supabase project "kesher-relay" (EU) opened.
 - [ ] Roee: paste the Ably API key and the Supabase URL + anon key in Settings › Kesher Cloud › Backup relays (after
   the next build). Supabase: Realtime › Settings must allow public channels (the default).

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateHubKeys, openEnvelope, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
+import { generateHubKeys, openEnvelope, pairChannel, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
 import type { InboxTaskView } from "@kesher/shared";
 import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubClientDeps, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
@@ -705,4 +705,96 @@ test("backup relays: keys are checked, never in the status, and go sealed to the
   for (let i = 0; i < 50 && sentRelays().length < 2; i++) await wait(10);
   assert.equal(r.client.status().relays.ably, false);
   assert.equal(sentRelays().length, 2, "a change goes again");
+});
+
+test("three relays: the hub first; a silent hub fails over to Ably on the pair's channel; copies are dropped by id; back to the hub after 2 minutes", async (t) => {
+  let now = Date.UTC(2026, 10, 22, 12);
+  const published: Array<{ url: string; body: { name: string; data: string } }> = [];
+  let polls = 0;
+  const fetchAll = (async (url: string, init: RequestInit) => {
+    const u = new URL(url);
+    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    if (u.host === "rest.ably.io") {
+      published.push({ url, body: JSON.parse(String(init.body)) as { name: string; data: string } });
+      return new Response(null, { status: 201 });
+    }
+    if (u.pathname === "/api/pair/start") return reply({ code: "ABCD-EFGH", pollSecret: "poll", expiresIn: 300 });
+    if (u.pathname === "/api/pair/poll") return reply(++polls < 2 ? { status: "pending" } : { status: "paired", deviceId: "dpc", token: "kh_secret_token", hubKey: "" });
+    if (u.pathname === "/api/ticket") return reply({ ticket: "tick1", rotateDue: false });
+    return reply({ error: "no" }, 404);
+  }) as unknown as typeof fetch;
+  const relaySockets: Array<{ url: string; sent: unknown[]; onmessage: ((ev: { data: unknown }) => void) | null }> = [];
+  const r = await rig({
+    fetch: fetchAll,
+    now: () => now,
+    openRelaySocket: (url) => {
+      const s = { url, sent: [] as unknown[], readyState: 0, onopen: null as ((ev: unknown) => void) | null, onmessage: null as ((ev: { data: unknown }) => void) | null, onclose: null, onerror: null, send: (d: string) => void s.sent.push(JSON.parse(d)), close: () => undefined };
+      relaySockets.push(s);
+      queueMicrotask(() => {
+        s.readyState = 1;
+        s.onopen?.({});
+        s.onmessage?.({ data: JSON.stringify({ action: 4, connectionDetails: { maxIdleInterval: 15000 } }) });
+      });
+      return s;
+    },
+  });
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  await r.client.pair();
+  for (let i = 0; i < 100 && !r.client.status().connected; i++) await wait(50);
+  const phone = await generateHubKeys(false);
+  const pcPub = await (await import("@kesher/shared")).importPrivateJwk(r.s.key!).then((k) => k.publicKey);
+  const presence = [{ id: "dphone", name: "Phone", kind: "phone", publicKey: phone.publicKey, online: true, busy: false, agents: [], optIn: {} }];
+  await r.client.onMessage(JSON.stringify({ t: "welcome", deviceId: "dpc", hubKey: "", paused: false, rotateDue: false, presence }));
+  await r.client.setRelays({ ablyKey: "appId1.keyId1:abcdefghijklmnop" });
+  await wait(20);
+  const channel = await pairChannel(phone.privateKey, pcPub);
+  assert.deepEqual(relaySockets[0]!.sent, [{ action: 10, channel }], "listens on the pair's channel");
+  assert.deepEqual(r.s.peers, [{ id: "dphone", kind: "phone", publicKey: phone.publicKey }], "the phone's key is kept for a start while the hub is down");
+  assert.equal(r.client.status().path, "hub");
+
+  const boards = () => r.sent.filter((f) => f.t === "send" && (f.env as SealedEnvelope).kind === "board").length;
+  const before = boards();
+  await r.board.change("roee", [{ op: "add", title: "One" }]);
+  await r.client.reportBoard();
+  assert.equal(boards(), before + 1, "through the hub while it answers");
+  assert.equal(published.length, 0);
+
+  // The hub's socket stays open but hears nothing for 60 s: the next message goes through Ably.
+  now += 61_000;
+  assert.equal(r.client.status().path, "ably");
+  await r.board.change("roee", [{ op: "add", title: "Two" }]);
+  await r.client.reportBoard();
+  assert.equal(boards(), before + 1);
+  assert.equal(published.length, 1);
+  assert.equal(published[0]!.url, `https://rest.ably.io/channels/${channel}/messages`);
+  const env = JSON.parse(published[0]!.body.data) as SealedEnvelope;
+  const body = (await openEnvelope(env, phone.privateKey, pcPub)) as Extract<SealedBody, { type: "board" }>;
+  assert.deepEqual(body.items.map((i) => i.title), ["One", "Two"]);
+  assert.equal(r.client.status().relayUse.ably, 2, "a publish counts two messages");
+
+  // A command from the phone through Ably and the same one through the hub: applied once.
+  const applied: string[] = [];
+  (r.client as unknown as { deps: { boardCommand: unknown } }).deps.boardCommand = async (id: string) => (applied.push(id), { ok: true, text: "ok" });
+  const cmd = await sealMessage({ from: "dphone", to: "dpc", kind: "command" }, { type: "command", commandId: "c1", action: "board", taskId: "t1", board: { op: "raise" } }, phone.privateKey, pcPub);
+  relaySockets[0]!.onmessage?.({ data: JSON.stringify({ action: 15, channel, messages: [{ name: "env", data: JSON.stringify(cmd) }] }) });
+  await wait(30);
+  await r.client.onMessage(JSON.stringify({ t: "deliver", env: cmd }));
+  assert.deepEqual(applied, ["t1"]);
+  // One from another channel (not this pair's) is ignored.
+  relaySockets[0]!.onmessage?.({ data: JSON.stringify({ action: 15, channel: "kesher-00", messages: [{ name: "env", data: JSON.stringify({ ...cmd, id: "other1" }) }] }) });
+  await wait(30);
+  assert.deepEqual(applied, ["t1"]);
+
+  // The hub answers again: still Ably until it has answered for 2 minutes in a row (from its first answer).
+  for (let i = 0; i < 4; i++) {
+    now += 30_000;
+    r.events().message('{"t":"pong"}');
+  }
+  assert.equal(r.client.status().path, "ably");
+  now += 30_000;
+  r.events().message('{"t":"pong"}');
+  assert.equal(r.client.status().path, "hub");
 });

@@ -21,7 +21,7 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { RUN_ALL_KEY } from "../../../packages/shared/src/run-undo.js";
 import { runAllButton, runWithUndo } from "./run-button.js";
-import { pathLine } from "./direct.js";
+import { pathLine, relayLine } from "./direct.js";
 import type { HubProbe } from "../../../packages/shared/src/direct-path.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
@@ -1222,7 +1222,7 @@ function render(): void {
   const showSignIn = !app.signedIn && !device.paired;
   const body: Child = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
   root.replaceChildren(
-    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), pathLine(hubProbe, app.appOrigin), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
+    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), (device.hasRelays && device.relayPath !== "hub" ? relayLine(device.relayPath) : pathLine(hubProbe, app.appOrigin)), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
   );
   root.classList.toggle("in-app", !!app.appOrigin);
   if (scroller) scroller.scrollTop = y;

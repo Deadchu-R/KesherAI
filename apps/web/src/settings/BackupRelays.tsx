@@ -12,6 +12,16 @@ export interface RelaysStatus {
   supabaseUrl?: string;
 }
 
+/** Where the sealed messages go now, each relay's health and this month's use (`HubStatus`). */
+export interface RelaysLive {
+  path?: "hub" | "ably" | "supabase";
+  relayHealth?: Partial<Record<"ably" | "supabase", { state: string; healthy: boolean; error?: string }>>;
+  relayUse?: { month: string; ably: number; supabase: number };
+}
+
+/** The free plans' monthly messages (as in @kesher/shared relay-failover.ts). */
+const ALLOWANCE = { ably: 6_000_000, supabase: 2_000_000 } as const;
+
 /**
  * Settings › Kesher Cloud › Backup relays: the Ably API key and the Supabase project URL + anon key, so Ably and
  * Supabase Realtime carry the sealed messages when the Kesher hub is down or at its limit. The keys go to this PC once
@@ -19,9 +29,10 @@ export interface RelaysStatus {
  * paired phones get them sealed through the hub. Works the same from the phone (remote).
  *
  * @param props.relays - Which relays have keys.
+ * @param props.live - The path in use, health and use.
  * @param props.onSaved - Called after a save (reloads the status).
  */
-export function BackupRelays({ relays, onSaved }: { relays: RelaysStatus; onSaved: () => void }) {
+export function BackupRelays({ relays, live, onSaved }: { relays: RelaysStatus; live: RelaysLive; onSaved: () => void }) {
   const [ablyKey, setAblyKey] = useState("");
   const [sbUrl, setSbUrl] = useState("");
   const [sbKey, setSbKey] = useState("");
@@ -50,9 +61,32 @@ export function BackupRelays({ relays, onSaved }: { relays: RelaysStatus; onSave
       </span>
     );
 
+  const pathName = { hub: L("המרכז", "the hub"), ably: "Ably", supabase: "Supabase" };
+  const relayRow = (kind: "ably" | "supabase", name: string) => {
+    if (!relays[kind]) return null;
+    const h = live.relayHealth?.[kind];
+    const pct = live.relayUse ? Math.min(100, Math.round((live.relayUse[kind] / ALLOWANCE[kind]) * 1000) / 10) : 0;
+    return (
+      <li key={kind} className="row wrap small">
+        <span className={`dot ${h?.healthy ? "on" : "off"}`} aria-hidden="true" /> {name}
+        <span className="muted">· {h?.healthy ? L("מוכן", "Ready") : h?.state === "connecting" ? L("מתחבר…", "Connecting…") : h ? L("לא זמין", "Unavailable") : L("כבוי", "Off")}</span>
+        <span className={pct >= 80 ? "bad" : "muted"}>· {L(`${pct}% מהחינם החודש`, `${pct}% of the free plan this month`)}</span>
+      </li>
+    );
+  };
+
   return (
     <div className="stack backup-relays">
       <h3>{L("ממסרים לגיבוי", "Backup relays")}</h3>
+      {(relays.ably || relays.supabase) && live.path && (
+        <div className="stack">
+          <span className="small">{L(`ההודעות עוברות עכשיו דרך ${pathName[live.path]}`, `Messages go through ${pathName[live.path]} now`)}</span>
+          <ul className="device-list">
+            {relayRow("ably", "Ably")}
+            {relayRow("supabase", "Supabase")}
+          </ul>
+        </div>
+      )}
       <small className="muted">{L("כשהמרכז נופל או מגיע למגבלה, ההודעות הנעולות עוברות דרך Ably ואז Supabase (חינם, בלי כרטיס). הם רואים רק טקסט מוצפן. המפתחות נשמרים מוצפנים במחשב הזה, ולא נשלחים למרכז.", "When the hub is down or at its limit, the sealed messages go through Ably, then Supabase (free, no card). They see only ciphertext. The keys are saved encrypted on this PC and never sent to the hub.")}</small>
 
       <label className="stack">

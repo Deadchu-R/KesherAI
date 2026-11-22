@@ -15,6 +15,8 @@ import { sameLabel } from "../../../packages/shared/src/agent-label.js";
 import { inboxMetaOf } from "../../../packages/shared/src/hub-work.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import { rememberDirect } from "./direct.js";
+import { makeTransports, pairChannel } from "../../../packages/shared/src/relay-transport.js";
+import { countUse, RELAY_PATH_LABELS, RelayRouter } from "../../../packages/shared/src/relay-failover.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
     waiting: { he: "ממתין", en: "Waiting" },
@@ -67,7 +69,19 @@ export class HubDevice {
     listeners = new Set();
     /** The devices as the hub shows them (PCs that appear, and phones). */
     presence = [];
-    connected = false;
+    /** The hub's live link is open (see {@link connected} for "can send now"). */
+    hubConnected = false;
+    /** The failover between the hub and the backup relays (relay-failover.ts), and the relays' transports. */
+    router = new RelayRouter();
+    transports = [];
+    transportsKey = "";
+    /** Each PC's channel on the backup relays, and back (a channel only carries its own pair's messages). */
+    channelOf = new Map();
+    pcOf = new Map();
+    /** The paired PCs' keys kept from presence (kv `pcKeys`), for a page opened while the hub is down. */
+    keptPcKeys = {};
+    relayTimer;
+    lastPath = "hub";
     paused = false;
     tasks = [];
     pending;
@@ -115,8 +129,11 @@ export class HubDevice {
         catch {
             // IndexedDB blocked (some private windows): the page still works for signing in and managing.
         }
-        if (this.ident)
+        if (this.ident) {
             this.connect();
+            this.keptPcKeys = (await get("pcKeys").catch(() => undefined)) ?? {};
+            void this.syncRelays();
+        }
     }
     /** Whether this browser is paired with the hub. */
     get paired() {
@@ -216,7 +233,7 @@ export class HubDevice {
             return;
         for (const pc of this.onlinePcs()) {
             const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId: randomB64url(12), action: "inbox-asknext", taskId: executor, on }, id.privateKey, pc.publicKey);
-            this.sendFrame({ t: "send", env });
+            await this.sendEnv(env);
         }
     }
     /**
@@ -309,6 +326,124 @@ export class HubDevice {
         this.pcKeysText = "";
         this.changed();
     }
+    /** Whether this browser can send now: the hub's live link, or a healthy backup relay. */
+    get connected() {
+        return this.hubConnected || this.transports.some((t) => t.health().healthy);
+    }
+    /** Where this browser's sealed messages go now: the hub, Ably or Supabase (relay-failover.ts). */
+    get relayPath() {
+        return this.relayOrder()[0] ?? "hub";
+    }
+    /** Whether any backup relay is set up on this browser (its keys came sealed from the PC). */
+    get hasRelays() {
+        return this.transports.length > 0;
+    }
+    // ---- backup relays (relay-transport.ts, relay-failover.ts) ----
+    /** A paired PC's public key: from presence, or kept from it (a page opened while the hub is down). */
+    pcKey(id) {
+        return this.presence.find((d) => d.id === id)?.publicKey ?? this.keptPcKeys[id]?.publicKey;
+    }
+    /** This month's messages per backup relay (in this browser's storage). */
+    relayUse() {
+        try {
+            return JSON.parse(localStorage.getItem("kh-relay-use") || "null");
+        }
+        catch {
+            return undefined;
+        }
+    }
+    countRelay(kind, n) {
+        try {
+            localStorage.setItem("kh-relay-use", JSON.stringify(countUse(this.relayUse(), kind, n, Date.now())));
+        }
+        catch {
+            /* storage off: not counted */
+        }
+    }
+    relayOrder() {
+        return this.router.order(this.transports.map((t) => ({ kind: t.kind, healthy: t.health().healthy })), this.relayUse());
+    }
+    /**
+     * Brings the backup relays in line with the keys the PC sent and the paired PCs: makes (or closes) the transports
+     * when the keys change, and listens on each PC's channel. While on, a 5-second check re-renders when the path
+     * changes and sends the outbox once a relay can carry it.
+     */
+    async syncRelays() {
+        const id = this.ident;
+        const stored = id ? await get("relays").catch(() => undefined) : undefined;
+        const keys = stored?.keys ?? {};
+        const key = id && (keys.ably || keys.supabase) ? JSON.stringify(keys) : "";
+        if (key !== this.transportsKey) {
+            for (const t of this.transports)
+                t.close();
+            this.transports = [];
+            this.transportsKey = key;
+            window.clearInterval(this.relayTimer);
+            if (key) {
+                this.transports = makeTransports(keys, { openSocket: (url) => new WebSocket(url), fetch: (u, i) => fetch(u, i) });
+                for (const t of this.transports)
+                    t.onEnvelope((env, channel) => void this.fromRelay(t.kind, env, channel));
+                this.relayTimer = window.setInterval(() => {
+                    const path = this.relayPath;
+                    if (path === this.lastPath)
+                        return;
+                    this.lastPath = path;
+                    if (path !== "hub")
+                        void this.flushOutbox();
+                    this.changed();
+                }, 5000);
+            }
+        }
+        if (!id || !key)
+            return;
+        const pcs = new Map(Object.entries(this.keptPcKeys).map(([pc, k]) => [pc, k.publicKey]));
+        for (const d of this.presence)
+            if (d.kind === "pc")
+                pcs.set(d.id, d.publicKey);
+        const channelOf = new Map();
+        for (const [pc, pub] of pcs)
+            channelOf.set(pc, this.channelOf.get(pc) ?? (await pairChannel(id.privateKey, pub).catch(() => "")));
+        for (const [pc, ch] of channelOf)
+            if (!ch)
+                channelOf.delete(pc);
+        this.channelOf = channelOf;
+        this.pcOf = new Map([...channelOf].map(([pc, ch]) => [ch, pc]));
+        for (const t of this.transports) {
+            t.setChannels([...channelOf.values()]);
+            t.connect();
+        }
+    }
+    /** An envelope from a backup relay: only one for this browser, from the PC its channel belongs to. */
+    async fromRelay(kind, env, channel) {
+        if (env.to !== this.ident?.deviceId || this.pcOf.get(channel) !== env.from)
+            return;
+        this.countRelay(kind, 1);
+        await this.onDeliver(env, false);
+        this.changed();
+    }
+    /**
+     * Sends one sealed envelope on the best path now: the hub's live link, or a backup relay (the next one when a
+     * publish fails).
+     *
+     * @param env - The envelope.
+     * @returns The path it went on, or undefined when nothing took it.
+     */
+    async sendEnv(env) {
+        for (const path of this.relayOrder()) {
+            if (path === "hub") {
+                if (this.sendFrame({ t: "send", env }))
+                    return "hub";
+                continue;
+            }
+            const t = this.transports.find((x) => x.kind === path);
+            const channel = this.channelOf.get(env.to);
+            if (t && channel && (await t.publish(channel, env))) {
+                this.countRelay(path, 2);
+                return path;
+            }
+        }
+        return undefined;
+    }
     // ---- the socket ----
     stop() {
         clearTimeout(this.retryTimer);
@@ -316,7 +451,8 @@ export class HubDevice {
         this.syncPings.cancel();
         this.ws?.close();
         this.ws = undefined;
-        this.connected = false;
+        this.hubConnected = false;
+        this.router.hubClosed();
     }
     /** Connects (a one-use ticket, then the socket); reconnects with backoff. */
     connect() {
@@ -331,7 +467,10 @@ export class HubDevice {
                 return void this.forget();
             }
             if (!t || t.status !== 200 || typeof t.data.ticket !== "string") {
-                this.paused = t?.status === 503;
+                // The daily storage limit, or a Cloudflare 1101 (the Worker threw, a 500): the backup relays take over now.
+                if ((t?.status === 503 && t.data.error === "hub-storage-limit") || t?.status === 500)
+                    this.router.hubFailed();
+                this.paused = t?.status === 503 && t.data.error !== "hub-storage-limit";
                 return this.later();
             }
             if (t.data.rotateDue === true) {
@@ -345,15 +484,20 @@ export class HubDevice {
             this.ws = ws;
             ws.onopen = () => {
                 this.retry = 0;
+                this.router.hubOpen();
                 ws.send(JSON.stringify({ t: "hello", version: "hub-page", platform: "web", busy: false, optIn: DEFAULT_OPT_IN, agents: [] }));
                 // Pings are answered by the hub without waking it (free while idle).
                 this.pingTimer = window.setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('{"t":"ping"}'), 30_000);
             };
-            ws.onmessage = (e) => void this.onFrame(String(e.data));
+            ws.onmessage = (e) => {
+                this.router.hubHeard();
+                void this.onFrame(String(e.data));
+            };
             ws.onclose = () => {
                 clearInterval(this.pingTimer);
                 this.ws = undefined;
-                this.connected = false;
+                this.hubConnected = false;
+                this.router.hubClosed();
                 this.changed();
                 this.later();
             };
@@ -381,11 +525,12 @@ export class HubDevice {
         }
         switch (f.t) {
             case "welcome":
-                this.connected = true;
+                this.hubConnected = true;
                 this.paused = f.paused;
                 this.presence = f.presence;
                 void this.keepPcKeys();
                 rememberDirect(f.presence);
+                void this.syncRelays();
                 if (this.ident && f.hubKey && f.hubKey !== this.ident.hubKey) {
                     this.ident.hubKey = f.hubKey;
                     await put("device", this.ident).catch(() => undefined);
@@ -397,6 +542,7 @@ export class HubDevice {
                 this.presence = f.presence;
                 void this.keepPcKeys();
                 rememberDirect(f.presence);
+                void this.syncRelays();
                 return this.changed();
             case "pause":
                 this.paused = f.paused;
@@ -465,7 +611,7 @@ export class HubDevice {
     /** One sealed activity batch (live or caught up): opened with its PC's key and applied to its card. */
     async onAgentEvent(env, live) {
         const id = this.ident;
-        const senderKey = this.presence.find((d) => d.id === env.from)?.publicKey;
+        const senderKey = this.pcKey(env.from);
         if (!id || !senderKey)
             return;
         let body;
@@ -528,7 +674,7 @@ export class HubDevice {
         const commandId = randomB64url(12);
         const clean = { ...(label.name?.trim() ? { name: label.name.trim() } : {}), ...(label.note?.trim() ? { note: label.note.trim() } : {}) };
         const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "agent-label", taskId: c.runId, label: clean }, id.privateKey, pc.publicKey);
-        if (!this.sendFrame({ t: "send", env }))
+        if (!(await this.sendEnv(env)))
             return false;
         this.agentLabels.set(`${c.deviceId}/${c.runId}`, { commandId, label: clean });
         this.changed();
@@ -557,7 +703,7 @@ export class HubDevice {
         if (!id || !pc?.online || !this.connected)
             return false;
         const env = await sealMessage({ from: id.deviceId, to: pc.id, kind }, body, id.privateKey, pc.publicKey);
-        if (!this.sendFrame({ t: "send", env }))
+        if (!(await this.sendEnv(env)))
             return false;
         this.agentActions.set(`${c.deviceId}/${c.runId}`, action);
         this.changed();
@@ -572,12 +718,14 @@ export class HubDevice {
      * @param at - When the PC sent them (ms).
      */
     async onRelayKeys(from, keys, at) {
-        if (this.presence.find((d) => d.id === from)?.kind !== "pc")
+        const sender = this.presence.find((d) => d.id === from);
+        if (sender ? sender.kind !== "pc" : !this.keptPcKeys[from])
             return;
         const old = await get("relays").catch(() => undefined);
         if (old && old.at > at)
             return;
         await put("relays", { from, keys, at }).catch(() => undefined);
+        await this.syncRelays();
         this.changed();
     }
     /**
@@ -590,16 +738,17 @@ export class HubDevice {
         if (text === this.pcKeysText)
             return;
         this.pcKeysText = text;
+        this.keptPcKeys = keys;
         await put("pcKeys", keys).catch(() => undefined);
     }
     /** A sealed message for this browser: a PC's progress or result, or the hub's "Claude cloud started". */
-    async onDeliver(env) {
+    async onDeliver(env, fromHub = true) {
         const id = this.ident;
         if (!id)
             return;
         if (env.kind === "agent_event")
             return this.onAgentEvent(env, true);
-        const senderKey = env.from === "hub" ? id.hubKey : this.presence.find((d) => d.id === env.from)?.publicKey;
+        const senderKey = env.from === "hub" ? id.hubKey : this.pcKey(env.from);
         if (!senderKey)
             return; // A sender not in presence (yet): it comes again on the next connect.
         let body;
@@ -607,9 +756,11 @@ export class HubDevice {
             body = await openEnvelope(env, id.privateKey, senderKey);
         }
         catch {
-            return void this.sendFrame({ t: "ack", id: env.id }); // Tampered or not for us: drop it.
+            // Tampered or not for us: dropped (acked when the hub sent it, so it does not come again).
+            return void (fromHub && this.sendFrame({ t: "ack", id: env.id }));
         }
-        this.sendFrame({ t: "ack", id: env.id });
+        if (fromHub)
+            this.sendFrame({ t: "ack", id: env.id });
         // A PC before the approvals snapshot sent single requests: the snapshot replaced them, so they are dropped.
         if (body.type === "approval_request")
             return;
@@ -680,7 +831,7 @@ export class HubDevice {
             return false;
         const commandId = randomB64url(12);
         const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "board", taskId, board }, id.privateKey, pc.publicKey);
-        if (!this.sendFrame({ t: "send", env }))
+        if (!(await this.sendEnv(env)))
             return false;
         this.boardActions.set(`${pc.id}/${taskId}`, { commandId });
         this.changed();
@@ -752,7 +903,7 @@ export class HubDevice {
         let sent = 0;
         for (const pc of pcs) {
             const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action: "assign", taskId, to, ...(confirm ? { confirm: true } : {}), ...(model !== undefined ? { model } : {}) }, id.privateKey, pc.publicKey);
-            if (this.sendFrame({ t: "send", env }))
+            if (await this.sendEnv(env))
                 sent++;
         }
         if (sent)
@@ -782,7 +933,7 @@ export class HubDevice {
         let sent = 0;
         for (const pc of to) {
             const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId, action, taskId: t.taskId }, id.privateKey, pc.publicKey);
-            if (this.sendFrame({ t: "send", env }))
+            if (await this.sendEnv(env))
                 sent++;
         }
         if (sent) {
@@ -867,7 +1018,7 @@ export class HubDevice {
             return false;
         const mins = decision === "allow" && a.forWhile && forMinutes ? Math.min(forMinutes, HUB_LIMITS.approvalForMaxMin) : 0;
         const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "approval_answer" }, { type: "approval_answer", requestId: a.requestId, conversationId: a.conversationId, decision, ...(mins ? { forMinutes: mins } : {}) }, id.privateKey, pc.publicKey);
-        if (!this.sendFrame({ t: "send", env }))
+        if (!(await this.sendEnv(env)))
             return false;
         this.approvalActions.set(`${pc.id}/${a.requestId}`, mins ? "while" : decision);
         this.changed();
@@ -949,7 +1100,7 @@ export class HubDevice {
         const id = this.ident;
         if (!id || !this.connected || !task.to)
             return;
-        const recipient = task.to === "hub" ? id.hubKey : this.presence.find((d) => d.id === task.to)?.publicKey;
+        const recipient = task.to === "hub" ? id.hubKey : this.pcKey(task.to);
         if (!recipient) {
             task.status = "failed";
             task.line = REFUSAL["no-recipient"][document.documentElement.lang === "en" ? "en" : "he"];
@@ -957,8 +1108,15 @@ export class HubDevice {
         }
         const env = await sealMessage({ from: id.deviceId, to: task.to, kind: task.route === "claude-cloud" ? "cloud" : "task" }, { type: "task", taskId: task.taskId, title: task.title, spec: task.spec, executor: task.executor, ifOffline: task.ifOffline, createdAt: new Date(task.createdAt).toISOString() }, id.privateKey, recipient);
         task.envId = env.id;
-        if (this.sendFrame({ t: "send", env }))
-            await this.saveTasks();
+        const via = await this.sendEnv(env);
+        if (!via)
+            return;
+        // The hub answers "sent" / "queued"; a backup relay has no answer: the task counts as sent on its way.
+        if (via !== "hub") {
+            task.status = "sent";
+            task.history.push({ t: Date.now(), he: `נשלח ${RELAY_PATH_LABELS[via].he}`, en: `Sent ${RELAY_PATH_LABELS[via].en}` });
+        }
+        await this.saveTasks();
     }
     /** Sends what waited for a connection. */
     async flushOutbox() {
