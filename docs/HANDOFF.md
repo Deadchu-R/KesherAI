@@ -109,3 +109,6 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
 
 ## Updating KesherAI on Roee's PC (2026-11-20)
 Use the Claude desktop app's built-in browser (remote-devices Claude_Browser tools) at http://127.0.0.1:7420/#/updates: "בדוק עדכונים" → "הורד והתקן", then poll /api/version. No computer-use approval needed (computer-use access expires after 30 min and blocks at night). Overnight runs: no design-doc publishes (prepare boards under tools/design/out/, publish once in the morning with Roee).
+
+## Standing rule (Roee, 22.11 10:04): move work to KesherAI
+Where KesherAI supports it, send work to it instead of Claude helpers, to save Claude usage: research → Antigravity/Gemini inbox tasks; code tasks → Antigravity inbox tasks with a model (Claude Opus 4.6 via Antigravity for conversions/builds, Flash for small); PC actions → POST /api/control/tasks (computer tasks) instead of Claude screenshots. Claude keeps: leading, task writing, review of agy/* branches, merges, releases, Roee's updates. Claude helpers only for what KesherAI cannot do yet.
