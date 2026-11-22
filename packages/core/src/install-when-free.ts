@@ -18,6 +18,8 @@ export interface FreeState {
   updating: boolean;
   /** Study model calls running (a summary, a quiz being written or graded). */
   study?: number;
+  /** An inbox agent task (Antigravity / local) is running. */
+  agentTask?: string;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface FreeState {
  * @param s - What is busy now.
  */
 export function isFree(s: FreeState): boolean {
-  return s.chats === 0 && !s.selfWork && s.downloads === 0 && !s.updating && !s.study;
+  return s.chats === 0 && !s.selfWork && s.downloads === 0 && !s.updating && !s.study && !s.agentTask;
 }
 
 /** What the waiter needs from KesherAI. */

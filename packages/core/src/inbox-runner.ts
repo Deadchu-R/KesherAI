@@ -198,8 +198,9 @@ export class TaskInbox {
     }
     for (const t of this.saved.tasks) {
       if (t.status === "running" || t.status === "needs-approval") {
-        t.status = "failed";
-        t.note = "KesherAI restarted during the run.";
+        // Cut off by a restart, not by the agent: back in line where it was (creation order), ready for Run again.
+        t.status = t.runBy === "local" ? "queued" : "waiting";
+        t.note = "KesherAI restarted during the run; it is back in line — press Run again.";
         delete t.pending;
       } else if (t.note?.startsWith("Queued") && RUNNABLE.has(t.status)) {
         // The line was in memory only: it is gone, the task waits for Run again.

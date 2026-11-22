@@ -1154,6 +1154,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       downloads: s.downloads.list().filter((j) => j.status === "downloading" || j.status === "queued").length,
       updating: s.updater.status().running,
       study: s.studyBusy?.() ?? 0,
+      ...(s.taskInbox?.runningTask() ? { agentTask: s.taskInbox.runningTask()!.title } : {}),
     };
   };
   const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, beforeApply: async () => s.resume?.save("update"), apply: () => s.updater.apply() });
@@ -1169,6 +1170,10 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     if (working.length && req.body?.force !== true) {
       const titles = working.map((id) => s.library.summary(id)?.title ?? id).slice(0, 5);
       return reply.code(409).send({ error: `${working.length} chat(s) are working now: ${titles.join(", ")}. The update restarts KesherAI and stops them (after it, "Continue what was running" brings them back).`, code: "chats-working", chats: titles });
+    }
+    const agent = s.taskInbox?.runningTask();
+    if (agent && req.body?.force !== true) {
+      return reply.code(409).send({ error: `An agent task is running: ${agent.title}. The update restarts KesherAI and would stop it; it installs when the task ends ("Install when free"), or force it.`, code: "agent-working", task: agent.id });
     }
     try {
       // The record of what runs now, so nothing the update cuts off is lost (the card after the start lists it).
