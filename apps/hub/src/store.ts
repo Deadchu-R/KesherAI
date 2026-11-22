@@ -208,7 +208,7 @@ export interface HubStore {
   pruneGrants(now: number): void;
 }
 
-/** The store in memory, for tests (same behaviour as the SQLite one). */
+/** The store in memory, for tests (same behaviour as the SQLite one); the hub also keeps live agent activity in one. */
 export class MemoryStore implements HubStore {
   private settings = new Map<string, string>();
   private devs = new Map<string, DeviceRow>();
@@ -218,10 +218,15 @@ export class MemoryStore implements HubStore {
   private queue: QueuedRow[] = [];
   private log: AuditRow[] = [];
   private agentRows: AgentEventRow[] = [];
-  private agentSeq = 0;
+  private agentSeq: number;
   private clients = new Map<string, OauthClientRow>();
   private codes = new Map<string, OauthCodeRow>();
   private grantRows = new Map<string, OauthGrantRow>();
+
+  /** @param seqStart - The agent-event order number to count up from (the hub's live ring starts at its wake time). */
+  constructor(seqStart = 0) {
+    this.agentSeq = seqStart;
+  }
 
   /** @inheritdoc */
   getSetting(key: string): string | undefined {

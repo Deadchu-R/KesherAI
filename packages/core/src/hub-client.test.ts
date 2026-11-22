@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateHubKeys, openEnvelope, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
 import type { InboxTaskView } from "@kesher/shared";
-import { askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
+import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
 
 const settings = (): HubSettings => ({ enabled: true, url: "https://hub.example.test", reported: [], optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false } });
@@ -197,6 +197,38 @@ test("connection problems: unreachable retries, a refused PC must pair again", a
   assert.equal(client.status().errorCode, "refused");
   assert.equal(client.status().paired, false);
   client.stop();
+});
+
+test("the hub's daily storage limit: shown with its own code, and the next try is after 00:00 UTC (not in minutes)", async () => {
+  const s = settings();
+  s.token = "kh_t";
+  s.deviceId = "dpc";
+  let tries = 0;
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => undefined,
+    version: "test",
+    fetch: (async () => {
+      tries++;
+      return new Response(JSON.stringify({ error: "hub-storage-limit" }), { status: 503 });
+    }) as unknown as typeof fetch,
+    openSocket: () => assert.fail("no socket without a ticket"),
+  });
+  client.start();
+  await wait(20);
+  const st = client.status();
+  assert.equal(st.errorCode, "hub-limit");
+  assert.equal(st.paused, false, "not mistaken for a paused hub");
+  assert.equal(tries, 1);
+  assert.ok(Date.parse(st.nextRetryAt!) >= afterUtcMidnight(Date.now(), 0) - 1000, "waits for the reset");
+  assert.equal(s.token, "kh_t", "the pairing is kept");
+  client.stop();
+});
+
+test("afterUtcMidnight: one to five minutes after the next 00:00 UTC", () => {
+  const now = Date.UTC(2026, 10, 22, 10, 11);
+  assert.equal(afterUtcMidnight(now, 0), Date.UTC(2026, 10, 23, 0, 1));
+  assert.equal(afterUtcMidnight(now, 0.999), Date.UTC(2026, 10, 23, 0, 4, 59, 760));
 });
 
 const inboxTask = (over: Partial<InboxTaskView>): InboxTaskView => ({ id: "c-1120-01", title: "Fix the hub status", executor: "auto", risk: "low", from: "claude", base: "origin/main", allowedPaths: [], forbiddenPaths: [], check: "", maxMinutes: 30, maxFiles: 15, goal: "SECRET GOAL TEXT", status: "waiting", runBy: "antigravity", branch: "agy/c-1120-01-fix", ...over });

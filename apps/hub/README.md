@@ -130,11 +130,14 @@ days before you approve again, at most 10 connections. **Settings › Connected 
 - Open, rate limited: `POST /api/signin` `{credential}` (Google ID token, from the hub page only), `POST /api/pair/start`
   `{publicKey, kind, name}` → `{code, pollSecret, expiresIn, fingerprint}`, `POST /api/pair/poll` `{pollSecret}` →
   `pending` or `{deviceId, token, hubKey}` once.
-- Device token (`Authorization: Bearer kh_…`): `POST /api/ticket` → a one-use 60-second `ticket` (and `rotateDue`
+- Device token (`Authorization: Bearer kh_…`): `POST /api/ticket` → a one-use 60-second signed `ticket` (and `rotateDue`
   after 30 days), `POST /api/rotate` → a new token (the old one stops at once). Tokens older than 180 days are refused.
   A phone or hub page: `POST /api/push/subscribe` `{endpoint, keys: {p256dh, auth}, lang}` (known push services only)
   and `POST /api/push/unsubscribe`.
 - Socket: `GET /ws/device?ticket=…`. Frames in `packages/shared/src/hub-protocol.ts`.
+- Storage quota: when Cloudflare's daily quota of rows written is used up (Workers Free: 100,000, reset at 00:00 UTC),
+  calls answer `503 {error: "hub-storage-limit"}` with `Retry-After`; tickets need no write, so devices still connect.
+  Fast-changing state (live agent activity, heartbeats, snapshots) stays in memory; see `WRITE_PACE` in `src/hub.ts`.
 - Claude connector: `GET /.well-known/oauth-protected-resource[/mcp]`, `GET /.well-known/oauth-authorization-server`,
   `POST /oauth/register` (only Claude's redirect addresses), `GET /oauth/authorize` (→ the approval page `/connect`),
   `POST /oauth/token` (code + PKCE S256, or refresh), `POST /mcp` (Bearer access token; tools `list_devices`,

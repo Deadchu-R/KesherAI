@@ -13,6 +13,9 @@
  * - The Claude connector (connector.ts): `/.well-known/oauth-*`, `/oauth/*`, `/mcp`; and, signed in,
  *   `POST /api/oauth/check`, `POST /api/oauth/decide`, `POST /api/connections/:id/revoke`.
  * - Internal (cron only): `POST /internal/cleanup`.
+ *
+ * When storage refuses (Cloudflare's daily quota of rows written is used up), an HTTP call answers 503 with
+ * `{error: "hub-storage-limit"}` (or `"hub-storage-error"`) instead of a bare 500; socket frames are dropped quietly.
  */
 import type { HubFrame } from "../../../packages/shared/src/hub.js";
 import { fireClaudeTask } from "./claude-cloud.js";
@@ -22,6 +25,7 @@ import { googleKeys, verifyGoogleIdToken } from "./google.js";
 import { bearer, cookie, json, readJson, sameOrigin, SESSION_COOKIE, sessionCookie } from "./http.js";
 import { Hub, isHubError, type DeviceSockets } from "./hub.js";
 import { SqlStore } from "./sql-store.js";
+import { guardStore, secondsToUtcMidnight, storageCode } from "./storage-guard.js";
 import { vapidFromEnv } from "./web-push.js";
 
 /** Sockets of this object, found by their device-id tag. */
@@ -72,7 +76,7 @@ export class HubObject {
   constructor(private readonly ctx: DurableObjectState, env: HubEnvBindings) {
     const keyFor = googleKeys();
     this.hub = new Hub({
-      store: new SqlStore(ctx.storage.sql),
+      store: guardStore(new SqlStore(ctx.storage.sql)),
       sockets: socketsOf(ctx),
       config: { allowedEmail: env.ALLOWED_EMAIL, hubPrivateJwk: env.HUB_PRIVATE_KEY, claude: { triggerId: env.CLAUDE_TRIGGER_ID, token: env.CLAUDE_FIRE_TOKEN }, vapid: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT) },
       verifyIdToken: (t) => verifyGoogleIdToken(t, env.GOOGLE_CLIENT_ID ?? "", keyFor, Date.now()),
@@ -90,6 +94,18 @@ export class HubObject {
    * @returns The answer.
    */
   async fetch(req: Request): Promise<Response> {
+    try {
+      return await this.route(req);
+    } catch (e) {
+      const code = storageCode(e);
+      if (!code) throw e;
+      console.warn(`hub: storage refused a request (${code})`);
+      return json({ error: code, message: e instanceof Error ? e.message : code }, 503, { "retry-after": String(secondsToUtcMidnight(Date.now())) });
+    }
+  }
+
+  /** {@link fetch}'s routing (storage errors are turned into 503 answers there). */
+  private async route(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     const ip = req.headers.get("x-kh-ip") ?? "unknown";
@@ -190,7 +206,12 @@ export class HubObject {
   async webSocketMessage(ws: CfWebSocket, message: string | ArrayBuffer): Promise<void> {
     const id = this.deviceOf(ws);
     if (!id) return ws.close(4000, "unknown");
-    await this.hub.onFrame(id, typeof message === "string" ? message : null);
+    try {
+      await this.hub.onFrame(id, typeof message === "string" ? message : null);
+    } catch (e) {
+      // The frame is dropped; the device stays connected (the next snapshot or beat carries the state again).
+      if (!storageCode(e)) throw e;
+    }
   }
 
   /**
@@ -200,7 +221,11 @@ export class HubObject {
    */
   async webSocketClose(ws: CfWebSocket): Promise<void> {
     const id = this.deviceOf(ws);
-    if (id) this.hub.onClose(id);
+    try {
+      if (id) this.hub.onClose(id);
+    } catch (e) {
+      if (!storageCode(e)) throw e;
+    }
   }
 
   /**

@@ -39,7 +39,7 @@ interface HubStatus {
   pairing?: { code: string; fingerprint: string; expiresAt: string };
   devices: Array<{ id: string; name: string; kind: string; online: boolean }>;
   lastError?: string;
-  errorCode?: "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped";
+  errorCode?: "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped" | "hub-limit";
   lastConnectedAt?: string;
   nextRetryAt?: string;
 }
@@ -61,6 +61,8 @@ function problemText(s: HubStatus): string | undefined {
       return L("יותר מדי ניסיונות. מנסה שוב בעוד רגע.", "Too many tries. Retrying in a moment.");
     case "hub-error":
       return L(`המרכז החזיר שגיאה${s.lastError ? ` (${s.lastError})` : ""}. מנסה שוב לבד.`, `The hub returned an error${s.lastError ? ` (${s.lastError})` : ""}. Retrying by itself.`);
+    case "hub-limit":
+      return L("ההאב הגיע למגבלה היומית של Cloudflare; חוזר בחצות UTC", "The hub reached Cloudflare's daily limit; it comes back at midnight UTC.");
     case "dropped":
       return L("הודעה מהמרכז לא נפתחה ונמחקה (הקישור עצמו תקין).", "A message from the hub could not be opened and was dropped (the link itself is fine).");
     default:

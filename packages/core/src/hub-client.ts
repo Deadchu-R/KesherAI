@@ -151,8 +151,23 @@ export interface HubClientDeps {
  * - `rate-limited`: too many tries for now; it retries by itself.
  * - `hub-error`: the hub answered with an error; it retries by itself.
  * - `dropped`: a message could not be opened and was dropped (the link itself is fine).
+ * - `hub-limit`: the hub used up Cloudflare's daily storage quota; it tries again after 00:00 UTC (not every few minutes).
  */
-export type HubErrorCode = "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped";
+export type HubErrorCode = "unreachable" | "refused" | "socket" | "rate-limited" | "hub-error" | "dropped" | "hub-limit";
+
+/**
+ * When to try again after the hub's daily quota ran out: a few minutes after the next 00:00 UTC (spread, so devices
+ * do not all come at once).
+ *
+ * @param now - The time in ms.
+ * @param jitter - 0..1 (default random).
+ * @returns The time in ms.
+ */
+export function afterUtcMidnight(now: number, jitter = Math.random()): number {
+  const next = new Date(now);
+  next.setUTCHours(24, 0, 0, 0);
+  return next.getTime() + 60_000 + Math.floor(jitter * 4 * 60_000);
+}
 
 /** What the settings card shows (never the token or the key). */
 export interface HubStatus {
@@ -552,6 +567,16 @@ export class HubClient {
     this.retryTimer.unref?.();
   }
 
+  /** Reconnects at a set time (after the hub's daily quota resets); the backoff starts over then. */
+  private laterAt(at: number): void {
+    if (this.stopped) return;
+    clearTimeout(this.retryTimer);
+    this.retry = 0;
+    this.retryAt = at;
+    this.retryTimer = setTimeout(() => void this.connect(), Math.max(1000, at - Date.now()));
+    this.retryTimer.unref?.();
+  }
+
   /** Gets a one-use ticket (rotating the token when due), then opens the socket. */
   async connect(): Promise<void> {
     if (this.stopped || !this.s.token || !this.s.url || this.connecting || this.socket) return;
@@ -570,6 +595,14 @@ export class HubClient {
       let r = await this.post("/api/ticket", {}, this.s.token);
       if (this.stopped) return;
       if (r.status === 401 || r.status === 403) return this.lost("The hub no longer knows this PC. Pair it again.");
+      if (r.status === 503 && r.data.error === "hub-storage-limit") {
+        this.fail("hub-limit", "The hub reached Cloudflare's daily limit; it comes back at midnight UTC.");
+        return this.laterAt(afterUtcMidnight(Date.now()));
+      }
+      if (r.status === 503 && r.data.error === "hub-storage-error") {
+        this.fail("hub-error", "The hub's storage failed.");
+        return this.later();
+      }
       if (r.status === 503) {
         this.paused = true;
         return this.later();
