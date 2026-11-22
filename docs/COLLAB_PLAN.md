@@ -97,3 +97,7 @@ A hybrid is possible: git for text, hub for binaries, locks and results. Decide 
 - Auto-apply for text-only packets from a trusted collaborator, or always ask? (default here: always ask)
 - Lock time-out default (30 min) and whether Roee's own lock may be taken over after a warning.
 - Is a collaborator also allowed to use the chat model on the main PC, or only her own?
+
+
+## Live co-editing of one scene (Roee 22.11 07:20)
+Roee wants collaborators to work on the same scene at the same time and see each other: presence (who is in the scene, their camera/viewpoint as a small avatar or frustum, their selection outlined in their colour), live object moves/rotations streamed to everyone, per-object soft locks while someone drags, chat beside the scene, and the main PC applying the merged result to the real project through the plugins. Like Unreal Multi-User Editing / Figma multiplayer / Roblox Team Create, but with the engine only on the main PC. Research how those do it (CRDT vs server-authoritative ops, conflict rules, transport through the hub or LAN WebRTC), before building. Ties into the sync-channel decision above.
