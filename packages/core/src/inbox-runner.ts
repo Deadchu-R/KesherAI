@@ -1052,7 +1052,12 @@ export class TaskInbox {
       }, t.maxMinutes * 60_000);
       while (a.why !== "stop") {
         try {
+          const before = text.length;
           stop = await agent.prompt(agentPrompt(t, t.branch));
+          // agy answers a spent quota as plain text ("⚠ Individual quota reached … Resets in 4h32m") and ends the turn,
+          // not as an error: treat that answer like the quota error, so the next model of the chain gets the task.
+          const said = text.slice(before);
+          if (!a.why && stop === "end_turn" && said.length < 600 && isQuotaError(said)) throw new Error(said.trim());
           break;
         } catch (e) {
           const msg = (e as Error).message || String(e);
