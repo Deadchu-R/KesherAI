@@ -34,6 +34,12 @@ export interface OverlayState {
   takeover: boolean;
   /** A pending yes/no bubble (null when none). */
   bubble: PendingBubble | null;
+  /** Target cursor position for smooth animation (set by cursor_move). */
+  targetCursor: { x: number; y: number } | null;
+  /** Display cursor position (interpolated toward targetCursor each tick). */
+  displayCursor: { x: number; y: number } | null;
+  /** Remaining delay in ms before cursor starts moving (human pacing). */
+  paceDelay: number;
 }
 
 /** Initial empty state. */
@@ -43,6 +49,9 @@ export const OVERLAY_INITIAL: OverlayState = {
   caption: "",
   takeover: false,
   bubble: null,
+  targetCursor: null,
+  displayCursor: null,
+  paceDelay: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -91,14 +100,13 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
         caption: "",
         bubble: null,
         cursor: null,
+        targetCursor: null,
+        displayCursor: null,
+        paceDelay: 0,
       };
 
     case "cursor_move":
-      return {
-        ...state,
-        visible: true,
-        cursor: { x: event.x, y: event.y },
-      };
+      return overlayCursorMove({ ...state, visible: true }, event.x, event.y);
 
     case "takeover_on":
       return { ...state, takeover: true };
@@ -134,12 +142,16 @@ export function overlayReducer(state: OverlayState, event: OverlayEvent): Overla
  * @param y - Target y in OS pixels (optional).
  */
 export function overlayFromStep(caption: string, x?: number, y?: number): OverlayState {
+  const c = x !== undefined && y !== undefined ? { x, y } : null;
   return {
     visible: true,
-    cursor: x !== undefined && y !== undefined ? { x, y } : null,
+    cursor: c,
     caption,
     takeover: false,
     bubble: null,
+    targetCursor: c,
+    displayCursor: c,
+    paceDelay: 0,
   };
 }
 
@@ -150,4 +162,70 @@ export function overlayFromStep(caption: string, x?: number, y?: number): Overla
  */
 export function overlayCaption(state: OverlayState): string {
   return state.caption.length > 60 ? state.caption.slice(0, 59) + "…" : state.caption;
+}
+
+// ---------------------------------------------------------------------------
+// Animation helpers (pure, tick-driven)
+// ---------------------------------------------------------------------------
+
+/** How many ms the overlay waits before starting a move (human pacing). */
+const PACE_DELAY_MS = 400;
+
+/** Lerp factor per tick at 60 fps (cursor reaches target in ~200 ms). */
+const CURSOR_LERP = 0.15;
+
+/**
+ * Advance the overlay state by `dt` milliseconds.
+ * Handles the human pacing delay and smooth cursor interpolation.
+ *
+ * @param state - The current overlay state.
+ * @param dt - Delta time in milliseconds since the last tick.
+ * @returns A new state with displayCursor and paceDelay updated.
+ */
+export function overlayTick(state: OverlayState, dt: number): OverlayState {
+  if (!state.targetCursor || !state.displayCursor) return state;
+
+  // Still waiting for the pacing delay?
+  if (state.paceDelay > 0) {
+    return { ...state, paceDelay: Math.max(0, state.paceDelay - dt) };
+  }
+
+  // Smooth interpolation toward target
+  const dx = state.targetCursor.x - state.displayCursor.x;
+  const dy = state.targetCursor.y - state.displayCursor.y;
+  const nx = state.displayCursor.x + dx * CURSOR_LERP;
+  const ny = state.displayCursor.y + dy * CURSOR_LERP;
+
+  // Snap when close enough
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+    return { ...state, displayCursor: { ...state.targetCursor } };
+  }
+
+  return {
+    ...state,
+    displayCursor: { x: nx, y: ny },
+  };
+}
+
+/**
+ * Apply a cursor_move event and set up the smooth animation.
+ * Resets the display cursor to the current position and sets a new target
+ * with a human pacing delay.
+ *
+ * @param state - The current overlay state.
+ * @param x - Target x in OS pixels.
+ * @param y - Target y in OS pixels.
+ * @returns A new state ready for overlayTick to animate.
+ */
+export function overlayCursorMove(state: OverlayState, x: number, y: number): OverlayState {
+  const target = { x, y };
+  const display = state.displayCursor ?? state.cursor ?? target;
+
+  return {
+    ...state,
+    cursor: target,
+    targetCursor: target,
+    displayCursor: display,
+    paceDelay: PACE_DELAY_MS,
+  };
 }
