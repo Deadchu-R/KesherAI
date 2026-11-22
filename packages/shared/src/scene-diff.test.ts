@@ -39,3 +39,12 @@ test("objects of the wrong shape are dropped and long text is cut", () => {
   assert.equal(got.objects[0]!.name.length, 300);
   assert.deepEqual(got.objects[0]!.props, [{ name: "b", to: "1" }]);
 });
+
+test("a level plan travels in the preview, checked: bad numbers and a short before-list drop the plan", () => {
+  const diff = { engine: "unity" as const, scene: "Assets/A.unity", objects: [{ kind: "changed" as const, name: "Crate" }], undo: "checkpoint" as const, readBefore: true, plan: { min: [0, 0] as [number, number], max: [10, 10] as [number, number], rest: [[1, 1]] as Array<[number, number]>, before: [[2, 2]] as Array<[number, number]>, after: [[3, 3], [4, 4]] as Array<[number, number]>, moved: 1 } };
+  assert.deepEqual(parseScenePreview(scenePreview(diff))?.diff.plan, diff.plan);
+  const bad = scenePreview({ ...diff, plan: { ...diff.plan, before: [] } });
+  assert.equal(parseScenePreview(bad)?.diff.plan, undefined);
+  const nan = scenePreview(diff).replace('"min":[0,0]', '"min":["x",0]');
+  assert.equal(parseScenePreview(nan)?.diff.plan, undefined);
+});

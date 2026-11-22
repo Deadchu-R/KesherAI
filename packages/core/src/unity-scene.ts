@@ -614,6 +614,44 @@ export function sceneView(objects: readonly UnityObject[]): UnityView {
   return { view: flat ? "2d" : "3d", ...(bounds ? { bounds } : {}), ...(canvas ? { canvas } : {}) };
 }
 
+/** Where an object really is in the scene (its parents applied). */
+export interface UnityWorld {
+  position: [number, number, number];
+  /** Turn about the up (y) axis, degrees. */
+  yaw: number;
+  /** The size factors along its own axes. */
+  scale: [number, number, number];
+}
+
+/**
+ * The world place, yaw and scale of every object (parents applied), for reading a scene as a level. An object under a
+ * parent that is off, or whose own scale is 0, is still given a place (the check is about layout, not visibility).
+ *
+ * @param objects - The scene's objects.
+ * @returns By object id.
+ */
+export function worldPlaces(objects: readonly UnityObject[]): Map<string, UnityWorld> {
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  const mats = new Map<string, M>();
+  const matrix = (o: UnityObject, depth = 0): M => {
+    const got = mats.get(o.id);
+    if (got) return got;
+    const local = compose(o.position, o.rotation, o.scale);
+    const parent = depth < 256 ? byId.get(o.parent) : undefined;
+    const m = parent && parent !== o ? mul(matrix(parent, depth + 1), local) : local;
+    mats.set(o.id, m);
+    return m;
+  };
+  const out = new Map<string, UnityWorld>();
+  for (const o of objects) {
+    const m = matrix(o);
+    const col = (c: number) => Math.hypot(m[c]!, m[4 + c]!, m[8 + c]!);
+    const sz = col(2) || 1;
+    out.set(o.id, { position: [m[3]!, m[7]!, m[11]!], yaw: (Math.atan2(m[2]! / sz, m[10]! / sz) * 180) / Math.PI, scale: [col(0), col(1), sz] });
+  }
+  return out;
+}
+
 /** A move for the Unity package to apply (local position, rotation and scale of one Transform). */
 export interface UnityMove {
   id: string;

@@ -25,6 +25,7 @@ import { knowledgeTools } from "../knowledge.js";
 import { appUri, mcpResultText } from "../mcp.js";
 import { memoryTools } from "../memory-tools.js";
 import { setAppearance } from "../routes/parts.js";
+import { queueUnityMoves, unitySceneOf, unityScenes } from "../routes/unity-scene.js";
 import { ensureImageModel, ensureVideoModel } from "../sdcpp.js";
 import { readMedia, speechTools } from "../speech-tools.js";
 import { SideEngine, sideEngineOf, smallerBeside, translatorModelId } from "../side-engine.js";
@@ -253,6 +254,7 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     unity: unityCli,
     unreal: unrealBridge,
     gameCheckpoints,
+    unityScenes: { readUnity: (project, scene) => unitySceneOf(project, scene), unityScenes: (project) => unityScenes(project), queueUnity: (project, scene, moves) => queueUnityMoves(project, scene, moves) },
     godot,
     look: {
       get: () => cleanAppearance(config.appearance),

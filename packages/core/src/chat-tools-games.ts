@@ -26,6 +26,7 @@ import { planFile, playTestTool } from "./play-test.js";
 import { unityAssetFile, unrealAssetFile, unrealLevelFile } from "./game-sync.js";
 import { unrealLevelTools } from "./unreal-level-tools.js";
 import { unrealBuildTools } from "./engine-build-tools.js";
+import { LEVEL_NOTE, levelDesignTools, levelWrites } from "./level-design-tools.js";
 
 /**
  * The game tools for one chat, and the lines for its system prompt.
@@ -114,6 +115,16 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     tools.push(...unrealBuildTools(deps.unreal ? { bridge: deps.unreal } : {}));
     notes.push("unreal_inspect_level lists a level's actors (labels, classes, transforms, mesh slots and materials), also with Unreal closed; unreal_apply_material puts a material in an actor's mesh slot (the user sees the old → new material before it runs).");
   }
+  // Level design on Unity scenes and Unreal levels, engine open or closed (level-design-tools.ts).
+  if (deps.unity?.activeProject || p.unreal.project || deps.unreal?.connected) {
+    tools.push(...levelDesignTools({
+      unityProject: () => deps.unity?.activeProject,
+      unrealProjectDir: () => (deps.unreal?.projectFile ? dirname(deps.unreal.projectFile) : p.unreal.project ? (/\.uproject$/i.test(p.unreal.project) ? dirname(p.unreal.project) : p.unreal.project) : undefined),
+      ...(deps.unreal ? { bridge: deps.unreal } : {}),
+      ...deps.unityScenes,
+    }));
+    notes.push(LEVEL_NOTE);
+  }
   // A game project in use: running its Android build on the user's phone and reading why it closed.
   if (p.unreal.project || deps.unity?.activeProject) {
     tools.push(...androidPhoneTools());
@@ -176,6 +187,9 @@ export function engineWrites(name: string, input: Record<string, unknown>, dirs:
       return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim()) : undefined);
     case "unreal_blockout":
       return one("unreal", dirs.unreal, dirs.unreal && typeof input.level === "string" ? unrealLevelFile(dirs.unreal, input.level.trim().split(".")[0]!) : undefined);
+    case "level_arrange":
+    case "level_move":
+      return levelWrites(input, dirs, unrealLevelFile);
     case "unreal_write_source":
       return one("unreal", dirs.unreal, path && dirs.unreal ? join(dirs.unreal, path) : undefined);
     case "godot_file":

@@ -40,6 +40,25 @@ export interface SceneObjectChange {
  */
 export type SceneUndo = "undo" | "checkpoint" | "queued";
 
+/**
+ * A top-down plan of a level change (x right, z forward, meters), drawn on the card as a before/after picture: the
+ * other objects as small dots, and the ones that change with their old and new places. Plain numbers: the card draws
+ * the SVG itself, nothing from a tool is ever put in the page as markup.
+ */
+export interface ScenePlan {
+  /** The drawn area. */
+  min: [number, number];
+  max: [number, number];
+  /** Objects that stay (up to 300). */
+  rest: Array<[number, number]>;
+  /** Old places of the first `moved` objects of `after`. */
+  before: Array<[number, number]>;
+  /** New places: the moved objects (their old places in `before`, same order), then the added ones. */
+  after: Array<[number, number]>;
+  /** How many of `after` are moved (the others are added). */
+  moved: number;
+}
+
 /** Everything the approval card shows about a scene change. */
 export interface SceneDiff {
   engine: SceneEngine;
@@ -49,6 +68,8 @@ export interface SceneDiff {
   undo: SceneUndo;
   /** The old values were read from the scene (false: the editor did not answer, so only the new values are known). */
   readBefore: boolean;
+  /** A top-down before/after picture, for level changes. */
+  plan?: ScenePlan;
 }
 
 /** The marker line that carries the diff inside a preview. */
@@ -132,6 +153,21 @@ function cleanObject(v: unknown): SceneObjectChange | undefined {
   return out;
 }
 
+const MAX_PLAN = 300;
+
+/** A checked plan (the preview text comes from a tool): finite numbers, capped lists, `moved` within `after`. */
+function cleanPlan(v: unknown): ScenePlan | undefined {
+  const p = (v ?? {}) as Record<string, unknown>;
+  const pair = (x: unknown): x is [number, number] => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === "number" && Number.isFinite(n));
+  const pairs = (x: unknown): Array<[number, number]> => (Array.isArray(x) ? x.slice(0, MAX_PLAN).filter(pair).map((q) => [q[0], q[1]] as [number, number]) : []);
+  if (!pair(p.min) || !pair(p.max)) return undefined;
+  const after = pairs(p.after);
+  const moved = Math.min(after.length, Math.max(0, Math.floor(Number(p.moved) || 0)));
+  const before = pairs(p.before).slice(0, moved);
+  if (before.length < moved) return undefined;
+  return { min: [p.min[0], p.min[1]], max: [p.max[0], p.max[1]], rest: pairs(p.rest), before, after, moved };
+}
+
 /**
  * Finds the scene diff in an approval preview.
  *
@@ -152,7 +188,8 @@ export function parseScenePreview(preview: string): { diff: SceneDiff; text: str
   if (!engine || !undo || !Array.isArray(raw.objects)) return undefined;
   const objects = raw.objects.slice(0, MAX_OBJECTS).map(cleanObject).filter((o): o is SceneObjectChange => !!o);
   const scene = str(raw.scene);
-  return { diff: { engine, ...(scene ? { scene } : {}), objects, undo, readBefore: raw.readBefore === true }, text: preview.slice(0, at) };
+  const plan = cleanPlan(raw.plan);
+  return { diff: { engine, ...(scene ? { scene } : {}), objects, undo, readBefore: raw.readBefore === true, ...(plan ? { plan } : {}) }, text: preview.slice(0, at) };
 }
 
 /**

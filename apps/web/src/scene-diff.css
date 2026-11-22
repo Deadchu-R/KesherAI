@@ -26,3 +26,13 @@
   .sd-props, .sd-props tbody, .sd-props tr, .sd-props th, .sd-props td { display: block; width: auto; }
   .sd-props th { padding: 2px 0 0; }
 }
+
+/* The top-down before/after plan of a level change: side by side, stacked below 480 px (a 390 px phone). */
+.sd-plan { display: flex; flex-wrap: wrap; gap: 8px; }
+.sd-plan-side { margin: 0; flex: 1 1 160px; min-width: 0; }
+.sd-plan-side svg { width: 100%; height: auto; max-height: 220px; display: block; border-radius: 8px; }
+.sd-plan-side figcaption { text-align: center; margin-top: 2px; }
+.sd-plan-bg { fill: var(--hover, rgba(127,127,127,.12)); }
+.sd-dot-rest { fill: rgba(127,127,127,.55); }
+.sd-dot-moved { fill: var(--accent); }
+.sd-dot-added { fill: #2e9d57; }

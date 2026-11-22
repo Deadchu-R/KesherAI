@@ -32,6 +32,8 @@ export interface ConversationDeps {
   checkpoints?: Checkpoints;
   /** Checkpoints of the game-project files a chat's engine tools write (one per turn). */
   gameCheckpoints?: import("./game-checkpoints.js").GameCheckpoints;
+  /** A Unity scene's stand-in (read, list, queue moves), for the level-design tools: it lives with the routes. */
+  unityScenes?: Pick<import("./level-design-tools.js").LevelDesignDeps, "readUnity" | "unityScenes" | "queueUnity">;
   /** Where each agent run's earlier files are kept, for "Undo all" on its receipt. */
   undoDir?: string;
   /**

@@ -21,7 +21,7 @@ import { HELPER_STEPS, type AgentDef } from "./agents.js";
 
 /** Read tools every specialist gets: files, pictures, the game index and each engine's read tools. */
 const READS =
-  /^(list_files|read_file|search|view_image|game_find|unity_(status|console|inspect_object|screenshot|performance)|unreal_(status|inspect_level)|godot_(status|tree|get|screenshot|log))$/;
+  /^(list_files|read_file|search|view_image|game_find|unity_(status|console|inspect_object|screenshot|performance)|unreal_(status|inspect_level)|level_(describe|check)|godot_(status|tree|get|screenshot|log))$/;
 
 /** Unreal's own MCP server (5.8+), any prefix: listing toolsets is a read; `call_tool` keeps the server's risk. */
 const UNREAL_MCP_READ = /(^|_)(list_toolsets|describe_toolset)$/;
@@ -31,7 +31,7 @@ const UNREAL_MCP_CALL = /(^|_)call_tool$/;
 export const SPECIALIST_TOOLS: Readonly<Record<SpecialistId, RegExp>> = {
   materials: /^(make_pbr_texture|unity_create_pbr_material|unity_texture_settings|unity_scene|unreal_apply_material|godot_edit)$/,
   vfx: /^(unity_vfx|unreal_vfx|unity_modify_scene|unity_scene|godot_edit)$/,
-  level: /^(unity_blockout|unreal_blockout|unity_create_gameobject|unity_modify_scene|unity_scene|godot_edit|godot_scene)$/,
+  level: /^(level_arrange|level_move|unity_blockout|unreal_blockout|unity_create_gameobject|unity_modify_scene|unity_scene|godot_edit|godot_scene)$/,
 };
 
 /** Each role's Unreal MCP toolsets (named in its instructions; `describe_toolset` gives their exact tools). */

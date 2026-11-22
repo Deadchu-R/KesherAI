@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sceneCounts, type SceneDiff, type SceneObjectChange } from "@kesher/shared";
+import { sceneCounts, type SceneDiff, type SceneObjectChange, type ScenePlan } from "@kesher/shared";
 import { getLocale, he$ } from "./i18n";
 import "./scene-diff.css";
 
@@ -28,6 +28,38 @@ function undoText(d: SceneDiff): string {
   }
 }
 
+/** One side of the before/after picture: the rest as grey dots, the objects that change as bigger ones. */
+function PlanSide({ plan, side }: { plan: ScenePlan; side: "before" | "after" }) {
+  const W = Math.max(1e-6, plan.max[0] - plan.min[0]);
+  const D = Math.max(1e-6, plan.max[1] - plan.min[1]);
+  // 100 units wide; z grows upward (forward), so the picture is flipped to read like a map.
+  const H = Math.min(200, Math.max(40, (100 * D) / W));
+  const k = 100 / W;
+  const at = (p: [number, number]) => ({ cx: (p[0] - plan.min[0]) * k, cy: H - (p[1] - plan.min[1]) * (H / D) });
+  const r = Math.max(0.8, Math.min(2.2, 100 / (plan.rest.length + plan.after.length + 8)));
+  const list = side === "before" ? plan.before : plan.after;
+  return (
+    <figure className="sd-plan-side">
+      <svg viewBox={`0 0 100 ${H}`} role="img" aria-label={side === "before" ? L("לפני", "Before") : L("אחרי", "After")} preserveAspectRatio="xMidYMid meet">
+        <rect x="0" y="0" width="100" height={H} className="sd-plan-bg" />
+        {plan.rest.map((p, i) => <circle key={`r${i}`} {...at(p)} r={r} className="sd-dot-rest" />)}
+        {list.map((p, i) => <circle key={`m${i}`} {...at(p)} r={r * 1.3} className={side === "after" && i >= plan.moved ? "sd-dot-added" : "sd-dot-moved"} />)}
+      </svg>
+      <figcaption className="muted small">{side === "before" ? L("לפני", "Before") : L("אחרי", "After")}</figcaption>
+    </figure>
+  );
+}
+
+/** The top-down plan: before and after side by side (stacked on a phone). */
+function PlanPicture({ plan }: { plan: ScenePlan }) {
+  return (
+    <div className="sd-plan" role="group" aria-label={L("תוכנית מלמעלה", "Top-down plan")}>
+      {plan.moved > 0 && <PlanSide plan={plan} side="before" />}
+      <PlanSide plan={plan} side="after" />
+    </div>
+  );
+}
+
 /**
  * The scene diff on an approval card.
  *
@@ -44,6 +76,7 @@ export function SceneDiffCard({ diff }: { diff: SceneDiff }) {
         <b>{L(he, en)}</b>
         {diff.scene && <> · <code dir="ltr">{diff.scene}</code></>}
       </p>
+      {diff.plan && <PlanPicture plan={diff.plan} />}
       <ul className="sd-counts" aria-label={L("סיכום", "Summary")}>
         {c.added > 0 && <li className="sd-added">+{c.added} {L("נוספים", "added")}</li>}
         {c.removed > 0 && <li className="sd-removed">−{c.removed} {L("נמחקים", "removed")}</li>}

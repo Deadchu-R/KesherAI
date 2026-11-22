@@ -448,6 +448,33 @@ export async function unityAssetOf(project: unknown, path: unknown): Promise<Buf
 }
 
 /**
+ * Queues moves for the KesherAI Unity package (KesherAI/pending-moves.json): checked, merged with those waiting, and
+ * written whole-or-not-at-all. The package applies them as one Undo step when the scene is open (now, if Unity is
+ * open with it). Shared by the stand-in's route and the level-design chat tools.
+ *
+ * @param project - The project's folder.
+ * @param scene - "Assets/….unity" inside it.
+ * @param moves - The moves (those with a bad id or numbers are dropped; at most 5000).
+ * @param checkpoints - When given, the scene and the waiting moves are kept first (restoring drops moves Unity has not applied).
+ * @returns How many were queued and how many wait for this scene.
+ */
+export async function queueUnityMoves(project: unknown, scene: unknown, moves: unknown, checkpoints?: GameCheckpoints): Promise<{ queued: number; waiting: number }> {
+  const { dir, rel } = await paths(project, scene);
+  const nums = (a: unknown, n: number) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(x));
+  const ok = (Array.isArray(moves) ? (moves as UnityMove[]).slice(0, 5000) : []).filter((m) => /^-?\d{1,20}(:-?\d{1,20})?$/.test(String(m?.id)) && nums(m.to?.position, 3) && nums(m.to?.rotation, 4) && nums(m.to?.scale, 3) && nums(m.from?.position, 3) && nums(m.from?.rotation, 4));
+  const file = join(dir, "KesherAI", "pending-moves.json");
+  await mkdir(join(dir, "KesherAI"), { recursive: true });
+  // The scene and the waiting moves as they are now (restoring drops these moves if Unity has not applied them yet).
+  if (ok.length) await checkpoints?.beforeSave("unity", dir, "stand-in", `Stand-in: ${rel}`, [join(dir, rel!), file]);
+  const waiting = JSON.parse(await readFile(file, "utf8").catch(() => "{}")) as Record<string, UnityMove[]>;
+  const next = mergeMoves(waiting, rel!, ok.map((m) => ({ id: String(m.id), name: String(m.name ?? "").slice(0, 200), from: m.from, to: m.to })));
+  // Write then rename: the KesherAI package in Unity reads this file when Unity opens (scan 168: never half of it).
+  await writeFile(`${file}.tmp`, JSON.stringify(next, null, 1));
+  await rename(`${file}.tmp`, file);
+  return { queued: ok.length, waiting: next[rel!]!.length };
+}
+
+/**
  * The routes.
  *
  * @param app - The server.
@@ -486,19 +513,7 @@ export async function unitySceneRoutes(app: FastifyInstance, checkpoints?: GameC
   // moved there).
   app.post<{ Body: { project?: string; scene?: string; moves?: UnityMove[] } }>("/api/unity/scene", async (req, reply) => {
     try {
-      const { dir, rel } = await paths(req.body?.project, req.body?.scene);
-      const nums = (a: unknown, n: number) => Array.isArray(a) && a.length === n && a.every((x) => Number.isFinite(x));
-      const ok = (Array.isArray(req.body?.moves) ? req.body!.moves.slice(0, 5000) : []).filter((m) => /^-?\d{1,20}(:-?\d{1,20})?$/.test(String(m?.id)) && nums(m.to?.position, 3) && nums(m.to?.rotation, 4) && nums(m.to?.scale, 3) && nums(m.from?.position, 3) && nums(m.from?.rotation, 4));
-      const file = join(dir, "KesherAI", "pending-moves.json");
-      await mkdir(join(dir, "KesherAI"), { recursive: true });
-      // The scene and the waiting moves as they are now (restoring drops these moves if Unity has not applied them yet).
-      if (ok.length) await checkpoints?.beforeSave("unity", dir, "stand-in", `Stand-in: ${rel}`, [join(dir, rel!), file]);
-      const waiting = JSON.parse(await readFile(file, "utf8").catch(() => "{}")) as Record<string, UnityMove[]>;
-      const next = mergeMoves(waiting, rel!, ok.map((m) => ({ id: String(m.id), name: String(m.name ?? "").slice(0, 200), from: m.from, to: m.to })));
-      // Write then rename: the KesherAI package in Unity reads this file when Unity opens (scan 168: never half of it).
-      await writeFile(`${file}.tmp`, JSON.stringify(next, null, 1));
-      await rename(`${file}.tmp`, file);
-      return { queued: ok.length, waiting: next[rel!]!.length };
+      return await queueUnityMoves(req.body?.project, req.body?.scene, req.body?.moves, checkpoints);
     } catch (e) {
       const f = fail(e);
       return reply.code(f.code).send({ error: f.error });

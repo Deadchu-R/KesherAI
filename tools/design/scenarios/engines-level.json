@@ -1,0 +1,112 @@
+{
+ "group": "Game engines · Chat",
+ "now": "2026-11-22T10:00:00Z",
+ "boards": [
+  {
+   "id": "EnginesChatLevelDesign",
+   "title": "עיצוב שלבים בצ'אט: אישור סידור עצים עם תוכנית לפני ואחרי ורשימה (Unity)",
+   "route": "#/c/ld1",
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".sd-plan"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/ld1",
+     "json": {
+      "id": "ld1",
+      "projectId": null,
+      "title": "Forest: trees along the road",
+      "kind": "chat",
+      "modelId": "qwen3-8b",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "20m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 3,
+      "session": {
+       "id": "ld1",
+       "status": "waiting",
+       "modelId": "qwen3-8b",
+       "mode": "ask",
+       "pendingApprovals": [
+        "r1"
+       ],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "4m"
+        },
+        "type": "user",
+        "text": "סדר לי 10 עצים לאורך הדרך"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "3m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "מצאתי 10 עצים בסצנה. הנה התוכנית: שורה לאורך הדרך, עם סיבוב קל לכל עץ. אחרי האישור הם יוזזו ב-Unity בצעד ביטול אחד, והסצנה נשמרת בנקודת שמירה."
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "1m"
+        },
+        "type": "approval_request",
+        "requestId": "r1",
+        "callId": "k1",
+        "name": "level_arrange",
+        "input": {
+         "scene": "Assets/Scenes/Forest.unity",
+         "source": "Tree",
+         "count": 10,
+         "pattern": "line",
+         "from": [
+          -16,
+          0
+         ],
+         "to": [
+          16,
+          8
+         ],
+         "yaw_jitter": 20,
+         "pos_jitter": 0.4,
+         "seed": 3
+        },
+        "preview": "Unity scene Assets/Scenes/Forest.unity: 10 changed\n~ Tree (0) (Cylinder)\n    position (m): (-16, 0.5, 14) → (-15.82, 0.5, -0.37)\n    yaw: 0° → -1.75°\n~ Tree (1) (Cylinder)\n    position (m): (-11, 0.5, 14) → (-12.78, 0.5, 1.1)\n    yaw: 0° → -0.75°\n~ Tree (2) (Cylinder)\n    position (m): (-6, 0.5, 14) → (-8.9, 0.5, 1.51)\n    yaw: 0° → -9.47°\n~ Tree (3) (Cylinder)\n    position (m): (-16, 0.5, 10) → (-5.29, 0.5, 2.42)\n    yaw: 0° → -16.66°\n~ Tree (4) (Cylinder)\n    position (m): (-11, 0.5, 10) → (-1.61, 0.5, 3.54)\n    yaw: 0° → 11.75°\n~ Tree (5) (Cylinder)\n    position (m): (-6, 0.5, 10) → (2.08, 0.5, 4.3)\n    yaw: 0° → 7.62°\n~ Tree (6) (Cylinder)\n    position (m): (-16, 0.5, 6) → (5.16, 0.5, 5.47)\n    yaw: 0° → 1.06°\n~ Tree (7) (Cylinder)\n    position (m): (-11, 0.5, 6) → (9.15, 0.5, 6.25)\n    yaw: 0° → -19.54°\n~ Tree (8) (Cylinder)\n    position (m): (-6, 0.5, 6) → (12.75, 0.5, 6.96)\n    yaw: 0° → 17.47°\n~ Tree (9) (Cylinder)\n    position (m): (-16, 0.5, 2) → (16.22, 0.5, 7.94)\n    yaw: 0° → 8.59°\n<!--kesher-scene {\"engine\":\"unity\",\"scene\":\"Assets/Scenes/Forest.unity\",\"objects\":[{\"kind\":\"changed\",\"name\":\"Tree (0)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-16, 0.5, 14)\",\"to\":\"(-15.82, 0.5, -0.37)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"-1.75°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (1)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-11, 0.5, 14)\",\"to\":\"(-12.78, 0.5, 1.1)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"-0.75°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (2)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-6, 0.5, 14)\",\"to\":\"(-8.9, 0.5, 1.51)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"-9.47°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (3)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-16, 0.5, 10)\",\"to\":\"(-5.29, 0.5, 2.42)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"-16.66°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (4)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-11, 0.5, 10)\",\"to\":\"(-1.61, 0.5, 3.54)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"11.75°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (5)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-6, 0.5, 10)\",\"to\":\"(2.08, 0.5, 4.3)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"7.62°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (6)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-16, 0.5, 6)\",\"to\":\"(5.16, 0.5, 5.47)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"1.06°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (7)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-11, 0.5, 6)\",\"to\":\"(9.15, 0.5, 6.25)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"-19.54°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (8)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-6, 0.5, 6)\",\"to\":\"(12.75, 0.5, 6.96)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"17.47°\"}]},{\"kind\":\"changed\",\"name\":\"Tree (9)\",\"type\":\"Cylinder\",\"props\":[{\"name\":\"position (m)\",\"from\":\"(-16, 0.5, 2)\",\"to\":\"(16.22, 0.5, 7.94)\"},{\"name\":\"yaw\",\"from\":\"0°\",\"to\":\"8.59°\"}]}],\"undo\":\"checkpoint\",\"readBefore\":true,\"plan\":{\"min\":[-18,-10],\"max\":[20,16],\"rest\":[[8,-8],[10,-5],[12,-8],[14,-5],[16,-8],[18,-5]],\"before\":[[-16,14],[-11,14],[-6,14],[-16,10],[-11,10],[-6,10],[-16,6],[-11,6],[-6,6],[-16,2]],\"after\":[[-15.82,-0.37],[-12.78,1.1],[-8.9,1.51],[-5.29,2.42],[-1.61,3.54],[2.08,4.3],[5.16,5.47],[9.15,6.25],[12.75,6.96],[16.22,7.94]],\"moved\":10}}-->",
+        "reason": "Changes the project."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/ld1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/ld1/events*",
+     "json": null
+    }
+   ]
+  }
+ ]
+}
