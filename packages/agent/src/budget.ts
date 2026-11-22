@@ -80,9 +80,11 @@ export function supersededReads(messages: readonly AgentMessage[]): Map<string, 
   const calls = new Map<string, { path: string; range: string }>();
   for (const m of messages) {
     for (const c of m.toolCalls ?? []) {
-      if (c.name !== "read_file" || typeof c.arguments.path !== "string") continue;
-      const path = c.arguments.path.replace(/\\/g, "/").replace(/^\.\//, "");
-      const range = c.arguments.offset === undefined && c.arguments.limit === undefined ? "" : `${String(c.arguments.offset ?? 1)}:${String(c.arguments.limit ?? "")}`;
+      // A call can come without parsed arguments (a model that sent none, or a turn still being built).
+      const args = (c.arguments ?? {}) as Record<string, unknown>;
+      if (c.name !== "read_file" || typeof args.path !== "string") continue;
+      const path = args.path.replace(/\\/g, "/").replace(/^\.\//, "");
+      const range = args.offset === undefined && args.limit === undefined ? "" : `${String(args.offset ?? 1)}:${String(args.limit ?? "")}`;
       calls.set(c.id, { path, range });
     }
   }
