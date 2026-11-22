@@ -390,3 +390,10 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 - No design-doc publishes overnight; boards ready under tools/design/out/, one publish with him at 10:00.
 - ⏳ Roee: extension 0.3.0 (Chrome control over the debugger, optional `debugger` permission) is built (295839f) but its store release is held: manifest stays 0.2.6 until he says yes, because pushing main uploads a changed version to the Chrome Web Store. To release: set apps/browser-extension/manifest.json to 0.3.0 and push.
 - ⏳ Morning (PC link dropped ~01:30): install the newest release on the PC through the built-in browser; start the vision model downloads (Qwen3-VL 8B Q4_K_M + mmproj F16 from Qwen/Qwen3-VL-8B-Instruct-GGUF; UI-TARS-1.5-7B Q4_K_M + mmproj from Mungert/UI-TARS-1.5-7B-GGUF, names unconfirmed) to E: through KesherAI; real tests with Roee: computer control (Notepad), Unreal plugin 0.1.24 tools, vision benchmark.
+
+## Cheap flat coding plans (Roee's 8 links, checked 2026-11-22)
+Fits (flat, no per-use billing, drivable from KesherAI):
+- ⬜ T1 (S) Jules as an executor: Google AI Pro (already paid) gives 100 Jules tasks/day, separate from Antigravity's weekly quota; works on the GitHub repo and returns a PR. Add `executor: jules` to the task inbox (code tasks → PR, which Claude approves in batches). Check the terms and API/CLI first.
+- ⬜ T2 (S) Flat-plan provider in Settings > Providers: Xiaomi MiMo Lite ($6, monthly credits, no 5-hour/weekly caps, works with OpenCode/Claude Code/Codex/Cline) or OpenCode Go ($10, Kimi/GLM/DeepSeek/Qwen with 5-hour/weekly caps) as the fallback coder when Antigravity is out. Needs Roee's decision before any purchase.
+- ⬜ T3 (S) GitHub Copilot Pro ($10) via Copilot CLI as an executor — only if T1/T2 fall short.
+Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0.50 per 1M), the dit.ai list (DeepInfra, Groq, Together, DeepSeek API). Cursor Plus is IDE-only; Zed Pro bills past its credits.
