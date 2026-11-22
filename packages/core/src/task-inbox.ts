@@ -84,7 +84,7 @@ export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
  * @throws When the ref is not allowed (nothing runs) or the push failed.
  */
 export async function pushRef(git: (cwd: string, args: string[]) => Promise<{ code: number; out: string }>, repo: string, ref: string, inboxBranch = INBOX_BRANCH): Promise<void> {
-  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
+  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/* and ocgo/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
   const r = await git(repo, ["push", "--no-verify", "origin", `refs/heads/${ref}:refs/heads/${ref}`]);
   if (r.code !== 0) throw new Error(`git push failed: ${r.out.slice(0, 300)}`);
 }

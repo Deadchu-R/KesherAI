@@ -564,6 +564,23 @@ export class HubDevice {
         return true;
     }
     /**
+     * The backup relays' keys from a paired PC (sealed to this browser, so the hub never saw them): kept in this
+     * browser's IndexedDB (kv `relays`), the newest wins; empty keys forget them. Only a PC may send them.
+     *
+     * @param from - The PC (its envelope opened with its key).
+     * @param keys - The checked keys.
+     * @param at - When the PC sent them (ms).
+     */
+    async onRelayKeys(from, keys, at) {
+        if (this.presence.find((d) => d.id === from)?.kind !== "pc")
+            return;
+        const old = await get("relays").catch(() => undefined);
+        if (old && old.at > at)
+            return;
+        await put("relays", { from, keys, at }).catch(() => undefined);
+        this.changed();
+    }
+    /**
      * Keeps the paired PCs' public keys and names for the service worker (kv `pcKeys`), so a notification's ask can be
      * opened and answered with the page closed. The same keys the page itself uses from presence; written only on change.
      */
@@ -606,6 +623,8 @@ export class HubDevice {
             return this.onCommandResult(body.commandId, body.taskId, body.ok, body.text, body.ask);
         if (body.type === "inbox_task")
             return this.onInboxTask(env.from, body);
+        if (body.type === "relays")
+            return this.onRelayKeys(env.from, body.keys, body.at);
         const task = "taskId" in body ? this.tasks.find((t) => t.taskId === body.taskId && !t.inbox) : undefined;
         if (!task)
             return;
