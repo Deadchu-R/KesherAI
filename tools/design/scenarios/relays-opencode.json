@@ -1,0 +1,286 @@
+{
+ "group": "סוכנים · Agents",
+ "mocks": [
+  {
+   "url": "**/api/task-inbox",
+   "json": {
+    "settings": {
+     "enabled": true,
+     "paused": false,
+     "repo": "D:/Projects/KesherAI",
+     "branch": "kesher-inbox",
+     "fetchMinutes": 10,
+     "dailyCap": 10,
+     "maxMinutes": 30,
+     "model": "",
+     "allowedPaths": [],
+     "forbiddenPaths": [],
+     "commands": [
+      "pnpm -s typecheck"
+     ],
+     "notWhileGame": true,
+     "notWhileEditor": false,
+     "gpuBusyPercent": 0,
+     "opencode": {
+      "enabled": true,
+      "small": "opencode-go/mimo-v2.6-flash",
+      "strong": "opencode-go/mimo-v2.6-pro",
+      "dailyCap": 40
+     }
+    },
+    "today": {
+     "date": "2026-11-20",
+     "used": 2
+    },
+    "busy": {
+     "free": true,
+     "reasons": []
+    },
+    "runHere": true,
+    "project": "KesherAI",
+    "lastFetch": {
+     "$agoMs": "2m"
+    },
+    "tasks": [
+     {
+      "id": "r-0524",
+      "title": "מפת קוד מתומצתת לסוכנים (1,024 טוקנים)",
+      "executor": "opencode",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "מפת קוד מתומצתת",
+      "status": "running",
+      "runBy": "opencode",
+      "branch": "ocgo/r-0524",
+      "modelUsed": "OpenCode Go · mimo-v2.6-pro",
+      "size": "M"
+     },
+     {
+      "id": "r-0522",
+      "title": "טעינת כלים לפי הצורך (MCP ומנועים)",
+      "executor": "opencode",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "טעינת כלים לפי הצורך",
+      "status": "waiting",
+      "runBy": "opencode",
+      "branch": "ocgo/r-0522",
+      "size": "S"
+     },
+     {
+      "id": "r-0553",
+      "title": "ייבוא דוח מחקר ופירוק למשימות",
+      "executor": "opencode",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "ייבוא דוח מחקר",
+      "status": "done",
+      "runBy": "opencode",
+      "branch": "ocgo/r-0553",
+      "modelUsed": "OpenCode Go · mimo-v2.6-flash",
+      "size": "S",
+      "note": "PR מחכה לבדיקה של Claude"
+     },
+     {
+      "id": "t-0412",
+      "title": "להשוות את מסך ההגדרות למתחרים",
+      "executor": "auto",
+      "risk": "low",
+      "from": "claude",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "להשוות את מסך ההגדרות למתחרים",
+      "status": "waiting",
+      "runBy": "antigravity",
+      "branch": "agy/t-0412",
+      "label": {
+       "name": "השוואת הגדרות",
+       "note": "לא לגעת בעיצוב הישן"
+      }
+     },
+     {
+      "id": "t-0411",
+      "title": "לתקן אזהרות לינט בחבילת core",
+      "executor": "auto",
+      "risk": "low",
+      "from": "self-work",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לתקן אזהרות לינט בחבילת core",
+      "status": "queued",
+      "runBy": "local",
+      "branch": "agy/t-0411"
+     },
+     {
+      "id": "t-0409",
+      "title": "לעדכן את תיעוד ההתקנה",
+      "executor": "auto",
+      "risk": "low",
+      "from": "roee",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 8,
+      "goal": "לעדכן את תיעוד ההתקנה",
+      "status": "done",
+      "runBy": "opus",
+      "branch": "agy/t-0409"
+     }
+    ],
+    "opencode": {
+     "ready": true,
+     "used": 12,
+     "models": [
+      "opencode-go/mimo-v2.6-flash",
+      "opencode-go/mimo-v2.6-pro",
+      "opencode-go/glm-5.3",
+      "opencode-go/glm-5.3-flash",
+      "opencode-go/deepseek-v4.1-flash",
+      "opencode-go/kimi-k3"
+     ]
+    }
+   }
+  },
+  {
+   "url": "**/api/hub",
+   "json": {
+    "enabled": true,
+    "url": "https://hub.example.com",
+    "paired": true,
+    "connected": false,
+    "paused": false,
+    "optIn": {
+     "appear": true,
+     "acceptTasks": true,
+     "acceptLocal": true,
+     "acceptAntigravity": true,
+     "reportLinks": true,
+     "reportActivity": true,
+     "reportFileNames": false
+    },
+    "devices": [
+     {
+      "id": "ph1",
+      "name": "הטלפון",
+      "kind": "phone",
+      "online": true
+     }
+    ],
+    "lastError": "ticket 503 hub-storage-limit",
+    "errorCode": "hub-limit",
+    "path": "ably",
+    "relays": {
+     "ably": true,
+     "supabase": true,
+     "supabaseUrl": "https://example.supabase.co"
+    },
+    "relayHealth": {
+     "ably": {
+      "state": "connected",
+      "healthy": true
+     },
+     "supabase": {
+      "state": "connected",
+      "healthy": true
+     }
+    },
+    "relayUse": {
+     "month": "2026-11",
+     "ably": 184000,
+     "supabase": 2600
+    }
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "BackupRelays",
+   "title": "ענן Kesher: הגדרות › טלפון וגישה מרחוק — ממסרים לגיבוי (Ably, Supabase) כשהמרכז נופל",
+   "route": "#/settings/phone",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".backup-relays"
+    },
+    {
+     "scroll": ".backup-relays"
+    }
+   ]
+  },
+  {
+   "id": "InboxOpencodeCard",
+   "title": "תיבת משימות: הגדרות › OpenCode Go — מודל קטן/חזק, סף יומי, ספירה של היום",
+   "route": "#/settings/inbox",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-ocgo"
+    },
+    {
+     "scroll": ".tinbox-ocgo"
+    }
+   ]
+  },
+  {
+   "id": "InboxOpencodeTasks",
+   "title": "תיבת משימות: משימות ש-OpenCode Go לוקח (◈ OpenCode Go · המודל)",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 900,
+    "phone": 1700
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has(.tinbox-title)"
+    }
+   ]
+  }
+ ]
+}
