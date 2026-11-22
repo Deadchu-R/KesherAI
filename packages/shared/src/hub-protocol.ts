@@ -10,6 +10,7 @@
 import { cleanAgentLabel, type AgentLabel } from "./agent-label.js";
 import { parseAssignTo, type AssignTo } from "./task-assign.js";
 import { cleanAwayNote, type AwayNote } from "./device-status.js";
+import { cleanTailscaleDirect, type TailscaleDirect } from "./direct-path.js";
 
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1 as const;
@@ -180,11 +181,13 @@ export interface HubPresence {
   version?: string;
   /** It said it is going to sleep or shut down (ISO time) and what was running; gone when it is back. */
   away?: { at: string; note: AwayNote };
+  /** A PC's tailnet-only addresses (direct-path.ts): the phone's backup path when the hub is down. Older hubs and PCs leave it out. */
+  direct?: TailscaleDirect;
 }
 
 /** A frame a device sends the hub over its socket. */
 export type DeviceFrame =
-  | { t: "hello"; version: string; platform?: string; busy: boolean; optIn: HubOptIn; agents: HubAgent[] }
+  | { t: "hello"; version: string; platform?: string; busy: boolean; optIn: HubOptIn; agents: HubAgent[]; direct?: TailscaleDirect }
   | { t: "beat"; busy: boolean; optIn?: HubOptIn; agents: HubAgent[] }
   /** "Going to sleep or shutting down" (with what was running), or "back". An older hub refuses it (`bad-frame`) and nothing breaks. */
   | { t: "away"; state: "asleep" | "awake"; note: AwayNote }
@@ -650,7 +653,8 @@ export function parseDeviceFrame(raw: unknown): DeviceFrame | null {
   switch (x.t) {
     case "hello": {
       const optIn = cleanOptIn(x.optIn);
-      return { t: "hello", version: str(x.version, 40), ...(typeof x.platform === "string" ? { platform: str(x.platform, 40) } : {}), busy: x.busy === true, optIn, agents: cleanAgents(x.agents, optIn.reportLinks) };
+      const direct = cleanTailscaleDirect(x.direct);
+      return { t: "hello", version: str(x.version, 40), ...(typeof x.platform === "string" ? { platform: str(x.platform, 40) } : {}), busy: x.busy === true, optIn, agents: cleanAgents(x.agents, optIn.reportLinks), ...(direct ? { direct } : {}) };
     }
     case "beat": {
       const optIn = x.optIn === undefined ? undefined : cleanOptIn(x.optIn);

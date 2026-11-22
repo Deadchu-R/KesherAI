@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121213" />
   <link rel="stylesheet" href="theme.css" />
+  <script src="vendor/path.js"></script>
   <title>KesherAI · Kesher Cloud</title>
   <style>
     /* The ☁ Cloud tab of the top bar (Phone / Computer / ☁ Cloud). It opens the owner's Kesher Cloud hub page, which
@@ -38,6 +39,8 @@
   <div class="logo" aria-hidden="true">☁</div>
   <h1>Kesher Cloud</h1>
   <p id="opening" hidden data-he="פותח את המרכז שלך…" data-en="Opening your hub…">פותח את המרכז שלך…</p>
+  <p id="path" class="small" hidden></p>
+  <p id="tsHint" class="small" hidden></p>
   <section id="empty" class="card" hidden>
     <strong data-he="לחבר מרכז" data-en="Connect a hub">לחבר מרכז</strong>
     <p data-he="המרכז הפרטי שלך (Cloudflare, בחינם) מראה אילו מחשבים דלוקים ושולח משימות נעולות גם כשהמחשב כבוי. את הכתובת מוצאים במחשב: הגדרות › טלפון וגישה מרחוק › ענן Kesher." data-en="Your own private hub (Cloudflare, free) shows which PCs are on and sends sealed tasks even when the PC is off. Find its address on the PC: Settings › Phone and remote access › Kesher Cloud.">המרכז הפרטי שלך (Cloudflare, בחינם) מראה אילו מחשבים דלוקים ושולח משימות נעולות גם כשהמחשב כבוי. את הכתובת מוצאים במחשב: הגדרות › טלפון וגישה מרחוק › ענן Kesher.</p>
@@ -93,6 +96,40 @@
     location.replace(`${hub}/?app=${encodeURIComponent(location.origin)}${frag}`);
   };
 
+  /**
+   * The hub first; when it does not answer, answers 5xx or has used up its daily storage, straight to the computer
+   * through Tailscale (direct-path.ts), with the same key this phone uses at home. Without a Tailscale address for
+   * the computer, a one-time hint to install Tailscale, then the hub page anyway (it shows its own error).
+   */
+  async function hubOrDirect(hub) {
+    const P = globalThis.kesherPath;
+    if (!P) return open(hub);
+    // The hub sends no CORS headers to the app, so this only tells whether it answered at all (an opaque answer);
+    // a 5xx or the storage limit is caught by the hub page itself, which offers the same direct path.
+    const probe = await fetch(`${hub}/api/config`, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(4000) })
+      .then(() => ({ status: 200 }))
+      .catch(() => ({}));
+    let computers = [];
+    try { computers = JSON.parse(localStorage.getItem("kesherai-computers") || "[]"); } catch { /* none */ }
+    const recent = computers.sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || ""))[0];
+    const ip = (recent?.links || []).map((l) => { try { return new URL(l).hostname; } catch { return ""; } }).find((h) => /^100\./.test(h));
+    const direct = P.cleanTailscaleDirect({ ...(recent?.tailscale || {}), ...(ip && !recent?.tailscale?.ip ? { ip } : {}) });
+    const pick = P.choosePath(probe, direct);
+    const show = (path) => { $("path").hidden = false; $("path").textContent = P.PATH_LABELS[path][lang]; };
+    if (pick.path === "tailscale") {
+      $("opening").hidden = true;
+      show("tailscale");
+      return location.replace("index.html?direct=1");
+    }
+    if (!P.hubUsable(probe) && !localStorage.getItem("kesherai-ts-hint")) {
+      localStorage.setItem("kesherai-ts-hint", "1");
+      $("tsHint").hidden = false;
+      $("tsHint").textContent = P.TAILSCALE_HINT[lang];
+      await new Promise((r) => setTimeout(r, 4000));
+    }
+    if (P.hubUsable(probe)) show("hub");
+    return open(hub);
+  }
   const params = new URLSearchParams(location.search);
   const given = clean(params.get("hub") || "");
   if (given) localStorage.setItem(KEY, given);
@@ -100,7 +137,7 @@
   if (hub && !params.has("change")) {
     $("opening").hidden = false;
     $("change").hidden = false;
-    void open(hub);
+    void hubOrDirect(hub);
   } else {
     $("empty").hidden = false;
     $("url").value = hub;

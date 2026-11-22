@@ -14,6 +14,7 @@ import { applyAgentBatch, RUN_STARTING_MS, runStarting } from "../../../packages
 import { sameLabel } from "../../../packages/shared/src/agent-label.js";
 import { inboxMetaOf } from "../../../packages/shared/src/hub-work.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
+import { rememberDirect } from "./direct.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
     waiting: { he: "ממתין", en: "Waiting" },
@@ -384,6 +385,7 @@ export class HubDevice {
                 this.paused = f.paused;
                 this.presence = f.presence;
                 void this.keepPcKeys();
+                rememberDirect(f.presence);
                 if (this.ident && f.hubKey && f.hubKey !== this.ident.hubKey) {
                     this.ident.hubKey = f.hubKey;
                     await put("device", this.ident).catch(() => undefined);
@@ -394,6 +396,7 @@ export class HubDevice {
             case "presence":
                 this.presence = f.presence;
                 void this.keepPcKeys();
+                rememberDirect(f.presence);
                 return this.changed();
             case "pause":
                 this.paused = f.paused;

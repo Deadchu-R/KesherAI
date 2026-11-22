@@ -121,6 +121,7 @@ import { buildGameEngines, buildJournal, buildPipelines, buildRoutines, buildSel
 import { Study } from "./study.js";
 import { VisionService, visionServiceOf } from "./vision-service.js";
 import { buildNotifier, buildTelegram, buildTunnel, setupRemoteAccess, watchDisk } from "./server/build-remote.js";
+import { TailscaleWatch } from "./tailscale-watch.js";
 
 export { amdCardOnLinux } from "./server/build-engines.js";
 
@@ -396,7 +397,10 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
-  const { tunnel } = buildTunnel(paths, downloads, config, persist);
+  const { tunnel, tailscaleCli } = buildTunnel(paths, downloads, config, persist);
+  // Closes a Funnel the user did not choose and keeps the tailnet addresses for the phone's backup path (tailscale-watch.ts).
+  const tailscaleWatch = new TailscaleWatch(tailscaleCli, { port: () => config.port, allowFunnel: () => config.remote.allowFunnel, remoteOn: () => config.remote.enabled, onChange: () => helloAgain?.sayHello() });
+  let helloAgain: { sayHello(): void } | undefined;
   const whisper = new WhisperEngine(join(paths.engines, "whisper"), () => paths.models, downloads, async () => {
     const nv = await nvidiaGpus();
     return { nvidia: nv.length > 0, ...(nv[0] ? { vramGb: nv[0].vramTotal / 1024 ** 3 } : {}) };
@@ -721,6 +725,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // Kesher Cloud hub: off until the user turns it on; tasks from it land on this board (hub-client.ts).
   const hub = new HubClient({
     activity,
+    direct: () => tailscaleWatch.current(),
     settings: () => config.hub,
     persist,
     board: taskBoard,
@@ -1004,6 +1009,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       await app.listen({ port: config.port, host });
       // Kesher Cloud: a paired PC that was on connects again when the app starts (before 0.6.402 it waited for the
       // On switch, so the hub page showed it Off). The main app only, never a worker.
+      helloAgain = hub;
+      if (!options.worker && features.remote) void tailscaleWatch.start().catch((err: Error) => console.warn(`[tailscale] ${err.message}`));
       if (!options.worker) hub.start();
       if (!options.worker) services.tasksSync?.start();
       // Helpers a restart stopped continue (and the ended ones show again); the main app only, never a worker.

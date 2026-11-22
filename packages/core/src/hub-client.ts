@@ -36,6 +36,7 @@ import {
   type HubAskNote,
   type HubBoardCommand,
   type HubCryptoKey,
+  type DeviceFrame,
   type HubFrame,
   type HubInboxState,
   type HubInboxTask,
@@ -44,11 +45,13 @@ import {
   type InboxTaskView,
   type SealedBody,
   type SealedEnvelope,
+  type TailscaleDirect,
 } from "@kesher/shared";
 import { inboxRunId, type ActivityBatch, type AgentActivity } from "./agent-activity.js";
 import type { KesherConfig } from "./config.js";
 import { hubBoardSnapshot } from "./hub-board.js";
 import { parseHubDiag, type HubDiagSnapshot } from "./hub-diag.js";
+import { pickRelay, relayList, type RelayProvider } from "./relay.js";
 import type { TaskBoard } from "./task-board.js";
 
 /** The hub part of KesherAI's config. */
@@ -147,6 +150,11 @@ export interface HubClientDeps {
    * the app saves them to `logs/hub-diag.json` and the newest error to `main.log` (hub-diag.ts).
    */
   saveDiag?: (snap: HubDiagSnapshot, reason: string) => void;
+  /**
+   * This PC's tailnet-only addresses (tailscale-watch.ts), sent in the hello so the owner's phones can reach the PC
+   * directly when the hub is down (direct-path.ts). Undefined without Tailscale.
+   */
+  direct?: () => TailscaleDirect | undefined;
 }
 
 /**
@@ -360,6 +368,8 @@ export class HubClient {
   private pairing?: { code: string; fingerprint: string; expiresAt: number };
   private lastError?: string;
   private readonly fetch: typeof fetch;
+  /** Relays that failed since the last good link (relay.ts): the next one in priority order is tried. */
+  private readonly relayFailed = new Set<string>();
   /** `sync` pings, at most one per 5 seconds (the last one held back, never lost). */
   private readonly syncPings = syncPinger(() => {
     if (this.connected) this.send({ t: "sync" });
@@ -380,6 +390,34 @@ export class HubClient {
 
   private get s(): HubSettings {
     return this.deps.settings();
+  }
+
+  /** The relay in use now: the first in priority order that has not failed (today the one hub). */
+  private get relay(): RelayProvider | undefined {
+    return pickRelay(relayList(this.s), this.relayFailed);
+  }
+
+  /** The current relay's address (the hub address while there is only one). */
+  private get relayUrl(): string | undefined {
+    return this.relay?.url ?? this.s.url;
+  }
+
+  /** Marks the current relay as failed, so the next connect tries the next one (none yet: the same hub again). */
+  private relayDown(): void {
+    const r = this.relay;
+    if (r && relayList(this.s).length > 1) this.relayFailed.add(r.id);
+  }
+
+  /**
+   * Sends the hello again on an open link (this PC's Tailscale address changed), so the phones learn it now.
+   */
+  sayHello(): void {
+    if (this.connected) this.send(this.helloFrame());
+  }
+
+  private helloFrame(): DeviceFrame {
+    const direct = this.deps.direct?.();
+    return { t: "hello", version: this.deps.version, platform: process.platform, busy: this.deps.busy?.() ?? false, optIn: cleanOptIn(this.s.optIn), agents: this.agents(), ...(direct ? { direct } : {}) };
   }
 
   /** @returns What the settings card shows (no secrets). */
@@ -478,7 +516,7 @@ export class HubClient {
   }
 
   private async post(path: string, body: unknown, token?: string): Promise<{ status: number; data: Record<string, unknown>; note?: string }> {
-    const r = await this.fetch(`${this.s.url}${path}`, {
+    const r = await this.fetch(`${this.relayUrl}${path}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body ?? {}),
@@ -518,7 +556,7 @@ export class HubClient {
     if (!force && Date.now() - this.diagAt < DIAG_GAP_MS) return;
     this.diagAt = Date.now();
     try {
-      const r = await this.fetch(`${this.s.url}/api/diag`, { headers: { authorization: `Bearer ${this.s.token}` }, signal: AbortSignal.timeout(15_000) });
+      const r = await this.fetch(`${this.relayUrl}/api/diag`, { headers: { authorization: `Bearer ${this.s.token}` }, signal: AbortSignal.timeout(15_000) });
       if (r.status !== 200) return;
       const snap = parseHubDiag(await r.json().catch(() => undefined));
       if (snap) this.deps.saveDiag(snap, reason);
@@ -661,6 +699,7 @@ export class HubClient {
       if (this.stopped) return;
       if (r.status === 401 || r.status === 403) return this.lost("The hub no longer knows this PC. Pair it again.");
       if (r.status === 503 && r.data.error === "hub-storage-limit") {
+        this.relayDown();
         this.fail("hub-limit", this.stepText("ticket", r));
         void this.fetchDiag(this.stepText("ticket", r));
         return this.laterAt(afterUtcMidnight(Date.now()));
@@ -699,10 +738,11 @@ export class HubClient {
       ticket = String(r.data.ticket);
     } catch {
       this.fail("unreachable", "The hub did not answer.");
+      this.relayDown();
       return this.later();
     }
     if (this.stopped) return;
-    const ws = `${this.s.url.replace(/^http/, "ws")}/ws/device?ticket=${encodeURIComponent(ticket)}`;
+    const ws = `${(this.relayUrl ?? this.s.url).replace(/^http/, "ws")}/ws/device?ticket=${encodeURIComponent(ticket)}`;
     const open = this.deps.openSocket ?? wsSocket;
     let opened = false;
     const gen = ++this.gen;
@@ -717,7 +757,8 @@ export class HubClient {
         this.lastError = undefined;
         this.errorCode = undefined;
         this.connectedAt = this.heardAt = Date.now();
-        this.send({ t: "hello", version: this.deps.version, platform: process.platform, busy: this.deps.busy?.() ?? false, optIn: cleanOptIn(this.s.optIn), agents: this.agents() });
+        this.relayFailed.clear();
+        this.send(this.helloFrame());
         clearInterval(this.beatTimer);
         this.beatTimer = setInterval(() => this.beat(), BEAT_MS);
         this.beatTimer.unref?.();

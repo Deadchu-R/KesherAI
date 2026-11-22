@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <script src="vendor/address.js"></script>
+  <script src="vendor/path.js"></script>
   <script src="link-beacon.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#121213" />
@@ -171,6 +172,7 @@
     lastUsed: { he: "שימוש אחרון: ", en: "Last used: " },
     removeComputer: { he: "להסיר את המחשב הזה מהרשימה?", en: "Remove this computer from the list?" },
     tryingNext: { he: "מנסה כתובת אחרת…", en: "Trying another address…" },
+    viaTailscale: { he: "ישיר דרך Tailscale…", en: "Direct through Tailscale…" },
     findingNew: { he: "מחפש את הכתובת החדשה של המחשב…", en: "Looking for the computer's new address…" },
     installingScanner: { he: "מכין את הסורק (פעם ראשונה בלבד)…", en: "Preparing the scanner (first time only)…" },
     notKesher: { he: "זה לא קוד של KesherAI. סרוק את הקוד שבמחשב: הגדרות ← טלפון.", en: "That is not a KesherAI code. Scan the code on the computer: Settings → Phone." },
@@ -233,14 +235,22 @@
     c.wake = url.searchParams.get("wake") || c.wake;
     c.bcast = url.searchParams.get("bcast") || c.bcast;
     c.lastUsed = new Date().toISOString();
+    // From the QR code (`ts`): the tailnet-only HTTPS address, kept for the direct path.
+    const pendingTs = globalThis.kesherPath?.cleanTailscaleDirect({ url: sessionStorage.getItem("kesherai-pending-ts") || "" });
+    sessionStorage.removeItem("kesherai-pending-ts");
+    if (pendingTs) c.tailscale = { ...(c.tailscale || {}), ...pendingTs };
     try {
       const info = await fetch(`${base}/api/remote/links`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) }).then((r) => r.json());
       if (info?.name) c.name = info.name;
+      // The backup path when the hub is down (direct-path.ts): the computer's tailnet-only addresses, tried last.
+      const direct = globalThis.kesherPath?.cleanTailscaleDirect(info?.direct);
+      if (direct) c.tailscale = direct;
       for (const l of info?.links ?? []) {
         if (!c.links.includes(l.url)) c.links.push(l.url);
         if (l.kind === "home" && l.mac && !c.wake) { c.wake = l.mac; c.bcast = l.broadcast; }
       }
     } catch { /* older KesherAI: keep what we have */ }
+    for (const l of globalThis.kesherPath?.directUrls(c.tailscale) ?? []) if (!c.links.includes(l)) c.links.push(l);
     // "My devices": the user's other computers (same Google account) appear here by themselves.
     try {
       const peers = await fetch(`${base}/api/devices/peers`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(4000) }).then((r) => (r.ok ? r.json() : []));
@@ -267,10 +277,24 @@
   /** This phone's model name, as Android tells it (for the computer's list of devices). */
   const deviceName = () => (navigator.userAgent.match(/;\s*([^;)]+)\s+Build\//) || [])[1] || "Phone";
 
-  async function connectComputer(c) {
+  /** Whether an address is the computer's Tailscale one (the direct path): a ts.net name or 100.64.0.0/10. */
+  const isTailscaleLink = (l) => { try { const h = new URL(l).hostname; return /\.ts\.net$/i.test(h) || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h); } catch { return false; } };
+
+  /**
+   * @param c - The saved computer.
+   * @param directOnly - From the Cloud tab when the hub is down: only the computer's Tailscale addresses.
+   */
+  async function connectComputer(c, directOnly) {
     cancelled = false;
+    if (directOnly) {
+      const direct = c.links.filter(isTailscaleLink);
+      c = { ...c, links: direct.length ? direct : globalThis.kesherPath?.directUrls(c.tailscale) ?? [] };
+    }
     for (let i = 0; i < c.links.length && !cancelled; i++) {
-      if (i > 0) { $("status").className = ""; $("status").textContent = tr.tryingNext[lang]; }
+      $("status").className = "";
+      // Which way it goes, so she knows the direct path is in use (the hub is not needed for it).
+      if (isTailscaleLink(c.links[i])) { $("status").textContent = tr.viaTailscale[lang]; sessionStorage.setItem("kesherai-path", "tailscale"); }
+      else if (i > 0) $("status").textContent = tr.tryingNext[lang];
       const ok = await fetch(`${c.links[i]}/api/health`, { headers: { authorization: `Bearer ${c.token}` }, signal: AbortSignal.timeout(5000) }).then((r) => r.ok).catch(() => false);
       if (ok) {
         // Found with the shared token (Google, QR): trade it for a key of this phone's own, once.
@@ -571,6 +595,9 @@
       const u = new URL(link);
       if (u.protocol !== "kesherai:") return null;
       const server = u.searchParams.get("server");
+      // `ts`: the computer's tailnet-only HTTPS address, kept by rememberComputer for the direct path.
+      const ts = u.searchParams.get("ts");
+      if (ts && globalThis.kesherPath?.cleanTailscaleDirect({ url: ts })) sessionStorage.setItem("kesherai-pending-ts", ts);
       return server && /^https?:\/\//.test(server) ? server : null;
     } catch { return null; }
   }
@@ -832,7 +859,9 @@
     if (lastCrash) return;
     if (launch) return connect(launch);
     // A computer tab in the side menu: open that saved computer (its addresses in turn).
-    const use = new URLSearchParams(location.search).get("use");
+    // From the Cloud tab when the hub did not answer: straight to the computer through Tailscale.
+    if (new URLSearchParams(location.search).get("direct") === "1" && recent) return connectComputer(recent, true);
+        const use = new URLSearchParams(location.search).get("use");
     if (use !== null && /^\d{1,2}$/.test(use) && loadComputers()[Number(use)]) return connectComputer(loadComputers()[Number(use)]);
     // The interface's Computers menu asks for a computer by its name (it does not see this list's order).
     if (use && !/^\d{1,2}$/.test(use)) {

@@ -16,6 +16,7 @@ import { inboxMetaOf, type InboxMeta } from "../../../packages/shared/src/hub-wo
 import type { AssignTo } from "../../../packages/shared/src/task-assign.js";
 import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import type { DriveMark } from "./drive-view.js";
+import { rememberDirect } from "./direct.js";
 
 /** This browser's identity at the hub. */
 interface Identity {
@@ -454,6 +455,7 @@ export class HubDevice {
         this.paused = f.paused;
         this.presence = f.presence;
         void this.keepPcKeys();
+        rememberDirect(f.presence);
         if (this.ident && f.hubKey && f.hubKey !== this.ident.hubKey) {
           this.ident.hubKey = f.hubKey;
           await put("device", this.ident).catch(() => undefined);
@@ -464,6 +466,7 @@ export class HubDevice {
       case "presence":
         this.presence = f.presence;
         void this.keepPcKeys();
+        rememberDirect(f.presence);
         return this.changed();
       case "pause":
         this.paused = f.paused;

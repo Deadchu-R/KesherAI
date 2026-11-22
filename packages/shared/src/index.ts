@@ -45,6 +45,7 @@ export * from "./grades.js";
 export * from "./timetable.js";
 export * from "./study-plan.js";
 export * from "./link-beacon.js";
+export * from "./direct-path.js";
 export * from "./sheet.js";
 export * from "./office-out.js";
 export * from "./hub.js";

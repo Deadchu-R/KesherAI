@@ -430,10 +430,15 @@ export const KesherConfigSchema = z.object({
       anywhere: z.boolean().default(false),
       /**
        * Which internet link: "quick" (Cloudflare, no account, a new address each time it starts), "cloudflare"
-       * (the user's own Cloudflare account and domain: a fixed address) or "tailscale" (Tailscale Funnel: a fixed
-       * https://<computer>.<tailnet>.ts.net address).
+       * (the user's own Cloudflare account and domain: a fixed address) or "tailscale" (a fixed
+       * https://<computer>.<tailnet>.ts.net address; tailnet only unless `allowFunnel`).
        */
       anywhereMode: z.enum(["quick", "cloudflare", "tailscale"]).default("quick"),
+      /**
+       * Tailscale Funnel: mode "tailscale" opens KesherAI to the whole internet instead of only the user's tailnet.
+       * Off by default, and only the user's explicit choice (Settings → Phone, with a warning) turns it on.
+       */
+      allowFunnel: z.boolean().default(false),
       /** The user's own Cloudflare tunnel (mode "cloudflare"). */
       cloudflare: z.object({ hostname: z.string().optional(), tunnelId: z.string().optional() }).prefault({}),
       /** A key of its own for each paired device (only a hash is kept), so one can be removed without the others. */

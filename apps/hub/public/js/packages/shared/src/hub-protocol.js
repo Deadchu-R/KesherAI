@@ -10,6 +10,7 @@
 import { cleanAgentLabel } from "./agent-label.js";
 import { parseAssignTo } from "./task-assign.js";
 import { cleanAwayNote } from "./device-status.js";
+import { cleanTailscaleDirect } from "./direct-path.js";
 /** The protocol version every frame and envelope carries. */
 export const HUB_PROTOCOL = 1;
 /** Size and time limits shared by both sides. */
@@ -302,7 +303,8 @@ export function parseDeviceFrame(raw) {
     switch (x.t) {
         case "hello": {
             const optIn = cleanOptIn(x.optIn);
-            return { t: "hello", version: str(x.version, 40), ...(typeof x.platform === "string" ? { platform: str(x.platform, 40) } : {}), busy: x.busy === true, optIn, agents: cleanAgents(x.agents, optIn.reportLinks) };
+            const direct = cleanTailscaleDirect(x.direct);
+            return { t: "hello", version: str(x.version, 40), ...(typeof x.platform === "string" ? { platform: str(x.platform, 40) } : {}), busy: x.busy === true, optIn, agents: cleanAgents(x.agents, optIn.reportLinks), ...(direct ? { direct } : {}) };
         }
         case "beat": {
             const optIn = x.optIn === undefined ? undefined : cleanOptIn(x.optIn);

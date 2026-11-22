@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateHubKeys, openEnvelope, sealMessage, type HubFrame, type SealedBody, type SealedEnvelope } from "@kesher/shared";
 import type { InboxTaskView } from "@kesher/shared";
-import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubSettings, type HubSocketEvents } from "./hub-client.js";
+import { afterUtcMidnight, askNoteOf, cleanHubUrl, HubClient, hubInboxTask, type HubClientDeps, type HubSettings, type HubSocketEvents } from "./hub-client.js";
 import { TaskBoard } from "./task-board.js";
 
 const settings = (): HubSettings => ({ enabled: true, url: "https://hub.example.test", reported: [], optIn: { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false } });
 
 /** A fake hub: answers pairing and tickets, and records what the PC sends on its socket. */
-async function rig() {
+async function rig(extra: Partial<HubClientDeps> = {}) {
   const dir = await mkdtemp(join(tmpdir(), "kesher-hubc-"));
   const s = settings();
   const board = new TaskBoard(join(dir, "board.json"));
@@ -47,11 +47,28 @@ async function rig() {
       queueMicrotask(() => on.open());
       return { send: (t) => sent.push(JSON.parse(t) as Record<string, unknown>), close: () => undefined };
     },
+    ...extra,
   });
   return { dir, s, board, sent, calls, client, notes, activity, events: () => events!, socketUrl: () => socketUrl, done: () => rm(dir, { recursive: true, force: true }) };
 }
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+test("the hello carries this PC's tailnet addresses (the phone's backup path), and again when they change", async (t) => {
+  let direct: { url?: string; ip?: string } | undefined = { ip: "100.64.0.9" };
+  const r = await rig({ direct: () => direct });
+  t.after(() => {
+    r.client.stop();
+    return r.done();
+  });
+  Object.assign(r.s, { token: "kh_secret_token", deviceId: "dpc" });
+  r.client.start();
+  for (let i = 0; i < 50 && !r.client.status().connected; i++) await wait(20);
+  assert.deepEqual(r.sent[0], { ...r.sent[0], t: "hello", direct: { ip: "100.64.0.9" } });
+  direct = { url: "https://pc.tail1.ts.net", ip: "100.64.0.9" };
+  r.client.sayHello();
+  assert.deepEqual(r.sent.filter((f) => f.t === "hello").at(-1)?.direct, direct);
+});
 
 test("hub address: https only (http just for this computer)", () => {
   assert.equal(cleanHubUrl("https://hub.example.test/"), "https://hub.example.test");

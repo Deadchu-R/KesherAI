@@ -21,6 +21,8 @@ import { deviceIcon, getLocale, h, initLocale, L, setLocale, when, type Child } 
 import { HubDevice, post, type PageTask } from "./device.js";
 import { RUN_ALL_KEY } from "../../../packages/shared/src/run-undo.js";
 import { runAllButton, runWithUndo } from "./run-button.js";
+import { pathLine } from "./direct.js";
+import type { HubProbe } from "../../../packages/shared/src/direct-path.js";
 import { agentsSummary, agentsTab, runWaitActions, runWaitOf, runWaitTag, type AgentsView } from "./agents.js";
 import { assignBox } from "./assign.js";
 import { assignOfExecutor } from "../../../packages/shared/src/task-assign.js";
@@ -146,9 +148,14 @@ function tab(): Tab {
   return t === "new" || TABS.includes(t) ? t : "dash";
 }
 
+/** How the hub last answered the page (direct.ts shows the Tailscale path when it is down). */
+let hubProbe: HubProbe | undefined;
+
 /** Reads the owner's state; a 401 means not signed in. */
 async function loadOwner(): Promise<void> {
   const r = await fetch("/api/state", { credentials: "same-origin" }).catch(() => undefined);
+  // How the hub answered, for the backup-path line (direct.ts): no answer, a 5xx or its storage limit.
+  hubProbe = !r ? {} : r.status >= 500 ? { status: r.status, error: String(((await r.clone().json().catch(() => ({}))) as { error?: unknown }).error ?? "") } : { status: r.status };
   if (r?.status === 200) {
     app.owner = (await r.json()) as OwnerState;
     app.signedIn = true;
@@ -1215,7 +1222,7 @@ function render(): void {
   const showSignIn = !app.signedIn && !device.paired;
   const body: Child = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
   root.replaceChildren(
-    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
+    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), pathLine(hubProbe, app.appOrigin), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
   );
   root.classList.toggle("in-app", !!app.appOrigin);
   if (scroller) scroller.scrollTop = y;

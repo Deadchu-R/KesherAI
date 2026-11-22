@@ -178,6 +178,9 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         token: s.config.remote.token,
         port: s.config.port,
         addresses,
+        allowFunnel: s.config.remote.allowFunnel,
+        // For the pairing QR: the phone keeps the tailnet-only HTTPS address as its backup path (direct-path.ts).
+        tailscaleUrl: (await tailscale.direct(s.config.port).catch(() => undefined))?.url,
       };
     });
 
@@ -194,7 +197,9 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         .map((a) => ({ url: `http://${a.address}:${s.config.port}`, kind: /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(a.address) ? "tailscale" : "home", mac: a.mac, broadcast: broadcastOf(a.address, a.netmask) }));
       const tunnel = s.tunnel.status().url;
       const https = await tailscale.status(s.config.port).catch(() => undefined);
-      return { name: hostname(), links: [...(https?.on && https.url ? [{ url: https.url, kind: "https" }] : []), ...lan, ...(tunnel ? [{ url: tunnel, kind: "anywhere" }] : [])] };
+      // The phone's backup path when the hub is down (direct-path.ts): tailnet-only addresses, kept by the phone.
+      const direct = await tailscale.direct(s.config.port).catch(() => undefined);
+      return { name: hostname(), links: [...(https?.on && https.url ? [{ url: https.url, kind: "https" }] : []), ...lan, ...(tunnel ? [{ url: tunnel, kind: "anywhere" }] : [])], ...(direct ? { direct } : {}) };
     });
 
     /** HTTPS through Tailscale (a real certificate for this computer's tailnet name). */
@@ -226,7 +231,7 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
      */
     /**
      * Which internet link: quick (no account, a new address each start), the user's own Cloudflare (a fixed
-     * address in their domain) or Tailscale Funnel (a fixed ts.net address). Only from this computer.
+     * address in their domain) or Tailscale (a fixed ts.net address; tailnet only unless Funnel is allowed). Only from this computer.
      */
     app.put<{ Body: { mode?: string } }>("/api/remote/anywhere-mode", async (req, reply) => {
       if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
@@ -244,6 +249,31 @@ export async function systemRoutes(app: FastifyInstance, s: KesherServices): Pro
         }
       }
       return s.tunnel.status();
+    });
+    /**
+     * Tailscale Funnel (KesherAI open to the whole internet, not only the user's tailnet): only by the user's explicit
+     * choice here, off by default. Turning it off closes a running Funnel and serves the tailnet only. Only from this
+     * computer. Body: `{ on: boolean }`.
+     */
+    app.put<{ Body: { on?: boolean } }>("/api/remote/allow-funnel", async (req, reply) => {
+      if (!isLocalRequest(req)) return reply.code(403).send({ error: "Only available on this computer" });
+      if (typeof req.body?.on !== "boolean") return reply.code(400).send({ error: "on must be true or false" });
+      const was = s.config.remote.allowFunnel;
+      s.config.remote.allowFunnel = req.body.on;
+      await s.saveConfig();
+      if (was && !req.body.on) {
+        const ip = (await tailscale.self()).ip;
+        await tailscale.closeFunnel(s.config.port, s.config.remote.enabled ? ip : undefined).catch(() => false);
+      }
+      if (was !== req.body.on && s.config.remote.anywhere && s.config.remote.anywhereMode === "tailscale") {
+        s.tunnel.stop();
+        try {
+          await s.tunnel.start(s.config.port);
+        } catch (err) {
+          return reply.code(502).send({ ...s.tunnel.status(), allowFunnel: s.config.remote.allowFunnel, error: (err as Error).message });
+        }
+      }
+      return { ...s.tunnel.status(), allowFunnel: s.config.remote.allowFunnel };
     });
     /** Your own Cloudflare, step 1: Cloudflare's sign-in page (open it on any device; pick the domain there). */
     app.post("/api/remote/cloudflare/login", async (req, reply) => {

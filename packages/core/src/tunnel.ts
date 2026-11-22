@@ -100,6 +100,8 @@ export class Tunnel {
       saveNamed?: (n: { hostname?: string; tunnelId?: string }) => Promise<void>;
       tailscale?: Tailscale;
       tailscaleTarget?: () => Promise<string | undefined>;
+      /** The user explicitly allowed Tailscale Funnel (open to the whole internet); otherwise mode "tailscale" is tailnet-only `serve`. */
+      allowFunnel?: () => boolean;
     } = {},
   ) {
     this.exe = join(dir, process.platform === "win32" ? "cloudflared.exe" : "cloudflared");
@@ -119,7 +121,7 @@ export class Tunnel {
     };
   }
 
-  /** Tailscale Funnel is passing the internet to KesherAI (mode "tailscale"). */
+  /** Tailscale (Funnel, or tailnet-only serve) is passing requests to KesherAI (mode "tailscale"). */
   private funnelOn = false;
   private loginUrl?: string;
   private loginChild?: ChildProcess;
@@ -267,7 +269,7 @@ export class Tunnel {
    */
   async start(port: number): Promise<string> {
     const mode = this.opts.mode?.() ?? "quick";
-    if (mode === "tailscale") return this.startFunnel(port);
+    if (mode === "tailscale") return this.startTailscale(port);
     if ((this.child || this.adopted) && this.state.url) return this.state.url;
     const kept = this.adopt(port);
     if (kept) return kept;
@@ -331,13 +333,30 @@ export class Tunnel {
     }
   }
 
-  /** Tailscale Funnel: the internet reaches KesherAI at the computer's fixed ts.net address. */
-  private async startFunnel(port: number): Promise<string> {
+  /**
+   * Mode "tailscale": the computer's fixed ts.net address. By default tailnet-only (`tailscale serve`: only the user's
+   * own devices in Tailscale reach it), and a Funnel left on by an older KesherAI is turned off first. Tailscale
+   * Funnel (the whole internet) only when the user explicitly allowed it (`remote.allowFunnel`).
+   */
+  private async startTailscale(port: number): Promise<string> {
     const ts = this.opts.tailscale;
     if (!ts) throw new Error("Tailscale is not available here.");
-    const target = await this.opts.tailscaleTarget?.();
-    if (!target) throw new Error("Tailscale is not running on this computer, or it is not signed in. Install Tailscale (tailscale.com/download), sign in, and try again.");
-    const st = await ts.funnel(port, target);
+    const notRunning = "Tailscale is not running on this computer, or it is not signed in. Install Tailscale (tailscale.com/download), sign in, and try again.";
+    let st;
+    if (this.opts.allowFunnel?.()) {
+      const target = await this.opts.tailscaleTarget?.();
+      if (!target) throw new Error(notRunning);
+      st = await ts.funnel(port, target);
+    } else {
+      // serve points at the Tailscale address (not 127.0.0.1), so KesherAI sees these requests as another device's.
+      const target = (await ts.self()).ip;
+      if (!target) throw new Error(notRunning);
+      if (await ts.funnelActive()) {
+        console.warn("[tailscale] a Funnel (open to the internet) was on: turned off, KesherAI is served to the tailnet only");
+        await ts.funnelOff();
+      }
+      st = await ts.enable(port, target);
+    }
     if (st.hint || !st.url) {
       this.state = { installed: existsSync(this.exe), running: false, error: st.hint ?? "Tailscale gave no address." };
       throw new Error(this.state.error);
@@ -404,7 +423,8 @@ export class Tunnel {
   stop(): void {
     if (this.funnelOn) {
       this.funnelOn = false;
-      void this.opts.tailscale?.funnelOff().catch(() => undefined);
+      // A Funnel is closed; tailnet-only serve stays on: it is private and it is the phone's backup path when the hub is down.
+      if (this.opts.allowFunnel?.()) void this.opts.tailscale?.funnelOff().catch(() => undefined);
     }
     const c = this.child;
     this.child = undefined;

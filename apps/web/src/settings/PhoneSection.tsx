@@ -15,6 +15,9 @@ interface Remote {
   enabled: boolean; keepAwake: boolean; anywhere: boolean; token: string; port: number;
   tunnel: TunnelInfo & { message?: string };
   addresses: Array<{ address: string; tailscale: boolean; mac: string; broadcast: string }>;
+  /** The tailnet-only HTTPS address (tailscale serve), the phone's backup path when the hub is down. */
+  tailscaleUrl?: string;
+  allowFunnel?: boolean;
 }
 
 /** Settings → Phone: pairing a phone (a QR per address with a deep link), the access-from-anywhere link, and the newest APK. */
@@ -62,7 +65,8 @@ export function PhoneSection() {
               const wake = a.tailscale || a.mac === "00:00:00:00:00:00" ? "" : `&wake=${a.mac}&bcast=${a.broadcast}`;
               const url = `http://${a.address}:${r.port}/?token=${encodeURIComponent(r.token)}${wake}`;
               // The code opens the KesherAI Android app and connects; the copied link works in any browser.
-              const deep = `kesherai://connect?server=${encodeURIComponent(url)}`;
+              // `ts`: the tailnet-only HTTPS address, which the app keeps as the backup path when the hub is down.
+              const deep = `kesherai://connect?server=${encodeURIComponent(url)}${r.tailscaleUrl ? `&ts=${encodeURIComponent(r.tailscaleUrl)}` : ""}`;
               return { url, image: await QRCode.toDataURL(deep, { margin: 1, width: 220 }), tailscale: a.tailscale };
             }),
           ),
@@ -109,7 +113,7 @@ export function PhoneSection() {
           <strong>{t("anywhere")}</strong>
         </label>
         <p className="muted">{t("anywhereHint")}</p>
-        <AnywhereMode tunnel={remote.tunnel} onChange={(tunnel) => setRemote({ ...remote, tunnel })} />
+        <AnywhereMode tunnel={remote.tunnel} allowFunnel={!!remote.allowFunnel} onChange={(tunnel, allowFunnel) => setRemote({ ...remote, tunnel, ...(allowFunnel !== undefined ? { allowFunnel } : {}) })} />
         {anyBusy && <p className="muted">{remote.tunnel.installed ? t("anywhereConnecting") : t("anywhereDownloading")}</p>}
         {remote.anywhere && remote.tunnel.error && !anyBusy && <p className="error">{remote.tunnel.error}</p>}
         {anyQr && (

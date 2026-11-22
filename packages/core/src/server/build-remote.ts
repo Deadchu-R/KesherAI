@@ -46,6 +46,8 @@ export function buildTunnel(paths: DataPaths, downloads: DownloadManager, config
     tailscale: tailscaleCli,
     // Funnel passes requests to 127.0.0.1; they still need a key: they name another host and carry forwarding headers.
     tailscaleTarget: async () => ((await tailscaleCli.status(config.port).catch(() => undefined))?.running ? "127.0.0.1" : undefined),
+    // Funnel only by the user's explicit choice; otherwise "tailscale" is tailnet-only serve.
+    allowFunnel: () => config.remote.allowFunnel,
   });
   return { tailscaleCli, tunnel };
 }

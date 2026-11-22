@@ -17,9 +17,10 @@ export interface TunnelInfo {
 /**
  * Which kind of "access from anywhere" link: quick (no account, a new address
  * each time it starts), the user's own Cloudflare (a fixed address in their
- * domain) or Tailscale Funnel (a fixed ts.net address).
+ * domain) or Tailscale (a fixed ts.net address; only the user's own devices in
+ * Tailscale reach it, unless the user explicitly allows Funnel, with a warning).
  */
-export function AnywhereMode({ tunnel, onChange }: { tunnel: TunnelInfo; onChange: (t: TunnelInfo) => void }) {
+export function AnywhereMode({ tunnel, allowFunnel = false, onChange }: { tunnel: TunnelInfo; allowFunnel?: boolean; onChange: (t: TunnelInfo, allowFunnel?: boolean) => void }) {
   const mode = tunnel.mode ?? "quick";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,9 +38,17 @@ export function AnywhereMode({ tunnel, onChange }: { tunnel: TunnelInfo; onChang
     }
   };
   const setMode = (m: string) => void run(async () => onChange(await api<TunnelInfo>("/api/remote/anywhere-mode", { method: "PUT", body: { mode: m } })));
+  const setFunnel = (on: boolean) => {
+    // Funnel opens KesherAI to the whole internet: only after the user confirms the warning.
+    if (on && !window.confirm(L("Funnel פותח את KesherAI לכל האינטרנט, לא רק למכשירים שלך ב-Tailscale. כל אחד יוכל לנסות להתחבר (עדיין צריך מפתח). להדליק?", "Funnel opens KesherAI to the whole internet, not only your devices in Tailscale. Anyone can try to connect (a key is still needed). Turn it on?"))) return;
+    void run(async () => {
+      const r = await api<TunnelInfo & { allowFunnel: boolean }>("/api/remote/allow-funnel", { method: "PUT", body: { on } });
+      onChange(r, r.allowFunnel);
+    });
+  };
   const modes: Array<[TunnelInfo["mode"], string, string]> = [
     ["quick", L("מהיר (בלי חשבון)", "Quick (no account)"), L("כתובת חדשה בכל פעם שהקישור מתחיל מחדש.", "A new address each time the link starts again.")],
-    ["tailscale", "Tailscale Funnel", L("כתובת קבועה https://<המחשב>.<הרשת>.ts.net. צריך את Tailscale מותקן ומחובר במחשב הזה.", "A fixed address https://<computer>.<tailnet>.ts.net. Needs Tailscale installed and signed in on this computer.")],
+    ["tailscale", "Tailscale", L("כתובת קבועה https://<המחשב>.<הרשת>.ts.net, רק למכשירים שלך ב-Tailscale. צריך את Tailscale מותקן ומחובר במחשב ובטלפון.", "A fixed address https://<computer>.<tailnet>.ts.net, only for your devices in Tailscale. Needs Tailscale installed and signed in on the computer and the phone.")],
     ["cloudflare", L("Cloudflare שלך", "Your own Cloudflare"), L("כתובת קבועה בדומיין שלך (למשל kesher.example.com). צריך חשבון Cloudflare חינמי ודומיין שמנוהל בו.", "A fixed address in your domain (kesher.example.com, say). Needs a free Cloudflare account with the domain on it.")],
   ];
   return (
@@ -52,7 +61,14 @@ export function AnywhereMode({ tunnel, onChange }: { tunnel: TunnelInfo; onChang
         </label>
       ))}
       {mode === "tailscale" && (
-        <p className="muted small">{L("פעם אחת: התקן את Tailscale מ-tailscale.com/download, התחבר, ואז הדלק כאן את הגישה מכל מקום. אם Tailscale מבקש לאשר Funnel, יופיע כאן קישור לאישור.", "Once: install Tailscale from tailscale.com/download, sign in, then turn access from anywhere on here. If Tailscale asks to allow Funnel, a link to allow it shows here.")}</p>
+        <div className="stack">
+          <p className="muted small">{L("פעם אחת: התקן את Tailscale מ-tailscale.com/download במחשב ובטלפון, התחבר באותו חשבון, ואז הדלק כאן את הגישה מכל מקום. אם Tailscale מבקש להפעיל HTTPS, יופיע כאן קישור לאישור.", "Once: install Tailscale from tailscale.com/download on the computer and the phone, sign in with the same account, then turn access from anywhere on here. If Tailscale asks to turn on HTTPS, a link to allow it shows here.")}</p>
+          <label className="check">
+            <input type="checkbox" checked={allowFunnel} disabled={busy} onChange={(e) => setFunnel(e.target.checked)} />
+            <span>{L("לאפשר Funnel (פתוח לכל האינטרנט)", "Allow Funnel (open to the whole internet)")} <span className="muted small">— {L("לא מומלץ. כבוי, רק המכשירים שלך ב-Tailscale מגיעים למחשב.", "Not recommended. Off, only your devices in Tailscale reach the computer.")}</span></span>
+          </label>
+          {allowFunnel && <p className="error small">{L("⚠ Funnel דולק: KesherAI פתוח לכל האינטרנט.", "⚠ Funnel is on: KesherAI is open to the whole internet.")}</p>}
+        </div>
       )}
       {mode === "cloudflare" && (
         <div className="stack">

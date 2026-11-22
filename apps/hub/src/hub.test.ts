@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { exportPrivateJwk, generateHubKeys, openEnvelope, sealMessage, type HubFrame, type HubKeyPair, type SealedBody } from "../../../packages/shared/src/hub.js";
+import { exportPrivateJwk, generateHubKeys, openEnvelope, sealMessage, type HubFrame, type HubKeyPair, type HubPresence, type SealedBody } from "../../../packages/shared/src/hub.js";
 import { Hub, HUB_TIMES, isHubError, WRITE_PACE, type DeviceSockets, type HubConfig, type HubDeps } from "./hub.js";
 import type { GoogleClaims } from "./google.js";
 import { LIMITS, RateLimiter } from "./rate-limit.js";
@@ -382,6 +382,24 @@ test("older clients: a 0.6.401 PC (old opt-in, unknown fields) stays online; unk
   // The keep-alive ping is answered (on Cloudflare the auto-response does this without waking the hub).
   await hub.onFrame(pc.id, JSON.stringify({ t: "ping" }));
   assert.deepEqual(sockets.frames(pc.id, "pong").length, 1);
+});
+
+test("a PC's Tailscale address (hello) reaches the phones in presence, cleaned, kept in memory only", async () => {
+  const { hub, store, sockets } = await setup();
+  const pc = await pair(hub, "pc", "Home PC");
+  const phone = await pair(hub, "phone", "Phone");
+  sockets.on.add(pc.id);
+  sockets.on.add(phone.id);
+  await hub.onOpen(phone.id);
+  await hub.onOpen(pc.id);
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", version: "0.6.500", busy: false, optIn: { appear: true }, agents: [], direct: { url: "https://pc.tail1234.ts.net", ip: "100.101.102.103", dns: "pc.tail1234.ts.net.", evil: "x" } }));
+  const p = sockets.frames(phone.id, "presence").at(-1);
+  assert.ok(p?.t === "presence");
+  assert.deepEqual(p.presence.find((x) => x.id === pc.id)?.direct, { url: "https://pc.tail1234.ts.net", ip: "100.101.102.103", dns: "pc.tail1234.ts.net" });
+  assert.equal(JSON.stringify(store.device(pc.id)).includes("ts.net"), false, "not written to storage");
+  // A non-tailnet address is dropped (it could send the phone's key elsewhere); a hello without it clears it.
+  await hub.onFrame(pc.id, JSON.stringify({ t: "hello", version: "0.6.500", busy: false, optIn: { appear: true }, agents: [], direct: { url: "https://evil.example.com" } }));
+  assert.equal((sockets.frames(phone.id, "presence").at(-1) as { presence: HubPresence[] }).presence.find((x) => x.id === pc.id)?.direct, undefined);
 });
 
 test("task-inbox reports: only from a PC to a phone, kept while the phone is off (saved paced, not queued), never audited with content", async () => {

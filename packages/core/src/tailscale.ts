@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { cleanTailscaleDirect, isTailscaleIp, type TailscaleDirect } from "@kesher/shared";
 
 /**
  * HTTPS for remote access through Tailscale: `tailscale serve` gives this
@@ -7,6 +8,9 @@ import { existsSync } from "node:fs";
  * passes requests to KesherAI. Only devices in the user's own tailnet can
  * reach it, and they still need the remote-access token (requests through
  * it are not "from this computer").
+ *
+ * Tailscale Funnel (the same address open to the whole internet) is never turned on unless the user chose it
+ * (`remote.allowFunnel`, off by default); a Funnel left on from an older KesherAI is replaced by `serve` at start.
  */
 
 /** What the settings page shows. */
@@ -52,6 +56,64 @@ export class Tailscale {
   }
 
   /**
+   * This computer in the tailnet: its Tailscale IPv4 address and MagicDNS name (empty when Tailscale is not running).
+   *
+   * @returns The address and name.
+   */
+  async self(): Promise<{ ip?: string; dns?: string }> {
+    try {
+      const st = JSON.parse(await this.run(["status", "--json"])) as { BackendState?: string; Self?: { DNSName?: string; TailscaleIPs?: string[] } };
+      if (st.BackendState !== "Running") return {};
+      const ip = st.Self?.TailscaleIPs?.find((a) => isTailscaleIp(a));
+      const dns = st.Self?.DNSName?.replace(/\.$/, "");
+      return { ...(ip ? { ip } : {}), ...(dns ? { dns } : {}) };
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * What the phones are told for the backup path (direct-path.ts): the tailnet-only HTTPS address when `serve`
+   * passes it to KesherAI, the 100.x address and the MagicDNS name.
+   *
+   * @param port - KesherAI's port.
+   * @returns The addresses, or undefined when Tailscale is not running.
+   */
+  async direct(port: number): Promise<TailscaleDirect | undefined> {
+    const [me, st] = await Promise.all([this.self(), this.status(port).catch(() => undefined)]);
+    return cleanTailscaleDirect({ ...me, ...(st?.on && st.url ? { url: st.url } : {}) });
+  }
+
+  /**
+   * Whether a Funnel is on (anything in `serve status --json` marked `AllowFunnel`).
+   *
+   * @returns True when something on this computer is open to the internet through Tailscale.
+   */
+  async funnelActive(): Promise<boolean> {
+    try {
+      const j = JSON.parse(await this.run(["serve", "status", "--json"])) as { AllowFunnel?: Record<string, boolean> };
+      return Object.values(j?.AllowFunnel ?? {}).some((v) => v === true);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Replaces a Funnel left on (by an older KesherAI, which ran `tailscale funnel` at start) with tailnet-only
+   * `serve`: turns the Funnel off, then serves KesherAI to the tailnet again when a target is given.
+   *
+   * @param port - KesherAI's port.
+   * @param target - Where serve passes requests (this computer's Tailscale address), or undefined to only turn it off.
+   * @returns Whether a Funnel was found and turned off.
+   */
+  async closeFunnel(port: number, target?: string): Promise<boolean> {
+    if (!(await this.funnelActive())) return false;
+    await this.funnelOff();
+    if (target) await this.enable(port, target);
+    return true;
+  }
+
+  /**
    * Turns HTTPS on: `tailscale serve --bg --https=443 http://<this computer's Tailscale address>:<port>`.
    * It points at the Tailscale address, not 127.0.0.1, so KesherAI sees
    * these requests as coming from another device (they need the token).
@@ -72,8 +134,8 @@ export class Tailscale {
   }
 
   /**
-   * Tailscale Funnel: the same HTTPS address, open to the internet (for "access from anywhere" with a fixed
-   * address). Requests still need a device key or the token.
+   * Tailscale Funnel: the same HTTPS address, open to the internet. Only when the user explicitly allowed it
+   * (`remote.allowFunnel`); the caller checks. Requests still need a device key or the token.
    *
    * @returns The state; `hint` says what to do when the tailnet does not allow Funnel yet (a link from Tailscale).
    */

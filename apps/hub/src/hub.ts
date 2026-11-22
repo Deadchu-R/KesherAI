@@ -31,6 +31,7 @@ import {
   type SealedEnvelope,
   type SealedKind,
 } from "../../../packages/shared/src/hub.js";
+import type { TailscaleDirect } from "../../../packages/shared/src/direct-path.js";
 import { CachedStore } from "./cached-store.js";
 import { claudeTrigger, fireText, type ClaudeTrigger, type FireResult } from "./claude-cloud.js";
 import { deriveHmacKey, issueDeviceToken, SIGNED_TOKEN_PREFIX, verifyDeviceToken, type DeviceTokenClaims } from "./device-token.js";
@@ -232,6 +233,11 @@ export class Hub {
   private readonly agentRing: MemoryStore;
   /** Heartbeat state per device (busy, agents, last seen), newer than its stored row. */
   private readonly live = new Map<string, Pick<DeviceRow, "busy" | "agents"> & { lastSeen: number }>();
+  /**
+   * Each PC's tailnet-only addresses from its hello (direct-path.ts), in memory only: never written (no storage rows
+   * used), and sent again by the PC on every connect. Phones use them as the backup path when this hub is down.
+   */
+  private readonly directs = new Map<string, TailscaleDirect>();
   /** Snapshots waiting for each device's ack, oldest first (loaded from its settings row on first use). */
   private readonly pending = new Map<string, QueuedRow[]>();
   /** What is saved for each device now (to skip a write that changes nothing), when it was saved, and its timer. */
@@ -849,6 +855,7 @@ export class Hub {
         agents: d.agents,
         ...(d.version ? { version: d.version } : {}),
         ...this.awayOf(d),
+        ...(d.kind === "pc" && this.directs.has(d.id) ? { direct: this.directs.get(d.id) } : {}),
       }));
   }
 
@@ -961,9 +968,16 @@ export class Hub {
         const changedLive = JSON.stringify([prev.busy, prev.agents]) !== JSON.stringify([next.busy, next.agents]);
         const changedSaved = JSON.stringify([d.optIn, d.version, d.away]) !== JSON.stringify([next.optIn, next.version, next.away]);
         this.live.set(deviceId, { busy: next.busy, agents: next.agents, lastSeen: t });
+        let changedDirect = false;
+        if (f.t === "hello") {
+          const before = JSON.stringify(this.directs.get(deviceId) ?? null);
+          if (f.direct && next.kind === "pc") this.directs.set(deviceId, f.direct);
+          else this.directs.delete(deviceId);
+          changedDirect = before !== JSON.stringify(this.directs.get(deviceId) ?? null);
+        }
         if (Hub.reachable(d) && (changedSaved || !d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs)) this.saveDeviceSoft({ ...next, lastSeen: t });
         else if (changedSaved) this.store.remember(next);
-        if (changedLive || changedSaved) this.broadcastPresence();
+        if (changedLive || changedSaved || changedDirect) this.broadcastPresence();
         return;
       }
       case "away": {

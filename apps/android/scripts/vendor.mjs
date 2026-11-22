@@ -56,4 +56,14 @@ esbuild.buildSync({
   outfile: join(www, "address.js"),
   logLevel: "warning",
 });
+// The hub-or-direct-Tailscale choice, from the same shared code (a classic script, for index.html and cloud.html).
+esbuild.buildSync({
+  entryPoints: [join(here, "..", "path-core.ts")],
+  bundle: true,
+  format: "iife",
+  minify: true,
+  target: "es2020",
+  outfile: join(www, "path.js"),
+  logLevel: "warning",
+});
 console.log("vendor files copied to www/vendor");
