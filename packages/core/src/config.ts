@@ -275,6 +275,8 @@ export const KesherConfigSchema = z.object({
       loop: z.boolean().optional(),
       // Install a ready update by itself when nothing would be cut off (install-when-free.ts): on unless turned off.
       installWhenFree: z.boolean().optional(),
+      // An AI-converted engine plugin installs by itself into matching projects (engine-conversion routes): on unless off.
+      autoInstallConverted: z.boolean().optional(),
       notWhileGame: z.boolean().default(true),
       notWhileEditor: z.boolean().default(true),
       gpuBusyPercent: z.number().int().min(0).max(100).default(40),

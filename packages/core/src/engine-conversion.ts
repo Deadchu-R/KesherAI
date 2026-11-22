@@ -7,9 +7,10 @@ import type { InstallJob } from "./unreal-install.js";
 /**
  * An AI-converted plugin copy, from "ready" to installed in a project and back (Roee, 2026-11-21). "Convert with AI"
  * (engine-support.ts) only makes a branch; this is the rest: the page shows "AI-converted plugin for <version> is ready",
- * the user reviews the diff summary and presses "Install this copy", and "Revert to none" removes it. Nothing is
- * installed without that press, only a project found on this computer is touched (so it works from the phone), and
- * the files are read from the reviewed commit with git (no checkout, no scripts run).
+ * and it installs by itself into every project on this computer of that engine version (Roee 2026-11-22; Settings ›
+ * Task inbox › autoInstallConverted turns that off, then "Install this copy" does it by hand). "Revert to none" removes
+ * it. Only a project found on this computer is touched (so it works from the phone), and the files are read from the
+ * task's commit with git (no checkout, no scripts run).
  */
 
 /** The file beside an installed copy that says it is an AI-converted one (and is the only kind "Revert to none" removes). */
