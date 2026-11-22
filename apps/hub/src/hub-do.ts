@@ -123,7 +123,11 @@ export class HubObject {
       const server = pair[1];
       this.ctx.acceptWebSocket(server, [device.id]);
       server.serializeAttachment({ deviceId: device.id });
-      await this.hub.onOpen(device.id);
+      // The socket opens even when storage refuses writes (the daily quota): the open's bookkeeping is skipped.
+      await this.hub.onOpen(device.id).catch((e: unknown) => {
+        if (!storageCode(e)) throw e;
+        console.warn("hub: open bookkeeping skipped (storage refused)");
+      });
       return upgradeResponse(pair[0]);
     }
 
