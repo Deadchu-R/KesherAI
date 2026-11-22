@@ -14,16 +14,17 @@ export const LONG_SECTION = 6;
 export type CurtainStore = Record<string, boolean>;
 
 /**
- * The curtain's state when the user has not changed it: Done and Failed (and long work-list sections) are closed,
- * what is waiting, active or next is open.
+ * The curtain's state when the user has not changed it: Done (and long work-list sections) is closed; what is
+ * waiting, active, next or failed is open.
  *
  * @param key - The curtain: `t:<tab>:<group>` for a Tasks group, `wl:<section>` for a work-list section.
  * @param count - The number of items inside (only a work-list section uses it).
  */
 export function defaultOpen(key: string, count = 0): boolean {
   if (key.startsWith("wl:")) return count <= LONG_SECTION;
-  const tab = key.split(":")[1];
-  return tab !== "done" && tab !== "failed";
+  // Done starts closed (a long history). Failed starts open: the Failed tab is opened to see the failures, and a
+  // closed curtain there showed an empty-looking page.
+  return key.split(":")[1] !== "done";
 }
 
 /**

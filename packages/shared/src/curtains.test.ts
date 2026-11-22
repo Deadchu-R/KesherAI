@@ -5,7 +5,7 @@ import { defaultOpen, isOpen, LONG_SECTION, parseCurtains, serializeCurtains, to
 test("defaults: active groups open, Done and Failed closed, long work-list sections closed", () => {
   assert.equal(defaultOpen("t:active:agy"), true);
   assert.equal(defaultOpen("t:done:agy"), false);
-  assert.equal(defaultOpen("t:failed:local"), false);
+  assert.equal(defaultOpen("t:failed:local"), true);
   assert.equal(defaultOpen("wl:Now", LONG_SECTION), true);
   assert.equal(defaultOpen("wl:Later", LONG_SECTION + 1), false);
 });

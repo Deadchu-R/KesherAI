@@ -217,7 +217,8 @@
      "wait": "#free-cloud .free-card"
     },
     {
-     "click": "#free-cloud .free-card:nth-of-type(2) button:has-text(\"הצג מודלים\")"
+     "click": "#free-cloud .free-card:nth-of-type(2) button:has-text(\"הצג מודלים\")",
+     "optional": true
     },
     {
      "waitMs": 400

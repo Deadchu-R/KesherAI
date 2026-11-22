@@ -291,18 +291,15 @@
    },
    "steps": [
     {
-     "wait": ".trow"
+     "wait": ".nowstrip"
     }
    ],
    "phoneSteps": [
     {
+     "wait": ".nowstrip"
+    },
+    {
      "waitMs": 800
-    },
-    {
-     "scroll": ".trow:has-text(\"לצלם את מסכי\")"
-    },
-    {
-     "waitMs": 300
     }
    ]
   },
@@ -431,7 +428,7 @@
    },
    "steps": [
     {
-     "wait": ".trow"
+     "wait": ".nowstrip"
     }
    ]
   },
