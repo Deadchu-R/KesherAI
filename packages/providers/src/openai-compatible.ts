@@ -40,6 +40,8 @@ export class OpenAICompatibleProvider implements Provider {
   readonly capabilities = { chat: true, tools: true };
   private readonly baseUrl: string;
   private readonly headers: Record<string, string>;
+  /** Whether chats carry `x-opencode-session` (OpenCode's own endpoints). */
+  private readonly sessionHeader: boolean;
   /** How long to keep trying while the server cannot be reached (the main KesherAI restarting for an update). */
   private readonly waitMs: number;
   /** Set for llama.cpp's server: how many slots it has now (see {@link llamaCppFields}). */
@@ -58,11 +60,25 @@ export class OpenAICompatibleProvider implements Provider {
     this.waitMs = Number(config.options?.waitForServerMs ?? 0) || 0;
     const llama = config.options?.llamaCpp;
     if (llama) this.llamaCpp = typeof llama === "object" ? (llama as { slots?: () => number; parallelChats?: () => number }) : {};
+    // OpenCode Go refuses chats without a stable per-conversation id ("MissingSessionID", 2026-11-22) and asks clients
+    // to name themselves instead of a generic HTTP library (opencode.ai/docs/console/go, "Where can I use it").
+    this.sessionHeader = /(^|\.)opencode\.ai$/i.test(hostOf(this.baseUrl));
     this.headers = {
       "content-type": "application/json",
+      ...(this.sessionHeader ? { "user-agent": "KesherAI/1.0" } : {}),
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
       ...((config.options?.headers as Record<string, string> | undefined) ?? {}),
     };
+  }
+
+  /**
+   * The headers for one chat request: the shared ones, plus `x-opencode-session` for OpenCode's endpoints. Requests carry
+   * no conversation id, so the id is a hash of the conversation's start (its first two messages), which stays the same
+   * for every turn of one conversation and differs between conversations.
+   */
+  private chatHeaders(messages: ReadonlyArray<{ role?: unknown; content?: unknown }>): Record<string, string> {
+    if (!this.sessionHeader) return this.headers;
+    return { ...this.headers, "x-opencode-session": conversationKey(messages) };
   }
 
   /** @inheritDoc */
@@ -108,7 +124,7 @@ export class OpenAICompatibleProvider implements Provider {
   async *chat(request: ProviderChatRequest, signal?: AbortSignal): AsyncIterable<ChatStreamEvent> {
     const res = await fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: this.headers,
+      headers: this.chatHeaders(request.messages),
       signal,
       body: JSON.stringify({
         model: request.providerModelId,
@@ -180,7 +196,7 @@ export class OpenAICompatibleProvider implements Provider {
   ): Promise<ProviderToolChatResult> {
     const res = await this.reach(() => fetchOk(`${this.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: this.headers,
+      headers: this.chatHeaders(request.messages),
       signal,
       body: JSON.stringify({
         model: request.providerModelId,
@@ -345,3 +361,30 @@ export const openAICompatibleFactory: ProviderFactory = {
   categories: ["chat", "embedding"],
   create: (config) => new OpenAICompatibleProvider(config),
 };
+
+/** The host of a URL, or "" when it does not parse. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A stable id for one conversation: FNV-1a (64-bit, as two 32-bit halves) over the role and text of its first two
+ * messages. Not a secret and not reversible to the text in practice; only used so the provider can keep one cache.
+ * @param messages - The conversation as sent.
+ * @returns `kesher-` and 16 hex digits.
+ */
+export function conversationKey(messages: ReadonlyArray<{ role?: unknown; content?: unknown }>): string {
+  const head = messages.slice(0, 2).map((m) => `${String(m.role ?? "")}:${typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "")}`).join("\n");
+  let h1 = 0x811c9dc5;
+  let h2 = 0x050c5d1f;
+  for (let i = 0; i < head.length; i++) {
+    const c = head.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ (c + i), 0x01000193) >>> 0;
+  }
+  return `kesher-${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
+}
