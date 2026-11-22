@@ -16,6 +16,8 @@ Everything researched so far (one line each). Read this first so a new research 
 | c-20261121-42 | Deep Research: Every Unity Muse Tool and Bringing Each into KesherAI | [c-20261121-42.md](c-20261121-42.md) |
 | c-20261122-01 | Professional Layered Picture Editor: Layers, Masks, Non-Destructive Pipeline, and Local AI Tooling | [c-20261122-01.md](c-20261122-01.md) |
 | c-20261122-02 | 3D Editor to Blender/Max/Maya Level: Modifiers, UV, Sculpt, Rigging, Animation, and AI 3D | [c-20261122-02.md](c-20261122-02.md) |
+| c-20261122-03 | From Sound Editor to DAW Level: Multitrack, Virtual Instruments, Hum-to-MIDI, Mixing, and Local AI | [c-20261122-03.md](c-20261122-03.md) |
+| c-20261122-04 | Elevating KesherAI Video Editor to Pro Level: Multitrack Timeline, Keyframes, Colour Grading, Titles, Audio Du | [c-20261122-04.md](c-20261122-04.md) |
 | c-20261122-05 | Playing Game Web Builds on Mobile Phones: Unreal Engine 5.9 Web, Unity WASM64, Streaming vs. Download, and Kes | [c-20261122-05.md](c-20261122-05.md) |
 | c-20261122-06 | Distributed Local AI Architecture: Hardware-Aware Task Routing, Model Partitioning, and Multi-Device Coordinat | [c-20261122-06.md](c-20261122-06.md) |
 | c-20261122-11 | Deep Research: The Four Editors (Picture, 3D, Sound, Video) to Pro Level | [c-20261122-11.md](c-20261122-11.md) |
@@ -35,8 +37,12 @@ Everything researched so far (one line each). Read this first so a new research 
 | c-20261122-26 | Research Report: Empirical Benchmarking and Tuning of Speculative Decoding in llama.cpp for Local Agent Speed | [c-20261122-26.md](c-20261122-26.md) |
 | c-20261122-27 | Embedded Headless ComfyUI Runtime Management, Snapshot Isolation, and Dynamic VRAM Allocation | [c-20261122-27.md](c-20261122-27.md) |
 | c-20261122-28 | Research: KesherAI Sets Itself Up from What the User Asks — Self-Configuring Setup by Prompt | [c-20261122-28.md](c-20261122-28.md) |
+| c-20261122-29 | Local Autonomous Subagent Architecture and Git Worktree Isolation: Windows Concurrency, Streaming JSON Rollups | [c-20261122-29.md](c-20261122-29.md) |
+| c-20261122-30 | Research: Godot 4 Headless Scene Synthesis, ClassDB Reflection, and Native MCP Bridge for KesherAI | [c-20261122-30.md](c-20261122-30.md) |
 | c-20261122-31 | Research Report: Local Model Quantization and KV Cache Optimization for RTX 3090 (KesherAI / Roee) | [c-20261122-31.md](c-20261122-31.md) |
+| c-20261122-32 | Local Video In-Betweening and Motion Continuity with Wan 2.1 in ComfyUI Desktop | [c-20261122-32.md](c-20261122-32.md) |
 | c-20261122-33 | Technical Architecture: Mobile WebRTC and Touch-First Control for 3D Viewports and Game Playtesting (KesherAI  | [c-20261122-33.md](c-20261122-33.md) |
 | c-20261122-34 | Research Report: Local Hebrew TTS with Kokoro-82M and Low-Latency Voice Cloning for KesherAI | [c-20261122-34.md](c-20261122-34.md) |
+| c-20261122-35 | Speculative Next-Edit Suggestions and Ghost Diffs via Small Local Draft Models | [c-20261122-35.md](c-20261122-35.md) |
 | c-20261122-36 | KesherAI Sound Design and Foley Generation Pipeline (Late 2026 Specification) | [c-20261122-36.md](c-20261122-36.md) |
 | c-20261122-next-1 | What to Research Next: The Next 8 High-Value Research Tasks for KesherAI Usability plus 3 Blind-Spot Innovatio | [c-20261122-next-1.md](c-20261122-next-1.md) |
