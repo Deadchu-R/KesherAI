@@ -126,7 +126,9 @@ export interface HubClientDeps {
    * Run or Cancel for a task-inbox task, pressed on the owner's paired phone or hub page (`from`: that verified
    * device). Returns whether it was done, or why not in a short line.
    */
-  inboxCommand?: (action: HubCommandAction, taskId: string, from: { id: string; kind: string }) => Promise<{ ok: boolean; text: string }>;
+  /** The inbox's "ask before the next task" settings per executor (reported with each task). */
+  inboxAskNext?: () => { antigravity: boolean; local: boolean };
+  inboxCommand?: (action: HubCommandAction, taskId: string, from: { id: string; kind: string }, on?: boolean) => Promise<{ ok: boolean; text: string }>;
   /** "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts). */
   assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
   /** Renames an agent run and sets its note, from the owner's phone or hub page (agent-labels.ts). */
@@ -203,7 +205,7 @@ const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
  *   the waiting tasks (1 = next). Both optional; an older page ignores them.
  * @returns The report, or undefined when it is not reported.
  */
-export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number } = {}): HubInboxTask | undefined {
+export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number; askNext?: { antigravity: boolean; local: boolean } } = {}): HubInboxTask | undefined {
   if (t.from === "hub" || !/^[\w-]{1,64}$/.test(t.id)) return undefined;
   let state = INBOX_STATE[t.status];
   // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
@@ -235,6 +237,9 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     ...(t.boardId && /^[\w-]{1,64}$/.test(t.boardId) ? { boardId: t.boardId } : {}),
     ...(order.priority !== undefined ? { priority: order.priority } : {}),
     ...(order.queuePos && (state === "waiting" || state === "waiting-run") ? { queuePos: order.queuePos } : {}),
+    ...(t.queued ? { lineAt: t.queued } : {}),
+    ...(t.standing ? { standing: true } : {}),
+    ...(order.askNext && (t.runBy === "antigravity" || t.runBy === "local") ? { askNext: order.askNext[t.runBy] } : {}),
     kind: workKindOf({ kind: t.kind, title: t.title, goal: t.goal }),
     ...(t.startedAt ? { startedAt: t.startedAt } : {}),
     ...(ended && t.endedAt ? { endedAt: t.endedAt } : {}),
@@ -859,7 +864,7 @@ export class HubClient {
                 : await this.deps.agentLabel(body.taskId, body.label ?? {}, { id: env.from, kind }).catch(failed)
               : !this.deps.inboxCommand
                 ? { ok: false, text: "This PC has no task inbox." }
-                : await this.deps.inboxCommand(body.action, body.taskId, { id: env.from, kind }).catch(failed);
+                : await this.deps.inboxCommand(body.action, body.taskId, { id: env.from, kind }, body.on === true).catch(failed);
         if (kind === "phone") await this.sendSealed(env.from, "command_result", { type: "command_result", commandId: body.commandId, taskId: body.taskId, ok: r.ok, text: r.text.slice(0, 300), ...(r.ask ? { ask: r.ask } : {}) }, HUB_LIMITS.approvalTtl);
         return ack();
       }
@@ -977,7 +982,8 @@ export class HubClient {
     for (const t of tasks) {
       const base = hubInboxTask(t, now);
       const waits = base?.state === "waiting" || base?.state === "waiting-run";
-      const report = base && hubInboxTask(t, now, { ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
+      const askNext = this.deps.inboxAskNext?.();
+      const report = base && hubInboxTask(t, now, { ...(askNext ? { askNext } : {}), ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
       if (!report) continue;
       const { at: _at, ...shape } = report;
       const hash = createHash("sha256").update(JSON.stringify(shape)).digest("base64url").slice(0, 16);

@@ -56,6 +56,26 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   /** Run on the PC itself. On the phone, Run is the answer to the PC's ask (`/run-answer`). */
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/run", async (req, reply) => inbox.run(req.params.id, { here: isLocalRequest(req) }).catch((e) => failed(reply, e)));
 
+  /**
+   * "Add to queue" / "Take out of the queue" (inbox-queue.ts): the tap is the user's own start for the task. From the
+   * phone (remote) it counts with the paired device's own key.
+   */
+  app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/queue", async (req, reply) => {
+    const by = verifiedBy(req);
+    if (!by) return reply.code(403).send({ error: "Only your paired phone or this computer can queue a task." });
+    return inbox.queueAdd(req.params.id, by).catch((e) => failed(reply, e));
+  });
+  app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/unqueue", async (req, reply) => inbox.queueRemove(req.params.id).catch((e) => failed(reply, e)));
+
+  /**
+   * The freed-slot notification's Run button (no token: the one-time code is the key, as for quick-approve): starts the
+   * next Antigravity task once, if the slot is still free. The phone app sends it from anywhere, also remotely.
+   */
+  app.post<{ Params: { code: string } }>("/api/quick-run/:code", async (req, reply) => {
+    if (!(await inbox.quickRun(req.params.code))) return reply.code(410).send({ error: "This button no longer works: the slot was taken, the task started, or it is too old." });
+    return { ok: true };
+  });
+
   /** Asks again "Run this task in Antigravity?" (after the last ask expired or got "Not now"). */
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/ask", async (req, reply) => inbox.askRun(req.params.id).catch((e) => failed(reply, e)));
 
@@ -139,6 +159,11 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
       bool("paused");
       bool("notWhileGame");
       bool("notWhileEditor");
+      // "Ask before the next task" per executor (inbox-queue.ts).
+      if (b.askBeforeNext && typeof b.askBeforeNext === "object") {
+        const a = b.askBeforeNext as Record<string, unknown>;
+        for (const k of ["antigravity", "local"] as const) if (typeof a[k] === "boolean") cur.askBeforeNext = { ...cur.askBeforeNext, [k]: a[k] as boolean };
+      }
       int("fetchMinutes", 1, 120);
       int("dailyCap", 0, 100);
       int("maxMinutes", 1, 60);

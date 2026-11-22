@@ -241,7 +241,7 @@ export type SealedBody =
    * `assign`: `taskId` is an inbox task (or its Drive record) or a work-list item, `to` who does it now, `confirm` the
    * user's yes to stopping a running task or running a finished one again (task-assign.ts).
    */
-  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean; board?: HubBoardCommand }
+  | { type: "command"; commandId: string; action: HubCommandAction; taskId: string; label?: AgentLabel; to?: AssignTo; confirm?: boolean; on?: boolean; board?: HubBoardCommand }
   /** The PC's answer to a command: done, or why not (a short line); `ask`: an `assign` that needs the user's yes. */
   | { type: "command_result"; commandId: string; taskId: string; ok: boolean; text: string; ask?: "running" | "finished" }
   | { type: "cloud_started"; taskId: string; sessionUrl?: string; error?: string }
@@ -275,7 +275,14 @@ export interface HubAskNote {
  * a task or a work-list item to another executor ("Who does it", task-assign.ts). `inbox-ask` makes the PC ask again
  * "Run this task in Antigravity?" for a task whose earlier ask expired (one ask, nothing runs until Run is pressed).
  */
-export type HubCommandAction = "inbox-run" | "inbox-cancel" | "inbox-ask" | "agent-label" | "assign" | "board";
+export type HubCommandAction = "inbox-run" | "inbox-cancel" | "inbox-ask" | "inbox-queue" | "inbox-unqueue" | "inbox-asknext" | "agent-label" | "assign" | "board";
+
+/**
+ * Queue commands (task-inbox queue per executor, inbox-queue.ts): `inbox-queue` adds a task to its executor's line,
+ * `inbox-unqueue` takes it out; `inbox-asknext` sets "ask before the next task" for the executor named in `taskId`
+ * (`antigravity` or `local`) to `on`.
+ */
+export const HUB_COMMAND_ACTIONS: readonly HubCommandAction[] = ["inbox-run", "inbox-cancel", "inbox-ask", "inbox-queue", "inbox-unqueue", "inbox-asknext", "agent-label", "assign", "board"];
 
 /**
  * One approval waiting on a PC, as the hub page's "Waiting for you" shows it: what (the chat or task, the tool and a
@@ -387,6 +394,11 @@ export interface HubInboxTask {
   boardId?: string;
   priority?: number;
   queuePos?: number;
+  /** The place in its executor's line while the user has it queued (1 = next), and that executor's "ask before the next task" setting. */
+  lineAt?: number;
+  askNext?: boolean;
+  /** The standing "what to research next" task: last in the Antigravity curtain. */
+  standing?: boolean;
   kind?: HubWorkKind;
   startedAt?: number;
   endedAt?: number;
@@ -706,7 +718,8 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
     }
     case "command":
-      if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign" && b.action !== "board")) return null;
+      if (!isHubId(b.commandId) || !isHubId(b.taskId) || !HUB_COMMAND_ACTIONS.includes(b.action as HubCommandAction)) return null;
+      if (b.action === "inbox-asknext") return b.taskId === "antigravity" || b.taskId === "local" ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, on: b.on === true } : null;
       if (b.action === "board") {
         const board = cleanBoardCommand(b.board);
         return board ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, board } : null;
@@ -716,7 +729,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
         return to ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, to, ...(b.confirm === true ? { confirm: true } : {}) } : null;
       }
       if (b.action === "agent-label") return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, label: cleanAgentLabel(b.label) };
-      return { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId };
+      return { type: "command", commandId: b.commandId, action: b.action as HubCommandAction, taskId: b.taskId };
     case "command_result":
       if (!isHubId(b.commandId) || !isHubId(b.taskId)) return null;
       return { type: "command_result", commandId: b.commandId, taskId: b.taskId, ok: b.ok === true, text: str(b.text, 300), ...(b.ask === "running" || b.ask === "finished" ? { ask: b.ask } : {}) };
@@ -748,7 +761,7 @@ export function parseSealedBody(x: unknown, kind: SealedKind): SealedBody | null
       // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
       const executor: HubInboxExecutor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
       const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...(HUB_WORK_KINDS.includes(b.kind as HubWorkKind) ? { kind: b.kind as HubWorkKind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
+      return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind as HubWorkKind) ? { kind: b.kind as HubWorkKind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
     }
     case "ask_note": {
       const a = b.ask && typeof b.ask === "object" ? (b.ask as Record<string, unknown>) : undefined;

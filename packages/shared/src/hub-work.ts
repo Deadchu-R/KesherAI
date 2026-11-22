@@ -25,6 +25,10 @@ export interface InboxMeta {
   boardId?: string;
   priority?: number;
   queuePos?: number;
+  /** The place in its executor's line (1 = next) while queued, and that executor's "ask before the next task" switch. */
+  lineAt?: number;
+  askNext?: boolean;
+  standing?: boolean;
   kind?: HubWorkKind;
   startedAt?: number;
   endedAt?: number;
@@ -53,6 +57,9 @@ export function inboxMetaOf(r: HubInboxTask, deviceId: string): InboxMeta {
     ...(r.boardId ? { boardId: r.boardId } : {}),
     ...(r.priority !== undefined ? { priority: r.priority } : {}),
     ...(r.queuePos ? { queuePos: r.queuePos } : {}),
+    ...(r.lineAt ? { lineAt: r.lineAt } : {}),
+    ...(r.askNext !== undefined ? { askNext: r.askNext } : {}),
+    ...(r.standing ? { standing: true } : {}),
     ...(r.kind ? { kind: r.kind } : {}),
     ...(r.startedAt ? { startedAt: r.startedAt } : {}),
     ...(r.endedAt ? { endedAt: r.endedAt } : {}),

@@ -406,6 +406,144 @@
      "wait": ".tinbox-runcount"
     }
    ]
+  },
+  {
+   "id": "InboxQueue",
+   "title": "תיבת משימות: תור לכל מבצע — \"＋ הוסף לתור\", מקום בתור, מתג \"לשאול לפני הבאה\"; \"הפעל\" כשמשימה רצה נחסם: \"משימה רצה, אין להריץ עד שתסתיים\"",
+   "titleEn": "Task inbox: a queue per executor — \"＋ Add to queue\", place in line, an \"Ask before next\" switch; Run while one runs is refused",
+   "route": "#/task-inbox",
+   "fullPage": true,
+   "height": {
+    "desktop": 800,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/task-inbox",
+     "json": {
+      "settings": {
+       "enabled": true,
+       "paused": false,
+       "repo": "D:/Projects/KesherAI",
+       "branch": "kesher-inbox",
+       "fetchMinutes": 10,
+       "dailyCap": 10,
+       "maxMinutes": 30,
+       "model": "",
+       "allowedPaths": [],
+       "forbiddenPaths": [],
+       "commands": [
+        "pnpm -s typecheck"
+       ],
+       "notWhileGame": true,
+       "notWhileEditor": false,
+       "gpuBusyPercent": 0,
+       "askBeforeNext": {
+        "antigravity": true,
+        "local": false
+       }
+      },
+      "today": {
+       "date": "2026-11-20",
+       "used": 2
+      },
+      "busy": {
+       "free": true,
+       "reasons": []
+      },
+      "runHere": true,
+      "project": "KesherAI",
+      "lastFetch": {
+       "$agoMs": "2m"
+      },
+      "tasks": [
+       {
+        "id": "t-0430",
+        "title": "להוסיף חיפוש להגדרות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "להוסיף חיפוש להגדרות",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0430"
+       },
+       {
+        "id": "t-0431",
+        "title": "לתקן את גלילת רשימת ההורדות",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לתקן את גלילת רשימת ההורדות",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0431",
+        "queued": 1
+       },
+       {
+        "id": "t-0432",
+        "title": "לעדכן את תיעוד ההתקנה",
+        "executor": "antigravity",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 8,
+        "goal": "לעדכן את תיעוד ההתקנה",
+        "status": "waiting",
+        "runBy": "antigravity",
+        "branch": "agy/t-0432",
+        "queued": 2
+       },
+       {
+        "id": "t-0433",
+        "title": "לסדר את שמות הקבצים בתיקיית ההורדות",
+        "executor": "local",
+        "risk": "low",
+        "from": "claude",
+        "base": "main",
+        "allowedPaths": [
+         "apps/web/"
+        ],
+        "forbiddenPaths": [],
+        "check": "pnpm -s typecheck",
+        "maxMinutes": 30,
+        "maxFiles": 2,
+        "goal": "לסדר שמות",
+        "status": "failed",
+        "runBy": "local",
+        "branch": "local/t-0433"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".tinbox-queues"
+    }
+   ]
   }
  ]
 }

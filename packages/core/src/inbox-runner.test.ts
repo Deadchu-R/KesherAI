@@ -102,10 +102,14 @@ function fakeAgy(write: Record<string, string>, seen: { prompts: number; push?: 
     });
 }
 
+/** The heavy job the test pretends runs (heavy-gate.ts), if any. */
+let heavyNow: string | undefined;
+
 async function inboxFor(repo: string, root: string, write: Record<string, string>, seen: { prompts: number; push?: string; install?: string; mode?: string }, now = () => Date.now()) {
   const notes: string[] = [];
+  const noteOpts: Array<{ path?: string; actions?: Array<{ label: string; path: string }> } | undefined> = [];
   const board = new TaskBoard(join(root, "board.json"));
-  const settings = { enabled: true, repo, branch: "kesher-inbox", dailyCap: 2, askSteps: true };
+  const settings: Record<string, unknown> = { enabled: true, repo, branch: "kesher-inbox", dailyCap: 2, askSteps: true };
   const inbox = new TaskInbox({
     settings: () => settings,
     file: join(root, "inbox.json"),
@@ -113,14 +117,15 @@ async function inboxFor(repo: string, root: string, write: Record<string, string
     run: git.length ? async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }) : git,
     startAgent: (_cwd, h) => AcpAgent.connect(fakeAgy(write, seen), h),
     board,
-    notify: (t, b) => void notes.push(`${t} ${b}`),
+    notify: (t, b, o) => void (notes.push(`${t} ${b}`), noteOpts.push(o)),
     // A game is running: Antigravity runs in the cloud, so Run still goes ahead.
     busy: async () => ({ free: false, reasons: ["game: Elden Ring"] }),
     me: { username: "someone", home: join(root, "home", "someone") },
     now,
+    heavy: () => heavyNow,
     approvalMs: 300,
   });
-  return { inbox, notes, board, settings };
+  return { inbox, notes, noteOpts, board, settings };
 }
 
 const settle = async (inbox: TaskInbox, id: string) => {
@@ -248,16 +253,17 @@ test("inbox run: a second Run on a task that is already starting is a quiet no-o
 });
 
 /** Three Antigravity tasks: A runs, B and C are pressed Run while A runs (they queue). */
-async function queuedThree() {
+async function queuedThree(ask = true) {
   const ids = ["c-20261122-01", "c-20261122-02", "c-20261122-03"];
   const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
   const seen = { prompts: 0 };
   const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
   h.settings.dailyCap = 9;
+  h.settings.askBeforeNext = { antigravity: ask, local: false };
   await h.inbox.sync();
   await h.inbox.run(ids[0]!, { here: true });
-  await h.inbox.run(ids[1]!, { here: true });
-  await h.inbox.run(ids[2]!, { here: true });
+  await h.inbox.queueAdd(ids[1]!, "pc");
+  await h.inbox.queueAdd(ids[2]!, "pc");
   await h.inbox.idle();
   return { ...h, ids, root, seen };
 }
@@ -271,7 +277,8 @@ test("inbox queue: after a finish it stops and asks \"Next in line — Start?\";
     assert.equal(b!.status, "waiting");
     assert.deepEqual([b!.runAsk?.next?.done, b!.runAsk?.next?.more], [a!.title, 1]);
     assert.equal(c!.runAsk, undefined, "the third is not asked yet");
-    assert.ok(notes.some((n) => n.startsWith("✦ Next in line — Start?") && n.includes("Next in line:")));
+    assert.ok(notes.some((n) => n.startsWith("🟢 אנטיגרוויטי פנוי") && n.includes("Next in line:")), "one freed-slot note names the next");
+    assert.equal(notes.filter((n) => n.startsWith("✦ Next in line")).length, 0, "no second note for the ask");
     assert.equal(inbox.openAsks().length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -625,6 +632,158 @@ test("inbox: Gemini busy (503 overloaded) waits 15 minutes and tries once more, 
     await inbox.pumpGemini();
     t = await inbox.task("r-20261121-03");
     assert.deepEqual([t.status, calls], ["done", 2]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: with the ask setting off, the next queued task starts by itself and one note says so", async () => {
+  const { inbox, notes, ids, root, seen } = await queuedThree(false);
+  try {
+    await inbox.idle();
+    await inbox.idle();
+    assert.equal(seen.prompts, 3, "all three ran, one at a time");
+    for (const id of ids) assert.equal((await inbox.task(id)).status, "done");
+    assert.equal(inbox.openAsks().length, 0, "nothing was asked");
+    assert.ok(notes.some((n) => n.startsWith("🟢 אנטיגרוויטי:") && n.includes("התחילה")));
+    assert.equal(notes.filter((n) => n.startsWith("✦ Antigravity started")).length, 1, "only the tapped first run has its own start note");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: a heavy job holds the next queued task back until it is over", async () => {
+  heavyNow = "Unreal build";
+  const { inbox, ids, root, seen } = await queuedThree(false);
+  try {
+    assert.equal(seen.prompts, 1, "the next one waits for the heavy job");
+    const b = await inbox.task(ids[1]!);
+    assert.equal(b.status, "waiting");
+    assert.match(b.note ?? "", /waiting for Unreal build/);
+    heavyNow = undefined;
+    await inbox.pump();
+    await inbox.idle();
+    await inbox.idle();
+    assert.equal(seen.prompts, 3);
+  } finally {
+    heavyNow = undefined;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox run: Run while another task runs is refused (409) with the PC's words, and Add to queue is the way", async () => {
+  const ids = ["c-20261122-11", "c-20261122-12"];
+  const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  try {
+    await h.inbox.sync();
+    await h.inbox.run(ids[0]!, { here: true });
+    await assert.rejects(h.inbox.run(ids[1]!, { here: true }), (e: Error & { code?: number }) => e.code === 409 && e.message === "משימה רצה, אין להריץ עד שתסתיים");
+    await assert.rejects(h.inbox.queueAdd(ids[1]!, ""), (e: Error & { code?: number }) => e.code === 403, "a tap without a verified sender queues nothing");
+    const q = await h.inbox.queueAdd(ids[1]!, "pc");
+    assert.equal(q.queued, 1);
+    assert.deepEqual(h.inbox.queues().antigravity, [ids[1]]);
+    await h.inbox.queueRemove(ids[1]!);
+    assert.deepEqual(h.inbox.queues().antigravity, []);
+    await h.inbox.idle();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: an Antigravity task that ends with another one waiting gets a fresh Next-in-line ask and one note", async () => {
+  const ids = ["c-20261122-21", "c-20261122-22"];
+  const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  try {
+    await h.inbox.sync();
+    await h.inbox.run(ids[0]!, { here: true });
+    await h.inbox.idle();
+    const b = await h.inbox.task(ids[1]!);
+    assert.ok(b.runAsk?.next, "the waiting task is asked, so the phone shows Run");
+    assert.equal(h.notes.filter((n) => n.startsWith("🟢 אנטיגרוויטי פנוי")).length, 1, "one note per freed slot");
+    assert.equal(h.notes.filter((n) => /^[✓✕◐⏸] c-2026/.test(n)).length, 0, "the plain end note is replaced");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: the next queued task is the oldest created, not the first tapped", async () => {
+  const ids = ["c-20261122-31", "c-20261122-32", "c-20261122-33"];
+  const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  h.settings.askBeforeNext = { antigravity: false, local: false };
+  try {
+    await h.inbox.sync();
+    await h.inbox.run(ids[0]!, { here: true });
+    // The newest is tapped first, the older second: the older still goes first.
+    await h.inbox.queueAdd(ids[2]!, "pc");
+    const q = await h.inbox.queueAdd(ids[1]!, "pc");
+    assert.equal(q.queued, 1, "the older task is next in line");
+    assert.equal(h.inbox.queues().antigravity.length, 2);
+    assert.equal((await h.inbox.list()).find((t) => t.id === ids[2])?.queued, 2);
+    for (let i = 0; i < 4; i++) await h.inbox.idle();
+    const [b, c] = await Promise.all([h.inbox.task(ids[1]!), h.inbox.task(ids[2]!)]);
+    assert.ok((b.startedAt ?? 0) <= (c.startedAt ?? 0), "oldest started first");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("standing task: a fresh copy of the template appears when Antigravity is idle, once, and never runs by itself", async () => {
+  const tpl = "c-20261122-16";
+  const { root, repo } = await setup({ [tpl]: TASK(tpl) });
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  try {
+    await h.inbox.sync();
+    assert.equal((await h.inbox.list()).filter((t) => t.standing).length, 0, "the template itself waits: Antigravity is not idle");
+    await h.inbox.run(tpl, { here: true });
+    await h.inbox.idle();
+    await h.inbox.sync();
+    let copies = (await h.inbox.list()).filter((t) => t.standing);
+    assert.equal(copies.length, 1);
+    assert.match(copies[0]!.id, /^c-\d{8}-next-1$/);
+    assert.equal(copies[0]!.status, "waiting");
+    assert.equal(copies[0]!.runAsk, undefined, "no ask, no auto run");
+    await h.inbox.sync();
+    copies = (await h.inbox.list()).filter((t) => t.standing);
+    assert.equal(copies.length, 1, "at most one at a time");
+    assert.equal(seen.prompts, 1, "only the template ran");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inbox queue: the freed-slot note's Run button starts the next task once; a taken slot voids it", async () => {
+  const ids = ["c-20261122-41", "c-20261122-42", "c-20261122-43"];
+  const { root, repo } = await setup(Object.fromEntries(ids.map((id) => [id, TASK(id)])));
+  const seen = { prompts: 0 };
+  const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
+  h.settings.dailyCap = 9;
+  try {
+    await h.inbox.sync();
+    await h.inbox.run(ids[0]!, { here: true });
+    await h.inbox.idle();
+    const freed = h.noteOpts.filter((o, i) => h.notes[i]!.startsWith("🟢 אנטיגרוויטי פנוי") && o?.actions?.length);
+    assert.equal(freed.length, 1, "one note with a Run button per freed slot");
+    const code = /quick-run\/([\w-]{32})$/.exec(freed[0]!.actions![0]!.path)![1]!;
+    assert.equal(await h.inbox.quickRun("x".repeat(32)), false, "an unknown code does nothing");
+    assert.equal(await h.inbox.quickRun(code), true);
+    assert.equal(await h.inbox.quickRun(code), false, "one-time");
+    await h.inbox.idle();
+    assert.equal(seen.prompts, 2);
+    assert.ok(h.notes.some((n) => /התחילה Antigravity started/.test(n)), "a follow-up note says it started");
+    // The slot freed again: a new code. Starting another task by hand voids the old buttons.
+    const next = h.inbox.queues();
+    assert.deepEqual(next.antigravity, []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

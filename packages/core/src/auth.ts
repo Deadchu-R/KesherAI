@@ -167,6 +167,8 @@ export function registerRemoteAuth(
     if (path === "/api/hello") return;
     // The Approve / Deny buttons on a phone or watch notification: a one-time code for one request.
     if (request.method === "POST" && /^\/api\/quick-approve\/[\w-]{32}$/.test(path)) return;
+    // The freed-slot notification's Run button: a one-time code for one task and one free slot (inbox-runner.ts quickRun).
+    if (request.method === "POST" && /^\/api\/quick-run\/[\w-]{32}$/.test(path)) return;
     // The owner's Allow / Deny buttons for a phone asking to control this computer (the one-time code is the key).
     if (request.method === "POST" && /^\/api\/remote-desktop\/decide\/[0-9a-f]{32}$/.test(path)) return;
     // A guest opening an invite link (guests.ts): the one-time token is the key; only this route takes it.

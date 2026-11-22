@@ -155,7 +155,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       },
     },
     board: p.board,
-    notify: (title, body) => void p.notifier.send({ title, body, path: "#/task-inbox", tags: ["inbox_tray"] }).catch(() => undefined),
+    notify: (title, body, opts) => void p.notifier.send({ title, body, path: opts?.path ?? "#/task-inbox", tags: ["inbox_tray"], ...(opts?.actions ? { actions: opts.actions } : {}) }).catch(() => undefined),
     busy,
     me: { username: (() => {
       try {

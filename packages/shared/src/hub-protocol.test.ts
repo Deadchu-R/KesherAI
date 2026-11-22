@@ -175,3 +175,13 @@ test("the away frame: asleep or awake, with a clean note; anything else is refus
   assert.equal(parseDeviceFrame(JSON.stringify({ t: "away", state: "awake" }))?.t, "away");
   assert.equal(parseDeviceFrame(JSON.stringify({ t: "away", state: "dead" })), null);
 });
+
+test("queue commands: add, take out, and the ask-before-next switch of a named executor", () => {
+  const base = { type: "command", commandId: "cmd-12345678" };
+  assert.equal(parseSealedBody({ ...base, action: "inbox-queue", taskId: "c-20261122-01" }, "command")?.type, "command");
+  assert.deepEqual(parseSealedBody({ ...base, action: "inbox-asknext", taskId: "local", on: true }, "command"), { ...base, action: "inbox-asknext", taskId: "local", on: true });
+  assert.equal(parseSealedBody({ ...base, action: "inbox-asknext", taskId: "opus", on: true }, "command"), null, "only antigravity and local have a line");
+  assert.equal(parseSealedBody({ ...base, action: "inbox-nope", taskId: "x1" }, "command"), null);
+  const t = parseSealedBody({ type: "inbox_task", taskId: "c-1", title: "T", state: "waiting-run", executor: "antigravity", from: "claude", lineAt: 2, askNext: false, at: 1 }, "inbox_task");
+  assert.ok(t && t.type === "inbox_task" && t.lineAt === 2 && t.askNext === false);
+});

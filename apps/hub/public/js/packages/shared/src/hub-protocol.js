@@ -83,6 +83,12 @@ const SEALED_KINDS = ["task", "progress", "result", "cancel", "approval_request"
 export const DEFAULT_OPT_IN = { appear: true, acceptTasks: false, acceptLocal: false, acceptAntigravity: false, reportLinks: false, reportActivity: false, reportFileNames: false };
 const EXECUTORS = ["auto", "claude-cloud", "pc-local", "pc-antigravity", "pc-any"];
 /**
+ * Queue commands (task-inbox queue per executor, inbox-queue.ts): `inbox-queue` adds a task to its executor's line,
+ * `inbox-unqueue` takes it out; `inbox-asknext` sets "ask before the next task" for the executor named in `taskId`
+ * (`antigravity` or `local`) to `on`.
+ */
+export const HUB_COMMAND_ACTIONS = ["inbox-run", "inbox-cancel", "inbox-ask", "inbox-queue", "inbox-unqueue", "inbox-asknext", "agent-label", "assign", "board"];
+/**
  * Fits a PC's approvals into one sealed snapshot: the newest {@link HUB_LIMITS.approvalItems}, fields capped, and
  * previews shortened until the whole is at most {@link HUB_LIMITS.approvalsChars} characters.
  *
@@ -375,8 +381,10 @@ export function parseSealedBody(x, kind) {
             return { type: "approval_answer", requestId: b.requestId, conversationId: b.conversationId, decision, ...(mins > 0 ? { forMinutes: Math.min(mins, HUB_LIMITS.approvalForMaxMin) } : {}) };
         }
         case "command":
-            if (!isHubId(b.commandId) || !isHubId(b.taskId) || (b.action !== "inbox-run" && b.action !== "inbox-cancel" && b.action !== "inbox-ask" && b.action !== "agent-label" && b.action !== "assign" && b.action !== "board"))
+            if (!isHubId(b.commandId) || !isHubId(b.taskId) || !HUB_COMMAND_ACTIONS.includes(b.action))
                 return null;
+            if (b.action === "inbox-asknext")
+                return b.taskId === "antigravity" || b.taskId === "local" ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, on: b.on === true } : null;
             if (b.action === "board") {
                 const board = cleanBoardCommand(b.board);
                 return board ? { type: "command", commandId: b.commandId, action: b.action, taskId: b.taskId, board } : null;
@@ -427,7 +435,7 @@ export function parseSealedBody(x, kind) {
             // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
             const executor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
         }
         case "ask_note": {
             const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;

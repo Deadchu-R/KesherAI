@@ -197,8 +197,25 @@ export class HubDevice {
         // A task whose own 5 seconds are still counting goes with this one: its window closes so it is not sent twice.
         for (const t of all)
             this.undoRun(t.taskId);
-        for (const t of all)
-            await this.inboxCommand(t, "inbox-run");
+        // The first runs; the rest join the line (a second Run while one runs is refused by the PC).
+        for (const [i, t] of all.entries())
+            await this.inboxCommand(t, i === 0 ? "inbox-run" : "inbox-queue");
+    }
+    /**
+     * "Ask before the next task" for an executor, sent to every PC that is on (the PC keeps the setting and reports it
+     * with each task).
+     *
+     * @param executor - Antigravity or the local model.
+     * @param on - Ask (true) or start the next queued task by itself (false).
+     */
+    async setAskNext(executor, on) {
+        const id = this.ident;
+        if (!id || !this.connected)
+            return;
+        for (const pc of this.onlinePcs()) {
+            const env = await sealMessage({ from: id.deviceId, to: pc.id, kind: "command" }, { type: "command", commandId: randomB64url(12), action: "inbox-asknext", taskId: executor, on }, id.privateKey, pc.publicKey);
+            this.sendFrame({ t: "send", env });
+        }
     }
     /**
      * Calls back when another device wrote to the owner's Google Drive (pull now instead of at the next timer).

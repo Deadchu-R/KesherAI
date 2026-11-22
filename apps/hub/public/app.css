@@ -293,3 +293,16 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 @keyframes wleave { to { grid-template-rows: 0fr; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .leaving { animation: none; } }
 @media (max-width: 640px) { .nowrow, .nl-item { padding-inline: 12px; } .nw-who { min-width: 0; } }
+
+/* Curtains (curtains.ts): the head of a Tasks group or a work-list section is one button that opens/closes it. */
+.curtain { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; min-height: 44px; background: none; border: 0; color: inherit; font: inherit; text-align: start; cursor: pointer; padding: 0; }
+.curtain:focus-visible { outline: 2px solid #a5b4ff; outline-offset: 2px; }
+.curtain .cnt { margin-inline-start: auto; }
+.wl-h .curtain { width: 100%; font-weight: 600; }
+
+/* Who does it + queue under a task row, and the "needs your Run" mark of an Antigravity task (taskControls, taskRow). */
+.tctl { gap: 8px; padding-top: 4px; }
+.needsrun-row { box-shadow: inset 3px 0 0 #f0b429; }
+.tag.needsrun { font-weight: 600; }
+.trow.ghead { flex-wrap: wrap; }
+.trow.ghead .curtain { flex: 1 1 9rem; }

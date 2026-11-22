@@ -725,8 +725,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     board: taskBoard,
     inbox: (t, boardId) => taskInbox.fromHub(t, boardId),
     inboxTasks: () => taskInbox.list(),
+    inboxAskNext: () => ({ antigravity: config.taskInbox.askBeforeNext.antigravity, local: config.taskInbox.askBeforeNext.local }),
     // Run / Cancel pressed on the owner's phone or hub page (hub-client.ts checks the sender; hub-commands.ts).
-    inboxCommand: (action, taskId, from) =>
+    inboxCommand: (action, taskId, from, on) =>
       inboxCommand(
         {
           ids: async () => (await taskInbox.list()).map((t) => t.id),
@@ -736,10 +737,17 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
           stop: (id) => taskInbox.stop(id),
           skip: (id) => taskInbox.skip(id),
           ask: (id) => taskInbox.askRun(id),
+          queue: (id, by) => taskInbox.queueAdd(id, by),
+          unqueue: (id) => taskInbox.queueRemove(id),
+          askNext: async (executor, on) => {
+            config.taskInbox.askBeforeNext = { ...config.taskInbox.askBeforeNext, [executor]: on };
+            await persist();
+          },
         },
         action,
         taskId,
         from,
+        on,
       ),
     // "Who does it" for a task or a work-list item, from the owner's phone or hub page (task-assign.ts).
     assign: (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm),

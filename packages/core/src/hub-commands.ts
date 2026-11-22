@@ -19,6 +19,11 @@ export interface InboxCommandDeps {
   skip: (id: string) => Promise<unknown>;
   /** Asks "Run this task in Antigravity?" again (inbox-runner.ts askRun); the earlier ask expired. */
   ask?: (id: string) => Promise<unknown>;
+  /** "Add to queue" / "Take out of the queue" (inbox-runner.ts queueAdd / queueRemove). */
+  queue?: (id: string, approvedBy: string) => Promise<unknown>;
+  unqueue?: (id: string) => Promise<unknown>;
+  /** Sets "ask before the next task" of an executor (saved in the settings). */
+  askNext?: (executor: "antigravity" | "local", on: boolean) => Promise<unknown>;
 }
 
 /**
@@ -30,8 +35,13 @@ export interface InboxCommandDeps {
  * @param from - The verified device that pressed it.
  * @returns Done, or why not (the inbox's own words).
  */
-export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction, taskId: string, from: { id: string }): Promise<{ ok: boolean; text: string }> {
+export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction, taskId: string, from: { id: string }, on = false): Promise<{ ok: boolean; text: string }> {
   if (action === "agent-label" || action === "assign" || action === "board") return { ok: false, text: "Not a task command." };
+  if (action === "inbox-asknext") {
+    if (!d.askNext || (taskId !== "antigravity" && taskId !== "local")) return { ok: false, text: "This PC cannot change that yet." };
+    await d.askNext(taskId, on);
+    return { ok: true, text: on ? "The PC will ask before the next task." : "The next task will start by itself." };
+  }
   const ids = await d.ids();
   const id = ids.includes(taskId) ? taskId : await d.fromDrive?.(taskId);
   if (!id || !ids.includes(id)) return { ok: false, text: "This PC does not have that task." };
@@ -40,6 +50,15 @@ export async function inboxCommand(d: InboxCommandDeps, action: HubCommandAction
       if (!d.ask) return { ok: false, text: "This PC cannot ask again yet." };
       await d.ask(id);
       return { ok: true, text: "Asked again on the PC." };
+    }
+    if (action === "inbox-queue") {
+      if (!d.queue) return { ok: false, text: "This PC cannot queue yet." };
+      await d.queue(id, `hub:${from.id}`);
+      return { ok: true, text: "Added to the queue." };
+    }
+    if (action === "inbox-unqueue") {
+      await d.unqueue?.(id);
+      return { ok: true, text: "Taken out of the queue." };
     }
     if (action === "inbox-run") {
       const started = (await d.run(id, `hub:${from.id}`)) as { note?: string } | undefined;

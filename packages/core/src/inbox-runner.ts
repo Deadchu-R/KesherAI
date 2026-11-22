@@ -3,11 +3,13 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { BUSY_RUN_TEXT, INBOX_GIT_MISSING, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
+import { heavyGate } from "./heavy-gate.js";
+import { freedSlotNote, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, validBranchName, validTaskId } from "./task-inbox.js";
 
@@ -40,7 +42,8 @@ export interface TaskInboxDeps {
   /** Starts the unmodified `agy acp` in the folder (it signs in by itself; no token passes through KesherAI). */
   startAgent: (cwd: string, h: AcpHandlers) => Promise<AcpAgent>;
   board?: TaskBoard;
-  notify: (title: string, body: string) => void;
+  /** Tells the user (PC and phone); `path` is where a tap on it goes in the app (default Settings). */
+  notify: (title: string, body: string, opts?: { path?: string; actions?: Array<{ label: string; path: string }> }) => void;
   busy: () => Promise<InboxBusy>;
   /** This computer's user name and home folder, which the privacy scan looks for. */
   me?: { username?: string; home?: string };
@@ -51,6 +54,8 @@ export interface TaskInboxDeps {
    */
   research?: { ready: () => boolean; run: (question: string, signal: AbortSignal) => Promise<string> };
   now?: () => number;
+  /** The heavy job that runs now (default: the app's heavy-job gate); a queued task waits while there is one. */
+  heavy?: () => string | undefined;
   /** How long an asked step waits before it is denied (default 30 minutes). */
   approvalMs?: number;
 }
@@ -89,6 +94,8 @@ interface Active {
   agent?: AcpAgent;
   why?: "stop" | "time";
   answer?: (decision: "allow" | "deny" | "timeout") => void;
+  /** Started from the queue: no "started" notification of its own (the freed-slot one says it). */
+  quiet?: boolean;
   done: Promise<void>;
 }
 
@@ -138,7 +145,15 @@ export class TaskInbox {
    * ends, the first one gets the ask "Next in line — Start?" and starts only on the user's own Start. Kept in memory:
    * a restart empties it (see {@link load}), the safe choice since nothing may start without a fresh answer.
    */
-  private queue: string[] = [];
+  /** The user's lines per executor (inbox-queue.ts), in memory only. */
+  private readonly lines = new TaskLines();
+  /** The title of the task that just ended, per executor, until its next queued task was asked about or started. */
+  private readonly pendingDone: Partial<Record<QueueExecutor, string>> = {};
+  private queueTimer?: ReturnType<typeof setInterval>;
+  /** Counts how often the Antigravity slot was taken: a freed-slot Run button is only good for the slot it was made for. */
+  private slotEpoch = 0;
+  /** The freed-slot notification's one-time Run codes: the task, the slot it belongs to and when it expires. */
+  private readonly quickRuns = new Map<string, { id: string; epoch: number; expires: number }>();
   private timer?: ReturnType<typeof setInterval>;
   /** Asks for one message to Antigravity from a chat's agent (kept in memory: a restart drops them, nothing runs). */
   private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
@@ -158,7 +173,8 @@ export class TaskInbox {
   private get s(): InboxSettings {
     // Unset fields (lists the user never changed) keep the defaults.
     const given = Object.fromEntries(Object.entries(this.d.settings()).filter(([, v]) => v !== undefined));
-    return { ...INBOX_DEFAULTS, ...given } as InboxSettings;
+    const ask = { ...INBOX_DEFAULTS.askBeforeNext, ...((given.askBeforeNext as Partial<InboxSettings["askBeforeNext"]> | undefined) ?? {}) };
+    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask } as InboxSettings;
   }
 
   /** Reads the queue file once; a run cut off by a restart is marked failed (its worktree stays for a look). */
@@ -198,10 +214,30 @@ export class TaskInbox {
     return () => this.listeners.delete(cb);
   }
 
+  /** An executor's queued task ids in priority order: oldest created first (Roee, 2026-11-22), not the order of the taps. */
+  private ordered(ex: QueueExecutor): string[] {
+    const inLine = new Set(this.lines.ids(ex));
+    return this.saved.tasks.filter((t) => inLine.has(t.id)).map((t) => t.id);
+  }
+
+  /** The next queued task of an executor (the oldest created), taken out of its line. */
+  private takeHead(ex: QueueExecutor): string | undefined {
+    const id = this.ordered(ex)[0] ?? this.lines.first(ex);
+    if (id) this.lines.remove(id);
+    return id;
+  }
+
+  /** A copy of a task with its place in the user's line (never stored). */
+  private withPlace<T extends InboxTaskView>(t: T): T {
+    const ex: QueueExecutor | undefined = t.runBy === "antigravity" || t.runBy === "local" ? t.runBy : undefined;
+    const queued = ex && this.lines.has(t.id) ? this.ordered(ex).indexOf(t.id) + 1 : 0;
+    return queued ? { ...t, queued } : { ...t };
+  }
+
   /** The tasks as they are now, oldest first, without their diffs. */
   async list(): Promise<InboxTaskView[]> {
     await this.load();
-    return this.saved.tasks.map(({ diff: _d, ...t }) => ({ ...t }));
+    return this.saved.tasks.map(({ diff: _d, ...t }) => this.withPlace(t));
   }
 
   /** Writes the queue file (one write at a time, write then rename). */
@@ -251,7 +287,7 @@ export class TaskInbox {
       settings: this.s,
       today: { ...this.today() },
       // Newest first; the diff is only on the task page.
-      tasks: [...this.saved.tasks].reverse().map(({ diff: _d, ...t }) => t),
+      tasks: [...this.saved.tasks].reverse().map(({ diff: _d, ...t }) => this.withPlace(t)),
       busy,
       ...(this.saved.lastFetch ? { lastFetch: this.saved.lastFetch } : {}),
       ...(this.saved.lastError ? { lastError: this.saved.lastError } : {}),
@@ -388,9 +424,11 @@ export class TaskInbox {
     }
     await this.closeReplaced();
     await this.followBoard();
+    await this.syncStanding().catch(() => undefined);
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
+    void this.pump().catch(() => undefined);
   }
 
   /**
@@ -458,6 +496,8 @@ export class TaskInbox {
       t.summary = (item.result ?? "").slice(0, 2000);
       t.endedAt = this.now();
       t.resultWritten = false;
+      // A local task ended: the next one of its line is asked about or started (queue pump).
+      if (this.lines.size("local")) this.pendingDone.local = t.title;
     }
   }
 
@@ -674,42 +714,47 @@ export class TaskInbox {
    *
    * @param done - The title of the task that just ended.
    */
-  private async askNext(done: string): Promise<void> {
-    while (this.queue.length && !this.active) {
-      const id = this.queue.shift()!;
+  private async askNext(done: string, ex: QueueExecutor = "antigravity", quiet = false): Promise<string | undefined> {
+    while (this.lines.size(ex) && (ex === "local" || !this.active)) {
+      const id = this.takeHead(ex)!;
       const t = this.saved.tasks.find((x) => x.id === id);
       if (!t) continue;
-      const no = this.cannotRun(t);
+      const no = this.cannotRun(t, false, true);
       if (no) {
         t.note = `Not asked from the queue: ${no.msg}`;
         await this.save();
         continue;
       }
-      this.makeAsk(t, { done, more: this.queue.length });
+      this.makeAsk(t, { done, more: this.lines.size(ex) }, quiet);
       await this.save();
-      return;
+      return t.title;
     }
+    return undefined;
   }
 
   /**
-   * Empties the line: every queued task goes back to waiting for Run (the user's "Clear the queue").
+   * Empties an executor's line: every queued task goes back to waiting for Run (the user's "Clear the queue").
    *
    * @param why - The note the tasks get.
+   * @param ex - The executor (Antigravity's line by default).
    */
-  private clearQueue(why = "The queue was cleared; press Run when you want it."): void {
-    for (const id of this.queue.splice(0)) {
+  private clearQueue(why = "The queue was cleared; press Run when you want it.", ex: QueueExecutor = "antigravity"): void {
+    for (const id of this.lines.clear(ex)) {
       const t = this.saved.tasks.find((x) => x.id === id);
       if (t && t.note?.startsWith("Queued")) t.note = why;
     }
   }
 
-  /** @param ignoreActive - For a press that will wait in the queue: everything but "another task is running". */
-  private cannotRun(t: InboxTaskView, ignoreActive = false): { msg: string; code: number } | undefined {
+  /**
+   * @param ignoreActive - For a press that will wait in the queue: everything but "another task is running".
+   * @param viaQueue - The task comes from a line: a local-model task may then be started too (handed to the board).
+   */
+  private cannotRun(t: InboxTaskView, ignoreActive = false, viaQueue = false): { msg: string; code: number } | undefined {
     const s = this.s;
     if (!s.enabled) return { msg: "The inbox is off (Settings > Task inbox).", code: 409 };
     if (s.paused) return { msg: "The inbox is paused.", code: 409 };
-    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
-    if (this.active && !ignoreActive) return { msg: "Another task is running. One at a time.", code: 409 };
+    if (viaQueue && t.runBy === "local") return RUNNABLE.has(t.status) ? undefined : { msg: "This task cannot be run now.", code: 409 };    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
+    if (this.active && !ignoreActive) return { msg: BUSY_RUN_TEXT.he, code: 409 };
     if (!RUNNABLE.has(t.status)) return { msg: "This task cannot be run now.", code: 409 };
     if (this.saved.quota && this.saved.quota.until > this.now()) return { msg: `Antigravity's quota ran out; it can run again at ${new Date(this.saved.quota.until).toISOString()}.`, code: 429 };
     if (this.today().used >= s.dailyCap) return { msg: `Today's limit of ${s.dailyCap} Antigravity tasks is reached (Settings > Task inbox).`, code: 429 };
@@ -721,7 +766,7 @@ export class TaskInbox {
     for (const t of this.saved.tasks) {
       if (!t.runAsk || t.runAsk.until > this.now()) continue;
       // An unanswered "Next in line" ask leaves nothing running on its own: the rest of the line is cleared too.
-      if (t.runAsk.next) this.clearQueue("The ask expired and the queue was cleared; press Run when you want it.");
+      if (t.runAsk.next) this.clearQueue("The ask expired and the queue was cleared; press Run when you want it.", t.runBy === "local" ? "local" : "antigravity");
       delete t.runAsk;
     }
   }
@@ -732,11 +777,13 @@ export class TaskInbox {
    * @param t - The task.
    * @param next - For the ask after a finished task: its title and how many more are in line.
    */
-  private makeAsk(t: InboxTaskView, next?: { done: string; more: number }): boolean {
-    if (this.cannotRun(t)) return false;
+  private makeAsk(t: InboxTaskView, next?: { done: string; more: number }, quiet = false): boolean {
+    if (this.cannotRun(t, false, !!next)) return false;
     const now = this.now();
     t.runAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + (this.d.approvalMs ?? 30 * 60_000), left: Math.max(0, this.s.dailyCap - this.today().used), ...(next ? { next } : {}) };
-    if (next) this.d.notify("✦ Next in line — Start?", nextInLineTitle(next.done, t.title));
+    if (next) {
+      if (!quiet) this.d.notify("✦ Next in line — Start?", nextInLineTitle(next.done, t.title));
+    }
     else this.d.notify("✦ Run this task in Antigravity?", `${t.id}: ${t.title} · ${t.runAsk.left} left today`);
     return true;
   }
@@ -841,11 +888,11 @@ export class TaskInbox {
     if (next && decision !== "allow") {
       if (decision === "clear") {
         t.note = "The queue was cleared; press Run when you want it.";
-        this.clearQueue();
+        this.clearQueue(undefined, t.runBy === "local" ? "local" : "antigravity");
       } else {
         t.note = "Skipped for now; press Run when you want it.";
         // The one after it gets its own ask ("asks again").
-        await this.askNext(next.done);
+        await this.askNext(next.done, t.runBy === "local" ? "local" : "antigravity");
       }
       await this.save();
       return t;
@@ -855,7 +902,7 @@ export class TaskInbox {
       await this.save();
       return t;
     }
-    return this.run(t.id, { approvedBy: by });
+    return t.runBy === "local" ? this.handToLocal(t) : this.run(t.id, { approvedBy: by });
   }
 
   /**
@@ -876,17 +923,9 @@ export class TaskInbox {
       delete t.runAsk;
       return t;
     }
-    // Another task is running: the task joins the line. When that one ends the PC asks "Next in line — Start?" and
-    // the task starts only on that Start (Antigravity runs only on the user's own press, one press per task).
-    if (this.active && this.active.id !== id && !this.queue.includes(id)) {
-      const wait = this.cannotRun(t, true);
-      if (wait) throw fail(wait.msg, wait.code);
-      this.queue.push(id);
-      delete t.runAsk;
-      t.note = `Queued: the PC asks "Start?" after the task now running (${this.queue.length} in line).`;
-      await this.save();
-      return t;
-    }
+    // Another task is running: Run does not start or queue anything silently (a double tap must not start two). The
+    // page says so and offers "Add to queue" (queueAdd).
+    if (this.active && this.active.id !== id && !this.lines.has(id)) throw fail(BUSY_RUN_TEXT.he, 409);
     const no = this.cannotRun(t);
     if (no) throw fail(no.msg, no.code);
     // Drop the ask for good and show the task as started at once (the hub and the phone follow every save): the fetch
@@ -894,12 +933,16 @@ export class TaskInbox {
     // Run (and the phone's "Run this?" ask) a second time.
     const before = { status: t.status, note: t.note };
     delete t.runAsk;
+    // The slot is taken: an old "Next in line - Start?" ask of another task is void (it must not start a second run).
+    for (const o of this.saved.tasks) if (o.id !== id && o.runAsk?.next && o.runBy === "antigravity") delete o.runAsk;
     t.status = "running";
     t.note = "Starting…";
     // The task holds the one run slot from now on (another press queues behind it, as for a running task).
     let end!: () => void;
-    const active: Active = { id, done: new Promise<void>((r) => (end = r)) };
+    const active: Active = { id, ...("approvedBy" in how && how.approvedBy === "queue" ? { quiet: true } : {}), done: new Promise<void>((r) => (end = r)) };
     this.active = active;
+    this.slotEpoch++;
+    this.quickRuns.clear();
     await this.save();
     try {
       return await this.begin(t, active, end);
@@ -938,11 +981,11 @@ export class TaskInbox {
     delete t.diff;
     today.used++;
     await this.save();
-    this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`);
+    if (!active.quiet) this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`);
     void this.work(t, active, wt.path, wt.base, repo).finally(async () => {
       this.active = undefined;
-      // The next task in line is only asked about, never started (the ask is made before `idle` resolves).
-      await this.askNext(t.title).catch(() => undefined);
+      // The next task of the line is asked about or started by the user's own queue tap (the ask is made before `idle` resolves).
+      await this.slotFreed(t).catch(() => undefined);
       end();
     });
     return t;
@@ -1074,6 +1117,230 @@ export class TaskInbox {
   }
 
   /**
+   * "Add to queue": puts a task in its executor's line (Antigravity or the local model). The tap is the user's own
+   * start for it: when the executor's slot is free (and no heavy job runs) it starts at once, and otherwise the next
+   * one starts by itself when the slot frees, or the PC asks "Next in line - Start?" when that executor's
+   * "ask before the next task" setting is on.
+   *
+   * @param id - The task (waiting, failed, partial or deferred).
+   * @param by - Who tapped, as verified by the caller (this computer or a paired device).
+   * @returns The task with its note and place.
+   */
+  async queueAdd(id: string, by: string): Promise<InboxTaskView> {
+    await this.load();
+    const t = this.find(id);
+    if (!by) throw fail("Only your paired phone or this computer can queue a task.", 403);
+    if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : "Claude runs this task; it has no queue here.", 409);
+    const no = this.cannotRun(t, true, true);
+    if (no) throw fail(no.msg, no.code);
+    const ex: QueueExecutor = t.runBy;
+    delete t.runAsk;
+    const place = this.lines.add(ex, id);
+    t.note = `Queued (${place} in line): it starts when ${ex === "local" ? "the local model" : "the task now running"} is free.`;
+    this.ensureQueueTimer();
+    await this.save();
+    await this.pump(ex);
+    return this.withPlace(t);
+  }
+
+  /**
+   * Takes a task out of its line (it waits for Run again).
+   *
+   * @param id - The task.
+   * @returns The task.
+   */
+  async queueRemove(id: string): Promise<InboxTaskView> {
+    await this.load();
+    const t = this.find(id);
+    if (this.lines.remove(id) && t.note?.startsWith("Queued")) t.note = "Taken out of the queue; add it again when you want it.";
+    await this.save();
+    return t;
+  }
+
+  /** The lines now: the task ids per executor, first in line first. */
+  queues(): Record<QueueExecutor, string[]> {
+    return { antigravity: this.lines.ids("antigravity"), local: this.lines.ids("local") };
+  }
+
+  /** Looks at the lines every 15 seconds while one has a task (a heavy job or a board item may free its slot). */
+  private ensureQueueTimer(): void {
+    if (this.queueTimer) return;
+    this.queueTimer = setInterval(() => {
+      if (this.lines.empty) {
+        clearInterval(this.queueTimer);
+        this.queueTimer = undefined;
+        return;
+      }
+      void this.followBoard().then(() => this.pump()).catch(() => undefined);
+    }, 15_000);
+    this.queueTimer.unref?.();
+  }
+
+  /** Whether an executor's slot is free: Antigravity runs nothing, the local model has nothing open or claimed on the board. */
+  private slotFree(ex: QueueExecutor): boolean {
+    if (ex === "antigravity") return !this.active;
+    return !this.saved.tasks.some((t) => t.runBy === "local" && t.status === "queued" && (t.boardState === "open" || t.boardState === "claimed"));
+  }
+
+  /**
+   * Moves the lines forward: for each executor whose slot is free, starts the first queued task, waits while a heavy
+   * job runs, or asks "Next in line - Start?" after a task ended when the setting is on (see {@link queueStep}).
+   *
+   * @param only - One executor, or both.
+   */
+  async pump(only?: QueueExecutor, quiet = false): Promise<{ started?: string; asked?: string }> {
+    await this.load();
+    const out: { started?: string; asked?: string } = {};
+    for (const ex of only ? [only] : QUEUE_EXECUTORS) {
+      for (;;) {
+        const id = this.ordered(ex)[0] ?? this.lines.first(ex);
+        if (!id) break;
+        const t = this.saved.tasks.find((x) => x.id === id);
+        if (!t || !RUNNABLE.has(t.status)) {
+          this.lines.remove(id);
+          continue;
+        }
+        const step = queueStep({ queued: this.lines.size(ex), slotFree: this.slotFree(ex), heavy: this.heavyJob(), ask: this.s.askBeforeNext[ex], afterEnd: this.pendingDone[ex] !== undefined });
+        if (step.kind === "idle") break;
+        if (step.kind === "wait") {
+          const note = `Queued: waiting for ${step.job} to finish (a heavy job runs).`;
+          if (t.note !== note) {
+            t.note = note;
+            await this.save();
+          }
+          break;
+        }
+        const done = this.pendingDone[ex];
+        delete this.pendingDone[ex];
+        if (step.kind === "ask") {
+          const asked = await this.askNext(done ?? "", ex, quiet);
+          if (asked) out.asked = asked;
+          break;
+        }
+        this.lines.remove(id);
+        try {
+          if (ex === "local") await this.handToLocal(t);
+          else await this.run(id, { approvedBy: "queue" });
+          out.started = t.title;
+        } catch (e) {
+          t.note = `Not started from the queue: ${(e as Error).message}`.slice(0, 300);
+          await this.save();
+          continue;
+        }
+        break;
+      }
+    }
+    if (this.lines.empty && this.queueTimer) {
+      clearInterval(this.queueTimer);
+      this.queueTimer = undefined;
+    }
+    return out;
+  }
+
+  /**
+   * An Antigravity task ended and its slot is free: the line moves on (the next one starts by itself or is asked
+   * about) and the user gets ONE notification for the freed slot (see {@link freedSlotNote}).
+   *
+   * @param ended - The task that ended.
+   */
+  private async slotFreed(ended: InboxTaskView): Promise<void> {
+    if (this.lines.size("antigravity")) this.pendingDone.antigravity = ended.title;
+    await this.syncStanding().catch(() => undefined);
+    const r = await this.pump("antigravity", true).catch(() => ({}) as { started?: string; asked?: string });
+    const waiting = !r.started && !r.asked ? this.saved.tasks.find((x) => x.runBy === "antigravity" && x.status === "waiting" && !x.standing && x.id !== ended.id && this.cannotRun(x) === undefined) : undefined;
+    // The first waiting task gets a fresh "Next in line - Start?" ask: the phone's notification shows its Run button
+    // (hub ask note, answered with the paired key). One ask is one run and ends at 30 minutes or when a task starts.
+    if (waiting) {
+      this.makeAsk(waiting, { done: ended.title, more: 0 }, true);
+      await this.save();
+    }
+    const n = freedSlotNote({ ended: { title: ended.title, ok: ended.status === "done" }, ...(r.started ? { started: r.started } : {}), ...(r.asked ? { asked: r.asked } : {}), ...(waiting ? { waiting: waiting.title } : {}) });
+    const target = r.asked ? this.saved.tasks.find((x) => x.runAsk?.next && x.title === r.asked) : waiting;
+    // The phone app's notification gets a Run button (it POSTs to this computer, also from anywhere): one code, one task, this slot.
+    const run = target && target.status === "waiting" ? this.quickRunCode(target.id) : undefined;
+    this.d.notify(n.title, n.body, { path: target ? `#/task-inbox/${target.id}` : "#/task-inbox", ...(run ? { actions: [{ label: "▶ Run", path: `api/quick-run/${run}` }] } : {}) });
+  }
+
+  /**
+   * A one-time code for the freed-slot notification's Run button. It works once, for this task, while this slot stays
+   * free (starting any task voids it) and for 30 minutes at most.
+   *
+   * @param id - The task the button starts.
+   * @returns The code (32 URL-safe characters).
+   */
+  private quickRunCode(id: string): string {
+    const now = this.now();
+    for (const [k, v] of this.quickRuns) if (v.expires < now) this.quickRuns.delete(k);
+    const code = randomBytes(24).toString("base64url");
+    this.quickRuns.set(code, { id, epoch: this.slotEpoch, expires: now + 30 * 60_000 });
+    return code;
+  }
+
+  /**
+   * The freed-slot notification's Run button: starts the next Antigravity task, as the user's own tap, once. The phone
+   * then gets a follow-up notification "<task> started" or why not (e.g. a task is running).
+   *
+   * @param code - The button's code.
+   * @returns Whether the task was started.
+   */
+  async quickRun(code: string): Promise<boolean> {
+    await this.load();
+    const q = this.quickRuns.get(code);
+    this.quickRuns.delete(code);
+    if (!q || q.expires < this.now() || q.epoch !== this.slotEpoch) return false;
+    const t = this.saved.tasks.find((x) => x.id === q.id);
+    if (!t) return false;
+    try {
+      await this.run(q.id, { approvedBy: "notification" });
+      this.d.notify(`🟢 ${t.title.slice(0, 80)} התחילה`, "Antigravity started.", { path: `#/task-inbox/${t.id}` });
+      return true;
+    } catch (e) {
+      this.d.notify("✕ ההרצה לא התחילה", `${(e as Error).message}`.slice(0, 200), { path: `#/task-inbox/${t.id}` });
+      return false;
+    }
+  }
+
+  /**
+   * The standing "what to research next" task (see {@link standingPlan}): makes a fresh copy of the template task
+   * when Antigravity is idle, or withdraws an unstarted copy when real work appears. Never runs it.
+   */
+  private async syncStanding(): Promise<void> {
+    const tasks = this.saved.tasks;
+    const real = tasks.filter((t) => t.runBy === "antigravity" && !t.standing);
+    const busy = real.some((t) => t.status === "waiting" || t.status === "running" || t.status === "needs-approval") || this.lines.size("antigravity") > 0;
+    const copies = tasks.filter((t) => t.standing);
+    const tpl = tasks.find((t) => t.id === STANDING_TEMPLATE_ID);
+    const plan = standingPlan({ busy, copies: copies.map((c) => ({ ended: isEnded(c.status), ...(c.endedAt !== undefined ? { endedAt: c.endedAt } : {}) })), hasTemplate: !!tpl, now: this.now() });
+    if (plan === "withdraw") {
+      const gone = copies.filter((c) => c.status === "waiting");
+      if (!gone.length) return;
+      this.saved.tasks = tasks.filter((t) => !gone.includes(t));
+      await this.save();
+    } else if (plan === "create" && tpl) {
+      const id = standingId(this.now(), copies.length + 1);
+      if (!validTaskId(id) || tasks.some((t) => t.id === id)) return;
+      const { diff: _d, runAsk: _a, ...spec } = tpl;
+      const copy: InboxTaskView = { ...spec, id, standing: true, from: "self-work", status: "waiting", runBy: "antigravity", executor: "antigravity", branch: branchFor({ id, title: tpl.title }, "antigravity"), note: "Standing task: what to research next. Run starts it." };
+      for (const k of ["startedAt", "endedAt", "summary", "plan", "steps", "decisions", "checks", "files", "headSha", "pushed", "boardId", "boardState", "resultWritten", "modelUsed", "researchReport", "retryAt", "autoRetried", "pending"] as const) delete (copy as unknown as Record<string, unknown>)[k];
+      this.saved.tasks.push(copy);
+      await this.save();
+    }
+  }
+
+  /** The heavy job that runs now, in English, or undefined. */
+  private heavyJob(): string | undefined {
+    return this.d.heavy ? this.d.heavy() : heavyGate.runningLabel()?.en;
+  }
+
+  /** Hands a task to the local model: its board item is opened for self-work, which takes it in its own order. */
+  private async handToLocal(t: InboxTaskView): Promise<InboxTaskView> {
+    await this.reassign(t.id, "local", { again: true });
+    t.boardState = "open";
+    await this.save();
+    return t;
+  }
+
+  /**
    * Skips a waiting task (its board item is blocked with why).
    *
    * @param id - The task.
@@ -1087,7 +1354,7 @@ export class TaskInbox {
     t.status = "skipped";
     t.endedAt = this.now();
     t.note = note;
-    this.queue = this.queue.filter((q) => q !== id);
+    this.lines.remove(id);
     delete t.runAsk;
     t.resultWritten = false;
     if (t.boardId) await this.d.board?.change("roee", [{ op: "block", id: t.boardId, result: "Skipped in the task inbox." }]).catch(() => undefined);
@@ -1168,7 +1435,8 @@ export class TaskInbox {
     });
     await this.save();
     const icon = status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕";
-    this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
+    // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
+    if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
   }
 
   /**
@@ -1180,23 +1448,27 @@ export class TaskInbox {
    * @param to - The local model (self-work, through the board), Claude's Opus agent, or Antigravity (waits for Run).
    * @param o.again - Run a finished task again with the new executor (the user confirmed).
    */
-  async reassign(id: string, to: "local" | "opus" | "antigravity", o: { again?: boolean } = {}): Promise<InboxTaskView> {
+  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini", o: { again?: boolean } = {}): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
     if ((t.status === "done" || t.status === "partial") && !o.again) throw fail("It is done.", 409);
+    if (to === "gemini" && t.kind !== "research") throw fail("Free Gemini does only research tasks.", 409);
+    this.lines.remove(id);
+    delete t.boardState;
     t.runBy = to;
     t.executor = to;
-    t.status = to === "antigravity" ? "waiting" : "queued";
+    t.status = to === "antigravity" || to === "gemini" ? "waiting" : "queued";
     t.branch = branchFor(t, to);
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;
-    t.note = to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
+    t.note = to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
     await this.save();
     // Antigravity asks "Run this?" on the PC and the phone, as for a new task.
     if (to === "antigravity") this.makeAsk(t);
+    if (to === "gemini") void this.pumpGemini().catch(() => undefined);
     return t;
   }
 

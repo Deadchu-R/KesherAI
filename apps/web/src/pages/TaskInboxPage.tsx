@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { RUN_ALL_KEY, agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, assignOfExecutor, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -111,6 +111,8 @@ export function TaskInboxPage({ id }: { id?: string }) {
   const [filter, setFilter] = useState<"all" | "waiting" | "running" | "ask" | "ended">("all");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** The task whose Run the PC refused because another one runs: its row says so and offers "Add to queue". */
+  const [busyRun, setBusyRun] = useState<string | undefined>();
   const load = () => void api<InboxState>("/api/task-inbox").then(setS, () => undefined);
   useEffect(() => {
     load();
@@ -128,7 +130,8 @@ export function TaskInboxPage({ id }: { id?: string }) {
       await api(path, { method: "POST", body });
     } catch (e) {
       if (runOf) runTapped.delete(runOf);
-      toast((e as Error).message);
+      if (runOf && (e as Error).message === BUSY_RUN_TEXT.he) setBusyRun(runOf);
+      else toast((e as Error).message);
     } finally {
       setBusy(false);
       load();
@@ -202,10 +205,12 @@ export function TaskInboxPage({ id }: { id?: string }) {
 
       {runAll.length > 1 && (
         <div className="row wrap tinbox-runall">
-          <RunUndoButton id={RUN_ALL_KEY} primary={false} disabled={busy} label={<>▶ {L(`הפעל הכל (${runAll.length})`, `Run all (${runAll.length})`)}</>} send={() => void (async () => { for (const t of runAll) await act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id); })()} />
-          <span className="small muted">{L("הראשונה רצה, השאר ממתינות וכל אחת נשאלת בתורה.", "The first runs, the rest wait and are asked one by one.")}</span>
+          <RunUndoButton id={RUN_ALL_KEY} primary={false} disabled={busy} label={<>▶ {L(`הפעל הכל (${runAll.length})`, `Run all (${runAll.length})`)}</>} send={() => void (async () => { for (const [i, t] of runAll.entries()) await act(`/api/task-inbox/tasks/${t.id}/${i === 0 ? "run" : "queue"}`, {}, i === 0 ? t.id : undefined); })()} />
+          <span className="small muted">{L("הראשונה רצה, השאר נכנסות לתור.", "The first runs, the rest join the queue.")}</span>
         </div>
       )}
+
+      <QueuePanel state={s} put={put} />
 
       {adding && <AddTask onDone={() => { setAdding(false); load(); }} />}
 
@@ -220,7 +225,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
           <span>#</span><span>{L("משימה", "Task")}</span><span>{L("מבצע", "Executor")}</span><span>{L("מצב", "State")}</span><span>{L("ענף", "Branch")}</span><span />
         </div>
         {!shown.length && <p className="muted tinbox-empty">{s.tasks.length ? L("אין משימות כאן.", "No tasks here.") : L("עוד אין משימות. Claude כותב אותן לענף kesher-inbox, או הוסיפו אחת כאן.", "No tasks yet. Claude writes them to the kesher-inbox branch, or add one here.")}</p>}
-        {shown.map((t) => <QueueRow key={t.id} t={t} state={s} act={act} busy={busy} onAssigned={load} />)}
+        {shown.map((t) => <QueueRow key={t.id} t={t} state={s} act={act} busy={busy} onAssigned={load} busyRun={busyRun === t.id} clearBusy={() => setBusyRun(undefined)} />)}
       </div>
 
       <WorkListSend onSent={load} />
@@ -325,11 +330,13 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
 }
 
 /** One task in the queue: a table row on the computer, a card on the phone. */
-function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean; onAssigned: () => void }) {
+function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: InboxTaskView; state: InboxState; act: Act; busy: boolean; onAssigned: () => void; busyRun?: boolean; clearBusy?: () => void }) {
   const st = statusChip(t);
   const ex = executorChip(t.runBy, t.kind);
   const open = () => (location.hash = `#/task-inbox/${t.id}`);
   const runnable = t.runBy === "antigravity" && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
+  // Antigravity and the local model have a line: "Add to queue" (the tap is the user's own start for the task).
+  const queueable = (t.runBy === "antigravity" || t.runBy === "local") && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
   const copy = () => void navigator.clipboard?.writeText(forClaude(t)).then(() => toast(L("הועתק", "Copied")), () => toast(forClaude(t)));
   return (
     <div className="tinbox-row">
@@ -352,6 +359,10 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
           : <RunUndoButton id={t.id} disabled={busy} send={() => void act(`/api/task-inbox/tasks/${t.id}/run`, {}, t.id)} label={<>▶ {t.status === "waiting" ? L("הפעל", "Run") : L("נסה שוב", "Retry")}</>} />)}
         {runnable && !state.runHere && startingNow(t) && <button type="button" className="primary" disabled>{L("מתחיל…", "Starting…")}</button>}
         {runnable && !state.runHere && !t.runAsk && !startingNow(t) && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/ask`)}>▶ {L("הפעל", "Run")}</button>}
+        {busyRun && <span className="small warn" role="alert" dir="auto">{L(BUSY_RUN_TEXT.he, BUSY_RUN_TEXT.en)}</span>}
+        {queueable && (t.queued
+          ? <><span className="tinbox-chip">{L(`בתור #${t.queued}`, `Queued #${t.queued}`)}</span><button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/unqueue`)}>{L("הסר מהתור", "Take out")}</button></>
+          : <button type="button" className={busyRun ? "primary" : ""} disabled={busy} onClick={() => { clearBusy?.(); void act(`/api/task-inbox/tasks/${t.id}/queue`); }}>＋ {L("הוסף לתור", "Add to queue")}</button>)}
         {t.status === "waiting" && <button type="button" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/skip`)}>{L("דלג", "Skip")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}
@@ -359,6 +370,37 @@ function QueueRow({ t, state, act, busy, onAssigned }: { t: InboxTaskView; state
         {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} onDone={onAssigned} />}
       </span>
     </div>
+  );
+}
+
+/**
+ * The queue per executor (Antigravity, Local model): how many wait, who is next, and the switch "ask before the next
+ * task" (on: the PC asks "Next in line - Start?" when a task ends; off: the next queued task starts by itself, unless a
+ * heavy job runs). Shown when there is a line or a task for the executor.
+ */
+function QueuePanel({ state, put }: { state: InboxState; put: (body: Record<string, unknown>) => void }) {
+  const rows = (["antigravity", "local"] as const).map((ex) => {
+    const line = state.tasks.filter((t) => t.runBy === ex && t.queued).sort((a, b) => a.queued! - b.queued!);
+    const any = state.tasks.some((t) => t.runBy === ex);
+    return { ex, line, any };
+  }).filter((r) => r.any);
+  if (!rows.length) return null;
+  return (
+    <section className="card stack tinbox-queues" aria-label={L("תור לפי מבצע", "Queue per executor")}>
+      {rows.map(({ ex, line }) => {
+        const ask = state.settings.askBeforeNext?.[ex] ?? ex === "antigravity";
+        return (
+          <div key={ex} className="row wrap small">
+            <b>{ex === "antigravity" ? "✦ Antigravity" : L("◆ מודל מקומי", "◆ Local model")}</b>
+            <span className="tinbox-chip">{line.length ? L(`${line.length} בתור · הבאה: ${line[0]!.title}`, `${line.length} queued · next: ${line[0]!.title}`) : L("התור ריק", "Queue empty")}</span>
+            <label className="row small">
+              <input type="checkbox" role="switch" checked={ask} onChange={(e) => put({ askBeforeNext: { [ex]: e.target.checked } })} /> {L("לשאול לפני המשימה הבאה", "Ask before the next task")}
+            </label>
+          </div>
+        );
+      })}
+      <span className="small muted">{L("משימה בתור מחכה גם כשרצה עבודה כבדה במחשב.", "A queued task also waits while a heavy job runs on the PC.")}</span>
+    </section>
   );
 }
 

@@ -21,7 +21,7 @@ export interface AssignDeps {
   /** A work-list item by its id (`w-…`): its title and whole text. */
   workItem?: (id: string) => Promise<{ title: string; text: string } | undefined>;
   stop: (id: string) => Promise<boolean>;
-  reassign: (id: string, to: "opus" | "antigravity" | "local", again: boolean) => Promise<unknown>;
+  reassign: (id: string, to: "opus" | "antigravity" | "local" | "gemini", again: boolean) => Promise<unknown>;
   add: (input: { title: string; goal: string; executor: string }) => Promise<{ id: string }>;
   /** Opens a code chat whose lead hands the task to a sub-agent of the role; returns the chat's title. */
   toChat?: (role: AssignRole | SpecialistId, title: string, text: string) => Promise<string>;
@@ -50,6 +50,7 @@ export async function assignTask(d: AssignDeps, taskId: string, to: AssignTo, co
         if (!d.toChat) return { ok: false, text: "This PC cannot open a chat for it (no project for the task inbox)." };
         return { ok: true, text: `Sent to a new chat: ${await d.toChat(role, item.title, item.text)}.` };
       }
+      if (exec === "gemini") return { ok: false, text: "Free Gemini does only research tasks; add this one as research first." };
       const t = await d.add({ title: item.title, goal: item.text, executor: exec! });
       return { ok: true, text: `Added to the task inbox for ${nameOf(to)} (${t.id}).` };
     }

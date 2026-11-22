@@ -54,6 +54,8 @@ export interface InboxTaskSpec {
   localOk?: boolean;
   /** `replaces: [ids]`: older tasks this one supersedes; the PC skips those that have not started, with a note. */
   replaces?: string[];
+  /** The standing "what to research next" task (a fresh copy of a template, shown while Antigravity is idle; inbox-queue.ts). */
+  standing?: boolean;
   goal: string;
   readFirst?: string;
   acceptance?: string;
@@ -107,6 +109,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   branch: string;
   /** The board item it was put on (the shared task board). */
   boardId?: string;
+  /** The place in its executor's queue (1 = next), while the user has it queued (added by the PC's list, never stored). */
+  queued?: number;
   /** A local-model task's board item while it is not ended: open = waits for the local agent, claimed = it works on it. */
   boardState?: "open" | "claimed";
   /** The model it ran on, as the agent named it. */
@@ -182,6 +186,11 @@ export interface InboxSettings {
   forbiddenPaths: string[];
   /** Commands the agent may run without asking, and the only ones KesherAI runs as a task's check. */
   commands: string[];
+  /**
+   * Per executor: ask "Next in line: X - Start?" when a task ends and another is queued (true), or start the next
+   * queued task by itself (false). Antigravity defaults to asking (Roee, 2026-11-22); the local model to starting by itself.
+   */
+  askBeforeNext: { antigravity: boolean; local: boolean };
   /** Busy rules: Run waits while a game, an editor, or a busy graphics card is on. */
   notWhileGame: boolean;
   notWhileEditor: boolean;
@@ -218,3 +227,6 @@ export interface InboxState {
   /** The project's folder name (never its full path), for the ask card. */
   project?: string;
 }
+
+/** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */
+export const BUSY_RUN_TEXT = { he: "משימה רצה, אין להריץ עד שתסתיים", en: "A task is running; do not run another until it ends" } as const;

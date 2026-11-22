@@ -26,6 +26,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
   allowedPaths: ["apps/**", "packages/*/src/**", "plugins/**", "docs/**"],
   forbiddenPaths: [...ALWAYS_FORBIDDEN],
   commands: ["pnpm -s typecheck", "pnpm -s lint", "node --test", "node --conditions=source --import tsx --test", "git status", "git diff", "git log", "git show", "rg", "ls"],
+  askBeforeNext: { antigravity: true, local: false },
   notWhileGame: true,
   notWhileEditor: true,
   gpuBusyPercent: 40,

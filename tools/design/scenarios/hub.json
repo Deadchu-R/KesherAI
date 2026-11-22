@@ -1713,6 +1713,396 @@
      }
     ]
    }
+  },
+  {
+   "id": "HubCurtains",
+   "title": "ענן Kesher: משימות — וילון לכל קבוצה (▾/▸ עם ספירה), נזכר במכשיר; רצות עכשיו, ואחריה Antigravity: הרצה, אחר כך הממתינות מהישנה לחדשה עם תאריך ושעה",
+   "titleEn": "Kesher Cloud: Tasks — a curtain per group (▾/▸ with count); Running now, then Antigravity: running, then waiting ones oldest first with date/time",
+   "route": "#tasks",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".curtain"
+    },
+    {
+     "click": ".ghead .curtain"
+    },
+    {
+     "wait": ".curtain[aria-expanded=\"false\"]"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "askNext": true
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "kind": "code",
+       "askNext": true
+      }
+     },
+     {
+      "title": "לתקן את גלילת רשימת ההורדות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "kind": "code",
+       "lineAt": 1,
+       "askNext": true
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 6,
+       "kind": "code",
+       "lineAt": 2,
+       "askNext": true
+      }
+     },
+     {
+      "title": "לסדר את שמות הקבצים בתיקיית ההורדות",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "2h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code",
+       "askNext": false,
+       "cause": "הסוכן המקומי נעצר"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "HubQueue",
+   "title": "ענן Kesher: משימות — מי מבצע על כל משימה שממתינה/נכשלה, \"＋ הוסף לתור\" והמקום בתור, ומתג \"שאל לפני הבאה\" לכל מבצע",
+   "titleEn": "Kesher Cloud: Tasks — who does it on every waiting/failed task, \"＋ Add to queue\" with the place in line, and an \"Ask before next\" switch per executor",
+   "route": "#tasks",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".tctl"
+    },
+    {
+     "wait": ".tctl .assign"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "לתקן את מסך ההתחברות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "50m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 3,
+       "estSteps": 8,
+       "model": "Gemini 3 Pro",
+       "kind": "code",
+       "runId": "in-t1",
+       "startedAt": {
+        "$agoMs": "7m"
+       },
+       "askNext": true
+      }
+     },
+     {
+      "title": "להשוות כלי ציור לעורך התמונות",
+      "status": "running",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "40m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "gemini",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "steps": 2,
+       "estSteps": 5,
+       "model": "gemini-flash",
+       "kind": "research",
+       "startedAt": {
+        "$agoMs": "4m"
+       }
+      }
+     },
+     {
+      "title": "להוסיף חיפוש להגדרות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "30m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "kind": "code",
+       "askNext": true
+      }
+     },
+     {
+      "title": "לתקן את גלילת רשימת ההורדות",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "25m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 8,
+       "kind": "code",
+       "lineAt": 1,
+       "askNext": true
+      }
+     },
+     {
+      "title": "לעדכן את תיעוד ההתקנה",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "20m"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "estSteps": 6,
+       "kind": "code",
+       "lineAt": 2,
+       "askNext": true
+      }
+     },
+     {
+      "title": "לסדר את שמות הקבצים בתיקיית ההורדות",
+      "status": "failed",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "2h"
+      },
+      "inbox": {
+       "from": "claude",
+       "executor": "local",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "2m"
+       },
+       "kind": "code",
+       "askNext": false,
+       "cause": "הסוכן המקומי נעצר"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "HubStandingResearch",
+   "title": "ענן Kesher: משימות — כש-Antigravity פנוי מופיעה \"מה לחקור הלאה\" (עותק חדש של התבנית) בתחתית הווילון עם הרצה; לא רצה לבד",
+   "titleEn": "Kesher Cloud: Tasks — when Antigravity is idle, \"What to research next\" (a fresh copy of the template) sits last in its curtain with Run",
+   "route": "#tasks",
+   "height": {
+    "desktop": 700,
+    "phone": 900
+   },
+   "steps": [
+    {
+     "wait": ".curtain"
+    }
+   ],
+   "hub": {
+    "device": {
+     "name": "הטלפון"
+    },
+    "pcs": [
+     {
+      "id": "pc-studio",
+      "name": "PC-Studio"
+     }
+    ],
+    "tasks": [
+     {
+      "title": "מה לחקור הלאה: KesherAI עצמו ונוחות השימוש בו",
+      "status": "waiting-run",
+      "route": "pc",
+      "to": "pc-studio",
+      "toName": "PC-Studio",
+      "createdAt": {
+       "$agoMs": "1m"
+      },
+      "inbox": {
+       "from": "self-work",
+       "executor": "antigravity",
+       "deviceId": "pc-studio",
+       "at": {
+        "$agoMs": "1m"
+       },
+       "kind": "research",
+       "standing": true,
+       "askNext": true
+      }
+     }
+    ]
+   }
   }
  ]
 }

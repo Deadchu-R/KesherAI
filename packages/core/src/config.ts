@@ -268,6 +268,7 @@ export const KesherConfigSchema = z.object({
       allowedPaths: z.array(z.string().max(120)).max(40).optional(),
       forbiddenPaths: z.array(z.string().max(120)).max(60).optional(),
       commands: z.array(z.string().max(120)).max(40).optional(),
+      askBeforeNext: z.object({ antigravity: z.boolean().default(true), local: z.boolean().default(false) }).prefault({}),
       notWhileGame: z.boolean().default(true),
       notWhileEditor: z.boolean().default(true),
       gpuBusyPercent: z.number().int().min(0).max(100).default(40),

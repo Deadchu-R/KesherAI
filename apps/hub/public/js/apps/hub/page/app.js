@@ -15,6 +15,7 @@
  * offers pairing by code there instead, plus a button that opens the hub in the phone's own browser.
  */
 import { keyFingerprint } from "../../../packages/shared/src/hub-crypto.js";
+import { BUSY_RUN_TEXT } from "../../../packages/shared/src/task-inbox.js";
 import { isSafeLink } from "../../../packages/shared/src/hub-protocol.js";
 import { deviceIcon, getLocale, h, initLocale, L, setLocale, when } from "./dom.js";
 import { HubDevice, post } from "./device.js";
@@ -34,6 +35,7 @@ import { isGoing, shownState, sortedCards } from "../../../packages/shared/src/h
 import { PageDrive } from "./drive.js";
 import { agentSnapshots, mergeTasks, parseAppToken, WORK_LIST_STATUS, workListView } from "./drive-view.js";
 import { WORK_LIST_STATUSES } from "../../../packages/shared/src/work-list.js";
+import { CURTAINS_KEY, isOpen as curtainOpen, parseCurtains, serializeCurtains, toggled } from "../../../packages/shared/src/curtains.js";
 const TABS = ["dash", "agents", "devices", "tasks", "pair", "settings"];
 const device = new HubDevice();
 const app = {
@@ -530,8 +532,9 @@ function workListGroup(q) {
     const sections = view.sections
         .map((s) => ({ ...s, items: s.items.filter((i) => !q || `${i.title}\n${i.text}\n${s.section}`.toLowerCase().includes(q)) }))
         .filter((s) => s.items.length);
+    const wlOpen = (s) => curtainOpen(curtains, `wl:${s.section}`, s.items.length, !!q);
     return h("section", { class: "card clip wl", "aria-label": L("רשימת העבודה של Claude", "Claude's work list") }, h("div", { class: "row wrap head" }, h("b", null, L("📋 רשימת העבודה של Claude", "📋 Claude's work list")), h("span", { class: "mut xs" }, L("מהמחשב, מתעדכנת כל 15 דקות", "From the PC, updated every 15 minutes"))), h("div", { class: "row wrap filters wl-filters" }, WORK_LIST_STATUSES.map(chip)), sections.length
-        ? sections.map((s) => h("div", { class: "wl-sec" }, h("h3", { class: "wl-h", dir: "auto" }, s.section), s.items.map((i) => {
+        ? sections.map((s) => h("div", { class: "wl-sec" }, h("h3", { class: "wl-h", dir: "auto" }, curtainButton(`wl:${s.section}`, wlOpen(s), s.items.length, s.items.length, h("span", { class: "grow ell1" }, s.section), "wl-curtain")), (wlOpen(s) ? s.items : []).map((i) => {
             const w = WORK_LIST_STATUS[i.status];
             const open = app.wlOpen.has(i.id);
             const more = i.text.length > i.title.length + 1;
@@ -553,7 +556,11 @@ function runButtons(t) {
         return h("span", { class: "tag t-run runbtn" }, L("מתחיל…", "Starting…"));
     if (a && !a.result)
         return h("span", { class: "tag t-run runbtn" }, L("נשלח למחשב…", "Sent to the PC…"));
-    const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, a.result.text) : null;
+    // Another Antigravity task runs: the PC refuses (409). Say it in the user's language and offer the queue instead.
+    const busy = a?.result?.ok === false && a.result.text === BUSY_RUN_TEXT.he;
+    const note = a?.result ? h("span", { class: `xs ${a.result.ok ? "mut" : "warn"} wrapl`, dir: "auto" }, busy ? L(BUSY_RUN_TEXT.he, BUSY_RUN_TEXT.en) : a.result.text) : null;
+    if (busy && device.canRun(t))
+        return h("span", { class: "row wrap runacts" }, note, h("button", { type: "button", class: "btn sm-btn pri", onclick: (e) => { e.stopPropagation(); void device.inboxCommand(t, "inbox-queue"); } }, L("＋ הוסף לתור", "＋ Add to queue")));
     if (!device.canRun(t))
         return note;
     // A tap on Run counts 5 seconds first ("Starting in 5… Undo"); the command is sent only after that.
@@ -568,9 +575,46 @@ function runButtons(t) {
     };
     return h("span", { class: "row runacts" }, runWithUndo(device, t.taskId, L("▶ הרץ", "▶ Run"), () => void device.inboxCommand(t, "inbox-run")), counting ? null : h("button", { type: "button", class: "btn sm-btn runbtn", onclick: cancel }, L("בטל", "Cancel")), note);
 }
+/** The curtains this device changed (read once; storage may be off, then they simply are not remembered). */
+let curtains = (() => {
+    try {
+        return parseCurtains(localStorage.getItem(CURTAINS_KEY));
+    }
+    catch {
+        return {};
+    }
+})();
+/**
+ * One curtain's head: a button (ArrowDown/Enter/Space work as on any button) with aria-expanded that opens or closes
+ * what is under it; the count stays visible when it is closed.
+ *
+ * @param key - The curtain's key (see curtains.ts).
+ * @param open - Whether it is open now.
+ * @param count - The number shown on the head.
+ * @param count0 - The count the default state depends on (work-list sections).
+ * @param label - The head's label.
+ * @param cls - The button's class.
+ */
+function curtainButton(key, open, count, count0, label, cls) {
+    return h("button", {
+        type: "button",
+        class: `curtain ${cls}`,
+        "aria-expanded": String(open),
+        onclick: () => {
+            curtains = toggled(curtains, key, count0);
+            try {
+                localStorage.setItem(CURTAINS_KEY, serializeCurtains(curtains));
+            }
+            catch { /* storage off: not remembered */ }
+            render();
+        },
+    }, h("span", { class: "mut xs", "aria-hidden": "true" }, open ? "▾" : "▸"), label, h("span", { class: "tag cnt" }, String(count)));
+}
 const GROUPS = [
-    ["agents", "🤖", "סוכנים", "Agents"],
+    // Running now first (every task that runs), then Antigravity: its running task first, then the ones that wait for Roee's own Run.
+    ["now", "▶", "רצות עכשיו", "Running now"],
     ["agy", "✦", "Antigravity", "Antigravity"],
+    ["agents", "🤖", "סוכנים", "Agents"],
     ["gemini", "✧", "Gemini (חינמי)", "Gemini (free)"],
     ["local", "◆", "מקומי", "Local"],
     ["pc", "🖥", "מחשב", "PC"],
@@ -622,7 +666,16 @@ function taskGroups(list, q, byId) {
     const agents = agentRows(q);
     const out = [];
     const entry = (g, t) => ({ id: t.taskId, group: g, build: () => taskRow(t, byId.get(t.taskId)?.work) });
-    const all = GROUPS.flatMap(([g]) => (g === "agents" ? agents.map((c) => ({ id: `${c.deviceId}/${c.runId}`, group: g, build: () => agentRow(c) })) : list.filter((t) => groupOf(t) === g).map((t) => entry(g, t))));
+    // Antigravity: the running task first, then the ones that wait for the owner's own Run (marked in their row), then the rest.
+    // The available ones are ordered by creation, oldest on top (that is their priority); the standing "what to research next" task is last.
+    const agyRank = (t) => (t.inbox?.standing ? 3 : t.status === "running" ? 0 : t.status === "waiting-run" || t.status === "waiting" ? 1 : 2);
+    const all = GROUPS.flatMap(([g]) => g === "agents"
+        ? agents.map((c) => ({ id: `${c.deviceId}/${c.runId}`, group: g, build: () => agentRow(c) }))
+        : g === "now"
+            ? list.filter((t) => t.status === "running").map((t) => ({ ...entry(g, t), id: `now:${t.taskId}` }))
+            : g === "agy"
+                ? list.filter((t) => groupOf(t) === g).sort((a, b) => agyRank(a) - agyRank(b) || (agyRank(a) === 1 ? a.createdAt - b.createdAt : 0)).map((t) => entry(g, t))
+                : list.filter((t) => groupOf(t) === g).map((t) => entry(g, t)));
     const folding = workState.phase === "active" ? foldingRows(`${workState.phase}|${JSON.stringify(workState.filters)}|${q}`, all, render) : [];
     for (const [g, icon, he, en] of GROUPS) {
         const rows = all.filter((r) => r.group === g).map((r) => r.build());
@@ -630,9 +683,51 @@ function taskGroups(list, q, byId) {
             rows.splice(Math.min(l.index, rows.length), 0, leavingRow(l.build()));
         if (!rows.length)
             continue;
-        out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en)), h("span", { class: "mut xs grow" }, String(rows.length)), g === "agy" ? runAllButton(device) : null), ...rows);
+        const key = `t:${workState.phase}:${g}`;
+        const open = curtainOpen(curtains, key, 0, !!q);
+        out.push(h("div", { class: "trow ghead", role: "heading", "aria-level": 3 }, curtainButton(key, open, rows.length, 0, h("span", { class: "grow row" }, h("span", { "aria-hidden": "true" }, icon), h("b", null, L(he, en))), "ghead-btn"), g === "agy" || g === "local" ? askNextToggle(g, list) : null, g === "agy" ? runAllButton(device) : null), ...(open ? rows : []));
     }
     return out;
+}
+/** A creation time as "22.11 08:41" (day.month hour:minute, this device's clock). */
+function stamp(ms) {
+    const d = new Date(ms);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+/** The statuses where "Who does it" and "Add to queue" are shown on the row. */
+const CHOOSABLE = new Set(["waiting", "waiting-run", "failed", "partial", "deferred"]);
+/**
+ * "Ask before the next task" for an executor's queue, as a switch in the group's head (the PC keeps it and reports it
+ * with each task): on, the PC asks "Next in line - Start?" when a task ends; off, the next queued task starts by itself.
+ *
+ * @param g - The group (Antigravity or Local).
+ * @param list - The shown tasks (the switch's state comes from the PC's report on any task of that executor).
+ */
+function askNextToggle(g, list) {
+    const ex = g === "agy" ? "antigravity" : "local";
+    const mine = [...list, ...allTasks()].find((t) => t.inbox && t.inbox.executor === ex && t.inbox.askNext !== undefined);
+    if (!mine || !device.connected)
+        return null;
+    const on = mine.inbox.askNext === true;
+    return h("button", { type: "button", class: `chip${on ? " chip-on" : ""}`, role: "switch", "aria-checked": String(on), title: L("כשמשימה מסתיימת: לשאול לפני שהבאה בתור מתחילה", "When a task ends: ask before the next queued one starts"), onclick: (e) => { e.stopPropagation(); void device.setAskNext(ex, !on); } }, on ? L("שאל לפני הבאה", "Ask before next") : L("הבאה מתחילה לבד", "Next starts by itself"));
+}
+/**
+ * The line under a task that can still be given to someone or queued: its executor ("Who does it", with Gemini,
+ * Antigravity, Local and Claude) and, for Antigravity and Local, "Add to queue" / its place in the line with "Take out".
+ *
+ * @param t - A task of a PC's inbox that waits, failed, ended partly or was deferred.
+ */
+function taskControls(t) {
+    if (!t.inbox || !CHOOSABLE.has(t.status))
+        return null;
+    const ex = t.inbox.executor;
+    const pcs = device.assignTargets(t);
+    const a = device.taskActions.get(t.taskId);
+    const queueable = (ex === "antigravity" || ex === "local") && device.connected && device.assignTargets(t).length > 0;
+    const place = t.inbox.lineAt;
+    const stop = (e) => e.stopPropagation();
+    return h("div", { class: "row wrap tctl", onclick: stop }, assignBox({ device, render, taskId: t.taskId, pcs, current: assignOfExecutor(ex === "claude" ? "opus" : ex) }), queueable ? (place ? h("span", { class: "row" }, h("span", { class: "tag t-run" }, L(`בתור #${place}`, `Queued #${place}`)), h("button", { type: "button", class: "btn sm-btn", onclick: () => void device.inboxCommand(t, "inbox-unqueue") }, L("הסר מהתור", "Take out"))) : h("button", { type: "button", class: "btn sm-btn", onclick: () => void device.inboxCommand(t, "inbox-queue") }, L("＋ הוסף לתור", "＋ Add to queue"))) : null, a && (a.action === "inbox-queue" || a.action === "inbox-unqueue") && a.result && !a.result.ok ? h("span", { class: "xs warn wrapl", dir: "auto" }, a.result.text) : null);
 }
 /** One row of the task list. */
 function taskRow(t, work) {
@@ -658,10 +753,10 @@ function taskRow(t, work) {
                             : t.link && isSafeLink(t.link)
                                 ? h("a", { class: "btn sm-btn", href: t.link, target: "_blank", rel: "noopener noreferrer", onclick: (e) => e.stopPropagation() }, t.route === "claude-cloud" ? L("פתח ב-Claude", "Open in Claude") : L("פתח", "Open"))
                                 : null;
-    return h("div", { class: `trow${app.openTask === t.taskId ? " sel" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if (e.key === "Enter") {
+    return h("div", { class: `trow${app.openTask === t.taskId ? " sel" : ""}${t.status === "waiting-run" ? " needsrun-row" : ""}`, role: "button", tabindex: 0, onclick: () => { app.openTask = app.openTask === t.taskId ? undefined : t.taskId; render(); }, onkeydown: (e) => { if (e.key === "Enter") {
             app.openTask = t.taskId;
             render();
-        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t)), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, work?.phase === "failed" ? failedBlock(workView, t, work) : work?.phase === "done" ? doneLine(t) : t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
+        } } }, h("span", { class: "c-st" }, statusTag(t)), h("div", { class: "grow min0" }, h("div", { class: "row wrap tline" }, h("b", { class: "w5 ell1" }, t.title), sourceChip(t), deviceChip(t), t.status === "waiting-run" ? h("span", { class: "tag t-ask needsrun" }, L("✋ דורש הפעלה ידנית", "✋ Needs your Run")) : null, t.inbox?.standing ? h("span", { class: "tag t-off" }, L("🔎 מה לחקור הלאה", "🔎 What to research next")) : null, t.inbox && CHOOSABLE.has(t.status) ? h("span", { class: "xs mut", dir: "ltr", title: L("נוצרה", "Created") }, stamp(t.createdAt)) : null), taskControls(t), t.branch && t.inbox ? h("div", { class: "xs mono mut ell" }, t.branch) : null, stepsLine(t) ? h("div", { class: "xs mut" }, stepsLine(t)) : null, work?.phase === "failed" ? failedBlock(workView, t, work) : work?.phase === "done" ? doneLine(t) : t.line ? h("div", { class: "sm sub wrapl", dir: "auto" }, t.line) : t.status === "waiting" && !t.inbox && !t.drive?.only ? h("div", { class: "sm sub wrapl" }, L(`${t.toName} כבוי. יימסר כשיידלק`, `${t.toName} is off. It is delivered when it comes on`)) : null), h("span", { class: "c-rt" }, routeChip(t)), h("span", { class: "c-when mut sm" }, when(t.createdAt)), h("span", { class: "c-act" }, action));
 }
 /** The open task, with its answer and timeline. */
 function taskDetail(t) {
