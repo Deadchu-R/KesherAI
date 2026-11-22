@@ -83,7 +83,13 @@ const toQueued = (r: Row): QueuedRow => ({ id: String(r.id), to: String(r.recipi
 export class SqlStore implements HubStore {
   /** @param sql - `ctx.storage.sql` of the Durable Object. */
   constructor(private readonly sql: SqlStorage) {
-    this.sql.exec(SCHEMA);
+    // The tables exist after the first start. When Cloudflare's daily write limit is used up even "CREATE TABLE IF
+    // NOT EXISTS" can throw; failing here would fail every request (Error 1101), so the object starts and reads work.
+    try {
+      this.sql.exec(SCHEMA);
+    } catch (e) {
+      console.warn(`hub: schema check skipped (${e instanceof Error ? e.message : String(e)})`);
+    }
   }
 
   private all(q: string, ...args: unknown[]): Row[] {

@@ -36,7 +36,13 @@ export default {
       const headers = new Headers(req.headers);
       // The DO trusts this header, so the Worker always overwrites it.
       headers.set("x-kh-ip", req.headers.get("cf-connecting-ip") ?? "unknown");
-      return hubStub(env).fetch(new Request(req, { headers }));
+      try {
+        return await hubStub(env).fetch(new Request(req, { headers }));
+      } catch (e) {
+        // A Durable Object that cannot start or answer gives a clear JSON 503 instead of Cloudflare's Error 1101 page.
+        console.error(`hub: the object failed (${e instanceof Error ? e.message : String(e)})`);
+        return json({ error: "hub-unavailable", message: "The hub could not answer; it tries again shortly." }, 503, { "retry-after": "120" });
+      }
     }
     return json({ error: "Not found." }, 404);
   },
