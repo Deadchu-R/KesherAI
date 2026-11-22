@@ -94,6 +94,17 @@ they finish, and review it before it ships. Don't let the PC agents sit idle whi
   file name), then hands them out: S and precise → local self-work, M code → Antigravity (Opus), L → Claude.
 - docs/research/SYNTHESIS-2026-11-22.md holds the breakdown of all research up to that day, with a coverage table.
 
+## Autonomy loop (Roee 2026-11-22, at 70% Claude usage)
+- Goal: KesherAI does almost all the work by itself in loops: research → tasks → work (local, Antigravity, Gemini)
+  → updates → research again, with new insights each round. Claude only leads, reviews PR batches and releases.
+- Decisions: research merges itself into main (docs/research only); code goes through PRs Claude approves in batches;
+  updates install by themselves when the PC is free, and KesherAI is split into components that update separately
+  (agent host r-20261122-04, model runtimes) so an update never breaks a running task.
+- Built (0.6.448): research-tasks.ts + inbox-runner importResearch/feedFromResearch (backlog from every report and
+  SYNTHESIS-2026-11-22.md; S→local, M→Antigravity Opus, L→lead; GET /api/task-inbox/research).
+- Waiting in the inbox (kesher-inbox): a-20261122-01 research self-merge, -02 (partly done by 0.6.448), -03 PRs,
+  -04 auto-update by component, -05 loop scheduler. Antigravity's weekly quota is out until about 29.11 (all models).
+
 ## Permissions Roee already gave (and limits)
 - Push to main; release by `git push -qf origin HEAD:release` (never force-push main). Commit without asking.
 - Use his Chrome / the built-in browser for his own accounts when he asks (Cloudflare, Google Cloud, claude.ai): no
