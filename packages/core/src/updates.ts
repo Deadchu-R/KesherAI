@@ -45,6 +45,8 @@ export interface UpdateProgress {
   /** This copy runs from source (`pnpm dev`): the server restarts itself, the page only needs a reload. */
   fromSource?: boolean;
   finishedAt?: string;
+  /** The installer ended but the app did not restart: `error` says so and the screen offers Retry. */
+  installFailed?: boolean;
 }
 
 /**
@@ -53,14 +55,42 @@ export interface UpdateProgress {
  * with `pnpm dev`, the server and the UI reload by themselves afterwards.
  * Packaged installers will update through their own updater instead.
  */
+/** What a started installer tells: when its process ended (the exit code, or null when unknown). */
+export interface InstallerHandle {
+  exited: Promise<number | null>;
+}
+
+/** How long after starting an installer a second one is refused (it runs a minute or two before it closes the app). */
+export const INSTALL_LOCK_MS = 10 * 60_000;
+/** If the app did not restart this long after the installer ended, the install is counted as failed and the lock is lifted. */
+export const INSTALL_GRACE_MS = 2 * 60_000;
+/** What the updates screen says when the installer ended and the app did not restart. */
+export const INSTALL_FAILED_TEXT = "ההתקנה לא הסתיימה — נסה שוב";
+
+/**
+ * Whether "An update is being installed" still blocks a new try: from the installer's start for 10 minutes, but not
+ * once the installer has ended and the app is still the old one after the grace period (the install failed silently).
+ *
+ * @param s - When the installer started (0: none) and, if known, when it ended (ms).
+ * @param now - Now (ms).
+ * @param grace - The grace after the installer's end (ms).
+ */
+export function installLocked(s: { startedAt: number; endedAt?: number | undefined }, now: number, grace = INSTALL_GRACE_MS): boolean {
+  if (!s.startedAt || now - s.startedAt >= INSTALL_LOCK_MS) return false;
+  return !(s.endedAt !== undefined && now - s.endedAt >= grace);
+}
+
 /** How an installed (not git) copy updates itself: from the project's GitHub releases. */
 export interface PackagedUpdates {
   /** The installed app's version (e.g. Electron's app.getVersion()). */
   version: string;
   /** `owner/repo` on GitHub. */
   repo: string;
-  /** Runs a downloaded installer (and usually quits the app so it can replace it). */
-  install(file: string): Promise<void>;
+  /**
+   * Runs a downloaded installer (and usually quits the app so it can replace it). It may return the installer's exit
+   * (the exit code, or null when it could not be told), so a silent failure can be noticed (see {@link installLocked}).
+   */
+  install(file: string): Promise<void | InstallerHandle>;
   /** The GitHub API base (tests pass a fake server). */
   api?: string;
   /** Where a checked installer is kept, to pass on to the user's other computers (updates without GitHub). */
@@ -120,6 +150,50 @@ export class Updater {
   }
   /** When an installer was started (ms): until the app restarts, a second one must not start beside it. */
   private installerStartedAt = 0;
+  /** When that installer's process ended (ms), if it was told. */
+  private installerEndedAt: number | undefined;
+  /** The grace after the installer's end (tests make it short). */
+  private installGraceMs = INSTALL_GRACE_MS;
+
+  /**
+   * Sets the grace after the installer ended, before the install counts as failed (the default is 2 minutes).
+   *
+   * @param ms - Milliseconds.
+   */
+  setInstallGrace(ms: number): void {
+    this.installGraceMs = ms;
+  }
+
+  /** @returns Whether an installer started recently and still blocks a new try. */
+  private get installBusy(): boolean {
+    return installLocked({ startedAt: this.installerStartedAt, endedAt: this.installerEndedAt }, Date.now(), this.installGraceMs);
+  }
+
+  /**
+   * Watches a started installer: when it ends and the app (this process) is still running after the grace period,
+   * the install failed silently. The lock is lifted and the progress shows the error with Retry.
+   *
+   * @param exited - The installer's exit.
+   * @param line - Writes a line to the update log.
+   * @param saveLog - Saves the log.
+   */
+  private watchInstaller(exited: Promise<number | null>, line: (t: string) => void, saveLog: () => Promise<void>): void {
+    const started = this.installerStartedAt;
+    void exited.catch(() => null).then((code) => {
+      if (this.installerStartedAt !== started) return;
+      this.installerEndedAt = Date.now();
+      line(`The installer ended (exit code ${code ?? "unknown"}); waiting for the app to restart`);
+      const timer = setTimeout(() => {
+        if (this.installerStartedAt !== started) return;
+        this.installerStartedAt = 0;
+        this.installerEndedAt = undefined;
+        line(`The app did not restart after the installer ended (exit code ${code ?? "unknown"}): the install did not finish`);
+        this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: INSTALL_FAILED_TEXT, installFailed: true };
+        void saveLog();
+      }, this.installGraceMs);
+      timer.unref?.();
+    });
+  }
 
   /**
    * @param root - The repository folder (defaults to three levels above this file).
@@ -363,8 +437,10 @@ export class Updater {
         }
         line(`Downloaded in ${((Date.now() - t0) / 1000).toFixed(0)} s; starting the installer`);
         prog("Installing");
-        await installer.install(file);
+        const handle = await installer.install(file);
         this.installerStartedAt = Date.now();
+        this.installerEndedAt = undefined;
+        if (handle && typeof handle === "object" && "exited" in handle) this.watchInstaller(handle.exited, line, saveLog);
         line("The installer started; the app restarts when it finishes");
         this.packagedProgress = { ...this.packagedProgress, running: false, step: "Done", finishedAt: new Date().toISOString() } as UpdateProgress;
       } catch (err) {
@@ -410,7 +486,7 @@ export class Updater {
     if (this.status().running) throw new Error("An update is already running.");
     // The installer runs for a minute or two before it closes the app: a second "Update" in that time started a
     // second installer beside it, and the app did not come back (found on the PC, 2026-11-15, 0.6.237).
-    if (Date.now() - this.installerStartedAt < 10 * 60_000) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
+    if (this.installBusy) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
     const info = await this.version();
     if (info.install === "git") throw new Error("This copy runs from the source code: use git to get a fresh copy.");
     await this.checkRelease(info, true);
@@ -428,7 +504,7 @@ export class Updater {
     if (this.status().running) throw new Error("An update is already running.");
     // The installer runs for a minute or two before it closes the app: a second "Update" in that time started a
     // second installer beside it, and the app did not come back (found on the PC, 2026-11-15, 0.6.237).
-    if (Date.now() - this.installerStartedAt < 10 * 60_000) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
+    if (this.installBusy) throw new Error("An update is being installed; KesherAI restarts when it finishes.");
     const info = await this.version();
     if (info.install !== "git") return this.applyRelease();
     writeFileSync(this.statusFile, JSON.stringify({ running: true, step: "Starting", log: [] }));

@@ -5,7 +5,7 @@ import { reconnect } from "../Reconnect";
 import { getLocale, t } from "../i18n";
 
 interface UpdateCheck { version: string; commit?: string; install: string; newCommits: Array<{ hash: string; subject: string }>; latestVersion?: string; localChanges: string[]; building?: string }
-interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string }
+interface UpdateProgress { running: boolean; step?: string; log: string[]; error?: string; restartRequired?: boolean; fromSource?: boolean; finishedAt?: string; installFailed?: boolean }
 
 /** Updates, from the side menu: this version, what is new, and installing it. */
 export function UpdatesPage() {
@@ -29,14 +29,15 @@ function Updates() {
 
   useEffect(() => {
     void api<{ version: string; commit?: string; install: string }>("/api/version").then(setVersion);
-    void api<UpdateProgress>("/api/updates/progress").then((p) => p.running && setProgress(p));
+    void api<UpdateProgress>("/api/updates/progress").then((p) => (p.running || p.installFailed) && setProgress(p));
   }, []);
   useEffect(() => {
-    if (!progress?.running) return;
+    // After "Done" an installed copy keeps looking: if the installer ends and the app does not restart, the PC says so (installFailed).
+    if (!progress?.running && !(progress?.step === "Done" && !progress.error && !progress.installFailed)) return;
     // The server may restart during the update; keep polling through the gap.
     const timer = setInterval(() => void api<UpdateProgress>("/api/updates/progress").then(setProgress).catch(() => undefined), 1000);
     return () => clearInterval(timer);
-  }, [progress?.running]);
+  }, [progress?.running, progress?.step, progress?.error, progress?.installFailed]);
 
   // When the update is done, open the new version by itself.
   const finished = !!progress && !progress.running && progress.step === "Done" && !progress.error;
@@ -208,7 +209,8 @@ function Updates() {
           <p>{progress.running ? `${t("updating")} ${progress.step ?? ""}` : progress.error ? "" : progress.restartRequired && !desktop()?.restart ? t("updateRestart") : t("updateDone")}</p>
           {finished && progress.restartRequired && desktop()?.restart && <button type="button" className="primary" onClick={() => void desktop()!.restart!()}>{t("restartNow")}</button>}
           {progress.running && progress.log.length > 0 && <p className="muted mono small" dir="ltr" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{progress.log.at(-1)}</p>}
-          {progress.error && <p className="error">{progress.error}</p>}
+          {progress.error && <p className="error" role="alert">{progress.installFailed && getLocale() !== "he" ? "The installation did not finish — try again." : progress.error}</p>}
+          {progress.installFailed && <button type="button" className="primary" onClick={() => void apply()}>{getLocale() === "he" ? "נסה שוב" : "Retry"}</button>}
           <details><summary>{t("output")}</summary><pre className="code" dir="ltr">{progress.log.join("\n")}</pre></details>
         </>
       )}

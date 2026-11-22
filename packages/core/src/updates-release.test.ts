@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Updater, compareVersions, installerFor } from "./updates.js";
+import { INSTALL_FAILED_TEXT, INSTALL_GRACE_MS, INSTALL_LOCK_MS, Updater, compareVersions, installLocked, installerFor } from "./updates.js";
 
 test("versions and installers", () => {
   assert.ok(compareVersions("0.10.0", "0.4.1") > 0);
@@ -111,4 +111,54 @@ test("what's new: releases newest first with their bullet points; drafts and pre
   assert.deepEqual(h[0]?.notes, ["Big: thing", "Small"]);
   srv.closeAllConnections();
   srv.close();
+});
+
+test("install lock: 10 minutes from the start, lifted 2 minutes after the installer ended", () => {
+  const t0 = 1_000_000;
+  assert.equal(installLocked({ startedAt: 0 }, t0), false, "no installer started");
+  assert.equal(installLocked({ startedAt: t0 }, t0 + 5 * 60_000), true);
+  assert.equal(installLocked({ startedAt: t0 }, t0 + INSTALL_LOCK_MS), false, "the 10 minutes are over");
+  const ended = t0 + 60_000;
+  assert.equal(installLocked({ startedAt: t0, endedAt: ended }, ended + INSTALL_GRACE_MS - 1), true, "still within the grace");
+  assert.equal(installLocked({ startedAt: t0, endedAt: ended }, ended + INSTALL_GRACE_MS), false, "the app did not restart: try again");
+});
+
+test("an installer that ends while the app stays: the lock is lifted and the screen says it did not finish, with Retry", async () => {
+  const srv = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+    if (req.url === "/repos/o/r/releases?per_page=10") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify([{ tag_name: "v0.4.2", name: "KesherAI 0.4.2", body: "", assets: [...NAMES.slice(0, 4), "latest.yml", "latest-mac.yml", "latest-linux.yml"].map((name) => ({ name, size: 5, browser_download_url: `${base}/dl/${name}` })) }]));
+    }
+    if (req.url?.startsWith("/dl/latest")) return res.end(NAMES.map((n) => `  - url: ${n}\n    sha512: ${HELLO_SHA512}`).join("\n"));
+    if (req.url?.startsWith("/dl/")) return res.end("hello");
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const api = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
+  let runs = 0;
+  let end!: (code: number | null) => void;
+  const exited = new Promise<number | null>((r) => (end = r));
+  const u = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.1", repo: "o/r", api, install: async () => { runs++; return { exited }; } });
+  u.setInstallGrace(60);
+  try {
+    await u.check();
+    await u.apply();
+    for (let i = 0; i < 100 && (u.status().running || runs === 0); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 1);
+    await assert.rejects(u.apply(), /being installed/, "locked while the installer runs");
+    end(1);
+    for (let i = 0; i < 100 && !u.status().installFailed; i++) await new Promise((r) => setTimeout(r, 20));
+    const st = u.status();
+    assert.equal(st.installFailed, true);
+    assert.equal(st.error, INSTALL_FAILED_TEXT);
+    assert.ok(st.log.some((l) => /exit code 1/.test(l)), "the log says how the installer ended");
+    // Retry is possible again.
+    await u.apply();
+    for (let i = 0; i < 100 && runs < 2; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(runs, 2);
+  } finally {
+    srv.closeAllConnections();
+    srv.close();
+  }
 });

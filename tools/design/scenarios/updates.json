@@ -1,0 +1,39 @@
+{
+ "group": "עדכונים · Updates",
+ "target": "app",
+ "boards": [
+  {
+   "id": "UpdateInstallFailed",
+   "title": "עדכונים: ההתקנה לא הסתיימה — המתקין נגמר והאפליקציה לא חזרה: \"ההתקנה לא הסתיימה — נסה שוב\", הנעילה משתחררת, ויש כפתור נסה שוב",
+   "titleEn": "Updates: the installation did not finish — the installer ended and the app did not come back: the lock is lifted, with Retry",
+   "route": "#/updates",
+   "height": {
+    "desktop": 760,
+    "phone": 900
+   },
+   "mocks": [
+    {
+     "url": "**/api/updates/progress",
+     "json": {
+      "running": false,
+      "step": "Failed",
+      "error": "ההתקנה לא הסתיימה — נסה שוב",
+      "installFailed": true,
+      "log": [
+       "[0.2 s] Updating to KesherAI-Setup-0.6.250.exe (96 MB) from GitHub",
+       "[41.0 s] Downloaded; starting the installer",
+       "[41.3 s] The installer started; the app restarts when it finishes",
+       "[96.5 s] The installer ended (exit code 1); waiting for the app to restart",
+       "[216.5 s] The app did not restart after the installer ended (exit code 1): the install did not finish"
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".error"
+    }
+   ]
+  }
+ ]
+}

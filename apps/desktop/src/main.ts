@@ -119,7 +119,7 @@ async function startCore(): Promise<string> {
             install: async (file: string) => {
               // Found by the automatic check: install when the user restarts or quits, not in the middle of their work.
               if (autoUpdating) return updateDownloaded(file);
-              await runInstaller(file);
+              return runInstaller(file);
             },
           },
         }
@@ -196,7 +196,7 @@ let readyInstaller: { file: string; version?: string } | undefined;
 let refreshTrayMenu: () => void = () => undefined;
 
 /** Runs a downloaded installer: silently on Windows (then the app starts again), opened on a Mac. */
-async function runInstaller(file: string): Promise<void> {
+async function runInstaller(file: string): Promise<void | { exited: Promise<number | null> }> {
   if (process.platform === "darwin") {
     // A disk image: open it so the new app can be dragged to Applications.
     await shell.openPath(file);
@@ -206,11 +206,18 @@ async function runInstaller(file: string): Promise<void> {
   // The new version starts by itself: keep the tunnel so the phone's link keeps working.
   if (server) server.services.restarting = true;
   // NSIS: /S installs without questions, --force-run opens the new version when done.
-  spawn(file, process.platform === "win32" ? ["/S", "--force-run"] : [], { detached: true, stdio: "ignore" }).unref();
+  const child = spawn(file, process.platform === "win32" ? ["/S", "--force-run"] : [], { detached: true, stdio: "ignore" });
+  child.unref();
+  // The installer's end, so a silent failure (the app still the old one) is noticed and the lock is lifted (updates.ts).
+  const exited = new Promise<number | null>((resolve) => {
+    child.once("exit", (code) => resolve(code));
+    child.once("error", () => resolve(null));
+  });
   setTimeout(() => {
     quitting = true;
     app.quit();
   }, 1500);
+  return { exited };
 }
 
 /**
