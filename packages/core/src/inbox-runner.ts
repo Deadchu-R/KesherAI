@@ -992,6 +992,10 @@ export class TaskInbox {
       if (report && !a.why && stop === "end_turn" && !existsSync(join(worktree, report))) {
         stop = await agent.prompt(researchNudge(report));
       }
+      // A code task that ends having changed nothing gets the same one more chance (same session).
+      if (!report && !a.why && stop === "end_turn" && !(await worktreeChanged(worktree))) {
+        stop = await agent.prompt(codeNudge());
+      }
     } catch (e) {
       error = (e as Error).message || String(e);
     } finally {
@@ -1232,4 +1236,24 @@ export function researchNudge(report: string): string {
     "A refused step is not a reason to stop: use your file tools (read, list, search) and web search instead of shell commands.",
     "Write everything you found so far, mark the parts you could not finish as \"not done\", and save the file before you end.",
   ].join("\n");
+}
+
+/** The second prompt to a code agent that ended without changing any file. */
+export function codeNudge(): string {
+  return [
+    "You ended without changing any file, so nothing was done. Continue the task now.",
+    "A refused step is not a reason to stop: read and list files with your file tools (or Get-ChildItem / Get-Content without pipes), then write the changes the task asks for.",
+    "End only when the files are changed, or explain in one line why the task cannot be done.",
+  ].join("\n");
+}
+
+/** Whether the agent changed anything in its worktree (tracked changes or new files). */
+async function worktreeChanged(worktree: string): Promise<boolean> {
+  try {
+    const { execFile } = await import("node:child_process");
+    const out = await new Promise<string>((res, rej) => execFile("git", ["status", "--porcelain"], { cwd: worktree, windowsHide: true }, (e, so) => (e ? rej(e) : res(so))));
+    return out.trim().length > 0;
+  } catch {
+    return true;
+  }
 }

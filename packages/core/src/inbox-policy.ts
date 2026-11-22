@@ -214,7 +214,9 @@ export function decideStep(p: AcpPermission, ctx: PolicyContext): PolicyVerdict 
     if (SECRET_FILE.test(command.split(/\s+/).find((w) => SECRET_FILE.test(w)) ?? "")) return { verdict: "deny", rule: "secret files", what };
     // Where it runs (cwd) and any path it names must be inside the worktree.
     if (f.paths.some((x) => !insideWorktree(ctx.worktree, x))) return { verdict: "deny", rule: "outside the worktree", what };
-    return (ctx.research ? commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS], RESEARCH_PIPE_FILTERS) : commandAllowed(command, ctx.commands)) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
+    // Read-only listing/reading commands are safe for every task (a 4.27 plugin conversion stopped after a refused
+    // "Get-ChildItem -Recurse"); only research tasks may pipe into output filters.
+    return (ctx.research ? commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS], RESEARCH_PIPE_FILTERS) : commandAllowed(command, [...ctx.commands, ...RESEARCH_READ_COMMANDS])) ? { verdict: "allow", rule: "on the command list", what } : { verdict: "ask", rule: "not on the command list", what };
   }
 
   if (kind === "fetch") {
