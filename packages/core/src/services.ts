@@ -36,6 +36,7 @@ import type { Speakers } from "./speakers.js";
 import type { Kokoro } from "./kokoro.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
+import type { ControlTasks } from "./control-task.js";
 import type { WhisperEngine } from "./whisper.js";
 import type { McpManager } from "./mcp.js";
 import type { GitHubAuth } from "./github.js";
@@ -130,6 +131,8 @@ export interface KesherServices {
   kokoro: Kokoro;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */
   computer: ComputerControl;
+  /** Computer tasks (one goal, KesherAI does the steps; control-task.ts); made when the routes are registered. */
+  controlTasks?: ControlTasks;
   /** Which chats a screen shows now (browser/computer approvals skip the phone notification then). */
   controlWatchers: ControlWatchers;
   /** Suggests better prompts, tools and models from how conversations went; learns the user's habits. */

@@ -157,6 +157,14 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
       computer: { enabled: c.enabled, active: c.active, app: c.app },
       log: mergeControlLog(b.log, c.log, lite ? 1 : 40),
       approvals: lite ? [] : s.conversations.pendingControl(),
+      // The computer task (control-task.ts), running or ended in the last 10 minutes; lite: without its pictures.
+      task: (() => {
+        const t = s.controlTasks?.current();
+        if (!t) return null;
+        if (!lite) return t;
+        const { lastShot: _shot, ...rest } = t;
+        return { ...rest, steps: rest.steps.slice(-1).map(({ shotThumb: _t, ...st }) => st) };
+      })(),
     };
   });
   /** A screen shows these chats' browser/computer approval cards now (`{ chats }`): their notification waits. */

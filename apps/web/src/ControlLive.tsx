@@ -5,6 +5,7 @@ import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 import { actionWord } from "./BrowserPanel";
 import { ControlApproval } from "./ControlApproval";
+import { ControlTaskCard } from "./ControlTaskCard";
 import { liveSources, pickSource, type LiveSource, type LiveState } from "./control-live-view";
 import "./control-card.css";
 
@@ -13,7 +14,8 @@ import "./control-card.css";
  * phone's view of the PC while a model uses KesherAI's browser, the user's Chrome or the computer. A picture that
  * refreshes (the pane, the Chrome tab or the screen), the "now" line, the waiting approvals as card v2 with the crop,
  * one big Stop, Manual/Auto and Pause, and the merged action log. A tab of the inbox (#/watch), the same on the
- * computer, in remote and in the Android app. While it is on screen, approvals are not sent as notifications.
+ * computer, in remote and in the Android app. While it is on screen, approvals are not sent as notifications. The
+ * computer task (one goal that KesherAI carries out by itself) shows here too, with its form (ControlTaskCard.tsx).
  */
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
@@ -53,6 +55,8 @@ export function ControlLive() {
   const [busy, setBusy] = useState(false);
   const [missing, setMissing] = useState(false);
   const ticks = useRef(0);
+  /** Read again now (after starting, answering or stopping a computer task). */
+  const [kick, setKick] = useState(0);
   // One read every 2 seconds while the page is on screen; `watch=1` tells the computer a screen shows the approvals.
   useEffect(() => {
     let alive = true;
@@ -76,7 +80,7 @@ export function ControlLive() {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [kick]);
 
   const source = st ? pickSource(st, picked) : undefined;
   // A picture that failed (no tab, a Chrome tab let go) is tried again with the next one.
@@ -140,6 +144,8 @@ export function ControlLive() {
         <span className="cl-k">{st.paused ? L("מושהה", "Paused") : active ? L("עכשיו", "Now") : L("אחרון", "Last")}</span>{" "}
         {st.paused ? L("פעולות חדשות בדפדפן ובמחשב מחכות עד שתמשיכו. הצ׳אטים ממשיכים.", "New browser and computer actions wait until you resume. The chats go on.") : last ? lineText(last) : L("הסוכן עוד לא השתמש בדפדפן או במחשב.", "The agent has not used the browser or the computer yet.")}
       </p>
+
+      <ControlTaskCard task={st.task} enabled={st.computer.enabled} onChange={() => setKick((k) => k + 1)} />
 
       {st.approvals.map((a) => (
         <div key={(a.ev as ApprovalEv).requestId} className="cl-approval">

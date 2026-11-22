@@ -263,10 +263,10 @@ export class VisionService implements Grounding {
       body: JSON.stringify({
         messages: [
           ...(a.system ? [{ role: "system", content: a.system }] : []),
-          { role: "user", content: [{ type: "image_url", image_url: { url: `data:image/png;base64,${a.png.toString("base64")}` } }, { type: "text", text: a.user }] },
+          { role: "user", content: [...(a.png ? [{ type: "image_url", image_url: { url: `data:${a.mime ?? "image/png"};base64,${a.png.toString("base64")}` } }] : []), { type: "text", text: a.user }] },
         ],
         temperature: 0,
-        max_tokens: 96,
+        max_tokens: a.maxTokens ?? 96,
         logprobs: true,
         top_logprobs: 1,
       }),
@@ -285,6 +285,24 @@ export class VisionService implements Grounding {
     const m = this.model() ?? pickVisionModel(this.d.config.computer.visionModel ?? "auto", await this.refresh());
     if (!m) throw new Error("No vision model is installed.");
     return this.grounder.ground(m, req);
+  }
+
+  /**
+   * One planning question to the local vision model (computer tasks' fallback when the free Gemini key cannot answer):
+   * an optional picture and a text prompt, answered in text. The caller runs it through the heavy-job gate.
+   *
+   * @param req.system - The instructions.
+   * @param req.user - The question.
+   * @param req.image - The picture, if any.
+   * @param req.maxTokens - The longest answer (default 400).
+   * @param req.signal - Stop.
+   * @returns The model's text.
+   */
+  async plan(req: { system: string; user: string; image?: { data: Buffer; mimeType: string }; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
+    const m = this.model() ?? pickVisionModel(this.d.config.computer.visionModel ?? "auto", await this.refresh());
+    if (!m) throw new Error("No vision model is installed.");
+    const r = await this.ask({ model: m, system: req.system, user: req.user, maxTokens: req.maxTokens ?? 400, ...(req.image ? { png: req.image.data, mime: req.image.mimeType } : {}), ...(req.signal ? { signal: req.signal } : {}) });
+    return r.text;
   }
 
   /** The saved test runs, newest last. */

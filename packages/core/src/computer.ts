@@ -665,6 +665,15 @@ export class ComputerControl {
     return this.lastShot;
   }
 
+  /**
+   * The app and window in front now (computer tasks check it before each step: UAC, allowed apps).
+   *
+   * @returns The process name and title; empty strings when it cannot be read.
+   */
+  async foregroundNow(): Promise<Foreground> {
+    return this.be.foreground().catch(() => ({ app: "", title: "" }));
+  }
+
   private lastWatch = 0;
   private lastShot?: Buffer;
 

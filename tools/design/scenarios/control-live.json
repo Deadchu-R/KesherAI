@@ -491,6 +491,300 @@
      }
     }
    ]
+  },
+  {
+   "id": "ControlTaskAsk",
+   "title": "משימת מחשב: מטרה אחת, KesherAI עושה את הצעדים — מחכה לך (UAC)",
+   "route": "#/watch",
+   "height": {
+    "desktop": 1100,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".ct-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/pane/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/browser/chrome/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#1e2a44'/><rect x='80' y='50' width='560' height='380' rx='8' fill='#fff'/><rect x='80' y='50' width='560' height='34' rx='8' fill='#dde3ee'/><text x='96' y='73' font-size='16' fill='#222' font-family='sans-serif'>notes.txt - Notepad</text><text x='100' y='120' font-size='16' fill='#333' font-family='monospace'>Shopping list:</text><text x='100' y='146' font-size='16' fill='#333' font-family='monospace'>- milk</text><rect x='0' y='500' width='960' height='40' fill='#0f1626'/></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#eef0f4'/><rect x='90' y='34' width='140' height='52' rx='4' fill='#fff' stroke='#2b6cd4' stroke-width='3'/><text x='160' y='68' font-size='22' text-anchor='middle' fill='#222' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/control/seen",
+     "json": {
+      "ok": true
+     }
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": false,
+      "mode": "manual",
+      "skipAllowed": false,
+      "browser": {
+       "active": false,
+       "pane": false
+      },
+      "computer": {
+       "enabled": true,
+       "active": true,
+       "app": "EpicGamesLauncher"
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "40s"
+        },
+        "kind": "computer",
+        "action": "tree",
+        "where": "EpicGamesLauncher",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "computer",
+        "action": "invoke",
+        "where": "EpicGamesLauncher",
+        "target": "Button \"Install\"",
+        "ok": true
+       }
+      ],
+      "approvals": [],
+      "task": {
+       "id": "ct-1a2b3c4d",
+       "goal": "להתקין את Unreal 5.5 מה־Epic Launcher",
+       "apps": [
+        "EpicGamesLauncher"
+       ],
+       "planner": "gemini",
+       "status": "needs-you",
+       "step": 7,
+       "maxSteps": 40,
+       "steps": [
+        {
+         "n": 1,
+         "action": "open EpicGamesLauncher",
+         "note": "bring the launcher to the front",
+         "ok": true
+        },
+        {
+         "n": 2,
+         "action": "press TabItem \"Unreal Engine\"",
+         "note": "",
+         "ok": true,
+         "shotThumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27200%27%20height%3D%27112%27%3E%3Crect%20width%3D%27200%27%20height%3D%27112%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27200%27%20height%3D%2716%27%20fill%3D%27%232a2f3d%27/%3E%3Crect%20x%3D%278%27%20y%3D%2724%27%20width%3D%2740%27%20height%3D%2780%27%20fill%3D%27%23232838%27/%3E%3Crect%20x%3D%2756%27%20y%3D%2724%27%20width%3D%27136%27%20height%3D%2750%27%20rx%3D%274%27%20fill%3D%27%232b3346%27/%3E%3Ctext%20x%3D%27124%27%20y%3D%2754%27%20font-size%3D%2712%27%20text-anchor%3D%27middle%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3EUnreal%20Engine%3C/text%3E%3C/svg%3E"
+        },
+        {
+         "n": 3,
+         "action": "press TabItem \"Library\"",
+         "note": "engine versions are listed here",
+         "ok": true
+        },
+        {
+         "n": 4,
+         "action": "press Button \"+\"",
+         "note": "add an engine version",
+         "ok": true
+        },
+        {
+         "n": 5,
+         "action": "select ListItem \"5.5.4\"",
+         "note": "",
+         "ok": true
+        },
+        {
+         "n": 6,
+         "action": "press Button \"Install\"",
+         "note": "the goal asks to install",
+         "ok": true,
+         "shotThumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27200%27%20height%3D%27112%27%3E%3Crect%20width%3D%27200%27%20height%3D%27112%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27200%27%20height%3D%2716%27%20fill%3D%27%232a2f3d%27/%3E%3Crect%20x%3D%278%27%20y%3D%2724%27%20width%3D%2740%27%20height%3D%2780%27%20fill%3D%27%23232838%27/%3E%3Crect%20x%3D%2756%27%20y%3D%2724%27%20width%3D%27136%27%20height%3D%2750%27%20rx%3D%274%27%20fill%3D%27%232f8cff%27/%3E%3Ctext%20x%3D%27124%27%20y%3D%2754%27%20font-size%3D%2712%27%20text-anchor%3D%27middle%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3EInstall%205.5.4%3C/text%3E%3C/svg%3E"
+        }
+       ],
+       "summary": "",
+       "question": "A Windows permission or sign-in window is open (User Account Control). Answer it on the computer, then answer here to go on.",
+       "startedAt": 0
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "ControlTaskDone",
+   "title": "משימת מחשב: הושלם — סיכום, צילום מסך אחרון והצעדים, וטופס למשימה חדשה",
+   "route": "#/watch",
+   "height": {
+    "desktop": 1100,
+    "phone": 1500
+   },
+   "steps": [
+    {
+     "wait": ".ct-card"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/pane/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/browser/chrome/shot*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='780' height='520'><rect width='780' height='520' fill='#fff'/><rect width='780' height='56' fill='#2d3a8c'/><text x='24' y='36' font-size='22' fill='#fff' font-family='sans-serif'>mail.example.com</text><rect x='24' y='84' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='110' font-size='17' fill='#333' font-family='sans-serif'>To: dana@example.com</text><rect x='24' y='136' width='732' height='40' rx='6' fill='#f1f2f6'/><text x='36' y='162' font-size='17' fill='#333' font-family='sans-serif'>Subject: Invoice November</text><rect x='24' y='188' width='732' height='220' rx='6' fill='#f7f7fa'/><text x='36' y='220' font-size='16' fill='#555' font-family='sans-serif'>Hi Dana, the invoice is attached.</text><rect x='24' y='430' width='150' height='56' rx='10' fill='#2d3a8c' stroke='#ff6b6b' stroke-width='4'/><text x='99' y='466' font-size='22' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/computer/screen*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='960' height='540'><rect width='960' height='540' fill='#1e2a44'/><rect x='80' y='50' width='560' height='380' rx='8' fill='#fff'/><rect x='80' y='50' width='560' height='34' rx='8' fill='#dde3ee'/><text x='96' y='73' font-size='16' fill='#222' font-family='sans-serif'>notes.txt - Notepad</text><text x='100' y='120' font-size='16' fill='#333' font-family='monospace'>Shopping list:</text><text x='100' y='146' font-size='16' fill='#333' font-family='monospace'>- milk</text><rect x='0' y='500' width='960' height='40' fill='#0f1626'/></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-send*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#f4f4f6'/><rect x='70' y='30' width='180' height='60' rx='10' fill='#2d3a8c'/><text x='160' y='70' font-size='26' text-anchor='middle' fill='#fff' font-family='sans-serif'>Send</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/assets/crop-save*",
+     "body": "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='120'><rect width='320' height='120' fill='#eef0f4'/><rect x='90' y='34' width='140' height='52' rx='4' fill='#fff' stroke='#2b6cd4' stroke-width='3'/><text x='160' y='68' font-size='22' text-anchor='middle' fill='#222' font-family='sans-serif'>Save</text></svg>",
+     "contentType": "image/svg+xml"
+    },
+    {
+     "url": "**/api/control/seen",
+     "json": {
+      "ok": true
+     }
+    },
+    {
+     "url": "**/api/control/live*",
+     "json": {
+      "paused": false,
+      "mode": "manual",
+      "skipAllowed": false,
+      "browser": {
+       "active": false,
+       "pane": false
+      },
+      "computer": {
+       "enabled": true,
+       "active": false,
+       "app": "EpicGamesLauncher"
+      },
+      "log": [
+       {
+        "at": {
+         "$ago": "40s"
+        },
+        "kind": "computer",
+        "action": "tree",
+        "where": "EpicGamesLauncher",
+        "ok": true
+       },
+       {
+        "at": {
+         "$ago": "20s"
+        },
+        "kind": "computer",
+        "action": "invoke",
+        "where": "EpicGamesLauncher",
+        "target": "Button \"Install\"",
+        "ok": true
+       }
+      ],
+      "approvals": [],
+      "task": {
+       "id": "ct-1a2b3c4d",
+       "goal": "להתקין את Unreal 5.5 מה־Epic Launcher",
+       "apps": [
+        "EpicGamesLauncher"
+       ],
+       "planner": "gemini",
+       "status": "done",
+       "step": 11,
+       "maxSteps": 40,
+       "steps": [
+        {
+         "n": 1,
+         "action": "open EpicGamesLauncher",
+         "note": "bring the launcher to the front",
+         "ok": true
+        },
+        {
+         "n": 2,
+         "action": "press TabItem \"Unreal Engine\"",
+         "note": "",
+         "ok": true,
+         "shotThumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27200%27%20height%3D%27112%27%3E%3Crect%20width%3D%27200%27%20height%3D%27112%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27200%27%20height%3D%2716%27%20fill%3D%27%232a2f3d%27/%3E%3Crect%20x%3D%278%27%20y%3D%2724%27%20width%3D%2740%27%20height%3D%2780%27%20fill%3D%27%23232838%27/%3E%3Crect%20x%3D%2756%27%20y%3D%2724%27%20width%3D%27136%27%20height%3D%2750%27%20rx%3D%274%27%20fill%3D%27%232b3346%27/%3E%3Ctext%20x%3D%27124%27%20y%3D%2754%27%20font-size%3D%2712%27%20text-anchor%3D%27middle%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3EUnreal%20Engine%3C/text%3E%3C/svg%3E"
+        },
+        {
+         "n": 3,
+         "action": "press TabItem \"Library\"",
+         "note": "engine versions are listed here",
+         "ok": true
+        },
+        {
+         "n": 4,
+         "action": "press Button \"+\"",
+         "note": "add an engine version",
+         "ok": true
+        },
+        {
+         "n": 5,
+         "action": "select ListItem \"5.5.4\"",
+         "note": "",
+         "ok": true
+        },
+        {
+         "n": 6,
+         "action": "press Button \"Install\"",
+         "note": "the goal asks to install",
+         "ok": true,
+         "shotThumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27200%27%20height%3D%27112%27%3E%3Crect%20width%3D%27200%27%20height%3D%27112%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27200%27%20height%3D%2716%27%20fill%3D%27%232a2f3d%27/%3E%3Crect%20x%3D%278%27%20y%3D%2724%27%20width%3D%2740%27%20height%3D%2780%27%20fill%3D%27%23232838%27/%3E%3Crect%20x%3D%2756%27%20y%3D%2724%27%20width%3D%27136%27%20height%3D%2750%27%20rx%3D%274%27%20fill%3D%27%232f8cff%27/%3E%3Ctext%20x%3D%27124%27%20y%3D%2754%27%20font-size%3D%2712%27%20text-anchor%3D%27middle%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3EInstall%205.5.4%3C/text%3E%3C/svg%3E"
+        },
+        {
+         "n": 10,
+         "action": "wait 30 s",
+         "note": "the download is running",
+         "ok": true
+        },
+        {
+         "n": 11,
+         "action": "done",
+         "note": "Unreal Engine 5.5.4 is downloading in the Epic launcher (31%).",
+         "ok": true,
+         "shotThumb": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27200%27%20height%3D%27112%27%3E%3Crect%20width%3D%27200%27%20height%3D%27112%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27200%27%20height%3D%2716%27%20fill%3D%27%232a2f3d%27/%3E%3Crect%20x%3D%278%27%20y%3D%2724%27%20width%3D%2740%27%20height%3D%2780%27%20fill%3D%27%23232838%27/%3E%3Crect%20x%3D%2756%27%20y%3D%2724%27%20width%3D%27136%27%20height%3D%2750%27%20rx%3D%274%27%20fill%3D%27%232b3346%27/%3E%3Ctext%20x%3D%27124%27%20y%3D%2754%27%20font-size%3D%2712%27%20text-anchor%3D%27middle%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3E31%25%3C/text%3E%3C/svg%3E"
+        }
+       ],
+       "summary": "Unreal Engine 5.5.4 is downloading in the Epic launcher (31%). It installs to the launcher's default folder; nothing else was changed.",
+       "lastShot": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27960%27%20height%3D%27540%27%3E%3Crect%20width%3D%27960%27%20height%3D%27540%27%20fill%3D%27%231b1f2a%27/%3E%3Crect%20width%3D%27960%27%20height%3D%2744%27%20fill%3D%27%232a2f3d%27/%3E%3Ctext%20x%3D%2720%27%20y%3D%2729%27%20font-size%3D%2718%27%20fill%3D%27%23ddd%27%20font-family%3D%27sans-serif%27%3EEpic%20Games%20Launcher%3C/text%3E%3Crect%20x%3D%270%27%20y%3D%2744%27%20width%3D%27190%27%20height%3D%27496%27%20fill%3D%27%23232838%27/%3E%3Ctext%20x%3D%2724%27%20y%3D%2790%27%20font-size%3D%2716%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3ELibrary%3C/text%3E%3Crect%20x%3D%27220%27%20y%3D%2780%27%20width%3D%27700%27%20height%3D%27120%27%20rx%3D%2710%27%20fill%3D%27%232b3346%27/%3E%3Ctext%20x%3D%27244%27%20y%3D%27130%27%20font-size%3D%2722%27%20fill%3D%27%23fff%27%20font-family%3D%27sans-serif%27%3EUnreal%20Engine%205.5.4%3C/text%3E%3Crect%20x%3D%27244%27%20y%3D%27150%27%20width%3D%27520%27%20height%3D%2714%27%20rx%3D%277%27%20fill%3D%27%233a4258%27/%3E%3Crect%20x%3D%27244%27%20y%3D%27150%27%20width%3D%27160%27%20height%3D%2714%27%20rx%3D%277%27%20fill%3D%27%232f8cff%27/%3E%3Ctext%20x%3D%27780%27%20y%3D%27162%27%20font-size%3D%2715%27%20fill%3D%27%23ccc%27%20font-family%3D%27sans-serif%27%3E31%25%3C/text%3E%3C/svg%3E",
+       "startedAt": 0,
+       "endedAt": 0
+      }
+     }
+    }
+   ]
   }
  ]
 }

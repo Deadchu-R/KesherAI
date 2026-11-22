@@ -30,8 +30,12 @@ export type GroundResult =
 /** What the model call gets: the prompt and the picture. */
 export interface VisionAsk {
   model: VisionModel;
-  /** The picture as PNG. */
-  png: Buffer;
+  /** The picture (PNG unless `mime` says otherwise); absent for a question with no picture. */
+  png?: Buffer;
+  /** The picture's type (default image/png). */
+  mime?: string;
+  /** The longest answer in tokens (default 96: a point). */
+  maxTokens?: number;
   system?: string;
   user: string;
   signal?: AbortSignal;

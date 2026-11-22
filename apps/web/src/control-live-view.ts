@@ -15,6 +15,35 @@ export interface LiveState {
   computer: { enabled: boolean; active: boolean; app: string };
   log: Array<{ at: string; kind: "browser" | "computer"; action: string; where?: string; target?: string; ok: boolean; note?: string }>;
   approvals: Array<{ conversationId: string; title: string; ev: unknown }>;
+  /** The computer task, running or ended in the last 10 minutes (routes/control-tasks.ts); null when none. */
+  task?: ControlTaskView | null;
+}
+
+/** A computer task as the server gives it (packages/core/src/control-task.ts). */
+export interface ControlTaskView {
+  id: string;
+  goal: string;
+  apps: string[];
+  planner?: "gemini" | "local";
+  status: "running" | "done" | "failed" | "needs-you" | "stopped";
+  step: number;
+  maxSteps: number;
+  steps: Array<{ n: number; action: string; note: string; ok: boolean; shotThumb?: string }>;
+  summary: string;
+  lastShot?: string;
+  question?: string;
+  startedAt: number;
+  endedAt?: number;
+}
+
+/**
+ * Reads the apps box of "Give the computer a task": names split by commas, `.exe` dropped, at most 8.
+ *
+ * @param text - What the user typed, e.g. "EpicGamesLauncher, notepad.exe".
+ * @returns Process names.
+ */
+export function parseApps(text: string): string[] {
+  return [...new Set(text.split(/[,;\n،]+/).map((a) => a.trim().replace(/\.exe$/i, "")).filter((a) => /^[A-Za-z0-9 ._-]{1,60}$/.test(a)))].slice(0, 8);
 }
 
 /**
@@ -45,4 +74,21 @@ export function pickSource(s: Pick<LiveState, "browser" | "computer" | "log">, p
   const last = [...s.log].reverse().find((a) => a.action !== "stop" && a.action !== "pause" && a.action !== "resume");
   const fromLog: LiveSource | undefined = !last ? undefined : last.kind === "computer" ? "computer" : s.browser.chrome && (!s.browser.pane || last.where === s.browser.chrome) ? "chrome" : "pane";
   return fromLog && there.includes(fromLog) ? fromLog : there[0];
+}
+
+/** The server's step verbs (control-task.ts `describe`) in Hebrew. */
+const STEP_HE: Array<[RegExp, string]> = [
+  [/^press /, "לחיצה על "], [/^invoke /, "לחיצה על "], [/^toggle /, "החלפת מצב: "], [/^select /, "בחירה: "], [/^expand /, "פתיחה: "], [/^collapse /, "סגירה: "], [/^focus /, "מיקוד: "],
+  [/^write (\d+) characters into /, "כתיבת $1 תווים בשדה "], [/^type (\d+) characters$/, "הקלדת $1 תווים"], [/^keys /, "מקשים: "], [/^click at /, "לחיצה בנקודה "],
+  [/^scroll /, "גלילה "], [/^open /, "פתיחת "], [/^wait (\d+) s$/, "המתנה $1 שניות"], [/^look$/, "מבט במסך"], [/^done$/, "הושלם"], [/^fail$/, "לא הצליח"], [/^asked you$/, "שאל אותך"],
+];
+
+/**
+ * A computer task's step in Hebrew: its verb translated; the app's own names (a button's label) stay as they are.
+ *
+ * @param action - The step as the server wrote it, e.g. `press Button "Library"`.
+ */
+export function stepWordHe(action: string): string {
+  const hit = STEP_HE.find(([re]) => re.test(action));
+  return hit ? action.replace(hit[0], hit[1]) : action;
 }

@@ -52,3 +52,32 @@
 .cl-log { margin: 6px 0 0; padding-inline-start: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .cl-log li { line-height: 1.45; overflow-wrap: anywhere; }
 .cl-log li.bad { color: var(--danger, #f87171); }
+
+/* Computer tasks (ControlTaskCard.tsx): one goal KesherAI carries out by itself. */
+.ct-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border, rgba(127,127,127,.3)); border-inline-start: 3px solid var(--live, #ff6b6b); }
+.ct-card.ct-done { border-inline-start-color: #2fa36b; }
+.ct-card.ct-failed, .ct-card.ct-stopped { border-inline-start-color: var(--border, rgba(127,127,127,.5)); }
+.ct-card.ct-needs-you { border-inline-start-color: #e0a020; }
+.ct-head { display: flex; gap: 10px; align-items: flex-start; }
+.ct-who { font-size: 20px; line-height: 1.3; }
+.ct-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.ct-chip { font-weight: 700; }
+.ct-chip-needs-you { color: #e0a020; }
+.ct-chip-done { color: #2fa36b; }
+.ct-stop { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #b4232a; background: rgb(180 35 42 / 0.18); color: var(--text); white-space: nowrap; }
+.ct-ask { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: rgb(224 160 32 / 0.12); }
+.ct-ask p { margin: 0; overflow-wrap: anywhere; }
+.ct-answer { display: flex; gap: 6px; flex-wrap: wrap; }
+.ct-answer input { flex: 1 1 160px; min-width: 0; min-height: 40px; }
+.ct-answer button { min-height: 40px; }
+.ct-summary { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.ct-shot { width: 100%; max-height: 360px; object-fit: contain; border-radius: 8px; background: #000; }
+.ct-steps ol { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ct-steps li { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; overflow-wrap: anywhere; min-width: 0; }
+.ct-steps li.bad { color: var(--danger, #f87171); }
+.ct-steps li img { width: 72px; flex: none; border-radius: 4px; }
+.ct-new { display: flex; flex-direction: column; gap: 6px; }
+.ct-new[open] { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border, rgba(127,127,127,.3)); }
+.ct-new > summary { cursor: pointer; font-weight: 600; min-height: 32px; }
+.ct-new textarea, .ct-new input { width: 100%; box-sizing: border-box; min-height: 40px; }
+.ct-new > * + * { margin-top: 6px; }
