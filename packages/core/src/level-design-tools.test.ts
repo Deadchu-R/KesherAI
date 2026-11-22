@@ -167,8 +167,10 @@ test("level_check and level_describe read a scene, and ask which scene when it i
 
 test("the turn's checkpoint keeps the scene and the waiting moves (Unity) or the level (Unreal)", () => {
   const lf = (dir: string, level: string) => `${dir}/Content${level.replace("/Game", "")}.umap`;
-  assert.deepEqual(levelWrites({ scene: "Assets/Main.unity" }, { unity: "/p", unreal: "/u" }, lf), { engine: "unity", project: "/p", files: ["/p/Assets/Main.unity", "/p/KesherAI/pending-moves.json"] });
-  assert.deepEqual(levelWrites({ scene: "/Game/Maps/Arena.Arena" }, { unity: "/p", unreal: "/u" }, lf), { engine: "unreal", project: "/u", files: ["/u/Content/Maps/Arena.umap"] });
+  // Paths are joined with the system's separator; compare them with forward slashes so the test runs on Windows too.
+  const fw = (w: ReturnType<typeof levelWrites>) => w && { ...w, files: w.files.map((f) => f.replace(/\\/g, "/")) };
+  assert.deepEqual(fw(levelWrites({ scene: "Assets/Main.unity" }, { unity: "/p", unreal: "/u" }, lf)), { engine: "unity", project: "/p", files: ["/p/Assets/Main.unity", "/p/KesherAI/pending-moves.json"] });
+  assert.deepEqual(fw(levelWrites({ scene: "/Game/Maps/Arena.Arena" }, { unity: "/p", unreal: "/u" }, lf)), { engine: "unreal", project: "/u", files: ["/u/Content/Maps/Arena.umap"] });
   assert.equal(levelWrites({ scene: "Assets/../x.unity" }, { unity: "/p" }, lf), undefined);
   assert.equal(levelWrites({}, { unity: "/p", unreal: "/u" }, lf), undefined);
 });

@@ -31,13 +31,18 @@ test("a last-known address that fails falls back to all the others at once", asy
 });
 
 test("a last-known address that hangs gives way after its short wait", async () => {
+  // findAddress's timers do not hold the process open (unref), so keep the loop alive while the test waits.
+  const alive = setInterval(() => undefined, 1000);
   const t0 = Date.now();
   const hit = await findAddress(urls, "http://192.168.1.5:3000", (u) => (u === "http://192.168.1.5:3000" ? new Promise(() => undefined) : Promise.resolve(u)), 30);
   assert.ok(hit && hit.url !== "http://192.168.1.5:3000");
   assert.ok(Date.now() - t0 < 5000);
+  clearInterval(alive);
 });
 
 test("nothing answers: undefined", async () => {
+  const alive = setInterval(() => undefined, 1000);
   assert.equal(await findAddress(urls, undefined, () => Promise.reject(new Error("no")), 10), undefined);
   assert.equal(await findAddress([], undefined, () => Promise.resolve(1)), undefined);
+  clearInterval(alive);
 });
