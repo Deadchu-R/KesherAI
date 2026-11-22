@@ -39,10 +39,12 @@ export function worktreeName(text: string, now = new Date()): string {
 
 /** Files to copy into a new worktree: ignored files the repo's `.worktreeinclude` names. */
 export function includedFiles(patterns: string, ignoredFiles: string[]): string[] {
-  const lines = patterns.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  const lines = patterns.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#")).map((l) => l.replace(/\\/g, "/"));
   if (!lines.length) return [];
   const ig = ignore().add(lines);
-  return ignoredFiles.filter((f) => f && !f.endsWith("/") && ig.ignores(f));
+  return ignoredFiles
+    .map((f) => f.replace(/\\/g, "/")) // normalize Windows backslashes
+    .filter((f) => f && !f.endsWith("/") && ig.ignores(f));
 }
 
 /**
@@ -55,7 +57,7 @@ export function includedFiles(patterns: string, ignoredFiles: string[]): string[
 export async function excludeWorktrees(repo: string, git: Git): Promise<void> {
   const exclude = join(resolve(repo, (await git(repo, ["rev-parse", "--git-common-dir"])).trim()), "info", "exclude");
   const had = existsSync(exclude) ? await readFile(exclude, "utf8") : "";
-  if (!/^\/?\.kesher\/worktrees\/?$/m.test(had)) {
+  if (!/^[/\\]?\.kesher[/\\]worktrees[/\\]?$/m.test(had)) {
     await mkdir(dirname(exclude), { recursive: true });
     await appendFile(exclude, `${had && !had.endsWith("\n") ? "\n" : ""}/.kesher/worktrees/\n`);
   }
@@ -91,7 +93,7 @@ export async function createSessionWorktree(folder: string, name: string, git: G
   if (want.trim()) {
     // --directory: an ignored folder (node_modules) is one line, so the list stays short and .env is not cut off.
     const ignored = (await git(repo, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory"]).catch(() => "")).split(/\r?\n/);
-    for (const f of includedFiles(want, ignored).filter((x) => !x.startsWith(".kesher/")).slice(0, 500)) {
+    for (const f of includedFiles(want, ignored).filter((x) => !x.startsWith(".kesher/") && !x.startsWith(".kesher\\")).slice(0, 500)) {
       const to = join(path, f);
       await mkdir(dirname(to), { recursive: true });
       await copyFile(join(repo, f), to).catch(() => undefined);
