@@ -477,6 +477,8 @@ html, body { overflow-x: hidden; }
 .appbar-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 14px; }
 .bar-btn { width: 32px; height: 32px; padding: 0; display: inline-grid; place-items: center; border: 0; background: transparent; color: var(--muted); border-radius: calc(8px * var(--r-scale, 1)); }
 .bar-btn:hover, .bar-btn[aria-expanded="true"] { background: var(--panel-2); color: var(--text); }
+/* On a phone the bar buttons are 40 px high (the bar is 48); the width stays 32 so the chat bar's ten buttons still fit. */
+@media (max-width: 760px) { .bar-btn { height: 40px; } }
 [dir="rtl"] .dir-icon { transform: scaleX(-1); }
 .bar-seg { margin-inline-start: auto; display: inline-flex; padding: 2px; gap: 2px; border-radius: calc(10px * var(--r-scale, 1)); background: var(--bg); border: 1px solid var(--border); }
 .app.sidebar-hidden .bar-seg { margin-inline-start: 6px; }
@@ -499,6 +501,7 @@ html, body { overflow-x: hidden; }
 .bar-title svg { flex: none; color: var(--muted); }
 .bar-rename input { height: 32px; width: min(420px, 60vw); }
 .bar-status { position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; color: var(--muted); }
+@media (max-width: 760px) { .bar-status { height: 40px; } }
 .bar-status .dot { position: absolute; top: 5px; inset-inline-end: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); border: 2px solid var(--bg); }
 .bar-status.ok .dot { background: var(--good); }
 .bar-status.off .dot { background: var(--bad); }
@@ -4743,7 +4746,9 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 
 .games-night { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin-bottom: 12px; }
 .games-night-set { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); padding-top: 8px; }
-.games-night-switch { min-height: 44px; gap: 8px; }
+.games-night-switch { min-height: 44px; gap: 8px; flex-direction: row; align-items: center; font-size: 14px; color: var(--text); }
+.games-night-switch input { width: 20px; height: 20px; flex: none; }
+.games-night-switch .grow { flex: 0 1 auto; margin-inline-end: auto; }
 .games-night-opts { gap: 12px; padding-inline-start: 28px; }
 .games-night-log { margin: 0; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .compile-failed { border-color: var(--warn, #c9a227); }
@@ -4754,3 +4759,15 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .converted-installed .pill { white-space: normal; }
 .converted-installed button, .converted-ready .row button { white-space: normal; }
 .hub-led.asleep { background: var(--warn, #e0b252); box-shadow: 0 0 0 4px rgb(224 178 82 / .14); }
+/* Phone QA pass: finger-size targets on the newer screens (the model lookup chips, the stand-in install button,
+   the folded headings of the graphics check, the game tests and the found-projects list, the settings tabs). */
+@media (max-width: 760px) {
+  .hub-chips .chip-text, .auto-chip { min-height: 40px; }
+  .standin-projects .standin-install { min-height: 40px; }
+  .play-tests-head, .found-projects > summary { min-height: 40px; display: flex; align-items: center; }
+  .settings-cats a { min-height: 40px; }
+  .settings-search input { height: 40px; }
+  .row:has(> strong.grow + .segmented) > strong.grow { flex: 1 1 auto; }
+  details > summary.muted.small { min-height: 40px; display: flex; align-items: center; }
+  .page button:not(.link):not(.chip):not(.chip-text):not(.model-chip) { min-height: 40px; }
+}

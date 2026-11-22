@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global document, localStorage, sessionStorage -- the functions passed to page.evaluate run in the browser */
+/* global document, localStorage, sessionStorage, NodeFilter -- the functions passed to page.evaluate run in the browser */
 /**
  * The release end-to-end suite (docs/TESTING.md): starts the built server with a throw-away data folder, a throw-away
  * home folder holding a Unity and an Unreal fixture project, and a fake model (scripts/e2e/fake-model.mjs), then
@@ -283,6 +283,20 @@ try {
     if (w > width + 1) throw new Error(`the page is ${w} px wide on a ${width} px screen`);
   };
 
+  /** No translation key shows as text (a word like "downloads.title" means a text is missing from the word lists). */
+  const noKeys = async (page) => {
+    const keys = await page.evaluate(() => {
+      const found = [];
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const t = n.textContent.trim();
+        if (/^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9_-]+){1,3}$/.test(t) && !/\.(png|jpg|json|md|exe|txt|js|ts|gguf|com|app|dev|io)$/.test(t) && !n.parentElement?.closest("code,pre")) found.push(t.slice(0, 40));
+      }
+      return found;
+    });
+    if (keys.length) throw new Error(`a text key shows on the page: ${keys.slice(0, 3).join(", ")}`);
+  };
+
   /**
    * The whole set of flows, for one viewport.
    *
@@ -405,14 +419,15 @@ try {
   await flows(phone, 390, "p");
   await phone.ctx.close();
 
-  // The same pages in Hebrew on the phone: right to left, nothing wider than the screen.
+  // The same pages in Hebrew on the phone: right to left, nothing wider than the screen, no text key showing.
   const he = await open("phone-he", { width: 390, height: 844, base: phoneBase, token: REMOTE_TOKEN, locale: "he" });
-  for (const p of ["#/", "#/downloads", "#/unity", "#/unreal", "#/settings/accounts"]) {
+  for (const p of ["#/", "#/downloads", "#/unity", "#/unreal", "#/settings/accounts", "#/models", "#/health", "#/games", "#/plugins", "#/docs"]) {
     await he.step(`Hebrew ${p}`, async () => {
       await he.page.goto(`${phoneBase}/${p}`);
       await he.page.waitForTimeout(1500);
       if ((await he.page.evaluate(() => document.documentElement.dir)) !== "rtl") throw new Error("the page is not right to left");
       await fits(he.page, 390);
+      await noKeys(he.page);
     });
   }
   await he.ctx.close();
