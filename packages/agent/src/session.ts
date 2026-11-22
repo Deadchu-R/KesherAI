@@ -47,7 +47,7 @@ export type ModelTurn = (
   request: { messages: AgentMessage[]; tools: ToolSpec[] },
   signal: AbortSignal,
   onText: (delta: string) => void,
-) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number }; truncated?: boolean }>;
+) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; cacheWriteTokens?: number }; truncated?: boolean }>;
 
 /**
  * A local server (llama.cpp) refusing the model's whole answer because a tool call in it was not in the model's own
@@ -905,9 +905,10 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     const input = result.usage?.inputTokens ?? Math.round(sizeOf(sent) / CHARS_PER_TOKEN);
     const output = result.usage?.outputTokens ?? Math.round((result.text.length + JSON.stringify(result.toolCalls).length) / CHARS_PER_TOKEN);
     const cached = result.usage?.cachedTokens;
+    const cacheWrite = result.usage?.cacheWriteTokens;
     // What the token budget left out of this call (main model only; teammates get their own short prompts).
     const pruned = role === "main" ? Math.round((this.lastPrunedChars + this.lastCappedChars) / this.charsPerToken) : 0;
-    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
+    this.push({ type: "usage", modelId, role, input, output, estimated: !reported, tools: result.toolCalls.map((c) => c.name), ...(timing ? { waitMs: timing.waitMs, writeMs: timing.writeMs } : {}), ...(typeof cached === "number" && cached >= 0 ? { cached: Math.min(cached, input) } : {}), ...(typeof cacheWrite === "number" && cacheWrite > 0 ? { cacheWrite: Math.min(cacheWrite, input) } : {}), ...(pruned > 0 ? { pruned } : {}) });
   }
 
   /** Characters the last fitted prompt left out (pruned tool outputs), for the usage event. */

@@ -13,6 +13,7 @@ interface UsageLike {
   output: number;
   estimated: boolean;
   cached?: number;
+  cacheWrite?: number;
   pruned?: number;
 }
 
@@ -26,6 +27,8 @@ export interface AnswerTokens {
   cached?: number;
   /** The input of the calls that reported `cached` (the base for the cache share). */
   cacheBase?: number;
+  /** Tokens written to the prompt cache (Anthropic); only when any. */
+  cacheWrite?: number;
   /** Tokens the token budget did not send (pruned tool results, tools over the cap); only when any. */
   pruned?: number;
   /** True when any count was estimated from the text instead of reported by the provider. */
@@ -57,6 +60,7 @@ export function answerTokens(events: ReadonlyArray<{ type: string; seq: number }
       cur.estimated ||= u.estimated;
       if (u.role === "main" || !mainSeen) cur.modelId = u.modelId;
       if (u.role === "main") mainSeen = true;
+      if (typeof u.cacheWrite === "number" && u.cacheWrite > 0) cur.cacheWrite = (cur.cacheWrite ?? 0) + u.cacheWrite;
       if (typeof u.pruned === "number" && u.pruned > 0) cur.pruned = (cur.pruned ?? 0) + u.pruned;
       if (typeof u.cached === "number") {
         cur.cached = (cur.cached ?? 0) + Math.min(u.cached, u.input);

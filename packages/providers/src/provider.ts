@@ -81,6 +81,8 @@ export interface ProviderUsage {
   outputTokens?: number;
   /** Of `inputTokens`, how many came from the server's prompt cache (llama.cpp `timings.cache_n`, OpenAI `cached_tokens`). */
   cachedTokens?: number;
+  /** Of `inputTokens`, how many were written to the prompt cache this call (Anthropic `cache_creation_input_tokens`). */
+  cacheWriteTokens?: number;
 }
 
 /** One finished model turn: its text and the tools it wants to call. */

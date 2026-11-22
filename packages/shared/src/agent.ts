@@ -380,6 +380,8 @@ export type AgentEvent = EventBase &
          * `cached_tokens`). Only when the provider reported it; older servers and clients leave it out.
          */
         cached?: number;
+        /** Of `input`, the tokens written to the prompt cache this call (Anthropic; billed a bit above plain input). */
+        cacheWrite?: number;
         /**
          * Tokens this call did not send because of the token budget (main model only): older tool results sent as
          * one summary line, and tool instructions over the per-turn cap. Estimated from the text.

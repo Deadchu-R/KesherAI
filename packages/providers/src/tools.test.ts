@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { once } from "node:events";
 import { OpenAICompatibleProvider, toOpenAIMessages } from "./openai-compatible.js";
-import { AnthropicProvider, toAnthropicMessages } from "./anthropic.js";
+import { AnthropicProvider, addCacheBreakpoints, toAnthropicMessages } from "./anthropic.js";
 import { parseToolArguments } from "./tool-args.js";
 import type { AgentMessage } from "@kesher/shared";
 
@@ -97,8 +97,8 @@ test("Anthropic tool_use blocks and JSON deltas become tool calls", async () => 
     assert.equal(out.text, "On it.");
     assert.deepEqual(out.toolCalls, [{ id: "tu_1", name: "run_command", arguments: { command: "npm test" } }]);
     assert.deepEqual(out.usage, { inputTokens: 12, outputTokens: 7 });
-    const body = srv.body() as { system: string; tools?: unknown };
-    assert.equal(body.system, "Be brief.");
+    const body = srv.body() as { system: unknown; tools?: unknown };
+    assert.deepEqual(body.system, [{ type: "text", text: "Be brief.", cache_control: { type: "ephemeral" } }]);
     assert.equal(body.tools, undefined);
   } finally {
     srv.close();
@@ -117,6 +117,51 @@ test("Anthropic conversion merges tool results into one user turn", () => {
     { type: "tool_result", tool_use_id: "c2", content: "(no output)" },
     { type: "text", text: "thanks" },
   ]);
+});
+
+test("Anthropic cache counts are read and added into the prompt total", async () => {
+  const srv = await sseServer([
+    { type: "message_start", message: { usage: { input_tokens: 10, cache_read_input_tokens: 900, cache_creation_input_tokens: 90 } } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "ok" } },
+    { type: "message_delta", usage: { output_tokens: 3 } },
+  ]);
+  try {
+    const p = new AnthropicProvider({ id: "a", type: "anthropic", apiKey: "k", baseUrl: `${srv.url}/v1` });
+    const tools = [{ name: "a", description: "d", inputSchema: {} }, { name: "b", description: "d", inputSchema: {} }];
+    const out = await p.chatWithTools({ providerModelId: "claude", messages: history, tools });
+    assert.deepEqual(out.usage, { inputTokens: 1000, outputTokens: 3, cachedTokens: 900, cacheWriteTokens: 90 });
+    const body = srv.body() as { tools: Array<{ cache_control?: unknown }> };
+    assert.equal(body.tools[0]?.cache_control, undefined);
+    assert.deepEqual(body.tools[1]?.cache_control, { type: "ephemeral" });
+    // Turned off: plain system string, no breakpoints.
+    const off = new AnthropicProvider({ id: "a", type: "anthropic", apiKey: "k", baseUrl: `${srv.url}/v1`, options: { promptCache: false } });
+    await off.chatWithTools({ providerModelId: "claude", messages: history, tools });
+    assert.equal(JSON.stringify(srv.body()).includes("cache_control"), false);
+    assert.equal((srv.body() as { system: unknown }).system, "Be brief.");
+  } finally {
+    srv.close();
+  }
+});
+
+test("cache breakpoints: last tool, first system block, last two user turns, never more than four", () => {
+  const conv = toAnthropicMessages([
+    { role: "system", content: "static" },
+    { role: "system", content: "today's date" },
+    { role: "user", content: "one" },
+    { role: "assistant", content: "a" },
+    { role: "user", content: "two" },
+    { role: "assistant", content: "b" },
+    { role: "user", content: "three" },
+  ]);
+  const tools = [{ name: "t", description: "d", input_schema: {} }];
+  const out = addCacheBreakpoints(conv.systemParts, conv.messages, tools);
+  assert.deepEqual(out.system, [{ type: "text", text: "static", cache_control: { type: "ephemeral" } }, { type: "text", text: "today's date" }]);
+  const marks = out.messages.map((m) => m.content.some((b) => b.cache_control !== undefined));
+  assert.deepEqual(marks, [false, false, true, false, true]);
+  assert.equal(JSON.stringify(out).split("cache_control").length - 1, 4);
+  // The inputs are not changed.
+  assert.equal(JSON.stringify(conv).includes("cache_control"), false);
+  assert.equal("cache_control" in tools[0]!, false);
 });
 
 test("invalid tool JSON is kept, not thrown", () => {

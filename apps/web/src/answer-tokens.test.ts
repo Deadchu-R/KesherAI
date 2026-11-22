@@ -32,3 +32,9 @@ test("cache percent", () => {
   assert.equal(cachePercent(5, 0), undefined);
   assert.equal(cachePercent(500, 100), 100);
 });
+
+test("cache writes (Anthropic) are summed per answer, only when any", () => {
+  const m = answerTokens([ev(1, { type: "user" }), use(2, { input: 1000, output: 5, cached: 0, cacheWrite: 990 }), use(3, { input: 1100, output: 5, cached: 990, cacheWrite: 100 }), ev(4, { type: "assistant" })]);
+  assert.equal(m.get(4)!.cacheWrite, 1090);
+  assert.equal(m.get(4)!.cached, 990);
+});
