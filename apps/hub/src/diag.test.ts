@@ -58,7 +58,7 @@ function fakeSql(state: { refuse: boolean }): SqlStorage {
   return {
     exec(query: string, ...bindings: unknown[]) {
       if (state.refuse && /^\s*(INSERT|UPDATE|DELETE)/i.test(query)) throw new Error("Exceeded allowed rows written in Durable Objects free tier.");
-      if (bindings.length === 0 && /CREATE/i.test(query)) {
+      if (bindings.length === 0 && /^\s*CREATE/i.test(query)) {
         db.exec(query);
         return { toArray: () => [], rowsWritten: 0 };
       }

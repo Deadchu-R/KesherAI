@@ -24,6 +24,7 @@ class_name = "HubObject"
 tag = "v1"
 new_sqlite_classes = ["HubObject"]
 
-# Cleanup every 5 minutes: expired messages, pairings, tickets, sessions, audit lines older than 30 days.
+# Cleanup once an hour (expired messages, pairings, sessions, audit lines older than 30 days); the hub skips it while
+# nothing that can expire was written, so an idle hub reads and writes nothing for it.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["17 * * * *"]

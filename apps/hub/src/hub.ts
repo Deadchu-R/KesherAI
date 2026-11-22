@@ -31,10 +31,13 @@ import {
   type SealedEnvelope,
   type SealedKind,
 } from "../../../packages/shared/src/hub.js";
+import { CachedStore } from "./cached-store.js";
 import { claudeTrigger, fireText, type ClaudeTrigger, type FireResult } from "./claude-cloud.js";
+import { deriveHmacKey, issueDeviceToken, SIGNED_TOKEN_PREFIX, verifyDeviceToken, type DeviceTokenClaims } from "./device-token.js";
 import { ownerCheck, type GoogleClaims } from "./google.js";
 import { ConnectorAuth } from "./oauth.js";
 import { LIMITS, RateLimiter } from "./rate-limit.js";
+import { HubStorageError, storageCode } from "./storage-guard.js";
 import { MemoryStore, type AuditRow, type DeviceRow, type HubStore, type QueuedRow } from "./store.js";
 import { cleanPushSub, PUSH, sendPush, type StoredPushSub, type VapidKeys } from "./web-push.js";
 
@@ -59,6 +62,13 @@ export const HUB_TIMES = {
   /** A token older than this is refused: the device pairs again. */
   tokenMax: 180 * DAY,
   audit: 30 * DAY,
+  /** The cron's cleanup runs at most this often (the cron itself is hourly; an older 5-minute cron is skipped). */
+  cleanupGap: 55 * MIN,
+  /** ...and is skipped for up to this long when nothing that can expire was written since it last ran. Expired rows
+   * are already refused when read, so cleaning later only frees space. */
+  cleanupIdle: 6 * HOUR,
+  /** A device's "connect" line is written to the audit log at most this often (phones reconnect a lot). */
+  connectAudit: 10 * MIN,
 } as const;
 
 /** Rows the Durable Objects free plan lets the hub write per day (Cloudflare pricing page, 2026-11). */
@@ -73,7 +83,13 @@ export const FREE_ROWS_PER_DAY = 100_000;
  * - snapshots (task-inbox reports, approvals, board, command results): memory until acked; the ones a phone needs
  *   after the hub sleeps are saved as one settings row per phone, at most once a minute ({@link WRITE_PACE});
  * - progress notes: delivered to an online phone, never kept;
- * - socket tickets: signed (HMAC), checked without storage.
+ * - socket tickets and `kh2_` device tokens: signed (HMAC), checked without storage;
+ * - devices, settings, the newest audit lines and the queue size: read once per wake into memory (cached-store.ts);
+ * - the cron's cleanup: at most hourly, and skipped while nothing that can expire was written (HUB_TIMES.cleanupGap).
+ *
+ * When storage refuses (the quota is used up), connected devices keep relaying live frames from memory, tickets and
+ * diagnostics still answer; only what must be kept (a new pairing, a revoke, a message queued for a device that is
+ * off) fails, with 503 `hub-storage-limit`.
  */
 export const WRITE_PACE = {
   /** A device's last-seen time is written at most this often while it is connected (it is written when it leaves). */
@@ -199,10 +215,13 @@ export interface ConnectorTaskRequest {
 /** The hub. One instance lives in the Durable Object. */
 export class Hub {
   readonly limits: RateLimiter;
-  private readonly store: HubStore;
+  /** The store, with devices, settings and recent audit lines in memory. */
+  private readonly store: CachedStore;
   private readonly sockets: DeviceSockets;
   private readonly now: () => number;
   private hubKey?: Promise<{ privateKey: HubCryptoKey; publicKey: string } | undefined>;
+  /** The hub's own key as JWK text when it is kept in storage (read or made by {@link ownKey}). */
+  private ownJwk?: string;
   /** The Claude connector's OAuth (oauth.ts): registered clients, codes and "Connected apps". */
   readonly connector: ConnectorAuth;
   private readonly schedule: (fn: () => void, ms: number) => void;
@@ -222,10 +241,22 @@ export class Hub {
   /** The key socket tickets are signed with, and the ticket nonces already used (until they expire). */
   private ticketKey?: Promise<HubCryptoKey>;
   private readonly usedTickets = new Map<string, number>();
+  /** The device each live ticket was issued to (by nonce): lets a socket open while storage refuses reads. */
+  private readonly ticketDevices = new Map<string, { row: DeviceRow; until: number }>();
+  /** The key `kh2_` device tokens are signed with, per secret text it was derived from. */
+  private tokenKey?: { from: string; key: Promise<HubCryptoKey> };
+  /** Devices revoked (in memory; also saved in the `revokedIds` setting when storage takes it). */
+  private readonly revoked = new Set<string>();
+  /** When the cleanup last ran (in memory: after a wake it runs on the next cron), and the store's count of rows
+   * that can expire at that time. */
+  private cleanedAt = -Infinity;
+  private cleanedWrites = 0;
+  /** When each device's "connect" was last audited. */
+  private readonly connectAudited = new Map<string, number>();
 
   /** @param deps - Storage, sockets, setup values and the outside calls. */
   constructor(private readonly deps: HubDeps) {
-    this.store = deps.store;
+    this.store = deps.store instanceof CachedStore ? deps.store : new CachedStore(deps.store);
     this.sockets = deps.sockets;
     this.now = deps.now ?? Date.now;
     this.limits = new RateLimiter(this.now);
@@ -255,6 +286,28 @@ export class Hub {
     this.bestEffort(() => this.store.audit({ ts: this.now(), action, ...extra }));
   }
 
+  /** A setting, or undefined when storage refuses to read it (a switch then reads as off). */
+  private softSetting(key: string): string | undefined {
+    try {
+      return this.store.getSetting(key);
+    } catch (e) {
+      if (!storageCode(e)) throw e;
+      return undefined;
+    }
+  }
+
+  /** A device row with its best-effort write: memory keeps it when storage refuses. */
+  private saveDeviceSoft(row: DeviceRow): void {
+    try {
+      this.store.putDevice(row);
+    } catch (e) {
+      this.store.remember(row);
+      this.bestEffort(() => {
+        throw e;
+      });
+    }
+  }
+
   /**
    * A write that may fail without failing the request (an audit line, a last-seen time, a paced save): when storage
    * refuses (the daily quota is used up), the hub keeps working from memory.
@@ -281,34 +334,41 @@ export class Hub {
    * hub from the dashboard needs no command line).
    */
   private ownKey(): Promise<{ privateKey: HubCryptoKey; publicKey: string } | undefined> {
-    this.hubKey ??= (async () => {
+    if (this.hubKey) return this.hubKey;
+    const made = (async () => {
       try {
         if (this.deps.config.hubPrivateJwk) return await importPrivateJwk(this.deps.config.hubPrivateJwk);
+        // A refused read throws here: no key this time (never a new key over the kept one), and the next call tries again.
         let jwk = this.store.getSetting("hubKey");
         if (!jwk) {
-          const made = await exportPrivateJwk((await generateHubKeys(true)).privateKey);
-          jwk = made;
+          const fresh = await exportPrivateJwk((await generateHubKeys(true)).privateKey);
+          jwk = fresh;
           // A refused write (the daily quota) keeps the key in memory until the hub sleeps: the welcome still carries it.
-          this.bestEffort(() => this.store.setSetting("hubKey", made));
+          this.bestEffort(() => this.store.setSetting("hubKey", fresh));
         }
+        this.ownJwk = jwk;
         return await importPrivateJwk(jwk);
       } catch {
         return undefined;
       }
     })();
-    return this.hubKey;
+    this.hubKey = made;
+    void made.then((k) => {
+      if (!k && this.hubKey === made) this.hubKey = undefined;
+    });
+    return made;
   }
 
   /** The Claude path's trigger when it is set up, the hub key exists, and it is not switched off. */
   private async cloudTrigger(): Promise<ClaudeTrigger | undefined> {
-    if (this.store.getSetting("cloudOff") === "1") return undefined;
+    if (this.softSetting("cloudOff") === "1") return undefined;
     if (!(await this.ownKey())) return undefined;
     return claudeTrigger(this.deps.config.claude ?? {});
   }
 
   /** Whether the hub is paused (kill switch 1: no routing, no device sockets). */
   get paused(): boolean {
-    return this.store.getSetting("paused") === "1";
+    return this.softSetting("paused") === "1";
   }
 
   // ---- sign-in and sessions ----
@@ -455,7 +515,7 @@ export class Hub {
     this.store.deletePairing(p.codeHash);
     const t = this.now();
     const deviceId = `d${randomB64url(12)}`;
-    const token = `kh_${randomB64url(32)}`;
+    const token = await this.newToken({ deviceId, kind: p.kind, issuedAt: t });
     this.store.putDevice({ id: deviceId, name: p.name, kind: p.kind, publicKey: p.publicKey, tokenHash: await sha256Hex(token), tokenIssuedAt: t, createdAt: t, busy: false, optIn: { ...(p.kind === "claude-chat" ? CLAUDE_CHAT_OPT_IN : DEFAULT_OPT_IN) }, agents: [] });
     this.audit("pair-done", { deviceId, ipHash });
     this.broadcastPresence();
@@ -464,12 +524,81 @@ export class Hub {
 
   // ---- device tokens, tickets, rotation, revocation ----
 
-  /** The device a bearer token belongs to, unless the token is too old. */
+  /**
+   * The secret `kh2_` tokens are signed from: the `HUB_PRIVATE_KEY` secret (survives restarts, never stored), else the
+   * key the hub made and keeps in its settings (read once per wake). Undefined when neither can be had.
+   */
+  private tokenSecret(): string | undefined {
+    return this.deps.config.hubPrivateJwk || this.ownJwk || this.softSetting("hubKey");
+  }
+
+  /** The HMAC key for `kh2_` tokens (derived with HKDF; see device-token.ts), or undefined without a secret. */
+  private deviceTokenKey(): Promise<HubCryptoKey> | undefined {
+    const from = this.tokenSecret();
+    if (!from) return undefined;
+    if (this.tokenKey?.from !== from) this.tokenKey = { from, key: deriveHmacKey(from, "device-token-v2") };
+    return this.tokenKey.key;
+  }
+
+  /** A new device token: signed (`kh2_`) when the hub has its key, else a random `kh_` token (a hub without one yet). */
+  private async newToken(claims: DeviceTokenClaims): Promise<string> {
+    const key = await this.ownKey().then(() => this.deviceTokenKey());
+    return key ? issueDeviceToken(await key, claims) : `kh_${randomB64url(32)}`;
+  }
+
+  /** Revoked device ids: the ones in memory and the saved list (when storage lets it be read). */
+  private isRevoked(deviceId: string): boolean {
+    if (this.revoked.has(deviceId)) return true;
+    try {
+      const saved = JSON.parse(this.softSetting("revokedIds") ?? "[]") as unknown;
+      return Array.isArray(saved) && saved.includes(deviceId);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * The device a bearer token belongs to, unless the token is too old. A signed `kh2_` token is checked without storage
+   * (signature, the revoked list, then the device row from memory); when storage refuses and the device is not in
+   * memory, a stand-in row from the token's claims lets it get a ticket and relay (without a public key it is never
+   * listed in presence or sent anything). Old `kh_` tokens, and any token whose signature cannot be checked, are looked
+   * up by their hash (in memory once the devices are loaded).
+   */
   async deviceForToken(bearer: string | undefined): Promise<DeviceRow | undefined> {
-    if (!bearer || !bearer.startsWith("kh_") || bearer.length > 100) return undefined;
-    const d = this.store.deviceByTokenHash(await sha256Hex(bearer));
-    if (!d || this.now() - d.tokenIssuedAt > HUB_TIMES.tokenMax) return undefined;
+    if (!bearer || bearer.length > 200) return undefined;
+    const signed = bearer.startsWith(SIGNED_TOKEN_PREFIX);
+    if (!signed && (!bearer.startsWith("kh_") || bearer.length > 100)) return undefined;
+    const hash = await sha256Hex(bearer);
+    const t = this.now();
+    const key = signed ? this.deviceTokenKey() : undefined;
+    const claims = key ? await verifyDeviceToken(await key, bearer) : undefined;
+    if (claims) {
+      if (this.isRevoked(claims.deviceId) || t - claims.issuedAt > HUB_TIMES.tokenMax) return undefined;
+      let d: DeviceRow | undefined;
+      try {
+        d = this.store.device(claims.deviceId);
+      } catch (e) {
+        if (!storageCode(e)) throw e;
+        return Hub.standIn(claims);
+      }
+      // A stand-in kept from an earlier call (storage still refusing) matches by the issue time it was made from.
+      if (d && !Hub.reachable(d)) return d.tokenIssuedAt === claims.issuedAt ? d : undefined;
+      // The row's hash is the token now in use: a rotated (older) token no longer matches.
+      return d && d.tokenHash === hash && t - d.tokenIssuedAt <= HUB_TIMES.tokenMax ? d : undefined;
+    }
+    const d = this.store.deviceByTokenHash(hash);
+    if (!d || t - d.tokenIssuedAt > HUB_TIMES.tokenMax) return undefined;
     return d;
+  }
+
+  /** A device row made only from a signed token's claims (no public key: see {@link deviceForToken}). */
+  private static standIn(c: DeviceTokenClaims): DeviceRow {
+    return { id: c.deviceId, name: DEFAULT_NAME[c.kind], kind: c.kind, publicKey: "", tokenHash: "", tokenIssuedAt: c.issuedAt, createdAt: c.issuedAt, busy: false, optIn: { ...(c.kind === "claude-chat" ? CLAUDE_CHAT_OPT_IN : DEFAULT_OPT_IN) }, agents: [] };
+  }
+
+  /** Whether a device can be listed and sent to (a stand-in from token claims has no public key). */
+  private static reachable(d: DeviceRow): boolean {
+    return d.publicKey !== "";
   }
 
   /**
@@ -477,8 +606,10 @@ export class Hub {
    * daily quota), a key in memory serves until the hub sleeps (a ticket lives 60 seconds, so nothing breaks).
    */
   private signingKey(): Promise<HubCryptoKey> {
+    // With the HUB_PRIVATE_KEY secret the key is derived from it: nothing to read or write.
+    if (this.deps.config.hubPrivateJwk) return (this.ticketKey ??= deriveHmacKey(this.deps.config.hubPrivateJwk, "socket-ticket-v1"));
     this.ticketKey ??= (async () => {
-      let raw = this.store.getSetting("ticketKey");
+      let raw = this.softSetting("ticketKey");
       if (!raw) {
         raw = randomB64url(32);
         const made = raw;
@@ -500,7 +631,7 @@ export class Hub {
    * so a PC can connect even on a day the storage quota is used up.
    *
    * @param bearer - The device token.
-   * @returns The ticket, and whether the token is due to rotate.
+   * @returns The ticket, and whether the token is due to rotate (also when an old `kh_` token can become a signed one).
    */
   async issueTicket(bearer: string | undefined): Promise<{ ticket: string; rotateDue: boolean } | HubError> {
     const d = await this.deviceForToken(bearer);
@@ -508,10 +639,15 @@ export class Hub {
     if (!this.limits.take(`ticket:${d.id}`, LIMITS.ticket)) return fail(429, "Too many tries.");
     if (this.paused) return fail(503, "The hub is paused.");
     const t = this.now();
-    const head = Hub.ticketText(d.id, String(t + HUB_TIMES.ticket), randomB64url(18));
+    const nonce = randomB64url(18);
+    const head = Hub.ticketText(d.id, String(t + HUB_TIMES.ticket), nonce);
     const sig = toB64url(await crypto.subtle.sign("HMAC", await this.signingKey(), new TextEncoder().encode(head)));
-    return { ticket: `${head}.${sig}`, rotateDue: t - d.tokenIssuedAt > HUB_TIMES.rotateAfter };
+    for (const [n, x] of this.ticketDevices) if (x.until <= t) this.ticketDevices.delete(n);
+    this.ticketDevices.set(nonce, { row: d, until: t + HUB_TIMES.ticket });
+    const upgrade = !bearer!.startsWith(SIGNED_TOKEN_PREFIX) && !!this.deviceTokenKey();
+    return { ticket: `${head}.${sig}`, rotateDue: upgrade || t - d.tokenIssuedAt > HUB_TIMES.rotateAfter };
   }
+
 
   /**
    * Uses a socket ticket (once: its nonce is remembered in memory until the ticket expires).
@@ -535,11 +671,22 @@ export class Hub {
     }
     if (!ok) return undefined;
     this.usedTickets.set(nonce, Number(exp));
-    return this.store.device(deviceId);
+    const issued = this.ticketDevices.get(nonce)?.row;
+    this.ticketDevices.delete(nonce);
+    try {
+      return this.store.device(deviceId);
+    } catch (e) {
+      // Storage refused the read and the device is not in memory: the row the ticket was issued for stands in (the
+      // device was checked a moment ago), and is kept in memory for its frames until storage answers again.
+      if (!storageCode(e) || !issued) throw e;
+      this.store.remember(issued);
+      return issued;
+    }
   }
 
   /**
-   * The device replaces its own token (every 30 days); the old one stops working at once.
+   * The device replaces its own token (every 30 days, or once to move from `kh_` to a signed `kh2_` token); the old
+   * one stops working at once.
    *
    * @param bearer - The current token.
    * @returns The new token.
@@ -548,8 +695,12 @@ export class Hub {
     const d = await this.deviceForToken(bearer);
     if (!d) return fail(401, "Unknown device.");
     if (!this.limits.take(`ticket:${d.id}`, LIMITS.ticket)) return fail(429, "Too many tries.");
-    const token = `kh_${randomB64url(32)}`;
-    this.store.putDevice({ ...d, tokenHash: await sha256Hex(token), tokenIssuedAt: this.now() });
+    if (!Hub.reachable(d)) throw new HubStorageError("hub-storage-limit", new Error("the device row could not be read"));
+    // Strictly newer than the current token, so a new signed token never equals the old one.
+    const t = Math.max(this.now(), d.tokenIssuedAt + 1);
+    const token = await this.newToken({ deviceId: d.id, kind: d.kind, issuedAt: t });
+    // Must be kept: when storage refuses, this throws (503) and the device keeps its current token.
+    this.store.putDevice({ ...d, tokenHash: await sha256Hex(token), tokenIssuedAt: t });
     this.audit("token-rotated", { deviceId: d.id });
     return { token };
   }
@@ -563,6 +714,7 @@ export class Hub {
   revoke(deviceId: string): boolean {
     if (!this.store.device(deviceId)) return false;
     this.store.deleteDevice(deviceId);
+    this.noteRevoked([deviceId]);
     this.store.setSetting(pushKey(deviceId), undefined);
     this.store.setSetting(waitingKey(deviceId), undefined);
     this.store.dropQueueFor(deviceId);
@@ -604,10 +756,30 @@ export class Hub {
     this.audit(off ? "cloud-off" : "cloud-on");
   }
 
+  /**
+   * Remembers revoked devices, so their signed tokens are refused even before the device rows can be read: in memory,
+   * and in the `revokedIds` setting (the newest 200) when storage takes the write.
+   */
+  private noteRevoked(ids: string[]): void {
+    for (const id of ids) this.revoked.add(id);
+    this.bestEffort(() => {
+      let saved: unknown = [];
+      try {
+        saved = JSON.parse(this.store.getSetting("revokedIds") ?? "[]");
+      } catch {
+        // A damaged list is replaced.
+      }
+      const list = [...new Set([...(Array.isArray(saved) ? saved.filter((x): x is string => typeof x === "string") : []), ...ids])].slice(-200);
+      this.store.setSetting("revokedIds", JSON.stringify(list));
+    });
+  }
+
   /** Kill switch 2: sign out everywhere, revoke every device and every Claude connection, drop every queued message. */
   killAll(): void {
     this.store.deleteAllSessions();
-    for (const d of this.store.devices()) {
+    const all = this.store.devices();
+    this.noteRevoked(all.map((d) => d.id));
+    for (const d of all) {
       this.store.deleteDevice(d.id);
       this.store.setSetting(pushKey(d.id), undefined);
       this.store.setSetting(waitingKey(d.id), undefined);
@@ -664,7 +836,7 @@ export class Hub {
     return this.store
       .devices()
       .map((d) => this.withLive(d))
-      .filter((d) => d.kind === "phone" || d.optIn.appear)
+      .filter((d) => Hub.reachable(d) && (d.kind === "phone" || d.optIn.appear))
       .map((d) => ({
         id: d.id,
         name: d.name,
@@ -696,7 +868,7 @@ export class Hub {
    * @returns The state.
    */
   async state(): Promise<{ devices: Array<HubPresence & { fingerprint: string }>; paused: boolean; cloudOff: boolean; cloudReady: boolean; queued: number; agents: { kept: number; writtenToday: number; freeWrites: number }; connections: ReturnType<ConnectorAuth["list"]>; audit: AuditRow[] }> {
-    const all = this.store.devices().map((d) => this.withLive(d));
+    const all = this.store.devices().filter(Hub.reachable).map((d) => this.withLive(d));
     const devices = await Promise.all(
       all.map(async (d) => ({ id: d.id, name: d.name, kind: d.kind, publicKey: d.publicKey, online: this.sockets.isOnline(d.id), ...(d.lastSeen ? { lastSeen: new Date(d.lastSeen).toISOString() } : {}), busy: d.busy, optIn: d.optIn, agents: d.agents, ...(d.version ? { version: d.version } : {}), ...this.awayOf(d), fingerprint: await keyFingerprint(d.publicKey) })),
     );
@@ -719,15 +891,28 @@ export class Hub {
     if (!d) return this.sockets.close(deviceId, 4001, "revoked");
     const t = this.now();
     this.live.set(deviceId, { busy: d.busy, agents: d.agents, lastSeen: t });
-    this.bestEffort(() => this.store.putDevice({ ...d, lastSeen: t }));
+    // Last seen is kept in memory while it is on (written when it leaves, and at most every 15 minutes).
+    if (!d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs) this.saveDeviceSoft({ ...d, lastSeen: t });
     this.sockets.send(deviceId, { t: "welcome", deviceId, hubKey: (await this.ownKey())?.publicKey ?? "", presence: this.presence(), paused: this.paused, rotateDue: t - d.tokenIssuedAt > HUB_TIMES.rotateAfter });
-    // Queued messages and waiting snapshots, oldest first.
-    const waiting = [...this.store.queued(deviceId), ...this.pendingFor(deviceId)].sort((a, b) => a.createdAt - b.createdAt);
+    // Queued messages and waiting snapshots, oldest first (what storage refuses to read now comes on the next connect).
+    let queued: QueuedRow[] = [];
+    if (Hub.reachable(d)) {
+      try {
+        queued = this.store.queued(deviceId);
+      } catch (e) {
+        if (!storageCode(e)) throw e;
+        this.deps.warn?.("queued messages could not be read (storage refused)");
+      }
+    }
+    const waiting = [...queued, ...(Hub.reachable(d) ? this.pendingFor(deviceId) : [])].sort((a, b) => a.createdAt - b.createdAt);
     for (const q of waiting) {
       if (q.expiresAt <= t) continue;
       this.sockets.send(deviceId, { t: "deliver", env: JSON.parse(q.env) as SealedEnvelope });
     }
-    this.audit("connect", { deviceId });
+    if (t - (this.connectAudited.get(deviceId) ?? -Infinity) > HUB_TIMES.connectAudit) {
+      this.connectAudited.set(deviceId, t);
+      this.audit("connect", { deviceId });
+    }
     this.broadcastPresence();
   }
 
@@ -739,7 +924,7 @@ export class Hub {
   onClose(deviceId: string): void {
     const d = this.store.device(deviceId);
     // The heartbeat state from memory is written once now, so the owner sees what was running when it left.
-    if (d) this.bestEffort(() => this.store.putDevice({ ...this.withLive(d), lastSeen: this.now(), busy: false }));
+    if (d && Hub.reachable(d)) this.saveDeviceSoft({ ...this.withLive(d), lastSeen: this.now(), busy: false });
     this.live.delete(deviceId);
     this.broadcastPresence();
   }
@@ -776,14 +961,15 @@ export class Hub {
         const changedLive = JSON.stringify([prev.busy, prev.agents]) !== JSON.stringify([next.busy, next.agents]);
         const changedSaved = JSON.stringify([d.optIn, d.version, d.away]) !== JSON.stringify([next.optIn, next.version, next.away]);
         this.live.set(deviceId, { busy: next.busy, agents: next.agents, lastSeen: t });
-        if (changedSaved || !d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs) this.bestEffort(() => this.store.putDevice({ ...next, lastSeen: t }));
+        if (Hub.reachable(d) && (changedSaved || !d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs)) this.saveDeviceSoft({ ...next, lastSeen: t });
+        else if (changedSaved) this.store.remember(next);
         if (changedLive || changedSaved) this.broadcastPresence();
         return;
       }
       case "away": {
         // "Going to sleep / shutting down" (or "back"): shown to the owner's other devices instead of a plain "offline".
         const { away: _prev, ...rest } = this.withLive(d);
-        this.store.putDevice({ ...rest, lastSeen: t, ...(f.state === "asleep" ? { away: { at: t, note: f.note } } : {}) });
+        this.saveDeviceSoft({ ...rest, lastSeen: t, ...(f.state === "asleep" ? { away: { at: t, note: f.note } } : {}) });
         return this.broadcastPresence();
       }
       case "ack":
@@ -796,7 +982,7 @@ export class Hub {
       case "ping":
         // On Cloudflare the hub's auto-response answers pings without waking; this is the local (test) path.
         this.live.set(deviceId, { busy: this.withLive(d).busy, agents: this.withLive(d).agents, lastSeen: t });
-        if (!d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs) this.bestEffort(() => this.store.putDevice({ ...d, lastSeen: t }));
+        if (Hub.reachable(d) && (!d.lastSeen || t - d.lastSeen > WRITE_PACE.lastSeenMs)) this.saveDeviceSoft({ ...d, lastSeen: t });
         return void this.sockets.send(deviceId, { t: "pong" });
       case "sync":
         return this.syncPing(d);
@@ -811,7 +997,7 @@ export class Hub {
    */
   private syncPing(from: DeviceRow): void {
     if (from.kind === "claude-chat" || !this.limits.take(`sync:${from.id}`, LIMITS.syncPing)) return;
-    for (const d of this.store.devices()) if (d.id !== from.id && d.kind !== "claude-chat") this.sockets.send(d.id, { t: "sync" });
+    for (const d of this.store.devices()) if (d.id !== from.id && d.kind !== "claude-chat" && Hub.reachable(d)) this.sockets.send(d.id, { t: "sync" });
   }
 
   /**
@@ -826,7 +1012,7 @@ export class Hub {
     for (const env of envs) {
       if (env.from !== from.id || !env.run) return refuse("not-allowed", env.id);
       const to = this.store.device(env.to);
-      if (!to || to.kind !== "phone") continue;
+      if (!to || to.kind !== "phone" || !Hub.reachable(to)) continue;
       const row = this.agentRing.addAgentEvent({ to: to.id, from: from.id, run: env.run, n: env.n ?? 0, env: JSON.stringify(env), createdAt: t }, HUB_LIMITS.agentEventsPerRun);
       // The whole ring is capped too (scan 168), oldest rows first.
       this.agentRing.capAgentEvents(HUB_LIMITS.agentEventsTotal);
@@ -848,7 +1034,7 @@ export class Hub {
     // An ask note only rides inside an `approvals` envelope (into the Web Push payload), never on its own.
     if (env.kind === "cloud" || env.kind === "cloud_started" || env.kind === "ask_note") return refuse("not-allowed", env.id);
     const to = this.store.device(env.to);
-    if (!to || to.id === from.id) return refuse("no-recipient", env.id);
+    if (!to || to.id === from.id || !Hub.reachable(to)) return refuse("no-recipient", env.id);
     // The Claude chat only reports activity (`agents` frames): it neither sends nor gets relayed messages.
     if (from.kind === "claude-chat" || to.kind === "claude-chat") return refuse("not-allowed", env.id);
     if (env.kind === "task" && (to.kind !== "pc" || !to.optIn.appear || !to.optIn.acceptTasks)) return refuse("not-accepting", env.id);
@@ -864,7 +1050,15 @@ export class Hub {
     // The note is for the push only: the queued and delivered envelope goes without it.
     const { note, ...plain } = env;
     if (LIVE_KINDS.has(env.kind)) return this.relayLive(from, to, env, plain, note);
-    const added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(plain), createdAt: t });
+    let added: boolean;
+    try {
+      added = this.store.enqueue({ id: env.id, to: to.id, from: from.id, kind: env.kind, expiresAt: t + env.ttl * 1000, env: JSON.stringify(plain), createdAt: t });
+    } catch (e) {
+      if (!storageCode(e)) throw e;
+      // Storage refused: a recipient that is on still gets it now (not kept, so no redelivery); one that is off cannot.
+      if (!this.sockets.send(to.id, { t: "deliver", env: plain })) return refuse("storage-limit", env.id);
+      return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: false });
+    }
     if (!added) return void this.sockets.send(from.id, { t: "sent", id: env.id, queued: true });
     const online = this.sockets.send(to.id, { t: "deliver", env: plain });
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
@@ -890,7 +1084,11 @@ export class Hub {
     this.sockets.send(from.id, { t: "sent", id: env.id, queued: !online });
     if (env.kind === "approvals" && env.waiting !== undefined) {
       this.bestEffort(() => this.noteWaiting(from.id, env.waiting!));
-      await this.notifyWaiting(to.id, env.waiting, online, note);
+      // A push needs its subscription read and its count written: skipped (noted) when storage refuses.
+      await this.notifyWaiting(to.id, env.waiting, online, note).catch((e: unknown) => {
+        if (!storageCode(e)) throw e;
+        this.deps.warn?.("a notification was skipped (storage refused)");
+      });
     }
   }
 
@@ -910,8 +1108,15 @@ export class Hub {
   private pendingFor(deviceId: string): QueuedRow[] {
     let list = this.pending.get(deviceId);
     if (!list) {
-      const raw = this.store.getSetting(pendingKey(deviceId));
-      this.savedText.set(deviceId, raw);
+      let raw: string | undefined;
+      try {
+        raw = this.store.getSetting(pendingKey(deviceId));
+        this.savedText.set(deviceId, raw);
+      } catch (e) {
+        if (!storageCode(e)) throw e;
+        // Storage refused: start from memory (the PC's next snapshots replace what was saved); the next save overwrites.
+        this.savedText.set(deviceId, "\u0000unread");
+      }
       list = [];
       try {
         const x = JSON.parse(raw ?? "[]") as unknown;
@@ -954,7 +1159,14 @@ export class Hub {
 
   /** Writes a device's saved snapshots now, when they differ from what is saved. */
   private savePending(deviceId: string): void {
-    if (!this.store.device(deviceId)) return;
+    let known: DeviceRow | undefined;
+    try {
+      known = this.store.device(deviceId);
+    } catch (e) {
+      if (!storageCode(e)) throw e;
+      return this.deps.warn?.("waiting snapshots were not saved (storage refused)");
+    }
+    if (!known) return;
     const t = this.now();
     const keep = this.pendingFor(deviceId).filter((q) => SAVED_KINDS.has(q.kind) && q.expiresAt > t);
     const text = keep.length ? JSON.stringify(keep) : undefined;
@@ -992,6 +1204,8 @@ export class Hub {
     if (!env || env.kind !== "approval_answer" || env.from !== d.id) return fail(400, "bad-frame");
     let refused: HubRefusal | undefined;
     await this.relay(d, env, (code) => void (refused = code));
+    // The PC is off and storage refuses to queue the answer: the same 503 as other refused writes.
+    if (refused === "storage-limit") throw new HubStorageError("hub-storage-limit", new Error("the answer could not be queued"));
     if (refused) return fail(refused === "rate-limited" ? 429 : refused === "no-recipient" ? 404 : 403, refused);
     return { ok: true, queued: !this.sockets.isOnline(env.to) };
   }
@@ -1203,19 +1417,15 @@ export class Hub {
   // ---- upkeep ----
 
   /**
-   * The cron's cleanup (every 5 minutes): old sessions, pairings, tickets, expired messages and audit lines.
+   * The cron's cleanup (hourly): old sessions, pairings, tickets, expired messages and audit lines. Skipped (nothing
+   * read or written) within {@link HUB_TIMES.cleanupGap} of the last run, and within {@link HUB_TIMES.cleanupIdle}
+   * when nothing that can expire was written since; memory (snapshots, the activity ring, used tickets) is cleaned
+   * on every call.
    *
-   * @returns How many expired messages were deleted.
+   * @returns How many expired messages were deleted, or undefined when storage was skipped.
    */
-  cleanup(): number {
+  cleanup(): number | undefined {
     const t = this.now();
-    this.store.pruneSessions(t - HUB_TIMES.sessionIdle, t - HUB_TIMES.sessionMax);
-    this.store.prunePairings(t);
-    this.store.pruneTickets(t);
-    this.store.pruneAudit(t - HUB_TIMES.audit);
-    this.store.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
-    this.agentRing.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
-    this.connector.cleanup();
     let expired = 0;
     for (const [id, list] of this.pending) {
       const keep = list.filter((q) => q.expiresAt > t);
@@ -1224,6 +1434,20 @@ export class Hub {
       this.pending.set(id, keep);
       this.markPending(id);
     }
-    return this.store.pruneQueue(t) + expired;
+    this.agentRing.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
+    for (const [n, until] of this.usedTickets) if (until <= t) this.usedTickets.delete(n);
+    for (const [n, x] of this.ticketDevices) if (x.until <= t) this.ticketDevices.delete(n);
+    const since = t - this.cleanedAt;
+    if (since < HUB_TIMES.cleanupGap || (since < HUB_TIMES.cleanupIdle && this.store.expiringWrites === this.cleanedWrites)) return expired || undefined;
+    this.store.pruneSessions(t - HUB_TIMES.sessionIdle, t - HUB_TIMES.sessionMax);
+    this.store.prunePairings(t);
+    this.store.pruneTickets(t);
+    this.store.pruneAudit(t - HUB_TIMES.audit);
+    this.store.pruneAgentEvents(t - HUB_LIMITS.agentKeepMs);
+    this.connector.cleanup();
+    const pruned = this.store.pruneQueue(t);
+    this.cleanedAt = t;
+    this.cleanedWrites = this.store.expiringWrites;
+    return pruned + expired;
   }
 }

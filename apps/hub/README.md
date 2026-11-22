@@ -61,7 +61,7 @@ the phone's browser" (`?kesher-external=1`, which the app opens in the browser).
 | `GOOGLE_CLIENT_ID` | The client ID from step 3. | Yes |
 | `CLAUDE_TRIGGER_ID` | The scheduled task's trigger id (step 5). | For the Claude path |
 | `CLAUDE_FIRE_TOKEN` | The scheduled task's API token (step 5). | For the Claude path |
-| `HUB_PRIVATE_KEY` | Leave unset: the hub makes its own key on first start and keeps it in its storage. | No |
+| `HUB_PRIVATE_KEY` | Optional: unset, the hub makes its own key on first start and keeps it in its storage. Set (a P-256 private key as JWK, **Secret**), device tokens (`kh2_…`) and socket tickets are checked from it without any storage read, so paired devices still connect on a day Cloudflare refuses storage. | No |
 | `HUB_DISABLED` | Set to `1` to switch the whole hub off at once (kill switch outside the hub). | No |
 | `VAPID_PUBLIC_KEY` | Notifications (step 7): the public key. Type **Text** is fine (it is public). | For notifications |
 | `VAPID_PRIVATE_KEY` | Notifications (step 7): the private key. **Secret**, never in a file or in git. | For notifications |

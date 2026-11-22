@@ -15,10 +15,13 @@
  * - Device token (Bearer), read-only: `GET /api/diag`, the in-memory diagnostics ring (diag.ts; rate limited, never writes).
  * - Internal (cron only): `POST /internal/cleanup`.
  *
- * When storage refuses (Cloudflare's daily quota of rows written is used up), an HTTP call answers 503 with
+ * When storage refuses (Cloudflare's daily quota of rows read or written is used up), connected devices keep relaying
+ * from memory: each socket carries its device row in its attachment (kept by Cloudflare through hibernation, not in
+ * SQLite), so a hub that wakes without storage still knows who is on. A call that must keep something answers 503 with
  * `{error: "hub-storage-limit"}` (or `"hub-storage-error"`) instead of a bare 500; socket frames are dropped quietly.
  */
-import type { HubFrame } from "../../../packages/shared/src/hub.js";
+import { cleanDeviceKind, cleanOptIn, type HubFrame } from "../../../packages/shared/src/hub.js";
+import { CachedStore } from "./cached-store.js";
 import { fireClaudeTask } from "./claude-cloud.js";
 import { connectorOwnerRoute, connectorRoute, isConnectorPath } from "./connector.js";
 import { cfGlobals, upgradeResponse, type CfWebSocket, type DurableObjectState, type HubEnvBindings } from "./cf.js";
@@ -29,7 +32,23 @@ import { Hub, isHubError, type DeviceSockets } from "./hub.js";
 import { LIMITS } from "./rate-limit.js";
 import { SqlStore } from "./sql-store.js";
 import { guardStore, secondsToUtcMidnight, storageCode } from "./storage-guard.js";
+import type { DeviceRow } from "./store.js";
+import { UsageMeter } from "./usage.js";
 import { vapidFromEnv } from "./web-push.js";
+
+/** A socket's attachment: its device, and the device's row without live state (at most 2 KB). */
+interface SocketAttachment {
+  deviceId: string;
+  row?: Omit<DeviceRow, "agents" | "busy" | "away">;
+}
+
+/** The device row a socket carries, cleaned (an older socket carries only its id: undefined). */
+function attachedRow(a: unknown): DeviceRow | undefined {
+  const r = (a as SocketAttachment | null)?.row;
+  if (!r || typeof r.id !== "string" || typeof r.publicKey !== "string" || typeof r.tokenHash !== "string") return undefined;
+  const optIn = cleanOptIn(r.optIn);
+  return { id: r.id, name: String(r.name ?? ""), kind: cleanDeviceKind(r.kind), publicKey: r.publicKey, tokenHash: r.tokenHash, tokenIssuedAt: Number(r.tokenIssuedAt) || 0, createdAt: Number(r.createdAt) || 0, ...(Number.isFinite(r.lastSeen) ? { lastSeen: Number(r.lastSeen) } : {}), busy: false, optIn, agents: [], ...(typeof r.version === "string" ? { version: r.version } : {}) };
+}
 
 /** Sockets of this object, found by their device-id tag. */
 function socketsOf(ctx: DurableObjectState): DeviceSockets {
@@ -73,6 +92,8 @@ export class HubObject {
   private readonly hub: Hub;
   /** Recent problems, in memory only (diag.ts); read by the PC through `GET /api/diag`. */
   private readonly diag = new DiagRing();
+  /** Rows read and written today, per store call (memory only; in `GET /api/diag`). */
+  private readonly usage = new UsageMeter();
 
   /**
    * @param ctx - The object's state.
@@ -80,8 +101,14 @@ export class HubObject {
    */
   constructor(private readonly ctx: DurableObjectState, env: HubEnvBindings) {
     const keyFor = googleKeys();
+    const store = new CachedStore(guardStore(new SqlStore(ctx.storage.sql, this.usage)));
+    // Connected devices are known from their sockets even before (or without) the first storage read.
+    store.seed(ctx.getWebSockets().flatMap((ws) => {
+      const row = attachedRow(ws.deserializeAttachment());
+      return row ? [row] : [];
+    }));
     this.hub = new Hub({
-      store: guardStore(new SqlStore(ctx.storage.sql)),
+      store,
       sockets: socketsOf(ctx),
       config: { allowedEmail: env.ALLOWED_EMAIL, hubPrivateJwk: env.HUB_PRIVATE_KEY, claude: { triggerId: env.CLAUDE_TRIGGER_ID, token: env.CLAUDE_FIRE_TOKEN }, vapid: vapidFromEnv(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT) },
       verifyIdToken: (t) => verifyGoogleIdToken(t, env.GOOGLE_CLIENT_ID ?? "", keyFor, Date.now()),
@@ -124,14 +151,14 @@ export class HubObject {
   }
 
   /**
-   * `GET /api/diag`: the diagnostics ring, for a paired device. Read-only: the token is looked up (a read), the rate
-   * limit lives in memory, and nothing is written.
+   * `GET /api/diag`: the diagnostics ring and today's storage counts (rows read and written per kind), for a paired
+   * device. The token is checked from memory (or its signature), the rate limit lives in memory, nothing is written.
    */
   private async diagRoute(req: Request): Promise<Response> {
     const d = await this.hub.deviceForToken(bearer(req));
     if (!d) return json({ error: "Unknown device." }, 401);
     if (!this.hub.limits.take(`diag:${d.id}`, LIMITS.diag)) return json({ error: "Too many tries." }, 429);
-    return json(this.diag.snapshot());
+    return json({ ...this.diag.snapshot(), usage: this.usage.snapshot() });
   }
 
   /** {@link fetch}'s routing (storage errors are turned into 503 answers there). */
@@ -160,7 +187,13 @@ export class HubObject {
       const pair = new WebSocketPair();
       const server = pair[1];
       this.ctx.acceptWebSocket(server, [device.id]);
-      server.serializeAttachment({ deviceId: device.id });
+      const { agents: _a, busy: _b, away: _w, ...row } = device;
+      try {
+        server.serializeAttachment({ deviceId: device.id, row } satisfies SocketAttachment);
+      } catch {
+        // Over the attachment's 2 KB: the id alone (the row is read from storage instead).
+        server.serializeAttachment({ deviceId: device.id } satisfies SocketAttachment);
+      }
       // The socket opens even when storage refuses writes (the daily quota): the open's bookkeeping is skipped.
       // Any other failure there is recorded too, and the socket still opens: the PC's hello and beats carry the state.
       await this.hub.onOpen(device.id).catch((e: unknown) => {

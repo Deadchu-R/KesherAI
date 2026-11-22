@@ -116,7 +116,8 @@ test("pairing: codes are single use, expire, and need a real key; tokens are sto
   const { hub, store, tick } = await setup();
   assert.ok(isHubError(await hub.pairStart("ip", { publicKey: "nope" })));
   const pc = await pair(hub, "pc", "Home PC");
-  assert.match(pc.token, /^kh_[\w-]{43}$/);
+  // A signed token (kh2_: device id, kind, issue time, HMAC), derived from the hub's own key.
+  assert.match(pc.token, /^kh2_d[\w-]+\.pc\.[0-9a-z]+\.[\w-]{43}$/);
   assert.ok(!JSON.stringify(store.devices()).includes(pc.token), "the token itself is never stored");
   const keys = await generateHubKeys(false);
   const start = await hub.pairStart("ip", { publicKey: keys.publicKey });

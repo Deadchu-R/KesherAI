@@ -1,7 +1,7 @@
 /**
  * Kesher Cloud hub: the Worker entry. The page itself is static (public/, served before the Worker). It refuses
  * everything when the outside kill switch (`HUB_DISABLED = "1"`) is on, answers the page's `/api/config`, and forwards
- * API, socket and Claude-connector requests (`/mcp`, `/oauth/*`, `/.well-known/oauth-*`) to the one Durable Object, with the caller's IP in a header it sets itself. The cron (every 5 minutes) runs the object's cleanup.
+ * API, socket and Claude-connector requests (`/mcp`, `/oauth/*`, `/.well-known/oauth-*`) to the one Durable Object, with the caller's IP in a header it sets itself. The cron (hourly) runs the object's cleanup.
  *
  * Nothing here deploys itself: the owner deploys it from the Cloudflare dashboard (apps/hub/README.md).
  */

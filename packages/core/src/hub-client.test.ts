@@ -625,3 +625,31 @@ test("while connected the diagnostics are fetched on the 10-minute timer", async
   assert.deepEqual(reasons, ["every 10 minutes"]);
   client.stop();
 });
+
+test("a due rotate stores the hub's signed kh2_ token and uses it for the next ticket", async () => {
+  const s = settings();
+  s.token = "kh_old";
+  s.deviceId = "dpc";
+  let persisted = 0;
+  const auths: Array<[string, string]> = [];
+  const signed = "kh2_dpc.pc.lfls.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_abcde";
+  const client = new HubClient({
+    settings: () => s,
+    persist: async () => void persisted++,
+    version: "test",
+    saveDiag: () => undefined,
+    fetch: (async (url: string, init: RequestInit) => {
+      const path = new URL(url).pathname;
+      auths.push([path, (init.headers as Record<string, string>).authorization ?? ""]);
+      if (path === "/api/rotate") return new Response(JSON.stringify({ token: signed }), { status: 200 });
+      return new Response(JSON.stringify({ ticket: "t1", rotateDue: auths.length === 1 }), { status: 200 });
+    }) as unknown as typeof fetch,
+    openSocket: () => ({ send: () => undefined, close: () => undefined }),
+  });
+  client.start();
+  await wait(30);
+  client.stop();
+  assert.equal(s.token, signed, "the signed token replaces the old one");
+  assert.ok(persisted >= 1, "and is saved");
+  assert.deepEqual(auths.slice(0, 3), [["/api/ticket", "Bearer kh_old"], ["/api/rotate", "Bearer kh_old"], ["/api/ticket", `Bearer ${signed}`]]);
+});

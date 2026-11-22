@@ -50,7 +50,7 @@ export interface DiagSnapshot {
 const MESSAGE_MAX = 200;
 
 /**
- * Hides what must never be kept: hub tokens (`kh_…`), tickets (`kt1.…`), JWT-like strings, e-mail addresses, IPv4 and
+ * Hides what must never be kept: hub tokens (`kh_…`, `kh2_…`), tickets (`kt1.…`), JWT-like strings, e-mail addresses, IPv4 and
  * IPv6 addresses, and any long token-like run of letters and digits. Cuts the result to {@link MESSAGE_MAX}.
  *
  * @param text - A message.
@@ -58,7 +58,7 @@ const MESSAGE_MAX = 200;
  */
 export function scrub(text: string): string {
   return text
-    .replace(/\bkh_[\w-]+/g, "<token>")
+    .replace(/\bkh2?_[\w.-]+/g, "<token>")
     .replace(/\bkt1\.[\w.-]+/g, "<ticket>")
     .replace(/\beyJ[\w-]+\.[\w-]+(\.[\w-]*)?/g, "<jwt>")
     .replace(/[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+/g, "<email>")

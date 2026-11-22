@@ -197,8 +197,8 @@ export type DeviceFrame =
   /** "I wrote to Google Drive": the hub passes it on to the owner's other devices, which pull now. Carries nothing. */
   | { t: "sync" };
 
-/** Why the hub refused a frame. */
-export type HubRefusal = "bad-frame" | "rate-limited" | "paused" | "no-recipient" | "not-accepting" | "too-big" | "cloud-off" | "cloud-failed" | "not-allowed";
+/** Why the hub refused a frame (`storage-limit`: the recipient is off and the hub cannot keep the message today). */
+export type HubRefusal = "bad-frame" | "rate-limited" | "paused" | "no-recipient" | "not-accepting" | "too-big" | "cloud-off" | "cloud-failed" | "not-allowed" | "storage-limit";
 
 /** A frame the hub sends a device. */
 export type HubFrame =

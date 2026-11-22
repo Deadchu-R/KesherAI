@@ -105,6 +105,7 @@ const REFUSAL: Record<HubRefusal, { he: string; en: string }> = {
   "cloud-off": { he: "המסלול ל-Claude בענן כבוי או לא מוגדר", en: "The Claude cloud path is off or not set up" },
   "cloud-failed": { he: "Claude בענן לא התחיל את המשימה", en: "Claude cloud did not start the task" },
   "not-allowed": { he: "לא מותר", en: "Not allowed" },
+  "storage-limit": { he: "המחשב כבוי, והמרכז הגיע היום למגבלת האחסון של Cloudflare; נסה שוב כשהמחשב פועל או אחרי חצות UTC", en: "The PC is off and the hub reached Cloudflare's storage limit today; try again when the PC is on or after midnight UTC" },
 };
 
 /** The browser's device: identity, socket, presence and tasks. One per page. */

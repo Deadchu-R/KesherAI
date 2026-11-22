@@ -6,6 +6,8 @@
 /** A SQL cursor (`ctx.storage.sql.exec`). */
 export interface SqlCursor {
   toArray(): Record<string, unknown>[];
+  /** Rows read so far (complete once the rows are read). */
+  readonly rowsRead?: number;
   readonly rowsWritten: number;
 }
 
