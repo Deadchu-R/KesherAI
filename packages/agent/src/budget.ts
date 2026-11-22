@@ -153,6 +153,13 @@ export function pruneToolOutputs(messages: readonly AgentMessage[], opts: { keep
       return { ...m, content };
     }
     if (i >= line) return m;
+    // list_files older than 2 turns is dropped entirely (the model can re-run it when needed)
+    if (m.toolName === "list_files") {
+      const content = `[list_files dropped (id "${m.toolCallId}")]`;
+      prunedChars += m.content.length - content.length;
+      ids.push(m.toolCallId);
+      return { ...m, content };
+    }
     const pictures = m.images?.length ?? 0;
     if (m.content.length < MIN_PRUNE_CHARS && !pictures) return m;
     const summary = STATUS_LAST_TOOLS.has(m.toolName ?? "") ? statusSummary(m.content) : summaryLine(m.content);

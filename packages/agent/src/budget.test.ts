@@ -133,6 +133,34 @@ describe("capTools", () => {
   });
 });
 
+describe("list_files dropped entirely when pruned", () => {
+  test("old list_files becomes a short drop marker", () => {
+    const lf1: AgentMessage = { role: "tool", toolCallId: "lf1", toolName: "list_files", content: "file1.txt\nfile2.txt\nfile3.txt\n" };
+    const msgs: AgentMessage[] = [
+      { role: "user", content: "q1" }, lf1, { role: "assistant", content: "a1" },
+      ...turn(2), ...turn(3),
+    ];
+    const { messages } = pruneToolOutputs(msgs);
+    const out = messages.find((m) => m.toolCallId === "lf1");
+    assert.ok(out);
+    assert.ok(out!.content.includes("dropped"), `Expected drop marker, got: ${out!.content}`);
+    assert.ok(out!.content.includes("lf1"), "Must keep id so the model can re-open it");
+  });
+  test("recent list_files stays full", () => {
+    const lf2: AgentMessage = { role: "tool", toolCallId: "lf2", toolName: "list_files", content: "file1.txt\nfile2.txt\nfile3.txt\n" };
+    const msgs: AgentMessage[] = [
+      { role: "user", content: "q1" },
+      ...turn(2),
+      lf2,
+      { role: "assistant", content: "a2" },
+    ];
+    const { messages } = pruneToolOutputs(msgs);
+    const out = messages.find((m) => m.toolCallId === "lf2");
+    assert.ok(out);
+    assert.ok(out!.content.includes("file2.txt"), "Recent list_files must stay full");
+  });
+});
+
 describe("pinnedBefore", () => {
   const msgs: AgentMessage[] = [
     { role: "user", content: "read both" },
