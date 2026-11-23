@@ -446,7 +446,6 @@ export async function readProject(
   };
 }
 
-/** @returns Where the plugin's source is: bundled with the app, or in the repository. */
 /**
  * The editor program of an installed engine: `UnrealEditor` on Unreal 5, `UE4Editor` on Unreal 4 (2026-11-23: opening a
  * 4.27 project failed with "the editor was not found" because only the UE5 name was tried).
@@ -461,6 +460,7 @@ export function editorExe(enginePath: string, cmd = false): string {
   return names.find((f) => existsSync(f)) ?? names[0]!;
 }
 
+/** @returns Where the plugin's source is: bundled with the app, or in the repository. */
 export function bridgeSource(): string | undefined {
   const resources = (process as { resourcesPath?: string }).resourcesPath;
   const here = dirname(fileURLToPath(import.meta.url));

@@ -134,7 +134,6 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     const p = await readProject(projectFile);
     const e = engineFor(await findEngines(), p.engine);
     if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
-    const win = process.platform === "win32";
     // Unreal open on this project without the plugin connected: a second editor saving the same assets could lose
     // work, so the change waits for the plugin instead.
     if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
@@ -162,7 +161,6 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     const e = engineFor(await findEngines(), p.engine);
     if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
     if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
-    const win = process.platform === "win32";
     const cmd = editorExe(e.path, true);
     const dir = join(p.dir, "Saved", "KesherAI");
     await mkdir(dir, { recursive: true });
