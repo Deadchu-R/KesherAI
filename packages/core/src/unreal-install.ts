@@ -5,7 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { heavyGate, waitingFor } from "./heavy-gate.js";
-import { unrealSupport } from "./engine-support.js";
+import { isConvertedCopy, majorMinor, pluginAtLeast, splitPluginVersion, unrealSupport } from "./engine-support.js";
 import { writeConvertedMarker, type ConvertedMarker } from "./engine-conversion.js";
 
 /**
@@ -162,7 +162,8 @@ export async function runBatchItems(
  * @returns The item's first state.
  */
 export function batchStateOf(p: { engine?: string; plugin: string | null }, latest: string): BatchItem["state"] {
-  if (p.plugin === latest) return "skipped";
+  // A converted copy (0.1.33-ue4.27) is current when its base version is: it is never replaced by the UE5 plugin.
+  if (p.plugin === latest || (isConvertedCopy(p.plugin ?? undefined) && pluginAtLeast(p.plugin ?? undefined, latest))) return "skipped";
   if (!unrealSupport(p.engine).supported) return "unsupported";
   return "queued";
 }
@@ -514,6 +515,13 @@ export class BridgeInstaller {
         new Error(`Unreal ${project.engine} is older than the plugin supports (5.1 and newer). KesherAI can convert a copy of the plugin with AI.`),
         { unsupported: { engine: "unreal", version: project.engine } },
       );
+    // The plugin converted for this very engine (VersionName "0.1.33-ue4.27") is never replaced by the bundled UE5 plugin.
+    if (!copy) {
+      const installed = await readFile(join(project.dir, "Plugins", "KesherAIBridge", "KesherAIBridge.uplugin"), "utf8").then((t) => (JSON.parse(t.replace(/^\uFEFF/, "")) as { VersionName?: string }).VersionName, () => undefined);
+      const forEngine = splitPluginVersion(installed).convertedFor;
+      if (forEngine && forEngine === (majorMinor(project.engine) ?? []).join("."))
+        throw new Error(`This project has the KesherAI plugin converted for Unreal ${forEngine} (${installed}); the bundled plugin is for Unreal 5.1+ and is not installed over it.`);
+    }
     const engines = await findEngines();
     const engine =
       engines.find((e) => e.version === project.engine) ??
@@ -570,7 +578,7 @@ export class BridgeInstaller {
         path: p.path,
         ...(p.engine ? { engine: p.engine } : {}),
         state,
-        ...(state === "skipped" ? { message: p.plugin === latest ? `Already ${latest}` : "Open in Unreal: close it, or use Update automatically" } : {}),
+        ...(state === "skipped" ? { message: p.plugin === latest || isConvertedCopy(p.plugin ?? undefined) ? `Already ${p.plugin ?? latest}` : "Open in Unreal: close it, or use Update automatically" } : {}),
         ...(state === "unsupported" ? { message: `Unreal ${p.engine} is older than 5.1` } : {}),
         ...(unrealSupport(p.engine).full ? { mcp: true } : {}),
       };

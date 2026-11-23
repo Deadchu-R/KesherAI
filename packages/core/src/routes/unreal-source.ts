@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { projectFileInFolder } from "../project-path.js";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KesherServices } from "../services.js";
@@ -32,8 +33,7 @@ export function unrealSourceRoutes(app: FastifyInstance, s: KesherServices): voi
   const builds = new Map<string, Build>();
   const projects = async () => {
     const found = (await findGameProjects({ ...(unreal.projectFile ? { unrealFile: unreal.projectFile } : {}) })).filter((p) => p.kind === "unreal");
-    const open = unreal.connected && unreal.projectFile ? dirname(unreal.projectFile).toLowerCase() : "";
-    return found.map((p) => ({ name: p.name, path: p.path, open: p.path.toLowerCase() === open }));
+    return found.map((p) => ({ name: p.name, path: p.path, open: unreal.connected && projectFileInFolder(unreal.projectFile, p.path) }));
   };
   const known = async (project: unknown) => {
     const want = String(project ?? "");

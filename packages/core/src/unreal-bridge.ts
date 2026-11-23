@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
+import { nativeProjectFile, samePath } from "./project-path.js";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type WebSocket from "ws";
 import { batchFiles, engineChangedAt, nodeSig, sortForSync, unrealAssetFile, unrealLevelFile, type ClashChoice, type SyncBatch, type SyncReport } from "./game-sync.js";
 import { mergeEdits, withTempIds } from "./unity-cli.js";
@@ -377,7 +378,7 @@ export class UnrealBridge {
     }
     if (msg.event === "hello" && socket === this.socket) {
       // Only a real .uproject on this computer is kept (the chat's Unreal tools then work on that project).
-      const pf = typeof msg.projectFile === "string" && /\.uproject$/i.test(msg.projectFile) && existsSync(msg.projectFile) ? msg.projectFile : undefined;
+      const pf = typeof msg.projectFile === "string" && /\.uproject$/i.test(msg.projectFile) && existsSync(msg.projectFile) ? nativeProjectFile(msg.projectFile) : undefined;
       const pid = typeof msg.pid === "number" && Number.isInteger(msg.pid) && msg.pid > 0 ? msg.pid : undefined;
       const info = { project: String(msg.project ?? "Project"), engine: String(msg.engine ?? ""), bridge: String(msg.bridge ?? ""), ...(pf ? { projectFile: pf } : {}), ...(pid ? { pid } : {}), connectedAt: new Date().toISOString() };
       this.info = info;
@@ -566,7 +567,7 @@ export class UnrealBridge {
    */
   async standIn<T extends object>(cmd: "levels" | "level" | "level_mesh", path = "", projectFile?: string): Promise<T & { cached?: boolean }> {
     // A project chosen from the menu that is not the one open in the editor: read headless from its own .uproject.
-    const other = !!projectFile && !(this.connected && this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase());
+    const other = !!projectFile && !(this.connected && this.lastProjectFile && samePath(this.lastProjectFile, projectFile));
     const project = other ? basename(projectFile!, ".uproject") : await this.project();
     if (!project) throw new Error(`KesherAI does not know the project yet: open it once in the ${this.editor} with the KesherAI Bridge plugin.`);
     const file = join(this.projectDir(project), "standin", `${cmd}-${fileFor(path)}`);
@@ -609,7 +610,7 @@ export class UnrealBridge {
    * @returns The plugin's answer.
    */
   async assetCommand<T = unknown>(cmd: "asset_export" | "asset_import", args: Record<string, unknown>, projectFile: string): Promise<T> {
-    const open = this.connected && !!this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase();
+    const open = this.connected && !!this.lastProjectFile && samePath(this.lastProjectFile, projectFile);
     if (open) return this.request<T>(cmd, args, 900_000);
     const [a] = await this.offline([{ cmd, ...args }], projectFile);
     if (!a?.ok) throw new Error(a?.error ?? `The ${this.editor} could not do that.`);
@@ -625,7 +626,7 @@ export class UnrealBridge {
    * @returns How many moved, and those that moved in Unreal meanwhile (left as they are) or are gone.
    */
   async moveActors(path: string, moves: unknown[], projectFile?: string): Promise<{ moved: number; clashes: string[]; missing: string[]; saved: boolean }> {
-    const other = !!projectFile && !(this.connected && this.lastProjectFile && resolve(this.lastProjectFile).toLowerCase() === resolve(projectFile).toLowerCase());
+    const other = !!projectFile && !(this.connected && this.lastProjectFile && samePath(this.lastProjectFile, projectFile));
     type Moved = { moved: number; clashes: string[]; missing: string[]; saved: boolean };
     let r: Moved;
     if (other) {

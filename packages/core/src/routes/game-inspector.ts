@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { projectFileInFolder } from "../project-path.js";
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -79,7 +80,7 @@ export function engineOpen(s: KesherServices, p: Pick<GameProject, "kind" | "pat
     const st = s.godot.status();
     return !!st.connected && !!st.editor?.projectFile && sameFolder(dirname(st.editor.projectFile), p.path);
   }
-  return !!s.unreal.connected && !!s.unreal.projectFile && sameFolder(dirname(s.unreal.projectFile), p.path);
+  return !!s.unreal.connected && !!s.unreal.projectFile && projectFileInFolder(s.unreal.projectFile, p.path);
 }
 
 /**

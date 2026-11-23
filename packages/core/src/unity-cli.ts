@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { samePath } from "./project-path.js";
 import { homedir } from "node:os";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { appendFile, writeFile as writeText } from "node:fs/promises";
@@ -17,7 +18,8 @@ const graphFile = (path: string) => `${createHash("sha256").update(path).digest(
  * @param a - One folder.
  * @param b - The other.
  */
-export const sameFolder = (a: string, b: string): boolean => (process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
+/** Whether two paths are the same folder (slash style, letter case on Windows and links do not matter; project-path.ts). */
+export const sameFolder = samePath;
 
 /** Reads a JSON file, or undefined when it is missing or broken. */
 function readJsonFile<T>(file: string): T | undefined {

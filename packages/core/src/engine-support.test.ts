@@ -55,3 +55,17 @@ test("install in all projects: already current is skipped, an old engine is offe
   assert.equal(batchStateOf({ engine: "5.8", plugin: "0.1.20" }, "0.1.29"), "queued");
   assert.equal(batchStateOf({ plugin: null }, "0.1.29"), "queued");
 });
+
+test("a converted copy's version counts as its base release; it is never updated to the UE5 plugin", async () => {
+  const { splitPluginVersion, pluginAtLeast, isConvertedCopy } = await import("./engine-support.js");
+  assert.deepEqual(splitPluginVersion("0.1.33-ue4.27"), { base: "0.1.33", convertedFor: "4.27" });
+  assert.deepEqual(splitPluginVersion("0.1.33"), { base: "0.1.33" });
+  assert.equal(pluginAtLeast("0.1.33-ue4.27", "0.1.9"), true);
+  assert.equal(pluginAtLeast("0.1.33-ue4.27", "0.1.33"), true);
+  assert.equal(pluginAtLeast("0.1.30-ue4.27", "0.1.33"), false);
+  assert.equal(pluginAtLeast("", "0.1.1"), false);
+  assert.equal(isConvertedCopy("0.1.33-ue4.27"), true);
+  assert.equal(isConvertedCopy("0.1.33"), false);
+  assert.equal(batchStateOf({ engine: "4.27", plugin: "0.1.33-ue4.27" }, "0.1.33"), "skipped");
+  assert.equal(batchStateOf({ engine: "4.27", plugin: "0.1.20-ue4.27" }, "0.1.33"), "unsupported");
+});

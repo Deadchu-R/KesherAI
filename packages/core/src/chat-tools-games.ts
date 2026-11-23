@@ -3,6 +3,7 @@
  * and its Blueprints in words through the KesherAI Bridge), the Visual Scripting graphs, and running a game's Android
  * build on the user's phone. Few tokens until a project is in use: then the full set and its guide come.
  */
+import { folderOf } from "./project-path.js";
 import { basename, dirname, join } from "node:path";
 import type { AgentTool } from "@kesher/agent";
 import { androidPhoneTools } from "./android-phone.js";
@@ -137,7 +138,7 @@ export function gameTools(p: { deps: ConversationDeps; id?: string; unityInChat:
     const godotFile = deps.godot?.status().editor?.projectFile;
     return {
       ...(deps.unity?.activeProject ? { unity: deps.unity.activeProject } : {}),
-      ...(deps.unreal?.projectFile ? { unreal: dirname(deps.unreal.projectFile) } : {}),
+      ...(deps.unreal?.projectFile ? { unreal: folderOf(deps.unreal.projectFile) } : {}),
       ...(godotFile ? { godot: dirname(godotFile) } : {}),
     };
   };

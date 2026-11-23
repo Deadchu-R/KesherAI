@@ -358,9 +358,10 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
   };
 
   // Only an older plugin is offered the update (a newer one, from a newer KesherAI on another computer, is left alone).
+  // A converted copy's version "0.1.33-ue4.27" counts as 0.1.33 (it is never offered the UE5 plugin).
   const older = (a: string, b: string) => {
-    const x = a.split(".").map(Number);
-    const y = b.split(".").map(Number);
+    const x = a.replace(/-ue\d+\.\d+.*$/i, "").split(".").map(Number);
+    const y = b.replace(/-ue\d+\.\d+.*$/i, "").split(".").map(Number);
     for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) < (y[i] ?? 0);
     return false;
   };

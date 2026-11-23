@@ -69,7 +69,7 @@ export function InstallIntoProject() {
       setError((e as Error).message);
     }
   };
-  const needing = found ? found.projects.filter((p) => p.plugin !== found.latest && !p.open && p.support?.supported !== false).length : 0;
+  const needing = found ? found.projects.filter((p) => p.plugin !== found.latest && !(p.plugin ?? "").includes("-ue") && !p.open && p.support?.supported !== false).length : 0;
   const batch = info.batch;
   const pick = async () => {
     const folder = await bridge?.pickFolder();
@@ -110,7 +110,7 @@ export function InstallIntoProject() {
       {found && found.projects.length > 0 && (
         <ul className="ue-found">
           {found.projects.map((p) => {
-            const current = p.plugin === found.latest;
+            const current = p.plugin === found.latest || (!!p.plugin && /-ue\d+\.\d+/i.test(p.plugin) && p.plugin.replace(/-ue.*$/i, "") === found.latest);
             return (
               <li key={p.path} className="row">
                 <span className="grow" dir="auto" title={p.path}>◆ {p.name}{p.engine ? <span className="muted small"> UE {p.engine}</span> : null}</span>

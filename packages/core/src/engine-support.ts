@@ -61,6 +61,40 @@ export function unrealSupport(version: string | undefined): EngineSupport {
 }
 
 /**
+ * Splits a plugin version into the release it is based on and the engine an AI-converted copy was made for:
+ * "0.1.33" → base "0.1.33"; "0.1.33-ue4.27" → base "0.1.33", converted for "4.27" (see {@link convertedCopyPath}).
+ *
+ * @param version - A plugin's `VersionName` or the version its editor reported.
+ */
+export function splitPluginVersion(version: string | undefined): { base: string; convertedFor?: string } {
+  const m = /^\s*v?(\d+(?:\.\d+)*)(?:-ue(\d+\.\d+))?/i.exec(String(version ?? ""));
+  return m ? { base: m[1]!, ...(m[2] ? { convertedFor: m[2] } : {}) } : { base: "" };
+}
+
+/** Compares two dotted versions ("0.1.9" < "0.1.33"); missing parts count as 0. */
+export function cmpPluginBase(a: string, b: string): number {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+/**
+ * Whether the plugin version `have` is `need` or newer, looking only at the release it is based on (a converted
+ * copy "0.1.33-ue4.27" counts as 0.1.33). An unreadable version is not enough.
+ */
+export function pluginAtLeast(have: string | undefined, need: string): boolean {
+  const h = splitPluginVersion(have).base;
+  return !!h && cmpPluginBase(h, splitPluginVersion(need).base) >= 0;
+}
+
+/** Whether a plugin version is an AI-converted copy for an older engine (never replaced by the bundled UE5 plugin). */
+export const isConvertedCopy = (version: string | undefined): boolean => !!splitPluginVersion(version).convertedFor;
+
+/**
  * Reads the editor version a Unity project was saved with, from ProjectSettings/ProjectVersion.txt. Copes with a
  * byte-order mark, UTF-16 (some git or copy tools re-encode it) and the old `m_EditorVersion` without a space.
  *

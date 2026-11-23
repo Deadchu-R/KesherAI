@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { projectFileInFolder } from "../project-path.js";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -144,8 +145,7 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
   app.get("/api/games", async () => {
     const [list, uq, unityQ, unrealProject, vals] = await Promise.all([found(), s.unreal.queue(), s.unity.queue(), s.unreal.project(), values.list()]);
     const godot = s.godot.status();
-    const unrealOpenDir = s.unreal.connected && s.unreal.projectFile ? dirname(s.unreal.projectFile) : undefined;
-    const projects: GameProjectState[] = await Promise.all(list.map(async (p): Promise<GameProjectState> => {
+        const projects: GameProjectState[] = await Promise.all(list.map(async (p): Promise<GameProjectState> => {
       const base = { engine: p.kind, name: p.name, path: p.path, ...(p.engine ? { version: p.engine } : {}) };
       if (p.kind === "unreal") {
         const mine = uq.filter((q) => q.project.toLowerCase() === p.name.toLowerCase());
@@ -155,7 +155,7 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
         const cloudOnly = cloudOnlyCount(p.path);
         return {
           ...base,
-          open: !!unrealOpenDir && sameFolder(unrealOpenDir, p.path),
+          open: s.unreal.connected && projectFileInFolder(s.unreal.projectFile, p.path),
           pending: mine.length,
           clashes: mine.filter((q) => q.clash && !q.decision).length,
           ...(st?.running ? { running: true } : {}),
@@ -309,7 +309,7 @@ export async function gamesRoutes(app: FastifyInstance, s: KesherServices, unity
     const cp = await s.gameCheckpoints.get(req.params.id);
     if (!cp) return reply.code(404).send({ error: "No such checkpoint." });
     // Unreal holds its packages while open and would save its own copy over them.
-    const unrealOpen = s.unreal.connected && !!s.unreal.projectFile && sameFolder(dirname(s.unreal.projectFile), cp.project);
+    const unrealOpen = s.unreal.connected && !!s.unreal.projectFile && projectFileInFolder(s.unreal.projectFile, cp.project);
     if (unrealOpen && cp.files.some((f) => /\.(uasset|umap)$/i.test(f.rel))) return reply.code(409).send({ error: "Close Unreal first: it keeps these assets open and would save over them." });
     try {
       const r = await s.gameCheckpoints.restore(cp.id);

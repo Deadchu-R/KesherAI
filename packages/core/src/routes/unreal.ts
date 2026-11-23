@@ -25,7 +25,8 @@ import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
 import { BridgeInstaller, editorExe, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
-import { convertTask, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
+import { convertTask, isConvertedCopy, pluginAtLeast, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
+import { projectFileInFolder } from "../project-path.js";
 import { engineConversionRoutes } from "./engine-conversion.js";
 import { MCP_PRESETS } from "../mcp.js";
 import { findGameProjects, listUnityScripts, unityProjectMenu } from "../game-projects.js";
@@ -36,12 +37,7 @@ import { unrealLogRoute } from "./unreal-log.js";
 const VARS_UNREAL = "0.1.9";
 const VARS_UNITY = "0.2.2";
 /** Whether version a is b or newer. */
-const atLeast = (a: string, b: string) => {
-  const x = a.split(".").map(Number);
-  const y = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
-  return true;
-};
+const atLeast = pluginAtLeast;
 
 /** Where the plugin is downloaded from (published by .github/workflows/unreal-plugin.yml). */
 export const BRIDGE_DOWNLOAD = "https://github.com/Deadchu-R/KesherAI/releases/download/unreal-plugin-latest/KesherAIBridge.zip";
@@ -815,6 +811,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
    * too: the save question shows on the computer.
    */
   app.post("/api/unreal/update-plugin", async (_req, reply) => {
+    // A converted copy (bridge "0.1.33-ue4.27") or an engine the plugin does not support is never "updated" to the UE5 plugin.
+    const editor = (await unreal.status()).editor;
+    if (editor && (isConvertedCopy(editor.bridge) || !unrealSupport(editor.engine).supported)) return reply.code(409).send({ error: `This project runs the KesherAI plugin converted for Unreal ${editor.engine || "4.x"} (${editor.bridge}). It is not replaced by the UE5 plugin; to change it, use Convert with AI.` });
     // Plugins before 0.1.3 do not say where the project is: the project of that name in the usual folders.
     let file = unreal.projectFile;
     const name = await unreal.project();
@@ -857,7 +856,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
           } catch {
             plugin = "?";
           }
-          return { ...p, plugin, open: !!s.unreal.projectFile && dirname(s.unreal.projectFile).toLowerCase() === p.path.toLowerCase(), support: unrealSupport(p.engine) };
+          return { ...p, plugin, open: projectFileInFolder(s.unreal.projectFile, p.path), support: unrealSupport(p.engine) };
         }),
       );
   };

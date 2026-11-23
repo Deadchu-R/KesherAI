@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { projectFileInFolder, samePath } from "../project-path.js";
 import { execFile } from "node:child_process";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { isLocalRequest } from "../auth.js";
 import { ConvertedCopies, readConvertedMarker, readyCopies, revertConvertedCopy, type ConvertedMarker, type GitBytes } from "../engine-conversion.js";
 import { majorMinor, readUnityVersion, type PluginEngine } from "../engine-support.js";
@@ -14,7 +15,7 @@ import { installUnityPackage } from "../unreal-install.js";
 const gitBytes: GitBytes = (cwd, args) =>
   new Promise((done) => execFile("git", args, { cwd, timeout: 60_000, windowsHide: true, maxBuffer: 16 * 1024 * 1024, encoding: "buffer" }, (err, stdout) => done({ code: err ? 1 : 0, out: Buffer.isBuffer(stdout) ? stdout : Buffer.alloc(0) })));
 
-const sameDir = (a: string, b: string) => (process.platform === "win32" ? resolve(a).toLowerCase() === resolve(b).toLowerCase() : resolve(a) === resolve(b));
+const sameDir = samePath;
 
 /**
  * The rest of "Convert with AI" (docs/WORK_LIST.md, Game engines): whether the Unity package compiled in a project (so the
@@ -40,7 +41,7 @@ export async function engineConversionRoutes(app: FastifyInstance, s: KesherServ
     unrealJob: () => installer.status(),
   });
   const engineOf = (v: unknown): PluginEngine | undefined => (v === "unity" || v === "unreal" ? v : undefined);
-  const unrealOpen = (path: string) => !!s.unreal.projectFile && sameDir(join(s.unreal.projectFile, ".."), path);
+  const unrealOpen = (path: string) => projectFileInFolder(s.unreal.projectFile, path);
 
   /**
    * Whether the KesherAI package compiled in a Unity project (the active one by default): "failed" carries the package's
