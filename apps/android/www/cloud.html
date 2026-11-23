@@ -107,7 +107,7 @@
     if (!P) return open(hub);
     // The hub sends no CORS headers to the app, so this only tells whether it answered at all (an opaque answer);
     // a 5xx or the storage limit is caught by the hub page itself, which offers the same direct path.
-    const probe = await fetch(`${hub}/api/config`, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(4000) })
+    const probe = await fetch(`${hub}/api/config`, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(8000) })
       .then(() => ({ status: 200 }))
       .catch(() => ({}));
     let computers = [];
@@ -117,7 +117,11 @@
     const direct = P.cleanTailscaleDirect({ ...(recent?.tailscale || {}), ...(ip && !recent?.tailscale?.ip ? { ip } : {}) });
     const pick = P.choosePath(probe, direct);
     const show = (path) => { $("path").hidden = false; $("path").textContent = P.PATH_LABELS[path][lang]; };
-    if (pick.path === "tailscale") {
+    // The probe can fail while the hub works (2026-11-23: the Cloud tab jumped to the Computer tab's connect screen
+    // every time, though hub.roeetal.com answered). So the Cloud tab always opens the hub page: it serves its saved
+    // copy when Cloudflare is down, sends through the backup relays and offers the direct Tailscale path itself.
+    // The automatic jump to Tailscale stays only behind ?direct-first (for testing).
+    if (pick.path === "tailscale" && params.has("direct-first")) {
       $("opening").hidden = true;
       show("tailscale");
       return location.replace("index.html?direct=1");
