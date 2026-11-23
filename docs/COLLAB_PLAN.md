@@ -99,7 +99,7 @@ A hybrid is possible: git for text, hub for binaries, locks and results. Decide 
 - Is a collaborator also allowed to use the chat model on the main PC, or only her own?
 
 
-## Live co-editing decision (GE-10, decided 22.11 after c-20261121-39 and c-20261122-12)
+## Live co-editing: proposed approach (GE-10, from c-20261121-39 and c-20261122-12; waiting for Roee)
 **Server-authoritative last-writer-wins per property, with a soft lock while a drag is active.**
 - The main PC (or the hub) is the single authority: every edit is an operation `{object, property, value, revision, author, at}` sent to the server, which accepts it and broadcasts the accepted value to everyone. The latest accepted write for a property wins (LWW per property), so two people moving different objects — or even different axes — never fight.
 - While someone drags an object, the server holds a **soft lock** on it (TTL 30 s, renewed by the drag stream). Others see the object as taken (a chip with the owner's name and colour) and their writes to it are rejected with a `clash` notice until the drag ends. No hard locks: a dropped connection releases the soft lock within the TTL.
@@ -108,32 +108,4 @@ A hybrid is possible: git for text, hub for binaries, locks and results. Decide 
 - Conflicts that do occur (a rejected write, two writers on one property) surface as the existing collision card (GE-9) with mine/theirs/skip.
 
 ## Live co-editing of one scene (Roee 22.11 07:20)
-
-### Decision: Server-authoritative last-writer-wins + soft locks (2026-11-23)
-
-**Goal:** Collaborators work on the same scene simultaneously, seeing each other's cursors, selections and moves in real time, with the engine running only on the main PC.
-
-**Chosen approach: Server-authoritative last-writer-wins per property, with per-object soft locks while dragging.**
-
-Why this over CRDT (Yjs / Automerge):
-- **Game transforms are not text.** Object positions, rotations and scales are absolute values (not append-only ops). A CRDT would need custom conflict-resolution sematics per-engine (Godot vs Unity vs Unreal), and the "correct" merge of two people moving the same object is simply "the last one wins" — which is exactly what a server-authoritative model gives without the complexity.
-- **The engine is already the authority.** The main PC runs the real engine. It already knows the true state. There is no need for a distributed consensus protocol when one machine is the ground truth.
-- **Soft locks prevent the main conflict case.** Two people dragging the same object simultaneously is the rare but annoying case. A soft lock (leased while dragging, released on mouse-up) avoids it entirely. No hard locks needed — the lock is advisory on the collaborator side; the server enforces it.
-- **Transport simplicity.** The hub relay already carries WebSocket frames. Transform updates are small JSON messages (`{objectId, property, value, timestamp}`), broadcast to all clients. The server keeps the canonical state and resolves any race by timestamp. No CRDT library, no operational-transform server, no CRDT sync frames.
-
-**Rules:**
-1. **Presence** — Each client sends a heartbeat with camera position + selection. The server broadcasts to all others (rate-limited to ~5 Hz).
-2. **Transform ops** — `{objectId, property, value, timestamp}` sent to server; server validates (object exists, property writable), applies if no conflicting soft lock, updates canonical state, broadcasts to all.
-3. **Soft locks** — Acquired on drag-start, released on drag-end or after 5 s timeout. If two clients lock the same object, the server keeps the earliest lock and sends a "lock taken" to the loser; the loser's UI shows a chip "locked by Dana" and disables editing that object.
-4. **Last-writer-wins** — If two ops for the same object+property arrive within the same 50 ms window (lock failed to prevent it), the server keeps the one with the later timestamp and silently drops the other.
-5. **Engine apply** — The server batches transform ops into intent packets (existing `level-design-tools.ts` format) and applies them to the engine through the bridge, with undo support.
-
-**What is NOT built now:**
-- Hard locks (enterprise-style, blocking commits).
-- CRDT or operational-transform for scene graphs.
-- Chat beside the scene (uses existing chat; a dedicated scene-chat can come later).
-- LAN WebRTC (hub relay is sufficient; WebRTC only if latency proves unacceptable).
-
-**Step 2 (size M):** Implement presence, cameras and soft-lock chips in the stand-in UI. Two browser tabs simulate two collaborators; the phone can be one participant. Checked via the hub relay.
-
-**Step 3 (size M):** Server-side lock manager, canonical state store, and transform broadcast. Connects to the engine bridge for real apply.
+Roee wants collaborators to work on the same scene at the same time and see each other: presence (who is in the scene, their camera/viewpoint as a small avatar or frustum, their selection outlined in their colour), live object moves/rotations streamed to everyone, per-object soft locks while someone drags, chat beside the scene, and the main PC applying the merged result to the real project through the plugins. Like Unreal Multi-User Editing / Figma multiplayer / Roblox Team Create, but with the engine only on the main PC. Research how those do it (CRDT vs server-authoritative ops, conflict rules, transport through the hub or LAN WebRTC), before building. Ties into the sync-channel decision above.
