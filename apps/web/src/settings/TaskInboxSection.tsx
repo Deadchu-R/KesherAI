@@ -42,9 +42,10 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
       </select>
     </label>
   );
-  const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
   const cool = st?.cooldowns ?? {};
   const when = (ms: number) => new Date(ms).toLocaleString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  // Same day: just the time; later: the day too, so a weekly block is not read as today.
+  const hhmm = (ms: number) => (new Date(ms).toDateString() === new Date().toDateString() ? new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false }) : when(ms));
   return (
     <div className="stack tinbox-ocgo">
       <div className="row">

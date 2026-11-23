@@ -177,7 +177,15 @@
       "opencode-go/glm-5.3-flash",
       "opencode-go/deepseek-v4.1-flash",
       "opencode-go/kimi-k3"
-     ]
+     ],
+     "cooldowns": {
+      "opencode-go/mimo-v2.6-pro": {
+       "$inMs": "3h"
+      },
+      "opencode-go/kimi-k3": {
+       "$inMs": "2d"
+      }
+     }
     }
    }
   },
