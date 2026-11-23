@@ -353,6 +353,11 @@ export interface InboxState {
   models?: InboxModel[];
   /** OpenCode Go now: its connection is set up with a key, today's count, and its limit's end when it answered 429. */
   opencode?: OpencodeState;
+  /**
+   * The work loop (Settings › Task inbox › Keep the work loop running): running, paused until Antigravity can work
+   * again (its quota, every model's quota, or today's cap: `until` in ms), or off.
+   */
+  loop?: { state: "running" | "paused" | "off"; until?: number; why?: "quota" | "models" | "cap" };
 }
 
 /** OpenCode Go's state for the settings card and the queue. */

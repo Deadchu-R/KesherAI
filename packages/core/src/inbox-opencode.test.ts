@@ -352,3 +352,56 @@ test("opencode: free models are only those the connection lists, and off with us
   assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), true);
   assert.equal(isFreeOpencodeModel("opencode-go/mimo-v2.6-flash"), false);
 });
+
+// ---- the work loop (work-loop.ts, a-20261122-05): the same harness, with a fake clock ----
+
+test("work loop: with a free OpenCode Go model open, Antigravity's line takes 3 and the next S/M tasks go to OpenCode Go", async () => {
+  const report = ["# Report", "", "## Tasks", ...[1, 2, 3, 4, 5].map((n) => `- **A${n}** — Add the ${["sort", "filter", "export", "import", "search"][n - 1]} button number ${n}: Size M, who AGY.`), ""].join("\n");
+  const { root, repo } = await setup({}, report);
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/beam-free", "opencode-go/mimo-v2.6-pro"] });
+  const { inbox } = inboxFor(repo, root, coder);
+  try {
+    await inbox.state(true); // the connection's models, as the settings card asks
+    await syncAndRun(inbox);
+    const tasks = await inbox.list();
+    // The test has no Antigravity (its start fails), so only the counts are checked: 3 made for its line.
+    assert.equal(tasks.filter((t) => t.runBy === "antigravity").length, 3, "Antigravity's line is filled to 3");
+    assert.equal(tasks.filter((t) => t.runBy === "opencode").length, 2, "the rest went to OpenCode Go's free model");
+    assert.ok(runs.every((r) => r.model === "opencode-go/beam-free"));
+    assert.equal((await inbox.state(true)).loop?.state, "running");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("work loop: an empty backlog offers the standing task (once a day, with the loop focus) and the 21:00 summary comes once", async () => {
+  const day = (h: number, d = 23) => new Date(2026, 10, d, h, 5).getTime();
+  let now = day(9);
+  const { root, repo } = await setup({ "c-20261122-16": TASK("c-20261122-16", "antigravity", "kind: research\n") });
+  const { inbox, notes } = inboxFor(repo, root, undefined, {}, () => now);
+  try {
+    await inbox.sync();
+    await inbox.skip("c-20261122-16", "The template ran before."); // the template's own run is over
+    await inbox.loopTick();
+    const copy = (await inbox.list()).find((t) => t.standing && !t.standingOf);
+    assert.ok(copy, "a standing copy was made");
+    assert.match((await inbox.task(copy.id)).goal, /Loop focus[\s\S]*INDEX\.md[\s\S]*co-developer/);
+    // Offered, not started: "Run this task in Antigravity?" on the PC and the phone; Run is the user's tap.
+    assert.equal(copy.status, "waiting");
+    assert.ok(copy.runAsk, "asked");
+    assert.equal(inbox.queues().antigravity.length, 0);
+    assert.equal(notes.filter((n) => n.startsWith("✦ Run this task in Antigravity?") && n.includes(copy.id)).length, 1);
+    await inbox.loopTick();
+    assert.equal((await inbox.list()).filter((t) => t.standing && !t.standingOf).length, 1, "not a second one");
+    assert.equal(notes.filter((n) => n.startsWith("✦ Run this task in Antigravity?") && n.includes(copy.id)).length, 1, "asked once today");
+    assert.ok(!notes.some((n) => n.includes("סיכום יומי")), "no summary before 21:00");
+    now = day(21);
+    await inbox.loopTick();
+    await inbox.loopTick();
+    assert.equal(notes.filter((n) => n.includes("סיכום יומי")).length, 1, "one summary at 21:00");
+    assert.match(notes.find((n) => n.includes("סיכום יומי")) ?? "", /0 done, 0 failed/);
+    assert.equal((await inbox.state(true)).loop?.state, "running");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

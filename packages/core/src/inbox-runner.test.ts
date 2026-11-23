@@ -774,6 +774,7 @@ test("standing task: a fresh copy of the template appears when Antigravity is id
   const seen = { prompts: 0 };
   const h = await inboxFor(repo, root, { "apps/a.ts": "export const a = 5;\n" }, seen);
   h.settings.dailyCap = 9;
+  h.settings.loop = false; // with the work loop on, the copy is offered once a day (inbox-opencode.test.ts)
   try {
     await h.inbox.sync();
     assert.equal((await h.inbox.list()).filter((t) => t.standing).length, 0, "the template itself waits: Antigravity is not idle");

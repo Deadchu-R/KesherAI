@@ -14,6 +14,7 @@ import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, s
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import { publishResearch } from "./research-publish.js";
+import { dailySummary, LINE_TARGET, localDay, LOOP_TICK_MS, loopState, standingDue, STANDING_LOOP_NOTE, summaryDue, type LoopState } from "./work-loop.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, taskSize, validBranchName, validTaskId } from "./task-inbox.js";
 
@@ -101,6 +102,8 @@ interface Saved {
   opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
   research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
+  /** The work loop (work-loop.ts): the local day it last offered the standing task and sent the summary, and when. */
+  loop?: { standingDay?: string; summaryDay?: string; summaryAt?: number };
 }
 
 /** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
@@ -184,6 +187,8 @@ export class TaskInbox {
   /** The freed-slot notification's one-time Run codes: the task, the slot it belongs to and when it expires. */
   private readonly quickRuns = new Map<string, { id: string; epoch: number; expires: number }>();
   private timer?: ReturnType<typeof setInterval>;
+  /** The work loop's one light timer (every {@link LOOP_TICK_MS}): feeds the lines, the standing task, the summary. */
+  private loopTimer?: ReturnType<typeof setInterval>;
   /** Asks for one message to Antigravity from a chat's agent (kept in memory: a restart drops them, nothing runs). */
   private readonly messageAsks = new Map<string, { ask: InboxRunAsk; info: MessageAskInfo; done: (a: "allow" | "deny" | "timeout") => void }>();
   private saving: Promise<void> = Promise.resolve();
@@ -242,7 +247,7 @@ export class TaskInbox {
     const day = this.ocToday();
     const out = this.opencodeFamilyUntil();
     if (out) return `OpenCode Go limit reached until ${new Date(out).toISOString()}.`;
-    const freeOpen = !!opencodeFreeModel(opencodeFreeFirst(this.oc, this.ocListed), this.opencodeCooldowns(), this.now());
+    const freeOpen = this.opencodeFreeOpen();
     if (day.used >= this.oc.dailyCap && !freeOpen) return `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached (Settings > Task inbox).`;
     return undefined;
   }
@@ -408,6 +413,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      loop: this.loopNow(),
     };
   }
 
@@ -460,10 +466,17 @@ export class TaskInbox {
     void this.load();
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    if (this.loopTimer) clearInterval(this.loopTimer);
+    this.loopTimer = undefined;
     const s = this.s;
     if (!s.enabled || s.paused || !s.repo) return;
     this.timer = setInterval(() => void this.sync().catch(() => undefined), Math.max(1, s.fetchMinutes) * 60_000);
     this.timer.unref?.();
+    // The work loop looks every 5 minutes even when fetching is slower (Settings › Task inbox › Look for new tasks).
+    if (s.loop !== false) {
+      this.loopTimer = setInterval(() => void this.loopTick().catch(() => undefined), LOOP_TICK_MS);
+      this.loopTimer.unref?.();
+    }
     void this.sync().catch(() => undefined);
   }
 
@@ -471,6 +484,8 @@ export class TaskInbox {
   async stopAll(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    if (this.loopTimer) clearInterval(this.loopTimer);
+    this.loopTimer = undefined;
     this.geminiStop?.abort();
     if (this.opencodeStop) {
       this.opencodeStop.why = "stop";
@@ -565,8 +580,7 @@ export class TaskInbox {
     await this.followBoard();
     await this.syncStanding().catch(() => undefined);
     await this.publishDoneResearch().catch(() => undefined);
-    await this.importResearch().catch(() => undefined);
-    await this.feedFromResearch().catch(() => undefined);
+    await this.loopWork().catch(() => undefined);
     for (const t of this.saved.tasks) if (isEnded(t.status) && !t.resultWritten && t.from !== "hub") await this.writeResult(t).catch(() => undefined);
     await this.save();
     void this.pumpGemini().catch(() => undefined);
@@ -1767,7 +1781,8 @@ export class TaskInbox {
     if (ls.code !== 0) return;
     for (const line of ls.out.split(/\r?\n/)) {
       const m = /^\d+ blob ([0-9a-f]{7,64})\t(docs\/research\/[\w.-]+\.md)$/.exec(line.trim());
-      if (!m || /\/(INDEX|BACKLOG)\.md$/.test(m[2]!) || r.seen[m[2]!] === m[1]) continue;
+      // INDEX.md lists reports; BACKLOG.md is read like a report (its `## Tasks`), and its tasks come first.
+      if (!m || /\/INDEX\.md$/.test(m[2]!) || r.seen[m[2]!] === m[1]) continue;
       const size = await this.d.git(repo, ["cat-file", "-s", m[1]!]);
       if (size.code !== 0 || Number(size.out.trim()) > 512 * 1024) continue;
       const body = await this.d.git(repo, ["show", m[1]!]);
@@ -1811,7 +1826,103 @@ export class TaskInbox {
         }
       }
     }
+    // OpenCode Go's free models cost nothing: while one is open, Antigravity's S/M tasks beyond its own line of 3 go to
+    // OpenCode Go too (up to 3 waiting there). While Antigravity is out, the gap filler above already does this.
+    if (!this.antigravityOut() && this.opencodeFreeOpen() && !this.opencodeBlocked()) {
+      const waiting = () => this.saved.tasks.filter((t) => t.runBy === "opencode" && t.status === "waiting").length;
+      for (let n = 0; n < LINE_TARGET && waiting() < LINE_TARGET; n++) {
+        const next = nextForExecutor(r.backlog, "antigravity");
+        if (!next || next.size === "L") break;
+        r.backlog = r.backlog.filter((b) => b !== next);
+        r.made.push(next.key);
+        await this.add({ title: next.title, goal: goalFor(next), executor: "opencode", risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size }).catch(() => undefined);
+      }
+    }
     await this.save();
+  }
+
+  /** Whether one of OpenCode Go's free models (Settings › Task inbox › free first) is open now (not cooling down). */
+  private opencodeFreeOpen(): boolean {
+    return !!opencodeFreeModel(opencodeFreeFirst(this.oc, this.ocListed), this.opencodeCooldowns(), this.now());
+  }
+
+  /** The work loop's state now (work-loop.ts): running, paused until Antigravity can work again, or off. */
+  loopNow(): LoopState {
+    return loopState({
+      on: this.s.loop !== false,
+      inboxOn: this.s.enabled && !this.s.paused,
+      quotaUntil: this.saved.quota?.until,
+      familyUntil: this.saved.familyUntil,
+      families: ["opus", "sonnet", "flash"],
+      capReached: this.today().used >= this.s.dailyCap,
+      now: this.now(),
+    });
+  }
+
+  /**
+   * One look of the work loop's 5-minute timer, in the same slot as a sync (they never overlap): the loop's work, then
+   * the lines move. Cheap when nothing is due (the research import itself waits 30 minutes between fetches).
+   */
+  loopTick(): Promise<void> {
+    this.syncing ??= (async () => {
+      await this.load();
+      await this.loopWork();
+      await this.save();
+      void this.pumpOpencode().catch(() => undefined);
+      void this.pump().catch(() => undefined);
+    })().finally(() => {
+      this.syncing = undefined;
+    });
+    return this.syncing;
+  }
+
+  /**
+   * The work loop (Settings › Task inbox › Keep the work loop running, `loop`): read new research tasks, keep the lines
+   * fed, offer the standing "what to research next" task when the backlog is empty, and send the 21:00 summary.
+   */
+  private async loopWork(): Promise<void> {
+    if (this.s.loop === false) return;
+    await this.importResearch().catch(() => undefined);
+    await this.feedFromResearch().catch(() => undefined);
+    await this.loopStanding().catch(() => undefined);
+    await this.loopSummary().catch(() => undefined);
+  }
+
+  /**
+   * Offers the standing "what to research next" copy (made by {@link syncStanding}) when the backlog has nothing for
+   * Antigravity, at most once a day and never while the loop is paused: "Run this task in Antigravity?" on the PC and
+   * the phone. It starts only on the user's tap (the standing task never runs by itself).
+   */
+  private async loopStanding(): Promise<void> {
+    await this.syncStanding();
+    const now = this.now();
+    const r = this.saved.research;
+    const idle = !this.saved.tasks.some((t) => t.runBy === "antigravity" && !t.standing && (t.status === "waiting" || t.status === "running" || t.status === "needs-approval"));
+    if (!standingDue({ running: this.loopNow().state === "running", backlogEmpty: !r || !nextForExecutor(r.backlog, "antigravity"), idle, lastDay: this.saved.loop?.standingDay, now })) return;
+    const copy = this.saved.tasks.find((t) => t.standing && !t.standingOf && t.status === "waiting" && !t.runAsk);
+    if (!copy) return;
+    if (!copy.goal.includes("## Loop focus")) copy.goal += STANDING_LOOP_NOTE;
+    if (!this.makeAsk(copy)) return;
+    (this.saved.loop ??= {}).standingDay = localDay(now);
+    await this.save();
+  }
+
+  /** The daily summary on the phone at 21:00 (local): done, failed, branches to review, what is next. Once a day. */
+  private async loopSummary(): Promise<void> {
+    const now = this.now();
+    const l = (this.saved.loop ??= {});
+    if (!summaryDue(now, l.summaryDay)) return;
+    const title = (id: string) => this.saved.tasks.find((t) => t.id === id)?.title;
+    const r = this.saved.research;
+    const next = [
+      ...[...this.lines.ids("antigravity"), ...this.lines.ids("local")].map(title),
+      ...(r ? (["antigravity", "local"] as const).map((ex) => nextForExecutor(r.backlog, ex)?.title) : []),
+    ].filter((t): t is string => !!t);
+    const n = dailySummary({ tasks: this.saved.tasks, next, since: l.summaryAt ?? now - 24 * 60 * 60_000, state: this.loopNow() });
+    l.summaryDay = localDay(now);
+    l.summaryAt = now;
+    await this.save();
+    this.d.notify(n.title, n.body, { path: "#/task-inbox" });
   }
 
   /** The research backlog for the hub and the phone: counts by executor, and the lead tasks waiting for a decision. */

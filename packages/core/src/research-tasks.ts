@@ -127,6 +127,9 @@ export function sameTask(a: string, b: string): boolean {
   return small.length >= 3 && hit / small.length >= 0.85;
 }
 
+/** The hand-written research backlog's file name in docs/research/ (its tasks are picked first). */
+export const BACKLOG_FILE = "BACKLOG.md";
+
 /** The order the backlog is worked in: co-developer, one chat, game engines, the rest; then the report's own order. */
 const SECTION_ORDER = ["CD", "CH", "GE"];
 
@@ -139,6 +142,8 @@ const SECTION_ORDER = ["CD", "CH", "GE"];
 export function nextForExecutor(backlog: readonly ResearchTask[], who: "local" | "antigravity"): ResearchTask | undefined {
   const rank = (t: ResearchTask) => {
     const id = t.key.split("#")[1] ?? "";
+    // The hand-written backlog (docs/research/BACKLOG.md) comes before the reports' own tasks.
+    if (t.source === BACKLOG_FILE) return -1;
     const i = SECTION_ORDER.findIndex((p) => id.startsWith(`${p}-`));
     return i < 0 ? SECTION_ORDER.length : i;
   };

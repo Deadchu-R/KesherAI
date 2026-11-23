@@ -14,7 +14,11 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ✅ Security/performance scan 0.6.451–0.6.462 (SECURITY_REVIEW.md)
 - ⬜ Check a task runs on beam-free; quality of free-model results
 - ⬜ OpenCode queue: s-20261122-01..05 scene stats/previews/contents panel, r-53 and the r-5x/6x tasks
-- ⬜ a-04, a-05, r-35/r-39 inject_input
+- ✅ a-04 (autonomy 4/5): install when free (on by default); phone notes "KesherAI updated to X" and "the update failed"; ARCHITECTURE.md "What restarts on an update"
+- ⬜ a-04 left: model runtimes (llama.cpp, ComfyUI) kept alive across an update and re-attached (risk: an orphan holding VRAM; decide first); agent host waits for r-20261122-04
+- ✅ a-05 (autonomy 5/5): work loop every 5 min (Settings › Task inbox › Keep the work loop running = `loop`): lines fed to 3 from reports and the new docs/research/BACKLOG.md (first), OpenCode Go free models take the overflow, empty backlog → standing "what to research next" offered (Run? ask) once a day with the loop focus, paused until the quota/cap resets, 21:00 summary on the phone, "Loop: running / paused until HH:MM" chip in the task inbox
+- ⬜ a-05 doubt: research-backlog tasks the loop queues for Antigravity start by themselves on a free slot (existing queue rule since the research loop), while Settings says Antigravity runs only on Run — decide whether they should ask instead
+- ⬜ r-35/r-39 inject_input
 - ⬜ Token-savings deck + site chart (free OpenCode models are a new saving)
 - 👤 Hebrew voice F5-TTS (3.6 GB, Settings › Speech); UE4Editor firewall prompt; 3 relay keys; GitHub token for a-03
 - 👤 Choice: should a paired phone be allowed to delete models, set relay keys and change the hub address (scan finding)?

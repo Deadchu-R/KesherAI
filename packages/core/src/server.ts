@@ -30,7 +30,7 @@ import { findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
 import { modelTurnFor, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
-import { Updater } from "./updates.js";
+import { noteRunVersion, Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
 import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
@@ -419,6 +419,18 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   // The phone app's own notifications (live connection, or UnifiedPush through ntfy).
   const phonePush = new PhonePush(() => config.remote.devices, persist);
   const notifier = buildNotifier({ config, phonePush, watching: (c) => controlWatchers.watching(c), ...(options.notify ? { desktop: options.notify } : {}), tunnel, chats: () => services.conversations, worker, paths });
+  // Updates on the phone (a-20261122-04): "KesherAI updated to X" once after an update, and an install that failed.
+  updater.onInstallFailed = (error) => void notifier.send({ title: "✕ העדכון של KesherAI נכשל", body: `${error}\nThe update did not install. Open Updates to try again.`, path: "#/updates" }).catch(() => undefined);
+  void updater
+    .version()
+    .then(async ({ version }) => {
+      const from = await noteRunVersion(join(paths.root, "last-version.txt"), version);
+      if (!from) return;
+      // The phone app reconnects after the restart first, so the note reaches it rather than only ntfy.
+      await new Promise((r) => setTimeout(r, 20_000).unref?.());
+      await notifier.send({ title: `✓ KesherAI עודכן ל-${version}`, body: `KesherAI updated to ${version} (from ${from}).`, path: "#/updates" });
+    })
+    .catch(() => undefined);
   // A lecture from the phone that the computer summarized by itself: "the lecture is ready" on the phone.
   study.onLectureReady = (course, lecture) => {
     const he = /[\u0590-\u05ff]/.test(`${course.name} ${lecture.title}`);

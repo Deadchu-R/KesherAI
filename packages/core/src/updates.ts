@@ -168,6 +168,22 @@ export class Updater {
     this.installGraceMs = ms;
   }
 
+  /**
+   * Told when an install failed (stuck, an error code, or the app still the old one after the grace), with the error
+   * text; the server sends it to the phone.
+   */
+  onInstallFailed?: (error: string) => void;
+
+  /** Marks the install as failed in the progress (with Retry) and tells {@link onInstallFailed}. */
+  private installFailed(error: string): void {
+    this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error, installFailed: true };
+    try {
+      this.onInstallFailed?.(error);
+    } catch {
+      // A notification must never break the updater.
+    }
+  }
+
   /** @returns Whether an installer started recently and still blocks a new try. */
   private get installBusy(): boolean {
     return installLocked({ startedAt: this.installerStartedAt, endedAt: this.installerEndedAt }, Date.now(), this.installGraceMs);
@@ -190,7 +206,7 @@ export class Updater {
       handle.child?.kill("SIGKILL");
       this.installerStartedAt = 0;
       this.installerEndedAt = undefined;
-      this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: "ההתקנה נתקעה והופסקה — נסה שוב", installFailed: true };
+      this.installFailed("ההתקנה נתקעה והופסקה — נסה שוב");
       void saveLog();
     }, INSTALL_TIMEOUT_MS);
     timeoutTimer.unref?.();
@@ -203,7 +219,7 @@ export class Updater {
         line(`Installer ended with error (exit code ${code})`);
         this.installerStartedAt = 0;
         this.installerEndedAt = undefined;
-        this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: `ההתקנה הסתיימה עם קוד שגיאה ${code} — נסה שוב`, installFailed: true };
+        this.installFailed(`ההתקנה הסתיימה עם קוד שגיאה ${code} — נסה שוב`);
         void saveLog();
         return;
       }
@@ -213,7 +229,7 @@ export class Updater {
         this.installerStartedAt = 0;
         this.installerEndedAt = undefined;
         line(`The app did not restart after the installer ended (exit code ${code ?? "unknown"}): the install did not finish`);
-        this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: INSTALL_FAILED_TEXT, installFailed: true };
+        this.installFailed(INSTALL_FAILED_TEXT);
         void saveLog();
       }, this.installGraceMs);
       timer.unref?.();
@@ -564,4 +580,18 @@ export function expectedSha512(yml: string, name: string): string | undefined {
   }
   const path = /^path:\s*['"]?([^'"\s]+)/m.exec(yml)?.[1];
   return path === name ? /^sha512:\s*['"]?([A-Za-z0-9+/=]+)/m.exec(yml)?.[1] : undefined;
+}
+
+/**
+ * Notes the version that runs now in a small file and says whether KesherAI was updated since the last start, so the
+ * phone hears "KesherAI updated to X" once. The first start (no file) and a downgrade say nothing.
+ *
+ * @param file - The file that keeps the last version (in KesherAI's data folder).
+ * @param version - The version that runs now.
+ * @returns The version it was updated from, or undefined.
+ */
+export async function noteRunVersion(file: string, version: string): Promise<string | undefined> {
+  const before = (await readFile(file, "utf8").catch(() => "")).trim();
+  if (before !== version) await writeFile(file, version, "utf8").catch(() => undefined);
+  return before && /^\d+(\.\d+)*$/.test(before) && compareVersions(version, before) > 0 ? before : undefined;
 }

@@ -96,6 +96,26 @@ A global model id is `<providerId>/<providerModelId>`, built with `makeModelId` 
   skills/<skill>/SKILL.md
 ```
 
+## What restarts on an update
+
+An update installs only when the PC is free (install-when-free.ts: no chat answering, self-work, download, study
+call or inbox agent task), so nothing that runs is cut off. Then the parts behave like this:
+
+| Part | On an update | How it comes back |
+|---|---|---|
+| App UI (Electron window, web page) | Restarts | Opens on the same page; the phone reconnects by itself. |
+| Local server (packages/core) | Restarts | "Continue what was running" card (resume-board.ts) lists what was running; the remote tunnel is kept (same address). |
+| Long jobs (game builds, packaging; jobs.ts) | Keep running (detached) | Re-attached from their record: the log is followed and the exit code read. |
+| Inbox tasks (Antigravity, OpenCode Go, local) | Not cut off: the update waits for them | Lines and the loop's state are saved in the queue file. |
+| Model runtimes (llama.cpp, stable-diffusion.cpp, ComfyUI, whisper) | Stop with the server | Load again on the next request (a chat's slot cache on disk is restored by llama.cpp). |
+| Agent host (agent tasks outside the server) | Not built yet (r-20261122-04) | — |
+
+The phone hears "KesherAI updated to X" once after the restart (updates.ts `noteRunVersion`, `last-version.txt` in
+the data folder), and "the update failed" when an install is stuck, ends with an error or leaves the old version.
+
+Keeping the model runtimes alive across an update (detached, re-attached by port and a saved key) is open: it saves
+one model load after an update, but a failed re-attach would leave a server holding the graphics card's memory.
+
 ## Design choices worth knowing
 
 - **Everything is a provider.** A local engine, a server the user runs and a cloud API look the same to the rest of the app. New sources never require changes outside `packages/providers` or a plugin.

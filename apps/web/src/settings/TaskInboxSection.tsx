@@ -133,6 +133,14 @@ export function TaskInboxSection() {
       <div className="row wrap small"><span className="grow">{L("בדיקת משימות חדשות", "Look for new tasks")}</span>{num("fetchMinutes", c.fetchMinutes, [1, 5, 10, 15, 30, 60], L("דק׳", "min"))}</div>
       <div className="row wrap small"><span className="grow">{L(`סף יומי ל-Antigravity (היום ${s.today.used})`, `Daily limit for Antigravity (today ${s.today.used})`)}</span>{num("dailyCap", c.dailyCap, [3, 5, 10, 15, 20, 30], "")}</div>
       <div className="row wrap small"><span className="grow">{L("זמן מקסימלי למשימה", "Most minutes per task")}</span>{num("maxMinutes", c.maxMinutes, [5, 10, 15, 20, 30, 45, 60], L("דק׳", "min"))}</div>
+      <label className="row small">
+        <input type="checkbox" checked={c.loop !== false} onChange={(e) => put({ loop: e.target.checked })} />
+        <span>
+          <b>{L("להשאיר את לולאת העבודה פועלת", "Keep the work loop running")}</b>
+          <br />
+          <span className="muted">{L("כל 5 דק׳: משימות ממחקרים ומ-docs/research/BACKLOG.md ממלאות את התורים (עד 3 בכל תור), שאלה \"להריץ את מה לחקור הבא?\" כשהרשימה ריקה (פעם ביום), עצירה עד שהמכסה מתאפסת, וסיכום לטלפון ב-21:00. משימה בתור של Antigravity מתחילה כשהוא פנוי, כמו כל משימה בתור.", "Every 5 min: tasks from research reports and docs/research/BACKLOG.md fill the lines (up to 3 each), \"Run what to research next?\" when the list is empty (once a day), a pause until the quota resets, and a summary on the phone at 21:00. A task in Antigravity's line starts when it is free, like any queued task.")}</span>
+        </span>
+      </label>
       <p className="small muted">{L('"כבה" עוצר גם את המשיכה מ-GitHub, מיד.', '"Off" also stops fetching from GitHub, at once.')}</p>
 
       <h3>✦ Antigravity</h3>

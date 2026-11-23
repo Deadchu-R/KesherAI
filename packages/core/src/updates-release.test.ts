@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { INSTALL_GRACE_MS, INSTALL_LOCK_MS, Updater, compareVersions, installLocked, installerFor } from "./updates.js";
+import { INSTALL_GRACE_MS, INSTALL_LOCK_MS, Updater, compareVersions, installLocked, installerFor, noteRunVersion } from "./updates.js";
 
 test("versions and installers", () => {
   assert.ok(compareVersions("0.10.0", "0.4.1") > 0);
@@ -141,6 +141,8 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
   const exited = new Promise<number | null>((r) => (end = r));
   const u = new Updater(await mkdtemp(join(tmpdir(), "kesher-upd-")), { version: "0.4.1", repo: "o/r", api, install: async () => { runs++; return { exited }; } });
   u.setInstallGrace(60);
+  const told: string[] = [];
+  u.onInstallFailed = (e) => told.push(e);
   try {
     await u.check();
     await u.apply();
@@ -153,6 +155,7 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
     assert.equal(st.installFailed, true);
     assert.equal(st.error, "ההתקנה הסתיימה עם קוד שגיאה 1 — נסה שוב");
     assert.ok(st.log.some((l) => /exit code 1/.test(l)), "the log says how the installer ended");
+    assert.deepEqual(told, ["ההתקנה הסתיימה עם קוד שגיאה 1 — נסה שוב"], "the phone is told once");
     // Retry is possible again.
     await u.apply();
     for (let i = 0; i < 100 && runs < 2; i++) await new Promise((r) => setTimeout(r, 20));
@@ -161,4 +164,14 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
     srv.closeAllConnections();
     srv.close();
   }
+});
+
+test("noteRunVersion: says 'updated from' once after an update; first start and a downgrade say nothing", async () => {
+  const file = join(await mkdtemp(join(tmpdir(), "kesher-ver-")), "last-version.txt");
+  assert.equal(await noteRunVersion(file, "0.6.463"), undefined, "first start");
+  assert.equal(await noteRunVersion(file, "0.6.463"), undefined, "same version");
+  assert.equal(await noteRunVersion(file, "0.6.470"), "0.6.463");
+  assert.equal(await noteRunVersion(file, "0.6.470"), undefined, "only once");
+  assert.equal(await noteRunVersion(file, "0.6.460"), undefined, "a downgrade");
+  assert.equal((await readFile(file, "utf8")).trim(), "0.6.460");
 });

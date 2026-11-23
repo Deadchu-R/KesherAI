@@ -65,6 +65,13 @@ test("nextForExecutor: co-developer first, lead and done never", () => {
   assert.equal(nextForExecutor(t.filter((x) => x.who === "lead"), "antigravity"), undefined);
 });
 
+test("nextForExecutor: the hand-written BACKLOG.md goes before the reports' tasks", () => {
+  const backlog = parseResearchTasks("# Research backlog\n\n## Tasks\n### BL-1: Add a loop chip\nSize M · Who AGY\nShow it.\n", "BACKLOG.md");
+  assert.equal(backlog.length, 1);
+  const all = [...parseResearchTasks(SYNTH, "S.md"), ...backlog];
+  assert.equal(nextForExecutor(all, "antigravity")?.key, "BACKLOG.md#BL-1");
+});
+
 test("sameTask: same words in another order, or almost all words inside the other", () => {
   assert.ok(sameTask("Overlay state (pure model)", "Pure model: overlay state"));
   assert.ok(sameTask("Unreal level cache written at editor exit", "Unreal level cache written at the editor exit time"));
