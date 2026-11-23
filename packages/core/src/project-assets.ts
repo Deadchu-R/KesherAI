@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
-import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat } from "node:fs/promises";
-import { basename, dirname, join, posix } from "node:path";
+import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, posix, relative } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { insideProject, realInside, type GameCheckpoints } from "./game-checkpoints.js";
@@ -320,6 +320,198 @@ export async function unrealExport(o: { cacheDir: string; project: string; proje
 export type SaveFormat = "glb" | "png" | "wav" | "shadergraph";
 
 /**
+ * Generates a Unity .meta file for the given asset path.
+ * Unity requires .meta files for every asset so it can track GUIDs and importers
+ * even when the editor is not running.
+ *
+ * @param filePath - The asset file path (relative or absolute).
+ * @param isFolder - Whether the path is a folder (gets folderAsset: yes).
+ * @returns The .meta file content as a string.
+ */
+export function unityMetaContent(filePath: string, isFolder: boolean = false): string {
+  const ext = extname(filePath).toLowerCase();
+  const guid = randomUUID().replace(/-/g, "");
+
+  if (isFolder) {
+    return `fileFormatVersion: 2
+guid: ${guid}
+folderAsset: yes
+DefaultImporter:
+  externalObjects: {}
+`;
+  }
+
+  let importer = "DefaultImporter";
+  let importerBody = "  externalObjects: {}\n";
+
+  if (ext === ".cs") {
+    importer = "MonoImporter";
+    importerBody = `  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  `;
+  } else if ([".png", ".jpg", ".jpeg", ".tga", ".bmp", ".webp", ".psd", ".exr"].includes(ext)) {
+    importer = "TextureImporter";
+    importerBody = `  externalObjects: {}
+  serializedVersion: 13
+  type: 0
+  placeholderTexture: {fileID: 0}
+  compressionQuality: 50
+  overrideFormat: 0
+  qualitySettings:
+  compressedFormat: 0
+  streamingMipmaps: 0
+  streamingMipmapsAddAllCameras: 1
+  streamingMipmapsMemoryBudget: 512
+  streamingMipmapsRenderersPerFrame: 512
+  streamingMipmapsMaxLevelReduction: 2
+  streamingMipmapsMaxFileIORequests: 1024
+  streamingMipmapsMemoryWarningCollector:
+    enabled: 0
+  alphaChannel: 0
+  compressionAlphaQuality: 50
+  additionalCompression: 0
+  additionalCompressionImportWizard: 0
+  textureCompression: 1
+  highquality: 0
+  mipmapLimit: 0
+  mipmapStreaming: 0
+  readable: 0
+  loadInBackground: 0
+  overrideCompression: 0
+  maxTextureSizeSet: 0
+  maxTextureSizeX: 1024
+  maxTextureSizeY: 1024
+  anisoLevel: 1
+  flipH: 0
+  flipV: 0
+  excludeFromPackageManager: 0
+  allowHDR: 0
+  allowISO: 0
+  alphaIsTransparency: 0
+  spriteGenerateFallbackPhysicsShape: 1
+  spriteTessellationDetail: -1
+  textureType: 0
+  textureShape: 1
+  singleChannelComponent: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spritePixelsToUnits: 100
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spriteFlipH: 0
+  spriteFlipV: 0
+  spriteRow: 1
+  spriteColumn: 1
+  spriteAlign: 0
+  spritePackingTag: 
+  spriteRemoveTags: 
+  spriteAddTags: 
+  spriteGenerateCulling: 0
+  spriteGenerateCullingMode: 0
+  `;
+  } else if ([".fbx", ".obj", ".glb", ".gltf"].includes(ext)) {
+    importer = "ModelImporter";
+    importerBody = `  externalObjects: {}
+  serializedVersion: 22
+  fileIDToRecycleName: {}
+  materialImportMode: 2
+  importBlendShapes: 1
+  importCameras: 0
+  importLights: 0
+  nodeNameCollisionMode: 1
+  loadAssets: 1
+  overrideQueue: -1
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  addGPUKeywordInstancer: 0
+  secondaryTextureImport: 0
+  importTextures: 1
+  compressionQuality: 50
+  importerVersion: 170
+  sources: []
+  spriteImportMode: 2
+  generateMipmap: 1
+  textureCompression: 1
+  physicalReflectionFormat: 3
+  blendShapeMode: 0
+  isReadable: 0
+  greyScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  alphaSource: 1
+  enableAlphaChannel: 0
+  deltaCubemap: 3
+  alphaDestination: 0
+  alphaSourceEx: 0
+  alphaDestinationEx: 0
+  alphaChannelEx: 0
+  alphaBlendOpType: 0
+  alphaBlendOpTypeEx: 0
+  alphaCompareOpType: 0
+  alphaCompareOpTypeEx: 0
+  alphaTestRefValue: 0.5
+  alphaTestRefValueEx: 0.5
+  alphaTestEnabled: 0
+  alphaTestEnabledEx: 0
+  alphaTestFunc: 5
+  alphaTestFuncEx: 5
+  alphaTestRef: 0.5
+  alphaTestRefEx: 0.5
+  `;
+  } else if ([".wav", ".mp3", ".ogg", ".aiff", ".flac"].includes(ext)) {
+    importer = "AudioImporter";
+    importerBody = `  externalObjects: {}
+  serializedVersion: 7
+  defaultSettings:
+  serializedVersion: 2
+  loadType: 0
+  sampleRateSetting: 0
+  sampleRateOverride: 44100
+  compressionFormat: 1
+  quality: 1
+  streamMode: 0
+  okToMerge: 0
+  forceMono: 0
+  resampleToTargetSampleRate: 0
+  allowLevelDown: 0
+  compressionLevel: 1
+  ignoreStartTiming: 0
+  ignoreLength: 0
+  captureStreamingIDs: 0
+  allowStreamingFail: 0
+  forceCompression: 0
+  overrideSettings: []
+  `;
+  } else if (ext === ".json") {
+    importer = "TextScriptImporter";
+    importerBody = `  externalObjects: {}
+  `;
+  } else if (ext === ".shader") {
+    importer = "ShaderImporter";
+    importerBody = `  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  `;
+  } else if (ext === ".shadergraph") {
+    importer = "ShaderGraphImporter";
+    importerBody = `  externalObjects: {}
+  `;
+  }
+
+  let content = `fileFormatVersion: 2\n`;
+  content += `guid: ${guid}\n`;
+  content += `${importer}:\n`;
+  content += importerBody;
+
+  return content;
+}
+
+/**
  * What a file's first bytes say it is.
  *
  * @param head - The first 12+ bytes (32 for a Shader Graph).
@@ -551,6 +743,25 @@ export class ProjectSaves {
         // Write then rename: Unity never reads half a file.
         await copyFile(staged, `${abs}.kesher-tmp`);
         await rename(`${abs}.kesher-tmp`, abs);
+        // Generate .meta file for the asset (Unity needs it when editor is closed)
+        const metaPath = abs + ".meta";
+        if (!existsSync(metaPath)) {
+          const metaContent = unityMetaContent(rel);
+          await writeFile(metaPath, metaContent, "utf-8");
+        }
+        // Ensure parent folders have .meta files too
+        let parent = dirname(abs);
+        const projectAssets = join(s.project, "Assets");
+        while (parent.startsWith(projectAssets) && parent !== projectAssets) {
+          const parentMeta = parent + ".meta";
+          if (!existsSync(parentMeta)) {
+            const parentRel = relative(s.project, parent);
+            const parentMetaContent = unityMetaContent(parentRel, true);
+            await mkdir(parent, { recursive: true });
+            await writeFile(parentMeta, parentMetaContent, "utf-8");
+          }
+          parent = dirname(parent);
+        }
       } else {
         if (!this.o.unreal) throw new Error("Unreal cannot be reached from here.");
         const { abs, rel } = await safeAssetPath("unreal", s.project, s.target);
