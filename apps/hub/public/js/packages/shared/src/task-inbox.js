@@ -22,9 +22,25 @@ export function opencodeModelFor(t, s) {
  * The models a task falls back to when its own model answers 429, in order (after the configured small and strong
  * ones). Kimi is never here: it has ~98 requests a month, so it runs only when the user configured or chose it.
  */
+/** OpenCode Go's free models (unlimited while the offer lasts), tried first when `useFree` is on and the connection lists them. */
+export const OPENCODE_FREE_MODELS = ["opencode-go/beam-free", "opencode-go/iceman-contributor-free"];
+/** Whether a model is one of the plan's free ones (does not count toward the daily cap). */
+export const isFreeOpencodeModel = (id) => OPENCODE_FREE_MODELS.includes(id);
+/**
+ * The free models to try first: on unless turned off, and only those the connection lists now (the offer is "for a
+ * limited time"; an empty or unknown list means none).
+ *
+ * @param s - The OpenCode Go settings.
+ * @param listed - The models the connection lists.
+ */
+export function opencodeFreeFirst(s, listed) {
+    return s.useFree === false ? [] : OPENCODE_FREE_MODELS.filter((m) => listed.includes(m));
+}
 export const OPENCODE_FALLBACKS = ["opencode-go/mimo-v2.6-flash", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3", "opencode-go/mimo-v2.6-pro"];
 /** What the Go plan ($10) allows a month, per model (approximate, 2026-11-22), shown in the OpenCode card. */
 export const OPENCODE_MONTHLY_REQUESTS = [
+    { id: "opencode-go/beam-free", name: "Beam Free", requests: Infinity },
+    { id: "opencode-go/iceman-contributor-free", name: "Iceman Contributor Free", requests: Infinity },
     { id: "opencode-go/kimi-k3", name: "Kimi K3", requests: 98 },
     { id: "opencode-go/mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3260 },
     { id: "opencode-go/glm-5.3", name: "GLM-5.3", requests: 2640 },
