@@ -20,6 +20,8 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
 - ⬜ r-35/r-39 inject_input
 - ⬜ Token-savings deck + site chart (free OpenCode models are a new saving)
 - 👤 Hebrew voice F5-TTS (3.6 GB, Settings › Speech); UE4Editor firewall prompt; 3 relay keys; GitHub token for a-03
+- 🔨 Free coders infrastructure (Roee 23.11): Beam Free → Z.ai GLM-4.7-Flash → OpenRouter :free → Cloudflare Workers AI → (careful routing: low-risk, non-security S tasks only, secrets scan) Gemini free, Mistral free, NVIDIA trial, OpenCode contributor → paid. Keys: Roee at home.
+- ⬜ Privacy guard for every user (Roee 23.11): ⚠ "trains on data" tag on providers (model picker, Connections, task cards) + one-time warning in a chat; a leak guard before anything goes to such a provider (chat, agents, tasks): finds keys/tokens/passwords/.env/private keys/personal data/user-name paths/files marked sensitive → hide and send / send to a local or non-training model / cancel; personal "never send" list; Settings › Privacy: auto-hide / always ask / block training providers. Competitor check first, design boards, works from the phone.
 - 👤 Choice: should a paired phone be allowed to delete models, set relay keys and change the hub address (scan finding)?
 
 ## Priority order (Roee, 2026-11-20 19:36)
