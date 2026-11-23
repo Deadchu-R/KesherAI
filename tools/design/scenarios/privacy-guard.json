@@ -150,16 +150,17 @@
      }
     },
     {
-     "wait": ".model-chip"
+     "wait": ".model-chip .train-tag"
     },
     {
-     "click": ".model-chip"
+     "click": "button.model-chip:has(.train-tag)",
+     "force": true
     },
     {
-     "wait": ".model-pop .train-tag"
+     "wait": ".model-pop"
     },
     {
-     "waitMs": 300
+     "waitMs": 500
     }
    ]
   },
