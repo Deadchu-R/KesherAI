@@ -76,7 +76,7 @@ async function setup(tasks: Record<string, string>, report?: string) {
 }
 
 /** A fake OpenCode Go coder: writes a file in the worktree, or throws what `fail` says. */
-function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[] } = {}) {
+function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[]; idle?: (model: string) => boolean } = {}) {
   const runs: Array<{ model: string; title: string }> = [];
   const coder: NonNullable<TaskInboxDeps["coder"]> = {
     ready: () => o.ready ?? true,
@@ -86,6 +86,7 @@ function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undef
       const err = o.fail?.(model);
       if (err) throw err;
       onStep(2);
+      if (o.idle?.(model)) return { text: "" };
       writeFileSync(join(worktree, "apps", "a.ts"), `export const a = ${runs.length + 1};\n`);
       return { text: "Changed apps/a.ts. Checked with git status." };
     },
@@ -355,7 +356,7 @@ test("opencode: free models are only those the connection lists, and off with us
   assert.deepEqual(opencodeFreeFirst({}, ["opencode-go/beam-free", "opencode-go/glm-5.3"]), ["opencode-go/beam-free"]);
   assert.deepEqual(opencodeFreeFirst({ useFree: false }, ["opencode-go/beam-free"]), []);
   assert.deepEqual(opencodeFreeFirst({}, []), []);
-  assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), true);
+  assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), false); // contributor models share data: never
   assert.equal(isFreeOpencodeModel("opencode-go/mimo-v2.6-flash"), false);
 });
 
@@ -435,6 +436,22 @@ test("work loop: research tasks for Antigravity wait; one Run? ask at a time, ne
     const ask = inbox.openAsks()[0]!.ask;
     await inbox.answerRun(ask.requestId, "allow", "pc").catch(() => undefined);
     assert.equal(agyStarts, 1, "started only by the answer");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("opencode: a free model that changes nothing hands the task to a paid model, which counts", async () => {
+  const { root, repo } = await setup({ "c-20261122-23": TASK("c-20261122-23", "opencode", "size: S\n") });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/beam-free", "opencode-go/mimo-v2.6-flash"], idle: (m) => m === "opencode-go/beam-free" });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 5 } });
+  try {
+    await inbox.state(true);
+    await syncAndRun(inbox);
+    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/beam-free", "opencode-go/mimo-v2.6-flash"]);
+    const t = await inbox.task("c-20261122-23");
+    assert.equal(t.status, "done");
+    assert.equal((await inbox.state(true)).opencode?.used, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -31,7 +31,7 @@ export interface OpencodeSettings {
   /** OpenCode Go tasks a day (its plan has one shared monthly allowance; this keeps a day from eating it). */
   dailyCap: number;
   /**
-   * Try the plan's free models first (Beam Free, Iceman Contributor Free: unlimited "for a limited time", 2026-11-23).
+   * Try the plan's free models first (Beam Free: unlimited "for a limited time", 2026-11-23).
    * A task on a free model does not count toward `dailyCap`; when they are gone or fail, the paid order takes over.
    */
   useFree?: boolean;
@@ -61,7 +61,9 @@ export function opencodeModelFor(t: { size?: InboxSize; model?: string }, s: Pic
  * ones). Kimi is never here: it has ~98 requests a month, so it runs only when the user configured or chose it.
  */
 /** OpenCode Go's free models (unlimited while the offer lasts), tried first when `useFree` is on and the connection lists them. */
-export const OPENCODE_FREE_MODELS: readonly string[] = ["opencode-go/beam-free", "opencode-go/iceman-contributor-free"];
+// Not the "Contributor" free models (Iceman Contributor Free): those answer 400 without the plan's data-sharing
+// opt-in, and sharing Roee's code for training is not wanted.
+export const OPENCODE_FREE_MODELS: readonly string[] = ["opencode-go/beam-free"];
 
 /** Whether a model is one of the plan's free ones (does not count toward the daily cap). */
 export const isFreeOpencodeModel = (id: string): boolean => OPENCODE_FREE_MODELS.includes(id);
@@ -82,7 +84,6 @@ export const OPENCODE_FALLBACKS: readonly string[] = ["opencode-go/mimo-v2.6-fla
 /** What the Go plan ($10) allows a month, per model (approximate, 2026-11-22), shown in the OpenCode card. */
 export const OPENCODE_MONTHLY_REQUESTS: ReadonlyArray<{ id: string; name: string; requests: number }> = [
   { id: "opencode-go/beam-free", name: "Beam Free", requests: Infinity },
-  { id: "opencode-go/iceman-contributor-free", name: "Iceman Contributor Free", requests: Infinity },
   { id: "opencode-go/kimi-k3", name: "Kimi K3", requests: 98 },
   { id: "opencode-go/mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3260 },
   { id: "opencode-go/glm-5.3", name: "GLM-5.3", requests: 2640 },

@@ -68,7 +68,7 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
       </ul>
       <label className="row wrap small">
         <input type="checkbox" checked={c.useFree !== false} disabled={!c.enabled} onChange={(e) => set({ useFree: e.target.checked })} />
-        <span className="grow">{L("קודם המודלים החינמיים (Beam Free, Iceman): לא נספרים בסף היומי", "Free models first (Beam Free, Iceman): they don't count toward the daily limit")}</span>
+        <span className="grow">{L("קודם המודלים החינמיים (Beam Free): לא נספרים בסף היומי", "Free models first (Beam Free): they don't count toward the daily limit")}</span>
       </label>
       {pick("small", "מודל למשימות קטנות (S): זול ומהיר", "Model for small tasks (S): cheap and fast")}
       {pick("strong", "מודל למשימות בינוניות וגדולות (M/L): חזק", "Model for medium and large tasks (M/L): strong")}

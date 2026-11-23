@@ -956,6 +956,11 @@ export class TaskInbox {
             }),
             stopped,
           ]);
+          // A free model that ended without changing anything (23.11: Beam Free answered nothing and touched no file)
+          // did not do the work: the task goes on to a paid model like after any free-model failure.
+          if (isFreeOpencodeModel(model) && !run.why && !(await this.d.git(wt.path, ["status", "--porcelain"])).out.trim()) {
+            throw new Error(`${opencodeModelName(model)} changed no files.`);
+          }
           text = r.text;
           error = "";
           break;
