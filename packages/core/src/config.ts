@@ -91,7 +91,7 @@ export const KesherConfigSchema = z.object({
       /** Graphics memory llama.cpp leaves free when it fits a model (MiB; unset: 2048), for a game or editor on the same card. */
       fitTargetMiB: z.number().int().min(512).max(16384).optional(),
       /** The context memory's type (unset: 8 bits). Set by calibration or by hand. */
-      kvType: z.enum(["f16", "q8_0"]).optional(),
+      kvType: z.enum(["f16", "q8_0", "q4_0"]).optional(),
       /** Load settings per model file (its name): context, context memory, expert layers on the processor, more arguments. */
       modelSettings: z
         .record(
@@ -106,7 +106,7 @@ export const KesherConfigSchema = z.object({
         )
         .default({}),
       /** Calibration results, by model file name and graphics card (calibrate.ts). */
-      calibrations: z.record(z.string(), z.object({ at: z.string(), gpu: z.string(), rows: z.array(z.object({ kv: z.enum(["f16", "q8_0"]), depth: z.number(), read: z.number().optional(), write: z.number().optional() })), kv: z.enum(["f16", "q8_0"]) })).prefault({}),
+      calibrations: z.record(z.string(), z.object({ at: z.string(), gpu: z.string(), rows: z.array(z.object({ kv: z.enum(["f16", "q8_0", "q4_0"]), depth: z.number(), read: z.number().optional(), write: z.number().optional() })), kv: z.enum(["f16", "q8_0", "q4_0"]) })).prefault({}),
       /** How models use the graphics cards (see gpus.ts). */
       gpus: z
         .object({

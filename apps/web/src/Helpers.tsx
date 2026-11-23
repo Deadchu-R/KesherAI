@@ -407,6 +407,7 @@ function SwipeableHunk({ onDecide, className, children }: {
   );
 }
 
+/** Review a helper diff: accept/reject hunks or the whole diff. */
 export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) {
   const [busy, setBusy] = useState(false);
   const [conflicts, setConflicts] = useState<Record<string, string>>({});
