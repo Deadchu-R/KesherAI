@@ -107,6 +107,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 .persona-ai [data-panel="top"] { display: none; }
 .persona-ai .ai-panel textarea { min-height: 140px; }
 .persona-ai .tools [data-tool="brush"], .persona-ai .tools [data-tool="eraser"], .persona-ai .tools [data-tool="fill"] { display: none; }
+.persona-game .ai-panel { display: none; }
 
 [dir="rtl"] .app { direction: rtl; }
 [dir="rtl"] .stage, [dir="rtl"] .stage canvas, [dir="rtl"] .swatches { direction: ltr; }

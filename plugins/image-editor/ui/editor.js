@@ -17,7 +17,7 @@
     newH: "תמונה חדשה", width: "רוחב", height: "גובה", whiteBg: "רקע לבן", cancel: "ביטול", create: "צור",
     background: "רקע", layer: "שכבה", aiWorking: "המודל מצייר… (זה יכול לקחת דקה)", upscaling: "מגדיל…", needSelection: "קודם בחר אזור (מלבן, אליפסה או לאסו).", needPrompt: "כתוב מה לצייר.",
     saved: "נשמר", done: "מוכן", noLayer: "אין שכבה פעילה",
-    pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
+    pPhoto: "צילום", pPixel: "פיקסלים", pAi: "AI", pGame: "משחק", openAffinity: "פתח ב-Affinity", size: "גודל", toAi: "צייר מחדש עם AI…", tolerance: "סבילות",
     tColor: "צבע", tAdjust: "התאמות", tAi: "AI", tLayers: "שכבות", tHistory: "היסטוריה", adjustHint: "לשכבה הפעילה, בתוך הבחירה.",
     affinityChanged: "נשמר ב-Affinity.", bringBack: "החזר כשכבה", affinityOpened: "נפתח ב-Affinity. כשתסיים: File ← Export ← PNG, ושמור באותו שם (החלף).", affinityDefault: "Affinity לא נמצא במחשב, אז הקובץ נפתח בתוכנה הרגילה לתמונות.", affinityRemote: "Affinity נפתח במחשב, לא בטלפון.",
     hCrop: "חיתוך", h_cw: "סיבוב 90° עם השעון", h_ccw: "סיבוב 90° נגד השעון", h_h: "היפוך התמונה לרוחב", h_v: "היפוך התמונה לגובה", h_lh: "היפוך השכבה לרוחב", h_lv: "היפוך השכבה לגובה", crop: "חיתוך", ratio: "יחס", cropHint: "גרור מסגרת. Enter מחיל, Esc מבטל.", apply2: "החל", free: "חופשי",
@@ -28,6 +28,7 @@
     undo: "בטל", redo: "בצע שוב", newLayer: "שכבה חדשה", duplicate: "שכפל שכבה", mergeDown: "מזג למטה", deleteLayer: "מחק שכבה", flattenAll: "שטח תמונה", zoomIn: "הגדל תצוגה", zoomOut: "הקטן תצוגה", actual: "גודל אמיתי",
     hMove: "גרור כדי להזיז את השכבה הפעילה.", hHand: "גרור כדי להזיז את התצוגה. גלגלת: זום.", hPicker: "לחץ על התמונה כדי לקחת צבע.",
     hBrush: "מברשת", hText: "טקסט", textType: "כתוב כאן · Ctrl+Enter שומר · Esc מבטל", sizeH: "גודל התמונה…", sizeT: "גודל התמונה", sizeLock: "שמור על הפרופורציות", hShape: "צורה", s_rect: "מלבן", s_ellipse: "אליפסה", s_line: "קו", s_arrow: "חץ", shapeFill: "מלא", shapeWidth: "עובי", shapeHint: "גרירה מציירת · Shift: ריבוע, עיגול, 45°", textAsk: "המילים (\\n לשורה חדשה):", textSize: "גודל", textFont: "גופן", fSans: "רגיל", fSerif: "סריף", fMono: "מונו", fDisplay: "כותרת", textBold: "מודגש", textOutline: "קו מתאר", textHint: "לחיצה על התמונה: טקסט חדש · על טקסט: שינוי", hEraser: "מחק", hFill: "דלי", hNew: "חדש", hOpenPic: "פתיחת תמונה", hFilter: "פילטר", hAiLayer: "שכבה מ-AI", hInpaint: "ציור מחדש ב-AI", hUpscale: "הגדלה", hClear: "ניקוי", hMove2: "הזזה", hLayerProps: "מאפייני שכבה", hFromAffinity: "חזר מ-Affinity",
+      hSeamless: "אטם חלקים", hNormals: "נורמלים מסובל", hOorm: "ORM", hOormHint: "מערבב חוסן, מתכת וסביבה לשורה אחת לשמירת טקסטורה.",
   };
   let he = false;
   const T = (k, en) => (he && HE[k]) || en;
