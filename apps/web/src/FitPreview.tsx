@@ -118,11 +118,11 @@ export function FitMargin() {
   );
 }
 
-interface CalRow { kv: "f16" | "q8_0"; depth: number; read?: number; write?: number }
+interface CalRow { kv: "f16" | "q8_0" | "q4_0"; depth: number; read?: number; write?: number }
 interface CalState {
-  run: { model: string; status: "running" | "done" | "failed" | "stopped"; step: number; steps: number; rows: CalRow[]; advice?: { kv: "f16" | "q8_0"; why: string; whyHe: string }; error?: string } | null;
-  kvType: "f16" | "q8_0";
-  saved: Record<string, { at: string; gpu: string; rows: CalRow[]; kv: "f16" | "q8_0" }>;
+  run: { model: string; status: "running" | "done" | "failed" | "stopped"; step: number; steps: number; rows: CalRow[]; advice?: { kv: "f16" | "q8_0" | "q4_0"; why: string; whyHe: string }; error?: string } | null;
+  kvType: "f16" | "q8_0" | "q4_0";
+  saved: Record<string, { at: string; gpu: string; rows: CalRow[]; kv: "f16" | "q8_0" | "q4_0" }>;
 }
 
 /**
@@ -152,7 +152,7 @@ export function CalibrateButton({ path, name }: { path: string; name: string }) 
   const saved = st?.saved[name];
   const rows = mine?.rows.length ? mine.rows : saved?.rows ?? [];
   const advice = mine?.advice ?? (saved ? { kv: saved.kv } : undefined);
-  const use = (kv: "f16" | "q8_0") => void api("/api/engines/llamacpp/settings", { method: "PUT", body: { kvType: kv } }).then(() => (toast(L("נשמר. המודל נטען מחדש.", "Saved. The model loads again.")), load()), (e: Error) => toast(e.message));
+  const use = (kv: "f16" | "q8_0" | "q4_0") => void api("/api/engines/llamacpp/settings", { method: "PUT", body: { kvType: kv } }).then(() => (toast(L("נשמר. המודל נטען מחדש.", "Saved. The model loads again.")), load()), (e: Error) => toast(e.message));
   return (
     <>
       <button type="button" onClick={() => (open ? setOpen(false) : (setOpen(true), load()))} title={L("מודד את המודל במחשב הזה וממליץ על ההגדרה", "Measures this model on this computer and recommends the setting")}>
@@ -182,7 +182,7 @@ export function CalibrateButton({ path, name }: { path: string; name: string }) 
           {rows.length > 0 && <span className="muted">{L("טוקנים לשנייה.", "Tokens per second.")}{saved && !mine ? ` ${L("נמדד", "Measured")} ${new Date(saved.at).toLocaleDateString()}${saved.gpu ? ` · ${saved.gpu}` : ""}.` : ""}</span>}
           {mine?.advice && <strong dir="auto">{L(mine.advice.whyHe, mine.advice.why)}</strong>}
           {advice && st.kvType !== advice.kv && !running && (
-            <button type="button" className="primary" onClick={() => use(advice.kv)}>{L(`השתמש בהקשר ${advice.kv === "f16" ? "16" : "8"} ביט`, `Use ${advice.kv === "f16" ? "16" : "8"}-bit context`)}</button>
+            <button type="button" className="primary" onClick={() => use(advice.kv)}>{L(`השתמש בהקשר ${advice.kv === "f16" ? "16" : advice.kv === "q8_0" ? "8" : "4"} ביט`, `Use ${advice.kv === "f16" ? "16" : advice.kv === "q8_0" ? "8" : "4"}-bit context`)}</button>
           )}
           {advice && st.kvType === advice.kv && !running && <span className="fit-good">✓ {L("זו ההגדרה שבשימוש.", "This is the setting in use.")}</span>}
           {!running && <button type="button" onClick={start}>{rows.length ? L("כייל שוב", "Calibrate again") : L("התחל כיול (כ-5 דקות)", "Start calibrating (about 5 minutes)")}</button>}

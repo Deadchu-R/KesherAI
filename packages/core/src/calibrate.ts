@@ -8,8 +8,8 @@
 
 /** One measured setup. */
 export interface CalRow {
-  /** Context memory type: 16 bits ("f16") or 8 bits ("q8_0"). */
-  kv: "f16" | "q8_0";
+  /** Context memory type: 16 bits ("f16"), 8 bits ("q8_0") or 4 bits ("q4_0"). */
+  kv: "f16" | "q8_0" | "q4_0";
   /** Tokens already in the context when measured. */
   depth: number;
   /** Reading the prompt, tokens per second. */
@@ -21,7 +21,7 @@ export interface CalRow {
 /** What KesherAI recommends from the rows. */
 export interface CalAdvice {
   /** The setup to use. */
-  kv: "f16" | "q8_0";
+  kv: "f16" | "q8_0" | "q4_0";
   /** Writing speed gained by 16 bits at the deepest depth both reached (percent; negative = slower). */
   f16Gain?: number;
   /** One sentence for the screen. */

@@ -352,7 +352,7 @@ export class LlamaEngine {
    * @param opts.args - Extra arguments from the config.
    */
   constructor(
-    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; lookup?: boolean; ramCache?: boolean; fitTargetMiB?: number; kvType?: "f16" | "q8_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
+    private readonly opts: { dir: string; binaryPath?: string; version?: string; port: number; args: string[]; parallel?: number; mtpDraft?: number; lookup?: boolean; ramCache?: boolean; fitTargetMiB?: number; kvType?: "f16" | "q8_0" | "q4_0"; modelArgs?: (modelPath: string) => string[]; gpuPlan?: (modelPath: string) => Promise<GpuPlan>; onLoad?: (modelPath: string) => void },
   ) {}
 
   /** @returns The engine's state. */
@@ -725,7 +725,7 @@ export class LlamaEngine {
    *
    * @param t - "q8_0", "f16", or undefined for the default.
    */
-  setKvType(t: "f16" | "q8_0" | undefined): void {
+  setKvType(t: "f16" | "q8_0" | "q4_0" | undefined): void {
     if (t === undefined) delete this.opts.kvType;
     else this.opts.kvType = t;
   }
@@ -830,7 +830,7 @@ export class LlamaEngine {
    * @param kvType - The context memory's type (default 8 bits; see setKvType).
    * @returns The full argument list besides model, host and port.
    */
-  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false, fitTargetMiB = 2048, kvType: "f16" | "q8_0" = "q8_0"): string[] {
+  static serverArgs(extra: string[], withJinja = true, parallel = 1, fits = false, fitTargetMiB = 2048, kvType: "f16" | "q8_0" | "q4_0" = "q8_0"): string[] {
     const args = [...extra];
     if (withJinja && !args.includes("--jinja")) args.push("--jinja");
     const own = args.some((a) => a === "-np" || a === "--parallel");

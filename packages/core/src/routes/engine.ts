@@ -372,7 +372,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
    * How many chats the engine answers at once, and multi-token prediction's guesses ahead (`mtpDraft`: a number,
    * 0 for off, null for llama.cpp's own). A running model is loaded again with them.
    */
-  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; lookup?: boolean | null; ramCache?: boolean | null; fitTargetMiB?: number | null; kvType?: "f16" | "q8_0" | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
+  app.put<{ Body: { parallel?: number; mtpDraft?: number | null; lookup?: boolean | null; ramCache?: boolean | null; fitTargetMiB?: number | null; kvType?: "f16" | "q8_0" | "q4_0" | null } }>("/api/engines/llamacpp/settings", async (req, reply) => {
     const b = req.body ?? {};
     let reload = false;
     if (b.parallel !== undefined) {
@@ -419,7 +419,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     }
     // The context memory's type (calibration's "Use this", or by hand); null: the default (8 bits).
     if (b.kvType !== undefined) {
-      if (b.kvType !== null && b.kvType !== "f16" && b.kvType !== "q8_0") return reply.code(400).send({ error: "Context memory: f16 or q8_0." });
+      if (b.kvType !== null && b.kvType !== "f16" && b.kvType !== "q8_0" && b.kvType !== "q4_0") return reply.code(400).send({ error: "Context memory: f16, q8_0 or q4_0." });
       const k = b.kvType ?? undefined;
       reload ||= s.config.engines.kvType !== k;
       if (k === undefined) delete s.config.engines.kvType;
