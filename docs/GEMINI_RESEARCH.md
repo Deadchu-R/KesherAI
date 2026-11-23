@@ -20,6 +20,8 @@ Please research end to end how the leading products and open-source projects do 
 sources and dates. For each: what the user sees, how it works technically, limits, pricing/licence if relevant.
 Then: what to take, what to avoid, and a step-by-step plan for KesherAI, with the risks.
 
+**Source-data guard**: If you cannot find real sources or concrete facts (only guesses, empty pages or paywalls), do NOT write a report. Instead write a single line `status: no data` at the top, add a short explanation (one sentence) why, and stop. Never invent facts, numbers or quotes.
+
 Answer format (keep it short and structured):
 1. One-paragraph conclusion.
 2. A table: product | what it does | how | what to take.
