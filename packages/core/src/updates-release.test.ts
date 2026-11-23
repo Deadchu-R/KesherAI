@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { INSTALL_FAILED_TEXT, INSTALL_GRACE_MS, INSTALL_LOCK_MS, Updater, compareVersions, installLocked, installerFor } from "./updates.js";
+import { INSTALL_GRACE_MS, INSTALL_LOCK_MS, Updater, compareVersions, installLocked, installerFor } from "./updates.js";
 
 test("versions and installers", () => {
   assert.ok(compareVersions("0.10.0", "0.4.1") > 0);
@@ -151,7 +151,7 @@ test("an installer that ends while the app stays: the lock is lifted and the scr
     for (let i = 0; i < 100 && !u.status().installFailed; i++) await new Promise((r) => setTimeout(r, 20));
     const st = u.status();
     assert.equal(st.installFailed, true);
-    assert.equal(st.error, INSTALL_FAILED_TEXT);
+    assert.equal(st.error, "ההתקנה הסתיימה עם קוד שגיאה 1 — נסה שוב");
     assert.ok(st.log.some((l) => /exit code 1/.test(l)), "the log says how the installer ended");
     // Retry is possible again.
     await u.apply();

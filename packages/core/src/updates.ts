@@ -55,9 +55,10 @@ export interface UpdateProgress {
  * with `pnpm dev`, the server and the UI reload by themselves afterwards.
  * Packaged installers will update through their own updater instead.
  */
-/** What a started installer tells: when its process ended (the exit code, or null when unknown). */
+/** What a started installer tells: when its process ended (the exit code, or null when unknown), and the child process (so the watchdog can kill it). */
 export interface InstallerHandle {
   exited: Promise<number | null>;
+  child?: import("node:child_process").ChildProcess;
 }
 
 /** How long after starting an installer a second one is refused (it runs a minute or two before it closes the app). */
@@ -115,6 +116,9 @@ export function compareVersions(a: string, b: string): number {
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) - (pb[i] ?? 0);
   return 0;
 }
+
+/** How long an installer is allowed to run before it is considered hung and killed. */
+export const INSTALL_TIMEOUT_MS = 15 * 60_000;
 
 /**
  * Picks this system's installer from a release's files.
@@ -177,11 +181,32 @@ export class Updater {
    * @param line - Writes a line to the update log.
    * @param saveLog - Saves the log.
    */
-  private watchInstaller(exited: Promise<number | null>, line: (t: string) => void, saveLog: () => Promise<void>): void {
+  private watchInstaller(handle: InstallerHandle, line: (t: string) => void, saveLog: () => Promise<void>): void {
     const started = this.installerStartedAt;
-    void exited.catch(() => null).then((code) => {
+    // Kill the installer if it runs longer than the timeout (stuck installer).
+    const timeoutTimer = setTimeout(() => {
       if (this.installerStartedAt !== started) return;
+      line(`Installer has been running for ${(INSTALL_TIMEOUT_MS / 1000 / 60).toFixed(0)} minutes without finishing; killing it`);
+      handle.child?.kill("SIGKILL");
+      this.installerStartedAt = 0;
+      this.installerEndedAt = undefined;
+      this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: "ההתקנה נתקעה והופסקה — נסה שוב", installFailed: true };
+      void saveLog();
+    }, INSTALL_TIMEOUT_MS);
+    timeoutTimer.unref?.();
+    void handle.exited.catch(() => null).then((code) => {
+      if (this.installerStartedAt !== started) return;
+      clearTimeout(timeoutTimer);
       this.installerEndedAt = Date.now();
+      // Non-zero exit code: the installer failed, report immediately.
+      if (code !== null && code !== 0) {
+        line(`Installer ended with error (exit code ${code})`);
+        this.installerStartedAt = 0;
+        this.installerEndedAt = undefined;
+        this.packagedProgress = { ...this.packagedProgress, running: false, step: "Failed", error: `ההתקנה הסתיימה עם קוד שגיאה ${code} — נסה שוב`, installFailed: true };
+        void saveLog();
+        return;
+      }
       line(`The installer ended (exit code ${code ?? "unknown"}); waiting for the app to restart`);
       const timer = setTimeout(() => {
         if (this.installerStartedAt !== started) return;
@@ -440,7 +465,7 @@ export class Updater {
         const handle = await installer.install(file);
         this.installerStartedAt = Date.now();
         this.installerEndedAt = undefined;
-        if (handle && typeof handle === "object" && "exited" in handle) this.watchInstaller(handle.exited, line, saveLog);
+        if (handle && typeof handle === "object" && "exited" in handle) this.watchInstaller(handle, line, saveLog);
         line("The installer started; the app restarts when it finishes");
         this.packagedProgress = { ...this.packagedProgress, running: false, step: "Done", finishedAt: new Date().toISOString() } as UpdateProgress;
       } catch (err) {
