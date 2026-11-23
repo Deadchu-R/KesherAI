@@ -12,7 +12,7 @@
     addB: "＋ הוסף", addS: "הוסף", addAt: "נכנס במקום הסמן", fromDevice: "מהמחשב / מהטלפון", fromChat: "מהקבצים של הצ׳אט", fromBank: "מבנק היצירות", fromProject: "מפרויקט משחק", dragToo: "גם גרירה", recHere: "הקלטה כאן", micToo: "מהמיקרופון", voiceWords: "קול ממילים", howH: "איך להכניס?", insertHere: "להכניס במקום הסמן", insertHint: "השאר זז קדימה", mixHere: "לערבב מעל, מהסמן", mixHint: "האורך לא משתנה", addedSound: (n) => `נוסף: ${n}`,
     kHomeEnd: "התחלה / סוף",
     export: "ייצוא WAV", toChat: "שלח לצ'אט", empty: "פתח צליל מצ'אט: \"עריכה בעורך הסאונד\" בתצוגה שלו.",
-    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiSfx: "אפקט קולי בשבילו (גשם, דלת, צעדים…; כמה שניות עד דקה; נכנס לבד)", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הצליל ייכנס לבד כשיהיה מוכן", aiLate: "הצליל לא הגיע תוך 20 דקות; הוסף אותו מבנק היצירות כשיגיע", aiIn: "הצליל נכנס", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)",
+    cut: "✂ מחיקה", keep: "השאר רק את זה", silence: "השתקה", fadeIn: "◢ דהייה פנימה", fadeOut: "◣ דהייה החוצה", reverse: "⇄ הפוך", echo: "הד", aiSel: "✦ עם AI…", aiH: "הקטע הזה, עם AI", aiSfx: "אפקט קולי בשבילו (גשם, דלת, צעדים…; כמה שניות עד דקה; נכנס לבד)", aiMusic: "מוזיקה בשבילו (מודל השירים של הצ׳אט, כמה דקות; נכנסת לבד)", aiVoice: "מילים אחרות בקול (שלך או טבעי)", aiMix: "מתחת למה שיש (בלי סימון: במקומו)", aiWhat: "מה זה צריך להיות?", aiGo: "צור", aiNoWords: "כתוב מה זה צריך להיות", aiWaiting: "ביקשתי מהצ׳אט; הצליל ייכנס לבד כשיהיה מוכן", aiLate: "הצליל לא הגיע תוך 20 דקות; הוסף אותו מבנק היצירות כשיגיע", aiIn: "הצליל נכנס", gap: "+ שנייה שקטה", speedL: "מהירות", speedHint: "מהיר או איטי יותר; בלי \"שמור גובה\" גם גבוה או נמוך יותר", keepPitch: "שמור גובה", louder: "‎+3 dB", quieter: "‎−3 dB", normalize: "נרמול", normalizeHeadroom: "נרמול -1 dB", dcRemove: "הסר DC", trimZeroCross: "חיתוך לשקט", makeLoop: "צירת לולאה", clean: "🧹 ניקוי רעש", cleaning: "מנקה רעש…", cleanedSel: "הרעש נוקה (נלמד מהקטע שבחרת)", cleanedAuto: "הרעש נוקה (נלמד מהרגעים השקטים)", noLoopPoint: "לא נמצא נקודת לולאה טובה. נסה צליל ארוך וחוזר יותר.", loopDone: (s) => `הלולאה נוצרה (התאמה: ${s}%)`,
     hint: "גרירה לבחירה · Space נגן · Delete מחיקה · Ctrl+A הכל · Esc ביטול בחירה",
     transcriptH: "תמלול", transcribe: "תמלל", transcriptHint: "לחיצה על שורה בוחרת אותה; ✂ חותך אותה. Whisper רץ במחשב שלך.",
     playS: "נגן", cutS: "חיתוך", fadeS: "דהייה", volS: "חזק יותר", wordsS: "מילים",
@@ -86,6 +86,121 @@
     const d = secs(b - a), sa = secs(a), sb = secs(b);
     parts = parts.flatMap((p) => (p.end <= sa ? [p] : p.start >= sb ? [{ ...p, start: p.start - d, end: p.end - d }] : []));
   }
+  // ---------- foley post-processing ----------
+  // Remove DC offset: subtract the mean value from each channel.
+  function dcRemove() {
+    if (!length()) return;
+    remember();
+    chans = chans.map((c) => {
+      let sum = 0;
+      for (let i = 0; i < c.length; i++) sum += c[i];
+      const mean = sum / c.length;
+      const out = new Float32Array(c.length);
+      for (let i = 0; i < c.length; i++) out[i] = c[i] - mean;
+      return out;
+    });
+    after();
+  }
+  // Find the nearest zero-crossing to a sample index.
+  function zeroCrossing(ch, target) {
+    const n = ch.length;
+    // Search forward from target
+    for (let d = 0; d < Math.min(44100, n - target); d++) {
+      if (target + d < n - 1 && (ch[target + d] >= 0) !== (ch[target + d + 1] >= 0)) return target + d;
+    }
+    // Search backward from target
+    for (let d = 1; d <= Math.min(44100, target); d++) {
+      if (target - d > 0 && (ch[target - d] >= 0) !== (ch[target - d + 1] >= 0)) return target - d;
+    }
+    return target; // fallback
+  }
+  // Trim audio to selection, snapping edges to zero crossings.
+  function trimZeroCrossing() {
+    if (!need()) return;
+    remember();
+    const [a, b] = sel;
+    // Use first channel for zero-crossing detection (mono or stereo)
+    const ch = chans[0];
+    const start = zeroCrossing(ch, a);
+    const end = zeroCrossing(ch, b);
+    chans = chans.map((c) => c.slice(start, end));
+    parts = parts.flatMap((p) => (p.end <= secs(start) || p.start >= secs(end) ? [] : [{ ...p, start: Math.max(0, p.start - secs(start)), end: p.end - secs(start) }]));
+    sel = null; head = 0; view.start = 0; fitZoom(); after();
+  }
+  // Normalize peak to -1 dBFS (leaves 1 dB headroom).
+  function normalizeHeadroom() {
+    if (!length()) return;
+    remember();
+    const [a, b] = sel ?? [0, length()];
+    let peak = 0;
+    chans.forEach((c) => { for (let i = a; i < b; i++) peak = Math.max(peak, Math.abs(c[i])); });
+    if (peak > 0) gainRange(a, b, Math.pow(10, -1 / 20) / peak);
+    after();
+  }
+  // Cross-correlation to find the best loop point. Returns {start, end} sample indices.
+  function findLoopPoint() {
+    const n = length();
+    if (n < 2 * rate) return null; // Need at least 2 seconds
+    const ch = mixed()[0]; // mono mix
+    const windowLen = Math.floor(rate * 0.5); // 0.5 second window
+    const tailStart = n - windowLen;
+    // Search area: middle 50% of audio, avoiding the last 25%
+    const searchStart = Math.floor(n * 0.25);
+    const searchEnd = Math.floor(n * 0.75);
+    const tail = ch.subarray(tailStart, tailStart + windowLen);
+    // Normalize tail for cross-correlation
+    let tailRms = 0;
+    for (let i = 0; i < windowLen; i++) tailRms += tail[i] * tail[i];
+    tailRms = Math.sqrt(tailRms / windowLen);
+    if (tailRms < 0.001) return null; // Too quiet
+    let bestScore = -1, bestPos = tailStart;
+    // Slide window and compute normalized cross-correlation
+    for (let pos = searchStart; pos <= searchEnd - windowLen; pos += 128) { // step by 128 samples for speed
+      let num = 0, denA = 0, denB = 0;
+      for (let i = 0; i < windowLen; i++) {
+        const a = tail[i], b = ch[pos + i];
+        num += a * b;
+        denA += a * a;
+        denB += b * b;
+      }
+      const score = num / (Math.sqrt(denA) * Math.sqrt(denB) + 1e-10);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPos = pos;
+      }
+    }
+    if (bestScore < 0.5) return null; // Too weak correlation
+    return { start: bestPos, end: tailStart, score: bestScore };
+  }
+  // Create a loop by crossfading at the detected loop point.
+  function makeLoop() {
+    if (!length()) return;
+    const lp = findLoopPoint();
+    if (!lp) { msg(T("noLoopPoint", "Could not find a good loop point. Try a longer, more repetitive sound."), true); return; }
+    remember();
+    const crossfadeLen = Math.min(Math.floor(rate * 0.05), (lp.end - lp.start) >> 1); // 50ms or half the segment
+    // Cut to just the loop segment and crossfade
+    chans = chans.map((c) => {
+      const loopData = c.subarray(lp.start, lp.end);
+      const out = new Float32Array(loopData.length);
+      out.set(loopData);
+      // Crossfade: fade out at end, fade in at start, blend
+      for (let i = 0; i < crossfadeLen; i++) {
+        const fadeIn = i / crossfadeLen;
+        const fadeOut = 1 - i / crossfadeLen;
+        out[i] = loopData[i] * fadeOut + loopData[loopData.length - crossfadeLen + i] * fadeIn;
+        out[loopData.length - crossfadeLen + i] = loopData[loopData.length - crossfadeLen + i] * fadeOut + loopData[i] * fadeIn;
+      }
+      return out;
+    });
+    parts = []; // Clear transcript after loop processing
+    sel = null; head = 0; view.start = 0; fitZoom(); after();
+    // Store loop info for export
+    loopInfo = { start: 0, end: length(), score: lp.score };
+    msg(T("loopDone", `Loop created (correlation: ${(lp.score * 100).toFixed(0)}%)`));
+  }
+  let loopInfo = null; // {start, end, score} for engine export
+
   const ops = {
     cut() { if (!need()) return; remember(); cutRange(sel[0], sel[1]); head = sel[0]; sel = null; after(); },
     keep() {
@@ -302,15 +417,42 @@
   };
 
   // ---------- WAV out ----------
-  function wav() {
+  function wav(withSmpl) {
     const all = mixed();
-    const n = all[0]?.length ?? 0, ch = all.length, bytes = 44 + n * ch * 2;
+    const n = all[0]?.length ?? 0, ch = all.length;
+    const smplSize = withSmpl && loopInfo ? 36 : 0;
+    const bytes = 44 + n * ch * 2 + smplSize;
     const buf = new ArrayBuffer(bytes), v = new DataView(buf);
     const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
     str(0, "RIFF"); v.setUint32(4, bytes - 8, true); str(8, "WAVE"); str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, ch, true);
     v.setUint32(24, rate, true); v.setUint32(28, rate * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, n * ch * 2, true);
     let o = 44;
     for (let i = 0; i < n; i++) for (let c = 0; c < ch; c++) { const s = Math.max(-1, Math.min(1, all[c][i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true); o += 2; }
+    // smpl chunk for engine loop support (Unity/Unreal/Godot)
+    if (smplSize) {
+      str(o, "smpl"); o += 4;
+      v.setUint32(o, 36, true); o += 4; // chunk size
+      v.setUint32(o, 0, true); o += 4; // manufacturer (0 = generic)
+      v.setUint32(o, 0, true); o += 4; // product (0 = generic)
+      v.setUint32(o, 0, true); o += 4; // sample period (unused)
+      v.setUint32(o, 0, true); o += 4; // MIDI unity note (unused)
+      v.setUint32(o, 0, true); o += 4; // MIDI pitch fraction (unused)
+      v.setUint32(o, 0, true); o += 4; // SMPTE format (unused)
+      v.setUint32(o, 0, true); o += 4; // SMPTE offset (unused)
+      v.setUint32(o, 1, true); o += 4; // sample loops count (1)
+      v.setUint32(o, 0, true); o += 4; // loop id
+      v.setUint32(o, 0, true); o += 4; // loop type (0 = forward)
+      v.setUint32(o, loopInfo.start, true); o += 4; // loop start (sample index)
+      v.setUint32(o, loopInfo.end, true); o += 4; // loop end (sample index)
+      v.setUint32(o, 0, true); o += 4; // loop start fraction (0)
+      v.setUint32(o, 1, true); o += 4; // loop length (1 = play until end marker)
+      v.setUint32(o, rate, true); o += 4; // playback speed (sample rate)
+      v.setUint32(o, 0, true); o += 4; // MIDI unity pitch (unused)
+      v.setUint32(o, 0, true); o += 4; // fine offset (unused)
+      v.setUint32(o, 0, true); o += 4; // sample fraction (unused)
+      v.setUint32(o, 0, true); o += 4; // loop start (extra)
+      v.setUint32(o, 0, true); o += 4; // loop end (extra)
+    }
     return new Blob([buf], { type: "audio/wav" });
   }
   const base = () => name.replace(/\.[^.]+$/, "") + "-edited";
@@ -391,6 +533,10 @@
         sel = null; head = 0; firstLength = length();
         fitZoom(); after();
       },
+      dcRemove: dcRemove,
+      trimZeroCross: trimZeroCrossing,
+      normalizeHeadroom: normalizeHeadroom,
+      makeLoop: makeLoop,
     };
   }
   $("rec").onclick = record;
@@ -879,6 +1025,10 @@
   $("speed").onchange = () => { const k = Number($("speed").value); $("speed").value = "1"; if (k !== 1) void changeSpeed(k); };
   Object.keys(ops).forEach((k) => ($(k).onclick = ops[k]));
   $("undo").onclick = undo; $("redo").onclick = redo; $("play").onclick = play;
+  $("normalizeHeadroom").onclick = ops.normalizeHeadroom;
+  $("dcRemove").onclick = ops.dcRemove;
+  $("trimZeroCross").onclick = ops.trimZeroCross;
+  $("makeLoop").onclick = ops.makeLoop;
   $("zoomIn").onclick = () => zoomBy(1.5); $("zoomOut").onclick = () => zoomBy(1 / 1.5);
   document.querySelectorAll(".phonebar [data-do]").forEach((b) => (b.onclick = () => (b.dataset.do === "play" ? play() : b.dataset.do === "add" ? addMenu(b) : b.dataset.do === "words" ? $("app").classList.toggle("sheet") : b.dataset.do === "inst" ? $("toInst").click() : ops[b.dataset.do]())));
   const KEYS = [["Space", "kPlay", "Play / pause (the selection, if any)"], ["Delete", "kCut", "Delete the selection"], ["Ctrl+A", "kAll", "Select all"], ["Esc", "kEsc", "Let go of the selection"], ["Ctrl+Z / Ctrl+Y", "kUndo", "Undo / redo"], ["+ / −", "kZoom", "Zoom"], ["← / →", "kMove", "The playhead a second back / on"], ["Home / End", "kHomeEnd", "The start / the end"], ["R", "rec", "Record"]];
