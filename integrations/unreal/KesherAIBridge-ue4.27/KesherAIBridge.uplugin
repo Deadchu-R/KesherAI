@@ -12,6 +12,7 @@
   "SupportURL": "https://github.com/Deadchu-R/KesherAI/issues",
   "CanContainContent": false,
   "IsBetaVersion": true,
+  "EnabledByDefault": true,
   "Installed": false,
   "Modules": [
     {
