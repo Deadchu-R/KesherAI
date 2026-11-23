@@ -90,6 +90,12 @@ export interface ModelJobFacts {
   translator: string;
   /** Computer control's vision choice. */
   vision: string;
+  /**
+   * What computer control's vision has on this computer (undefined: the vision models are not available here, then the
+   * row only shows the choice). `found` is the model that would find things now: an installed catalog model or any
+   * Qwen-VL / UI-TARS file with its projector found in the models folder; `offer` is what one tap would download.
+   */
+  visionState?: { found?: string; busy: boolean; offer: { name: string; sizeGb: number; installId: string }; withoutProjector: string[] };
 }
 
 /** Files that are not chat models (vision add-ons, embeddings, speech) even though they are GGUF. */
@@ -240,11 +246,26 @@ export function buildModelJobs(f: ModelJobFacts, pickImage: (vramGb: number) => 
     link: "#/knowledge",
   });
 
-  // Chosen elsewhere: music and 3D in ComfyUI, the translator and computer vision in their own sections.
+  // Chosen elsewhere: music and 3D in ComfyUI, the translator in its own section.
   jobs.push({ id: "music", state: f.active.music ? "ready" : "manual", current: f.active.music ? shortName(f.active.music) : null, link: "#/nodes" });
   jobs.push({ id: "3d", state: f.active["3d"] ? "ready" : "manual", current: f.active["3d"] ? shortName(f.active["3d"]) : null, link: "#/nodes" });
   jobs.push({ id: "translator", state: "manual", current: f.translator === "main" || f.translator === "off" ? f.translator : shortName(f.translator), link: "#/settings/chats" });
-  jobs.push({ id: "vision", state: "manual", current: f.vision, link: "#/settings/privacy" });
+  // Computer vision: ready only when a model that can run is on the computer (the choice "auto" says nothing about that).
+  const vis = f.visionState;
+  if (!vis) jobs.push({ id: "vision", state: "manual", current: f.vision, link: "#/settings/privacy" });
+  else {
+    const visState: ModelJobState = vis.found ? "ready" : vis.busy ? "busy" : "none";
+    jobs.push({
+      id: "vision",
+      state: visState,
+      current: vis.found ?? null,
+      ...(visState === "none"
+        ? { suggestion: { name: vis.offer.name, sizeGb: vis.offer.sizeGb, fit: fitOf(vis.offer.sizeGb, "llm"), onComputer: false, setup: `/api/installables/${vis.offer.installId}/install`, canSetup: f.local } }
+        : {}),
+      link: "#/settings/privacy",
+      ...unusedOf(vis.withoutProjector, ["חסר קובץ mmproj לידו, בלעדיו אין ראייה", "no mmproj file beside it, so it cannot see pictures"]),
+    });
+  }
   return jobs;
 }
 
@@ -253,9 +274,10 @@ export function buildModelJobs(f: ModelJobFacts, pickImage: (vramGb: number) => 
  * download.
  *
  * @param jobs - The card's rows.
- * @returns The jobs to set up, in order (chat first: others may need its engine), and the total in GB.
+ * @returns The jobs to set up (not computer vision), in order (chat first: others may need its engine), and the total in GB.
  */
 export function setupAllPlan(jobs: readonly ModelJob[]): { jobs: ModelJob[]; totalGb: number } {
-  const list = jobs.filter((j) => (j.state === "none" || j.state === "missing") && j.suggestion?.canSetup);
+  // Computer vision is left out: it is only for computer control and its download is large; its row has its own tap.
+  const list = jobs.filter((j) => j.id !== "vision" && (j.state === "none" || j.state === "missing") && j.suggestion?.canSetup);
   return { jobs: list, totalGb: round1(list.reduce((n, j) => n + (j.suggestion?.sizeGb ?? 0), 0)) };
 }

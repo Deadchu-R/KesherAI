@@ -87,6 +87,7 @@ test("embedding: a model already on the computer costs nothing; from the phone i
 
 test("music, 3D, translator and vision are chosen elsewhere, never downloaded from here", () => {
   for (const id of ["music", "3d", "translator", "vision"]) assert.equal(job(facts(), id).suggestion, undefined);
+  assert.equal(job(facts(), "vision").state, "manual");
   assert.equal(job(facts({ active: { music: "comfyui/ace_step_1.5_turbo.safetensors" } }), "music").current, "ace_step_1.5_turbo");
 });
 
@@ -123,4 +124,28 @@ test("Hebrew voice: the F5 checkpoint on the computer needs only the engine; Zon
   assert.equal(job(facts({ hebrewTts: { engine: "system", installed: true, busy: false, sizeGb: 0 } }), "hebrew-voice").suggestion?.onComputer, true);
   // An English interface with no Hebrew model anywhere: no row.
   assert.equal(job(facts({ hebrew: false, hebrewTts: { engine: "system", installed: false, busy: false, sizeGb: 4.9 } }), "hebrew-voice"), undefined);
+});
+
+const offer = { name: "Qwen3-VL 8B", sizeGb: 6.2, installId: "vision-model" };
+
+test("vision: nothing usable on the computer is `none` with an approval-only download offer, not `manual auto`", () => {
+  const v = job(facts({ visionState: { busy: false, offer, withoutProjector: [] } }), "vision");
+  assert.equal(v.state, "none");
+  assert.equal(v.current, null);
+  assert.equal(v.suggestion?.setup, "/api/installables/vision-model/install");
+  assert.equal(v.suggestion?.onComputer, false);
+  assert.equal(v.suggestion?.canSetup, true);
+  // From the phone the download is asked for on the computer itself.
+  assert.equal(job(facts({ local: false, visionState: { busy: false, offer, withoutProjector: [] } }), "vision").suggestion?.canSetup, false);
+});
+
+test("vision: a model found on the computer is ready and has no offer; a model without its projector is listed as unused", () => {
+  const v = job(facts({ visionState: { found: "Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL", busy: false, offer, withoutProjector: [] } }), "vision");
+  assert.equal(v.state, "ready");
+  assert.equal(v.current, "Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL");
+  assert.equal(v.suggestion, undefined);
+  const w = job(facts({ visionState: { busy: false, offer, withoutProjector: ["D:/m/Qwen2.5-VL-7B.gguf"] } }), "vision");
+  assert.equal(w.state, "none");
+  assert.equal(w.unused?.[0]?.name, "Qwen2.5-VL-7B");
+  assert.equal(job(facts({ visionState: { busy: true, offer, withoutProjector: [] } }), "vision").state, "busy");
 });

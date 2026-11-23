@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { budgetOf, detectHardwareCached } from "@kesher/downloads";
-import { ROUTER_MODEL } from "@kesher/shared";
+import { ROUTER_MODEL, VISION_MODELS } from "@kesher/shared";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { buildModelJobs, setupAllPlan } from "../model-jobs.js";
@@ -13,6 +13,7 @@ import { RECOMMENDED_VIDEO_MODEL, videoStatus } from "../video-setup.js";
 import { engineBusy, modelsOnComputer } from "./engine.js";
 import { classifySpeechModels } from "../hebrew-tts.js";
 import { speechModelsOnComputer } from "./speech.js";
+import { visionServiceOf } from "../vision-service.js";
 
 /**
  * "Models per job" (Settings › General): `GET /api/models/jobs?lang=he` → `{ jobs, plan: { ids, totalGb }, freeGb }`.
@@ -38,6 +39,11 @@ export async function modelJobRoutes(app: FastifyInstance, s: KesherServices): P
     const emb = s.semantic.status();
     const engine = s.engine.status();
     const router = matchRecommended(found, ROUTER_MODEL.repo, ROUTER_MODEL.filePattern);
+    // Computer vision: refreshed here so a model downloaded a moment ago shows at once.
+    const vs = visionServiceOf(s.config);
+    await vs?.refresh().catch(() => undefined);
+    const visionPick = vs?.model();
+    const visionOffer = vs?.missing();
     const jobs = buildModelJobs(
       {
         active: s.config.activeModels,
@@ -58,6 +64,9 @@ export async function modelJobRoutes(app: FastifyInstance, s: KesherServices): P
         embedding: { ready: emb.usable, busy: emb.phase === "downloading" || emb.phase === "loading", ...(emb.active ? { model: emb.active.split("/").pop()! } : {}), name: emb.model.name, sizeGb: emb.model.sizeGb, ...(embFound ? { onComputer: embFound.name } : {}) },
         translator: s.config.translator ?? "main",
         vision: s.config.computer.visionModel,
+        ...(vs && visionOffer
+          ? { visionState: { ...(visionPick ? { found: visionPick.name } : {}), busy: VISION_MODELS.some((m) => vs.busy(m.id)), offer: { name: visionOffer.name, sizeGb: visionOffer.sizeGb, installId: visionOffer.installId }, withoutProjector: vs.withoutProjector() } }
+          : {}),
       },
       imagePickFor,
     );

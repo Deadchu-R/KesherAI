@@ -73,3 +73,37 @@ test("VisionService: heavy-data folder, installed files, its own slot with the p
   assert.equal(visionServiceOf(config, () => v), v);
   assert.equal(visionServiceOf(config), v);
 });
+
+test("VisionService: a Qwen2.5-VL file with its projector in the models folder is what \"auto\" uses; a chosen catalog model is not replaced by it", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "kesher-vision-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const config = { computer: { visionModel: "auto" as "auto" | "qwen3-vl-8b" }, engines: {} };
+  const loads: string[] = [];
+  const v = new VisionService({
+    paths: { models: join(root, "models"), root, engines: join(root, "engines") },
+    config,
+    downloads: {} as DownloadManager,
+    binary: () => undefined,
+    makeEngine: (port) => ({ baseUrl: `http://127.0.0.1:${port}`, apiKey: "k", load: async (p) => void loads.push(p), stop: async () => undefined }),
+  });
+  const folder = join(root, "models", "image-support", "someone", "Qwen2.5-VL-7B-Instruct-GGUF");
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, "Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL.gguf"), "x");
+  await v.refresh();
+  assert.equal(v.model(), undefined, "no projector: not usable");
+  assert.equal(v.withoutProjector().length, 1);
+  await writeFile(join(folder, "mmproj-F16.gguf"), "x");
+  await v.refresh();
+  assert.equal(v.model()?.name, "Qwen2.5-VL-7B-Instruct-UD-Q4_K_XL");
+  assert.equal(v.model()?.coords, "abs28");
+  assert.match(v.localFound()!.mmproj, /mmproj-F16\.gguf$/);
+  config.computer.visionModel = "qwen3-vl-8b";
+  assert.equal(v.model(), undefined, "a model chosen by name is only that model");
+  config.computer.visionModel = "auto";
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ choices: [{ message: { content: "(280, 140)" } }] }))) as typeof fetch;
+  t.after(() => void (globalThis.fetch = realFetch));
+  await v.ground({ png: Buffer.from("png"), width: 1000, height: 500, query: "Save" });
+  assert.match(loads[0]!, /Qwen2\.5-VL-7B-Instruct-UD-Q4_K_XL\.gguf$/);
+  await v.unload();
+});

@@ -9,11 +9,12 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { listHubFiles, type DownloadManager, type HubFile } from "@kesher/downloads";
-import { VISION_MODELS, pickVisionModel, type VisionChoice, type VisionModel } from "@kesher/shared";
+import { LOCAL_VISION_ID, VISION_MODELS, pickVisionModel, type VisionChoice, type VisionModel } from "@kesher/shared";
 import { suggestHeavyDir } from "./heavy-folder.js";
 import { LlamaEngine, freePort, waitForDownload } from "./llamacpp.js";
 import { VisionGrounder, type GroundResult, type VisionAnswer, type VisionAsk } from "./vision-ground.js";
 import type { BenchRun } from "./vision-bench.js";
+import { findLocalVision, localVisionModel, type LocalVision } from "./vision-local.js";
 
 /** The two files a vision model needs on disk. */
 export interface VisionFiles {
@@ -121,6 +122,7 @@ export class VisionService implements Grounding {
    * @param m - The model.
    */
   async files(m: VisionModel): Promise<VisionFiles | undefined> {
+    if (m.id === LOCAL_VISION_ID) return this.local?.files;
     const folder = join(this.dir(), ...m.repo.split("/"));
     const names = await readdir(folder).catch(() => [] as string[]);
     const model = names.find((n) => new RegExp(m.filePattern, "i").test(n));
@@ -140,16 +142,38 @@ export class VisionService implements Grounding {
   }
 
   private installedNow: string[] = [];
+  private local: LocalVision | undefined;
+  private noProjector: string[] = [];
 
-  /** Re-reads which models are installed (the tools answer from this, without touching the disk each call). */
+  /**
+   * Re-reads which models are installed (the tools answer from this, without touching the disk each call), and looks
+   * for a vision model on the computer that is not in the catalog (vision-local.ts).
+   */
   async refresh(): Promise<string[]> {
     this.installedNow = await this.installed();
+    const found = findLocalVision([this.d.paths.models, this.dir()]);
+    this.local = found.usable[0];
+    this.noProjector = found.noProjector;
     return this.installedNow;
   }
 
-  /** The model the setting means among the installed ones. */
+  /** The vision model found on the computer (a Qwen-VL or UI-TARS file with its projector) as of the last refresh. */
+  localFound(): { name: string; model: string; mmproj: string } | undefined {
+    return this.local ? { name: this.local.name, model: this.local.files.model, mmproj: this.local.files.mmproj } : undefined;
+  }
+
+  /** Vision model files found on the computer that have no projector file beside them, so cannot be used (as of the last refresh). */
+  withoutProjector(): string[] {
+    return this.noProjector;
+  }
+
+  /**
+   * The model the setting means among the installed ones. "auto" takes the first installed catalog model, else a
+   * vision model found on the computer; a model chosen by name is only that model.
+   */
   model(): VisionModel | undefined {
-    return pickVisionModel(this.d.config.computer.visionModel ?? "auto", this.installedNow);
+    const choice = this.d.config.computer.visionModel ?? "auto";
+    return pickVisionModel(choice, this.installedNow) ?? (choice === "auto" && this.local ? localVisionModel(this.local) : undefined);
   }
 
   /** The default model's offer (the first in the catalog), or the chosen one's. */
@@ -284,7 +308,7 @@ export class VisionService implements Grounding {
 
   /** Finds a thing with the chosen model. */
   async ground(req: { png: Buffer; width: number; height: number; query: string; signal?: AbortSignal }): Promise<GroundResult> {
-    const m = this.model() ?? pickVisionModel(this.d.config.computer.visionModel ?? "auto", await this.refresh());
+    const m = this.model() ?? (await this.refresh(), this.model());
     if (!m) throw new Error("No vision model is installed.");
     return this.grounder.ground(m, req);
   }
@@ -301,7 +325,7 @@ export class VisionService implements Grounding {
    * @returns The model's text.
    */
   async plan(req: { system: string; user: string; image?: { data: Buffer; mimeType: string }; maxTokens?: number; signal?: AbortSignal }): Promise<string> {
-    const m = this.model() ?? pickVisionModel(this.d.config.computer.visionModel ?? "auto", await this.refresh());
+    const m = this.model() ?? (await this.refresh(), this.model());
     if (!m) throw new Error("No vision model is installed.");
     const r = await this.ask({ model: m, system: req.system, user: req.user, maxTokens: req.maxTokens ?? 400, ...(req.image ? { png: req.image.data, mime: req.image.mimeType } : {}), ...(req.signal ? { signal: req.signal } : {}) });
     return r.text;

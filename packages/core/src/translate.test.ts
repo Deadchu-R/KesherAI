@@ -10,9 +10,11 @@ test("notEnglish and autoTarget", () => {
   assert.equal(autoTarget("hello world"), "he");
 });
 
-test("pickTranslator: loaded chat model, then Gemini, then the local file", () => {
+test("pickTranslator: the chosen file, then the loaded chat model, then a local file, then Gemini", () => {
+  assert.deepEqual(pickTranslator({ localChat: "llamacpp/a", gemini: "gemini/flash", translatorFile: "/m/t.gguf", chosen: true }), { via: "local", model: "/m/t.gguf" });
   assert.deepEqual(pickTranslator({ localChat: "llamacpp/a", gemini: "gemini/flash", translatorFile: "/m/t.gguf" }), { via: "chat", model: "llamacpp/a" });
-  assert.deepEqual(pickTranslator({ gemini: "gemini/flash", translatorFile: "/m/t.gguf" }), { via: "gemini", model: "gemini/flash" });
+  assert.deepEqual(pickTranslator({ gemini: "gemini/flash", translatorFile: "/m/t.gguf" }), { via: "local", model: "/m/t.gguf" });
+  assert.deepEqual(pickTranslator({ gemini: "gemini/flash" }), { via: "gemini", model: "gemini/flash" });
   assert.deepEqual(pickTranslator({ translatorFile: "/m/t.gguf" }), { via: "local", model: "/m/t.gguf" });
   assert.equal(pickTranslator({}), undefined);
 });
@@ -65,11 +67,14 @@ test("englishPrompt leaves English alone and translates Hebrew", async () => {
   assert.match(calls[0]!.system, /generator/);
 });
 
-test("the local translation model is loaded only when nothing else can translate", async () => {
+test("a local translation model is loaded before Gemini, after a loaded chat model", async () => {
   const { t, loaded, calls } = fake({ translatorFile: () => "/models/translation/translategemma.gguf" });
   await t.translate("שלום", "en");
   assert.deepEqual(loaded, ["/models/translation/translategemma.gguf"]);
   assert.equal(calls[0]!.model, "llamacpp-beside/translategemma");
+  // Gemini is connected too: the file on the computer still goes first.
+  const both = fake({ gemini: async () => "gemini/flash", translatorFile: () => "/models/chat/x/translategemma-4b_Q5_K_M.gguf" });
+  assert.equal((await both.t.translate("שלום", "en")).via, "local");
 });
 
 test("no translator: a clear error; an answer still not in English is refused", async () => {

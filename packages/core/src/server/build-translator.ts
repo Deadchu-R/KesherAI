@@ -3,11 +3,12 @@
  * connection, and the small translation model (loaded beside the main one on demand, unloaded by the GPU guard when
  * idle). Also downloads that model when the user asks (Translate page → Download).
  */
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, join, sep } from "node:path";
 import { listHubFiles, type DownloadManager } from "@kesher/downloads";
 import type { ProviderRegistry } from "@kesher/providers";
 import type { KesherConfig } from "../config.js";
+import { listGgufFiles } from "../gguf-scan.js";
 import type { LlamaEngine } from "../llamacpp.js";
 import { modelTurnFor } from "../model-turn.js";
 import { translatorModelId, type SideEngine } from "../side-engine.js";
@@ -16,34 +17,56 @@ import { TRANSLATION_MODEL, Translator, pickFlash } from "../translate.js";
 /** The folder the translation model is downloaded into (under the models folder). */
 export const TRANSLATION_DIR = "translation";
 
+/** The last part of a path (either separator). */
+const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? p;
+
+/** A file or model id reduced for comparing: no `llamacpp/` prefix, no `.gguf`, lower case, spaces as dashes. */
+const comparable = (idOrPath: string): string =>
+  baseName(idOrPath.replace(/^llamacpp\//i, "")).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-").toLowerCase();
+
+/** How much a quantization is liked when several TranslateGemma files are on the computer (lower is better). */
+function quantRank(file: string): number {
+  const order = [/q4_k_m/i, /q5_k_m/i, /q4_k_s|q4_0/i, /q5_k_s|q5_0/i, /q6_k/i, /q8_0/i];
+  const i = order.findIndex((re) => re.test(baseName(file)));
+  return i < 0 ? order.length : i;
+}
+
 /**
- * The downloaded translation model: the translator chosen in Settings → model team when it is a GGUF file, else the
- * first GGUF under `models/translation`.
+ * The downloaded translation model, wherever the model downloader saved it:
+ * 1. the translator chosen in Settings → model team, when it is a GGUF path that exists, or the id/name of a
+ *    TranslateGemma file under the models folder (`PUT /api/model-team {translator}` stores either form);
+ * 2. any `translategemma*.gguf` under the models folder (any folder, any quantization; Q4_K_M first);
+ * 3. else the first GGUF under `models/translation` (the one-click download's folder).
  *
  * @param config - The settings.
  * @param modelsDir - The models folder.
+ * @returns The file's path, or undefined when there is none.
  */
 export function findTranslationFile(config: Pick<KesherConfig, "translator">, modelsDir: string): string | undefined {
   const pick = config.translator;
   if (pick && /\.gguf$/i.test(pick) && existsSync(pick)) return pick;
-  const walk = (dir: string, depth: number): string | undefined => {
-    let names: string[];
-    try {
-      names = readdirSync(dir);
-    } catch {
-      return undefined;
-    }
-    for (const n of names.sort()) {
-      const p = join(dir, n);
-      if (/\.gguf$/i.test(n)) return p;
-      if (depth > 0 && !n.startsWith(".") && statSync(p, { throwIfNoEntry: false })?.isDirectory()) {
-        const found = walk(p, depth - 1);
-        if (found) return found;
-      }
-    }
-    return undefined;
-  };
-  return walk(join(modelsDir, TRANSLATION_DIR), 3);
+  const all = listGgufFiles(modelsDir);
+  const gemma = all.filter((f) => /translategemma/i.test(baseName(f)) && !/mmproj/i.test(baseName(f)));
+  const chosen = pick && pick !== "main" && pick !== "off" ? gemma.find((f) => comparable(f) === comparable(pick)) : undefined;
+  if (chosen) return chosen;
+  const best = [...gemma].sort((a, b) => quantRank(a) - quantRank(b) || (a < b ? -1 : 1))[0];
+  if (best) return best;
+  const dir = join(modelsDir, TRANSLATION_DIR);
+  return all.find((f) => f.startsWith(dir + sep));
+}
+
+/**
+ * Whether the translator chosen in Settings → model team is a model file that is on this computer (then it is used
+ * before every other translator).
+ *
+ * @param config - The settings.
+ * @param modelsDir - The models folder.
+ */
+export function translatorChosenAndPresent(config: Pick<KesherConfig, "translator">, modelsDir: string): boolean {
+  const pick = config.translator;
+  if (!pick || pick === "main" || pick === "off") return false;
+  const file = findTranslationFile(config, modelsDir);
+  return !!file && (file === pick || comparable(file) === comparable(pick));
 }
 
 /**
@@ -72,6 +95,7 @@ export function buildTranslator(p: { registry: ProviderRegistry; engine: LlamaEn
       return flash.id;
     },
     translatorFile: () => findTranslationFile(p.config, p.modelsDir()),
+    translatorChosen: () => translatorChosenAndPresent(p.config, p.modelsDir()),
     loadFile: (path) => translatorModelId(p.side(), path),
     turn: (modelId) => modelTurnFor(p.registry, modelId, { temperature: 0.2 }, "helper"),
   });

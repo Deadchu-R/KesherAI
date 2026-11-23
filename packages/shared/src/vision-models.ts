@@ -15,10 +15,13 @@ export type VisionCoords =
   /** `(x, y)` in pixels of the picture as the model's own resize made it (multiples of 28: Qwen2.5-VL / UI-TARS). */
   | "abs28";
 
+/** The id of a vision model found on the computer that is not in the catalog (core's vision-local.ts). */
+export const LOCAL_VISION_ID = "local-vl";
+
 /** One vision model KesherAI can install for finding things on the screen. */
 export interface VisionModel {
   /** Stable id (settings, the API, the Install button's `vision-model…` ids). */
-  id: "qwen3-vl-8b" | "ui-tars-1.5-7b";
+  id: "qwen3-vl-8b" | "ui-tars-1.5-7b" | typeof LOCAL_VISION_ID;
   name: string;
   /** Hugging Face repository. */
   repo: string;
@@ -88,7 +91,7 @@ export const VISION_MODELS: readonly VisionModel[] = [
 ];
 
 /** What Settings → "Find things on the screen with" may hold. */
-export type VisionChoice = "auto" | VisionModel["id"];
+export type VisionChoice = "auto" | Exclude<VisionModel["id"], typeof LOCAL_VISION_ID>;
 
 /**
  * The model a choice means, among the installed ones: `auto` takes the first installed in catalog order.

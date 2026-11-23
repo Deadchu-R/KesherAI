@@ -58,18 +58,21 @@ export function autoTarget(text: string): TranslateTarget {
 }
 
 /**
- * Picks the translating model: the loaded local chat model, else Gemini's flash model, else the local translation
- * model file (loaded on demand).
+ * Picks the translating model: the translation model file the user chose (when it is on the computer), else the
+ * loaded local chat model, else any local translation model file (loaded on demand), and only then Gemini's flash model.
+ * A model on this computer is used before the cloud one.
  *
  * @param o.localChat - The local chat model's id, when one is loaded now.
  * @param o.gemini - Gemini's flash model id, when a Gemini connection is set up.
  * @param o.translatorFile - A downloaded translation model (GGUF path), if there is one.
+ * @param o.chosen - The user chose that file in Settings → model team: it comes before every other translator.
  * @returns The choice, or undefined when nothing can translate.
  */
-export function pickTranslator(o: { localChat?: string | undefined; gemini?: string | undefined; translatorFile?: string | undefined }): { via: TranslatorVia; model: string } | undefined {
+export function pickTranslator(o: { localChat?: string | undefined; gemini?: string | undefined; translatorFile?: string | undefined; chosen?: boolean | undefined }): { via: TranslatorVia; model: string } | undefined {
+  if (o.chosen && o.translatorFile) return { via: "local", model: o.translatorFile };
   if (o.localChat) return { via: "chat", model: o.localChat };
-  if (o.gemini) return { via: "gemini", model: o.gemini };
   if (o.translatorFile) return { via: "local", model: o.translatorFile };
+  if (o.gemini) return { via: "gemini", model: o.gemini };
   return undefined;
 }
 
@@ -159,6 +162,8 @@ export interface TranslatorDeps {
   gemini(signal?: AbortSignal): Promise<string | undefined>;
   /** A downloaded translation model file, if there is one. */
   translatorFile(): string | undefined;
+  /** Whether the user chose that file in Settings → model team (then it is used first). */
+  translatorChosen?(): boolean;
   /** Loads a translation model file beside the main one and returns its model id. */
   loadFile(path: string): Promise<string>;
   /** A model turn for a model id. */
@@ -176,7 +181,7 @@ export class Translator {
    * @param signal - Cancels listing Gemini's models.
    */
   async which(signal?: AbortSignal): Promise<{ via: TranslatorVia; model: string } | undefined> {
-    return pickTranslator({ localChat: this.deps.localChat(), gemini: await this.deps.gemini(signal).catch(() => undefined), translatorFile: this.deps.translatorFile() });
+    return pickTranslator({ localChat: this.deps.localChat(), gemini: await this.deps.gemini(signal).catch(() => undefined), translatorFile: this.deps.translatorFile(), chosen: this.deps.translatorChosen?.() });
   }
 
   /**
