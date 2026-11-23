@@ -1,0 +1,31 @@
+{
+ "group": "עורכים · Editors",
+ "mocks": [
+  {"url": "**/api/comfy-ui/session", "json": {"ok": true, "running": true}},
+  {"url": "**/api/comfy-ui/flows/music-ace-step-15/smoke", "method": "POST", "json": {"ok": true, "seconds": 41, "outputs": [{"kind": "audio", "file": "smoke.flac"}]}},
+  {"url": "**/api/comfy-ui/flows/video-wan22-ti2v/smoke", "method": "POST", "json": {"ok": false, "seconds": 12, "error": "Not enough GPU memory: close the chat model first"}},
+  {"url": "**/api/comfy-ui/flows", "json": [
+   {"id": "music-ace-step-15", "icon": "🎵", "title": {"en": "Music from words (ACE-Step 1.5)", "he": "מוזיקה ממילים (ACE-Step 1.5)"}, "description": {"en": "", "he": ""}, "license": {"name": "Apache-2.0", "url": ""}, "ready": true, "downloading": false, "missingGb": 0},
+   {"id": "video-wan22-ti2v", "icon": "🎬", "title": {"en": "Video from a picture (Wan 2.2 5B)", "he": "וידאו מתמונה (Wan 2.2 5B)"}, "description": {"en": "", "he": ""}, "license": {"name": "Apache-2.0", "url": ""}, "ready": true, "downloading": false, "missingGb": 0},
+   {"id": "3d-hunyuan3d", "icon": "🧊", "title": {"en": "3D object from a picture (Hunyuan3D 2)", "he": "אובייקט תלת-ממד מתמונה (Hunyuan3D 2)"}, "description": {"en": "", "he": ""}, "license": {"name": "Tencent", "url": ""}, "ready": true, "downloading": false, "missingGb": 0},
+   {"id": "3d-trellis2", "icon": "🧊", "title": {"en": "3D model with colours from a picture (TRELLIS.2)", "he": "מודל תלת-ממד עם צבעים מתמונה (TRELLIS.2)"}, "description": {"en": "", "he": ""}, "license": {"name": "MIT", "url": ""}, "ready": false, "downloading": false, "missingGb": 9.2}
+  ]}
+ ],
+ "boards": [
+  {
+   "id": "NodesFlowTest",
+   "title": "צמתים › זרימות מוכנות: כפתור \"בדיקה\" לכל זרימה (מריץ אותה פעם אחת בהגדרות הכי קטנות; ✓ עם שניות או השגיאה; רק במחשב)",
+   "titleEn": "Nodes › Ready-made flows: a Test button per flow",
+   "route": "#/nodes",
+   "viewports": ["desktop"],
+   "steps": [
+    {"wait": ".nodes-flows"},
+    {"click": ".nodes-flows button"},
+    {"wait": ".nodes-flow-test"},
+    {"click": ".nodes-flow-test >> nth=0", "force": true},
+    {"click": ".nodes-flow-test >> nth=1", "force": true},
+    {"waitMs": 600}
+   ]
+  }
+ ]
+}
