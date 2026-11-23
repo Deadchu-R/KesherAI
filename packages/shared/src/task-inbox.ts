@@ -51,6 +51,48 @@ export function opencodeModelFor(t: { size?: InboxSize; model?: string }, s: Pic
   return t.size === "S" ? s.small || OPENCODE_DEFAULTS.small : s.strong || OPENCODE_DEFAULTS.strong;
 }
 
+/**
+ * The models a task falls back to when its own model answers 429, in order (after the configured small and strong
+ * ones). Kimi is never here: it has ~98 requests a month, so it runs only when the user configured or chose it.
+ */
+export const OPENCODE_FALLBACKS: readonly string[] = ["opencode-go/mimo-v2.6-flash", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3", "opencode-go/mimo-v2.6-pro"];
+
+/** What the Go plan ($10) allows a month, per model (approximate, 2026-11-22), shown in the OpenCode card. */
+export const OPENCODE_MONTHLY_REQUESTS: ReadonlyArray<{ id: string; name: string; requests: number }> = [
+  { id: "opencode-go/kimi-k3", name: "Kimi K3", requests: 98 },
+  { id: "opencode-go/mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3260 },
+  { id: "opencode-go/glm-5.3", name: "GLM-5.3", requests: 2640 },
+  { id: "opencode-go/mimo-v2.6-flash", name: "MiMo-V2.6-Flash", requests: 30100 },
+  { id: "opencode-go/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", requests: 43300 },
+];
+
+/**
+ * The models OpenCode Go may use for a task, in order: the configured small and strong, then the fallbacks. No
+ * duplicates; kimi appears only when configured.
+ *
+ * @param s - The OpenCode Go settings.
+ */
+export function opencodeModelOrder(s: Pick<OpencodeSettings, "small" | "strong">): string[] {
+  return [...new Set([s.small || OPENCODE_DEFAULTS.small, s.strong || OPENCODE_DEFAULTS.strong, ...OPENCODE_FALLBACKS])];
+}
+
+/**
+ * The first model that is not cooling down. `first` (the task's own pick) is tried before the order; `skip` models
+ * (one that just answered 429) are never returned.
+ *
+ * @param order - The models in order (opencodeModelOrder).
+ * @param until - Each model's cooldown end (ms since epoch); absent or past means free.
+ * @param now - Now (ms).
+ * @param first - The model to prefer, when free.
+ * @param skip - Models to leave out.
+ * @returns The model id, or undefined when all are cooling down.
+ */
+export function opencodeFreeModel(order: readonly string[], until: Readonly<Record<string, number>>, now: number, first?: string, skip: readonly string[] = []): string | undefined {
+  const free = (m: string): boolean => !skip.includes(m) && (until[m] ?? 0) <= now;
+  if (first && free(first)) return first;
+  return order.find(free);
+}
+
 /** A model id without its connection (`opencode-go/kimi-k3` → `kimi-k3`), for cards. */
 export const opencodeModelName = (id: string): string => id.replace(new RegExp(`^${OPENCODE_PROVIDER}/`), "");
 
@@ -297,6 +339,8 @@ export interface OpencodeState {
   used: number;
   /** Its plan's limit was reached: no task starts before this (ms since epoch). */
   until?: number;
+  /** Models cooling down after a 429: model id → when it is free again (ms since epoch). Only those still cooling. */
+  cooldowns?: Record<string, number>;
   /** The models its connection lists (`opencode-go/<model>`), for the pickers; empty when it could not be asked. */
   models: string[];
 }

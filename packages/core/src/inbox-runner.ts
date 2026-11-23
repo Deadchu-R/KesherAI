@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, opencodeModelFor, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -98,7 +98,7 @@ interface Saved {
   /** A model family whose quota ran out, and until when (ms): later tasks start on the next model of their chain. */
   familyUntil?: Partial<Record<ModelFamily, number>>;
   /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
-  opencode?: { date: string; used: number; until?: number };
+  opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
   research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
 }
@@ -216,9 +216,9 @@ export class TaskInbox {
   }
 
   /** Today's OpenCode Go count, reset at midnight (UTC, like Antigravity's). */
-  private ocToday(): { date: string; used: number; until?: number } {
+  private ocToday(): { date: string; used: number; modelUntil?: Record<string, number> } {
     const date = new Date(this.now()).toISOString().slice(0, 10);
-    if (this.saved.opencode?.date !== date) this.saved.opencode = { date, used: 0, ...(this.saved.opencode?.until ? { until: this.saved.opencode.until } : {}) };
+    if (this.saved.opencode?.date !== date) this.saved.opencode = { date, used: 0, ...(this.saved.opencode?.modelUntil ? { modelUntil: this.saved.opencode.modelUntil } : {}) };
     return this.saved.opencode;
   }
 
@@ -240,9 +240,39 @@ export class TaskInbox {
     if (!this.oc.enabled) return "OpenCode Go is off (Settings > Task inbox).";
     if (!this.d.coder?.ready()) return "Waiting for the OpenCode Go connection: add it with your key (Settings > Connections).";
     const day = this.ocToday();
-    if ((day.until ?? 0) > this.now()) return `OpenCode Go limit reached until ${new Date(day.until!).toISOString()}.`;
+    const out = this.opencodeFamilyUntil();
+    if (out) return `OpenCode Go limit reached until ${new Date(out).toISOString()}.`;
     if (day.used >= this.oc.dailyCap) return `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached (Settings > Task inbox).`;
     return undefined;
+  }
+
+  /** The models still cooling down after a 429 (model id → end, ms); expired ones are dropped. */
+  private opencodeCooldowns(): Record<string, number> {
+    const day = this.ocToday();
+    const now = this.now();
+    const live = Object.fromEntries(Object.entries(day.modelUntil ?? {}).filter(([, u]) => u > now));
+    if (Object.keys(live).length) day.modelUntil = live;
+    else delete day.modelUntil;
+    return live;
+  }
+
+  /**
+   * Blocks one OpenCode Go model after its 429: until the reset the answer named, else 5 hours. The others stay open.
+   *
+   * @param model - The model id that answered 429.
+   * @param wait - The wait the answer's headers or text gave (ms), when it did.
+   */
+  private blockOpencodeModel(model: string, wait?: number): void {
+    const day = this.ocToday();
+    day.modelUntil = { ...day.modelUntil, [model]: this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS) };
+  }
+
+  /** When OpenCode Go as a whole is free again (the earliest model's end), or undefined while any model is free. */
+  private opencodeFamilyUntil(): number | undefined {
+    const cool = this.opencodeCooldowns();
+    const order = opencodeModelOrder(this.oc);
+    if (opencodeFreeModel(order, cool, this.now())) return undefined;
+    return Math.min(...order.map((m) => cool[m] ?? 0));
   }
 
   /**
@@ -386,7 +416,9 @@ export class TaskInbox {
     const day = this.ocToday();
     const ready = !!c?.ready();
     const models = ready ? await Promise.race([c!.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]) : [];
-    return { ready, used: day.used, ...((day.until ?? 0) > this.now() ? { until: day.until } : {}), models: models.slice(0, 100) };
+    const until = this.opencodeFamilyUntil();
+    const cooldowns = this.opencodeCooldowns();
+    return { ready, used: day.used, ...(until ? { until } : {}), ...(Object.keys(cooldowns).length ? { cooldowns } : {}), models: models.slice(0, 100) };
   }
 
   /** Resolves when no run is going on (its result written). */
@@ -835,7 +867,10 @@ export class TaskInbox {
 
   /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
   private async runOpencode(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
-    const model = opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
+    const order = opencodeModelOrder(this.oc);
+    const wanted = opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
+    // The task's own pick, unless that model is cooling down after a 429: then the next free one in the order.
+    let model = opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted;
     const repo = this.repo();
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
     const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
@@ -868,36 +903,52 @@ export class TaskInbox {
     }, t.maxMinutes * 60_000);
     let text = "";
     let error = "";
-    let wait: number | undefined;
+    const tried: string[] = [];
     try {
       const stopped = new Promise<never>((_, rej) => run.ctl.signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
-      const r = await Promise.race([
-        c.run({
-          worktree: wt.path,
-          title: `◈ OpenCode Go · ${t.title}`.slice(0, 120),
-          prompt: agentPrompt(t, t.branch),
-          model,
-          signal: run.ctl.signal,
-          onStep: (n) => {
-            t.steps = n;
-            void this.save();
-          },
-        }),
-        stopped,
-      ]);
-      text = r.text;
-    } catch (e) {
-      error = (e as Error).message || String(e);
-      if (isQuotaError(error)) wait = retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now());
+      for (;;) {
+        try {
+          const r = await Promise.race([
+            c.run({
+              worktree: wt.path,
+              title: `◈ OpenCode Go · ${t.title}`.slice(0, 120),
+              prompt: agentPrompt(t, t.branch),
+              model,
+              signal: run.ctl.signal,
+              onStep: (n) => {
+                t.steps = n;
+                void this.save();
+              },
+            }),
+            stopped,
+          ]);
+          text = r.text;
+          error = "";
+          break;
+        } catch (e) {
+          error = (e as Error).message || String(e);
+          if (run.why || !isQuotaError(error)) break;
+          // A 429 blocks only this model (until its reset, else 5 hours); the task goes once more on the next free one.
+          const wait = retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now());
+          this.blockOpencodeModel(model, wait);
+          tried.push(model);
+          const next = tried.length < 2 ? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), undefined, tried) : undefined;
+          if (!next) break;
+          const prev = model;
+          model = next;
+          t.modelUsed = `OpenCode Go · ${opencodeModelName(model)}`;
+          t.modelFallback = `${opencodeModelName(prev)} → ${opencodeModelName(model)}`;
+          await this.save();
+        }
+      }
     } finally {
       clearTimeout(timer);
       this.opencodeStop = undefined;
     }
     t.summary = text.trim().slice(-2000) || undefined;
     const limited = !run.why && !!error && isQuotaError(error);
-    // Like Antigravity's familyUntil: no OpenCode Go task starts before the window resets (Retry-After, else 5 hours).
-    if (limited) this.ocToday().until = this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS);
-    const why = limited ? `OpenCode Go limit reached until ${new Date(this.ocToday().until!).toISOString()}.` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
+    const until = limited ? this.ocToday().modelUntil?.[model] : undefined;
+    const why = limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
     await this.finish(t, wt.path, wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
   }
 

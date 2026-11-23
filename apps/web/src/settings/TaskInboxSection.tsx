@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { OPENCODE_DEFAULTS, opencodeModelName, type InboxState } from "@kesher/shared";
+import { OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
 import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -42,6 +42,8 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
       </select>
     </label>
   );
+  const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  const cool = st?.cooldowns ?? {};
   const when = (ms: number) => new Date(ms).toLocaleString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   return (
     <div className="stack tinbox-ocgo">
@@ -52,6 +54,17 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
       <p className="small muted">{L("כש-Antigravity נגמר (מכסה או סף יומי), משימות קוד קטנות ובינוניות עוברות לכאן ורצות לבד. משימות גדולות נשארות ל-Claude. העבודה בענף ocgo/*, אף פעם לא ב-main, ומחכה לבדיקה של Claude.", "When Antigravity is out (quota or daily limit), small and medium code tasks come here and run by themselves. Big tasks stay with Claude. The work goes to an ocgo/* branch, never main, and waits for Claude's review.")}</p>
       {!st?.ready && <p className="small tinbox-err">{L("אין חיבור OpenCode Go עם מפתח: הוסף אותו בהגדרות › חיבורים.", "No OpenCode Go connection with a key: add it in Settings › Connections.")}</p>}
       {st?.until && <p className="small tinbox-err">⏸ {L(`הגעת למגבלה של OpenCode Go עד ${when(st.until)}`, `OpenCode Go limit reached until ${when(st.until)}`)}</p>}
+      <ul className="small stack tinbox-ocmodels" dir="ltr">
+        {OPENCODE_MONTHLY_REQUESTS.map((m) => (
+          <li key={m.id} className="row wrap">
+            <span className="grow">{m.name} <span className="muted">· ~{m.requests.toLocaleString("en-US")} {L("בקשות/חודש", "requests/month")}</span></span>
+            {cool[m.id] !== undefined && <span className="tinbox-err">⏸ {L(`חסום עד ${hhmm(cool[m.id]!)}`, `blocked until ${hhmm(cool[m.id]!)}`)}</span>}
+          </li>
+        ))}
+        {Object.entries(cool).filter(([id]) => !OPENCODE_MONTHLY_REQUESTS.some((m) => m.id === id)).map(([id, u]) => (
+          <li key={id} className="row wrap"><span className="grow">{opencodeModelName(id)}</span><span className="tinbox-err">⏸ {L(`חסום עד ${hhmm(u)}`, `blocked until ${hhmm(u)}`)}</span></li>
+        ))}
+      </ul>
       {pick("small", "מודל למשימות קטנות (S): זול ומהיר", "Model for small tasks (S): cheap and fast")}
       {pick("strong", "מודל למשימות בינוניות וגדולות (M/L): חזק", "Model for medium and large tasks (M/L): strong")}
       <label className="row wrap small">
@@ -119,7 +132,7 @@ export function TaskInboxSection() {
 
       <h3>✦ Antigravity</h3>
       <label className="row small"><input type="radio" checked readOnly /> <span><b>{L('רק כשאני לוחץ "הפעל"', "Only when I press Run")}</b><br /><span className="muted">{L("במחשב, או בתשובה לשאלה בטלפון. משימה אחת בכל לחיצה, בלי המשך אוטומטי, בלי ריצות במקביל.", "On the PC, or answering its ask on the phone. One task per tap, no automatic follow-up, no parallel runs.")}</span></span></label>
-      <label className="row small locked"><input type="radio" disabled /> <span><b>{L("אוטומטי", "Automatic")}</b> 🔒<br /><span className="muted">{L("נעול: תנאי השימוש של Google לא מתירים זאת בתוכנית אישית. לעבודה בלי השגחה: מפתח API של AI Studio, או Jules (בהמשך).", "Locked: Google's terms do not allow it on a personal plan. For unattended work: an AI Studio API key, or Jules (later).")}</span></span></label>
+      <label className="row small locked"><input type="radio" disabled /> <span><b>{L("אוטומטי", "Automatic")}</b> 🔒<br /><span className="muted">{L("נעול: תנאי השימוש של Google לא מתירים זאת בתוכנית אישית. לעבודה בלי השגחה: מפתח API של AI Studio.", "Locked: Google's terms do not allow it on a personal plan. For unattended work: an AI Studio API key.")}</span></span></label>
       <label className="row wrap small">
         <span className="grow">{L("מודל (ריק: ברירת המחדל של Gemini)", "Model (empty: Gemini's default)")}</span>
         <input dir="ltr" defaultValue={c.model} placeholder="Gemini" maxLength={80} onBlur={(e) => e.target.value.trim() !== c.model && put({ model: e.target.value.trim() })} aria-label={L("מודל", "Model")} />
@@ -133,7 +146,6 @@ export function TaskInboxSection() {
         <span><span className="tinbox-ex agy">✦ Antigravity</span> {L('רק ב"הפעל".', "Only on Run.")}</span>
         <span><span className="tinbox-ex ocgo">◈ OpenCode Go</span> {L("רץ לבד, משימות קוד קטנות ובינוניות כש-Antigravity נגמר.", "Runs by itself: small and medium code tasks while Antigravity is out.")}</span>
         <span><span className="tinbox-ex opus">{L("✷ סוכן Opus", "✷ Opus agent")}</span> {L("של Claude, לא רץ במחשב. Claude מחליט.", "Claude's own, not on this PC. Claude decides.")}</span>
-        <span className="locked"><span className="tinbox-ex">Jules</span> {L("בהמשך (API רשמי של Google לעבודה בלי השגחה).", "Later (Google's official API for unattended work).")}</span>
       </div>
 
       <h3>Git</h3>

@@ -295,8 +295,7 @@ function WorkListSend({ onSent }: { onSent: () => void }) {
 function TermsNote() {
   return (
     <p className="small muted tinbox-terms">
-      {L("Antigravity רץ רק כשאתה לוחץ \"הפעל\" (במחשב, או בתשובה לשאלה בטלפון), משימה אחת בכל לחיצה, לפי מכסת התוכנית שלך. לעבודה בלי השגחה עדיף מפתח API של AI Studio או Jules (", "Antigravity runs only when you tap Run (on the PC, or answering its ask on the phone), one task per tap, within your plan's quota. For unattended work, an AI Studio API key or Jules is the better path (")}
-      <span className="tinbox-later">{L("Jules: בהמשך", "Jules: later")}</span>).
+      {L("Antigravity רץ רק כשאתה לוחץ \"הפעל\" (במחשב, או בתשובה לשאלה בטלפון), משימה אחת בכל לחיצה, לפי מכסת התוכנית שלך. לעבודה בלי השגחה עדיף מפתח API של AI Studio.", "Antigravity runs only when you tap Run (on the PC, or answering its ask on the phone), one task per tap, within your plan's quota. For unattended work, an AI Studio API key is the better path.")}
     </p>
   );
 }

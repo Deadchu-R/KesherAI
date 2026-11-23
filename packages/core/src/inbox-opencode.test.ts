@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OPENCODE_DEFAULTS, opencodeModelFor } from "@kesher/shared";
+import { OPENCODE_DEFAULTS, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
 import { inboxSnapshot } from "./agent-activity.js";
 import { OPENCODE_LIMIT_MS, TaskInbox, type RunCmd, type TaskInboxDeps } from "./inbox-runner.js";
 import { taskSize } from "./task-inbox.js";
@@ -244,7 +244,8 @@ test("opencode: a 429 marks it out until Retry-After (else 5 hours) and stops fe
   const { inbox, notes } = inboxFor(repo, root, coder, {}, () => now);
   try {
     await syncAndRun(inbox);
-    assert.equal(runs.length, 1);
+    // Each 429 blocks only its model; the task went on through all four (two tries a run) before the family was out.
+    assert.equal(runs.length, 4);
     const t = await inbox.task("c-20261122-09");
     assert.equal(t.status, "deferred-quota");
     assert.match(t.note ?? "", /OpenCode Go limit reached until/);
@@ -253,7 +254,7 @@ test("opencode: a 429 marks it out until Retry-After (else 5 hours) and stops fe
     // The second task is not fed to it while the limit holds.
     assert.equal((await inbox.task("c-20261122-10")).status, "waiting");
     await inbox.pumpOpencode();
-    assert.equal(runs.length, 1);
+    assert.equal(runs.length, 4);
     // After the reset both go, in order.
     fail = undefined;
     now += 601_000;
@@ -269,6 +270,44 @@ test("opencode: a 429 marks it out until Retry-After (else 5 hours) and stops fe
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("opencode: a 429 blocks only that model; the task goes once more on the next free one", async () => {
+  const { root, repo } = await setup({ "c-20261122-11": TASK("c-20261122-11", "opencode"), "c-20261122-12": TASK("c-20261122-12", "opencode") });
+  const now = 1_800_000_000_000;
+  const { coder, runs } = fakeCoder({ fail: () => (runs.length === 1 ? Object.assign(new Error("429 usage limit reached"), { rateHeaders: { "retry-after": "900" } }) : undefined) });
+  const { inbox } = inboxFor(repo, root, coder, {}, () => now);
+  try {
+    await syncAndRun(inbox);
+    // The first task: strong (pro) answered 429, flash took it over and finished it.
+    assert.deepEqual(runs.slice(0, 2).map((r) => r.model), ["opencode-go/mimo-v2.6-pro", "opencode-go/mimo-v2.6-flash"]);
+    const t = await inbox.task("c-20261122-11");
+    assert.equal(t.status, "done");
+    assert.match(t.modelUsed ?? "", /mimo-v2\.6-flash/);
+    // The family is not blocked: only pro is cooling (900 s); the next task starts on the next free model.
+    const st = (await inbox.state(true)).opencode;
+    assert.equal(st?.until, undefined);
+    assert.deepEqual(st?.cooldowns, { "opencode-go/mimo-v2.6-pro": now + 900_000 });
+    assert.equal(runs[2]?.model, "opencode-go/mimo-v2.6-flash");
+    assert.equal((await inbox.task("c-20261122-12")).status, "done");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("opencode: the fallback order and the free-model pick (kimi only when configured)", () => {
+  const def = opencodeModelOrder(OPENCODE_DEFAULTS);
+  assert.deepEqual(def, ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro", "opencode-go/deepseek-v4.1-flash", "opencode-go/glm-5.3"]);
+  assert.ok(!def.some((m) => m.includes("kimi")));
+  // Configured small/strong come first, kimi included when the user chose it.
+  assert.deepEqual(opencodeModelOrder({ small: "opencode-go/kimi-k3", strong: "opencode-go/glm-5.3" }).slice(0, 3), ["opencode-go/kimi-k3", "opencode-go/glm-5.3", "opencode-go/mimo-v2.6-flash"]);
+  const now = 1000;
+  assert.equal(opencodeFreeModel(def, {}, now, "opencode-go/mimo-v2.6-pro"), "opencode-go/mimo-v2.6-pro");
+  assert.equal(opencodeFreeModel(def, { "opencode-go/mimo-v2.6-pro": 2000 }, now, "opencode-go/mimo-v2.6-pro"), "opencode-go/mimo-v2.6-flash");
+  // An expired cooldown is free again; a skipped model is never returned; all cooling: undefined.
+  assert.equal(opencodeFreeModel(def, { "opencode-go/mimo-v2.6-pro": 999 }, now, "opencode-go/mimo-v2.6-pro"), "opencode-go/mimo-v2.6-pro");
+  assert.equal(opencodeFreeModel(def, {}, now, undefined, ["opencode-go/mimo-v2.6-flash"]), "opencode-go/mimo-v2.6-pro");
+  assert.equal(opencodeFreeModel(def, Object.fromEntries(def.map((m) => [m, 5000])), now), undefined);
 });
 
 test("opencode: the research loop fills the gap while Antigravity is out (M tasks; lead tasks stay)", async () => {
