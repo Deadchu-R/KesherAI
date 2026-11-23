@@ -839,6 +839,9 @@ export class ComputerControl {
         yShot = Y * v.scale;
       }
 
+      // A point outside the picture is an error the model can fix, not a click at the edge (clamping hid wrong coordinates).
+      if (xShot < 0 || yShot < 0 || xShot > v.width || yShot > v.height)
+        throw new Error(`(${X},${Y}) is outside the last screenshot (${v.width}×${v.height}).`);
       let xDesk = xShot / v.scale + v.left;
       let yDesk = yShot / v.scale + v.top;
 
