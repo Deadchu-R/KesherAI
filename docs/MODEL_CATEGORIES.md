@@ -70,3 +70,7 @@ at 256 x 256; 3D a short latent and a coarse mesh; 2 sampler steps; a generated 
 | Vision | auto | failed: nothing detected though gemma-4 + mmproj is on disk (fixed in 3a4bbee3) |
 | Video / music / 3D | Wan 2.2 5B / ACE-Step 1.5 / Hunyuan3D 2 | flows ready and models present; not run: KesherAI has no API to run a ComfyUI flow headless yet |
 | Hebrew voice | F5-TTS | not installed (3.6 GB, waits for Roee's tap) |
+
+### Re-run 23.11 on 0.6.462
+
+Every category works through KesherAI's API: DictaLM-12B answers in Hebrew with thinking off (9 s); the Qwen3.5-2B router answers (0.3 s); the translator runs locally on translategemma-4b; vision is `ready` on gemma-4-12b (Qwen2.5-VL-7B listed as unused: no mmproj beside it); smoke runs: music ACE-Step 1.5 ✓ 27 s, video Wan 2.2 5B ✓ 26 s, 3D Hunyuan3D 2 ✓ 17 s. Only the Hebrew voice (F5-TTS) is left, waiting for Roee's tap to download.
