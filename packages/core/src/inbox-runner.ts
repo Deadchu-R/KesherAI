@@ -1871,7 +1871,16 @@ export class TaskInbox {
     const allOk = checks.every((c) => c.ok);
     let status: InboxStatus;
     if (blocked) status = "failed";
-    else if (!files.length) status = forced ?? "failed";
+    else if (!files.length && !forced && t.runBy === "antigravity" && !why && this.now() - (t.startedAt ?? this.now()) < 4 * 60_000) {
+      // Antigravity with a spent weekly quota sometimes ends at once with no text we recognise and no change
+      // (2026-11-23: 11 research-loop tasks in a row, 1–2 minutes each). Treat it as the quota: the task waits, and the
+      // family is marked out for 6 hours so the loop stops feeding Antigravity instead of failing task after task.
+      const fam = t.modelUsed ? familyOf(t.modelUsed) : undefined;
+      const until = this.now() + 6 * 3600_000;
+      this.saved.familyUntil = { ...this.saved.familyUntil, ...(fam === "flash" ? { flash: until } : { opus: until, sonnet: until, ...(fam ? {} : { flash: until }) }) };
+      status = "deferred-quota";
+      why = "Antigravity ended at once without changing anything (its quota is likely spent); it waits and tries again later.";
+    } else if (!files.length) status = forced ?? "failed";
     else status = forced ?? (ok && allOk ? "done" : "partial");
     if (status === "partial" || (status === "deferred-quota" && files.length)) {
       const partial = `${t.branch}-partial`;
