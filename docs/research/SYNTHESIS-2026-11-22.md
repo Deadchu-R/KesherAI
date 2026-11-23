@@ -1,5 +1,7 @@
 # Research synthesis 2026-11-22: tasks for co-developer, one chat, game engines (and everything else)
 
+Last updated: 2026-11-23 (t308 maintenance — CD-1, CD-4, CD-8, GE-14, GE-23, GE-25 marked DONE).
+
 Source: every report in `docs/research/` (46 files on main plus `ui-texts-review.md`, which exists only on the branch
 `agy/c-20261121-04-check-interface-texts-in-hebre-partial`; the other `agy/*` branches carry the same report files that
 are on main), and `docs/RESEARCH_LOG.md` from 2026-11-20. Each task was checked against `packages/`, `apps/`, `plugins/`,
@@ -22,13 +24,13 @@ browser-computer-control). UIA (`packages/core/src/uia-script.ts`, `computer_tre
 (`vision-service.ts`, `vision-ground.ts`, `vision-find-tools.ts`), the phone live view and Stop (`ControlLive.tsx`) already exist. What is missing is the
 visible layer (overlay window), the engine pixel endpoints, the proactive watcher, next-edit suggestions, and the second-card pinning.
 
-**CD-1 Overlay state (pure model)** — NEW. Why: c-15 §1, §4, browser-computer-control §3.8, WORK_LIST line "Overlay, from c-15". Build: `packages/core/src/overlay-state.ts`: one pure state (frame on/off, model-cursor target in OS pixels, step caption, takeover flag, pending bubble), fed by the steps that `control-task.ts` already emits; exposed on `GET /api/control/live`. Size S. Who LOCAL. Deps none. Check: node:test on the reducer; the phone's `ControlLive.tsx` shows the same caption string.
+**CD-1 Overlay state (pure model)** — DONE (t260, `overlay-state.ts`, commit 82f958bb).
 
 **CD-2 Overlay window (click-through, always on top)** — NEW (no `setIgnoreMouseEvents` anywhere). Why: c-15 §4.1, c-21 §3.2. Build: transparent frameless BrowserWindow in `apps/desktop/src/overlay.ts`, `setIgnoreMouseEvents(true,{forward:true})`, switched off only over a bubble, no focus steal, orange 3 px frame, step pill, Take over button and Esc; one spike first: measure idle RAM/VRAM of the Electron window versus a native sidecar (c-15 open question). Size M. Who AGY. Deps CD-1. Check: on the PC through KesherAI (computer control run on Notepad: frame appears, clicks pass through, Esc stops); phone shows the same state.
 
 **CD-3 Visible model cursor and human pacing** — NEW (computer.ts has only a 350 ms wait, line 859, no easing). Why: c-21 §3.1-3.2, c-15 §1.1. Build: 4-6 waypoint eased cursor path (about 80 ms) before click/drag in `computer.ts`, drawn by the overlay; step cap of 15 actions per turn then ask. Size S. Who LOCAL. Deps CD-2 for the drawing; the pacing alone stands. Check: `computer.test.ts` with a fake backend asserts waypoints and the cap.
 
-**CD-4 Per-monitor DPI v2 and virtual-screen mapping** — PARTIAL (`computer.ts` calls the old `SetProcessDPIAware`, line 149). Why: c-21 §2. Build: switch to per-monitor v2, central `toScreenPoint()` implementing the rel1000/abs28 → shot → virtual-desktop equations including negative origins and clamping, used by `vision-ground.ts` and click tools. Size S. Who LOCAL. Deps none. Check: unit tests with mixed-DPI, negative-origin fixtures; one real run on his two monitors.
+**CD-4 Per-monitor DPI v2 and virtual-screen mapping** — DONE (t262, per-monitor v2 + toScreenPoint pipeline, commit ba1eca6a).
 
 **CD-5 Point-to-confirm from Unity and Unreal ("is this the object?")** — NEW (only a doc entry for `WorldToScreenPoint` in `apps/web/src/ide/unity-api.ts`). Why: c-15 §3, WORK_LIST "Point-to-confirm". Build: bridge commands `screen_point` in the Unity package and `world_to_pixel` in the Unreal plugin (`integrations/`), returning OS pixels for an actor/node (viewport origin plus DPI); core route in `unity-bridge.ts`/`unreal-bridge.ts`; bubble "yes (Enter) / no (Esc)" drawn by the overlay. Size M. Who AGY. Deps CD-1, CD-2. Check: Unity/Unreal on the PC, ask "select the door", bubble sits on the door; the phone shows a yes/no card while he is away.
 
@@ -36,7 +38,7 @@ visible layer (overlay window), the engine pixel endpoints, the proactive watche
 
 **CD-7 Phone mirror of every overlay piece** — NEW. Why: WORK_LIST "Mobile check", c-15 §7, c-35 §4.3. Build: a step line plus yes/no buttons and Stop in `ControlLive.tsx` for bubbles that wait; push notification after 10 s unseen (existing notifier). Size S. Who LOCAL. Deps CD-1. Check: 390 px Playwright board; real phone push.
 
-**CD-8 Cheap screen watching (frame hash first)** — NEW (watching still uses PowerShell CopyFromScreen; no DXGI/hash). Why: c-15 §4.2-4.3, WORK_LIST "Cheap watching". Build: small-frame hash check in `computer.ts watch()`; DXGI dirty rects only if the hash is not enough; measure idle CPU/GPU through KesherAI. Size S. Who LOCAL. Deps none. Check: idle numbers logged on the PC.
+**CD-8 Cheap screen watching (frame hash first)** — DONE (`frameHash()` added to `Backend` interface with Windows 32×32 thumbnail SHA-1 impl, t270, commit 29f10abb). Why: c-15 §4.2-4.3, WORK_LIST "Cheap watching". Size S. Who LOCAL. Deps none. Check: idle numbers logged on the PC.
 
 **CD-9 Proactive suggestion bubble** — NEW. Why: c-15 §2.3, §7.2, WORK_LIST. Build: idle over 1.5 s and the hash changed, ask the local model once, one dismissable bubble (Tab accept, Esc), per-app off switch, rate limit, silent while typing; false-positive guard for art tools (c-15 open question). Size M. Who AGY. Deps CD-2, CD-8. Check: PC with Unity open; phone setting toggles it.
 
@@ -128,11 +130,11 @@ Findings: Godot has bridge, `tscn.ts`, tools; Unity has scene reading, prefabs, 
 
 **GE-13 Viewport render back to the collaborator** — NEW. Why: c-39 Phase 4, c-12. Build: off-screen camera capture to WebP in both plugins, card on the phone after a batch. Size M. Who AGY. Deps GE-12. Check: apply a move, phone shows the picture.
 
-**GE-14 Generated assets into a closed Unity project with `.meta`** — NEW. Why: c-12 §C, c-36 §export, c-42 §5.1, WORK_LIST. Build: write asset plus `.meta` with deterministic path-based GUID and importer defaults (`unity-assets` helper in `unity-prefabs.ts` neighbourhood). Size S. Who LOCAL. Deps none. Check: Unity opens the project and finds the asset.
+**GE-14 Generated assets into a closed Unity project with `.meta`** — DONE (t297, Unity .meta generation, commit 718c4590).
 
 **GE-15 Godot AST scene writer** — PARTIAL (`tscn.ts` regex transforms). Why: c-30 §2, Roadmap Phase 1. Build: full `.tscn` format-3 reader/writer (`[ext_resource]`, `[sub_resource]`, `load_steps`, `.uid` sidecars, base-36 UIDs), round-trip tests. Size M. Who AGY. Deps none. Check: round-trip of sample scenes byte-stable.
 
-**GE-16 Godot headless validator** — NEW (`--check-only` absent). Why: c-30 §1. Build: `godot-cli.ts` wrapping `godot --headless --check-only` and a scene-instantiate validation script; used after every edit. Size S. Who LOCAL. Deps none. Check: a broken script reports a line number from the phone chat.
+**GE-16 Godot headless validator** — DONE (t298, Godot headless validator module, commit 4729d309).
 
 **GE-17 Godot ClassDB cache and on-demand tools** — PARTIAL (`godot-addon.ts` mentions `--dump-extension-api` and property flags; no cache or class tools). Why: c-30 §3. Build: pruned `classdb-cache.json` (editor properties only, instantiable subtrees), tools `godot_class_info` and `godot_node_synthesize` with schema validation. Size M. Who AGY. Deps GE-15. Check: ask for a `CharacterBody3D` setup; the tscn validates.
 
@@ -146,11 +148,11 @@ Findings: Godot has bridge, `tscn.ts`, tools; Unity has scene reading, prefabs, 
 
 **GE-22 Mobile player shell with joystick and memory gauge** — NEW. Why: c-05 §5.5, c-12 §D, c-33. Build: `GameLauncher.tsx` (fullscreen, joystick, FPS/heap badge for the 512 MB iOS limit, first-touch audio unmute). Size M. Who AGY. Deps GE-20, GE-5 gesture part. Check: 390 px board; real phone.
 
-**GE-23 Muse-parity asset pipelines (remaining)** — PARTIAL (`create_pbr_material`, `import_sprite`, TRELLIS, Stable Audio SFX exist). Why: c-42 §6, c-12 §C. Build, in order: RMBG-2.0 plus `pbr-packer.ts` with DirectX/OpenGL normal convention; Humanoid motion (text-to-BVH plus `.meta` importer); Sentis exporter (ONNX plus C# wrapper). Size L (three S/M slices). Who AGY for each slice, LEAD for the Sentis design. Deps GE-14. Check: Unity project receives and shows the asset.
+**GE-23 Muse-parity asset pipelines (remaining)** — PARTIAL (`create_pbr_material`, `import_sprite`, TRELLIS, Stable Audio SFX exist; Godot headless validator added t298). Why: c-42 §6, c-12 §C. Build, in order: RMBG-2.0 plus `pbr-packer.ts` with DirectX/OpenGL normal convention; Humanoid motion (text-to-BVH plus `.meta` importer); Sentis exporter (ONNX plus C# wrapper). Size L (three S/M slices). Who AGY for each slice, LEAD for the Sentis design. Deps GE-14. Check: Unity project receives and shows the asset.
 
 **GE-24 Material node editor to engines** — PARTIAL (`plugins/model-editor/ui/material-doc.js`, `material-graph.js`, `packages/core/src/material-doc.test.ts`). Why: c-14. Build: TSL/`MeshPhysicalNodeMaterial` preview, Unity `.shadergraph` NDJSON export (headless), Unreal material through `UKesherBridgeCommandlet`; handle engine mismatches table. Size L. Who LEAD for the schema, AGY for each export. Deps none. Check: material opens in Unity Shader Graph.
 
-**GE-25 Foley post-process, loops, engine export** — PARTIAL (Stable Audio small-SFX flow in `comfy-flows.ts`). Why: c-36. Build: zero-crossing trim, DC removal, peak -1 dBFS, cross-correlation loop point plus crossfade (pure functions in `packages/shared`), Unity clip plus meta via GE-14, Unreal `SoundWave`/MetaSound via the plugin. Size M. Who LOCAL for the DSP, AGY for Unreal export. Deps GE-14. Check: tests on synthetic signals; loop has no click.
+**GE-25 Foley post-process, loops, engine export** — DONE (t301, DC remove, trim, normalize, loop detection, engine export, i18n, commit 0196f67f).
 
 **GE-26 Figma to UMG and UI Toolkit (remaining)** — PARTIAL (`figma.ts`, `figma-umg.ts`). Why: c-24, WORK_LIST "stages 2-3", c-38 idea 15. Build: DTCG token export, `UXML/USS` headless generation, 9-slice, RTL mirroring for Hebrew, asset routing to `Assets/UI` / `Content/UI`. Size L. Who AGY per slice. Deps none. Check: generated USS loads in Unity; mirrored layout screenshot.
 
