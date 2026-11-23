@@ -979,7 +979,8 @@ export class TaskInbox {
     const safe = safeForTrainingProvider({ ...t, size: taskSize(t) });
     const trainOk = this.oc.freeTrainingOk !== false && safe.ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
     const services = taskSize(t) === "S" ? await this.freeServiceModels(c, listed, trainOk) : [];
-    const freeFirst = [...opencodeFreeFirst(this.oc, listed), ...services];
+    // Free services first, Beam Free last of the free ones: on 23.11 it ended 3 of 3 real tasks without changing a file.
+    const freeFirst = [...services, ...opencodeFreeFirst(this.oc, listed)];
     const paidLeft = this.ocToday().used < this.oc.dailyCap;
     // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
     const order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
