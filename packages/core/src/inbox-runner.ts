@@ -839,8 +839,12 @@ export class TaskInbox {
     const repo = this.repo();
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
     const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
-    const attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
-    const branch = `${branchFor(t, "opencode")}${attempt > 1 ? `-r${attempt}` : ""}`;
+    let attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
+    const named = (n: number): string => `${branchFor(t, "opencode")}${n > 1 ? `-r${n}` : ""}`;
+    // A run that failed before saving its branch name left that branch behind (2026-11-23: "a branch named
+    // ocgo/…-r2 already exists" failed 12 tasks in a row): take the next free name; never delete the old branch.
+    for (let i = 0; i < 20 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${named(attempt)}`])).code === 0; i++) attempt++;
+    const branch = named(attempt);
     let wt: Awaited<ReturnType<typeof createSessionWorktree>>;
     try {
       if (!validBranchName(branch)) throw new Error("Bad branch name.");

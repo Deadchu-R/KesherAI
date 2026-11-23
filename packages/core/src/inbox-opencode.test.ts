@@ -80,7 +80,7 @@ function fakeCoder(o: { ready?: boolean; fail?: () => Error | undefined } = {}) 
   const runs: Array<{ model: string; title: string }> = [];
   const coder: NonNullable<TaskInboxDeps["coder"]> = {
     ready: () => o.ready ?? true,
-    models: async () => ["opencode-go/glm-5.3-flash", "opencode-go/kimi-k3"],
+    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
     run: async ({ worktree, model, title, onStep }) => {
       runs.push({ model, title });
       const err = o.fail?.();
@@ -117,13 +117,13 @@ async function syncAndRun(inbox: TaskInbox): Promise<void> {
 }
 
 test("opencode: the model by size (S cheap, M/L strong; a task's own OpenCode Go model wins)", () => {
-  const s = { small: "opencode-go/glm-5.3-flash", strong: "opencode-go/kimi-k3" };
-  assert.equal(opencodeModelFor({ size: "S" }, s), "opencode-go/glm-5.3-flash");
-  assert.equal(opencodeModelFor({ size: "M" }, s), "opencode-go/kimi-k3");
-  assert.equal(opencodeModelFor({ size: "L" }, s), "opencode-go/kimi-k3");
+  const s = { small: "opencode-go/mimo-v2.6-flash", strong: "opencode-go/mimo-v2.6-pro" };
+  assert.equal(opencodeModelFor({ size: "S" }, s), "opencode-go/mimo-v2.6-flash");
+  assert.equal(opencodeModelFor({ size: "M" }, s), "opencode-go/mimo-v2.6-pro");
+  assert.equal(opencodeModelFor({ size: "L" }, s), "opencode-go/mimo-v2.6-pro");
   assert.equal(opencodeModelFor({ size: "S", model: "opencode-go/minimax-m3" }, s), "opencode-go/minimax-m3");
   // An Antigravity model name in the task does not leak into OpenCode Go.
-  assert.equal(opencodeModelFor({ size: "S", model: "Claude Opus 4.6 (Thinking)" }, s), "opencode-go/glm-5.3-flash");
+  assert.equal(opencodeModelFor({ size: "S", model: "Claude Opus 4.6 (Thinking)" }, s), "opencode-go/mimo-v2.6-flash");
   assert.equal(opencodeModelFor({}, { small: "", strong: "" }), OPENCODE_DEFAULTS.strong);
   // No size in the file: guessed from the limits.
   assert.equal(taskSize({ maxFiles: 2, risk: "low" }), "S");
@@ -139,19 +139,19 @@ test("opencode: an explicit task runs by itself on its size's model, on an ocgo/
     await syncAndRun(inbox);
     const a = await inbox.task("c-20261122-01");
     const b = await inbox.task("c-20261122-02");
-    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/glm-5.3-flash", "opencode-go/kimi-k3"]);
-    assert.deepEqual([a.runBy, a.status, a.modelUsed, a.pushed, a.steps], ["opencode", "done", "OpenCode Go · glm-5.3-flash", true, 2]);
+    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"]);
+    assert.deepEqual([a.runBy, a.status, a.modelUsed, a.pushed, a.steps], ["opencode", "done", "OpenCode Go · mimo-v2.6-flash", true, 2]);
     assert.match(a.branch, /^ocgo\/c-20261122-01-/);
-    assert.equal(b.modelUsed, "OpenCode Go · kimi-k3");
+    assert.equal(b.modelUsed, "OpenCode Go · mimo-v2.6-pro");
     // The branch is on origin (never main), committed as KesherAI.
     assert.match(await sh(repo, "ls-remote", "origin", a.branch), /refs\/heads\/ocgo\//);
-    assert.match(await sh(repo, "log", "-1", "--format=%an %B", `origin/${a.branch}`).catch(async () => (await sh(repo, "fetch", "-q", "origin", a.branch), sh(repo, "log", "-1", "--format=%B", "FETCH_HEAD"))), /run by OpenCode Go \(OpenCode Go · glm-5\.3-flash\)/);
+    assert.match(await sh(repo, "log", "-1", "--format=%an %B", `origin/${a.branch}`).catch(async () => (await sh(repo, "fetch", "-q", "origin", a.branch), sh(repo, "log", "-1", "--format=%B", "FETCH_HEAD"))), /run by OpenCode Go \(OpenCode Go · mimo-v2\.6-flash\)/);
     // Hebrew notes when it starts and ends.
     assert.ok(notes.some((n) => n.startsWith("◈ OpenCode Go התחיל משימה")), notes.join("\n"));
     assert.ok(notes.some((n) => n.startsWith("✓ OpenCode Go סיים משימה")), notes.join("\n"));
     // The hub's Agents page: the task inbox's run, with its model.
     const snap = inboxSnapshot(a, undefined, "asks");
-    assert.deepEqual([snap?.source, snap?.model, snap?.state], ["inbox", "OpenCode Go · glm-5.3-flash", "done"]);
+    assert.deepEqual([snap?.source, snap?.model, snap?.state], ["inbox", "OpenCode Go · mimo-v2.6-flash", "done"]);
     const st = await inbox.state(true);
     assert.deepEqual([st.opencode?.ready, st.opencode?.used, st.opencode?.models.length], [true, 2, 2]);
   } finally {
@@ -184,7 +184,7 @@ test("opencode: auto routing gives S/M code tasks to OpenCode Go only while Anti
       const t = await inbox.task("c-20261122-03");
       assert.deepEqual([t.runBy, t.status], ["opencode", "done"]);
       assert.equal((await inbox.task("c-20261122-04")).runBy, "antigravity");
-      assert.deepEqual(runs.map((r) => r.model), ["opencode-go/kimi-k3"]);
+      assert.deepEqual(runs.map((r) => r.model), ["opencode-go/mimo-v2.6-pro"]);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -283,7 +283,7 @@ test("opencode: the research loop fills the gap while Antigravity is out (M task
     // Its check (typecheck and lint) cannot run in the test, so the work is kept as partial: it ran all the same.
     assert.deepEqual([made?.runBy, made?.size, made?.status], ["opencode", "M", "partial"]);
     assert.ok(!tasks.some((t) => t.title.includes("sync engine")));
-    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/kimi-k3"]);
+    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/mimo-v2.6-pro"]);
     assert.equal(inbox.researchBacklog().lead.length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
