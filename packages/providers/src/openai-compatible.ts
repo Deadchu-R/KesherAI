@@ -67,6 +67,9 @@ export class OpenAICompatibleProvider implements Provider {
     this.headers = {
       "content-type": "application/json",
       ...(this.sessionHeader ? { "user-agent": "KesherAI/1.0" } : {}),
+      // OpenRouter asks apps to name themselves (openrouter.ai/docs/api-reference/overview, "Headers"): its rankings and
+      // abuse checks read these two. Public project info only; a connection's own `options.headers` still win.
+      ...(/(^|\.)openrouter\.ai$/i.test(hostOf(this.baseUrl)) ? { "http-referer": "https://github.com/Deadchu-R/KesherAI", "x-title": "KesherAI" } : {}),
       ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
       ...((config.options?.headers as Record<string, string> | undefined) ?? {}),
     };

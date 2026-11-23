@@ -4,7 +4,8 @@ import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
 import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ToolContext } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
-import { OPENCODE_PROVIDER, type InboxBusy } from "@kesher/shared";
+import { FREE_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, type InboxBusy } from "@kesher/shared";
+import { fetchFreeUsage } from "../openrouter-free.js";
 import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
 import type { KesherConfig } from "../config.js";
@@ -84,7 +85,43 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
       cache = { at: Date.now(), list };
       return list;
     },
+    // The free services (OpenRouter, Z.ai, Mistral, NVIDIA): each connection's chat models (asked at most every 10 minutes)
+    // and, for OpenRouter, today's free request count (at most once a minute). The key is read only for that one call.
+    free: Object.fromEntries(
+      FREE_PROVIDERS.filter((f) => f.id !== OPENCODE_PROVIDER).map((f) => {
+        let list: { at: number; ids: string[] } | undefined;
+        let use: { at: number; v: Awaited<ReturnType<typeof fetchFreeUsage>> } | undefined;
+        const key = () => p.config.providers.find((x) => x.id === f.id)?.apiKey;
+        return [
+          f.id,
+          {
+            ready: () => !!p.registry.get(f.id) && !!key(),
+            models: async () => {
+              if (list && Date.now() - list.at < 10 * 60_000) return list.ids;
+              const provider = p.registry.get(f.id);
+              if (!provider) return [];
+              const ids = (await provider.listModels(AbortSignal.timeout(5000))).filter((m) => m.category === "chat").map((m) => m.id);
+              list = { at: Date.now(), ids };
+              return ids;
+            },
+            ...(f.id === "openrouter"
+              ? {
+                  usage: async () => {
+                    if (use && Date.now() - use.at < 60_000) return use.v;
+                    const k = key();
+                    use = { at: Date.now(), v: k ? await fetchFreeUsage(k) : undefined };
+                    return use.v;
+                  },
+                }
+              : {}),
+          },
+        ];
+      }),
+    ),
     run: async ({ worktree, title, prompt, model, signal, onStep }) => {
+      // Only models the inbox may use run here (the free ones of OpenRouter, Z.ai, ...): a last guard. The runner has
+      // already checked the task itself for the services that may train; here only the setting is known.
+      if (!inboxModelAllowed(model, p.config.taskInbox?.opencode?.freeTrainingOk !== false)) throw new Error(`The task inbox may not use ${model}.`);
       const chats = p.chats();
       const c = await chats.create({ kind: "code", workspace: worktree, mode: "auto", title, modelId: model });
       const session = async () => (await chats.open(c.id))?.session;

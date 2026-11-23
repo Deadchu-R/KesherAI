@@ -76,11 +76,12 @@ async function setup(tasks: Record<string, string>, report?: string) {
 }
 
 /** A fake OpenCode Go coder: writes a file in the worktree, or throws what `fail` says. */
-function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[]; idle?: (model: string) => boolean } = {}) {
+function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[]; idle?: (model: string) => boolean; free?: Record<string, string[]>; usage?: { used: number; limit: number; remaining: number } } = {}) {
   const runs: Array<{ model: string; title: string }> = [];
   const coder: NonNullable<TaskInboxDeps["coder"]> = {
     ready: () => o.ready ?? true,
     models: async () => o.listed ?? ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    free: Object.fromEntries(Object.entries(o.free ?? {}).map(([id, ids]) => [id, { ready: () => true, models: async () => ids, ...(id === "openrouter" && o.usage ? { usage: async () => o.usage } : {}) }])),
     run: async ({ worktree, model, title, onStep }) => {
       runs.push({ model, title });
       const err = o.fail?.(model);
@@ -356,7 +357,8 @@ test("opencode: free models are only those the connection lists, and off with us
   assert.deepEqual(opencodeFreeFirst({}, ["opencode-go/beam-free", "opencode-go/glm-5.3"]), ["opencode-go/beam-free"]);
   assert.deepEqual(opencodeFreeFirst({ useFree: false }, ["opencode-go/beam-free"]), []);
   assert.deepEqual(opencodeFreeFirst({}, []), []);
-  assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), false); // contributor models share data: never
+  // Contributor models share data: free, but only with the training setting and a safe task (see the free-services tests).
+  assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), true);
   assert.equal(isFreeOpencodeModel("opencode-go/mimo-v2.6-flash"), false);
 });
 
@@ -452,6 +454,86 @@ test("opencode: a free model that changes nothing hands the task to a paid model
     const t = await inbox.task("c-20261122-23");
     assert.equal(t.status, "done");
     assert.equal((await inbox.state(true)).opencode?.used, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+const lowS = (id: string) => TASK(id, "opencode", "size: S\n").replace("risk: medium", "risk: low");
+
+test("opencode: every free option failed and the paid cap is reached: the task waits (deferred-quota), it does not fail", async () => {
+  const { root, repo } = await setup({ "c-20261123-31": TASK("c-20261123-31", "opencode", "size: S\n") });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/beam-free", "opencode-go/mimo-v2.6-flash"], idle: (m) => m === "opencode-go/beam-free" });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 0 } });
+  try {
+    await inbox.state(true);
+    await syncAndRun(inbox);
+    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/beam-free"]);
+    const t = await inbox.task("c-20261123-31");
+    assert.equal(t.status, "deferred-quota");
+    assert.match(t.note ?? "", /limit.*reached/); // the pump then holds it with its own note until a free model is open or tomorrow
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("free services: Z.ai, then OpenRouter (402 = out until tomorrow), then Mistral for a safe task; only free ids run; counted per service", async () => {
+  const { root, repo } = await setup({ "c-20261123-32": lowS("c-20261123-32") });
+  const { coder, runs } = fakeCoder({
+    listed: ["opencode-go/mimo-v2.6-flash"],
+    free: { zai: ["zai/glm-4.7-flash", "zai/glm-5-paid"], openrouter: ["openrouter/openrouter/free", "openrouter/openai/gpt-5", "openrouter/qwen/qwen3-coder:free"], mistral: ["mistral/devstral-small-latest"] },
+    idle: (m) => m === "zai/glm-4.7-flash",
+    fail: (m) => (m === "openrouter/openrouter/free" ? new Error("402 Payment Required: negative balance") : undefined),
+  });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 5 } });
+  try {
+    await inbox.state(true);
+    await syncAndRun(inbox);
+    assert.deepEqual(runs.map((r) => r.model), ["zai/glm-4.7-flash", "openrouter/openrouter/free", "mistral/devstral-small-latest"]);
+    assert.ok(runs.every((r) => !r.model.includes("gpt-5") && !r.model.includes("paid")));
+    const t = await inbox.task("c-20261123-32");
+    assert.equal(t.status, "done");
+    assert.equal(t.modelUsed, "Mistral · devstral-small-latest");
+    assert.equal(t.mayTrain, true);
+    const st = await inbox.state(true);
+    assert.equal(st.opencode?.used, 0); // free runs never count toward the paid cap
+    const or = st.free?.find((f) => f.id === "openrouter");
+    assert.equal(or?.limit, 50);
+    assert.ok((or?.used ?? 0) >= 1 && or?.until && or.until > Date.now()); // the failed attempt counted; out until tomorrow
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("free services: a medium-risk task, an M task, or the setting off never reaches a service that may train", async () => {
+  const cases: Array<[string, string, Record<string, unknown>]> = [
+    ["c-20261123-33", TASK("c-20261123-33", "opencode", "size: S\n"), {}], // risk medium
+    ["c-20261123-34", lowS("c-20261123-34"), { freeTrainingOk: false }],
+    ["c-20261123-35", TASK("c-20261123-35", "opencode", "size: M\n").replace("risk: medium", "risk: low"), {}], // M: no free service at all
+  ];
+  for (const [id, text, oc] of cases) {
+    const { root, repo } = await setup({ [id]: text });
+    const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"], free: { mistral: ["mistral/devstral-small-latest"], "nvidia-nim": ["nvidia-nim/qwen/qwen3-coder"], gemini: ["gemini/gemini-2.5-flash"] } });
+    const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 5, ...oc } });
+    try {
+      await inbox.state(true);
+      await syncAndRun(inbox);
+      assert.ok(runs.length >= 1 && runs.every((r) => r.model.startsWith("opencode-go/")), `${id}: ${runs.map((r) => r.model).join()}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("free services: a task about security stays off services that may train, but may use Z.ai", async () => {
+  const text = lowS("c-20261123-36").replace("Add a clear button", "Fix the token check on the button");
+  const { root, repo } = await setup({ "c-20261123-36": text });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-flash"], free: { zai: ["zai/glm-4.7-flash"], mistral: ["mistral/devstral-small-latest"] }, idle: (m) => m === "zai/glm-4.7-flash" });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 5 } });
+  try {
+    await inbox.state(true);
+    await syncAndRun(inbox);
+    assert.deepEqual(runs.map((r) => r.model), ["zai/glm-4.7-flash", "opencode-go/mimo-v2.6-flash"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

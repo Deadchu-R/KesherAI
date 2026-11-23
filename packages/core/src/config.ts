@@ -293,6 +293,8 @@ export const KesherConfigSchema = z.object({
           dailyCap: z.number().int().min(0).max(100).default(15),
           // Free models first (Beam Free), outside the daily cap.
           useFree: z.boolean().default(true),
+          // Free services that may train on prompts (Gemini free, Mistral, NVIDIA, OpenCode Contributor): only low-risk non-security tasks go there (safeForTrainingProvider); off stops them.
+          freeTrainingOk: z.boolean().default(true),
         })
         .prefault({}),
       maxMinutes: z.number().int().min(1).max(60).default(15),

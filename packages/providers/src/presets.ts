@@ -91,6 +91,8 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     needsApiKey: true,
   },
   {
+    // Its free "Experiment" plan (1 request/s) may use prompts for training: the task inbox uses it only with "Allow free
+    // services that may train on my code" (task-inbox.ts FREE_PROVIDERS).
     config: { id: "mistral", type: "openai-compatible", name: "Mistral", baseUrl: "https://api.mistral.ai/v1", location: "cloud" },
     description: "Mistral and Codestral models through the Mistral API.",
     needsApiKey: true,
@@ -116,6 +118,45 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     // never bills past the plan.
     config: { id: "opencode-go", type: "openai-compatible", name: "OpenCode Go", baseUrl: "https://opencode.ai/zen/go/v1", location: "cloud" },
     description: "Open coding models (Kimi, GLM, DeepSeek, Qwen, MiniMax, MiMo) on a flat $10/month plan with usage limits.",
+    needsApiKey: true,
+  },
+  {
+    // Free tier for coding agents: glm-4.7-flash and glm-4.5-flash, ONE request at a time (429 when more); API data is
+    // not used for training unless the user agrees. Used by the task inbox as a free fallback (task-inbox.ts FREE_PROVIDERS).
+    config: { id: "zai", type: "openai-compatible", name: "Z.ai", baseUrl: "https://api.z.ai/api/paas/v4", location: "cloud" },
+    description: "GLM models (free glm-4.7-flash and glm-4.5-flash) from Z.ai.",
+    needsApiKey: true,
+  },
+  {
+    // A free trial key for testing and evaluation (~40 requests/min); may train on data, so the inbox needs the same setting.
+    config: { id: "nvidia-nim", type: "openai-compatible", name: "NVIDIA NIM", baseUrl: "https://integrate.api.nvidia.com/v1", location: "cloud" },
+    description: "NVIDIA's hosted model catalog on a free trial key (testing and evaluation).",
+    needsApiKey: true,
+  },
+  {
+    // Workers AI: 10,000 Neurons a day free on every account (resets 00:00 UTC). Replace ACCOUNT_ID in the address with your
+    // Cloudflare account id when you add the key (an API token with Workers AI access). A free coder for the task inbox.
+    config: { id: "cloudflare-ai", type: "openai-compatible", name: "Cloudflare Workers AI", baseUrl: "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1", location: "cloud" },
+    description: "Open models on Cloudflare's network; a free daily allowance on every account (set your account id in the address).",
+    needsApiKey: true,
+  },
+  {
+    // Free, no card: 20 requests/min, 20/day, 200K tokens/day per model. Chat and research only: too small for agent loops,
+    // so never in the task inbox's coder order (task-inbox.ts CHAT_ONLY_PROVIDERS).
+    config: { id: "sambanova", type: "openai-compatible", name: "SambaNova", baseUrl: "https://api.sambanova.ai/v1", location: "cloud" },
+    description: "Fast open models on a free tier with small daily limits (chat and research only).",
+    needsApiKey: true,
+  },
+  {
+    // Trial key: rate-limited and for non-commercial use. Chat and research only (CHAT_ONLY_PROVIDERS).
+    config: { id: "cohere", type: "openai-compatible", name: "Cohere", baseUrl: "https://api.cohere.ai/compatibility/v1", location: "cloud" },
+    description: "Command models on a free trial key with rate limits (chat and research only).",
+    needsApiKey: true,
+  },
+  {
+    // The free plan has a small monthly allowance on starter models. Chat only (CHAT_ONLY_PROVIDERS).
+    config: { id: "ollama-cloud", type: "openai-compatible", name: "Ollama Cloud", baseUrl: "https://ollama.com/v1", location: "cloud" },
+    description: "Models hosted by Ollama; the free plan has a small monthly allowance (chat only).",
     needsApiKey: true,
   },
   {

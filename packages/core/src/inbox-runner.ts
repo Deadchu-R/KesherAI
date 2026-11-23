@@ -3,13 +3,14 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { retryAfterMs } from "./free-cloud.js";
+import { nextUtcMidnight, type FreeUsage } from "./openrouter-free.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
@@ -72,6 +73,11 @@ export interface TaskInboxDeps {
   coder?: {
     ready: () => boolean;
     models: () => Promise<string[]>;
+    /**
+     * The free services after Beam Free (shared `FREE_PROVIDERS`), by connection id: `ready` (connection with a key),
+     * its chat `models`, and `usage` (OpenRouter's own count of today's free requests, when it can say).
+     */
+    free?: Record<string, { ready: () => boolean; models: () => Promise<string[]>; usage?: () => Promise<FreeUsage | undefined> }>;
     run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number) => void }) => Promise<{ text: string }>;
   };
   now?: () => number;
@@ -100,6 +106,8 @@ interface Saved {
   familyUntil?: Partial<Record<ModelFamily, number>>;
   /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
   opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
+  /** The free services (shared FREE_PROVIDERS), by connection id: today's requests (UTC; failed ones too), the day's limit when known, and a stop until a time (402, 429 or the limit). */
+  free?: Record<string, { date: string; used: number; limit?: number; until?: number }>;
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
   research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
   /** The work loop (work-loop.ts): the local day it last offered the standing task and sent the summary, and when. */
@@ -227,6 +235,61 @@ export class TaskInbox {
     return this.saved.opencode;
   }
 
+  /** One free service's counters for today (UTC); the day resets the count, an unexpired stop stays. */
+  private freeDay(id: string): { date: string; used: number; limit?: number; until?: number } {
+    const date = new Date(this.now()).toISOString().slice(0, 10);
+    const all = (this.saved.free ??= {});
+    const cur = all[id];
+    if (cur?.date === date) {
+      if (cur.until !== undefined && cur.until <= this.now()) delete cur.until;
+      return cur;
+    }
+    return (all[id] = { date, used: 0, ...(cur?.until && cur.until > this.now() ? { until: cur.until } : {}) });
+  }
+
+  /** Whether a free service may take a request now: not stopped, and under its day's limit. */
+  private freeOpen(id: string): boolean {
+    const d = this.freeDay(id);
+    const limit = d.limit ?? FREE_PROVIDERS.find((f) => f.id === id)?.dailyLimit;
+    return !d.until && (limit === undefined || d.used < limit);
+  }
+
+  /**
+   * The free service models to try first for a small (S) task, in order (Z.ai, OpenRouter, then Mistral, NVIDIA and the
+   * contributor models only with `freeTrainingOk`): only what each connection lists now, from services that are not
+   * stopped or at their day's limit. OpenRouter's own request count is read first when it can say.
+   *
+   * @param c - The coder (its free connections).
+   * @param opencodeListed - The OpenCode Go connection's models (for its contributor ones).
+   * @param trainOk - Services that may train on prompts may be used (the setting is on and this task passed the safety gate).
+   */
+  private async freeServiceModels(c: NonNullable<TaskInboxDeps["coder"]>, opencodeListed: readonly string[], trainOk: boolean): Promise<string[]> {
+    if (this.oc.useFree === false) return [];
+    const listed: Record<string, readonly string[]> = { [OPENCODE_PROVIDER]: opencodeListed };
+    for (const f of FREE_PROVIDERS) {
+      const conn = c.free?.[f.id];
+      if (f.id === OPENCODE_PROVIDER || !conn?.ready()) continue;
+      listed[f.id] = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]);
+      await this.syncFreeUsage(f.id, conn);
+    }
+    return freeModelsFor(listed, trainOk).filter((m) => this.freeOpen(freeProviderOf(m)!.id));
+  }
+
+  /** Takes a service's own count of today's requests (OpenRouter: `free_model_daily_requests`) when it answers; else the local count stays. */
+  private async syncFreeUsage(id: string, conn: { usage?: () => Promise<FreeUsage | undefined> }): Promise<void> {
+    const u: FreeUsage | undefined = await conn.usage?.().catch(() => undefined);
+    if (!u) return;
+    const d = this.freeDay(id);
+    d.used = u.used;
+    d.limit = u.limit;
+  }
+
+  /** Stops a free service until `until` (ms): the given models of it cool down, and the card shows it. */
+  private stopFreeService(id: string, until: number, models: readonly string[]): void {
+    this.freeDay(id).until = until;
+    for (const m of models) if (freeProviderOf(m)?.id === id) this.blockOpencodeModel(m, until - this.now());
+  }
+
   /**
    * Whether Antigravity cannot take a task now: every model family's quota is spent, its plan's quota ran out, or
    * today's cap is reached.
@@ -299,7 +362,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -413,6 +476,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      ...(await this.freeStates()),
       loop: this.loopNow(),
     };
   }
@@ -435,6 +499,20 @@ export class TaskInbox {
     const until = this.opencodeFamilyUntil();
     const cooldowns = this.opencodeCooldowns();
     return { ready, used: day.used, ...(until ? { until } : {}), ...(Object.keys(cooldowns).length ? { cooldowns } : {}), models: models.slice(0, 100) };
+  }
+
+  /** The connected free services for the settings card (`free`, left out when none is connected). */
+  private async freeStates(): Promise<{ free?: FreeProviderState[] }> {
+    const out: FreeProviderState[] = [];
+    for (const f of FREE_PROVIDERS) {
+      const conn = this.d.coder?.free?.[f.id];
+      if (!conn?.ready()) continue;
+      await this.syncFreeUsage(f.id, conn);
+      const d = this.freeDay(f.id);
+      const limit = d.limit ?? f.dailyLimit;
+      out.push({ id: f.id, name: f.name, used: d.used, ...(limit !== undefined ? { limit } : {}), ...(d.until ? { until: d.until } : {}), trainsOnData: f.trainsOnData });
+    }
+    return out.length ? { free: out } : {};
   }
 
   /** Resolves when no run is going on (its result written). */
@@ -893,7 +971,14 @@ export class TaskInbox {
   /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
   private async runOpencode(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
     const listed = await this.opencodeListed(c);
-    const freeFirst = opencodeFreeFirst(this.oc, listed);
+    // The free services (Z.ai, OpenRouter, ...) take S tasks only (a coding agent burns many requests); right after Beam Free.
+    // Services that may train on prompts get a task only when the setting allows it, the task is low-risk and not about
+    // security (safeForTrainingProvider), and the privacy scan finds nothing in the prompt.
+    const prompt = agentPrompt(t, t.branch);
+    const safe = safeForTrainingProvider({ ...t, size: taskSize(t) });
+    const trainOk = this.oc.freeTrainingOk !== false && safe.ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
+    const services = taskSize(t) === "S" ? await this.freeServiceModels(c, listed, trainOk) : [];
+    const freeFirst = [...opencodeFreeFirst(this.oc, listed), ...services];
     const paidLeft = this.ocToday().used < this.oc.dailyCap;
     // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
     const order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
@@ -924,8 +1009,8 @@ export class TaskInbox {
       await this.save();
       return;
     }
-    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: `OpenCode Go · ${opencodeModelName(model)}` });
-    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "retryAt", "plan", "decisions"] as const) delete t[k];
+    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: modelLabel(model), ...(freeProviderOf(model)?.trainsOnData ? { mayTrain: true } : {}) });
+    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions"] as const) delete t[k];
     await this.save();
     this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
     if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
@@ -938,19 +1023,30 @@ export class TaskInbox {
     let text = "";
     let error = "";
     const tried: string[] = [];
+    // Every free model failed or is cooling and no paid one may run (cap reached): the task waits instead of failing.
+    let exhausted = false;
     try {
       const stopped = new Promise<never>((_, rej) => run.ctl.signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
       for (;;) {
+        let attemptSteps = 0;
         try {
+          // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
+          // services only when allowed): refused here, before anything is sent.
+          if (!inboxModelAllowed(model, trainOk)) throw new Error(`The task inbox may not use ${model}.`);
+          // Every attempt counts toward the service's day, failed ones too (OpenRouter's docs); each tool call is another request.
+          const attemptFree = freeProviderOf(model);
+          if (attemptFree) this.freeDay(attemptFree.id).used++;
           const r = await Promise.race([
             c.run({
               worktree: wt.path,
               title: `◈ OpenCode Go · ${t.title}`.slice(0, 120),
-              prompt: agentPrompt(t, t.branch),
+              prompt,
               model,
               signal: run.ctl.signal,
               onStep: (n) => {
                 t.steps = n;
+                if (attemptFree) this.freeDay(attemptFree.id).used += Math.max(0, n - attemptSteps);
+                attemptSteps = n;
                 void this.save();
               },
             }),
@@ -967,19 +1063,29 @@ export class TaskInbox {
         } catch (e) {
           error = (e as Error).message || String(e);
           const quota = isQuotaError(error);
+          const fp = freeProviderOf(model);
+          // A negative balance blocks OpenRouter's free models (402): that service is out until the next UTC midnight.
+          const pay = !!fp && /\b402\b|payment required|insufficient (credits|balance)|negative balance/i.test(error);
           // A free model that fails in any way (the offer ended, it is overloaded) hands the task to the paid order.
           if (run.why || (!quota && !isFreeOpencodeModel(model))) break;
           // A 429 blocks only this model (until its reset, else 5 hours; a failing free model 1 hour); the task goes
           // on to the next model that is not cooling down: at most one paid retry after the free ones.
-          const wait = quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now()) : 60 * 60_000;
+          const wait = pay ? nextUtcMidnight(this.now()) - this.now() : quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now()) : 60 * 60_000;
+          // A free service that answers 402 or 429 cools down as a whole (Z.ai allows one request at a time).
+          if (fp && (pay || quota)) this.stopFreeService(fp.id, this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS), order);
           this.blockOpencodeModel(model, wait);
           tried.push(model);
           const paidTried = tried.filter((m) => !isFreeOpencodeModel(m)).length;
           const next = paidTried < 2 ? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), undefined, tried) : undefined;
-          if (!next) break;
+          if (!next) {
+            exhausted = paidTried < 2 && isFreeOpencodeModel(model);
+            break;
+          }
           const prev = model;
           model = next;
-          t.modelUsed = `OpenCode Go · ${opencodeModelName(model)}`;
+          t.modelUsed = modelLabel(model);
+          if (freeProviderOf(model)?.trainsOnData) t.mayTrain = true;
+          else delete t.mayTrain;
           t.modelFallback = `${opencodeModelName(prev)} → ${opencodeModelName(model)}`;
           await this.save();
         }
@@ -991,9 +1097,11 @@ export class TaskInbox {
     // Only paid models count toward the daily cap (a task that ended on a free one cost nothing).
     if (!isFreeOpencodeModel(model)) this.ocToday().used++;
     t.summary = text.trim().slice(-2000) || undefined;
-    const limited = !run.why && !!error && isQuotaError(error);
-    const until = limited ? this.ocToday().modelUntil?.[model] : undefined;
-    const why = limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
+    const limited = !run.why && !!error && (isQuotaError(error) || exhausted);
+    // The earliest cooldown (a free model back, 1 hour for a failed one), else the paid cap's reset at the next UTC midnight.
+    const cools = Object.values(this.opencodeCooldowns());
+    const until = limited ? (exhausted ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
+    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
     await this.finish(t, wt.path, wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
   }
 
@@ -2210,6 +2318,9 @@ export class TaskInbox {
 }
 
 /** How long OpenCode Go waits after a 429 that does not say (its plan's shortest window is 5 hours). */
+/** A task's model, as shown on its card: the free service's name, else OpenCode Go. */
+const modelLabel = (model: string): string => `${freeProviderOf(model)?.name ?? "OpenCode Go"} · ${opencodeModelName(model)}`;
+
 export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
 
 /** An OpenCode Go task's end, in Hebrew, for the notification. */

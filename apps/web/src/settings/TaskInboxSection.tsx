@@ -70,6 +70,20 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
         <input type="checkbox" checked={c.useFree !== false} disabled={!c.enabled} onChange={(e) => set({ useFree: e.target.checked })} />
         <span className="grow">{L("קודם המודלים החינמיים (Beam Free): לא נספרים בסף היומי", "Free models first (Beam Free): they don't count toward the daily limit")}</span>
       </label>
+      {(s.free ?? []).length > 0 && (
+        <ul className="small stack" dir="ltr">
+          {(s.free ?? []).map((f) => (
+            <li key={f.id} className="row wrap">
+              <span className="grow">{f.name} ({L("חינם", "free")}): {f.used}{f.limit !== undefined ? `/${f.limit}` : ""} {L("היום", "today")}</span>
+              {f.until !== undefined && <span className="tinbox-err">⏸ {L(`חסום עד ${hhmm(f.until)}`, `blocked until ${hhmm(f.until)}`)}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="row wrap small">
+        <input type="checkbox" checked={c.freeTrainingOk !== false} disabled={!c.enabled} onChange={(e) => set({ freeTrainingOk: e.target.checked })} />
+        <span className="grow">{L("אפשר שירותים חינמיים שעשויים לאמן על הקוד שלי (נשלחות רק משימות בסיכון נמוך ולא-אבטחתיות)", "Allow free services that may train on my code (only low-risk, non-security tasks are sent)")}</span>
+      </label>
       {pick("small", "מודל למשימות קטנות (S): זול ומהיר", "Model for small tasks (S): cheap and fast")}
       {pick("strong", "מודל למשימות בינוניות וגדולות (M/L): חזק", "Model for medium and large tasks (M/L): strong")}
       <label className="row wrap small">
