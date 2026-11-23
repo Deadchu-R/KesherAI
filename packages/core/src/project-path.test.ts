@@ -35,7 +35,9 @@ test("a link to the same folder counts as the same place", async () => {
 });
 
 test("a path that does not exist is compared as given, and asking again gives the same answer", () => {
-  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), false);
-  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), false);
+  // Case counts only off Windows (Windows paths ignore case).
+  const caseSame = process.platform === "win32";
+  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), caseSame);
+  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), caseSame);
   assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/./A"), true);
 });
