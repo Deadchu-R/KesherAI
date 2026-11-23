@@ -148,6 +148,8 @@ export interface NightResult {
   outputDir?: string;
   /** Sent in a scorecard already. */
   reported?: boolean;
+  /** The APK was installed on the phone after a successful Android build. */
+  phoneInstalled?: boolean;
 }
 
 /**
@@ -207,6 +209,8 @@ export interface ScoreRow {
   errors: number;
   smoke?: { ok: boolean; note: string };
   changes: string[];
+  /** The APK was installed on the phone after a successful Android build. */
+  phoneInstalled?: boolean;
 }
 
 /** The morning scorecard. */
@@ -228,7 +232,7 @@ export function buildScorecard(results: readonly NightResult[]): Scorecard | und
   const latest = new Map<string, NightResult>();
   for (const r of [...results].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) latest.set(`${r.project}\u0000${r.platform}`, r);
   const rows = [...latest.values()]
-    .map((r): ScoreRow => ({ id: r.id, project: r.project, name: r.name, engine: r.engine, platform: r.platform, ok: r.ok && r.smoke?.ok !== false, durationMs: r.durationMs, ...(r.sizeBytes !== undefined ? { sizeBytes: r.sizeBytes } : {}), warnings: r.warnings, errors: r.errors, ...(r.smoke ? { smoke: r.smoke } : {}), changes: r.changes }))
+    .map((r): ScoreRow => ({ id: r.id, project: r.project, name: r.name, engine: r.engine, platform: r.platform, ok: r.ok && r.smoke?.ok !== false, durationMs: r.durationMs, ...(r.sizeBytes !== undefined ? { sizeBytes: r.sizeBytes } : {}), warnings: r.warnings, errors: r.errors, ...(r.smoke ? { smoke: r.smoke } : {}), changes: r.changes, ...(r.phoneInstalled !== undefined ? { phoneInstalled: r.phoneInstalled } : {}) }))
     .sort((a, b) => Number(a.ok) - Number(b.ok) || a.name.localeCompare(b.name));
   if (!rows.length) return undefined;
   const night = [...latest.values()].map((r) => r.slot).sort().pop()!;
