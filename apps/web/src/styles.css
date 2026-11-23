@@ -2090,6 +2090,8 @@ body[style*="gradient"] .sidebar { background: color-mix(in srgb, var(--bg) 55%,
 .kmenu-item:hover .kmenu-icon .glyph, .kmenu-item:focus .kmenu-icon .glyph { color: var(--text); }
 .kmenu-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .kmenu-end { flex: none; opacity: .65; font-size: 12.5px; }
+.nodes-flow-test { padding: 4px 10px; border: 1px solid var(--border, currentColor); border-radius: 999px; cursor: pointer; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nodes-flow-test[aria-disabled="true"] { cursor: progress; opacity: .6; }
 .kmenu-arrow { display: inline-block; transition: transform .12s; }
 .kmenu-item[aria-expanded="true"] .kmenu-arrow { transform: rotate(90deg); }
 [dir="rtl"] .kmenu-arrow { transform: scaleX(-1); }

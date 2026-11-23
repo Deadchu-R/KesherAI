@@ -477,6 +477,24 @@ export class GpuGuard {
   }
 
   /**
+   * Unloads the loaded engines that serve one provider (not the others), e.g. the chat model before a video job.
+   *
+   * @param providerId - The provider whose engine is freed (`llamacpp` for the chat model).
+   * @returns The names of the engines that were unloaded.
+   */
+  async unloadProvider(providerId: string): Promise<string[]> {
+    const done: string[] = [];
+    for (const item of this.items) {
+      if (!item.providers.includes(providerId) || !item.loaded() || item.busy?.()) continue;
+      if (await item.unload().then(() => true, () => false)) {
+        done.push(item.name);
+        this.lastUnload = { what: item.name, at: new Date().toISOString() };
+      }
+    }
+    return done;
+  }
+
+  /**
    * Loads engines unloaded for Play again (the ones that can come back by themselves), without waiting for a request.
    *
    * @param names - What {@link unloadLoaded} returned.

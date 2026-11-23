@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Menu, MenuItem } from "../ui/Menu";
-import { api } from "../api";
+import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { ComfySection } from "../ComfySection";
 import { toast } from "../library";
@@ -85,6 +85,8 @@ export function NodesPage() {
   const [flows, setFlows] = useState<ReadyFlow[]>([]);
   const [flowMenu, setFlowMenu] = useState(false);
   const [offer, setOffer] = useState<ReadyFlow | null>(null);
+  // The "Test" button's results per flow (a headless smoke run on the computer): running, or ✓ with seconds, or the error.
+  const [smoke, setSmoke] = useState<Record<string, { busy?: boolean; ok?: boolean; seconds?: number; error?: string }>>({});
   const loadFlows = () => void api<ReadyFlow[]>("/api/comfy-ui/flows").then(setFlows, () => undefined);
   useEffect(() => {
     if (state !== "ready") return;
@@ -179,6 +181,35 @@ export function NodesPage() {
       toast((e as Error).message);
     }
   };
+  /** Runs the flow once with the smallest settings (computer only; video and 3D free the chat model first). */
+  const testFlow = async (f: ReadyFlow) => {
+    setSmoke((m) => ({ ...m, [f.id]: { busy: true } }));
+    try {
+      const r = await api<{ ok: boolean; seconds: number; error?: string }>(`/api/comfy-ui/flows/${f.id}/smoke`, { method: "POST" });
+      setSmoke((m) => ({ ...m, [f.id]: r }));
+    } catch (e) {
+      setSmoke((m) => ({ ...m, [f.id]: { ok: false, error: (e as Error).message } }));
+    }
+  };
+  /** The end of a flow's menu row: its models' download state, or the Test button and its result. */
+  const flowEnd = (f: ReadyFlow) => {
+    if (!f.ready) return f.downloading ? L("מוריד…", "Downloading…") : `\u2066⬇ ~${f.missingGb} GB\u2069`;
+    // The test uses the computer's graphics card for minutes: it runs only from the computer, not from the phone.
+    if (isRemote()) return undefined;
+    const r = smoke[f.id];
+    const label = r?.busy ? L("בודק…", "Testing…") : r?.ok ? `\u2066✓ ${r.seconds}s\u2069` : r ? `\u2066✗ ${(r.error ?? "").slice(0, 40)}\u2069` : L("בדיקה", "Test");
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className="nodes-flow-test"
+        aria-disabled={r?.busy}
+        title={r?.error ?? (r?.ok ? L("הזרימה עובדת", "The flow works") : L("מריץ את הזרימה פעם אחת בהגדרות הקטנות ביותר", "Runs the flow once with the smallest settings"))}
+        onClick={(e) => { e.stopPropagation(); if (!r?.busy) void testFlow(f); }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); if (!r?.busy) void testFlow(f); } }}
+      >{label}</span>
+    );
+  };
   const download = async (f: ReadyFlow) => {
     try {
       await api(`/api/comfy-ui/flows/${f.id}/setup`, { method: "POST" });
@@ -224,7 +255,7 @@ export function NodesPage() {
       <button type="button" disabled={!history.length || busy} onClick={() => void undo()} title={L("בטל", "Undo")}>↶<span className="nodes-label"> {L("בטל", "Undo")}</span></button>
       <Menu className="nodes-flows" popClassName="bar-pop" title={L("זרימות מוכנות", "Ready-made flows")} open={flowMenu} onOpenChange={setFlowMenu} trigger={<>📂<span className="nodes-label"> {L("זרימות מוכנות", "Ready-made")}</span></>}>
         {flows.map((f) => (
-          <MenuItem key={f.id} icon={f.icon} keepOpen onSelect={() => void chooseFlow(f)} end={f.ready ? undefined : f.downloading ? L("מוריד…", "Downloading…") : `\u2066⬇ ~${f.missingGb} GB\u2069`}>{L(f.title.he, f.title.en)}</MenuItem>
+          <MenuItem key={f.id} icon={f.icon} keepOpen onSelect={() => void chooseFlow(f)} end={flowEnd(f)}>{L(f.title.he, f.title.en)}</MenuItem>
         ))}
       </Menu>
       <button type="button" onClick={closeMessages} title={L("סגור הודעות", "Close messages")}>✕<span className="nodes-label"> {L("הודעות", "Messages")}</span></button>

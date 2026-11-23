@@ -7,7 +7,8 @@ import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
 import { editFlow, type ApiFlow, type NodeInfo } from "../comfy-edit.js";
 import { modelTurnFor } from "../conversations.js";
-import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints } from "../comfy-flows.js";
+import { flowState, folderNames, readyFlows, setupFlow, withCheckpoints, type ReadyFlow } from "../comfy-flows.js";
+import { needsFreeCard, runSmoke, smallestSettings, smokeKind, testPicture, type SmokeResult } from "../comfy-smoke.js";
 
 /**
  * ComfyUI's own node editor inside KesherAI (the Nodes page): ComfyUI is
@@ -83,15 +84,66 @@ export async function comfyUiRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
   });
 
-  /** A ready-made flow in ComfyUI's API format, with the checkpoint names ComfyUI uses on this computer. */
-  app.get<{ Params: { id: string }; Querystring: { asset?: string } }>("/api/comfy-ui/flows/:id", async (req, reply) => {
-    const flow = readyFlows().find((f) => f.id === req.params.id);
-    if (!flow) return reply.code(404).send({ error: "No such flow." });
+  /** A ready-made flow in API format with the model names ComfyUI lists on this computer. */
+  const apiFlow = async (flow: ReadyFlow) => {
     const list = (folder: string) =>
       fetch(`${s.comfy.status().url}/models/${folder}`, { signal: AbortSignal.timeout(10_000) })
         .then((r) => (r.ok ? (r.json() as Promise<string[]>) : []))
         .catch(() => [] as string[]);
-    const out = withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
+    return withCheckpoints(flow, await list("checkpoints"), await folderNames(flow, list));
+  };
+
+  /** Flows being smoke-tested now (one at a time: they share the graphics card). */
+  let smoking: string | undefined;
+
+  /**
+   * A headless smoke run of a ready-made flow: starts ComfyUI if needed, runs the flow with the smallest settings and
+   * a generated test picture, waits (10 minutes at most) and answers `{ ok, seconds, outputs, error }`. Video and 3D
+   * flows unload the chat model first (the card cannot hold both). Computer only: it uses the card for minutes.
+   */
+  app.post<{ Params: { id: string } }>("/api/comfy-ui/flows/:id/smoke", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Run the test on the computer itself." });
+    const flow = readyFlows().find((f) => f.id === req.params.id);
+    if (!flow) return reply.code(404).send({ error: "No such flow." });
+    if (!flowState(flow, s.paths.models, s.downloads).ready) return reply.code(409).send({ error: "The flow's models are not downloaded yet." });
+    if (smoking) return reply.code(409).send({ error: `A test is already running (${smoking}).` });
+    const kind = smokeKind(flow.id);
+    if (needsFreeCard(kind) && Object.keys(s.conversations.activity()).length) return reply.code(409).send({ error: "A chat is answering now; the test needs the graphics card. Try again when it ends." });
+    smoking = flow.id;
+    // Counted as an open, working editor so the idle guard does not stop ComfyUI in the middle of the run.
+    s.comfy.editors++;
+    try {
+      if (needsFreeCard(kind)) await s.guard.unloadProvider("llamacpp");
+      s.guard.touch("comfyui");
+      await s.comfy.start();
+      const url = s.comfy.status().url;
+      const small = smallestSettings(await apiFlow(flow));
+      const loaders = Object.values(small).filter((n) => n.class_type === "LoadImage");
+      if (Object.values(small).some((n) => n.class_type === "Load3DAdvanced")) {
+        return { ok: false, seconds: 0, outputs: [], error: "This flow needs a 3D file; it cannot be tested alone." } satisfies SmokeResult;
+      }
+      if (loaders.length) {
+        const form = new FormData();
+        form.append("image", new Blob([new Uint8Array(testPicture())], { type: "image/png" }), "kesher_smoke.png");
+        form.append("overwrite", "true");
+        const up = await fetch(`${url}/upload/image`, { method: "POST", body: form, signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? (r.json() as Promise<{ name?: string }>) : undefined), () => undefined);
+        if (!up?.name) return { ok: false, seconds: 0, outputs: [], error: "ComfyUI did not take the test picture." } satisfies SmokeResult;
+        for (const n of loaders) n.inputs.image = up.name;
+      }
+      return await runSmoke({ url, flow: small, onPoll: () => (s.comfy.editorActiveAt = Date.now()) });
+    } catch (err) {
+      return { ok: false, seconds: 0, outputs: [], error: (err as Error).message.slice(0, 500) } satisfies SmokeResult;
+    } finally {
+      s.comfy.editors = Math.max(0, s.comfy.editors - 1);
+      smoking = undefined;
+    }
+  });
+
+  /** A ready-made flow in ComfyUI's API format, with the checkpoint names ComfyUI uses on this computer. */
+  app.get<{ Params: { id: string }; Querystring: { asset?: string } }>("/api/comfy-ui/flows/:id", async (req, reply) => {
+    const flow = readyFlows().find((f) => f.id === req.params.id);
+    if (!flow) return reply.code(404).send({ error: "No such flow." });
+    const out = await apiFlow(flow);
     // A picture of KesherAI's (a result on the Pictures page): sent to ComfyUI's inputs and set in the flow's
     // LoadImage, so "Animate" under a picture opens the video flow ready to run.
     const assetId = req.query.asset;

@@ -47,6 +47,14 @@ Not to use by default here: Qwen3-Coder-Next (~38 GB), huihui Coder-Next abliter
 (~84 GB): all spill far past 24 GB into RAM. Qwen3.8-27B UD-Q4 and gemma-4-31B are good alternatives to Qwen3.6-27B
 for chat (gemma-4-31B sees pictures, but at 18.8 GB leaves less room for context).
 
+## Headless smoke run of a ComfyUI flow
+
+`POST /api/comfy-ui/flows/:id/smoke` (computer only) checks that a ready-made flow (music, 3D, video, ...) works without
+opening ComfyUI's page: it starts ComfyUI if needed, runs the flow with the smallest settings (music 5 s; video 5 frames
+at 256 x 256; 3D a short latent and a coarse mesh; 2 sampler steps; a generated test picture for the loaders), waits up to
+10 minutes and answers `{ok, seconds, outputs:[{kind,file}], error}`. Video and 3D unload the chat model first. The
+"Test" button beside each ready flow (Nodes page, Ready-made menu) shows the same: a check with the seconds, or the error.
+
 ## Sweep 23.11 (PC on 0.6.461, one tiny real job per category through KesherAI's API)
 
 | Category | Model | Result |
