@@ -177,6 +177,10 @@ test("speedArgs: prompt reuse from b3000, lookup decoding from b12000, each only
 test("speedArgs: the setting, vision, multi-token prediction and the user's own arguments win", () => {
   assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { lookup: false, ...small }).features, ["prompt reuse"]);
   assert.deepEqual(LlamaEngine.speedArgs([], "b12110", { vision: true, ...small }), { args: [], features: [] });
+  assert.deepEqual(LlamaEngine.speedArgs(["--spec-type", "draft-mtp"], "b12110", small).features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs(["-md", "small.gguf"], "b12110", small).features, ["prompt reuse"]);
+  assert.deepEqual(LlamaEngine.speedArgs(["--cache-reuse", "0"], "b12110", small).features, ["lookup decoding"]);
+});
 
 test("speedArgs: host-RAM prompt cache of 20 GB on a 64 GB computer, on builds that have it; the setting turns it off", () => {
   const big = { ramGiB: 63.7 };
@@ -191,8 +195,4 @@ test("speedArgs: host-RAM prompt cache of 20 GB on a 64 GB computer, on builds t
   // The user's own --cache-ram wins; vision files still get it (it is not about the picture path).
   assert.equal(LlamaEngine.speedArgs(["-cram", "4096"], "b12110", big).args.includes("--cache-ram"), false);
   assert.ok(LlamaEngine.speedArgs([], "b12110", { ...big, vision: true }).args.includes("--cache-ram"));
-});
-  assert.deepEqual(LlamaEngine.speedArgs(["--spec-type", "draft-mtp"], "b12110").features, ["prompt reuse"]);
-  assert.deepEqual(LlamaEngine.speedArgs(["-md", "small.gguf"], "b12110").features, ["prompt reuse"]);
-  assert.deepEqual(LlamaEngine.speedArgs(["--cache-reuse", "0"], "b12110").features, ["lookup decoding"]);
 });
