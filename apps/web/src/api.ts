@@ -12,6 +12,12 @@ const TOKEN_KEY = "kesher-token";
 /** Where the Android app's own connect screen lives, when this page was opened from the app. */
 const APP_HOME_KEY = "kesher-app-home";
 
+/** MAC address of the paired computer, for Wake-on-LAN. */
+const WAKE_MAC_KEY = "kesher-wake-mac";
+
+/** Broadcast address of the paired computer's network, for Wake-on-LAN. */
+const WAKE_BCAST_KEY = "kesher-wake-bcast";
+
 /** @returns The Android app's connect screen, if this page runs inside the app. */
 export function appHome(): string | null {
   try {
@@ -64,11 +70,46 @@ export function disconnectComputer(): void {
     } catch {
       // ignore
     }
-    history.replaceState(null, "", location.pathname + location.hash);
-  } else if (app) {
+  }
+  // Save Wake-on-LAN parameters from the URL (set by PhoneSection when pairing).
+  const wakeMac = params.get("wake");
+  const wakeBcast = params.get("bcast");
+  if (wakeMac) {
+    try {
+      localStorage.setItem(WAKE_MAC_KEY, wakeMac);
+    } catch {
+      // ignore
+    }
+  }
+  if (wakeBcast) {
+    try {
+      localStorage.setItem(WAKE_BCAST_KEY, wakeBcast);
+    } catch {
+      // ignore
+    }
+  }
+  if (fromUrl || app) {
     history.replaceState(null, "", location.pathname + location.hash);
   }
 })();
+
+/** @returns The stored MAC address for Wake-on-LAN, or `null`. */
+export function getWakeMac(): string | null {
+  try {
+    return localStorage.getItem(WAKE_MAC_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** @returns The stored broadcast address for Wake-on-LAN, or `null`. */
+export function getWakeBcast(): string | null {
+  try {
+    return localStorage.getItem(WAKE_BCAST_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /** @returns This device's own key (kd_…) when it has one, for the phone app's native parts. */
 export function deviceKey(): string | undefined {

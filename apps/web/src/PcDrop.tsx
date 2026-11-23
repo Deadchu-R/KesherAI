@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, appHome } from "./api";
+import { api, appHome, getWakeMac, getWakeBcast } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { type Handoff, phoneHandoffUrl } from "./phone-handoff";
 
@@ -52,11 +52,26 @@ export function PcDrop() {
     const sub = notify?.addListener?.("openPhone", go);
     return () => void sub?.then((x) => x.remove());
   }, [home]);
+  const tryWake = () => {
+    const mac = getWakeMac();
+    const bcast = getWakeBcast();
+    if (!mac || !bcast) return;
+    const wol = (window as unknown as { Capacitor?: { Plugins?: { WakeOnLan?: { wake?: (o: { mac: string; broadcast: string }) => Promise<void> } } } }).Capacitor?.Plugins?.WakeOnLan;
+    if (wol) {
+      void wol.wake?.({ mac, broadcast: bcast }).catch(() => undefined);
+    }
+  };
   if (home && busy && !down) return <div className="pc-drop" role="status"><span>{L("המחשב עסוק: ", "The computer is busy: ")}{busy}…</span></div>;
   if (!home || !down) return null;
+  const hasWake = getWakeMac() && getWakeBcast();
   return (
     <div className="pc-drop" role="alert">
       <span>{L("המחשב לא עונה.", "The computer is not answering.")}</span>
+      {hasWake && (
+        <button type="button" className="small" onClick={tryWake}>
+          {L("הערת מחשב", "Wake computer")}
+        </button>
+      )}
       <button type="button" className="primary small" onClick={() => (location.href = phoneHandoffUrl(home, kept.current))}>
         {kept.current?.messages.length ? L("המשך את הצ׳אט בטלפון", "Go on with this chat on the phone") : L("המשך בטלפון", "Go on on the phone")}
       </button>
