@@ -35,8 +35,8 @@ Measured parts: caching numbers and research count/cost. The rest are stated ass
 - 2026-11-22 KesherAI: Anthropic prompt caching (cache_control on last tool, static system block, last two user turns); measured: pending (answer footer cache %, usage events `cached` / `cacheWrite`)
 - 2026-11-22 KesherAI: context pruning — superseded file reads as one line, old command/check outputs keep their exit line; measured: pending (usage `pruned`, session `savedTokens`)
 - 2026-11-22 KesherAI: llama.cpp host-RAM prompt cache 20 GB (`--cache-ram`, `--cache-idle-slots`) on 64 GB computers; measured: pending (engine log prompt time / `promptTps` when returning to a chat)
-- 2026-11-22 Code tasks to OpenCode Go ($10/month flat, no per-use payment) instead of Claude build helpers (≈145K–316K tokens each); measured: 2 done + 1 partial by 23.11 (too few to chart yet)
-- 2026-11-23 OpenCode Go: per-model 429 cooldown and fallback (a limit on one model no longer stops the rest)
-- 2026-11-23 OpenCode Go: free models first (Beam Free, Iceman Contributor Free: unlimited for a limited time), outside the daily cap
 - 2026-11-23 KesherAI: thinking off for short helper calls (router, inline code, translator, titles): fewer local tokens and no empty answers
 - 2026-11-23 ComfyUI flow smoke runs through KesherAI (one call, a ✓ back) instead of Claude driving ComfyUI on screen
+
+## Not counted as savings
+- OpenCode Go and other paid plans (Roee, 23.11): moving work to a service he pays for is not a token saving, so it stays out of the deck and the charts.
