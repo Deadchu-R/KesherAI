@@ -93,6 +93,9 @@ function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undef
   return { coder, runs };
 }
 
+/** How many times a test inbox tried to start Antigravity (it must stay 0 without the user's Run answer). */
+let agyStarts = 0;
+
 function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], settings: Record<string, unknown> = {}, now = () => Date.now()) {
   const notes: string[] = [];
   const inbox = new TaskInbox({
@@ -100,7 +103,10 @@ function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], set
     file: join(root, "inbox.json"),
     git,
     run: async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }),
-    startAgent: () => Promise.reject(new Error("Antigravity must not start for an OpenCode Go task")),
+    startAgent: () => {
+      agyStarts++;
+      return Promise.reject(new Error("Antigravity must not start for an OpenCode Go task"));
+    },
     notify: (t, b) => void notes.push(`${t} ${b}`),
     busy: async () => ({ free: true, reasons: [] }),
     ...(coder ? { coder } : {}),
@@ -401,6 +407,34 @@ test("work loop: an empty backlog offers the standing task (once a day, with the
     assert.equal(notes.filter((n) => n.includes("סיכום יומי")).length, 1, "one summary at 21:00");
     assert.match(notes.find((n) => n.includes("סיכום יומי")) ?? "", /0 done, 0 failed/);
     assert.equal((await inbox.state(true)).loop?.state, "running");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("work loop: research tasks for Antigravity wait; one Run? ask at a time, never a start (sync, loop ticks, a free slot)", async () => {
+  const report = ["# Report", "", "## Tasks", ...[1, 2, 3].map((n) => `- **A${n}** — Add the ${["sort", "filter", "export"][n - 1]} button number ${n}: Size M, who AGY.`), ""].join("\n");
+  const { root, repo } = await setup({}, report);
+  const { inbox, notes } = inboxFor(repo, root, undefined, {});
+  agyStarts = 0;
+  try {
+    await inbox.sync();
+    for (let i = 0; i < 3; i++) {
+      await inbox.loopTick();
+      await inbox.pump();
+      await inbox.idle();
+    }
+    const agy = (await inbox.list()).filter((t) => t.runBy === "antigravity" && !t.standing);
+    assert.equal(agy.length, 3);
+    assert.equal(agyStarts, 0, "Antigravity was never started");
+    assert.ok(agy.every((t) => t.status === "waiting"), "every one waits for the user's Run");
+    assert.equal(inbox.queues().antigravity.length, 0, "the loop puts nothing in Antigravity's line");
+    assert.equal(agy.filter((t) => t.runAsk).length, 1, "one ask at a time, the first in line");
+    assert.equal(notes.filter((n) => n.startsWith("✦ Run this task in Antigravity?")).length, 1);
+    // The ask is the user's way in: Run answers it, and then (and only then) Antigravity starts.
+    const ask = inbox.openAsks()[0]!.ask;
+    await inbox.answerRun(ask.requestId, "allow", "pc").catch(() => undefined);
+    assert.equal(agyStarts, 1, "started only by the answer");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

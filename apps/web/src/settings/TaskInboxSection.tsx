@@ -138,7 +138,7 @@ export function TaskInboxSection() {
         <span>
           <b>{L("להשאיר את לולאת העבודה פועלת", "Keep the work loop running")}</b>
           <br />
-          <span className="muted">{L("כל 5 דק׳: משימות ממחקרים ומ-docs/research/BACKLOG.md ממלאות את התורים (עד 3 בכל תור), שאלה \"להריץ את מה לחקור הבא?\" כשהרשימה ריקה (פעם ביום), עצירה עד שהמכסה מתאפסת, וסיכום לטלפון ב-21:00. משימה בתור של Antigravity מתחילה כשהוא פנוי, כמו כל משימה בתור.", "Every 5 min: tasks from research reports and docs/research/BACKLOG.md fill the lines (up to 3 each), \"Run what to research next?\" when the list is empty (once a day), a pause until the quota resets, and a summary on the phone at 21:00. A task in Antigravity's line starts when it is free, like any queued task.")}</span>
+          <span className="muted">{L("כל 5 דק׳: משימות ממחקרים ומ-docs/research/BACKLOG.md ממלאות את התורים (עד 3 בכל תור), שאלה \"להריץ את מה לחקור הבא?\" כשהרשימה ריקה (פעם ביום), עצירה עד שהמכסה מתאפסת, וסיכום לטלפון ב-21:00. משימות Antigravity ממתינות ללחיצת Run/Start שלך (הטלפון והמחשב שואלים); מחקר במפתח Gemini החינמי ומשימות OpenCode Go ומקומיות רצים מעצמם.", "Every 5 min: tasks from research reports and docs/research/BACKLOG.md fill the lines (up to 3 each), \"Run what to research next?\" when the list is empty (once a day), a pause until the quota resets, and a summary on the phone at 21:00. Antigravity tasks wait for your Run/Start tap (the phone and the PC ask); Gemini-key research and OpenCode Go/local tasks run by themselves.")}</span>
         </span>
       </label>
       <p className="small muted">{L('"כבה" עוצר גם את המשיכה מ-GitHub, מיד.', '"Off" also stops fetching from GitHub, at once.')}</p>

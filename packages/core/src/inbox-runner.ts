@@ -103,7 +103,7 @@ interface Saved {
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
   research?: { seen: Record<string, string>; backlog: ResearchTask[]; made: string[]; at?: number };
   /** The work loop (work-loop.ts): the local day it last offered the standing task and sent the summary, and when. */
-  loop?: { standingDay?: string; summaryDay?: string; summaryAt?: number };
+  loop?: { standingDay?: string; summaryDay?: string; summaryAt?: number; offer?: string[] };
 }
 
 /** What a message ask shows: the agent's task in a few words, the message, and where it runs. */
@@ -631,7 +631,8 @@ export class TaskInbox {
     this.saved.tasks.push(t);
     if (this.saved.tasks.length > 300) this.saved.tasks = this.saved.tasks.slice(-300);
     // An Antigravity task: the PC asks right away (on the PC and the phone); it starts only on the user's tap.
-    if (runBy !== "antigravity" || !this.makeAsk(t)) this.d.notify("📥 A new task in the inbox", `${spec.id}: ${spec.title}`);
+    // (A task the work loop makes is offered later, one ask at a time: see offerWaiting.)
+    if (!this.feeding && (runBy !== "antigravity" || !this.makeAsk(t))) this.d.notify("📥 A new task in the inbox", `${spec.id}: ${spec.title}`);
     return t;
   }
 
@@ -1526,7 +1527,7 @@ export class TaskInbox {
     t.note = `Queued (${place} in line): it starts when ${ex === "local" ? "the local model" : "the task now running"} is free.`;
     this.ensureQueueTimer();
     await this.save();
-    await this.pump(ex);
+    await this.pump(ex, false, true);
     return this.withPlace(t);
   }
 
@@ -1573,9 +1574,15 @@ export class TaskInbox {
    * Moves the lines forward: for each executor whose slot is free, starts the first queued task, waits while a heavy
    * job runs, or asks "Next in line - Start?" after a task ended when the setting is on (see {@link queueStep}).
    *
+   * Antigravity never starts from here by itself (Google's terms: only the user's own press): unless `tapped` (the
+   * user's "Add to queue" tap on a free slot, which is their own start), its head is asked about, one ask at a time,
+   * whatever the "ask before the next task" setting says.
+   *
    * @param only - One executor, or both.
+   * @param quiet - No notification for the ask (the caller sends one note for the freed slot).
+   * @param tapped - The call is the user's own tap (queueAdd).
    */
-  async pump(only?: QueueExecutor, quiet = false): Promise<{ started?: string; asked?: string }> {
+  async pump(only?: QueueExecutor, quiet = false, tapped = false): Promise<{ started?: string; asked?: string }> {
     await this.load();
     const out: { started?: string; asked?: string } = {};
     for (const ex of only ? [only] : QUEUE_EXECUTORS) {
@@ -1587,7 +1594,8 @@ export class TaskInbox {
           this.lines.remove(id);
           continue;
         }
-        const step = queueStep({ queued: this.lines.size(ex), slotFree: this.slotFree(ex), heavy: this.heavyJob(), ask: this.s.askBeforeNext[ex], afterEnd: this.pendingDone[ex] !== undefined });
+        const mustAsk = ex === "antigravity" && !tapped;
+        const step = queueStep({ queued: this.lines.size(ex), slotFree: this.slotFree(ex), heavy: this.heavyJob(), ask: mustAsk || this.s.askBeforeNext[ex], afterEnd: mustAsk || this.pendingDone[ex] !== undefined });
         if (step.kind === "idle") break;
         if (step.kind === "wait") {
           const note = `Queued: waiting for ${step.job} to finish (a heavy job runs).`;
@@ -1600,6 +1608,11 @@ export class TaskInbox {
         const done = this.pendingDone[ex];
         delete this.pendingDone[ex];
         if (step.kind === "ask") {
+          // One ask at a time: while an Antigravity ask is open, the rest of the line waits for its answer.
+          if (ex === "antigravity" && this.saved.tasks.some((x) => x.runBy === "antigravity" && x.runAsk)) {
+            if (done !== undefined) this.pendingDone[ex] = done;
+            break;
+          }
           const asked = await this.askNext(done ?? "", ex, quiet);
           if (asked) out.asked = asked;
           break;
@@ -1797,6 +1810,9 @@ export class TaskInbox {
     await this.save();
   }
 
+  /** True while the work loop makes a task: it gets no ask of its own (see offerWaiting). */
+  private feeding = false;
+
   /**
    * Keeps the lines fed from the research backlog: while an executor has fewer than 3 tasks in line (and, for
    * Antigravity, today's cap and the model quota allow it), the next backlog task becomes an inbox task and is queued.
@@ -1810,19 +1826,24 @@ export class TaskInbox {
       // take them (on, a key, under its own cap and limit); otherwise they wait in the backlog as before.
       const gap = ex === "antigravity" && this.antigravityOut();
       if (gap && this.opencodeBlocked()) continue;
-      const waiting = () => (gap ? this.saved.tasks.filter((t) => t.runBy === "opencode" && t.status === "waiting").length : this.lines.size(ex));
+      // Antigravity's tasks wait for the user's Run (they are never queued from here); the local line is automatic.
+      const waiting = () => (gap ? this.saved.tasks.filter((t) => t.runBy === "opencode" && t.status === "waiting").length : ex === "antigravity" ? this.saved.tasks.filter((t) => t.runBy === "antigravity" && t.status === "waiting" && !t.standing).length : this.lines.size(ex));
       for (let n = 0; n < 3 && waiting() < 3; n++) {
         const next = nextForExecutor(r.backlog, ex);
         if (!next) break;
         r.backlog = r.backlog.filter((b) => b !== next);
         r.made.push(next.key);
         try {
+          this.feeding = true;
           const t = await this.add({ title: next.title, goal: goalFor(next), executor: gap ? "opencode" : ex, risk: next.size === "S" ? "low" : "medium", check: "pnpm -s typecheck && pnpm -s lint", size: next.size });
           if (gap) continue;
           if (ex === "antigravity") await this.setModel(t.id, "Claude Opus 4.6 (Thinking)").catch(() => undefined);
-          await this.queueAdd(t.id, "research loop");
+          if (ex === "local") await this.queueAdd(t.id, "research loop");
+          else (this.saved.loop ??= {}).offer = [...((this.saved.loop ??= {}).offer ?? []), t.id].slice(-50);
         } catch {
           // A task that cannot be made or queued stays made (no retry storm); the backlog moves on.
+        } finally {
+          this.feeding = false;
         }
       }
     }
@@ -1884,8 +1905,28 @@ export class TaskInbox {
     if (this.s.loop === false) return;
     await this.importResearch().catch(() => undefined);
     await this.feedFromResearch().catch(() => undefined);
+    await this.offerWaiting().catch(() => undefined);
     await this.loopStanding().catch(() => undefined);
     await this.loopSummary().catch(() => undefined);
+  }
+
+  /**
+   * Offers the first waiting Antigravity task the loop made with the usual "Run this task in Antigravity?" ask (PC and
+   * phone), one ask at a time and each task once (an expired or declined ask is not repeated by the loop). Starts
+   * nothing: only the user's Run answer does. The tasks to offer are the ones {@link feedFromResearch} made.
+   */
+  private async offerWaiting(): Promise<void> {
+    const l = this.saved.loop;
+    if (!l?.offer?.length || this.active || this.loopNow().state !== "running") return;
+    if (this.saved.tasks.some((t) => t.runBy === "antigravity" && t.runAsk)) return;
+    // Ids that are gone, started or finished drop out; the first one still waiting gets its ask (once).
+    while (l.offer.length) {
+      const t = this.saved.tasks.find((x) => x.id === l.offer![0]);
+      if (t && t.status === "waiting" && t.runBy === "antigravity" && !this.makeAsk(t)) return;
+      l.offer.shift();
+      if (t && t.status === "waiting" && t.runAsk) break;
+    }
+    await this.save();
   }
 
   /**

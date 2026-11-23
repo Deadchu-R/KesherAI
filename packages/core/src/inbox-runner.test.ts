@@ -669,16 +669,19 @@ test("inbox: Gemini busy (503 overloaded) waits 15 minutes and tries once more, 
   }
 });
 
-test("inbox queue: with the ask setting off, the next queued task starts by itself and one note says so", async () => {
+test("inbox queue: even with the ask setting off, Antigravity's next queued task never starts without a Start answer", async () => {
   const { inbox, notes, ids, root, seen } = await queuedThree(false);
   try {
     await inbox.idle();
+    await inbox.pump();
+    await inbox.sync();
     await inbox.idle();
-    assert.equal(seen.prompts, 3, "all three ran, one at a time");
-    for (const id of ids) assert.equal((await inbox.task(id)).status, "done");
-    assert.equal(inbox.openAsks().length, 0, "nothing was asked");
-    assert.ok(notes.some((n) => n.startsWith("🟢 אנטיגרוויטי:") && n.includes("התחילה")));
-    assert.equal(notes.filter((n) => n.startsWith("✦ Antigravity started")).length, 1, "only the tapped first run has its own start note");
+    assert.equal(seen.prompts, 1, "only the tapped first run ran");
+    assert.equal((await inbox.task(ids[1]!)).status, "waiting");
+    assert.equal((await inbox.task(ids[2]!)).status, "waiting");
+    assert.equal(inbox.openAsks().length, 1, "one ask at a time, for the first in line");
+    assert.equal((await inbox.task(ids[1]!)).runAsk?.next?.done !== undefined, true, "the ask is for the first in line");
+    assert.equal(notes.filter((n) => n.startsWith("🟢 אנטיגרוויטי:") && n.includes("התחילה")).length, 0, "no \"started\" note");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -696,7 +699,8 @@ test("inbox queue: a heavy job holds the next queued task back until it is over"
     await inbox.pump();
     await inbox.idle();
     await inbox.idle();
-    assert.equal(seen.prompts, 3);
+    assert.equal(seen.prompts, 1, "when the job is over the next one is asked about, not started");
+    assert.equal(inbox.openAsks().length, 1);
   } finally {
     heavyNow = undefined;
     rmSync(root, { recursive: true, force: true });
