@@ -101,6 +101,8 @@ export interface ProviderChatRequest {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** Local reasoning models: how much to think; `off` asks for a short direct answer. Unset leaves the model's default. */
+  thinking?: ThinkingLevel;
 }
 
 /** Input to {@link Provider.generateImage}. */

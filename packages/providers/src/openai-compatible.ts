@@ -1,5 +1,5 @@
 import { textToolCalls } from "./text-tool-calls.js";
-import { makeModelId, thinkingFields, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
+import { makeModelId, thinkingFields, type ThinkingLevel, type AgentMessage, type ChatStreamEvent, type ModelInfo, type ModelLocation, type ToolCall } from "@kesher/shared";
 import type {
   Provider,
   ProviderChatRequest,
@@ -12,6 +12,7 @@ import type {
 } from "./provider.js";
 import { parseToolArguments } from "./tool-args.js";
 import { fetchOk, readSSE } from "./sse.js";
+import { ThinkSplitter } from "./think-split.js";
 
 /**
  * Provider for any server that speaks the OpenAI Chat Completions API.
@@ -128,7 +129,7 @@ export class OpenAICompatibleProvider implements Provider {
       signal,
       body: JSON.stringify({
         model: request.providerModelId,
-        messages: request.messages.map((m) => ({
+        messages: withNoThink(request.messages, request.providerModelId, request.thinking, !!this.llamaCpp).map((m) => ({
           role: m.role,
           content: m.content,
           ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
@@ -138,17 +139,49 @@ export class OpenAICompatibleProvider implements Provider {
         stream: true,
         stream_options: { include_usage: true },
         ...(this.llamaCpp ? llamaCppFields(undefined, this.llamaCpp.slots?.() ?? 0, this.llamaCpp.parallelChats?.() ?? 1) : {}),
+        ...thinkingFields(request.thinking, !!this.llamaCpp),
       }),
     });
     if (!res.body) throw new Error("Empty response body");
 
     let usage: ProviderUsage | undefined;
+    let answered = false;
+    let thought = false;
+    let cutOff = false;
+    const split = new ThinkSplitter();
     for await (const data of readSSE(res.body)) {
       if (data === "[DONE]") break;
-      const chunk = JSON.parse(data) as UsageReport & { choices?: Array<{ delta?: { content?: string | null } }> };
-      const text = chunk.choices?.[0]?.delta?.content;
-      if (text) yield { type: "delta", text };
+      const chunk = JSON.parse(data) as UsageReport & { choices?: Array<{ delta?: StreamDelta; finish_reason?: string | null }> };
+      const choice = chunk.choices?.[0];
+      if (choice?.finish_reason === "length") cutOff = true;
+      const think = choice?.delta?.reasoning_content ?? choice?.delta?.reasoning;
+      if (think) {
+        thought = true;
+        yield { type: "reasoning", text: think };
+      }
+      if (choice?.delta?.content) {
+        const part = split.push(choice.delta.content);
+        if (part.reasoning) {
+          thought = true;
+          yield { type: "reasoning", text: part.reasoning };
+        }
+        if (part.text) {
+          answered = true;
+          yield { type: "delta", text: part.text };
+        }
+      }
       usage = readUsage(chunk, usage);
+    }
+    const rest = split.flush();
+    if (rest.reasoning) yield { type: "reasoning", text: rest.reasoning };
+    if (rest.text) {
+      answered = true;
+      yield { type: "delta", text: rest.text };
+    }
+    // The token budget ran out while the model was still thinking: say so, not an empty answer.
+    if (cutOff && !answered && thought) {
+      yield { type: "error", message: THINKING_BUDGET_MESSAGE };
+      return;
     }
     yield { type: "done", ...(usage ? { usage } : {}) };
   }
@@ -200,7 +233,7 @@ export class OpenAICompatibleProvider implements Provider {
       signal,
       body: JSON.stringify({
         model: request.providerModelId,
-        messages: toOpenAIMessages(request.messages),
+        messages: toOpenAIMessages(withNoThink(request.messages, request.providerModelId, request.thinking, !!this.llamaCpp)),
         ...(request.tools.length > 0
           ? {
               tools: request.tools.map((t) => ({
@@ -227,12 +260,14 @@ export class OpenAICompatibleProvider implements Provider {
     let usage: ProviderToolChatResult["usage"];
     // The server stopped at max_tokens (finish_reason "length"): the answer or a tool call in it is cut off.
     let truncated = false;
+    // Thinking the model did (kept out of the answer); only used to tell "cut off while thinking" from "cut off".
+    let thought = false;
+    const split = new ThinkSplitter();
     for await (const data of readSSE(res.body)) {
       if (data === "[DONE]") break;
       const chunk = JSON.parse(data) as UsageReport & {
         choices?: Array<{
-          delta?: {
-            content?: string | null;
+          delta?: StreamDelta & {
             tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }>;
           };
           finish_reason?: string | null;
@@ -242,9 +277,14 @@ export class OpenAICompatibleProvider implements Provider {
       if (chunk.error) throw new Error(chunk.error.message ?? "Model server error");
       const delta = chunk.choices?.[0]?.delta;
       if (chunk.choices?.[0]?.finish_reason === "length") truncated = true;
+      if (delta?.reasoning_content || delta?.reasoning) thought = true;
       if (delta?.content) {
-        text += delta.content;
-        onText?.(delta.content);
+        const part = split.push(delta.content);
+        if (part.reasoning) thought = true;
+        if (part.text) {
+          text += part.text;
+          onText?.(part.text);
+        }
       }
       for (const tc of delta?.tool_calls ?? []) {
         const index = tc.index ?? calls.size;
@@ -256,6 +296,14 @@ export class OpenAICompatibleProvider implements Provider {
       }
       usage = readUsage(chunk, usage);
     }
+    const rest = split.flush();
+    if (rest.reasoning) thought = true;
+    if (rest.text) {
+      text += rest.text;
+      onText?.(rest.text);
+    }
+    // Cut off while still thinking: no answer and no call came out, so say why instead of ending the turn empty.
+    if (truncated && thought && !text.trim() && ![...calls.values()].some((c) => c.name)) throw new Error(THINKING_BUDGET_MESSAGE);
     const toolCalls: ToolCall[] = [...calls.entries()]
       .sort(([a], [b]) => a - b)
       .filter(([, c]) => c.name)
@@ -267,6 +315,36 @@ export class OpenAICompatibleProvider implements Provider {
     }
     return { text, toolCalls, ...(truncated ? { truncated } : {}), ...(usage ? { usage } : {}) };
   }
+}
+
+/** What a streamed chunk's `delta` can carry: the answer, and llama-server's (or another server's) thinking. */
+interface StreamDelta {
+  content?: string | null;
+  /** llama-server's `reasoning_content` (default `--reasoning-format deepseek`). */
+  reasoning_content?: string | null;
+  /** The same under the name some other OpenAI-style servers use. */
+  reasoning?: string | null;
+}
+
+/** Shown when a thinking model spent its whole token budget thinking and wrote no answer. */
+export const THINKING_BUDGET_MESSAGE = "The model used all its tokens thinking and wrote no answer. Turn thinking off for this model, or raise the token limit.";
+
+/**
+ * For llama.cpp's Nemotron models (also the DictaLM 3.0 Nemotron builds), thinking is switched by a `/no_think`
+ * line in the system prompt (the template has no `enable_thinking` flag to rely on), so it is added when thinking is off.
+ *
+ * @param messages - The conversation.
+ * @param model - The provider's model id.
+ * @param thinking - The requested thinking level.
+ * @param llamaCpp - Whether the server is llama.cpp's.
+ * @returns The messages, with `/no_think` prepended to the system message (or added as one) when it applies.
+ */
+export function withNoThink<M extends { role: string; content: string }>(messages: M[], model: string, thinking: ThinkingLevel | undefined, llamaCpp: boolean): M[] {
+  if (!llamaCpp || thinking !== "off" || !/nemotron/i.test(model)) return messages;
+  const i = messages.findIndex((m) => m.role === "system");
+  if (i < 0) return [{ role: "system", content: "/no_think" } as M, ...messages];
+  if (messages[i]!.content.trimStart().startsWith("/no_think")) return messages;
+  return messages.map((m, j) => (j === i ? { ...m, content: `/no_think\n${m.content}` } : m));
 }
 
 /**

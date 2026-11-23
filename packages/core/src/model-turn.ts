@@ -38,11 +38,14 @@ export function onModelSpeed(fn: typeof speedRecorder): void {
  * @param params - A persona's sampling settings, if any.
  * @param slotKind - Who asks (the chat's main model, a helper, or other), so llama.cpp keeps each kind's prompt
  *   cache in its own slot. Default `other`.
- * @param opts.thinking - The chat's thinking level, read at each call (it can change mid-chat; thinking.ts).
+ * @param opts.thinking - The chat's thinking level, read at each call (it can change mid-chat; thinking.ts). Unset
+ *   means a helper job: thinking is turned off for models that can (a short direct answer).
  * @returns The turn function.
  */
 export function modelTurnFor(registry: ProviderRegistry, modelId: string, params?: PersonaParams, slotKind?: SlotKind, opts: { thinking?: () => ThinkingLevel | undefined; noCloud?: () => boolean; fallback?: () => ModelTurn | undefined } = {}): ModelTurn {
-  const inner = rawTurnFor(registry, modelId, params, slotKind, opts.thinking);
+  // Only the chat's own model passes a thinking level (the user's choice). Every other caller (router, inline code,
+  // translator, titles, summaries, reports) wants a short direct answer, so a reasoning model gets thinking off.
+  const inner = rawTurnFor(registry, modelId, params, slotKind, opts.thinking ?? (() => "off"));
   return async (req, signal, onText) => {
     // A chat marked "never to the cloud" (incognito) is never sent to a free cloud provider, even when it is picked.
     if (isFreeCloudModel(modelId) && opts.noCloud?.()) throw new Error("This chat is private (incognito): it is never sent to the cloud. Choose a local model.");
@@ -112,7 +115,9 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
     const messages = req.messages
       .filter((m) => m.role !== "tool")
       .map((m) => ({ role: m.role, content: m.content }));
-    for await (const ev of provider.chat({ providerModelId, messages, ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}) }, signal)) {
+    const level = thinkingOf?.();
+    const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
+    for await (const ev of provider.chat({ providerModelId, messages, ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}), ...(thinking ? { thinking } : {}) }, signal)) {
       if (ev.type === "delta") {
         text += ev.text;
         onText(ev.text);

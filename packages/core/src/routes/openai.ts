@@ -168,6 +168,7 @@ export async function openAIRoutes(app: FastifyInstance, s: KesherServices): Pro
         sse.send(chunk({ role: "assistant" }, null));
         for await (const ev of target.provider.chat(request, sse.closed)) {
           if (ev.type === "delta") sse.send(chunk({ content: ev.text }, null));
+          else if (ev.type === "reasoning") sse.send(chunk({ reasoning_content: ev.text }, null));
           else if (ev.type === "error") sse.send({ error: { message: ev.message } });
         }
         sse.send(chunk({}, "stop"));

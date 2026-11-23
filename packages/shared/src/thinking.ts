@@ -18,7 +18,7 @@ export const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "low", "high"];
 /**
  * Model names (any case) of local families that think before answering. Coder and "instruct" builds of Qwen3 do not.
  */
-const REASONING = /qwen3(?![\w.-]*(?:coder|instruct))|qwq|deepseek-?r1|gpt-oss|magistral|phi-?4[\w-]*reasoning|glm-?4\.[5-9]|glm-?[5-9]|smollm3|exaone-?deep|granite[\w.-]*thinking|thinking|seed-oss|hermes-?4|nemotron[\w.-]*(?:nano|super)/i;
+const REASONING = /qwen3(?![\w.-]*(?:coder|instruct))|qwq|deepseek-?r1|gpt-oss|magistral|phi-?4[\w-]*reasoning|glm-?4\.[5-9]|glm-?[5-9]|smollm3|exaone-?deep|granite[\w.-]*thinking|thinking|seed-oss|hermes-?4|nemotron[\w.-]*(?:nano|super)|dictalm[\w.-]*nemotron/i;
 
 /**
  * Whether a model is known to think before it answers.

@@ -24,6 +24,11 @@ export const ChatRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().optional(),
+  /**
+   * Local reasoning models: `off` for a short direct answer (router, inline code, titles), `low` or `high` to
+   * think less or more; unset leaves the model's default (which may spend the whole budget thinking).
+   */
+  thinking: z.enum(["off", "low", "high"]).optional(),
 });
 
 /** Body of `POST /api/chat`; see {@link ChatRequestSchema}. */
@@ -35,6 +40,8 @@ export type ChatRequest = z.infer<typeof ChatRequestSchema>;
  */
 export type ChatStreamEvent =
   | { type: "delta"; text: string }
+  /** The model's thinking (llama.cpp `reasoning_content`, or a `<think>` block), apart from the answer in `delta`. */
+  | { type: "reasoning"; text: string }
   /** `cachedTokens`: of the input, how many the server read from its prompt cache (when it says). */
   | { type: "done"; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number } }
   | { type: "error"; message: string };
