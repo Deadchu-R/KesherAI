@@ -447,6 +447,20 @@ export async function readProject(
 }
 
 /** @returns Where the plugin's source is: bundled with the app, or in the repository. */
+/**
+ * The editor program of an installed engine: `UnrealEditor` on Unreal 5, `UE4Editor` on Unreal 4 (2026-11-23: opening a
+ * 4.27 project failed with "the editor was not found" because only the UE5 name was tried).
+ * @param enginePath - The engine's root folder.
+ * @param cmd - The command-line build (`-Cmd`) instead of the editor window.
+ * @returns The full path; the UE5 name when neither file exists (so the caller's "not found" message stays accurate).
+ */
+export function editorExe(enginePath: string, cmd = false): string {
+  const win = process.platform === "win32";
+  const dir = join(enginePath, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux");
+  const names = (cmd ? ["UnrealEditor-Cmd", "UE4Editor-Cmd"] : ["UnrealEditor", "UE4Editor"]).map((n) => join(dir, win ? `${n}.exe` : n));
+  return names.find((f) => existsSync(f)) ?? names[0]!;
+}
+
 export function bridgeSource(): string | undefined {
   const resources = (process as { resourcesPath?: string }).resourcesPath;
   const here = dirname(fileURLToPath(import.meta.url));
@@ -700,7 +714,7 @@ export class BridgeInstaller {
       this.beforeCopy = undefined;
       this.afterCopy = undefined;
       if (!projectFile) return;
-      const exe = join(engine.path, "Engine", "Binaries", "Win64", "UnrealEditor.exe");
+      const exe = editorExe(engine.path);
       if (!existsSync(exe)) return;
       spawn(exe, [projectFile], { detached: true, stdio: "ignore", windowsHide: false }).unref();
       job.message = `Updated. Opening ${basename(projectFile)} again…`;

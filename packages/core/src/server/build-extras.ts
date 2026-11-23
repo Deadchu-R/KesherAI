@@ -29,7 +29,7 @@ import { GameCheckpoints } from "../game-checkpoints.js";
 import type { SyncBatch } from "../game-sync.js";
 import { suggestHeavyDir } from "../heavy-folder.js";
 import { UnrealBridge } from "../unreal-bridge.js";
-import { findEngines, readProject } from "../unreal-install.js";
+import { editorExe, findEngines, readProject } from "../unreal-install.js";
 import { engineFor, runProgram } from "../unreal-tools.js";
 import { localCall } from "../local-call.js";
 
@@ -125,7 +125,7 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     const name = uproject.split(/[\\/]/).pop()!.toLowerCase();
     const r =
       process.platform === "win32"
-        ? await runProgram("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='UnrealEditor.exe'\" | ForEach-Object { $_.CommandLine }"], { timeoutMs: 15_000 }).catch(() => ({ code: 1, out: "" }))
+        ? await runProgram("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name='UnrealEditor.exe' OR Name='UE4Editor.exe'\" | ForEach-Object { $_.CommandLine }"], { timeoutMs: 15_000 }).catch(() => ({ code: 1, out: "" }))
         : await runProgram("ps", ["-eo", "args"], { timeoutMs: 10_000 }).catch(() => ({ code: 1, out: "" }));
     return r.out.split(/\r?\n/).some((l) => /UnrealEditor(?!-Cmd)/i.test(l) && l.toLowerCase().includes(name));
   };
@@ -138,7 +138,7 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     // Unreal open on this project without the plugin connected: a second editor saving the same assets could lose
     // work, so the change waits for the plugin instead.
     if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
-    const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
+    const cmd = editorExe(e.path, true);
     const dir = join(p.dir, "Saved", "KesherAI");
     await mkdir(dir, { recursive: true });
     const request = join(dir, "bridge-request.json");
@@ -163,7 +163,7 @@ export function buildGameEngines(paths: DataPaths, config: KesherConfig, persist
     if (!e) throw new Error(`Unreal ${p.engine} is not installed on this computer.`);
     if (await editorOpenOn(p.file)) throw new Error("Unreal is open on this project but the KesherAI Bridge plugin is not connected.");
     const win = process.platform === "win32";
-    const cmd = join(e.path, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux", win ? "UnrealEditor-Cmd.exe" : "UnrealEditor-Cmd");
+    const cmd = editorExe(e.path, true);
     const dir = join(p.dir, "Saved", "KesherAI");
     await mkdir(dir, { recursive: true });
     const request = join(dir, "play-test-request.json");

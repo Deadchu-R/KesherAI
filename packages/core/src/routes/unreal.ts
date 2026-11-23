@@ -24,7 +24,7 @@ import { editWidget, type WidgetNode } from "../widget-edit.js";
 import { figmaFrame, figmaNodeTree, parseFigmaLink } from "../figma.js";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { figmaToWidgetOps, type FigmaNode } from "../figma-umg.js";
-import { BridgeInstaller, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
+import { BridgeInstaller, editorExe, enableUnrealMcp, findEngines, installUnityPackage } from "../unreal-install.js";
 import { convertTask, readUnityVersion, unitySupport, unrealSupport, type ConvertRequest } from "../engine-support.js";
 import { engineConversionRoutes } from "./engine-conversion.js";
 import { MCP_PRESETS } from "../mcp.js";
@@ -905,7 +905,7 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
     const engines = await findEngines();
     const e = engines.find((x) => x.version === p.engine) ?? (p.engine ? undefined : engines[0]);
     if (!e) return reply.code(400).send({ error: `Unreal ${p.engine ?? ""} is not installed on this computer.`.replace("  ", " ") });
-    const exe = join(e.path, "Engine", "Binaries", process.platform === "win32" ? "Win64" : "Linux", process.platform === "win32" ? "UnrealEditor.exe" : "UnrealEditor");
+    const exe = editorExe(e.path);
     if (!existsSync(exe)) return reply.code(400).send({ error: `Unreal ${e.version}'s editor was not found.` });
     spawn(exe, [join(p.path, `${p.name}.uproject`)], { detached: true, stdio: "ignore" }).unref();
     return { ok: true, engine: e.version };

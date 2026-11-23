@@ -4,6 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  editorExe,
   type BatchItem,
   type InstallJob,
   bridgeSource,
@@ -158,4 +159,18 @@ test("runBatchItems: a failure that is not the build (the copy) does not stop th
   });
   assert.deepEqual(built, ["/p/a", "/p/b"]);
   assert.equal(items[1]!.state, "done");
+});
+
+test("editorExe: Unreal 4's UE4Editor when that is what the engine has, else UnrealEditor", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "ue-"));
+  const win = process.platform === "win32";
+  const bin = join(root, "Engine", "Binaries", win ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux");
+  mkdirSync(bin, { recursive: true });
+  const exe = (n: string) => join(bin, win ? `${n}.exe` : n);
+  assert.equal(editorExe(root), exe("UnrealEditor"), "neither: the UE5 name");
+  writeFileSync(exe("UE4Editor"), "");
+  writeFileSync(exe("UE4Editor-Cmd"), "");
+  assert.equal(editorExe(root), exe("UE4Editor"));
+  assert.equal(editorExe(root, true), exe("UE4Editor-Cmd"));
 });

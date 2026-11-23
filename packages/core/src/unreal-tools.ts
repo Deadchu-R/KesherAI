@@ -4,7 +4,7 @@ import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:
 import { constants, homedir, setPriority } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
-import { addEngineFolders, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
+import { addEngineFolders, editorExe, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
 import type { Phone } from "./phones.js";
 import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
@@ -446,7 +446,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
         // Found on the real editor: a small model wrote a one-liner without "import unreal" and the script failed.
         const code = String(input.code ?? "");
         await writeFile(script, /^\s*(import unreal\b|from unreal import)/m.test(code) ? code : `import unreal\n${code}`);
-        const cmd = join(e.path, "Engine", "Binaries", "Win64", "UnrealEditor-Cmd.exe");
+        const cmd = editorExe(e.path, true);
         // Forward slashes: Unreal's command line reads "\r" in "C:\Users\<name>" as a line break (found on the user's PC:
         // "Could not load Python file 'C:/Usersoeet/…'").
         const r = await runProgram(cmd, [p.file, "-run=pythonscript", `-script=${script.replace(/\\/g, "/")}`, "-unattended", "-nop4", "-nosplash", "-stdout", "-FullStdOutLogOutput"], { timeoutMs: 900_000 });
@@ -466,7 +466,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
       run: async () => {
         const p = await need();
         const e = await engineOf(p.engine);
-        spawn(join(e.path, "Engine", "Binaries", "Win64", "UnrealEditor.exe"), [p.file], { detached: true, stdio: "ignore" }).unref();
+        spawn(editorExe(e.path), [p.file], { detached: true, stdio: "ignore" }).unref();
         return { output: `Opening ${p.file} in Unreal ${e.version}. It takes a minute or more the first time (shaders).` };
       },
     },
