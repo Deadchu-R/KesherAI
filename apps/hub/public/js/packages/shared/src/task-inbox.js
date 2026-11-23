@@ -3,7 +3,7 @@ export const OPENCODE_PROVIDER = "opencode-go";
 /** The defaults: a cheap model for small work, a stronger (still cheap) one for the rest, 15 a day. */
 // Defaults by cost (Go plan, 2026-11-22, requests a month): Kimi K3 ~98 (44 requests spent a 5-hour window and 20% of
 // the month), MiMo-V2.6-Pro ~3,260, MiMo-V2.6-Flash ~30,100. An agent task makes tens of requests, so the cheap pair.
-export const OPENCODE_DEFAULTS = { enabled: true, small: "opencode-go/mimo-v2.6-flash", strong: "opencode-go/mimo-v2.6-pro", dailyCap: 15 };
+export const OPENCODE_DEFAULTS = { enabled: true, small: "opencode-go/mimo-v2.6-flash", strong: "opencode-go/mimo-v2.6-pro", dailyCap: 15, freeTrainingOk: true };
 /**
  * The OpenCode Go model for a task, by its size: the cheap one for S, the strong one for M and L (like OpenCode's own
  * `small_model` beside `model`, and Cline's separate Plan and Act models). A task's own `model` that names an OpenCode
@@ -27,7 +27,116 @@ export function opencodeModelFor(t, s) {
 // opt-in, and sharing Roee's code for training is not wanted.
 export const OPENCODE_FREE_MODELS = ["opencode-go/beam-free"];
 /** Whether a model is one of the plan's free ones (does not count toward the daily cap). */
-export const isFreeOpencodeModel = (id) => OPENCODE_FREE_MODELS.includes(id);
+/** OpenRouter's free tier without a credit purchase: 50 requests a day (20 a minute); failed attempts count (2026-11-23). */
+export const OPENROUTER_FREE_DAILY = 50;
+/** OpenRouter's free router (`openrouter/free`: picks an open free model by itself), as a KesherAI model id. */
+export const OPENROUTER_FREE_ROUTER = "openrouter/openrouter/free";
+/** Z.ai's free models (one request at a time; unpublished daily caps), as KesherAI model ids; the first is the coding one. */
+export const ZAI_FREE_MODELS = ["zai/glm-4.7-flash", "zai/glm-4.5-flash"];
+/** Coding-model names first (stable otherwise), at most `max`. */
+const coderFirst = (ids, max) => [...ids].sort((a, b) => Number(/coder|devstral|codestral/i.test(b)) - Number(/coder|devstral|codestral/i.test(a))).slice(0, max);
+/**
+ * Whether a KesherAI model id is one of OpenRouter's FREE models: the free router, or `openrouter/<provider>/<model>:free`.
+ * Any other OpenRouter id (paid) is never allowed in the inbox ({@link inboxModelAllowed}).
+ *
+ * @param id - The KesherAI model id.
+ */
+export function isOpenrouterFreeModel(id) {
+    return id === OPENROUTER_FREE_ROUTER || /^openrouter\/[\w.-]+\/[\w.-]+:free$/.test(id);
+}
+/** Cloudflare Workers AI: the free 10,000 Neurons a day (resets 00:00 UTC) cover only a few small tasks. */
+const isCloudflareModel = (id) => /^cloudflare-ai\/@cf\/[\w./:-]+$/.test(id);
+/** Gemini's free tier: the Flash and Flash-Lite models only (never Pro). */
+const isGeminiFree = (id) => /^gemini\/(models\/)?gemini-[\w.-]*flash[\w.-]*$/i.test(id);
+/** Services that are chat/research only: too small for an agent loop, never in the inbox's coder order. */
+export const CHAT_ONLY_PROVIDERS = ["sambanova", "cohere", "ollama-cloud"];
+const isContributorFree = (id) => /^opencode-go\/[\w.-]*contributor-free$/.test(id);
+/** The free services, in the order they are tried (after Beam Free). */
+export const FREE_PROVIDERS = [
+    // Z.ai: API data is not used for training unless the user agrees; one request at a time.
+    { id: "zai", name: "Z.ai", trainsOnData: false, allowed: (id) => ZAI_FREE_MODELS.includes(id), pick: (l) => ZAI_FREE_MODELS.filter((m) => l.includes(m)).slice(0, 1) },
+    {
+        id: "openrouter",
+        name: "OpenRouter",
+        trainsOnData: false,
+        dailyLimit: OPENROUTER_FREE_DAILY,
+        allowed: isOpenrouterFreeModel,
+        // The free router first, then up to two listed `:free` models (coder ones first).
+        pick: (l) => {
+            const free = l.filter(isOpenrouterFreeModel);
+            return [...free.filter((m) => m === OPENROUTER_FREE_ROUTER), ...coderFirst(free.filter((m) => m !== OPENROUTER_FREE_ROUTER), 2)];
+        },
+    },
+    // Workers AI: ~10,000 Neurons a day for every account; the best coding model it lists (low priority: a small allowance).
+    { id: "cloudflare-ai", name: "Cloudflare", trainsOnData: false, allowed: isCloudflareModel, pick: (l) => l.filter((m) => isCloudflareModel(m) && /coder/i.test(m)).slice(0, 1) },
+    // Gemini's free key: Flash first, then Flash-Lite; Google's free tier may use prompts to improve its products.
+    { id: "gemini", name: "Gemini", trainsOnData: true, allowed: isGeminiFree, pick: (l) => l.filter(isGeminiFree).sort((a, b) => Number(/lite/i.test(a)) - Number(/lite/i.test(b))).slice(0, 2) },
+    // The free "Experiment" plan: 1 request/s; its data may train models.
+    { id: "mistral", name: "Mistral", trainsOnData: true, allowed: (id) => /^mistral\/[\w.:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("mistral/")), 2) },
+    // The free trial key (testing and evaluation only): ~40 requests/min; its data may train models.
+    { id: "nvidia-nim", name: "NVIDIA", trainsOnData: true, allowed: (id) => /^nvidia-nim\/[\w./:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("nvidia-nim/")), 2) },
+    // OpenCode's "Contributor" free models answer only with the data-sharing opt-in.
+    { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: true, allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
+];
+/** The free service a model id belongs to, when it is one of the free tier's models. */
+export const freeProviderOf = (id) => FREE_PROVIDERS.find((p) => p.allowed(id));
+/** Whether a model is a free one (the plan's Beam Free or a free service's): it does not count toward the daily cap. */
+export const isFreeOpencodeModel = (id) => OPENCODE_FREE_MODELS.includes(id) || !!freeProviderOf(id);
+/**
+ * The guard for the inbox's automatic runs. A model of a free service's connection (OpenRouter, Z.ai, Cloudflare, Gemini,
+ * Mistral, NVIDIA) must be one of its free ones; one of a service that may train on data needs `freeTrainingOk`; the
+ * chat-only services never run; other ids are the OpenCode Go plan's own.
+ *
+ * @param id - The KesherAI model id.
+ * @param freeTrainingOk - The user's setting (default false).
+ */
+export function inboxModelAllowed(id, freeTrainingOk = false) {
+    if (CHAT_ONLY_PROVIDERS.some((p) => id.startsWith(`${p}/`)))
+        return false;
+    const fp = freeProviderOf(id);
+    if (fp)
+        return !fp.trainsOnData || freeTrainingOk;
+    // A model of a free service's connection that is not one of its free models is never allowed (paid ids included).
+    return !FREE_PROVIDERS.some((p) => p.id !== OPENCODE_PROVIDER && id.startsWith(`${p.id}/`)) && !isContributorFree(id);
+}
+const SECURITY_PATH = /(^|[/._@-])(auth|crypt|key|secret|token|passw|credential|permission|control-reviewer|relay-keys|hub-protocol|pairing|sandbox|gate|updates?|installer|cert|signing)/i;
+const SECURITY_WORDS = /\b(security|secure|vulnerab\w*|exploit\w*|passwords?|tokens?|keys?|secrets?|encrypt\w*|decrypt\w*|crypto\w*|auth\w*|permissions?|credentials?|cve(-\d+)?|sandbox|pairing|sealing|relay|installer|signing)\b|אבטח|סיסמ|מפתח|הרשא|הצפנ|טוקן|סוד|פגיעות/i;
+/**
+ * Whether a task may be sent to a free service that may train on its prompts (Gemini free, Mistral, NVIDIA, OpenCode
+ * Contributor): only a low-risk, small code task that stays away from anything security-sensitive. It never reads
+ * files; the caller also runs the privacy scan on the prompt it sends.
+ *
+ * @param t - The task (its limits and text).
+ * @returns `ok`, or `why` (English) it must stay with the other free options.
+ */
+export function safeForTrainingProvider(t) {
+    if (t.kind === "research")
+        return { ok: false, why: "research and report tasks stay off training services" };
+    if (t.risk !== "low")
+        return { ok: false, why: "only low-risk tasks go to services that may train" };
+    if (t.size !== "S")
+        return { ok: false, why: "only small (S) tasks go to services that may train" };
+    const paths = t.allowedPaths ?? [];
+    if (!paths.length)
+        return { ok: false, why: "the task has no path limit" };
+    const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || /^\*{0,2}(\/\*\*)?$/.test(g));
+    if (bad)
+        return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad})` };
+    const text = [t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n");
+    if (SECURITY_WORDS.test(text))
+        return { ok: false, why: "its text mentions a security topic" };
+    return { ok: true };
+}
+/**
+ * The free service models to try for a small task, in order: each connected service's picks, skipping the ones that may
+ * train on data unless allowed. Only what each connection lists now.
+ *
+ * @param listed - Per connection id, the models it lists (`<connection>/<model>`); absent: not connected.
+ * @param freeTrainingOk - The user's setting.
+ */
+export function freeModelsFor(listed, freeTrainingOk = false) {
+    return FREE_PROVIDERS.filter((p) => (freeTrainingOk || !p.trainsOnData) && listed[p.id]).flatMap((p) => p.pick(listed[p.id]));
+}
 /**
  * The free models to try first: on unless turned off, and only those the connection lists now (the offer is "for a
  * limited time"; an empty or unknown list means none).
@@ -75,7 +184,7 @@ export function opencodeFreeModel(order, until, now, first, skip = []) {
     return order.find(free);
 }
 /** A model id without its connection (`opencode-go/kimi-k3` → `kimi-k3`), for cards. */
-export const opencodeModelName = (id) => id.replace(new RegExp(`^${OPENCODE_PROVIDER}/`), "");
+export const opencodeModelName = (id) => id.replace(new RegExp(`^(${OPENCODE_PROVIDER}|openrouter|mistral|nvidia-nim|zai)/`), "");
 /**
  * The inbox's `lastError` when the git program cannot be started (not installed, or not on PATH). The page shows its
  * own Hebrew and English text for it instead of the raw system message (on Windows, cmd.exe's "is not recognized").
