@@ -4570,3 +4570,24 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
   Cloudflare 5xx" as down and fails over at once.
 - **Left**: Background Sync (Chrome only) to retry the outbox with the page closed; a relay presence beacon.
 - Stopped at: done (built the same day).
+
+## 2026-11-23 — A model for every job, one tap (Claude helper, brief, for "Models per job")
+- **LM Studio**: a curated "Staff picks" list, and each file in search marked against this machine ("Full GPU
+  offload possible" / "Partial" / "Likely too large"); one Download button, the model loads from My Models. No
+  automatic download.
+- **Ollama**: no fit check; the library's default tag is a ~4-bit file sized for common machines, `ollama pull` (or the
+  app's model picker) downloads on demand when a chat first asks for a model that is not there.
+- **Pinokio**: one-click installer scripts per app that also fetch the app's default weights; the script picks a
+  variant from the GPU (VRAM) it finds, and shows the disk it will use before Install.
+- **ComfyUI-Manager**: "Install Missing Models" reads the open workflow, matches missing file names against its
+  model-list.json and offers each with its size and one Install button (and Install all); nothing until clicked.
+- **Jan / Msty**: a hub with recommended models labelled against the machine's RAM/VRAM ("Recommended", "Slow on your
+  device", "Not enough RAM"); Msty's first-run offers one local model sized for the machine.
+- **Take**: one row per job with the model it uses; when it has none (or its file is gone), one suggestion that fits
+  this machine (prefer a model already on disk: no download), size and fit shown, one tap; "set up all" as one confirm
+  with the total size and the free disk (ComfyUI-Manager's Install all + Pinokio's disk line). **Leave**: Ollama's
+  silent download on first use (Roee wants to approve), and a long list per job (the Models page has it).
+- **Built**: core model-jobs.ts (picking, tested) + GET /api/models/jobs; Settings › General "Models per job" card;
+  each tap posts the job's existing setup route (downloads manager). Note: brief entry from known behaviour, no
+  fresh web check (research goes to Gemini).
+- Stopped at: done (built the same day).

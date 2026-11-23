@@ -15,6 +15,7 @@ import { assertWritableFolder } from "../library.js";
 import { ModelsMove } from "../models-move.js";
 import { EDITOR, HEAVY_FOLDERS, HeavyFolder, enginesRunning, stopProcesses, suggestHeavyDir, type HeavyName } from "../heavy-folder.js";
 import { engineRoutes } from "./engine.js";
+import { modelJobRoutes } from "./model-jobs.js";
 
 /** The one move of the models folder that may run at a time. */
 const mover = new ModelsMove();
@@ -440,4 +441,5 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
   });
 
   await engineRoutes(app, s);
+  await modelJobRoutes(app, s);
 }

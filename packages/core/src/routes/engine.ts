@@ -46,6 +46,11 @@ export async function ensureEngine(s: KesherServices): Promise<void> {
 /** What the last look over this computer found (kept five minutes: the models page asks often, and big ComfyUI or Hugging Face folders take a while to walk). */
 let found: { at: number; models: FoundModel[] } | undefined;
 
+/** Forgets the last look (the user changed the model folders). */
+export function forgetFoundModels(): void {
+  found = undefined;
+}
+
 /**
  * GGUF models on this computer: KesherAI's own folder, the folders the user
  * added and other apps' folders (LM Studio, Ollama, Hugging Face…).
@@ -54,12 +59,7 @@ let found: { at: number; models: FoundModel[] } | undefined;
  * @param fresh - Look again even if a recent look is kept.
  * @returns Models found.
  */
-/** Forgets the last look (the user changed the model folders). */
-export function forgetFoundModels(): void {
-  found = undefined;
-}
-
-async function modelsOnComputer(s: KesherServices, fresh = false): Promise<FoundModel[]> {
+export async function modelsOnComputer(s: KesherServices, fresh = false): Promise<FoundModel[]> {
   if (!fresh && found && Date.now() - found.at < 300_000) return found.models;
   const own = await scanFolder({ folder: join(s.paths.models, "chat"), source: "KesherAI" }).catch(() => []);
   const others = (await scanComputer(s.config.modelFolders).catch(() => [])).flatMap((f) => f.models);
@@ -679,7 +679,11 @@ export function skipSetupDownload(s: KesherServices): boolean {
   return s.downloads.cancel(setupJob.id);
 }
 
-function engineBusy(s: KesherServices): boolean {
+/**
+ * @param s - Services.
+ * @returns Whether the engine is installing, downloading or loading now (a failed step does not count).
+ */
+export function engineBusy(s: KesherServices): boolean {
   const job = s.engine.status().job;
   return !!job && job.phase !== "error";
 }

@@ -190,8 +190,8 @@ export function isMlx(path: string): boolean {
 
 /** Image models that run in the built-in engine, offered under Models → Images. */
 export const RECOMMENDED_IMAGE_MODELS = [
-  { id: "qwen-image-2512", name: "Qwen-Image 2512", repo: "unsloth/Qwen-Image-2512-GGUF", file: "qwen-image-2512-Q4_K_M.gguf", note: { en: "The best quality, and good at text inside images. Needs a strong GPU (12 GB+ is comfortable).", he: "האיכות הגבוהה ביותר, וטוב בטקסט בתוך תמונות. צריך כרטיס חזק (12 GB ומעלה בנוח)." } },
-  { id: "flux-schnell", name: "FLUX.1 schnell", repo: "second-state/FLUX.1-schnell-GGUF", file: "flux1-schnell-Q4_0.gguf", note: { en: "Fast: a good image in 4 steps. Works well on 8 GB GPUs.", he: "מהיר: תמונה טובה ב-4 צעדים. עובד טוב על כרטיסים של 8 GB." } },
+  { id: "qwen-image-2512", name: "Qwen-Image 2512", repo: "unsloth/Qwen-Image-2512-GGUF", file: "qwen-image-2512-Q4_K_M.gguf", sizeGb: 13.1, note: { en: "The best quality, and good at text inside images. Needs a strong GPU (12 GB+ is comfortable).", he: "האיכות הגבוהה ביותר, וטוב בטקסט בתוך תמונות. צריך כרטיס חזק (12 GB ומעלה בנוח)." } },
+  { id: "flux-schnell", name: "FLUX.1 schnell", repo: "second-state/FLUX.1-schnell-GGUF", file: "flux1-schnell-Q4_0.gguf", sizeGb: 6.8, note: { en: "Fast: a good image in 4 steps. Works well on 8 GB GPUs.", he: "מהיר: תמונה טובה ב-4 צעדים. עובד טוב על כרטיסים של 8 GB." } },
 ] as const;
 
 /** Thrown when the engine or a model's extra files are still downloading. */
@@ -702,6 +702,11 @@ export function sdProvider(engine: SdEngine): Provider {
 
 let pendingImageDownload: string | undefined;
 
+/** @returns Whether "Set it up for me" is downloading an image model now. */
+export function imageDownloadPending(): boolean {
+  return !!pendingImageDownload;
+}
+
 /**
  * The image model that fits this computer: Qwen-Image with 12 GB of graphics memory or more, else Flux.
  *
@@ -710,7 +715,16 @@ let pendingImageDownload: string | undefined;
 export async function imageModelPick(): Promise<(typeof RECOMMENDED_IMAGE_MODELS)[number]> {
   const { detectHardwareCached } = await import("@kesher/downloads");
   const hw = await detectHardwareCached();
-  const vramGb = Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3));
+  return imagePickFor(Math.max(0, ...hw.gpus.map((g) => g.vramTotal / 1024 ** 3)));
+}
+
+/**
+ * The recommended image model for a graphics card: Qwen-Image with 12 GB or more, else FLUX schnell.
+ *
+ * @param vramGb - The biggest card's memory in GB.
+ * @returns The entry of RECOMMENDED_IMAGE_MODELS.
+ */
+export function imagePickFor(vramGb: number): (typeof RECOMMENDED_IMAGE_MODELS)[number] {
   return RECOMMENDED_IMAGE_MODELS.find((m) => m.id === (vramGb >= 12 ? "qwen-image-2512" : "flux-schnell"))!;
 }
 
