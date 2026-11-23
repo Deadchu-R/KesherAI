@@ -46,3 +46,19 @@ model `sdcpp/<repo>/<file>`; a video model is the file's path (or a ComfyUI mode
 Not to use by default here: Qwen3-Coder-Next (~38 GB), huihui Coder-Next abliterated (~48 GB), Qwen3.8-Flash-Next
 (~84 GB): all spill far past 24 GB into RAM. Qwen3.8-27B UD-Q4 and gemma-4-31B are good alternatives to Qwen3.6-27B
 for chat (gemma-4-31B sees pictures, but at 18.8 GB leaves less room for context).
+
+## Sweep 23.11 (PC on 0.6.461, one tiny real job per category through KesherAI's API)
+
+| Category | Model | Result |
+|---|---|---|
+| Chat | Qwen3.6-27B Q4_K_M | works (10 s, with /no_think) |
+| Hebrew chat | DictaLM-3.0-Nemotron-12B | fails: empty answer, all tokens spent thinking, reasoning not shown (fix in progress) |
+| Router / inline code | Qwen3.5-2B | fails: same empty answer (fix in progress) |
+| Image | Qwen-Image-2512 Q4_K_M, 512 px, 8 steps | works (35 s) |
+| Text to speech | Kokoro | works (3 s) |
+| Speech to text | ivrit-ai large-v3-turbo | works: Kokoro's sentence came back word for word (1 s) |
+| Embedding search | Qwen3-Embedding-0.6B | works (7 s) |
+| Translator | translategemma-4b | failed: file not found, ran through Gemini (fixed in 3a4bbee3) |
+| Vision | auto | failed: nothing detected though gemma-4 + mmproj is on disk (fixed in 3a4bbee3) |
+| Video / music / 3D | Wan 2.2 5B / ACE-Step 1.5 / Hunyuan3D 2 | flows ready and models present; not run: KesherAI has no API to run a ComfyUI flow headless yet |
+| Hebrew voice | F5-TTS | not installed (3.6 GB, waits for Roee's tap) |
