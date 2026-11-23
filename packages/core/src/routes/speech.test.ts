@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
-import { speechRoutes } from "./speech.js";
+import { speechRoutes, speechModelsOnComputer } from "./speech.js";
 import type { KesherServices } from "../services.js";
 
 /** Services with only what transcription touches: the settings, and a local engine that may have a loaded model. */
@@ -42,4 +42,13 @@ test("a partial bigger than a short segment is refused before the engine runs", 
   const r = await app.inject({ method: "POST", url: "/api/speech/transcribe?partial=1", headers: { "content-type": "audio/wav" }, payload: Buffer.alloc(5 * 1024 * 1024) });
   assert.equal(r.statusCode, 413);
   assert.deepEqual(calls, []);
+});
+
+test("the speech-model scan is reused for a short time, and a different models folder scans again", async () => {
+  const mk = (models: string) => ({ paths: { models }, config: { modelFolders: [] } }) as unknown as KesherServices;
+  const a = mk("/nowhere/kesher-a");
+  const first = speechModelsOnComputer(a);
+  assert.equal(speechModelsOnComputer(a), first, "the second ask shares the first scan");
+  assert.notEqual(speechModelsOnComputer(mk("/nowhere/kesher-b")), first, "another folder is a new scan");
+  assert.deepEqual(await first, []);
 });

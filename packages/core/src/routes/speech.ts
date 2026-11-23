@@ -7,17 +7,34 @@ import { classifySpeechModels, HEBREW_TTS_ENGINES, type HebrewTtsEngine } from "
 import { scanFolder, type FoundModel } from "../model-scan.js";
 import { modelsOnComputer } from "./engine.js";
 
+/** The last speech-model scan: Settings polls "Models per job" every few seconds while a download runs. */
+let speechScan: { dir: string; at: number; models: Promise<FoundModel[]> } | undefined;
+/** How long a speech-model scan is reused (ms). */
+export const SPEECH_SCAN_TTL_MS = 15_000;
+
 /**
  * Speech models on this computer: KesherAI's own `text-to-speech` and `speech-to-text` folders under the models folder,
- * and the user's model folders (the same look as the Models page).
+ * and the user's model folders (the same look as the Models page). The scan is reused for {@link SPEECH_SCAN_TTL_MS}
+ * (it walks folders, and the Settings page asks every few seconds while something downloads).
  *
  * @param s - Services.
  * @returns The model files found.
  */
-export async function speechModelsOnComputer(s: KesherServices): Promise<FoundModel[]> {
-  const own = await Promise.all(["text-to-speech", "speech-to-text"].map((f) => scanFolder({ folder: join(s.paths.models, f), source: "KesherAI" }).catch(() => [])));
-  const seen = new Set<string>();
-  return [...own.flat(), ...(await modelsOnComputer(s).catch(() => []))].filter((m) => !seen.has(m.path) && !!seen.add(m.path));
+export function speechModelsOnComputer(s: KesherServices): Promise<FoundModel[]> {
+  const dir = s.paths.models;
+  if (speechScan && speechScan.dir === dir && Date.now() - speechScan.at < SPEECH_SCAN_TTL_MS) return speechScan.models;
+  const models = (async () => {
+    const own = await Promise.all(["text-to-speech", "speech-to-text"].map((f) => scanFolder({ folder: join(dir, f), source: "KesherAI" }).catch(() => [])));
+    const seen = new Set<string>();
+    return [...own.flat(), ...(await modelsOnComputer(s).catch(() => []))].filter((m) => !seen.has(m.path) && !!seen.add(m.path));
+  })();
+  const entry = { dir, at: Date.now(), models };
+  speechScan = entry;
+  // A failed scan is not kept.
+  models.catch(() => {
+    if (speechScan === entry) speechScan = undefined;
+  });
+  return models;
 }
 
 /** Why Zonos-Hebrew is found but not run (shown in Settings and "Models per job"). */

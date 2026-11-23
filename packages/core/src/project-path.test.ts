@@ -33,3 +33,9 @@ test("a link to the same folder counts as the same place", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a path that does not exist is compared as given, and asking again gives the same answer", () => {
+  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), false);
+  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/a"), false);
+  assert.equal(samePath("/nowhere/kesher-x/A", "/nowhere/kesher-x/./A"), true);
+});

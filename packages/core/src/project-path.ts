@@ -24,13 +24,26 @@ export function normalizePath(p: string): string {
   return posix.resolve(s.replace(/\\/g, "/")).replace(/\/+$/, "") || "/";
 }
 
+/** Real paths already looked up (path → real path, when). Bounded: the projects of one computer are a few dozen. */
+const realCache = new Map<string, { real: string; at: number }>();
+/** How long a looked-up real path is reused (ms); the sync lookup runs for every project at every Unreal page poll. */
+const REAL_TTL_MS = 30_000;
+const REAL_MAX = 256;
+
 /** The real path (links and short names resolved) when the path exists, else the path as given. */
 function real(p: string): string {
+  const now = Date.now();
+  const hit = realCache.get(p);
+  if (hit && now - hit.at < REAL_TTL_MS) return hit.real;
+  let out = p;
   try {
-    return realpathSync.native(p);
+    out = realpathSync.native(p);
   } catch {
-    return p;
+    // Not there (yet): compared as given.
   }
+  if (realCache.size >= REAL_MAX) realCache.clear();
+  realCache.set(p, { real: out, at: now });
+  return out;
 }
 
 /**
