@@ -63,7 +63,7 @@
   {
    "id": "PrivacyModelPicker",
    "title": "בחירת מודל בצ'אט: תגית \"⚠ עשוי לאמן על המידע שלך\" ליד מודלים של שירותים שמאמנים (Gemini חינמי, Mistral, מודלי :free ב-OpenRouter), ו-⚠ קטן בצ'יפ של המודל",
-   "titleEn": "Chat model menu: a \"⚠ may train on your data\" tag beside models whose service may train (free Gemini, Mistral, OpenRouter :free), and a small ⚠ on the model chip",
+   "titleEn": "Chat model menu: a \"⚠ may train on your data\" tag beside models whose service may train (free Gemini, Mistral, OpenRouter :free), and a small ⚠ on the model …",
    "route": "#/c/c1",
    "height": {
     "desktop": 900,
@@ -344,8 +344,8 @@
   },
   {
    "id": "PrivacyHitDialog",
-   "title": "\"נמצא מידע רגיש\" לפני שליחה לשירות שמאמן: מה נמצא (טוקן, סיסמה, מייל), איך ההודעה תיראה מוסתרת, ושלוש בחירות — להסתיר ולשלוח / לשלוח למודל מקומי / ביטול (גם בטלפון)",
-   "titleEn": "\"Sensitive info found\" before sending to a service that may train: what was found (token, password, email), the hidden preview, and three choices: hide and send / send to a local model / cancel (on the phone too)",
+   "title": "\"נמצא מידע רגיש\" לפני שליחה לשירות שמאמן: מה נמצא (טוקן, סיסמה, מייל), איך ההודעה תיראה מוסתרת, ושלוש בחירות — להסתיר ולשלוח / לשלוח למודל מקומי / ביטול (גם …",
+   "titleEn": "\"Sensitive info found\" before sending to a service that may train: what was found (token, password, email), the hidden preview, and three choices: hide and s…",
    "route": "#/c/c1",
    "height": {
     "desktop": 900,
@@ -474,8 +474,8 @@
   },
   {
    "id": "PrivacySettings",
-   "title": "הגדרות › פרטיות: \"הגנה מדליפת מידע\" — מה קורה כשנמצא מידע רגיש (לשאול / להסתיר לבד / לא לשלוח לשירותים שמאמנים), רשימת \"לעולם לא לשלוח\", והשירותים המחוברים שעשויים לאמן",
-   "titleEn": "Settings › Privacy: \"Leak guard\": what happens on a hit (ask / hide it myself / never send to services that train), the never-send list, and the connected services that may train",
+   "title": "הגדרות › פרטיות: \"הגנה מדליפת מידע\" — מה קורה כשנמצא מידע רגיש (לשאול / להסתיר לבד / לא לשלוח לשירותים שמאמנים), רשימת \"לעולם לא לשלוח\", והשירותים המחוברים ש…",
+   "titleEn": "Settings › Privacy: \"Leak guard\": what happens on a hit (ask / hide it myself / never send to services that train), the never-send list, and the connected se…",
    "route": "#/settings/privacy",
    "height": {
     "desktop": 1300,

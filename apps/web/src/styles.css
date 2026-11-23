@@ -4818,6 +4818,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .train-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); font-size: 13px; }
 .train-warn > span[aria-hidden] { color: var(--warn); }
 .privacy-hit .privacy-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.privacy-hit .privacy-kinds .chip { white-space: nowrap; flex: 0 0 auto; width: auto; height: auto; min-width: 0; line-height: 1.6; padding: 2px 10px; border-radius: 999px; background: var(--raised); font-size: 12px; }
 .privacy-hit .privacy-preview { max-height: 160px; overflow: auto; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--raised); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .privacy-hit .privacy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .privacy-hit .privacy-actions button { flex: 1 1 auto; }
