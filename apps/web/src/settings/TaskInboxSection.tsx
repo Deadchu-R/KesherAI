@@ -66,10 +66,14 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
           <li key={id} className="row wrap"><span className="grow">{opencodeModelName(id)}</span><span className="tinbox-err">⏸ {L(`חסום עד ${hhmm(u)}`, `blocked until ${hhmm(u)}`)}</span></li>
         ))}
       </ul>
+      <label className="row wrap small">
+        <input type="checkbox" checked={c.useFree !== false} disabled={!c.enabled} onChange={(e) => set({ useFree: e.target.checked })} />
+        <span className="grow">{L("קודם המודלים החינמיים (Beam Free, Iceman): לא נספרים בסף היומי", "Free models first (Beam Free, Iceman): they don't count toward the daily limit")}</span>
+      </label>
       {pick("small", "מודל למשימות קטנות (S): זול ומהיר", "Model for small tasks (S): cheap and fast")}
       {pick("strong", "מודל למשימות בינוניות וגדולות (M/L): חזק", "Model for medium and large tasks (M/L): strong")}
       <label className="row wrap small">
-        <span className="grow">{L(`סף יומי (היום ${st?.used ?? 0})`, `Daily limit (today ${st?.used ?? 0})`)}</span>
+        <span className="grow">{L(`סף יומי למודלים בתשלום (היום ${st?.used ?? 0})`, `Daily limit for paid models (today ${st?.used ?? 0})`)}</span>
         <select value={c.dailyCap} disabled={!c.enabled} onChange={(e) => set({ dailyCap: Number(e.target.value) })} aria-label={L("סף יומי ל-OpenCode Go", "OpenCode Go daily limit")}>
           {[...new Set([5, 10, 15, 20, 30, 50, c.dailyCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
         </select>

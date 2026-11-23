@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OPENCODE_DEFAULTS, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
+import { isFreeOpencodeModel, OPENCODE_DEFAULTS, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
 import { inboxSnapshot } from "./agent-activity.js";
 import { OPENCODE_LIMIT_MS, TaskInbox, type RunCmd, type TaskInboxDeps } from "./inbox-runner.js";
 import { taskSize } from "./task-inbox.js";
@@ -76,14 +76,14 @@ async function setup(tasks: Record<string, string>, report?: string) {
 }
 
 /** A fake OpenCode Go coder: writes a file in the worktree, or throws what `fail` says. */
-function fakeCoder(o: { ready?: boolean; fail?: () => Error | undefined } = {}) {
+function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[] } = {}) {
   const runs: Array<{ model: string; title: string }> = [];
   const coder: NonNullable<TaskInboxDeps["coder"]> = {
     ready: () => o.ready ?? true,
-    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    models: async () => o.listed ?? ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
     run: async ({ worktree, model, title, onStep }) => {
       runs.push({ model, title });
-      const err = o.fail?.();
+      const err = o.fail?.(model);
       if (err) throw err;
       onStep(2);
       writeFileSync(join(worktree, "apps", "a.ts"), `export const a = ${runs.length + 1};\n`);
@@ -327,4 +327,28 @@ test("opencode: the research loop fills the gap while Antigravity is out (M task
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("opencode: the plan's free models go first and do not count toward the daily cap", async () => {
+  const { root, repo } = await setup({ "c-20261122-21": TASK("c-20261122-21", "opencode", "size: S\n"), "c-20261122-22": TASK("c-20261122-22", "opencode", "size: S\n") });
+  const listed = ["opencode-go/beam-free", "opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"];
+  const { coder, runs } = fakeCoder({ listed });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 1 } });
+  try {
+    await inbox.state(true); // asks the connection for its models, as the settings card does
+    await syncAndRun(inbox);
+    // Both ran on Beam Free, past a cap of 1: free runs cost nothing.
+    assert.deepEqual(runs.map((r) => r.model), ["opencode-go/beam-free", "opencode-go/beam-free"]);
+    assert.equal((await inbox.state(true)).opencode?.used, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("opencode: free models are only those the connection lists, and off with useFree false", () => {
+  assert.deepEqual(opencodeFreeFirst({}, ["opencode-go/beam-free", "opencode-go/glm-5.3"]), ["opencode-go/beam-free"]);
+  assert.deepEqual(opencodeFreeFirst({ useFree: false }, ["opencode-go/beam-free"]), []);
+  assert.deepEqual(opencodeFreeFirst({}, []), []);
+  assert.equal(isFreeOpencodeModel("opencode-go/iceman-contributor-free"), true);
+  assert.equal(isFreeOpencodeModel("opencode-go/mimo-v2.6-flash"), false);
 });

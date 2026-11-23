@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -242,7 +242,8 @@ export class TaskInbox {
     const day = this.ocToday();
     const out = this.opencodeFamilyUntil();
     if (out) return `OpenCode Go limit reached until ${new Date(out).toISOString()}.`;
-    if (day.used >= this.oc.dailyCap) return `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached (Settings > Task inbox).`;
+    const freeOpen = !!opencodeFreeModel(opencodeFreeFirst(this.oc, this.ocListed), this.opencodeCooldowns(), this.now());
+    if (day.used >= this.oc.dailyCap && !freeOpen) return `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached (Settings > Task inbox).`;
     return undefined;
   }
 
@@ -410,12 +411,21 @@ export class TaskInbox {
     };
   }
 
+  /** The models the OpenCode Go connection listed when last asked (for "is a free model open" without waiting). */
+  private ocListed: string[] = [];
+
+  /** The models the OpenCode Go connection lists now (asked for at most 5 s; empty when it could not be asked). */
+  private async opencodeListed(c: NonNullable<TaskInboxDeps["coder"]>): Promise<string[]> {
+    this.ocListed = await Promise.race([c.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]);
+    return this.ocListed;
+  }
+
   /** OpenCode Go's state for the settings card (its models are asked from the connection, never more than 5 s). */
   private async opencodeState(): Promise<OpencodeState> {
     const c = this.d.coder;
     const day = this.ocToday();
     const ready = !!c?.ready();
-    const models = ready ? await Promise.race([c!.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]) : [];
+    const models = ready ? await this.opencodeListed(c!) : [];
     const until = this.opencodeFamilyUntil();
     const cooldowns = this.opencodeCooldowns();
     return { ready, used: day.used, ...(until ? { until } : {}), ...(Object.keys(cooldowns).length ? { cooldowns } : {}), models: models.slice(0, 100) };
@@ -867,10 +877,20 @@ export class TaskInbox {
 
   /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
   private async runOpencode(t: InboxTaskView, c: NonNullable<TaskInboxDeps["coder"]>): Promise<void> {
-    const order = opencodeModelOrder(this.oc);
+    const listed = await this.opencodeListed(c);
+    const freeFirst = opencodeFreeFirst(this.oc, listed);
+    const paidLeft = this.ocToday().used < this.oc.dailyCap;
+    // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
+    const order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
     const wanted = opencodeModelFor({ ...t, size: taskSize(t) }, this.oc);
-    // The task's own pick, unless that model is cooling down after a 429: then the next free one in the order.
-    let model = opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted;
+    // A free model first; else the task's own pick, unless it is cooling down after a 429: then the next free one.
+    let model = opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now()) ?? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted;
+    if (!paidLeft && !opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now())) {
+      // The daily cap is reached and no free model can take it: the task waits for tomorrow (nothing was started).
+      Object.assign(t, { status: "deferred-quota" as InboxStatus, note: `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached, and no free model is open.` });
+      await this.save();
+      return;
+    }
     const repo = this.repo();
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
     const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
@@ -891,7 +911,6 @@ export class TaskInbox {
     }
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: `OpenCode Go · ${opencodeModelName(model)}` });
     for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "retryAt", "plan", "decisions"] as const) delete t[k];
-    this.ocToday().used++;
     await this.save();
     this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
     if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
@@ -927,12 +946,16 @@ export class TaskInbox {
           break;
         } catch (e) {
           error = (e as Error).message || String(e);
-          if (run.why || !isQuotaError(error)) break;
-          // A 429 blocks only this model (until its reset, else 5 hours); the task goes once more on the next free one.
-          const wait = retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now());
+          const quota = isQuotaError(error);
+          // A free model that fails in any way (the offer ended, it is overloaded) hands the task to the paid order.
+          if (run.why || (!quota && !isFreeOpencodeModel(model))) break;
+          // A 429 blocks only this model (until its reset, else 5 hours; a failing free model 1 hour); the task goes
+          // on to the next model that is not cooling down: at most one paid retry after the free ones.
+          const wait = quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now()) : 60 * 60_000;
           this.blockOpencodeModel(model, wait);
           tried.push(model);
-          const next = tried.length < 2 ? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), undefined, tried) : undefined;
+          const paidTried = tried.filter((m) => !isFreeOpencodeModel(m)).length;
+          const next = paidTried < 2 ? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), undefined, tried) : undefined;
           if (!next) break;
           const prev = model;
           model = next;
@@ -945,6 +968,8 @@ export class TaskInbox {
       clearTimeout(timer);
       this.opencodeStop = undefined;
     }
+    // Only paid models count toward the daily cap (a task that ended on a free one cost nothing).
+    if (!isFreeOpencodeModel(model)) this.ocToday().used++;
     t.summary = text.trim().slice(-2000) || undefined;
     const limited = !run.why && !!error && isQuotaError(error);
     const until = limited ? this.ocToday().modelUntil?.[model] : undefined;

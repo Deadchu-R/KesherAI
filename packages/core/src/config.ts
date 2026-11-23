@@ -291,6 +291,8 @@ export const KesherConfigSchema = z.object({
           small: z.string().max(120).default("opencode-go/mimo-v2.6-flash"),
           strong: z.string().max(120).default("opencode-go/mimo-v2.6-pro"),
           dailyCap: z.number().int().min(0).max(100).default(15),
+          // Free models first (Beam Free, Iceman Contributor Free), outside the daily cap.
+          useFree: z.boolean().default(true),
         })
         .prefault({}),
       maxMinutes: z.number().int().min(1).max(60).default(15),
