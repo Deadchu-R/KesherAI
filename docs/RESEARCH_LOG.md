@@ -4591,3 +4591,29 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
   each tap posts the job's existing setup route (downloads manager). Note: brief entry from known behaviour, no
   fresh web check (research goes to Gemini).
 - Stopped at: done (built the same day).
+
+## 2026-11-23 — Hebrew text to speech from the installed models (Claude helper, for "every installed model works")
+- **F5-TTS Hebrew** (`Yzamari/f5tts-hebrew-v2`, 0.3B, fine-tune of F5-TTS v1 Base on ~158 h): runs with the official
+  `f5-tts` pip package (`F5TTS(model="F5TTS_v1_Base", ckpt_file, vocab_file)`), Vocos 24 kHz vocoder (downloads
+  itself), needs a reference clip + its transcript (no built-in voice). Input should carry nikud: hebrew-voice-studio
+  (Windows-first) and the Rosehill bake-off add it with Phonikud (`phonikud-onnx`, MIT, CPU, fast); without nikud
+  the bake-off heard skipped words. ~2.5× real time reported; NVIDIA card needed (very slow on CPU). Scored 95 in the
+  hebrew-tts-benchmark (tied first). Licence: Apache-2.0 fine-tune on CC-BY-NC base data (personal use fine).
+- **Zonos-Hebrew** (`notmax123/Zonos-Hebrew`, Zyphra Zonos v0.1, CC-BY-NC): Linux/macOS only; needs eSpeak-NG and,
+  for the hybrid model, mamba-ssm (no Windows wheels). Even hebrew-voice-studio runs it in Docker on another machine;
+  ComfyUI-Zonos (Windows) is 2 years stale and needs eSpeak + VS Build Tools. **Not wired**: shown as found, not used.
+- **ComfyUI nodes**: niknah/ComfyUI-F5-TTS loads custom checkpoints (`models/checkpoints/F5-TTS/X.safetensors` +
+  `X.txt` vocab) but needs a submodule fix, a BigVGAN patch and shared FFmpeg on Windows, and KesherAI has no
+  custom-node installer; TTS-Audio-Suite is broad but heavy. **Chosen**: own Python per engine (the Chatterbox/rembg
+  pattern, uv): Python 3.11, torch/torchaudio 2.7.1 (torchaudio 2.9 needs torchcodec + FFmpeg DLLs), f5-tts,
+  phonikud-onnx; one long-lived worker keeps the model loaded, ends after 5 idle minutes. Pinokio/AllTalk do the same
+  (a venv per engine, one-click install).
+- **STT**: `imvladikon/wav2vec2-large-xlsr-53-hebrew` is CTC without punctuation, clearly behind ivrit-ai whisper
+  (already wired): not worth wiring. `sahilmahendrakar/Earlybird-29M`: no public card found. Both show as "found, not
+  used" in Models per job.
+- **Built**: hebrew-tts.ts (F5Hebrew), routes /api/speech/tts/hebrew (+ /setup, provider "hebrew"), Settings › Speech
+  "Hebrew voice", the "Hebrew voice" row in Models per job. To check on the PC: the vocab file beside his checkpoint
+  (else vocab.txt is fetched from the repo), the Phonikud repo/file name, quality with the default English reference.
+- Next: a Hebrew reference voice (a kept voice; F5 transcribes it itself when ref_text is empty), and Kokoro-Hebrew
+  (`thewh1teagle/kokoro-hebrew`, Phonikud) as a CPU option.
+- Stopped at: done.

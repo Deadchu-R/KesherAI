@@ -102,3 +102,25 @@ test("set up everything: only what can be set up from here, chat first, with the
   const ready = facts({ active: { chat: "opencode-go/x", image: "comfyui/a" }, routerFile: "Qwen3.5-2B-Q4_K_M.gguf", video: { ready: true, busy: false, name: "Wan", sizeGb: 7.2 }, stt: { ready: true, busy: false, possible: true, label: "w", sizeGb: 1 }, tts: { ready: true, busy: false, sizeGb: 0.3 }, embedding: { ready: true, busy: false, name: "e", sizeGb: 0.6 } });
   assert.deepEqual(setupAllPlan(buildModelJobs(ready, imagePickFor)), { jobs: [], totalGb: 0 });
 });
+
+test("Hebrew voice: the F5 checkpoint on the computer needs only the engine; Zonos and wav2vec2 show as found, not used", () => {
+  const f = facts({
+    hebrewTts: { engine: "system", installed: false, busy: false, model: "model.safetensors", sizeGb: 3.6 },
+    speechUnused: { zonos: ["notmax123/Zonos-Hebrew · Zonos-v0.1-hybrid.safetensors"], otherStt: ["imvladikon/wav2vec2-large-xlsr-53-hebrew"] },
+  });
+  const h = job(f, "hebrew-voice");
+  assert.equal(h.state, "none");
+  assert.equal(h.suggestion?.setup, "/api/speech/tts/hebrew/setup");
+  assert.equal(h.suggestion?.sizeGb, 3.6);
+  assert.equal(h.suggestion?.onComputer, false);
+  assert.equal(h.unused?.[0]?.name, "Zonos-Hebrew · Zonos-v0.1-hybrid");
+  assert.equal(job(f, "speech-to-text").unused?.[0]?.name, "wav2vec2-large-xlsr-53-hebrew");
+  // Set up and chosen: ready, nothing to offer.
+  const ready = job(facts({ hebrewTts: { engine: "f5", installed: true, busy: false, model: "model.safetensors", sizeGb: 0 } }), "hebrew-voice");
+  assert.equal(ready.state, "ready");
+  assert.equal(ready.suggestion, undefined);
+  // Set up but another voice chosen: one tap turns it on, nothing to download.
+  assert.equal(job(facts({ hebrewTts: { engine: "system", installed: true, busy: false, sizeGb: 0 } }), "hebrew-voice").suggestion?.onComputer, true);
+  // An English interface with no Hebrew model anywhere: no row.
+  assert.equal(job(facts({ hebrew: false, hebrewTts: { engine: "system", installed: false, busy: false, sizeGb: 4.9 } }), "hebrew-voice"), undefined);
+});

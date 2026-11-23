@@ -90,6 +90,8 @@ import { BrowserBridge } from "./browser-bridge.js";
 import { ControlWatchers } from "./control-live.js";
 import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
+import { F5Hebrew, classifySpeechModels, vocabBeside } from "./hebrew-tts.js";
+import { speechModelsOnComputer } from "./routes/speech.js";
 import { ChatTimers } from "./chat-timers.js";
 import { MemoryStore } from "./memory-store.js";
 import { Tor } from "./tor.js";
@@ -592,6 +594,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     whisper,
     speakers,
     kokoro: new Kokoro(join(paths.engines, "voice"), speakers, downloads),
+    // Hebrew read aloud: F5-TTS with the Hebrew fine-tune he has in his models folder, in its own Python (hebrew-tts.ts).
+    f5Hebrew: new F5Hebrew(join(paths.engines, "f5-hebrew"), {
+      uv: async () => {
+        await runtimes.install("uv");
+        const dir = (await runtimes.paths()).find((p) => existsSync(join(p, process.platform === "win32" ? "uv.exe" : "uv")));
+        if (!dir) throw new Error("uv was not found after installing it.");
+        return join(dir, process.platform === "win32" ? "uv.exe" : "uv");
+      },
+      nvidia: async () => (await nvidiaGpus()).length > 0,
+      checkpoint: async () => {
+        const f5 = classifySpeechModels(await speechModelsOnComputer(services)).f5;
+        const vocab = f5 && (await vocabBeside(f5.path));
+        return f5 ? { model: f5.path, ...(vocab ? { vocab } : {}) } : {};
+      },
+    }),
     updater,
     google,
     driveSync,
@@ -1071,6 +1088,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       telegram.stop();
       hub.stop();
       void comfy.stop();
+      services.f5Hebrew.stop();
       routines.close();
       void semantic?.stop();
       // What is running now goes into the record first (a chat's tool, the inbox run, a sync), while it can still be seen.

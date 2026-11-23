@@ -523,6 +523,8 @@ export const KesherConfigSchema = z.object({
       language: z.string().default("auto"),
       /** "My languages": what automatic detection chooses from (empty: the app's language plus English). */
       languages: z.array(z.string().regex(/^[a-z]{2,3}$/)).max(12).default([]),
+      /** Who reads Hebrew aloud (🔊 and voice mode): the system's voice, or F5-TTS Hebrew on this computer (hebrew-tts.ts). */
+      ttsHebrew: z.enum(["system", "f5", "zonos"]).default("system"),
     })
     .prefault({}),
   /** Computer control: models with vision see the screen and click and type (off until the user turns it on). */

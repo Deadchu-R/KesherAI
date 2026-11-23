@@ -11,6 +11,8 @@ import { matchRecommended } from "../model-scan.js";
 import { imageDownloadPending, imagePickFor } from "../sdcpp.js";
 import { RECOMMENDED_VIDEO_MODEL, videoStatus } from "../video-setup.js";
 import { engineBusy, modelsOnComputer } from "./engine.js";
+import { classifySpeechModels } from "../hebrew-tts.js";
+import { speechModelsOnComputer } from "./speech.js";
 
 /**
  * "Models per job" (Settings › General): `GET /api/models/jobs?lang=he` → `{ jobs, plan: { ids, totalGb }, freeGb }`.
@@ -32,6 +34,7 @@ export async function modelJobRoutes(app: FastifyInstance, s: KesherServices): P
       s.semantic.onComputer().catch(() => undefined),
     ]);
     const tts = s.kokoro.status();
+    const [hebrewTts, speech] = await Promise.all([s.f5Hebrew.status(), speechModelsOnComputer(s).then(classifySpeechModels, () => undefined)]);
     const emb = s.semantic.status();
     const engine = s.engine.status();
     const router = matchRecommended(found, ROUTER_MODEL.repo, ROUTER_MODEL.filePattern);
@@ -50,6 +53,8 @@ export async function modelJobRoutes(app: FastifyInstance, s: KesherServices): P
         video: { ready: video.ready, busy: video.downloading, ...(video.model ? { model: video.model } : {}), name: RECOMMENDED_VIDEO_MODEL.name, sizeGb: 7.2 },
         stt: { ready: stt.engine && !!stt.model, busy: !!stt.busy, ...(stt.model ? { model: stt.model.split(/[\\/]/).pop()! } : {}), possible: stt.localPossible, label: stt.recommended.label, sizeGb: stt.recommended.sizeGb },
         tts: { ready: tts.ready, busy: tts.busy, sizeGb: tts.sizeMb / 1024 },
+        hebrewTts: { engine: s.config.speech.ttsHebrew, installed: hebrewTts.installed, busy: hebrewTts.phase === "installing", ...(hebrewTts.model ? { model: hebrewTts.model } : {}), sizeGb: hebrewTts.sizeGb },
+        ...(speech ? { speechUnused: { zonos: speech.zonos.map((f) => f.name), otherStt: speech.otherStt.map((f) => f.name) } } : {}),
         embedding: { ready: emb.usable, busy: emb.phase === "downloading" || emb.phase === "loading", ...(emb.active ? { model: emb.active.split("/").pop()! } : {}), name: emb.model.name, sizeGb: emb.model.sizeGb, ...(embFound ? { onComputer: embFound.name } : {}) },
         translator: s.config.translator ?? "main",
         vision: s.config.computer.visionModel,

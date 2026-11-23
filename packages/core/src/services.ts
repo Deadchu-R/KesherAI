@@ -34,6 +34,7 @@ import type { SdEngine } from "./sdcpp.js";
 import type { BrowserBridge } from "./browser-bridge.js";
 import type { Speakers } from "./speakers.js";
 import type { Kokoro } from "./kokoro.js";
+import type { F5Hebrew } from "./hebrew-tts.js";
 import type { Coach } from "./coach.js";
 import type { ComputerControl } from "./computer.js";
 import type { ControlTasks } from "./control-task.js";
@@ -129,6 +130,8 @@ export interface KesherServices {
   speakers: Speakers;
   /** A natural English voice on this computer (Kokoro). */
   kokoro: Kokoro;
+  /** A natural Hebrew voice on this computer (F5-TTS with the Hebrew fine-tune, in its own Python). */
+  f5Hebrew: F5Hebrew;
   /** Computer control (screen, mouse, keyboard) with its app approvals, stop switch and log. */
   computer: ComputerControl;
   /** Computer tasks (one goal, KesherAI does the steps; control-task.ts); made when the routes are registered. */

@@ -14,7 +14,7 @@ import { pickStarterModels } from "./starter-models.js";
 const GB = 1024 ** 3;
 
 /** The jobs, in the order the card shows them. */
-export const MODEL_JOB_IDS = ["chat", "router", "image", "video", "speech-to-text", "text-to-speech", "embedding", "music", "3d", "translator", "vision"] as const;
+export const MODEL_JOB_IDS = ["chat", "router", "image", "video", "speech-to-text", "text-to-speech", "hebrew-voice", "embedding", "music", "3d", "translator", "vision"] as const;
 /** One job of the card. */
 export type ModelJobId = (typeof MODEL_JOB_IDS)[number];
 
@@ -48,6 +48,8 @@ export interface ModelJob {
   suggestion?: ModelJobSuggestion;
   /** Where to choose it by hand (an app address). */
   link: string;
+  /** Models for this job found on the computer that KesherAI does not use, each with why (shown under the row). */
+  unused?: Array<{ name: string; whyHe: string; whyEn: string }>;
 }
 
 /** A local GGUF file (from the look over this computer). */
@@ -79,6 +81,10 @@ export interface ModelJobFacts {
   video: { ready: boolean; busy: boolean; model?: string; sizeGb: number; name: string };
   stt: { ready: boolean; busy: boolean; model?: string; possible: boolean; label: string; sizeGb: number };
   tts: { ready: boolean; busy: boolean; sizeGb: number };
+  /** The Hebrew voice (hebrew-tts.ts): the engine chosen, F5-TTS Hebrew's state and the checkpoint on the computer. */
+  hebrewTts?: { engine: string; installed: boolean; busy: boolean; model?: string; sizeGb: number };
+  /** Speech models on the computer KesherAI does not run (hebrew-tts.ts classifySpeechModels). */
+  speechUnused?: { zonos: string[]; otherStt: string[] };
   embedding: { ready: boolean; busy: boolean; model?: string; name: string; sizeGb: number; onComputer?: string };
   /** The model team's translator setting (`main`, `off` or a model id). */
   translator: string;
@@ -124,6 +130,11 @@ export function chatSuggestion(f: ModelJobFacts): ModelJobSuggestion | undefined
   const m = pick && RECOMMENDED_MODELS.find((x) => x.id === pick.id);
   if (!pick || !m) return undefined;
   return { name: m.name, sizeGb: m.sizeGb, fit: pick.fit, onComputer: false, setup: `/api/models/recommended/${encodeURIComponent(m.id)}/run`, canSetup: !f.engineBusy };
+}
+
+/** The `unused` field for a row: each file's short name with the same reason (nothing when there are none). */
+function unusedOf(files: readonly string[] | undefined, [whyHe, whyEn]: [string, string]): { unused?: ModelJob["unused"] } {
+  return files?.length ? { unused: files.map((n) => ({ name: shortName(n), whyHe, whyEn })) } : {};
 }
 
 /**
@@ -185,6 +196,7 @@ export function buildModelJobs(f: ModelJobFacts, pickImage: (vramGb: number) => 
     current: s.model ?? null,
     ...(sttState === "none" && s.possible ? { suggestion: { name: s.label, sizeGb: round1(s.sizeGb + (f.hebrew ? 1.62 : 0)), fit: fitOf(s.sizeGb, "audio"), onComputer: false, setup: "/api/speech/stt/setup", body: { hebrew: f.hebrew }, canSetup: true } } : {}),
     link: "#/settings/general",
+    ...unusedOf(f.speechUnused?.otherStt, ["whisper עם המודל העברי של ivrit-ai מדויק יותר ומוסיף פיסוק", "whisper with ivrit-ai's Hebrew model is more accurate and adds punctuation"]),
   });
 
   // Text to speech (Kokoro).
@@ -197,6 +209,23 @@ export function buildModelJobs(f: ModelJobFacts, pickImage: (vramGb: number) => 
     ...(ttsState === "none" ? { suggestion: { name: "Kokoro", sizeGb: round1(t.sizeGb), fit: fitOf(t.sizeGb, "audio"), onComputer: false, setup: "/api/speech/tts/local/setup", canSetup: true } } : {}),
     link: "#/models",
   });
+
+  // Hebrew read aloud: F5-TTS Hebrew (its own Python). The checkpoint on the computer is used in place; the setup
+  // downloads the engine (and the fine-tune only when it is not here). Zonos is shown as found, not used.
+  // Shown to Hebrew speakers, or when a Hebrew voice model is on the computer or chosen.
+  const h = f.hebrewTts;
+  if (h && (f.hebrew || h.model || h.engine !== "system" || f.speechUnused?.zonos.length)) {
+    const hState: ModelJobState = h.busy ? "busy" : h.engine === "f5" && h.installed ? "ready" : "none";
+    const name = h.model ? `F5-TTS Hebrew (${shortName(h.model)})` : "F5-TTS Hebrew";
+    jobs.push({
+      id: "hebrew-voice",
+      state: hState,
+      current: hState === "ready" ? name : null,
+      ...(hState === "none" ? { suggestion: { name, sizeGb: round1(h.sizeGb), fit: fitOf(2, "audio"), onComputer: h.sizeGb === 0, setup: "/api/speech/tts/hebrew/setup", canSetup: true } } : {}),
+      link: "#/settings/general",
+      ...unusedOf(f.speechUnused?.zonos, ["דורש mamba-ssm ו-eSpeak, שלא מותקנים ב-Windows בלי צעדים ידניים", "needs mamba-ssm and eSpeak, which do not install on Windows without manual steps"]),
+    });
+  }
 
   // Search by meaning: a model already on the computer is used in place. Its setup route is computer-only.
   const e = f.embedding;

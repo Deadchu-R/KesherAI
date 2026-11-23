@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { withToken } from "./api";
-import { getLocale, t } from "./i18n";
+import { api, withToken } from "./api";
+import { getLocale, he$, t } from "./i18n";
+import { toast } from "./library";
 import { Select } from "./ui/Select";
 import { LineIcon } from "./ui/Glyph";
 
@@ -117,6 +118,19 @@ function stopNow(): void {
   setSpeaking(false);
 }
 
+const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+
+/** The Hebrew voice chosen in Settings (the server keeps it, so the phone and the PC agree), read at most once a minute. */
+let hebrewEngine: { engine: string; at: number } | undefined;
+async function hebrewVoice(): Promise<string> {
+  if (hebrewEngine && Date.now() - hebrewEngine.at < 60_000) return hebrewEngine.engine;
+  const r = await api<{ engine: string }>("/api/speech/tts/hebrew").catch(() => undefined);
+  hebrewEngine = { engine: r?.engine ?? "system", at: Date.now() };
+  return hebrewEngine.engine;
+}
+/** When the "Hebrew voice did not answer" note was last shown (once in a few minutes, not every sentence of voice mode). */
+let hebrewNoteAt = 0;
+
 /**
  * Reads text aloud: with a cloud voice (OpenAI, through the server) when
  * chosen, otherwise with the computer's own voices (no download; Windows and
@@ -157,6 +171,19 @@ export async function speak(text: string, done?: () => void, rate = 1, host: 0 |
     await audio.play().catch(() => onEnd());
   };
   const voice = read(VOICE_KEY);
+  // Hebrew with a Hebrew voice on this computer chosen (Settings › Speech: F5-TTS Hebrew): it reads, here and on the
+  // phone (the audio comes from the computer). When it cannot, the system's voice reads and a short note says why.
+  if (/[֐-׿]/.test(say) && (await hebrewVoice()) === "f5") {
+    const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "hebrew" }), signal }).catch(() => undefined);
+    if (stale()) return onEnd();
+    if (res?.ok) return playAudio(res);
+    const why = res ? ((await res.json().catch(() => ({}))) as { error?: string; code?: string }) : { error: L("אין חיבור למחשב", "No connection to the computer") };
+    if (why.code !== "off" && Date.now() - hebrewNoteAt > 3 * 60_000) {
+      hebrewNoteAt = Date.now();
+      toast(L(`הקול העברי (F5-TTS) לא ענה, מקריא בקול של המערכת. ${why.error ?? ""}`, `The Hebrew voice (F5-TTS) did not answer; reading with the system's voice. ${why.error ?? ""}`).trim());
+    }
+    if (why.code === "off") hebrewEngine = { engine: "system", at: Date.now() };
+  }
   // The natural voice on this computer (Kokoro) speaks English; Hebrew goes to the system's voice.
   if (voice.startsWith("local:") && !/[֐-׿]/.test(say)) {
     const res = await fetch(withToken("/api/speech/tts"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: say, provider: "local", voice: host ? otherVoice(voice.slice(6), LOCAL_VOICES) : voice.slice(6) }), signal }).catch(() => undefined);
@@ -302,6 +329,63 @@ export function VoicePicker({ clouds }: { clouds: string[] }) {
       )}
       <button type="button" onClick={() => void speak(getLocale() === "he" ? "שלום, ככה אני נשמע." : "Hello, this is how I sound.")}>{t("ttsTry")}</button>
     </>
+  );
+}
+
+/** What the server says about the Hebrew voice (routes/speech.ts GET /api/speech/tts/hebrew). */
+interface HebrewInfo {
+  engine: "system" | "f5" | "zonos";
+  f5: { installed: boolean; phase?: string; message?: string; model?: string; loaded: boolean; sizeGb: number };
+  zonos: { found: string[]; supported: boolean; note: { he: string; en: string } };
+}
+
+/**
+ * Settings → Speech, the Hebrew voice: who reads Hebrew aloud (🔊 and voice mode). The system's voice, or F5-TTS
+ * Hebrew on this computer ("Set it up" installs it once, after a tap); Zonos is listed but cannot run on Windows yet.
+ * Works the same from the phone: the choice and the setup are the computer's.
+ */
+export function HebrewVoicePicker() {
+  const [info, setInfo] = useState<HebrewInfo | null>(null);
+  const load = () => void api<HebrewInfo>("/api/speech/tts/hebrew").then((i) => { setInfo(i); hebrewEngine = { engine: i.engine, at: Date.now() }; }, () => undefined);
+  useEffect(load, []);
+  const busy = info?.f5.phase === "installing";
+  useEffect(() => {
+    if (!busy) return;
+    const id = setInterval(load, 4000);
+    return () => clearInterval(id);
+  }, [busy]);
+  if (!info) return null;
+  const he = getLocale() === "he";
+  const choose = (engine: string) => void api("/api/speech/tts/hebrew", { method: "PUT", body: { engine } }).then(load, (e: Error) => toast(e.message));
+  const setUp = () => void api("/api/speech/tts/hebrew/setup", { method: "POST" }).then(() => { toast(L("ההתקנה התחילה. הקול העברי ייבחר כשתסתיים.", "Setup started. The Hebrew voice is chosen when it is done.")); load(); }, (e: Error) => toast(e.message));
+  const f5 = info.f5;
+  return (
+    <div className="stack hebrew-voice">
+      <label className="stack">
+        <span>{L("קול לעברית", "Hebrew voice")}</span>
+        <Select value={info.engine} onChange={(e) => choose(e.target.value)}>
+          <option value="system">{L("הקול של המערכת (או של הטלפון)", "The system's voice (or the phone's)")}</option>
+          <option value="f5" disabled={!f5.installed}>F5-TTS Hebrew{f5.installed ? "" : L(" (צריך התקנה)", " (needs setup)")}</option>
+          <option value="zonos" disabled>Zonos Hebrew{L(" (לא נתמך עדיין)", " (not supported yet)")}</option>
+        </Select>
+      </label>
+      <p className="muted small">
+        {L("Kokoro מקריא אנגלית בלבד. ", "Kokoro reads English only. ")}
+        {f5.model ? <>{L("נמצא במחשב: ", "On this computer: ")}<span dir="ltr" style={{ overflowWrap: "anywhere" }}>{f5.model}</span>. </> : null}
+        {f5.loaded ? L("טעון ומוכן.", "Loaded and ready.") : ""}
+      </p>
+      {!f5.installed && (
+        <p className="row small" style={{ flexWrap: "wrap", gap: 6 }}>
+          <span className="grow muted">
+            {busy ? (f5.message ?? L("מתקין…", "Setting up…")) : L(`קול עברי טבעי שרץ על המחשב (F5-TTS, כרטיס NVIDIA מומלץ). הורדה חד-פעמית של כ-${f5.sizeGb} GB.`, `A natural Hebrew voice that runs on this computer (F5-TTS; an NVIDIA card is best). A one-time download of about ${f5.sizeGb} GB.`)}
+          </span>
+          {!busy && <button type="button" className="small" onClick={setUp}>{L("הגדר", "Set it up")}</button>}
+        </p>
+      )}
+      {f5.phase === "error" && f5.message && <p className="error small" style={{ overflowWrap: "anywhere" }}>{f5.message}</p>}
+      {info.zonos.found.length > 0 && <p className="muted small">Zonos: {he ? he$(info.zonos.note.he) : info.zonos.note.en}</p>}
+      {info.engine === "f5" && <button type="button" onClick={() => void speak("שלום, ככה נשמע הקול העברי שלי.")}>{L("נסה את הקול העברי", "Try the Hebrew voice")}</button>}
+    </div>
   );
 }
 

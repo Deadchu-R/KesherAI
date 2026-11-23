@@ -14,9 +14,11 @@ import { toast } from "../library";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-type JobId = "chat" | "router" | "image" | "video" | "speech-to-text" | "text-to-speech" | "embedding" | "music" | "3d" | "translator" | "vision";
+type JobId = "chat" | "router" | "image" | "video" | "speech-to-text" | "text-to-speech" | "hebrew-voice" | "embedding" | "music" | "3d" | "translator" | "vision";
 interface Suggestion { name: string; sizeGb: number; fit: "gpu" | "partial" | "too-big" | "unknown"; onComputer: boolean; setup: string; body?: Record<string, unknown>; canSetup: boolean }
-interface Job { id: JobId; state: "ready" | "busy" | "missing" | "none" | "manual"; current: string | null; suggestion?: Suggestion; link: string }
+/** A model for the job found on the computer that KesherAI does not use, and why. */
+interface Unused { name: string; whyHe: string; whyEn: string }
+interface Job { id: JobId; state: "ready" | "busy" | "missing" | "none" | "manual"; current: string | null; suggestion?: Suggestion; link: string; unused?: Unused[] }
 interface Jobs { jobs: Job[]; plan: { ids: JobId[]; totalGb: number }; freeGb?: number }
 
 /** Each job's name and what it is for. */
@@ -26,7 +28,8 @@ const TEXT: Record<JobId, [string, string, string, string]> = {
   image: ["תמונות", "Images", "יצירת תמונות בצ'אט ובעמוד התמונות", "Pictures in chats and on the Images page"],
   video: ["וידאו", "Video", "סרטונים קצרים מתיאור", "Short clips from a description"],
   "speech-to-text": ["דיבור לטקסט", "Speech to text", "מיקרופון, שיחה קולית, הרצאות ופגישות", "Microphone, voice mode, lectures and meetings"],
-  "text-to-speech": ["טקסט לדיבור", "Text to speech", "הקראת תשובות", "Reading answers aloud"],
+  "text-to-speech": ["טקסט לדיבור", "Text to speech", "הקראת תשובות באנגלית (Kokoro)", "Reading answers aloud in English (Kokoro)"],
+  "hebrew-voice": ["קול לעברית", "Hebrew voice", "הקראה בעברית ושיחה קולית בעברית", "Reading Hebrew aloud and Hebrew voice mode"],
   embedding: ["חיפוש לפי משמעות", "Search by meaning", "מאגרי ידע וחיפוש בשיחות", "Knowledge bases and chat search"],
   music: ["מוזיקה ואפקטים", "Music & SFX", "נבחר ב-ComfyUI (עמוד הנודים)", "Chosen in ComfyUI (Nodes page)"],
   "3d": ["תלת-ממד", "3D", "נבחר ב-ComfyUI (עמוד הנודים)", "Chosen in ComfyUI (Nodes page)"],
@@ -134,6 +137,11 @@ export function ModelJobsSection() {
                 {j.state === "none" && <span className="pill small">{L("אין מודל", "No model")}</span>}
               </div>
               <span className="muted small">{TEXT[j.id][he ? 2 : 3]} · <span dir="ltr" style={{ overflowWrap: "anywhere" }}>{currentText(j)}</span> · <a href={j.link}>{L("שנה", "Change")}</a></span>
+              {j.unused?.map((u) => (
+                <span key={u.name} className="muted small" style={{ overflowWrap: "anywhere" }}>
+                  {L("נמצא במחשב ולא בשימוש:", "On this computer, not used:")} <span dir="ltr">{u.name}</span> · {he ? he$(u.whyHe) : u.whyEn}
+                </span>
+              ))}
               {s && (
                 <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
                   <span className="grow small">

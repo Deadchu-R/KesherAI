@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { getLocale, t } from "./i18n";
 import { langName, SPEECH_LANGS } from "./DetectedLang";
-import { VoicePicker } from "./Speak";
+import { HebrewVoicePicker, VoicePicker } from "./Speak";
 import { Select } from "./ui/Select";
 
 interface Info {
@@ -84,6 +84,7 @@ export function SpeechSection() {
       {info.local.error && <p className="error small">{info.local.error}</p>}
       <h3 className="sp-sub">{t("ttsTitle")}</h3>
       <VoicePicker clouds={info.ttsClouds ?? []} />
+      <HebrewVoicePicker />
     </section>
   );
 }
