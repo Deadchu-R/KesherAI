@@ -1692,7 +1692,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     }
     const alwaysKey = scope ?? tool.spec.name;
     const always = this.alwaysAllowed.has(alwaysKey) || !!this.isAlwaysAllowed?.(tool.spec.name, this.modelId, tool.commandOf?.(call.arguments), scope, call.arguments);
-    let verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments));
+    let verdict = decide(this.mode, tool.risk, always, tool.commandOf?.(call.arguments), this.workspace);
     // Browser and computer tools decide themselves (safety v2: modes, sensitive sites, the origin gate, the local
     // reviewer); a gate that fails asks the user.
     const gate = tool.gate
@@ -1710,7 +1710,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // slow answer leaves the question to the person, as before.
     const command = tool.commandOf?.(call.arguments);
     const reviewer = this.reviewerOf?.();
-    if (!gate && reviewer && verdict.action === "ask" && !mustAsk && this.mode === "auto-edit" && tool.risk === "exec" && command && !dangerReason(command)) {
+    if (!gate && reviewer && verdict.action === "ask" && !mustAsk && this.mode === "auto-edit" && tool.risk === "exec" && command && !dangerReason(command, this.workspace)) {
       const asked = this.askedLately();
       const review = await reviewer({ tool: tool.spec.name, command, input: call.arguments, asked, ...(this.workspace ? { folder: this.workspace } : {}) }, signal).catch(() => undefined);
       if (review?.allow) {
@@ -1730,7 +1730,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       }
       const requestId = randomUUID();
       // No "always" for what is always asked: a gate's sensitive step, a call the tool insists on, a dangerous command.
-      const noAlways = gate?.noAlways === true || !!mustAsk || (!!command && !!dangerReason(command));
+      const noAlways = gate?.noAlways === true || !!mustAsk || (!!command && !!dangerReason(command, this.workspace));
       const { decision: answered, feedback } = await new Promise<{ decision: ApprovalDecision; feedback?: string }>((resolve) => {
         // A gate's time limit (browser and computer: 5 minutes): no answer counts as denied, and the model is told.
         const timer = gate?.timeoutMs

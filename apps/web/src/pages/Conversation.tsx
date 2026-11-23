@@ -62,6 +62,7 @@ import { ShareDialog } from "../chat/ShareDialog";
 import { useOwnerTyping } from "../chat/ShareReplies";
 import { CanvasButton, GroupButton, TeamButton, TimersButton, exportChat, openChatCanvas } from "../chat/ChatHeaderTools";
 import { AttachmentChips } from "../chat/Attachments";
+import { gateNoteText } from "../chat/gate-text";
 import { namedDocuments, splitAttachments } from "../attach-lines";
 import { isShortcut } from "../keyboard";
 import { LineIcon } from "../ui/Glyph";
@@ -1160,7 +1161,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
                   </details>
                 );
               case "note":
-                return <p key={e.seq} className="muted note">{e.text}</p>;
+                return <p key={e.seq} className="muted note">{gateNoteText(e.text, L)}</p>;
               case "routed":
                 // "Auto" picked the model for the reply below, and why (model-router.ts); with loadSec it is loading.
                 return <p key={e.seq} className="muted note routed-line"><span aria-hidden="true">✨ </span><span dir="ltr">{routeName(e.modelId)}</span> — {routeWhy(e.why)}{e.loadSec ? ` · ${L(`טוען את המודל (כ-${e.loadSec} שניות)`, `loading the model (about ${e.loadSec} s)`)}` : ""}</p>;

@@ -7,6 +7,7 @@ import { FileChips } from "./MediaView";
 import { ShotThumb } from "./chat/ShotView";
 import type { ActedOn } from "./chat/step-fold";
 import { mediaKindOf } from "./chat/chat-inline";
+import { dangerWhat, reviewHeldText, splitReview } from "./chat/gate-text";
 import { getLocale, t, he$ } from "./i18n";
 import { desktop, toast } from "./library";
 import { RichText } from "./RichText";
@@ -209,10 +210,13 @@ function composeText(text: string): void {
 
 /** Shows the server's approval reason in the user's language. */
 export function reasonText(reason: string): string {
+  // The command reviewer's "left it to you" note (agent/session.ts) is added after the reason: both in the user's words.
+  const { base, review } = splitReview(reason);
+  if (review) return `${reasonText(base)} ${reviewHeldText(review, L)}`;
   if (reason === "The agent wants to change a file.") return t("reasonWrite");
   if (reason === "The agent wants to run a command on your computer.") return t("reasonExec");
   const danger = /^This command (.+), so it always needs your approval\.$/.exec(reason);
-  if (danger) return t("reasonDanger", { what: danger[1]! });
+  if (danger) return t("reasonDanger", { what: dangerWhat(danger[1]!, L) });
   // Unity scene changes that are always asked (unity-edit-tools.ts sceneAskReason, unity_create_pbr_material).
   if (reason === "Changes the selected objects in the Unity scene.") return L("שינוי האובייקטים שנבחרו בסצנה של Unity", reason);
   const unity = /^Changes (\d+) objects? in the Unity scene(?:, deleting (\d+))?\.$/.exec(reason);
