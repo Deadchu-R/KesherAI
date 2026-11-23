@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { agentDoing, isSpecialist, parseDiff, SPECIALISTS, stepTool, type AgentLabel, type DiffFile, type HelperRunInfo, type LabelWords } from "@kesher/shared";
 import { AgentLabelEditor, AgentLabelLines, words } from "./AgentLabel";
 import { api } from "./api";
@@ -371,13 +371,53 @@ const DECIDED = { accepted: ["✓ נשמר", "✓ Kept"], rejected: ["✕ נדח
  * applies accepted hunks to the project only where the file still matches, and tells the lead agent; conflicts show
  * under the hunk. Decisions come back on the run, so the phone in remote shows the same.
  */
+/** History entry for undo: reverts a hunk decision. */
+interface UndoEntry { path: string; hunk: number; decision: "accepted" | "rejected"; }
+
+/**
+ * A hunk card that accepts a swipe gesture (right → accept, left → reject) on touch screens,
+ * showing visual feedback during the drag and committing on release past a threshold.
+ *
+ * @param onDecide - Called when the swipe crosses the threshold.
+ * @param className - CSS classes for the hunk container.
+ * @param children - The hunk content (diff lines, buttons, status).
+ */
+function SwipeableHunk({ onDecide, className, children }: {
+  onDecide: (decision: "accepted" | "rejected") => void;
+  className: string;
+  children: ReactNode;
+}) {
+  const [dx, setDx] = useState(0);
+  const x0 = useRef<number | null>(null);
+  return (
+    <div
+      className={className}
+      style={dx ? { transform: `translateX(${dx}px)`, opacity: Math.max(0.25, 1 - Math.abs(dx) / 200) } : undefined}
+      onTouchStart={(e) => { x0.current = e.touches[0]!.clientX; setDx(0); }}
+      onTouchMove={(e) => { if (x0.current !== null) setDx(e.touches[0]!.clientX - x0.current); }}
+      onTouchEnd={() => {
+        const w = 320;
+        if (dx > w / 3) onDecide("accepted");
+        else if (dx < -w / 3) onDecide("rejected");
+        setDx(0);
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) {
   const [busy, setBusy] = useState(false);
   const [conflicts, setConflicts] = useState<Record<string, string>>({});
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
   const files = parseDiff(r.diff ?? "");
   const review = r.review ?? {};
   const open = (f: DiffFile) => f.hunks.some((_, i) => !review[f.path]?.[i]);
   const send = async (decision: "accepted" | "rejected", path?: string, hunk?: number) => {
+    if (path !== undefined && hunk !== undefined) {
+      setUndoStack((s) => [...s, { path, hunk, decision }]);
+    }
     setBusy(true);
     try {
       const out = await api<{ conflicts: Array<{ path: string; hunk: number; reason: string }> }>(`/api/conversations/${convId}/helpers/${r.id}/review`, { method: "POST", body: { decision, ...(path !== undefined ? { path } : {}), ...(hunk !== undefined ? { hunks: [hunk] } : {}) } });
@@ -389,6 +429,13 @@ export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) 
       setBusy(false);
     }
   };
+  const undoLast = () => {
+    const entry = undoStack.at(-1);
+    if (!entry) return;
+    setUndoStack((s) => s.slice(0, -1));
+    const opposite = entry.decision === "accepted" ? "rejected" : "accepted";
+    void send(opposite, entry.path, entry.hunk);
+  };
   const Buttons = ({ path, hunk, all }: { path?: string; hunk?: number; all?: boolean }) => (
     <span className="hrev-btns">
       <button type="button" className="small primary" disabled={busy} onClick={() => void send("accepted", path, hunk)}>{all ? L("אישור הכול", "Accept all") : L("אישור", "Accept")}</button>
@@ -397,12 +444,13 @@ export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) 
   );
   return (
     <div className="hrev">
-      {files.some(open) && files.length > 1 && (
-        <div className="hrev-top">
-          <span className="muted small">{L("כל הקבצים:", "Every file:")}</span>
-          <Buttons all />
-        </div>
-      )}
+      <div className="hrev-top">
+        {files.some(open) && files.length > 1 && <span className="muted small">{L("כל הקבצים:", "Every file:")}</span>}
+        <span className="hrev-btns">
+          {undoStack.length > 0 && <button type="button" className="small" disabled={busy} onClick={undoLast} title={L("בטל את ההחלטה האחרונה", "Undo last decision")}>{L("↩ בטל", "↩ Undo")} <span className="muted">({undoStack.length})</span></button>}
+          {files.some(open) && files.length > 1 && <Buttons all />}
+        </span>
+      </div>
       {files.map((f) => (
         <div key={f.path} className="hrev-file">
           <div className="hrev-head">
@@ -413,8 +461,8 @@ export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) 
           {f.hunks.map((h, i) => {
             const d = review[f.path]?.[i];
             const why = conflicts[`${f.path}#${i}`];
-            return (
-              <div key={i} className={`hrev-hunk${d ? ` ${d}` : ""}`}>
+            const hunkContent = (
+              <>
                 <pre className="code diff" dir="ltr">
                   <span className="hunk">{h.header}{"\n"}</span>
                   {h.lines.map((l, j) => <span key={j} className={l[0] === "+" ? "add" : l[0] === "-" ? "del" : ""}>{l}{"\n"}</span>)}
@@ -423,7 +471,12 @@ export function DiffReview({ r, convId }: { r: HelperRunInfo; convId: string }) 
                   {d ? <span className={`small ${d === "accepted" ? "ok" : "muted"}`}>{L(DECIDED[d][0], DECIDED[d][1])}</span> : <Buttons path={f.path} hunk={i} />}
                   {why && !d && <span className="bad small" dir="auto">{L("לא הוחל: הקובץ השתנה מאז שהסוכן קרא אותו.", "Not applied: the file changed since the agent read it.")}</span>}
                 </div>
-              </div>
+              </>
+            );
+            return (
+              <SwipeableHunk key={i} className={`hrev-hunk${d ? ` ${d}` : ""}`} onDecide={(decision) => void send(decision, f.path, i)}>
+                {hunkContent}
+              </SwipeableHunk>
             );
           })}
           {f.cut && <p className="muted small">{L("השינויים בקובץ הזה ארוכים מדי להצגה כאן; השאר לא מוצג ולא יוחל.", "This file's changes are too long to show here; the rest is not shown and is not applied.")}</p>}
