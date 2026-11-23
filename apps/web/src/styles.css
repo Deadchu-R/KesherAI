@@ -4809,3 +4809,18 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-runcount { gap: 6px; flex-wrap: nowrap; }
 .tinbox-runall { align-items: center; gap: 10px; margin-bottom: 8px; }
 .tinbox-askbtns { min-height: 40px; align-items: center; }
+
+/* Privacy guard (privacy.tsx): the "may train on your data" tag, the chat's one-time line, the "sensitive info" dialog. */
+.train-tag { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 11px; line-height: 1.4; padding: 1px 7px; border-radius: calc(999px * var(--r-scale, 1)); color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); white-space: nowrap; }
+.train-tag.short { padding: 0 5px; }
+.model-pop-list .train-tag { margin-inline-start: auto; }
+.conn-text .train-tag { align-self: flex-start; }
+.train-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); font-size: 13px; }
+.train-warn > span[aria-hidden] { color: var(--warn); }
+.privacy-hit .privacy-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.privacy-hit .privacy-preview { max-height: 160px; overflow: auto; margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--raised); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.privacy-hit .privacy-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.privacy-hit .privacy-actions button { flex: 1 1 auto; }
+@media (max-width: 480px) { .privacy-hit .privacy-actions { flex-direction: column; } .train-warn { font-size: 12px; } }
+.privacy-mode { align-items: flex-start; }
+.privacy-service { gap: 8px; align-items: center; }

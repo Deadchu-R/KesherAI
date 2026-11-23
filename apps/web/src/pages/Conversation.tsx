@@ -26,6 +26,7 @@ import { TurnDoneLine, TurnStatusLine } from "../chat/TurnStatusLine";
 import { turnStatus, turnSummary } from "../turn-status";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
+import { TrainWarnLine, guardBeforeSend } from "../privacy";
 import { CoachPanel } from "../CoachPanel";
 import { useWebSearch } from "../WebToggle";
 import { UnityChip } from "../UnityChip";
@@ -725,9 +726,20 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
       setSide(aside[1]?.trim() ? { first: aside[1].trim() } : {});
       return;
     }
-    const text = expandSlash(input.trim());
+    let text = expandSlash(input.trim());
     // While the agent works, the message joins the queue and goes when it is free (or steers: chat-queue.ts).
     if (!text) return;
+    // The model's service may train on it: keys, passwords and personal info are found first, and the user chooses
+    // (hide and send, another model, cancel). The server hides what is left either way (privacy.tsx).
+    if (!conv.auto) {
+      const choice = await guardBeforeSend(conv.modelId, text, models);
+      if (choice === null) return;
+      if (choice?.kind === "hide") text = choice.text;
+      else if (choice?.kind === "model") {
+        await patch({ modelId: choice.modelId });
+        toast(L(`עברנו ל-${shortModelName(choice.modelId)}.`, `Switched to ${shortModelName(choice.modelId)}.`));
+      }
+    }
     setInput("");
     setError("");
     const steer = wantsSteer({ busy, mode: qMode, alt, ...(info?.canSteer === false ? { canSteer: false } : {}) });
@@ -1276,6 +1288,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
           />
           {helperSheet?.startsWith("plan:") && plans.find((v) => `plan:${v.plan.id}` === helperSheet) && <PlanSheet view={plans.find((v) => `plan:${v.plan.id}` === helperSheet)!} convId={id} onOpen={(r) => setHelperSheet(r.id)} onClose={() => setHelperSheet(null)} />}
           {helperSheet && helpers.runs.find((r) => r.id === helperSheet) && <HelperSheet run={helpers.runs.find((r) => r.id === helperSheet)!} convId={id} onClose={() => setHelperSheet(null)} />}
+          {!conv.auto && <TrainWarnLine convId={id} modelId={conv.modelId} />}
           <div className="box">
             <PromptTextarea
               rows={2}

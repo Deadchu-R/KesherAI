@@ -190,9 +190,11 @@ export class ConversationManager {
    *
    * @param id - The chat.
    */
-  private freeOpts(id: string): { noCloud: () => boolean; fallback: () => ModelTurn | undefined } {
+  private freeOpts(id: string): { noCloud: () => boolean; fallback: () => ModelTurn | undefined; unattended: () => boolean } {
     return {
       noCloud: () => !!this.deps.library.summary(id)?.incognito,
+      // The privacy guard: an unattended run skips to a model that does not train when a file it read holds a secret.
+      unattended: () => this.sessions.get(id)?.isUnattended === true,
       fallback: () => (this.deps.config.freeCloud.chatFallback && this.deps.freeCloud?.candidates("chat").length ? this.deps.freeCloud.turn("chat") : undefined),
     };
   }

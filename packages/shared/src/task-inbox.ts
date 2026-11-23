@@ -6,6 +6,7 @@
  */
 import type { InboxModel } from "./inbox-models.js";
 import type { AgentLabel } from "./agent-label.js";
+import { freeTierTrains } from "./training-risk.js";
 
 /**
  * Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts).
@@ -90,7 +91,7 @@ export interface FreeProvider {
   id: string;
   /** Shown in the settings card. */
   name: string;
-  /** Its free tier may use prompts and outputs for training: used only when `freeTrainingOk` is on. */
+  /** Its free tier may use prompts and outputs for training (training-risk.ts): used only when `freeTrainingOk` is on. */
   trainsOnData: boolean;
   /** The free requests a day, when the service states one (absent: counted for the card, never limited here). */
   dailyLimit?: number;
@@ -126,11 +127,11 @@ const isContributorFree = (id: string): boolean => /^opencode-go\/[\w.-]*contrib
 /** The free services, in the order they are tried (after Beam Free). */
 export const FREE_PROVIDERS: readonly FreeProvider[] = [
   // Z.ai: API data is not used for training unless the user agrees; one request at a time.
-  { id: "zai", name: "Z.ai", trainsOnData: false, allowed: (id) => ZAI_FREE_MODELS.includes(id), pick: (l) => ZAI_FREE_MODELS.filter((m) => l.includes(m)).slice(0, 1) },
+  { id: "zai", name: "Z.ai", trainsOnData: freeTierTrains("zai"), allowed: (id) => ZAI_FREE_MODELS.includes(id), pick: (l) => ZAI_FREE_MODELS.filter((m) => l.includes(m)).slice(0, 1) },
   {
     id: "openrouter",
     name: "OpenRouter",
-    trainsOnData: false,
+    trainsOnData: freeTierTrains("openrouter"),
     dailyLimit: OPENROUTER_FREE_DAILY,
     allowed: isOpenrouterFreeModel,
     // The free router first, then up to two listed `:free` models (coder ones first).
@@ -140,15 +141,15 @@ export const FREE_PROVIDERS: readonly FreeProvider[] = [
     },
   },
   // Workers AI: ~10,000 Neurons a day for every account; the best coding model it lists (low priority: a small allowance).
-  { id: "cloudflare-ai", name: "Cloudflare", trainsOnData: false, allowed: isCloudflareModel, pick: (l) => l.filter((m) => isCloudflareModel(m) && /coder/i.test(m)).slice(0, 1) },
+  { id: "cloudflare-ai", name: "Cloudflare", trainsOnData: freeTierTrains("cloudflare-ai"), allowed: isCloudflareModel, pick: (l) => l.filter((m) => isCloudflareModel(m) && /coder/i.test(m)).slice(0, 1) },
   // Gemini's free key: Flash first, then Flash-Lite; Google's free tier may use prompts to improve its products.
-  { id: "gemini", name: "Gemini", trainsOnData: true, allowed: isGeminiFree, pick: (l) => l.filter(isGeminiFree).sort((a, b) => Number(/lite/i.test(a)) - Number(/lite/i.test(b))).slice(0, 2) },
+  { id: "gemini", name: "Gemini", trainsOnData: freeTierTrains("gemini"), allowed: isGeminiFree, pick: (l) => l.filter(isGeminiFree).sort((a, b) => Number(/lite/i.test(a)) - Number(/lite/i.test(b))).slice(0, 2) },
   // The free "Experiment" plan: 1 request/s; its data may train models.
-  { id: "mistral", name: "Mistral", trainsOnData: true, allowed: (id) => /^mistral\/[\w.:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("mistral/")), 2) },
+  { id: "mistral", name: "Mistral", trainsOnData: freeTierTrains("mistral"), allowed: (id) => /^mistral\/[\w.:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("mistral/")), 2) },
   // The free trial key (testing and evaluation only): ~40 requests/min; its data may train models.
-  { id: "nvidia-nim", name: "NVIDIA", trainsOnData: true, allowed: (id) => /^nvidia-nim\/[\w./:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("nvidia-nim/")), 2) },
+  { id: "nvidia-nim", name: "NVIDIA", trainsOnData: freeTierTrains("nvidia-nim"), allowed: (id) => /^nvidia-nim\/[\w./:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("nvidia-nim/")), 2) },
   // OpenCode's "Contributor" free models answer only with the data-sharing opt-in.
-  { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: true, allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
+  { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: freeTierTrains("opencode-go"), allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
 ];
 
 /** The free service a model id belongs to, when it is one of the free tier's models. */

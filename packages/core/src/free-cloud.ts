@@ -29,6 +29,7 @@ import {
 } from "@kesher/providers";
 import type { ModelTurn } from "@kesher/agent";
 import { FREE_PROVIDERS, freeProvider, modelListUrl, paidModelReason, parseModelList, type FreeProviderInfo, type ListedModel } from "./free-cloud-catalog.js";
+import { guardMessages } from "./privacy-guard.js";
 
 /** What the pool is used for. `pick`: the user chose "Free cloud" for a chat. `chat`: the local model is busy or off. */
 export type FreeUse = "pick" | "chat" | "background";
@@ -536,7 +537,9 @@ export class FreeCloudPool {
           if (!provider?.chatWithTools) throw new Error(`${id} cannot chat.`);
           let shown = 0;
           try {
-            return await provider.chatWithTools({ providerModelId: model, messages: req.messages, tools: req.tools }, signal, (t) => {
+            // Free tiers that may train (Mistral, OpenRouter's free models) get sensitive things hidden: privacy-guard.ts.
+            const { messages } = guardMessages(`${id}/${model}`, req.messages);
+            return await provider.chatWithTools({ providerModelId: model, messages, tools: req.tools }, signal, (t) => {
               shown += t.length;
               onText(t);
             });

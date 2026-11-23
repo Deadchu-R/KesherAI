@@ -4617,3 +4617,33 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - Next: a Hebrew reference voice (a kept voice; F5 transcribes it itself when ref_text is empty), and Kokoro-Hebrew
   (`thewh1teagle/kokoro-hebrew`, Phonikud) as a CPU option.
 - Stopped at: done.
+
+## 2026-11-23 — Privacy guard: warning on providers that may train, and a leak guard (Claude helper, for "Privacy guard")
+- **Chat clients** (LibreChat, Open WebUI, LobeChat): none tags a provider by its data use; the user must know each
+  service's terms. Open WebUI's answer is a community "PII filter" function (an `inlet` hook that masks before the
+  request goes out). **Take**: the hook point (one place every request passes). **Leave**: an add-on the user must find.
+- **Gateways** (LiteLLM guardrails with Presidio, Cloudflare AI Gateway DLP, Requesty): rules per request with an
+  action per hit: *mask* (typed placeholders), *block*, or *flag/log*; Cloudflare DLP profiles (keys, cards, IDs) apply
+  to the prompt and the answer. A known gap (dev.to "your PII redactor probably leaks tool call arguments"): only the
+  user's text is masked, not tool calls and tool results. **Take**: the three actions (our modes ask / auto-hide /
+  block), typed placeholders (`[key hidden]`), and scanning every message: tool arguments and tool results (files an
+  agent read) too.
+- **Enterprise DLP** (Microsoft Purview for AI, Nightfall): a pop-up when sensitive data is pasted into an AI site,
+  with "remove / continue with justification / cancel", and a per-org list of sensitive words and files. **Take**: the
+  dialog before sending (hide and send / another model / cancel) and the user's own "never send" list.
+- **Secret scanning** (GitGuardian, gitleaks, trufflehog): known prefixes first (ghp_, sk-, AKIA, AIza, xox*, hf_,
+  glpat-, npm_, JWT, PEM blocks), entropy only for values of secret-named settings (KEY=, token:, password=) and long
+  mixed tokens, with allow-lists for placeholders (`${VAR}`, `<your-key>`, `xxx`). **Take**: the same order, so
+  `const key = "id"` never matches.
+- **Presidio**: recognizers per entity (email, phone, credit card with Luhn, national IDs with checksums and context
+  words). **Take**: Luhn for cards, checksum + context word for an Israeli ID, `+`-prefixed phones; no NLP model
+  (names and places stay out: too many false hits in code).
+- **Plan for KesherAI**: one table in shared (`privacy-guard.ts`) of the services that train or may train (NVIDIA trial,
+  OpenCode contributor-free: yes; Gemini, Mistral free plans and OpenRouter `:free`: may) read by presets, the inbox's
+  FREE_PROVIDERS, the model menu, Connections and task cards; pure detection and redaction in shared (`leak-guard.ts`);
+  the server's model turn (every chat, agent, helper and inbox run) hides hits before a request goes to such a model;
+  the chat asks first (dialog on PC and phone); unattended runs hide, and a hit in a file the agent read moves the task
+  to a model that does not train (so placeholders never get written back into code).
+- Sources: docs.litellm.ai (PII masking v2 with Presidio), developers.cloudflare.com/ai-gateway/features/dlp,
+  openwebui.com/f/justinrahb/pii_filter, dev.to/crp4222 (tool call arguments), requesty.ai (guardrails and redaction).
+- Stopped at: done.

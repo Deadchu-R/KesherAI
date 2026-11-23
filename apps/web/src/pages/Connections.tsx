@@ -3,6 +3,7 @@ import { api } from "../api";
 import { t } from "../i18n";
 import { McpSection } from "../McpSection";
 import { DevicesSection } from "../DevicesSection";
+import { TrainTag } from "../privacy";
 import { Select } from "../ui/Select";
 
 interface ProviderRow {
@@ -66,6 +67,7 @@ export function ConnectionsPage() {
               <strong>{p.name ?? p.id}</strong>
               <span className="muted small mono" dir="ltr">{p.baseUrl ?? p.type}</span>
               <span className="muted small">{p.location ?? "server"}{p.autodetected ? ` · ${t("autodetected")}` : ""}</span>
+              <TrainTag connection={p.id} />
             </div>
             <span className={`conn-state ${p.healthy ? "good" : "bad"}`}>{p.healthy ? t("connected") : t("offline")}</span>
             <button type="button" className="small" onClick={() => void remove(p.id)}>{t("remove")}</button>

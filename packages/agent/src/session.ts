@@ -452,6 +452,11 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     this.unattended = on;
   }
 
+  /** Whether no one watches this run (self-work, the task inbox): see {@link setUnattended}. */
+  get isUnattended(): boolean {
+    return this.unattended;
+  }
+
   /**
    * Gives the agent access to a folder or file outside its workspace, for
    * the rest of this conversation. The user does this by attaching a file

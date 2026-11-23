@@ -52,6 +52,7 @@ import { lspRoutes } from "../routes/lsp.js";
 import { codeRoutes } from "../routes/code.js";
 import { spanEditRoutes } from "../routes/span-edit.js";
 import { voiceRoutes } from "../routes/voice.js";
+import { privacyRoutes } from "../routes/privacy.js";
 import { guardRoutes } from "../routes/guard.js";
 import { translateRoutes } from "../routes/translate.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
@@ -286,6 +287,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   codeRoutes(app, services);
   spanEditRoutes(app, services);
   voiceRoutes(app, services);
+  privacyRoutes(app, services);
   await unityRoutes(app, services);
   await copilotRoutes(app, services);
   await browserRoutes(app, services);

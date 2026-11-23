@@ -504,7 +504,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         <h1 className="grow" dir="auto">{t.label?.name || t.title}</h1>
         <button type="button" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>✎ {t.label?.name || t.label?.note ? L("ערוך שם והערה", "Edit name & note") : L("שם והערה", "Name & note")}</button>
         <span className={`tinbox-ex ${ex.cls}`}>{ex.text}{t.modelUsed ? ` · ${t.modelUsed}` : ""}</span>
-        {t.mayTrain && <span className="small muted" title={L("השירות החינמי הזה עשוי להשתמש בהנחיות לאימון", "This free service may use prompts for training")}>⚠ {L("עשוי לשמש לאימון", "may be used for training")}</span>}
+        {t.mayTrain && <span className="train-tag" title={L("השירות הזה עשוי להשתמש במה שנשלח אליו לאימון; מידע רגיש מוסתר לפני שליחה", "This service may use what it is sent for training; sensitive info is hidden before sending")}>⚠ {L("עשוי לאמן על המידע שלך", "may train on your data")}</span>}
         <span className={`tinbox-st ${st.cls}`}>{st.text}{minutes !== undefined ? ` · ${minutes} ${L("דק׳", "min")}` : ""}</span>
         {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}

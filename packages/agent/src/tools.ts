@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { realpathSync } from "node:fs";
 import { applyPatch, createTwoFilesPatch, reversePatch, structuredPatch } from "diff";
 import type { McpAppRef, ToolRisk, ToolSpec } from "@kesher/shared";
+import { countPlaceholders } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
 import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
@@ -352,6 +353,20 @@ export function guardRewrite(path: string, before: string | null, content: strin
   }
 }
 
+/**
+ * Refuses a write that adds the privacy guard's placeholders (`[key hidden]`, ...): the model saw a value hidden and
+ * would replace the real one in the file with the placeholder (core privacy-guard.ts).
+ *
+ * @param path - The path as the model gave it (for the message).
+ * @param before - The file's content now (null: a new file).
+ * @param after - The content to write.
+ */
+export function guardPlaceholders(path: string, before: string | null, after: string): void {
+  if (countPlaceholders(after) > countPlaceholders(before ?? "")) {
+    throw new Error(`The new content of ${path} holds a placeholder such as [key hidden]: a value the privacy guard hid from you. Do not write placeholders into files; change only the lines you need with edit_file and leave the lines with hidden values as they are.`);
+  }
+}
+
 const writeFileTool: AgentTool = {
   risk: "write",
   spec: {
@@ -371,6 +386,7 @@ const writeFileTool: AgentTool = {
     const path = await resolveForTool(ctx.workspace, ctx.extraRoots ?? [], str(input, "path"));
     const before = await readText(path);
     guardRewrite(str(input, "path"), before, str(input, "content"));
+    guardPlaceholders(str(input, "path"), before, str(input, "content"));
     return makeDiff(displayPath(root, path), before, str(input, "content"));
   },
   async run(input, ctx) {
@@ -379,6 +395,7 @@ const writeFileTool: AgentTool = {
     const before = await readText(path);
     const content = str(input, "content");
     guardRewrite(str(input, "path"), before, content);
+    guardPlaceholders(str(input, "path"), before, content);
     await mkdir(dirname(path), { recursive: true });
     ctx.recordChange(path, before);
     await writeFile(path, content, "utf8");
@@ -443,13 +460,17 @@ async function applyEdit(ctx: ToolContext, input: Record<string, unknown>) {
     // PC: three failed tries, then the model rewrote a whole 2,000-line file). Like Aider, match line by line ignoring
     // that, when the match is unique, and keep the file's own indentation.
     const loose = looseEdit(before, oldText, newText, eol);
-    if (loose) return { path, before, after: loose, rel: displayPath(root, path) };
+    if (loose) {
+      guardPlaceholders(str(input, "path"), before, loose);
+      return { path, before, after: loose, rel: displayPath(root, path) };
+    }
     throw new Error("old_text was not found in the file. Read the file again and copy the exact text, including spaces.");
   }
   if (count > 1 && input.replace_all !== true) {
     throw new Error(`old_text appears ${count} times. Add more surrounding lines so it is unique, or set replace_all.`);
   }
   const after = input.replace_all === true ? before.split(needle).join(replacement) : before.replace(needle, () => replacement);
+  guardPlaceholders(str(input, "path"), before, after);
   return { path, before, after, rel: displayPath(root, path) };
 }
 

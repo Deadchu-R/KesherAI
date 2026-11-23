@@ -601,6 +601,11 @@ export const KesherConfigSchema = z.object({
   chatBar: z.record(z.string(), z.boolean()).default({}),
   /** Settings → Web: safe search, dark web sites through Tor (off by default), sites never used in any chat. */
   webFilter: z.object({ safeSearch: z.enum(["strict", "moderate", "off"]).default("moderate"), onion: z.boolean().default(false), blocked: z.array(z.string().max(200)).max(200).default([]) }).default({ safeSearch: "moderate", onion: false, blocked: [] }),
+  /**
+   * Settings › Privacy: what happens when a request to a service that may train on it (shared training-risk.ts) holds
+   * sensitive info (leak-guard.ts): ask (default), hide it, or never send it there; plus the user's "never send" list.
+   */
+  privacy: z.object({ mode: z.enum(["ask", "auto-hide", "block-training-providers"]).default("ask"), neverSend: z.array(z.string().max(200)).max(200).default([]) }).default({ mode: "ask", neverSend: [] }),
   /** Settings > Web: the user's own free keys for Tavily and Brave Search (used first when set); never sent to a page. */
   webKeys: z.object({ tavily: z.string().max(200).optional(), brave: z.string().max(200).optional() }).prefault({}),
   /** Settings > Web: which search engine is tried first ("auto": the best that works); the others are the fallbacks. */

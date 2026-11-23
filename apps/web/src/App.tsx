@@ -25,6 +25,7 @@ import { InboxPage } from "./pages/InboxPage";
 import { PluginStyles } from "./plugins";
 import { DownloadsButton } from "./Downloads";
 import { ModelPickerHost } from "./ModelPicker";
+import { PrivacyHitHost } from "./privacy";
 import { Suspense, lazy, useEffect, useState } from "react";
 import { SaveToCourse, type WebClip } from "./SaveToCourse";
 import { api, isRemote } from "./api";
@@ -436,6 +437,7 @@ export function App() {
       <ComputerBanner hidden={hash === "#/watch"} />
       <ApprovalsPill hidden={hash === "#/watch" || hash === "#/inbox" || hash.startsWith("#/c/")} />
       <ModelPickerHost />
+      <PrivacyHitHost />
       <PluginStyles />
       <DownloadsButton />
       <StopSpeakingBar />

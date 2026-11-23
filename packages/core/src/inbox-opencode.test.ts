@@ -538,3 +538,24 @@ test("free services: a task about security stays off services that may train, bu
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("privacy guard: a file the task read holds a secret, so the task leaves the service that may train for one that does not", async () => {
+  const { root, repo } = await setup({ "c-20261123-37": lowS("c-20261123-37") });
+  const { coder, runs } = fakeCoder({
+    listed: ["opencode-go/mimo-v2.6-flash"],
+    free: { gemini: ["gemini/gemini-2.5-flash"], mistral: ["mistral/devstral-small-latest"] },
+    fail: (m) => (m.startsWith("gemini/") ? new Error("Privacy guard: skip. A file this run read holds 1 key or token; it is not sent to gemini.") : undefined),
+  });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { dailyCap: 5 } });
+  try {
+    await inbox.state(true);
+    await syncAndRun(inbox);
+    // Gemini's skip passes over Mistral (it may train too) to the plan's own model.
+    assert.deepEqual(runs.map((r) => r.model), ["gemini/gemini-2.5-flash", "opencode-go/mimo-v2.6-flash"]);
+    const t = await inbox.task("c-20261123-37");
+    assert.equal(t.status, "done");
+    assert.equal(t.mayTrain, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

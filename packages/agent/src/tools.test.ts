@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { guardRewrite, looseEdit } from "./tools.js";
+import { guardPlaceholders, guardRewrite, looseEdit } from "./tools.js";
 
 describe("looseEdit", () => {
   const file = ["function a() {", "    if (x) {", "      return 1;", "    }", "}"].join("\n");
@@ -113,5 +113,13 @@ describe("read_file on long lines", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("guardPlaceholders", () => {
+  it("refuses a write that adds the privacy guard's placeholders", () => {
+    assert.throws(() => guardPlaceholders("a.env", "KEY=abc\n", "KEY=[key hidden]\n"), /placeholder/);
+    assert.doesNotThrow(() => guardPlaceholders("a.env", "KEY=[key hidden]\n", "KEY=[key hidden]\nB=1\n"));
+    assert.doesNotThrow(() => guardPlaceholders("a.ts", null, "const a = [1];\n"));
   });
 });

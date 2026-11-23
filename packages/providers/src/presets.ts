@@ -1,3 +1,4 @@
+import { connectionTrainingRisk, type TrainingRisk } from "@kesher/shared";
 import type { ProviderConfig } from "./provider.js";
 
 /**
@@ -13,13 +14,25 @@ export interface ProviderPreset {
   autodetect?: boolean;
   /** Whether the user must supply an API key. */
   needsApiKey?: boolean;
+  /**
+   * Whether the service may train on what it is sent (`some`: only some of its models). Filled from the shared
+   * training table (training-risk.ts), the one source for the chat, the inbox and the interface.
+   */
+  trainsOnData?: TrainingRisk | "some";
 }
+
+/** Adds each preset's {@link ProviderPreset.trainsOnData} from the shared table. */
+const withTrainingRisk = (list: readonly ProviderPreset[]): readonly ProviderPreset[] =>
+  list.map((p) => {
+    const risk = connectionTrainingRisk(p.config.id);
+    return risk ? { ...p, trainsOnData: risk } : p;
+  });
 
 /**
  * Well-known servers and APIs. Ports are each project's defaults; the user
  * can change them after adding the connection.
  */
-export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
+export const PROVIDER_PRESETS: readonly ProviderPreset[] = withTrainingRisk([
   {
     config: { id: "lmstudio", type: "openai-compatible", name: "LM Studio", baseUrl: "http://localhost:1234/v1", location: "server" },
     description: "Models already downloaded in LM Studio, through its local server.",
@@ -164,4 +177,4 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     description: "Fast inference for open-weight models.",
     needsApiKey: true,
   },
-];
+]);

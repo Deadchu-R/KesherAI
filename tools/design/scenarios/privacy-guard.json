@@ -1,0 +1,567 @@
+{
+ "group": "שמירה על פרטיות · Privacy guard",
+ "mocks": [
+  {
+   "url": "**/api/models",
+   "method": "GET",
+   "json": {
+    "models": [
+     {
+      "id": "llamacpp/Qwen3.6-27B-Q4_K_M",
+      "providerId": "llamacpp",
+      "providerModelId": "Qwen3.6-27B-Q4_K_M",
+      "name": "Qwen3.6-27B",
+      "category": "chat",
+      "location": "local"
+     },
+     {
+      "id": "gemini/gemini-2.5-flash",
+      "providerId": "gemini",
+      "providerModelId": "gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
+      "category": "chat",
+      "location": "cloud"
+     },
+     {
+      "id": "mistral/devstral-small-latest",
+      "providerId": "mistral",
+      "providerModelId": "devstral-small-latest",
+      "name": "Devstral Small",
+      "category": "chat",
+      "location": "cloud"
+     },
+     {
+      "id": "openrouter/qwen/qwen3-coder:free",
+      "providerId": "openrouter",
+      "providerModelId": "qwen/qwen3-coder:free",
+      "name": "Qwen3 Coder (free)",
+      "category": "chat",
+      "location": "cloud"
+     },
+     {
+      "id": "openrouter/anthropic/claude-sonnet-4.5",
+      "providerId": "openrouter",
+      "providerModelId": "anthropic/claude-sonnet-4.5",
+      "name": "Claude Sonnet 4.5",
+      "category": "chat",
+      "location": "cloud"
+     },
+     {
+      "id": "zai/glm-4.7-flash",
+      "providerId": "zai",
+      "providerModelId": "glm-4.7-flash",
+      "name": "GLM-4.7 Flash",
+      "category": "chat",
+      "location": "cloud"
+     }
+    ],
+    "errors": []
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "PrivacyModelPicker",
+   "title": "בחירת מודל בצ'אט: תגית \"⚠ עשוי לאמן על המידע שלך\" ליד מודלים של שירותים שמאמנים (Gemini חינמי, Mistral, מודלי :free ב-OpenRouter), ו-⚠ קטן בצ'יפ של המודל",
+   "titleEn": "Chat model menu: a \"⚠ may train on your data\" tag beside models whose service may train (free Gemini, Mistral, OpenRouter :free), and a small ⚠ on the model chip",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "method": "GET",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "הסבר על ההתחברות",
+      "kind": "chat",
+      "modelId": "gemini/gemini-2.5-flash",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "8m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "gemini/gemini-2.5-flash",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תסביר לי איך עובד ה-hook של ההתחברות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "ה-hook שומר את הטוקן בזיכרון ומרענן אותו כשנשארות 5 דקות לתוקף."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/model-router",
+     "method": "GET",
+     "json": {
+      "defaultAuto": false,
+      "cloudKinds": [],
+      "labels": {},
+      "models": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "local": {
+      "key": "kesher.trainWarned.c1.gemini",
+      "value": "1"
+     }
+    },
+    {
+     "wait": ".model-chip"
+    },
+    {
+     "click": ".model-chip"
+    },
+    {
+     "wait": ".model-pop .train-tag"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "PrivacyConnections",
+   "title": "הגדרות › חיבורים: תגית ⚠ בשורה של כל שירות שעשוי לאמן (Gemini, Mistral, NVIDIA; ב-OpenRouter: \"חלק מהמודלים החינמיים\")",
+   "titleEn": "Settings › Connections: a ⚠ tag on each service that may train (Gemini, Mistral, NVIDIA; OpenRouter: \"some free models\")",
+   "route": "#/connections",
+   "height": {
+    "desktop": 900,
+    "phone": 1600
+   },
+   "mocks": [
+    {
+     "url": "**/api/providers",
+     "method": "GET",
+     "json": [
+      {
+       "id": "llamacpp",
+       "type": "openai-compatible",
+       "name": "llama.cpp (managed)",
+       "baseUrl": "http://127.0.0.1:8081/v1",
+       "location": "local",
+       "healthy": true
+      },
+      {
+       "id": "gemini",
+       "type": "openai-compatible",
+       "name": "Google Gemini",
+       "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "mistral",
+       "type": "openai-compatible",
+       "name": "Mistral",
+       "baseUrl": "https://api.mistral.ai/v1",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "openrouter",
+       "type": "openai-compatible",
+       "name": "OpenRouter",
+       "baseUrl": "https://openrouter.ai/api/v1",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "nvidia-nim",
+       "type": "openai-compatible",
+       "name": "NVIDIA NIM",
+       "baseUrl": "https://integrate.api.nvidia.com/v1",
+       "location": "cloud",
+       "healthy": false,
+       "apiKey": "••••"
+      },
+      {
+       "id": "zai",
+       "type": "openai-compatible",
+       "name": "Z.ai",
+       "baseUrl": "https://api.z.ai/api/paas/v4",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      }
+     ]
+    },
+    {
+     "url": "**/api/providers/presets",
+     "method": "GET",
+     "json": []
+    },
+    {
+     "url": "**/api/providers/types",
+     "method": "GET",
+     "json": []
+    },
+    {
+     "url": "**/api/plugins",
+     "method": "GET",
+     "json": []
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".conn-row .train-tag"
+    }
+   ]
+  },
+  {
+   "id": "PrivacyChatWarn",
+   "title": "צ'אט עם מודל ששירותו עשוי לאמן: שורת אזהרה חד-פעמית מעל תיבת ההודעה (\"הבנתי\" מסתיר אותה בצ'אט הזה) עם קישור להגדרות פרטיות",
+   "titleEn": "A chat on a model whose service may train: a one-time warning line above the message box (\"Got it\" hides it in this chat), with a link to Privacy settings",
+   "route": "#/c/c2",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c2",
+     "method": "GET",
+     "json": {
+      "id": "c2",
+      "projectId": null,
+      "title": "רעיונות לשלב חדש",
+      "kind": "chat",
+      "modelId": "gemini/gemini-2.5-flash",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "8m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c2",
+       "status": "idle",
+       "modelId": "gemini/gemini-2.5-flash",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "user",
+        "text": "תן לי 3 רעיונות לשלב קרח"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "2m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "1. משטח מחליק עם מכשולים נעים\n2. גשרי קרח שנשברים אחרי מעבר\n3. מערה עם קרני אור שממיסות דרך"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c2/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/model-router",
+     "method": "GET",
+     "json": {
+      "defaultAuto": false,
+      "cloudKinds": [],
+      "labels": {},
+      "models": []
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".train-warn"
+    }
+   ]
+  },
+  {
+   "id": "PrivacyHitDialog",
+   "title": "\"נמצא מידע רגיש\" לפני שליחה לשירות שמאמן: מה נמצא (טוקן, סיסמה, מייל), איך ההודעה תיראה מוסתרת, ושלוש בחירות — להסתיר ולשלוח / לשלוח למודל מקומי / ביטול (גם בטלפון)",
+   "titleEn": "\"Sensitive info found\" before sending to a service that may train: what was found (token, password, email), the hidden preview, and three choices: hide and send / send to a local model / cancel (on the phone too)",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 900,
+    "phone": 1500
+   },
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "method": "GET",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "הסבר על ההתחברות",
+      "kind": "chat",
+      "modelId": "gemini/gemini-2.5-flash",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "8m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "gemini/gemini-2.5-flash",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": []
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "user",
+        "text": "תסביר לי איך עובד ה-hook של ההתחברות"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "6m"
+        },
+        "type": "assistant",
+        "turn": 1,
+        "text": "ה-hook שומר את הטוקן בזיכרון ומרענן אותו כשנשארות 5 דקות לתוקף."
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "body": ": hi\n\n",
+     "contentType": "text/event-stream"
+    },
+    {
+     "url": "**/api/model-router",
+     "method": "GET",
+     "json": {
+      "defaultAuto": false,
+      "cloudKinds": [],
+      "labels": {},
+      "models": []
+     }
+    },
+    {
+     "url": "**/api/privacy/check",
+     "method": "POST",
+     "json": {
+      "risk": "may",
+      "mode": "ask",
+      "found": [
+       {
+        "kind": "key",
+        "count": 1
+       },
+       {
+        "kind": "password",
+        "count": 1
+       },
+       {
+        "kind": "email",
+        "count": 1
+       }
+      ],
+      "hidden": "הנה ה-.env שלי, למה ההתחברות נכשלת?\nOPENAI_API_KEY=[key hidden]\nDB_PASSWORD=[password hidden]\nכתבו לי ל-[email hidden]"
+     }
+    }
+   ],
+   "steps": [
+    {
+     "local": {
+      "key": "kesher.trainWarned.c1.gemini",
+      "value": "1"
+     }
+    },
+    {
+     "wait": ".composer textarea"
+    },
+    {
+     "fill": ".composer textarea",
+     "value": "הנה ה-.env שלי, למה ההתחברות נכשלת?\nOPENAI_API_KEY=sk-demo-not-a-real-key\nDB_PASSWORD=hunter2hunter\nכתבו לי ל-dana.levi@gmail.com"
+    },
+    {
+     "click": ".composer button.send"
+    },
+    {
+     "wait": ".privacy-hit"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "PrivacySettings",
+   "title": "הגדרות › פרטיות: \"הגנה מדליפת מידע\" — מה קורה כשנמצא מידע רגיש (לשאול / להסתיר לבד / לא לשלוח לשירותים שמאמנים), רשימת \"לעולם לא לשלוח\", והשירותים המחוברים שעשויים לאמן",
+   "titleEn": "Settings › Privacy: \"Leak guard\": what happens on a hit (ask / hide it myself / never send to services that train), the never-send list, and the connected services that may train",
+   "route": "#/settings/privacy",
+   "height": {
+    "desktop": 1300,
+    "phone": 2200
+   },
+   "mocks": [
+    {
+     "url": "**/api/privacy",
+     "method": "GET",
+     "json": {
+      "mode": "ask",
+      "neverSend": [
+       "Project Falcon",
+       "salary.xlsx",
+       "clients/"
+      ]
+     }
+    },
+    {
+     "url": "**/api/providers",
+     "method": "GET",
+     "json": [
+      {
+       "id": "llamacpp",
+       "type": "openai-compatible",
+       "name": "llama.cpp (managed)",
+       "baseUrl": "http://127.0.0.1:8081/v1",
+       "location": "local",
+       "healthy": true
+      },
+      {
+       "id": "gemini",
+       "type": "openai-compatible",
+       "name": "Google Gemini",
+       "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "mistral",
+       "type": "openai-compatible",
+       "name": "Mistral",
+       "baseUrl": "https://api.mistral.ai/v1",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "openrouter",
+       "type": "openai-compatible",
+       "name": "OpenRouter",
+       "baseUrl": "https://openrouter.ai/api/v1",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      },
+      {
+       "id": "nvidia-nim",
+       "type": "openai-compatible",
+       "name": "NVIDIA NIM",
+       "baseUrl": "https://integrate.api.nvidia.com/v1",
+       "location": "cloud",
+       "healthy": false,
+       "apiKey": "••••"
+      },
+      {
+       "id": "zai",
+       "type": "openai-compatible",
+       "name": "Z.ai",
+       "baseUrl": "https://api.z.ai/api/paas/v4",
+       "location": "cloud",
+       "healthy": true,
+       "apiKey": "••••"
+      }
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "wait": "#privacy-guard"
+    },
+    {
+     "top": "#privacy-guard"
+    }
+   ]
+  }
+ ]
+}

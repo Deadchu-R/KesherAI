@@ -3,10 +3,11 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
+import { isPrivacySkip } from "./privacy-guard.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { retryAfterMs } from "./free-cloud.js";
@@ -1009,7 +1010,7 @@ export class TaskInbox {
       await this.save();
       return;
     }
-    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: modelLabel(model), ...(freeProviderOf(model)?.trainsOnData ? { mayTrain: true } : {}) });
+    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: modelLabel(model), ...(trainingRiskOf(model) ? { mayTrain: true } : {}) });
     for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions"] as const) delete t[k];
     await this.save();
     this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
@@ -1066,10 +1067,24 @@ export class TaskInbox {
           const fp = freeProviderOf(model);
           // A negative balance blocks OpenRouter's free models (402): that service is out until the next UTC midnight.
           const pay = !!fp && /\b402\b|payment required|insufficient (credits|balance)|negative balance/i.test(error);
+          // A file the task read holds a secret (privacy-guard.ts): no service that may train gets it. The next model
+          // that does not train takes the task; the model itself is fine (no cooldown).
+          const privacy = isPrivacySkip(error);
           // A free model that fails in any way (the offer ended, it is overloaded) hands the task to the paid order.
-          if (run.why || (!quota && !isFreeOpencodeModel(model))) break;
+          if (!privacy && (run.why || (!quota && !isFreeOpencodeModel(model)))) break;
           // A 429 blocks only this model (until its reset, else 5 hours; a failing free model 1 hour); the task goes
           // on to the next model that is not cooling down: at most one paid retry after the free ones.
+          if (privacy) {
+            tried.push(model);
+            const next = opencodeFreeModel(order.filter((m) => !trainingRiskOf(m)), this.opencodeCooldowns(), this.now(), undefined, tried);
+            if (!next) break;
+            const prev = model;
+            model = next;
+            delete t.mayTrain;
+            Object.assign(t, { modelUsed: modelLabel(model), modelFallback: `${opencodeModelName(prev)} → ${opencodeModelName(model)}` });
+            await this.save();
+            continue;
+          }
           const wait = pay ? nextUtcMidnight(this.now()) - this.now() : quota ? retryAfterMs((e as { rateHeaders?: Record<string, string> }).rateHeaders ?? {}, error, this.now()) : 60 * 60_000;
           // A free service that answers 402 or 429 cools down as a whole (Z.ai allows one request at a time).
           if (fp && (pay || quota)) this.stopFreeService(fp.id, this.now() + (wait && wait > 0 ? wait : OPENCODE_LIMIT_MS), order);
@@ -1084,7 +1099,7 @@ export class TaskInbox {
           const prev = model;
           model = next;
           t.modelUsed = modelLabel(model);
-          if (freeProviderOf(model)?.trainsOnData) t.mayTrain = true;
+          if (trainingRiskOf(model)) t.mayTrain = true;
           else delete t.mayTrain;
           t.modelFallback = `${opencodeModelName(prev)} → ${opencodeModelName(model)}`;
           await this.save();

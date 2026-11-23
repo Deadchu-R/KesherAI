@@ -6,6 +6,7 @@ import { toast } from "./library";
 import { standbyText, useStandby } from "./standby";
 import { thinkingLevels, type ThinkingLevel } from "@kesher/shared";
 import { getLocale, he$, t } from "./i18n";
+import { TrainTag } from "./privacy";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -124,6 +125,7 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
         {onDevice && <span className="model-chip-device" title={t("runsOn", { name: deviceName(onDevice) })}>🖥 {deviceName(onDevice)} ·</span>}
         {auto?.on && <span className="model-chip-auto">✨ {L("אוטומטי", "Auto")} ·</span>}
         <span className="model-chip-name" title={value || undefined}><bdi>{current?.name ?? (value ? shortModelName(value) : t("defaultModel"))}</bdi></span>
+        {!auto?.on && <TrainTag modelId={value} short />}
         {levels.length > 0 && thinking?.value && levels.includes(thinking.value) && <span className="model-chip-think" title={L("רמת חשיבה", "Thinking level")}>· {levelName(thinking.value)}</span>}
         <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></svg>
       </button>
@@ -178,6 +180,7 @@ export function ModelMenu({ models, value, onChange, thinking, auto }: { models:
                     }}
                   >
                     <span dir="ltr">{m.name}</span>
+                    <TrainTag modelId={m.id} />
                     {m.id === value && !auto?.on && <span aria-hidden="true">✓</span>}
                   </button>
                 ))}
