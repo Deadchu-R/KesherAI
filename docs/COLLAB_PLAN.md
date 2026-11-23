@@ -99,7 +99,7 @@ A hybrid is possible: git for text, hub for binaries, locks and results. Decide 
 - Is a collaborator also allowed to use the chat model on the main PC, or only her own?
 
 
-## Live co-editing: proposed approach (GE-10, from c-20261121-39 and c-20261122-12; waiting for Roee)
+## Live co-editing decision (GE-10, approved by Roee 24.11; from c-20261121-39 and c-20261122-12)
 **Server-authoritative last-writer-wins per property, with a soft lock while a drag is active.**
 - The main PC (or the hub) is the single authority: every edit is an operation `{object, property, value, revision, author, at}` sent to the server, which accepts it and broadcasts the accepted value to everyone. The latest accepted write for a property wins (LWW per property), so two people moving different objects — or even different axes — never fight.
 - While someone drags an object, the server holds a **soft lock** on it (TTL 30 s, renewed by the drag stream). Others see the object as taken (a chip with the owner's name and colour) and their writes to it are rejected with a `clash` notice until the drag ends. No hard locks: a dropped connection releases the soft lock within the TTL.
