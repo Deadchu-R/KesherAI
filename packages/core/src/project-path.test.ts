@@ -16,7 +16,7 @@ test("paths are compared whatever their slashes, case (Windows) and trailing sla
   assert.equal(samePath("", ""), false);
   assert.equal(normalizePath("\\\\host\\Share\\P"), "\\\\host\\share\\p");
   assert.equal(folderOf("C:/g/P/P.uproject"), "C:\\g\\P");
-  assert.equal(folderOf("/home/u/g/P.uproject"), "/home/u/g");
+  if (process.platform !== "win32") assert.equal(folderOf("/home/u/g/P.uproject"), "/home/u/g"); // a POSIX path only on POSIX
   assert.equal(nativeProjectFile("C:/g/P/P.uproject"), "C:\\g\\P\\P.uproject");
 });
 
