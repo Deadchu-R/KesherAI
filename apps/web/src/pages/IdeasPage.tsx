@@ -51,7 +51,7 @@ export function IdeasPage() {
   return (
     <div className="page ideas-page">
       <header className="page-head">
-        <h1>🧠 {L("מוח פתוח", "Open mind")}</h1>
+        <h1>🧠 {L("ראש פתוח", "Open mind")}</h1>
         <p className="muted">{L("ממלמלים כל רעיון שעולה, בלי לסנן. בסוף KesherAI מוציא את הרעיונות, ממיין אותם ומציע מחקר.", "Mumble every idea that comes, unfiltered. Then KesherAI pulls out the ideas, sorts them and offers research.")}</p>
       </header>
       <div className="ideas-layout">
@@ -181,7 +181,7 @@ function Recorder({ onDone }: { onDone: (id: string) => void }) {
   return (
     <section className="card ideas-rec">
       <b>{L("הקלטה", "Recording")}</b>
-      <span className="muted small">{L("שבו בנוח, דברו כל מה שעולה. אפשר לחזור על עצמכם, לקפוץ בין נושאים ולשתוק.", "Sit back and say whatever comes. Repeat yourself, jump between topics, be quiet a while.")}</span>
+      <span className="muted small">{L("שב בנוח, דבר כל מה שעולה. אפשר לחזור על עצמך, לקפוץ בין נושאים ולשתוק.", "Sit back and say whatever comes. Repeat yourself, jump between topics, be quiet a while.")}</span>
       {state === "idle" ? (
         <button type="button" className="ideas-dial ideas-big" onClick={() => void start()} aria-label={L("להתחיל להקליט", "Start recording")}>
           <span className="ideas-big-mic" aria-hidden="true">🎙</span>
@@ -225,7 +225,7 @@ function PasteText({ onDone }: { onDone: (id: string) => void }) {
   return (
     <details className="ideas-paste">
       <summary>{L("או להדביק טקסט / תמלול", "Or paste text / a transcript")}</summary>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} dir="auto" placeholder={L("כל מה שחשבתם, כמו שזה…", "Everything you thought, as it came…")} />
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} dir="auto" placeholder={L("כל מה שחשבת, כמו שזה…", "Everything you thought, as it came…")} />
       <button type="button" disabled={busy || !text.trim()} onClick={async () => {
         setBusy(true);
         try {

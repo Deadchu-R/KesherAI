@@ -212,7 +212,7 @@ export function NodesPage() {
     return (
       <div className="page">
         <h1>{L("נודים", "Nodes")}</h1>
-        <p className="muted">{L("עורך הנודים של ComfyUI, בתוך KesherAI: בונים ועורכים זרימות לתמונות, וידאו, מוזיקה ותלת-ממד, וגם משנים אותן במילים עם המודל המקומי. צריך ש-ComfyUI יפעל:", "ComfyUI's node editor inside KesherAI: build and edit flows for pictures, video, music and 3D, and change them in words with your local model. ComfyUI needs to be running:")}</p>
+        <p className="muted">{L("עורך הצמתים של ComfyUI, בתוך KesherAI: בונים ועורכים זרימות לתמונות, וידאו, מוזיקה ותלת-ממד, וגם משנים אותן במילים עם המודל המקומי. צריך ש-ComfyUI יפעל:", "ComfyUI's node editor inside KesherAI: build and edit flows for pictures, video, music and 3D, and change them in words with your local model. ComfyUI needs to be running:")}</p>
         <ComfySection />
       </div>
     );
