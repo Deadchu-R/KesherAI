@@ -99,5 +99,13 @@ A hybrid is possible: git for text, hub for binaries, locks and results. Decide 
 - Is a collaborator also allowed to use the chat model on the main PC, or only her own?
 
 
+## Live co-editing decision (GE-10, decided 22.11 after c-20261121-39 and c-20261122-12)
+**Server-authoritative last-writer-wins per property, with a soft lock while a drag is active.**
+- The main PC (or the hub) is the single authority: every edit is an operation `{object, property, value, revision, author, at}` sent to the server, which accepts it and broadcasts the accepted value to everyone. The latest accepted write for a property wins (LWW per property), so two people moving different objects — or even different axes — never fight.
+- While someone drags an object, the server holds a **soft lock** on it (TTL 30 s, renewed by the drag stream). Others see the object as taken (a chip with the owner's name and colour) and their writes to it are rejected with a `clash` notice until the drag ends. No hard locks: a dropped connection releases the soft lock within the TTL.
+- **No CRDT (Yjs/Automerge) for transforms.** Positions/rotations are continuous numbers where last-writer-wins is what users expect, and a CRDT would add weight and surprise ("my snap got merged with her drag") for no gain. CRDT merge stays only where it already belongs: text files (scripts) merge by patch with a base hash.
+- Presence (who is in the scene, their camera frustum, their selection, their colour) is **ephemeral state**, not history: streamed through the sync channel (hub/relay), never persisted, never in checkpoints.
+- Conflicts that do occur (a rejected write, two writers on one property) surface as the existing collision card (GE-9) with mine/theirs/skip.
+
 ## Live co-editing of one scene (Roee 22.11 07:20)
 Roee wants collaborators to work on the same scene at the same time and see each other: presence (who is in the scene, their camera/viewpoint as a small avatar or frustum, their selection outlined in their colour), live object moves/rotations streamed to everyone, per-object soft locks while someone drags, chat beside the scene, and the main PC applying the merged result to the real project through the plugins. Like Unreal Multi-User Editing / Figma multiplayer / Roblox Team Create, but with the engine only on the main PC. Research how those do it (CRDT vs server-authoritative ops, conflict rules, transport through the hub or LAN WebRTC), before building. Ties into the sync-channel decision above.
