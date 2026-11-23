@@ -99,7 +99,8 @@
   /**
    * The hub first; when it does not answer, answers 5xx or has used up its daily storage, straight to the computer
    * through Tailscale (direct-path.ts), with the same key this phone uses at home. Without a Tailscale address for
-   * the computer, a one-time hint to install Tailscale, then the hub page anyway (it shows its own error).
+   * the computer, a one-time hint to install Tailscale, then the hub page anyway: its service worker opens the copy
+   * kept on this phone, which sends through the backup relays (packages/shared/src/hub-offline.ts).
    */
   async function hubOrDirect(hub) {
     const P = globalThis.kesherPath;
@@ -128,6 +129,12 @@
       await new Promise((r) => setTimeout(r, 4000));
     }
     if (P.hubUsable(probe)) show("hub");
+    else {
+      // The hub page's service worker serves the copy kept on this phone (the last devices, the relays' sealed keys),
+      // so it still sends through Ably or Supabase while Cloudflare is down.
+      $("path").hidden = false;
+      $("path").textContent = lang === "en" ? "The hub is not answering: opening the copy kept on this phone" : "המרכז לא עונה: פותח את העותק השמור בטלפון";
+    }
     return open(hub);
   }
   const params = new URLSearchParams(location.search);

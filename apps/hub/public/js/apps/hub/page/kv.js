@@ -1,11 +1,3 @@
-/**
- * The hub page's IndexedDB: one key-value store (`kesher-hub` › `kv`), used by the page and by the service worker.
- * Structured clone keeps the device's CryptoKey usable but not exportable, so the private key never leaves the browser.
- *
- * Keys: `device` (this browser's identity: id, token, key pair), `tasks`, `pcKeys` (the paired PCs' public keys and
- * names, for the service worker), `answered` (asks answered from a notification). No DOM here: the service worker
- * imports this file too.
- */
 const DB = "kesher-hub";
 let dbp;
 /** Opens the page's database. */

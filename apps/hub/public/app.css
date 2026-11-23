@@ -112,6 +112,7 @@ button.chip { cursor: pointer; min-height: 30px; }
 .top-tabs .ni { display: none; }
 .bottom-tabs { display: none; }
 .note { display: flex; align-items: center; gap: 10px; margin: 10px 26px 0; padding: 9px 12px; border-radius: 11px; background: #1f2a24; color: var(--ok); font-size: 13.5px; }
+.note.warn-note { background: #2a2520; color: var(--warn); }
 .bad-note { background: #3a2224; color: #ff9a9a; }
 .off-banner a { white-space: nowrap; }
 .off-banner { display: flex; align-items: center; gap: 8px; padding: 6px 22px; background: #1d1a14; color: var(--warn); border-bottom: 1px solid #2a2520; font-size: 13px; }

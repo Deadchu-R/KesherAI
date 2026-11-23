@@ -4558,4 +4558,15 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - **KesherAI already had**: the always-ask list (`permissions.ts`), the F10 command reviewer (metadata only, never denies), and for browser/computer the CD-16 reviewer itself (`core/control-reviewer.ts`, local model only, metadata only, Phase 4), sensitive-title block, app allow list, stop hotkey.
 - **Taken now**: rule gates in the same path (no new model call): turning off security (Defender, firewall, execution policy, bcdedit), sending/publishing in Roee's name (`Send-MailMessage`, `gh pr/issue/release create`), losing git work (`git restore .`, `stash drop`, `branch -D`), and deletes that reach outside the project folder (path-aware). All "always ask, no always-allow"; gate notes and reasons now read in Hebrew.
 - **Left**: OpenCode Go and Antigravity executors run their own permission systems (only the inbox's allowed_paths guard them); a Codex-style OS sandbox for `run_command`; payments in the shell are not detectable by rules (the browser gate hard-blocks them).
+
+## 2026-11-23 — Offline-first web apps when their origin is down (Claude helper, brief, for a-20261122-08)
+- **Found**: the usual pattern (web.dev "Offline Cookbook", Workbox strategies): an app shell precached at install,
+  then *network first* for pages and code (fresh when online, the cache only as fallback) with a network timeout,
+  because a dead origin often hangs instead of failing; app data in IndexedDB (not localStorage) so it survives and
+  the service worker can read it; never cache authenticated API answers. A CDN outage usually returns its own 5xx
+  page (Cloudflare 52x), so a 5xx must count as "down" too. Android WebView runs service workers for https origins.
+- **Taken**: hub-offline.ts (allowlist cache keys, imports read from the compiled modules at install, 5 s timeout,
+  5xx = down); kv `pcKeys` keeps the PCs' public data for a last known device list; the start reads "no answer /
+  Cloudflare 5xx" as down and fails over at once.
+- **Left**: Background Sync (Chrome only) to retry the outbox with the page closed; a relay presence beacon.
 - Stopped at: done (built the same day).

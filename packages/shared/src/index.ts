@@ -48,6 +48,7 @@ export * from "./link-beacon.js";
 export * from "./direct-path.js";
 export * from "./relay-transport.js";
 export * from "./relay-failover.js";
+export * from "./hub-offline.js";
 export * from "./sheet.js";
 export * from "./office-out.js";
 export * from "./hub.js";

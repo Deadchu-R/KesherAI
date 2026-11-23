@@ -48,9 +48,18 @@ Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [
   pong; back to the hub after 2 minutes of answers; listens on all relays at once, copies dropped by envelope id; use
   counted locally (80% of the free plan → last fallback); the phone shows "ההאב לא זמין · דרך Ably"; Settings shows
   the path, each relay's health and its % of the free plan. CSP allows rest.ably.io / realtime.ably.io / *.supabase.co.
+- [x] a-20261122-08 offline-first hub page (packages/shared/src/hub-offline.ts): the service worker (sw.js, and
+  sw-basic.js the simple way) keeps the page shell network-first (the page, style, icons and every module app.js
+  imports; never an API answer) and serves the kept copy when the hub gives no answer in 5 s or a 5xx (Cloudflare's
+  522 etc.); the page keeps the paired PCs' public data (kv `pcKeys`: name, public key, opt-ins) and, while the hub
+  cannot be reached, shows them as the last known list ("Unknown · via a backup relay"), routes and seals to them and
+  sends through Ably/Supabase; no answer or a Cloudflare 5xx at the start fails over at once (not after 20 s); a
+  paused hub never fails over; "forget this browser" now also drops the relays' keys. The Android Cloud tab says
+  "opening the copy kept on this phone" when the hub does not answer. Settings › Kesher Cloud status line was -07.
 - Left: live agent activity (`agents` frames) and Drive `sync` pings stay hub-only; a relay does not queue for an
-  offline device (the hub does); a hub page opened while the hub is down has no presence, so it cannot send until
-  -08. [ ] -08 hub page loads when Cloudflare is down.
+  offline device (the hub does), so from the last known list a task reaches only a PC that is on (no receipt until
+  its first progress); a phone that never opened the page while the hub was up has no kept copy. A PC "here" beacon
+  on the relays (to show on/off without the hub) would close the gap.
 - [x] Roee: Ably app and Supabase project "kesher-relay" (EU) opened.
 - [ ] Roee: paste the Ably API key and the Supabase URL + anon key in Settings › Kesher Cloud › Backup relays (after
   the next build). Supabase: Realtime › Settings must allow public channels (the default).

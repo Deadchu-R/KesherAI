@@ -2,13 +2,15 @@
  * The hub page's IndexedDB: one key-value store (`kesher-hub` › `kv`), used by the page and by the service worker.
  * Structured clone keeps the device's CryptoKey usable but not exportable, so the private key never leaves the browser.
  *
- * Keys: `device` (this browser's identity: id, token, key pair), `tasks`, `pcKeys` (the paired PCs' public keys and
- * names, for the service worker), `answered` (asks answered from a notification). No DOM here: the service worker
- * imports this file too.
+ * Keys: `device` (this browser's identity: id, token, key pair), `tasks`, `pcKeys` (the paired PCs' public keys,
+ * names and opt-ins, for the service worker and the last known device list), `relays` (the backup relays' keys, as a
+ * PC sent them sealed), `answered` (asks answered from a notification). No DOM here: the service worker imports this
+ * file too.
  */
+import type { KeptPc } from "../../../packages/shared/src/hub-offline.js";
 
-/** The paired PCs' public keys and names, by device id (written by the page from presence). */
-export type PcKeys = Record<string, { publicKey: string; name: string }>;
+/** The paired PCs' public data, by device id (written by the page from presence; hub-offline.ts). */
+export type PcKeys = Record<string, KeptPc>;
 
 const DB = "kesher-hub";
 let dbp: Promise<IDBDatabase> | undefined;

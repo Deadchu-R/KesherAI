@@ -17,6 +17,7 @@ import { RunUndo } from "../../../packages/shared/src/run-undo.js";
 import { rememberDirect } from "./direct.js";
 import { makeTransports, pairChannel } from "../../../packages/shared/src/relay-transport.js";
 import { countUse, RELAY_PATH_LABELS, RelayRouter } from "../../../packages/shared/src/relay-failover.js";
+import { hubStart, keepPcs, rememberedPresence, useRemembered } from "../../../packages/shared/src/hub-offline.js";
 /** The timeline words for an inbox task's states. */
 const INBOX_LABEL = {
     waiting: { he: "ממתין", en: "Waiting" },
@@ -67,8 +68,10 @@ export class HubDevice {
     pollTimer;
     replay = new ReplayGuard();
     listeners = new Set();
-    /** The devices as the hub shows them (PCs that appear, and phones). */
-    presence = [];
+    /** The devices as the hub showed them on this page (PCs that appear, and phones). */
+    livePresence = [];
+    /** The hub's socket has opened on this page (a later network blip waits the failover's 20 s). */
+    everOpen = false;
     /** The hub's live link is open (see {@link connected} for "can send now"). */
     hubConnected = false;
     /** The failover between the hub and the backup relays (relay-failover.ts), and the relays' transports. */
@@ -78,7 +81,7 @@ export class HubDevice {
     /** Each PC's channel on the backup relays, and back (a channel only carries its own pair's messages). */
     channelOf = new Map();
     pcOf = new Map();
-    /** The paired PCs' keys kept from presence (kv `pcKeys`), for a page opened while the hub is down. */
+    /** The paired PCs' public data kept from presence (kv `pcKeys`), for a page opened while the hub is down. */
     keptPcKeys = {};
     relayTimer;
     lastPath = "hub";
@@ -134,6 +137,17 @@ export class HubDevice {
             this.keptPcKeys = (await get("pcKeys").catch(() => undefined)) ?? {};
             void this.syncRelays();
         }
+    }
+    /**
+     * The devices to show and route to: the hub's live presence, or, while the hub cannot be reached (opened while it is
+     * down, or failed over), the last known PCs kept on this browser (hub-offline.ts), on when a backup relay is healthy.
+     */
+    get presence() {
+        return this.remembered ? rememberedPresence(this.keptPcKeys, this.transports.some((t) => t.health().healthy)) : this.livePresence;
+    }
+    /** Whether the device list is the last known one kept on this browser (the hub cannot be reached). */
+    get remembered() {
+        return !!this.ident && Object.keys(this.keptPcKeys).length > 0 && useRemembered(this.hubConnected, this.livePresence.length, this.router.hubDown());
     }
     /** Whether this browser is paired with the hub. */
     get paired() {
@@ -316,13 +330,17 @@ export class HubDevice {
         await dropLocalPush();
         this.stop();
         this.ident = undefined;
-        this.presence = [];
+        this.livePresence = [];
+        this.keptPcKeys = {};
         this.tasks = [];
         this.agents.clear();
         this.agentSeq = 0;
         await put("device", undefined).catch(() => undefined);
         await put("tasks", undefined).catch(() => undefined);
         await put("pcKeys", undefined).catch(() => undefined);
+        // The backup relays' keys go too (a revoked or forgotten browser keeps nothing of the pairing), and they close.
+        await put("relays", undefined).catch(() => undefined);
+        void this.syncRelays();
         this.pcKeysText = "";
         this.changed();
     }
@@ -461,16 +479,21 @@ export class HubDevice {
         void (async () => {
             const id = this.ident;
             const t = await post("/api/ticket", {}, id.token).catch(() => undefined);
-            if (t?.status === 401) {
+            const start = hubStart(t?.status, t?.data.error, this.everOpen);
+            if (start === "revoked") {
                 // Revoked at the hub: this browser is no longer a device.
                 this.error = { he: "הדפדפן הזה נותק מהמרכז", en: "This browser was disconnected from the hub" };
                 return void this.forget();
             }
-            if (!t || t.status !== 200 || typeof t.data.ticket !== "string") {
-                // The daily storage limit, or a Cloudflare 1101 (the Worker threw, a 500): the backup relays take over now.
-                if ((t?.status === 503 && t.data.error === "hub-storage-limit") || t?.status === 500)
+            if (start !== "ok" || !t || typeof t.data.ticket !== "string") {
+                // The daily storage limit, a Cloudflare 1101 (the Worker threw), Cloudflare's own 5xx, or no answer at the
+                // start (Cloudflare down): the backup relays take over now, and the page shows the last known devices.
+                if (start === "storage" || start === "down") {
                     this.router.hubFailed();
-                this.paused = t?.status === 503 && t.data.error !== "hub-storage-limit";
+                    this.changed();
+                    void this.flushOutbox();
+                }
+                this.paused = start === "paused";
                 return this.later();
             }
             if (t.data.rotateDue === true) {
@@ -484,6 +507,7 @@ export class HubDevice {
             this.ws = ws;
             ws.onopen = () => {
                 this.retry = 0;
+                this.everOpen = true;
                 this.router.hubOpen();
                 ws.send(JSON.stringify({ t: "hello", version: "hub-page", platform: "web", busy: false, optIn: DEFAULT_OPT_IN, agents: [] }));
                 // Pings are answered by the hub without waking it (free while idle).
@@ -527,7 +551,7 @@ export class HubDevice {
             case "welcome":
                 this.hubConnected = true;
                 this.paused = f.paused;
-                this.presence = f.presence;
+                this.livePresence = f.presence;
                 void this.keepPcKeys();
                 rememberDirect(f.presence);
                 void this.syncRelays();
@@ -539,7 +563,7 @@ export class HubDevice {
                 void this.catchUpAgents();
                 return this.flushOutbox();
             case "presence":
-                this.presence = f.presence;
+                this.livePresence = f.presence;
                 void this.keepPcKeys();
                 rememberDirect(f.presence);
                 void this.syncRelays();
@@ -729,11 +753,12 @@ export class HubDevice {
         this.changed();
     }
     /**
-     * Keeps the paired PCs' public keys and names for the service worker (kv `pcKeys`), so a notification's ask can be
-     * opened and answered with the page closed. The same keys the page itself uses from presence; written only on change.
+     * Keeps the paired PCs' public keys, names and opt-ins (kv `pcKeys`, public data only): for the service worker, so a
+     * notification's ask can be opened and answered with the page closed, and for the last known device list when the
+     * page opens while the hub is down. Written only on change.
      */
     async keepPcKeys() {
-        const keys = Object.fromEntries(this.presence.filter((d) => d.kind === "pc").map((d) => [d.id, { publicKey: d.publicKey, name: d.name }]));
+        const keys = keepPcs(this.livePresence);
         const text = JSON.stringify(keys);
         if (text === this.pcKeysText)
             return;
@@ -1069,7 +1094,17 @@ export class HubDevice {
      * @returns The decision.
      */
     route(executor, ifOffline, cloudAvailable) {
-        return chooseRoute({ executor, ifOffline }, this.presence, { cloudAvailable: cloudAvailable && !!this.ident?.hubKey });
+        const r = chooseRoute({ executor, ifOffline }, this.presence, { cloudAvailable: cloudAvailable && !!this.ident?.hubKey });
+        if (!this.remembered || r.route === "none")
+            return r;
+        // The last known list: whether the PC is on is not known, and a backup relay holds nothing for a PC that is off.
+        const name = this.presence.find((d) => d.id === r.to)?.name ?? "PC";
+        const via = RELAY_PATH_LABELS[this.relayPath];
+        if (r.route === "pc")
+            return { ...r, reason: { he: `${name} ${via.he}, אם הוא דלוק (המרכז לא זמין)`, en: `${name} ${via.en}, if it is on (the hub is unavailable)` } };
+        if (r.route === "wait")
+            return { ...r, reason: { he: `המרכז לא זמין; המשימה מחכה בטלפון עד שיהיה חיבור ל-${name}`, en: `The hub is unavailable; the task waits on this phone until ${name} can be reached` } };
+        return r;
     }
     /**
      * Sends a task: routes it, seals it to the recipient, and keeps it here. Without a connection it waits in the

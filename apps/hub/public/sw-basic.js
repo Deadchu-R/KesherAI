@@ -1,10 +1,38 @@
 // Kesher Cloud hub: the count-only service worker, for browsers that cannot run the module one (sw.js). It shows the
-// hub's Web Push ("KesherAI: 2 waiting for you", a count only) and opens "Waiting for you" on a tap. It caches nothing.
+// hub's Web Push ("KesherAI: 2 waiting for you", a count only) and opens "Waiting for you" on a tap. It also keeps the
+// page shell the simple way: each shell file it fetches (network first) is kept, and served when the hub is down.
+// The same allowlist and rules as packages/shared/src/hub-offline.ts (shellKey, shellDown); keep the two in step.
 // Plain script, no build step (apps/hub/page/push.ts registers it only when sw.js cannot be registered).
 "use strict";
 
+var SHELL_CACHE = "kesher-hub-shell-v1";
+var SHELL_FILE = /^\/(?:app\.css|boot\.js|manifest\.webmanifest|icon(?:-maskable)?-\d+\.png|js\/[\w./-]+\.js)$/;
+
+/** The cache key of a shell file, or undefined (hub-offline.ts shellKey). */
+function shellKey(req) {
+  if (req.method !== "GET") return undefined;
+  var u = new URL(req.url);
+  if (u.origin !== self.location.origin || u.pathname.indexOf("..") >= 0) return undefined;
+  if (u.pathname === "/" || u.pathname === "/index.html") return "/";
+  if (u.pathname === "/connect.html") return "/connect.html";
+  return SHELL_FILE.test(u.pathname) ? u.pathname : undefined;
+}
+
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (e) { e.waitUntil(self.clients.claim()); });
+
+self.addEventListener("fetch", function (e) {
+  var key = shellKey(e.request);
+  if (!key) return;
+  e.respondWith(caches.open(SHELL_CACHE).then(function (cache) {
+    var fallback = function (res) { return cache.match(key).then(function (kept) { return kept || res || Response.error(); }); };
+    return fetch(e.request, { signal: AbortSignal.timeout(5000) }).then(function (res) {
+      if (res.status >= 500) return fallback(res);
+      if (res.ok && res.type === "basic" && !res.redirected) cache.put(key, res.clone()).catch(function () {});
+      return res;
+    }, function () { return fallback(undefined); });
+  }));
+});
 
 /** Only a path on this hub is ever opened (the message is the hub's, but a tap must never leave the hub). */
 function samePath(u) {

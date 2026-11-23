@@ -153,7 +153,7 @@ let hubProbe: HubProbe | undefined;
 
 /** Reads the owner's state; a 401 means not signed in. */
 async function loadOwner(): Promise<void> {
-  const r = await fetch("/api/state", { credentials: "same-origin" }).catch(() => undefined);
+  const r = await fetch("/api/state", { credentials: "same-origin", signal: AbortSignal.timeout(8000) }).catch(() => undefined);
   // How the hub answered, for the backup-path line (direct.ts): no answer, a 5xx or its storage limit.
   hubProbe = !r ? {} : r.status >= 500 ? { status: r.status, error: String(((await r.clone().json().catch(() => ({}))) as { error?: unknown }).error ?? "") } : { status: r.status };
   if (r?.status === 200) {
@@ -200,11 +200,22 @@ const pcs = () => devices().filter((d) => d.kind === "pc");
 const pcOff = () => pcs().length > 0 && !pcs().some((d) => d.online);
 const lastPcSeen = () => pcs().map((d) => d.lastSeen ?? "").sort().pop();
 
+/**
+ * While the hub cannot be reached: the devices shown are the last known ones kept on this phone, and a backup relay
+ * holds nothing for a PC that is off (so a task may need sending again).
+ */
+function rememberedLine(): HTMLElement | null {
+  if (!device.remembered) return null;
+  return h("div", { class: "note warn-note", role: "status" }, "📴 ", h("span", null, device.connected ? L("המרכז לא זמין: מוצגים המכשירים האחרונים שנשמרו בטלפון. משימה עוברת דרך ממסר הגיבוי ומגיעה רק למחשב דלוק.", "The hub is unavailable: showing the last devices kept on this phone. A task goes through the backup relay and reaches only a PC that is on.") : L("המרכז לא זמין ואין ממסר גיבוי: משימות מחכות בטלפון ונשלחות כשיהיה חיבור.", "The hub is unavailable and no backup relay is reachable: tasks wait on this phone and go once there is a connection.")));
+}
+
 /** A status dot. */
 const dot = (state: "on" | "off" | "busy") => h("span", { class: `dot ${state}`, "aria-hidden": "true" });
 
 /** The state of a device in words and as a dot. */
 function stateOf(d: HubPresence): { dot: "on" | "off" | "busy"; text: string; cls: string } {
+  // The last known list (the hub cannot be reached): whether it is on is not known.
+  if ("remembered" in d) return d.online ? { dot: "busy", text: L("לא ידוע · דרך ממסר גיבוי", "Unknown · via a backup relay"), cls: "warn" } : { dot: "off", text: L("לא ידוע · אין חיבור", "Unknown · no connection"), cls: "mut" };
   if (!d.online) return { dot: "off", text: L("כבוי", "Off"), cls: "mut" };
   if (d.busy) return { dot: "busy", text: L("עסוק", "Busy"), cls: "warn" };
   return { dot: "on", text: L("מחובר", "Online"), cls: "ok" };
@@ -343,7 +354,7 @@ function whereBar(): HTMLElement | null {
 
 /** The amber line when no PC is on. */
 function pcOffBanner(): HTMLElement | null {
-  if (!pcOff()) return null;
+  if (!pcOff() || device.remembered) return null;
   return h(
     "div",
     { class: "off-banner", role: "status" },
@@ -517,7 +528,8 @@ function deviceRows(full: boolean): HTMLElement[] {
  * what to check on the PC (Settings › Kesher Cloud shows the PC's own reason).
  */
 function offReason(d: HubPresence): string | undefined {
-  if (d.online || d.kind !== "pc") return undefined;
+  // The last known list (the hub cannot be reached): the line above the list already says why.
+  if (d.online || d.kind !== "pc" || "remembered" in d) return undefined;
   if (!d.lastSeen) return L("לא התחבר מאז שחובר. במחשב: הגדרות › ענן Kesher, סמן \"פעיל\".", "Has not connected since it was paired. On the PC: Settings › Kesher Cloud, tick \"On\".");
   const min = (Date.now() - Date.parse(d.lastSeen)) / 60_000;
   if (min < 3) return L("הקישור נקטע עכשיו. המחשב מתחבר שוב לבד.", "The link just dropped. The PC reconnects by itself.");
@@ -1222,7 +1234,7 @@ function render(): void {
   const showSignIn = !app.signedIn && !device.paired;
   const body: Child = showSignIn ? signInScreen() : { dash: dashboard, agents: () => agentsTab(agentsView), devices: devicesTab, tasks: tasksTab, new: newTask, pair: pairTab, settings: settingsTab }[tab()]();
   root.replaceChildren(
-    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), (device.hasRelays && device.relayPath !== "hub" ? relayLine(device.relayPath) : pathLine(hubProbe, app.appOrigin)), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
+    ...[whereBar(), showSignIn ? null : topBar(), showSignIn ? null : pcOffBanner(), (device.hasRelays && device.relayPath !== "hub" ? relayLine(device.relayPath) : pathLine(hubProbe, app.appOrigin)), rememberedLine(), noteLine(), device.error ? h("div", { class: "note bad-note", role: "alert" }, L(device.error.he, device.error.en)) : null, body as Node, showSignIn ? null : tabs("bottom-tabs")].filter((x): x is HTMLElement => !!x),
   );
   root.classList.toggle("in-app", !!app.appOrigin);
   if (scroller) scroller.scrollTop = y;
@@ -1340,7 +1352,8 @@ async function main(): Promise<void> {
     render();
     scrollTo(0, 0);
   });
-  const cfg = await fetch("/api/config").then((r) => r.json() as Promise<{ googleClientId?: string; vapidPublicKey?: string }>).catch(() => ({}) as { googleClientId?: string; vapidPublicKey?: string });
+  // A hung connection (Cloudflare down, the page from the service worker's copy) must not hold the page: 5 seconds.
+  const cfg = await fetch("/api/config", { signal: AbortSignal.timeout(5000) }).then((r) => r.json() as Promise<{ googleClientId?: string; vapidPublicKey?: string }>).catch(() => ({}) as { googleClientId?: string; vapidPublicKey?: string });
   app.googleClientId = typeof cfg.googleClientId === "string" ? cfg.googleClientId : "";
   app.vapidKey = typeof cfg.vapidPublicKey === "string" && /^[\w-]{80,100}$/.test(cfg.vapidPublicKey) ? cfg.vapidPublicKey : "";
   await device.load();
