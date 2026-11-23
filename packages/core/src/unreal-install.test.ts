@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,6 +12,7 @@ import {
   runBatchItems,
   launcherEngines,
   readProject,
+  enableBridgeInProject,
 } from "./unreal-install.js";
 
 test("launcherEngines reads the Epic Games Launcher's list, newest first", () => {
@@ -173,4 +174,36 @@ test("editorExe: Unreal 4's UE4Editor when that is what the engine has, else Unr
   writeFileSync(exe("UE4Editor-Cmd"), "");
   assert.equal(editorExe(root), exe("UE4Editor"));
   assert.equal(editorExe(root, true), exe("UE4Editor-Cmd"));
+});
+
+test("enableBridgeInProject turns the plugin on once, keeps a backup, the BOM and Windows line ends", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ue-enable-"));
+  const file = join(dir, "Game.uproject");
+  const original = '\uFEFF{\r\n\t"FileVersion": 3,\r\n\t"EngineAssociation": "4.27",\r\n\t"Plugins": [\r\n\t\t{ "Name": "Paper2D", "Enabled": true }\r\n\t]\r\n}\r\n';
+  await writeFile(file, original);
+  const said = await enableBridgeInProject(dir, "4.27");
+  assert.match(said, /now on in Game\.uproject/);
+  const raw = await readFile(file, "utf8");
+  assert.ok(raw.startsWith("\uFEFF"), "BOM kept");
+  assert.ok(raw.includes('\r\n\t"FileVersion"') && !/[^\r]\n/.test(raw), "tabs and CRLF kept");
+  const j = JSON.parse(raw.slice(1)) as { Plugins: Array<Record<string, unknown>> };
+  // Unreal 4 reads WhitelistTargets (TargetAllowList is the Unreal 5 name).
+  assert.deepEqual(j.Plugins[1], { Name: "KesherAIBridge", Enabled: true, WhitelistTargets: ["Editor"] });
+  assert.equal(await readFile(`${file}.kesher-backup`, "utf8"), original);
+  // Already on: nothing written; the first original stays the backup.
+  assert.equal(await enableBridgeInProject(dir, "4.27"), "");
+  assert.equal(await readFile(`${file}.kesher-backup`, "utf8"), original);
+});
+
+test("enableBridgeInProject: Unreal 5 gets TargetAllowList; a disabled entry is only switched on", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "ue-enable5-"));
+  const file = join(dir, "Five.uproject");
+  await writeFile(file, JSON.stringify({ EngineAssociation: "5.4" }));
+  await enableBridgeInProject(dir, "{SOURCE-BUILD-ID}"); // not a version: the project's EngineAssociation decides
+  let j = JSON.parse(await readFile(file, "utf8")) as { Plugins: Array<Record<string, unknown>> };
+  assert.deepEqual(j.Plugins, [{ Name: "KesherAIBridge", Enabled: true, TargetAllowList: ["Editor"] }]);
+  await writeFile(file, JSON.stringify({ EngineAssociation: "5.4", Plugins: [{ Name: "KesherAIBridge", Enabled: false, MarketplaceURL: "x" }] }));
+  assert.notEqual(await enableBridgeInProject(file, "5.4"), "");
+  j = JSON.parse(await readFile(file, "utf8")) as { Plugins: Array<Record<string, unknown>> };
+  assert.deepEqual(j.Plugins, [{ Name: "KesherAIBridge", Enabled: true, MarketplaceURL: "x" }]);
 });

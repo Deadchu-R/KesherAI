@@ -683,8 +683,12 @@ export class BridgeInstaller {
       if (existsSync(join(source, "CONVERTED.md"))) await cp(join(source, "CONVERTED.md"), join(dest, "CONVERTED.md"));
       await writeConvertedMarker(dest, copy.marker);
     }
+    // The project names the plugin as on, so Unreal loads it instead of only offering it ("New plugins are available").
+    const enabled = await enableBridgeInProject(projectDir, engine.version).catch(
+      (e: unknown) => `The plugin could not be turned on in the .uproject (${(e as Error).message}): turn it on in Edit > Plugins.`,
+    );
     job.state = "done";
-    job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.`;
+    job.message = `Installed in ${dest}. Open (or restart) the project in Unreal ${engine.version}.${enabled ? ` ${enabled}` : ""}`;
     if (this.afterCopy) await this.afterCopy(job, engine).catch(() => undefined);
   }
 
@@ -834,6 +838,39 @@ export async function keepEditorPluginsOutOfGame(
     .join(
       ", ",
     )}) are now kept out of the game build (TargetAllowList Editor in ${file}; the old file is ${file}.kesher-backup).`;
+}
+
+/**
+ * Turns the KesherAI Bridge on in a project's .uproject after it is installed (2026-11-23). A project plugin is
+ * usually on by default, but an Unreal 4.27 project opened with the AI-converted copy only showed "New plugins are
+ * available" and never loaded it, so the project now names it: `{"Name":"KesherAIBridge","Enabled":true}` and the
+ * editor-only target (`TargetAllowList` on Unreal 5, `WhitelistTargets` on Unreal 4, which does not know the newer
+ * name). An entry that is already there only gets `Enabled: true`. The first original is kept as
+ * `<project>.uproject.kesher-backup`; a UTF-8 BOM and Windows line ends are kept; the file is written with tabs, as
+ * Unreal writes it.
+ *
+ * @param folder - The project folder (or its .uproject).
+ * @param engine - The engine version the plugin was built for ("4.27", "5.4"); when it is not a version (a source
+ *   build's id), the project's EngineAssociation decides.
+ * @returns What changed, or "" when the plugin was already on.
+ */
+export async function enableBridgeInProject(folder: string, engine?: string): Promise<string> {
+  const { file, engine: association } = await readProject(folder);
+  const raw = await readFile(file, "utf8");
+  const bom = raw.startsWith("\uFEFF");
+  const text = bom ? raw.slice(1) : raw;
+  const j = JSON.parse(text) as { Plugins?: Array<Record<string, unknown> & { Name?: string; Enabled?: boolean }> };
+  const plugins = Array.isArray(j.Plugins) ? j.Plugins : [];
+  const have = plugins.find((p) => p?.Name === "KesherAIBridge");
+  if (have?.Enabled === true) return "";
+  const version = engine && /^\d/.test(engine) ? engine : association;
+  if (have) have.Enabled = true;
+  else plugins.push({ Name: "KesherAIBridge", Enabled: true, [/^4\./.test(version) ? "WhitelistTargets" : "TargetAllowList"]: ["Editor"] });
+  j.Plugins = plugins;
+  if (!existsSync(`${file}.kesher-backup`)) await writeFile(`${file}.kesher-backup`, raw); // the first original is kept
+  const out = `${JSON.stringify(j, null, "\t")}\n`;
+  await writeFile(file, `${bom ? "\uFEFF" : ""}${text.includes("\r\n") ? out.replace(/\n/g, "\r\n") : out}`);
+  return `KesherAI Bridge is now on in ${basename(file)} (the old file is ${basename(file)}.kesher-backup).`;
 }
 
 /** An engine's exact version from Engine/Build/Build.version, e.g. [5, 8, 2]. */

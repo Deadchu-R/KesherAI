@@ -30,6 +30,7 @@ import { engineConversionRoutes } from "./engine-conversion.js";
 import { MCP_PRESETS } from "../mcp.js";
 import { findGameProjects, listUnityScripts, unityProjectMenu } from "../game-projects.js";
 import { readFile as readFileFs } from "node:fs/promises";
+import { unrealLogRoute } from "./unreal-log.js";
 
 /** The plugin and package versions that edit variables. */
 const VARS_UNREAL = "0.1.9";
@@ -861,6 +862,9 @@ async function editorRoutes(app: FastifyInstance, s: KesherServices, kind: "unre
       );
   };
   app.get("/api/unreal/projects", async () => ({ latest: BRIDGE_VERSION, projects: await projectsWithPlugin() }));
+
+  // The end of a project's editor log (GET /api/unreal/log), for finding faults without opening Unreal.
+  unrealLogRoute(app, unrealProjects);
 
   /**
    * "Install in all projects": the plugin into every Unreal project found on this computer, one after another (from
