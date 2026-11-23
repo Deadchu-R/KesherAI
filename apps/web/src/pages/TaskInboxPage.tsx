@@ -415,9 +415,14 @@ function QueuePanel({ state, put }: { state: InboxState; put: (body: Record<stri
           <div key={ex} className="row wrap small">
             <b>{ex === "antigravity" ? "✦ Antigravity" : L("◆ מודל מקומי", "◆ Local model")}</b>
             <span className="tinbox-chip">{line.length ? L(`${line.length} בתור · הבאה: ${line[0]!.title}`, `${line.length} queued · next: ${line[0]!.title}`) : L("התור ריק", "Queue empty")}</span>
-            <label className="row small">
-              <input type="checkbox" role="switch" checked={ask} onChange={(e) => put({ askBeforeNext: { [ex]: e.target.checked } })} /> {L("לשאול לפני המשימה הבאה", "Ask before the next task")}
-            </label>
+            {/* Antigravity always asks before the next task (Roee's rule: it runs only on his tap), so no switch there. */}
+            {ex === "antigravity" ? (
+              <span className="small muted">{L("תמיד שואל לפני המשימה הבאה", "Always asks before the next task")}</span>
+            ) : (
+              <label className="row small">
+                <input type="checkbox" role="switch" checked={ask} onChange={(e) => put({ askBeforeNext: { [ex]: e.target.checked } })} /> {L("לשאול לפני המשימה הבאה", "Ask before the next task")}
+              </label>
+            )}
           </div>
         );
       })}

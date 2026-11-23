@@ -26,7 +26,8 @@
       "small": "opencode-go/mimo-v2.6-flash",
       "strong": "opencode-go/mimo-v2.6-pro",
       "dailyCap": 40
-     }
+     },
+     "loop": true
     },
     "today": {
      "date": "2026-11-20",
@@ -186,6 +187,13 @@
        "$inMs": "2d"
       }
      }
+    },
+    "loop": {
+     "state": "paused",
+     "until": {
+      "$inMs": "3h"
+     },
+     "why": "quota"
     }
    }
   },
@@ -287,6 +295,20 @@
    "steps": [
     {
      "wait": ".tinbox-row:has(.tinbox-title)"
+    }
+   ]
+  },
+  {
+   "id": "InboxWorkLoop",
+   "title": "הגדרות › תיבת משימות: \"להשאיר את לולאת העבודה פועלת\" (כל 5 דק׳ ממלאת תורים, נעצרת עד איפוס המכסה, סיכום ב-21:00)",
+   "titleEn": "Settings › Task inbox: Keep the work loop running",
+   "route": "#/settings/inbox",
+   "steps": [
+    {
+     "wait": "input[type=checkbox]"
+    },
+    {
+     "top": "h3:has-text('התיבה')"
     }
    ]
   }
