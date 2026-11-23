@@ -77,7 +77,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
           <p className="small">{L("ה-CLI של Unity חינמי. הכפתור מריץ את ההתקנה הרשמית של Unity בחלון PowerShell שרואים:", "Unity's CLI is free. The button runs Unity's official installer in a PowerShell window you can watch:")} <code dir="ltr">irm https://unity.com/install.ps1 | iex</code></p>
           <div className="row">
             <button type="button" className="primary" disabled={!local || installing} onClick={() => {
-              if (!confirm(L("להוריד ולהתקין את Unity CLI מ-unity.com?", "Download and install Unity's CLI from unity.com?"))) return;
+              if (!confirm(L("הורד והתקן את Unity CLI", "Install Unity CLI"))) return;
               setInstalling(true);
               void api<{ message: string }>("/api/unity/cli/install", { method: "POST" }).then((r) => toast(r.message), (e: Error) => { toast(e.message); setInstalling(false); });
             }}>{installing ? L("מתקין… (החלון פתוח)", "Installing… (see the window)") : L("התקן את Unity CLI", "Install Unity CLI")}</button>
@@ -132,7 +132,7 @@ export function UnityCliPanel({ hasProject, onMade }: { hasProject: boolean; onM
                     {info.editors.map((v) => <option key={v} value={v}>{v}</option>)}
                   </Select>
                 </label>
-                <label className="grow">{L("סוג", "Template")}
+                <label className="grow">{L("תבנית", "Template")}
                   <Select value={template} onChange={(e) => setTemplate(e.target.value)}>
                     <option value="3d">3D (URP)</option>
                     <option value="2d">2D (URP)</option>

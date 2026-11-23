@@ -19,9 +19,9 @@ const KIND_TITLE: Record<Kind["id"], [string, string, string, string]> = {
 const NOTES_HE: Array<[RegExp, string]> = [
   [/^Needs an NVIDIA/, "צריך כרטיס מסך של NVIDIA: \u20668 GB\u2069 ומעלה ל-\u2066SD 1.5\u2069, ו-\u206612 GB\u2069 ומעלה ל-SDXL."],
   [/^This card has/, "לכרטיס הזה אין מספיק זיכרון: צריך \u20668 GB\u2069 ומעלה."],
-  [/^Needs ComfyUI/, "צריך את ComfyUI: מתקינים פעם אחת בדף הנודים."],
-  [/^Start ComfyUI/, "קודם מפעילים את ComfyUI (דף הנודים)."],
-  [/too old for training/, "ה-ComfyUI ישן מדי לאימון: עדכן אותו בדף הנודים."],
+  [/^Needs ComfyUI/, "צריך את ComfyUI: מתקינים פעם אחת בדף הצמתים."],
+  [/^Start ComfyUI/, "קודם מפעילים את ComfyUI (דף הצמתים)."],
+  [/too old for training/, "ה-ComfyUI ישן מדי לאימון: עדכן אותו בדף הצמתים."],
   [/^Needs a base model/, "צריך מודל בסיס (checkpoint של SD 1.5 או SDXL) בתיקיית models/checkpoints של ComfyUI."],
   [/^ComfyUI did not answer/, "ComfyUI לא ענה."],
   [/^Make a dataset from your chats and documents, then train/, "מכינים מאגר מהצ'אטים והמסמכים שלך, ואז מאמנים אותו (ניסיוני, למטה)."],

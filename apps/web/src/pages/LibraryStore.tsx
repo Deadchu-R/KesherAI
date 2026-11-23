@@ -61,7 +61,7 @@ export function LibraryStore({ kind }: { kind: "prompts" | "skills" }) {
               </div>
               <p className="store-desc" dir="auto">{p.text.replace("{{input}}", "…").slice(0, 160)}</p>
               <div className="store-actions">
-                {p.have ? <span className="muted small">✓ {L("יש לכם", "Added")}</span> : <button type="button" className="primary" disabled={!!busy} onClick={() => void run(p.command, async () => { await api("/api/prompts", { method: "POST", body: p }); await refreshPrompts(); }, L(`נוסף: /${p.command}`, `Added /${p.command}`))}>{L("הוספה", "Add")}</button>}
+                {p.have ? <span className="muted small">✓ {L("מוסף", "Added")}</span> : <button type="button" className="primary" disabled={!!busy} onClick={() => void run(p.command, async () => { await api("/api/prompts", { method: "POST", body: p }); await refreshPrompts(); }, L(`נוסף: /${p.command}`, `Added /${p.command}`))}>{L("הוספה", "Add")}</button>}
               </div>
             </article>
           ))}
@@ -76,12 +76,12 @@ export function LibraryStore({ kind }: { kind: "prompts" | "skills" }) {
               </div>
               <p className="store-desc" dir="auto">{p.instructions.slice(0, 180)}</p>
               <div className="store-actions">
-                {p.have ? <span className="muted small">✓ {L("יש לכם", "Added")}</span> : <button type="button" className="primary" disabled={!!busy} onClick={() => void run(p.name, async () => { await api("/api/personas", { method: "POST", body: p }); await refreshPersonas(); }, L(`נוספה הפרסונה ${p.name}`, `Added ${p.name}`))}>{L("הוספה", "Add")}</button>}
+                {p.have ? <span className="muted small">✓ {L("מוסף", "Added")}</span> : <button type="button" className="primary" disabled={!!busy} onClick={() => void run(p.name, async () => { await api("/api/personas", { method: "POST", body: p }); await refreshPersonas(); }, L(`נוספה הפרסונה ${p.name}`, `Added ${p.name}`))}>{L("הוספה", "Add")}</button>}
               </div>
             </article>
           ))}
         </div>
-        <p className="muted small store-foot">{L("רוצים לשתף פרומפט או פרסונה? פתחו בקשת שינוי (Pull Request) לקובץ community/library.json במאגר של KesherAI.", "Want to share a prompt or persona? Open a pull request to community/library.json in KesherAI's repository.")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/community/library.json" target="_blank" rel="noreferrer">GitHub</a></p>
+        <p className="muted small store-foot">{L("רוצה לשתף פרומפט או פרסונה? פתח בקשת שינוי (Pull Request) לקובץ community/library.json במאגר של KesherAI.", "Want to share a prompt or persona? Open a pull request to community/library.json in KesherAI's repository.")} <a href="https://github.com/Deadchu-R/KesherAI/blob/main/community/library.json" target="_blank" rel="noreferrer">GitHub</a></p>
       </div>
     );
   }
@@ -128,7 +128,7 @@ export function LibraryStore({ kind }: { kind: "prompts" | "skills" }) {
               <p className="store-desc" dir="auto">{k.description}</p>
               <div className="store-actions">
                 {k.have ? <span className="muted small">✓ {L("מותקן", "Installed")}</span> : <button type="button" className="primary" disabled={!!busy} onClick={() => setWarn(k.source)}>{L("התקנה", "Install")}</button>}
-                <a href={k.url} target="_blank" rel="noreferrer">{L("לקוד", "View")}</a>
+                <a href={k.url} target="_blank" rel="noreferrer">{L("צפייה", "View")}</a>
               </div>
             </article>
           ))}

@@ -522,7 +522,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     </div>
                   )}
                   {st.connected && readAt > 0 && (
-                    <p className="muted small ue-read-at" title={unity ? L("נבדק כל 5 שניות, ונקרא שוב כשמשהו משתנה ביוניטי", "Checked every 5 seconds, and read again when something changes in Unity") : L("נבדק כל 5 שניות, ונקרא שוב כש-Unreal מקמפל", "Checked every 5 seconds, and read again when Unreal compiles")}>
+                    <p className="muted small ue-read-at" title={unity ? L("נבדק כל 5 שניות, ונקרא שוב כשמשהו משתנה ב-Unity", "Checked every 5 seconds, and read again when something changes in Unity") : L("נבדק כל 5 שניות, ונקרא שוב כש-Unreal מקמפל", "Checked every 5 seconds, and read again when Unreal compiles")}>
                       {L("נקרא מהעורך ב-", "Read from the editor at ")}
                       <bdi dir="ltr">{new Date(readAt).toLocaleTimeString()}</bdi>
                     </p>
@@ -593,7 +593,7 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
                     {shownReport.map((l, i) => (
                       <li key={i} dir="auto">
                         {l.node ? (
-                          <button type="button" className="link-btn" style={{ height: "auto", padding: 0, whiteSpace: "normal" }} onClick={() => { if (l.graph) setGraphName(l.graph); setFlash((f) => ({ id: l.node!, n: (f?.n ?? 0) + 1 })); }} title={L("הצג את הנוד", "Show the node")}>{l.text}</button>
+                          <button type="button" className="link-btn" style={{ height: "auto", padding: 0, whiteSpace: "normal" }} onClick={() => { if (l.graph) setGraphName(l.graph); setFlash((f) => ({ id: l.node!, n: (f?.n ?? 0) + 1 })); }} title={L("הצג את הצומת", "Show the node")}>{l.text}</button>
                         ) : l.text}
                       </li>
                     ))}
@@ -641,7 +641,7 @@ function checkWords(c: GraphCheck, lang: "he" | "en"): string {
   // Each English node name is isolated (FSI … PDI), so a Hebrew sentence does not scramble its brackets and commas.
   const names = (l: string[]) => (l.length ? ` (${l.slice(0, 3).map((t) => `\u2068${t}\u2069`).join(", ")}${l.length > 3 ? "…" : ""})` : "");
   const parts = [
-    d.added.length ? (he ? `${d.added.length} נודים נוספו${names(d.added)}` : `${d.added.length} node(s) added${names(d.added)}`) : "",
+    d.added.length ? (he ? `${d.added.length} צמתים נוספו${names(d.added)}` : `${d.added.length} node(s) added${names(d.added)}`) : "",
     d.removed.length ? (he ? `${d.removed.length} נמחקו${names(d.removed)}` : `${d.removed.length} removed${names(d.removed)}`) : "",
     d.moved ? (he ? `${d.moved} זזו` : `${d.moved} moved`) : "",
     d.rewired ? (he ? `${d.rewired} חוברו אחרת` : `${d.rewired} rewired`) : "",

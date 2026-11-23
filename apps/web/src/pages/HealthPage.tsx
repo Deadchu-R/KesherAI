@@ -124,12 +124,12 @@ export function HealthPage() {
         <button type="button" className="primary" onClick={() => setFixing(true)}>{L("🛠 תקן לי", "🛠 Fix it for me")}</button>
         <button type="button" disabled={busy} onClick={() => load(true)}>{busy ? L("בודק…", "Checking…") : L("בדוק שוב", "Check again")}</button>
       </div>
-      <p className="muted">{L("מה חסר למחשב ומה לעשות. \"תקן לי\" עושה בעצמו את מה שבטוח, רק בדברים של KesherAI ורק אחרי שתאשרו. כל השאר הם צעדים שאתם עושים.", "What the computer is short of and what to do. \"Fix it for me\" does the safe part itself, only with KesherAI's own things and only after you confirm; the rest are steps you take.")}</p>
+      <p className="muted">{L("מה חסר למחשב ומה לעשות. \"תקן לי\" עושה בעצמו את מה שבטוח, רק בדברים של KesherAI ורק אחרי שתאשר. כל השאר הם צעדים שאתה עושה.", "What the computer is short of and what to do. \"Fix it for me\" does the safe part itself, only with KesherAI's own things and only after you confirm; the rest are steps you take.")}</p>
       {(device === "phone" ? !!phone : !!data) && (
         <section className="card health-score">
           <span className={`score-ring ${score >= 85 ? "good" : score >= 60 ? "warn" : "bad"}`} aria-hidden="true">{score}</span>
           <div className="stack">
-            <strong>{todo === 0 ? L("הכל תקין", "All good") : todo === 1 ? L("דבר אחד כדאי לעשות", "One thing worth doing") : L(`${todo} דברים כדאי לעשות`, `${todo} things worth doing`)}</strong>
+            <strong>{todo === 0 ? L("הכל תקין", "All good") : todo === 1 ? L("דבר אחד שכדאי לעשות", "One thing worth doing") : L(`${todo} דברים שכדאי לעשות`, `${todo} things worth doing`)}</strong>
             <span className="muted small">{L(`ציון ${score} מתוך 100`, `Score ${score} of 100`)}</span>
           </div>
         </section>

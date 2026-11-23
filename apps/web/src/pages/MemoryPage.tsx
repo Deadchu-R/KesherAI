@@ -79,7 +79,7 @@ export function MemoryPage() {
             <h2 className="grow">{L("מה למדתי עליך החודש", "What I learned about you this month")}</h2>
             <button type="button" className="ghost" onClick={() => void call(() => api<Memory>("/api/memory/recap/dismiss", { method: "POST" }))}>{L("הבנתי", "Got it")}</button>
           </div>
-          <p className="muted small">{L("משהו לא נכון או לא רצוי? הסירו אותו כאן.", "Anything wrong or unwanted? Remove it here.")}</p>
+          <p className="muted small">{L("משהו לא נכון או לא רצוי? הסר אותו כאן.", "Anything wrong or unwanted? Remove it here.")}</p>
           <ul className="memory-list">
             {m.recapItems.map((r) => (
               <li key={`${r.topicId}-${r.index}-${r.text}`} className="row">
@@ -116,7 +116,7 @@ export function MemoryPage() {
           <input type="checkbox" checked={m.recap} onChange={(e) => void call(() => api<Memory>("/api/memory/settings", { method: "PUT", body: { recap: e.target.checked } }))} />
           {L("סיכום חודשי: מה למדתי עליך החודש (רק בעמוד הזה, לא בהתראות)", "Monthly recap: what I learned about you this month (on this page only, never in notifications)")}
         </label>
-        <p className="muted small">{L("צ'אט בלי זיכרון: בצ'אט חדש לחצו על 👻 — הוא לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש.", "A chat without memory: in a new chat press 👻 — it neither reads nor files memory, and stays out of search.")}</p>
+        <p className="muted small">{L("צ'אט בלי זיכרון: בצ'אט חדש לחץ על 👻 — הוא לא קורא ולא שומר זיכרון, ולא מופיע בחיפוש.", "A chat without memory: in a new chat press 👻 — it neither reads nor files memory, and stays out of search.")}</p>
       </section>
 
       <section className="card stack">
@@ -141,7 +141,7 @@ export function MemoryPage() {
         ) : (
           <>
             <h2>{L("ייבוא זיכרון", "Import memory")}</h2>
-            <p className="muted small">{L("בקשו מ-ChatGPT או מ-Claude: \"תכתוב רשימה של כל מה שאתה זוכר עליי, שורה לכל פרט\", והדביקו כאן. שורה בצורה \"נושא: פרט\" נשמרת תחת הנושא. סיסמאות ומספרים רגישים מדולגים.", "Ask ChatGPT or Claude: \"List everything you remember about me, one fact per line\", and paste it here. A \"Topic: fact\" line keeps its topic. Passwords and sensitive numbers are skipped.")}</p>
+            <p className="muted small">{L("בקש מ-ChatGPT או מ-Claude: \"תכתוב רשימה של כל מה שאתה זוכר עליי, שורה לכל פרט\", והדבק כאן. שורה בצורה \"נושא: פרט\" נשמרת תחת הנושא. סיסמאות ומספרים רגישים מדולגים.", "Ask ChatGPT or Claude: \"List everything you remember about me, one fact per line\", and paste it here. A \"Topic: fact\" line keeps its topic. Passwords and sensitive numbers are skipped.")}</p>
             <textarea rows={6} value={importText} onChange={(e) => setImportText(e.target.value)} dir="auto" aria-label={L("הטקסט לייבוא", "Text to import")} />
             <div className="row">
               <button type="button" className="primary" disabled={!importText.trim()} onClick={() => void call(async () => {

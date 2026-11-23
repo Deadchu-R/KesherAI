@@ -55,7 +55,7 @@ export function LibrariesPage() {
   return (
     <div className="page stack">
       <header className="stack">
-        <h1>{L("חנות ספריות", "Library store")}</h1>
+        <h1>{L("חנות ספריית", "Library store")}</h1>
         <p className="muted">{L("תיעוד וקוד ייחוס שיורדים פעם אחת למחשב. אחרי זה המודלים מחפשים בהם בלי אינטרנט (כל ספרייה הופכת לבסיס ידע).", "Documentation and reference code downloaded once to this computer. After that the models search them with no internet (each library becomes a knowledge base).")}</p>
       </header>
       {!data && <p className="muted">…</p>}
