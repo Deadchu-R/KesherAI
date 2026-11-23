@@ -6,6 +6,19 @@ The running list of what is being worked on, what is next and what waits on Roee
 every task (and tells Roee in the chat what changed). Status: ✅ done · 🔨 in progress · ⬜ next · 👤 waits on Roee.
 Longer-term plans are in [FUTURE_FEATURES.md](FUTURE_FEATURES.md); research in [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
+## Monday 23.11 ✅/⬜
+- ✅ Unreal 4.27: plugin mounted + connected in ForMigration; "open" flag fixed (slashes/case), converted copies never "updated" to the UE5 plugin
+- ✅ OpenCode Go: per-model 429 cooldown and fallback; per-model requests/month + "blocked until" in the card; Jules removed
+- ✅ OpenCode Go: free models first (Beam Free, Iceman Contributor Free), outside the daily cap (0.6.463)
+- ✅ Every model category works (MODEL_CATEGORIES.md): translator local, vision gemma-4-12b, thinking models fixed, ComfyUI smoke runs + Test button
+- ✅ Security/performance scan 0.6.451–0.6.462 (SECURITY_REVIEW.md)
+- ⬜ Check a task runs on beam-free; quality of free-model results
+- ⬜ OpenCode queue: s-20261122-01..05 scene stats/previews/contents panel, r-53 and the r-5x/6x tasks
+- ⬜ a-04, a-05, r-35/r-39 inject_input
+- ⬜ Token-savings deck + site chart (free OpenCode models are a new saving)
+- 👤 Hebrew voice F5-TTS (3.6 GB, Settings › Speech); UE4Editor firewall prompt; 3 relay keys; GitHub token for a-03
+- 👤 Choice: should a paired phone be allowed to delete models, set relay keys and change the hub address (scan finding)?
+
 ## Priority order (Roee, 2026-11-20 19:36)
 1. Agents (a lead + helper agents in KesherAI, like Claude's: models per helper, live status, results).
 2. Everything works from a normal chat, like Claude: the chat shows everything and picks the right tools by itself (computer control, browser, showing and writing documents, code and more).
