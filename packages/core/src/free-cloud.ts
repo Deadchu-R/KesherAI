@@ -480,7 +480,7 @@ export class FreeCloudPool {
     if (!blocked.ok) return { ok: false, message: `At its free limit; try again in ${Math.max(1, Math.ceil((blocked.until - now) / MINUTE))}m.`, model };
     m.limiter.note(now);
     try {
-      await provider.chatWithTools({ providerModelId: model, messages: [{ role: "user", content: "Reply with: ok" }], tools: [], maxTokens: 8 }, signal ?? AbortSignal.timeout(20_000));
+      await provider.chatWithTools({ providerModelId: model, messages: [{ role: "user", content: "Reply with: ok" }], tools: [], maxTokens: 1024 }, signal ?? AbortSignal.timeout(20_000));
       m.limiter.success();
       m.breaker.success();
       m.lastOkAt = this.now();

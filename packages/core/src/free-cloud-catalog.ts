@@ -65,7 +65,7 @@ export const FREE_PROVIDERS: readonly FreeProviderInfo[] = [
     link: "https://developers.cloudflare.com/workers-ai/platform/pricing/",
     keyLink: "https://dash.cloudflare.com/profile/api-tokens",
     limits: { rpm: 0, rpd: 0 },
-    defaultModel: "@cf/meta/llama-3.1-8b-instruct",
+    defaultModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     needsAccountId: true,
   },
   {
@@ -87,7 +87,7 @@ export const FREE_PROVIDERS: readonly FreeProviderInfo[] = [
     link: "https://open.bigmodel.cn/pricing",
     keyLink: "https://open.bigmodel.cn/usercenter/apikeys",
     limits: { rpm: 3, rpd: 1000 },
-    defaultModel: "glm-4-flash",
+    defaultModel: "glm-4.5-flash",
   },
 ];
 

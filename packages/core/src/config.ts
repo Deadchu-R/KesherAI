@@ -42,7 +42,7 @@ export const KesherConfigSchema = z.object({
       /** Cloudflare's account id (part of its address; not a secret). */
       cloudflareAccountId: z.string().max(64).optional(),
       /** Zhipu: the mainland portal or the international z.ai. */
-      zhipuRegion: z.enum(["cn", "global"]).default("cn"),
+      zhipuRegion: z.enum(["cn", "global"]).default("global"),
     })
     .prefault({}),
   comfyui: z
