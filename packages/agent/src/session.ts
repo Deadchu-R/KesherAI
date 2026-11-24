@@ -292,6 +292,8 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   private readonly inbox: string[] = [];
   private readonly onChange?: (s: AgentSession) => void;
   private statusValue: AgentStatus = "idle";
+  /** When the status last changed (ms since 1970). */
+  private statusSince = Date.now();
   private readonly reviewerOf?: () => Reviewer | undefined;
   private readonly polishAnswer?: AgentSessionOptions["polishAnswer"];
   private readonly assetExists?: AgentSessionOptions["assetExists"];
@@ -421,6 +423,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     return {
       id: this.id,
       status: this.statusValue,
+      statusSince: this.statusSince,
       modelId: this.modelId,
       mode: this.mode,
       ...(this.workspace ? { workspace: this.workspace } : {}),
@@ -834,6 +837,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
   }
 
   private setStatus(status: AgentStatus, message?: string): void {
+    if (status !== this.statusValue) this.statusSince = Date.now();
     this.statusValue = status;
     this.push({ type: "status", status, ...(message ? { message } : {}) }, status === "error");
   }

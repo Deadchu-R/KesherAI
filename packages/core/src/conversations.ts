@@ -1955,6 +1955,21 @@ export class ConversationManager {
   }
 
   /**
+   * Like {@link activity}, with since when each chat has had its status (for install-when-free: a chat that waits for
+   * the user for hours must not block the update).
+   *
+   * @returns Working or waiting chats with their status and its start (ms).
+   */
+  activitySince(): Record<string, { status: "running" | "waiting"; since: number }> {
+    const out: Record<string, { status: "running" | "waiting"; since: number }> = {};
+    for (const [id, s] of this.sessions) {
+      const i = s.info();
+      if (i.status === "running" || i.status === "waiting") out[id] = { status: i.status, since: i.statusSince ?? Date.now() };
+    }
+    return out;
+  }
+
+  /**
    * The tool a working chat is in right now (its last call without a result), for the "Continue what was running"
    * record: a picture or video job, a render, or plain chat work.
    *

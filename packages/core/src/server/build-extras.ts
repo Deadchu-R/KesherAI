@@ -47,7 +47,7 @@ export interface InjectRef {
  *   routine runs), the notifier, the settings and Telegram.
  * @returns The routines.
  */
-export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injectRef: InjectRef; chats: () => ConversationManager; notifier: Notifier; config: KesherConfig; telegram: TelegramBridge; engine?: Pick<LlamaEngine, "note" | "status">; othersBusy?: () => boolean }): Routines {
+export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injectRef: InjectRef; chats: () => ConversationManager; notifier: Notifier; config: KesherConfig; telegram: TelegramBridge; engine?: Pick<LlamaEngine, "note" | "status">; othersBusy?: () => boolean; draining?: () => boolean }): Routines {
   const { paths, pipelines, injectRef, chats, notifier, config, telegram, engine } = p;
   return new Routines(join(paths.root, "routines.json"), {
     runPipeline: async (id, inputs) => {
@@ -137,6 +137,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
     },
     // Also while another program works the graphics card hard (a game, a shader build): a background routine would
     // load a model under it.
+    ...(p.draining ? { draining: p.draining } : {}),
     busy: () => Object.keys(chats().activity()).length > 0 || engine?.status().job?.phase === "loading" || !!p.othersBusy?.(),
   }, Date.now, DEFAULT_ROUTINES);
 }

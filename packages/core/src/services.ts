@@ -198,6 +198,8 @@ export interface KesherServices {
   agentLabels?: import("./agent-labels.js").AgentLabels;
   /** The task inbox (Claude's tasks on the kesher-inbox branch; Antigravity on the user's Run). */
   taskInbox?: import("./inbox-runner.js").TaskInbox;
+  /** Set while an update waits for a free moment: no new agent run starts (update-drain.ts). */
+  updateDrain?: import("./update-drain.js").UpdateDrain;
   /** Live notifications for outside Claude helpers (external-agents.ts; POST /api/agents/external). */
   externalAgents?: import("./external-agents.js").ExternalAgents;
   /** Set in worker mode: its version, and "move to the newer version after the current item". */

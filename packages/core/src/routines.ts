@@ -109,6 +109,8 @@ export interface RoutineDeps {
   digest?(): Promise<ActionResult>;
   /** Whether any chat is working or a model is loading now (background and start-up routines wait until not). */
   busy?(): boolean;
+  /** Whether an update waits for a free moment: routines that start agents wait (update-drain.ts); the others run. */
+  draining?(): boolean;
   notify(title: string, body: string, path: string): Promise<void>;
   /** Removes the chat a quiet run made when it found nothing. */
   discard?(link: string): Promise<void>;
@@ -117,6 +119,9 @@ export interface RoutineDeps {
   /** A web page's readable text (page routines). */
   pageText?(url: string): Promise<string>;
 }
+
+/** Whether a routine starts an agent run (a chat, self-work or an inbox task) when it fires. */
+export const startsAgent = (r: Routine): boolean => r.action.type === "prompt" || r.action.type === "self-work" || r.action.type === "inbox-run";
 
 /** What a heartbeat's model is told, after the user's own words. */
 export const QUIET_NOTE =
@@ -429,7 +434,9 @@ export class Routines {
         await this.persist().catch(() => undefined);
       }
     }
-    const due = this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t && !(busy && waits(r)));
+    // While an update waits for a free moment, nothing that starts an agent starts (it stays due and goes after the restart).
+    const draining = this.deps.draining?.() ?? false;
+    const due = this.list_.filter((r) => r.enabled && (this.due.get(r.id) ?? Infinity) <= t && !(busy && waits(r)) && !(draining && startsAgent(r)));
     await Promise.all(due.map((r) => (r.schedule.kind === "page" ? this.checkPage(r) : this.runNow(r.id))));
   }
 

@@ -52,6 +52,7 @@ import { buildResume } from "./server/build-resume.js";
 import { matchRecommended, scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
+import { UpdateDrain } from "./update-drain.js";
 import { ApiKeys } from "./api-keys.js";
 import { ConversationSearch } from "./conversation-search.js";
 import { PhonePush } from "./phone-push.js";
@@ -515,7 +516,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     exists: async (convId) => !!library.summary(convId),
   });
   void chatTimers.start();
-  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine, othersBusy: () => guard.othersBusy() });
+  // While an update waits for a free moment no new agent run starts (inbox, work loop, routines): update-drain.ts.
+  const updateDrain = new UpdateDrain();
+  const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine, othersBusy: () => guard.othersBusy(), draining: () => updateDrain.pending });
   void routines.start();
   const { unityCli, unrealBridge, gameCheckpoints } = buildGameEngines(paths, config, persist);
   // The Godot editor's link (KesherAI Bridge addon); Godot editors are looked for once, for the chat's tools.
@@ -674,12 +677,14 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const taskInbox = buildTaskInbox({
     config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
     githubToken: () => github.pushToken(),
+    draining: () => updateDrain.pending,
     localChat: () => {
       const st = engine.status();
       return st.running && st.modelPath && !st.job ? `llamacpp/${basename(st.modelPath).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}` : undefined;
     },
   });
   services.taskInbox = taskInbox;
+  services.updateDrain = updateDrain;
   // "Continue what was running" after a restart (resume-board.ts): the main app only; a worker has no card.
   if (!options.worker) services.resume = buildResume(paths.root, services);
   // The chat's @antigravity agent asks the same "Run this in Antigravity?" before each message it sends.

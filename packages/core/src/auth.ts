@@ -169,6 +169,8 @@ export function registerRemoteAuth(
     if (request.method === "POST" && /^\/api\/quick-approve\/[\w-]{32}$/.test(path)) return;
     // The freed-slot notification's Run button: a one-time code for one task and one free slot (inbox-runner.ts quickRun).
     if (request.method === "POST" && /^\/api\/quick-run\/[\w-]{32}$/.test(path)) return;
+    // The long-wait update notification's Install now button (update-drain.ts): a one-time code.
+    if (request.method === "POST" && /^\/api\/quick-install\/[\w-]{32}$/.test(path)) return;
     // The owner's Allow / Deny buttons for a phone asking to control this computer (the one-time code is the key).
     if (request.method === "POST" && /^\/api\/remote-desktop\/decide\/[0-9a-f]{32}$/.test(path)) return;
     // A guest opening an invite link (guests.ts): the one-time token is the key; only this route takes it.

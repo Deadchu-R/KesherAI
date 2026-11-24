@@ -23,7 +23,7 @@ import { conversationHtml, conversationMarkdown, exportFileName } from "../chat-
 import { assertWritableFolder } from "../library.js";
 import { isLocalRequest } from "../auth.js";
 import { DEFAULT_TOOL_CAP } from "@kesher/agent";
-import { InstallWhenFree, type FreeState } from "../install-when-free.js";
+import { blockingChats, InstallWhenFree, type FreeState } from "../install-when-free.js";
 import { feedName, newestFeed, parseRange, safeFeedFile } from "../update-feed.js";
 import { compareVersions } from "../updates.js";
 import { allowThroughFirewall, type FirewallResult } from "../firewall.js";
@@ -1149,7 +1149,7 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
   const freeState = async (): Promise<FreeState> => {
     const run = (await localCall<{ run?: { status?: string } | null }>(s.config.port, "GET", "/api/self-work").catch(() => ({ json: { run: null } }))).json.run;
     return {
-      chats: Object.keys(s.conversations.activity()).length,
+      chats: blockingChats(s.conversations.activitySince(), Date.now()).length,
       selfWork: run?.status === "running",
       downloads: s.downloads.list().filter((j) => j.status === "downloading" || j.status === "queued").length,
       updating: s.updater.status().running,
@@ -1157,7 +1157,31 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
       ...(s.taskInbox?.runningTask() ? { agentTask: s.taskInbox.runningTask()!.title } : {}),
     };
   };
-  const whenFree = new InstallWhenFree({ state: freeState, available: async () => (await s.updater.check()).newCommits.length > 0, beforeApply: async () => s.resume?.save("update"), apply: () => s.updater.apply() });
+  /** What the update waits for, by name (working chats and the running agent task). */
+  const waitingFor = (): string[] => [
+    ...blockingChats(s.conversations.activitySince(), Date.now()).map((id) => s.library.summary(id)?.title ?? id),
+    ...(s.taskInbox?.runningTask() ? [s.taskInbox.runningTask()!.title] : []),
+  ].slice(0, 5);
+  const drain = s.updateDrain;
+  const whenFree = new InstallWhenFree({
+    state: freeState,
+    available: async () => (await s.updater.check()).newCommits.length > 0,
+    beforeApply: async () => s.resume?.save("update"),
+    apply: () => s.updater.apply(),
+    ...(drain
+      ? {
+          drain,
+          // A long wait: the phone is told once, with a one-tap "Install now" (the one-time code is the key, like quick-run).
+          onLongDrain: () =>
+            s.notifier.send({
+              title: "Update waiting for: " + (waitingFor().join(", ") || "running work"),
+              body: "עדכון ממתין ל: " + (waitingFor().join(", ") || "עבודה שרצה") + ". The update installs when they end; tap to install now (it stops them; Continue what was running brings them back).",
+              path: "#/settings",
+              actions: [{ label: "Install now / התקן עכשיו", path: `api/quick-install/${drain.makeCode()}` }],
+            }),
+        }
+      : {}),
+  });
   app.addHook("onClose", async () => whenFree.stop());
   // On by default (Roee 2026-11-22): every start waits for a free moment again, so updates keep coming by themselves.
   if (s.config.taskInbox?.enabled && s.config.taskInbox.installWhenFree !== false) whenFree.set(true);
@@ -1171,9 +1195,23 @@ export async function libraryRoutes(app: FastifyInstance, s: KesherServices): Pr
     }
     return { whenFree: whenFree.on };
   });
+  /**
+   * The long-wait notification's "Install now" button (no token: the one-time code is the key, as for quick-run):
+   * installs through the same forced path as "Update now" while chats are working.
+   */
+  app.post<{ Params: { code: string } }>("/api/quick-install/:code", async (req, reply) => {
+    if (!s.updateDrain?.useCode(req.params.code)) return reply.code(410).send({ error: "This button no longer works: the update was installed or the code is too old." });
+    try {
+      await s.resume?.save("update").catch(() => undefined);
+      return await s.updater.apply();
+    } catch (err) {
+      return reply.code(409).send({ error: (err as Error).message });
+    }
+  });
   app.post<{ Body: { force?: boolean } | undefined }>("/api/updates/apply", async (req, reply) => {
     // Installing restarts KesherAI: a chat that is working would stop in the middle. Ask first.
-    const working = Object.keys(s.conversations.activity());
+    // A chat that only waits for the user for hours is resumed after the restart: it does not stop the install.
+    const working = blockingChats(s.conversations.activitySince(), Date.now());
     if (working.length && req.body?.force !== true) {
       const titles = working.map((id) => s.library.summary(id)?.title ?? id).slice(0, 5);
       return reply.code(409).send({ error: `${working.length} chat(s) are working now: ${titles.join(", ")}. The update restarts KesherAI and stops them (after it, "Continue what was running" brings them back).`, code: "chats-working", chats: titles });

@@ -6,6 +6,31 @@
  * kept in config (taskInbox.installWhenFree), so it is on again after the restart.
  */
 
+import type { UpdateDrain } from "./update-drain.js";
+
+/** A chat that only waits for the user (a question, an approval) this long no longer holds the install back. */
+export const WAITING_GRACE_MS = 6 * 3_600_000;
+
+/** One chat's activity: what it does, and since when. */
+export interface ChatActivity {
+  status: "running" | "waiting";
+  /** When it got this status (ms since 1970). */
+  since: number;
+}
+
+/**
+ * The chats that hold the install back: every working chat, and a chat waiting for the user for less than
+ * {@link WAITING_GRACE_MS} (a longer one is resumed after the restart anyway, so it must not block forever).
+ * @param chats - Chat id to its activity.
+ * @param now - The time now (ms).
+ * @returns The ids of the chats that block.
+ */
+export function blockingChats(chats: Record<string, ChatActivity>, now: number): string[] {
+  return Object.entries(chats)
+    .filter(([, a]) => a.status === "running" || now - a.since < WAITING_GRACE_MS)
+    .map(([id]) => id);
+}
+
 /** What is busy now; any of these holds the install back. */
 export interface FreeState {
   /** Chats answering right now. */
@@ -47,6 +72,13 @@ export interface InstallWhenFreeDeps {
   everyMs?: number;
   /** How often to ask whether a version is ready, in ms (default 5 min). */
   checkEveryMs?: number;
+  /**
+   * The shared drain flag: set while a version is ready and waits for a free moment, so no new agent run starts
+   * (update-drain.ts). Absent: the old behaviour (only wait).
+   */
+  drain?: UpdateDrain;
+  /** Called once when the drain lasted long (the phone gets "Update waiting for ..." with an "Install now" button). */
+  onLongDrain?: () => Promise<unknown> | unknown;
 }
 
 /** Waits for a free moment and installs the ready update then. */
@@ -79,8 +111,13 @@ export class InstallWhenFree {
     void this.tick();
   }
 
-  /** Stops waiting. */
+  /** Stops waiting (and lets new runs start again). */
   stop(): void {
+    this.halt();
+    this.deps.drain?.end();
+  }
+
+  private halt(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
   }
@@ -97,12 +134,22 @@ export class InstallWhenFree {
         this.lastCheck = Date.now();
         this.ready = await this.deps.available().catch(() => false);
       }
-      if (!this.ready || !isFree(await this.deps.state())) return false;
-      this.stop();
+      const drain = this.deps.drain;
+      // A ready version drains: running work finishes, nothing new starts (so a free moment comes).
+      if (this.ready) drain?.begin();
+      else drain?.end();
+      if (!this.ready) return false;
+      if (!isFree(await this.deps.state())) {
+        if (drain?.takeLongNotice()) await Promise.resolve(this.deps.onLongDrain?.()).catch(() => undefined);
+        return false;
+      }
+      // The drain stays on until the restart: no run may slip in between this look and the install.
+      this.halt();
       await this.deps.beforeApply?.().catch(() => undefined);
       await this.deps.apply();
       return true;
     } catch {
+      if (!this.timer) this.deps.drain?.end();
       return false;
     } finally {
       this.busy = false;

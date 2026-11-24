@@ -20,6 +20,7 @@ import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, s
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import { publishResearch } from "./research-publish.js";
+import { DRAIN_NOTE } from "./update-drain.js";
 import { dailySummary, LINE_TARGET, localDay, LOOP_TICK_MS, loopState, standingDue, STANDING_LOOP_NOTE, summaryDue, type LoopState } from "./work-loop.js";
 import type { TaskBoard } from "./task-board.js";
 import { agentPrompt, boardSizeFor, branchFor, checkParts, INBOX_DEFAULTS, parseTaskFile, pushRef, resultFileText, routeTask, slugOf, taskFileText, taskSize, validBranchName, validTaskId } from "./task-inbox.js";
@@ -44,6 +45,11 @@ export type RunCmd = (cwd: string, args: string[], timeoutMs?: number) => Promis
 export interface TaskInboxDeps {
   /** Settings > Task inbox (already filled with defaults). */
   settings: () => Partial<InboxSettings>;
+  /**
+   * Whether an update waits for a free moment (update-drain.ts): no new run starts (the running one finishes), and
+   * waiting tasks show {@link DRAIN_NOTE}. Absent: never.
+   */
+  draining?: () => boolean;
   /** Where the queue is kept (KesherAI's data folder). */
   file: string;
   /** Runs git with these arguments (the program is git itself; the list starts with the git command, e.g. "fetch"). */
@@ -1020,6 +1026,7 @@ export class TaskInbox {
       // A task its plan's limit cut off goes again by itself once the limit is over (opencodeBlocked holds it until then).
       const t = this.saved.tasks.find((x) => x.runBy === "opencode" && (x.status === "waiting" || x.status === "deferred-quota"));
       if (!t) return;
+      if (await this.drainNote(t)) return;
       const no = this.opencodeBlocked();
       if (no) {
         if (t.note !== no) {
@@ -1030,6 +1037,21 @@ export class TaskInbox {
       }
       await this.runOpencode(t, this.d.coder!);
     }
+  }
+
+  /**
+   * While an update waits for a free moment, a task that would start now waits with a note instead.
+   *
+   * @param t - The task that was about to start.
+   * @returns True when it must not start (the update waits).
+   */
+  private async drainNote(t: InboxTaskView): Promise<boolean> {
+    if (!this.d.draining?.()) return false;
+    if (t.note !== DRAIN_NOTE) {
+      t.note = DRAIN_NOTE;
+      await this.save();
+    }
+    return true;
   }
 
   /** One OpenCode Go code task: its own worktree and `ocgo/*` branch, the code chat, then the same checks, commit and push as Antigravity's. */
@@ -1314,6 +1336,7 @@ export class TaskInbox {
     if (!this.d.claude || this.cs.askRun || !s.enabled || s.paused || !s.repo || this.claudeRun) return;
     const t = this.saved.tasks.find((x) => x.runBy === "claude" && (x.status === "waiting" || x.status === "deferred-quota"));
     if (!t) return;
+    if (await this.drainNote(t)) return;
     await this.refreshClaude();
     const no = this.claudeBlocked();
     if (no) {
@@ -2246,6 +2269,14 @@ export class TaskInbox {
   async pump(only?: QueueExecutor, quiet = false, tapped = false): Promise<{ started?: string; asked?: string }> {
     await this.load();
     const out: { started?: string; asked?: string } = {};
+    // An update waits for a free moment: nothing new starts from the lines (the user's own tap still does).
+    if (!tapped && this.d.draining?.()) {
+      for (const ex of only ? [only] : QUEUE_EXECUTORS) {
+        const head = this.saved.tasks.find((x) => x.id === (this.ordered(ex)[0] ?? this.lines.first(ex)));
+        if (head) await this.drainNote(head);
+      }
+      return out;
+    }
     for (const ex of only ? [only] : QUEUE_EXECUTORS) {
       for (;;) {
         const id = this.ordered(ex)[0] ?? this.lines.first(ex);

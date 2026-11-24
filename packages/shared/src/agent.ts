@@ -403,6 +403,8 @@ export type AgentEvent = EventBase &
 export interface AgentSessionInfo {
   id: string;
   status: AgentStatus;
+  /** When the status last changed (ms since 1970); a chat that waits for the user for hours does not block an update. */
+  statusSince?: number;
   modelId: string;
   mode: PermissionMode;
   /** Absolute path of the folder the agent works in; absent for plain chats. */
