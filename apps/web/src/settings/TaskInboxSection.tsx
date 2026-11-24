@@ -146,7 +146,9 @@ export function TaskInboxSection() {
       <h3>{L("התיבה", "The inbox")}</h3>
       <div className="row wrap small"><span className="grow">{L("בדיקת משימות חדשות", "Look for new tasks")}</span>{num("fetchMinutes", c.fetchMinutes, [1, 5, 10, 15, 30, 60], L("דק׳", "min"))}</div>
       <div className="row wrap small"><span className="grow">{L(`סף יומי ל-Antigravity (היום ${s.today.used})`, `Daily limit for Antigravity (today ${s.today.used})`)}</span>{num("dailyCap", c.dailyCap, [3, 5, 10, 15, 20, 30], "")}</div>
-      <div className="row wrap small"><span className="grow">{L("זמן מקסימלי למשימה", "Most minutes per task")}</span>{num("maxMinutes", c.maxMinutes, [5, 10, 15, 20, 30, 45, 60], L("דק׳", "min"))}</div>
+      <div className="row wrap small"><span className="grow">{L("לעצור כשכלום לא משתנה במשך", "Stop when nothing changes for")}</span>{num("stallMinutes", c.stallMinutes ?? 10, [3, 5, 10, 15, 20, 30, 60], L("דק׳", "min"))}</div>
+      <div className="row wrap small"><span className="grow">{L("תקציב בקשות למשימה", "Request budget per task")}</span>{num("maxRequests", c.maxRequests ?? 80, [20, 40, 80, 120, 200, 400], "")}</div>
+      <p className="small muted">{L(`משימה ממשיכה כל עוד יש התקדמות (קובץ ששונה או צעד חדש). תקרת בטיחות: ${Math.max(c.maxMinutes, 120)} דק׳. עצירה בלי התקדמות שומרת את העבודה כענף חלקי, והניסיון הבא ממשיך ממנו.`, `A task keeps going while it makes progress (a changed file or a new step). Safety limit: ${Math.max(c.maxMinutes, 120)} min. A stop keeps the work as a partial branch, and the next attempt continues from it.`)}</p>
       <label className="row small">
         <input type="checkbox" checked={c.loop !== false} onChange={(e) => put({ loop: e.target.checked })} />
         <span>

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -10,6 +10,9 @@ import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport,
 import { isPrivacySkip } from "./privacy-guard.js";
 import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
+import { UsageLog, baselineOf, overBaseline, type UsageEntry } from "./usage-log.js";
+import { findSavings } from "./savings.js";
+import { limitsFor, parseReview, parseWatchVerdict, reviewPrompt, rescuePrompt, RunGuard, RunWatch, stopNote, watchdogPrompt, type AgentStep, type GuardHooks, type StopReason } from "./agent-watch.js";
 import { retryAfterMs } from "./free-cloud.js";
 import { nextUtcMidnight, type FreeUsage } from "./openrouter-free.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
@@ -79,8 +82,27 @@ export interface TaskInboxDeps {
      * its chat `models`, and `usage` (OpenRouter's own count of today's free requests, when it can say).
      */
     free?: Record<string, { ready: () => boolean; models: () => Promise<string[]>; usage?: () => Promise<FreeUsage | undefined> }>;
-    run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number) => void }) => Promise<{ text: string }>;
+    /**
+     * `onStep` gets the step count and, when known, the step itself (tool and arguments) for the run guard.
+     * `attach` is called once with a function that sends a user message into the running chat (the rescue hint).
+     */
+    run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number, step?: AgentStep) => void; attach?: (send: (text: string) => Promise<void>) => void }) => Promise<{ text: string }>;
   };
+  /**
+   * Second models for the run guard (agent-watch.ts). `ask`: a model other than the agent's, for one rescue hint and the
+   * end review: the local chat model when loaded and idle, else an open free provider, never a paid one; `canTrain`
+   * false means a service that may train on prompts must not get it. `look`: the small local router model for the
+   * watchdog (undefined when it is not available). Absent: no rescue, no review, no watchdog (the hard rules stay).
+   */
+  helpers?: {
+    ask: (o: { system: string; prompt: string; signal: AbortSignal; canTrain: boolean }) => Promise<{ text: string; model: string } | undefined>;
+    look: (o: { system: string; prompt: string; signal: AbortSignal }) => Promise<string | undefined>;
+  };
+  /** The usage log (usage-log.ts): what every run used and every warning of the guard. Absent: nothing is logged. */
+  usage?: UsageLog;
+  /** How often the guard looks at a run (default 30 s) and how often the watchdog asks (default 3 min); tests make them short. */
+  watchEveryMs?: number;
+  lookEveryMs?: number;
   now?: () => number;
   /** The heavy job that runs now (default: the app's heavy-job gate); a queued task waits while there is one. */
   heavy?: () => string | undefined;
@@ -133,7 +155,9 @@ const RUNNABLE = new Set<InboxStatus>(["waiting", "failed", "partial", "deferred
 interface Active {
   id: string;
   agent?: AcpAgent;
-  why?: "stop" | "time";
+  why?: "stop" | StopReason;
+  /** A rescue hint waiting to be sent as the next prompt (the turn was cancelled to send it). */
+  hint?: string;
   answer?: (decision: "allow" | "deny" | "timeout") => void;
   /** Started from the queue: no "started" notification of its own (the freed-slot one says it). */
   quiet?: boolean;
@@ -207,7 +231,7 @@ export class TaskInbox {
   private geminiStop?: AbortController;
   /** The OpenCode Go loop (one task at a time) and the stop for its running task. */
   private opencodeRun?: Promise<void>;
-  private opencodeStop?: { id: string; ctl: AbortController; why?: "stop" | "time" };
+  private opencodeStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
 
   /** @param d - What it needs from KesherAI. */
   constructor(private readonly d: TaskInboxDeps) {}
@@ -887,14 +911,15 @@ export class TaskInbox {
     await this.save();
     this.d.notify("✦ Research started (free Gemini)", `${t.id}: ${t.title}`);
     const stop = (this.geminiStop = new AbortController());
-    const timer = setTimeout(() => stop.abort(), t.maxMinutes * 60_000);
+    // A research run has no steps or files to watch: only the safety ceiling stops it.
+    const timer = setTimeout(() => stop.abort(), limitsFor(t.maxMinutes, this.s).ceilingMs);
     let status: InboxStatus = "done";
     try {
       const question = [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
       // The time limit holds even if a search or a page read ignores the signal (a run once hung for two hours).
       const report = (await Promise.race([
         r.run(question, stop.signal),
-        new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the time limit.")), { once: true })),
+        new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the safety limit.")), { once: true })),
       ])).trim();
       if (!report) throw new Error("The model wrote no report.");
       t.researchReport = report;
@@ -915,7 +940,7 @@ export class TaskInbox {
         t.note = `Gemini is busy right now (${/\b(5\d\d)\b/.exec(msg)?.[1] ?? "busy"}); ${t.autoRetried ? "run it again later." : "it tries once more in 15 minutes."}`;
       } else {
         status = "failed";
-        t.note = stop.signal.aborted ? `Stopped at the ${t.maxMinutes}-minute limit or by you.` : `The research failed: ${msg.slice(0, 300)}`;
+        t.note = stop.signal.aborted ? `${this.stopText(t, "ceiling")} (or stopped by you.)` : `The research failed: ${msg.slice(0, 300)}`;
       }
     } finally {
       clearTimeout(timer);
@@ -995,7 +1020,10 @@ export class TaskInbox {
     }
     const repo = this.repo();
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
-    const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    // A partial attempt's pushed branch is where this one continues from (its work is kept, not redone).
+    const resume = await this.resumeRef(repo, t);
+    const base = resume ?? taskBase;
     let attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
     const named = (n: number): string => `${branchFor(t, "opencode")}${n > 1 ? `-r${n}` : ""}`;
     // A run that failed before saving its branch name left that branch behind (2026-11-23: "a branch named
@@ -1011,20 +1039,29 @@ export class TaskInbox {
       await this.save();
       return;
     }
+    // The diff and the path check are against the task's own base, also when the work continues from a partial branch.
+    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: modelLabel(model), ...(trainingRiskOf(model) ? { mayTrain: true } : {}) });
-    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions"] as const) delete t[k];
+    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions", "watchLog", "review"] as const) delete t[k];
+    if (resume) t.note = `Continuing from the partial branch ${resume.replace(/^refs\/(heads|remotes\/origin)\//, "")}.`;
     await this.save();
     this.d.notify("◈ OpenCode Go התחיל משימה", `${t.title} · ${opencodeModelName(model)}`, { path: `#/task-inbox/${t.id}` });
     if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
-    const run: { id: string; ctl: AbortController; why?: "stop" | "time" } = { id: t.id, ctl: new AbortController() };
+    const run: { id: string; ctl: AbortController; why?: "stop" | StopReason } = { id: t.id, ctl: new AbortController() };
     this.opencodeStop = run;
-    // A task keeps the limit it was made with, unless the user's setting is longer now (23.11: tasks made at 15 min
-    // all stopped at 15 after the setting was raised to 40).
-    t.maxMinutes = Math.max(t.maxMinutes, this.s.maxMinutes);
-    const timer = setTimeout(() => {
-      run.why ??= "time";
-      run.ctl.abort();
-    }, t.maxMinutes * 60_000);
+    // No wall-clock kill: the guard stops a run that makes no progress, repeats itself or spends its request budget; the
+    // safety ceiling is the longest of the task's minutes, the setting and 120 (agent-watch.ts).
+    let send: ((text: string) => Promise<void>) | undefined;
+    const { guard, end } = this.startGuard(t, wt.path, {
+      stop: (r) => {
+        run.why ??= r;
+        run.ctl.abort();
+      },
+      inject: () => send,
+      canTrain: trainOk,
+      signal: run.ctl.signal,
+    });
+    let seq = 0;
     let text = "";
     let error = "";
     const tried: string[] = [];
@@ -1048,9 +1085,14 @@ export class TaskInbox {
               prompt,
               model,
               signal: run.ctl.signal,
-              onStep: (n) => {
+              attach: (fn) => {
+                send = fn;
+              },
+              onStep: (n, step) => {
                 t.steps = n;
                 if (attemptFree) this.freeDay(attemptFree.id).used += Math.max(0, n - attemptSteps);
+                // Each new step goes to the guard: the real one when the coder says it, else a step that is never a repeat.
+                for (let i = attemptSteps; i < n; i++) guard.step(i === n - 1 && step ? step : { tool: "step", args: ++seq });
                 attemptSteps = n;
                 void this.save();
               },
@@ -1110,19 +1152,198 @@ export class TaskInbox {
         }
       }
     } finally {
-      clearTimeout(timer);
+      end();
       this.opencodeStop = undefined;
     }
     // Only paid models count toward the daily cap (a task that ended on a free one cost nothing).
     if (!isFreeOpencodeModel(model)) this.ocToday().used++;
+    this.paidRuns.set(t.id, !isFreeOpencodeModel(model));
     t.summary = text.trim().slice(-2000) || undefined;
     const limited = !run.why && !!error && (isQuotaError(error) || exhausted);
+    if (limited) this.log(t, "quota", "warning", { requests: t.steps ?? 0 }, error.slice(0, 160));
     // The earliest cooldown (a free model back, 1 hour for a failed one), else the paid cap's reset at the next UTC midnight.
     const cools = Object.values(this.opencodeCooldowns());
     const until = limited ? (exhausted ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
-    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
-    await this.finish(t, wt.path, wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
+    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why ? this.stopText(t, run.why) : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
+    await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
   }
+
+  /**
+   * Starts the run guard for one run (agent-watch.ts): the hard rules (stall, repeat, request budget, safety ceiling), the
+   * rescue and the watchdog. It stops the run only through `stop`; the timer is checked every {@link TaskInboxDeps.watchEveryMs}.
+   *
+   * @param t - The task.
+   * @param worktree - Where the agent works (a changed file there is progress).
+   * @param o.stop - Ends the run for that reason.
+   * @param o.inject - Sends the rescue hint into the running agent (absent: no rescue).
+   * @param o.canTrain - A service that may train on prompts may see this task's text.
+   * @param o.signal - Ends the helper calls.
+   * @returns The guard and `end`, which stops its timer.
+   */
+  private startGuard(t: InboxTaskView, worktree: string, o: { stop: (r: StopReason) => void; inject?: () => ((hint: string) => Promise<void>) | undefined; canTrain: boolean; signal: AbortSignal }): { guard: RunGuard; end: () => void } {
+    const lim = limitsFor(t.maxMinutes, this.s);
+    const probe = async () => {
+      const status = (await this.d.git(worktree, ["status", "--porcelain"])).out;
+      const diff = (await this.d.git(worktree, ["diff", "HEAD"])).out;
+      return { fp: createHash("sha1").update(status).update("\0").update(diff).digest("hex"), files: status.split(/\r?\n/).filter((l) => l.trim()).map((l) => l.slice(3).trim()).slice(0, 40) };
+    };
+    const h = this.d.helpers;
+    const goal = `${t.title}\n${t.goal}`;
+    // The usage meter (usage-log.ts): the baseline of this executor and size, taken from the log; concurrency checks.
+    const size = taskSize(t);
+    let base: ReturnType<typeof baselineOf>;
+    void this.d.usage?.read({ since: this.now() - 14 * 86_400_000, limit: 5000 }).then((all) => void (base = baselineOf(all, t.runBy, size)));
+    const same = [...this.guarded.entries()].filter(([id]) => id === t.id).length;
+    const sameExecutor = [...this.guarded.entries()].filter(([id, ex]) => id !== t.id && ex === t.runBy).length;
+    this.guarded.set(t.id, t.runBy);
+    this.log(t, "run-start", "info", { requests: 0 });
+    if (same) this.log(t, "anomaly", "warning", {}, "Two runs of the same task at once.");
+    if (sameExecutor) this.log(t, "anomaly", "warning", { running: sameExecutor + 1 }, `More agents running than allowed for ${t.runBy} (one at a time).`);
+    const hooks: GuardHooks = {
+      log: (text) => {
+        t.watchLog = [...(t.watchLog ?? []), { at: this.now(), text }].slice(-30);
+        void this.save();
+        this.log(t, /^Rescued/.test(text) ? "rescue" : "anomaly", /^Rescued/.test(text) ? "info" : "warning", {}, text);
+      },
+      anomaly: (detail) => this.log(t, "anomaly", "warning", { requests: t.steps ?? 0 }, detail),
+      stop: (r) => {
+        this.log(t, "stop", "warning", { requests: t.steps ?? 0 }, this.stopText(t, r));
+        o.stop(r);
+      },
+      ...(h
+        ? {
+            rescue: async ({ reason, steps }) => {
+              const p = rescuePrompt({ goal, reason, steps });
+              const r = await h.ask({ ...p, signal: o.signal, canTrain: o.canTrain });
+              const hint = r?.text.trim();
+              return r && hint ? { hint: hint.slice(0, 800), model: r.model } : undefined;
+            },
+            look: async ({ steps, files, flags }) => {
+              // Never while a heavy job (a game, a render) needs the graphics card; no steps, nothing to look at.
+              if (this.heavyJob() || !steps.length) return undefined;
+              const p = watchdogPrompt({ goal, allowedPaths: t.allowedPaths, steps, files, flags });
+              const text = await h.look({ ...p, signal: o.signal });
+              return text ? parseWatchVerdict(text) : undefined;
+            },
+          }
+        : {}),
+      inject: async (hint) => {
+        const send = o.inject?.();
+        if (!send) throw new Error("This run cannot take a hint.");
+        await send(hint);
+      },
+    };
+    if (!o.inject) delete hooks.rescue;
+    const guard = new RunGuard(new RunWatch(lim, () => this.now(), probe), hooks, () => this.now(), this.d.lookEveryMs, (requests) => overBaseline({ requests }, base));
+    const timer = setInterval(() => void guard.tick().catch(() => undefined), this.d.watchEveryMs ?? 30_000);
+    return {
+      guard,
+      end: () => {
+        clearInterval(timer);
+        this.guarded.delete(t.id);
+        if (guard.offTask) this.offTask.set(t.id, guard.offTask);
+        else this.offTask.delete(t.id);
+      },
+    };
+  }
+
+  /** The day the savings finder last ran (once a day, in memory: a restart may run it once more, never twice the same text). */
+  private savingsDay = "";
+
+  /** Task ids whose run was on a free or local model (false) for the usage log; absent: paid. */
+  private paidRuns = new Map<string, boolean>();
+
+  /** The usage log for the API (empty when none is set). */
+  async usageLog(q: import("./usage-log.js").UsageQuery): Promise<{ entries: UsageEntry[]; totals: import("./usage-log.js").UsageDay[] }> {
+    const log = this.d.usage;
+    return log ? { entries: await log.read(q), totals: await log.totals(q.since) } : { entries: [], totals: [] };
+  }
+
+  /** Runs the guard watches now: task id → executor (for the concurrency check). */
+  private guarded = new Map<string, string>();
+
+  /** Writes one usage-log entry for a task (never throws; nothing when no log is set). */
+  private log(t: InboxTaskView, event: UsageEntry["event"], level: UsageEntry["level"], numbers: Record<string, number> = {}, why?: string): void {
+    void this.d.usage?.append({ level, executor: t.runBy, ...(t.modelUsed ? { model: t.modelUsed } : {}), task: t.id, size: taskSize(t), event, numbers, ...(why ? { why } : {}) });
+  }
+
+  /**
+   * The savings finder (usage-log.ts, savings.ts): looks over the last week's log for ways to reach the same result with
+   * less quota and writes `suggestion` entries (not twice for the same text). The small model words each in one plain
+   * sentence when it is available. Nothing is applied. Runs once a day from the loop and on demand.
+   *
+   * @returns The new suggestions.
+   */
+  async savingsPass(): Promise<string[]> {
+    const log = this.d.usage;
+    if (!log) return [];
+    const week = await log.read({ since: this.now() - 7 * 86_400_000, limit: 5000 });
+    const known = new Set(week.filter((e) => e.level === "suggestion").map((e) => `${e.executor}|${e.task ?? ""}|${e.size ?? ""}|${e.numbers?.saved ?? 0}`));
+    const fresh = findSavings(week).filter((s) => !known.has(`${s.executor}|${s.task ?? ""}|${s.size ?? ""}|${s.numbers?.saved ?? 0}`));
+    const out: string[] = [];
+    for (const s of fresh) {
+      let why = s.why ?? "";
+      const said = await this.d.helpers?.look({ system: "Write ONE plain sentence (max 30 words) telling a user how to save quota, from this evidence. No preface.", prompt: why, signal: AbortSignal.timeout(60_000) }).catch(() => undefined);
+      if (said?.trim()) why = `${said.trim().split(/\r?\n/)[0]!.slice(0, 200)} (${why})`;
+      await log.append({ ...s, why });
+      out.push(why);
+    }
+    return out;
+  }
+
+  /** The note of a guard stop, with this task's numbers. */
+  private stopText(t: InboxTaskView, r: StopReason): string {
+    const l = limitsFor(t.maxMinutes, this.s);
+    return stopNote(r, { stallMinutes: l.stallMinutes, maxRequests: l.maxRequests, ceilingMinutes: l.ceilingMinutes });
+  }
+
+  /**
+   * The end review (agent-watch.ts): a second model reads the diff against the goal and the allowed paths. A service that
+   * may train on prompts gets the diff only when the task is safe for it and the privacy scan finds nothing.
+   *
+   * @returns Nothing; the review is put on the task (absent when no model could review).
+   */
+  private async reviewDiff(t: InboxTaskView, diff: string): Promise<void> {
+    const h = this.d.helpers;
+    if (!h) return;
+    const canTrain = this.s.opencode?.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok && scanDiff(diff, this.d.me).length === 0;
+    try {
+      const p = reviewPrompt({ goal: `${t.title}\n${t.goal}`, ...(t.acceptance ? { acceptance: t.acceptance } : {}), allowedPaths: t.allowedPaths, diff, ...(this.offTask.get(t.id) ? { offTask: this.offTask.get(t.id)! } : {}) });
+      const r = await h.ask({ ...p, signal: AbortSignal.timeout(90_000), canTrain });
+      const v = r ? parseReview(r.text) : undefined;
+      if (r && v) {
+        t.review = { ...v, model: r.model, ...(this.offTask.get(t.id) ? { offTask: this.offTask.get(t.id)! } : {}) };
+        this.log(t, "review", v.verdict === "ok" ? "info" : "warning", { requests: t.steps ?? 0 }, `${v.verdict}${v.reasons.length ? `: ${v.reasons.join("; ")}` : ""}`);
+      }
+    } catch {
+      // No reviewer now: the checks above still decide.
+    }
+  }
+
+  /**
+   * Where a new attempt of a task starts: the partial branch the last attempt pushed (its work continues), else undefined
+   * (the task's own base, normally main).
+   *
+   * @param repo - The project.
+   * @param t - The task, before its fields are reset.
+   */
+  private async resumeRef(repo: string, t: InboxTaskView): Promise<string | undefined> {
+    if (!t.branch.endsWith("-partial") || !t.headSha || !validBranchName(t.branch)) return undefined;
+    for (const ref of [`refs/heads/${t.branch}`, `refs/remotes/origin/${t.branch}`]) {
+      if ((await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).code === 0) return ref;
+    }
+    return undefined;
+  }
+
+  /** The commit a ref points to, or undefined. */
+  private async commitOf(repo: string, ref: string): Promise<string | undefined> {
+    const r = await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+    const sha = r.out.trim();
+    return r.code === 0 && /^[0-9a-f]{40}$/.test(sha) ? sha : undefined;
+  }
+
+  /** Task ids whose watchdog said "off-task" in this run (kept for the end review). */
+  private offTask = new Map<string, string>();
 
   /** Writes a task's result file to the inbox branch. */
   private async writeResult(t: InboxTaskView, checkTail = ""): Promise<void> {
@@ -1396,21 +1617,28 @@ export class TaskInbox {
     const repo = this.repo();
     // Start from the newest base on GitHub (fetch only reads).
     await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
-    const base = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    // A partial attempt's pushed branch is where this one continues from.
+    const resume = await this.resumeRef(repo, t);
+    const base = resume ?? taskBase;
     const attempt = (t.decisions?.length || t.startedAt) ? (Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1) : 1;
     const branch = `${branchFor(t, "antigravity")}${attempt > 1 ? `-r${attempt}` : ""}`;
     if (!validBranchName(branch)) throw fail("Bad branch name.", 400);
     const wt = await createSessionWorktree(repo, `agy-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
+    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
     Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: now, plan: [], steps: 0, decisions: [], checks: [], files: [], pushed: false, resultWritten: false });
     delete t.endedAt;
-    delete t.note;
+    delete t.watchLog;
+    delete t.review;
+    if (resume) t.note = `Continuing from the partial branch ${resume.replace(/^refs\/(heads|remotes\/origin)\//, "")}.`;
+    else delete t.note;
     delete t.summary;
     delete t.headSha;
     delete t.diff;
     today.used++;
     await this.save();
     if (!active.quiet) this.d.notify("✦ Antigravity started", `${t.id}: ${t.title}`, { path: `#/task-inbox/${t.id}`, ref: progressRef(t.id) });
-    void this.work(t, active, wt.path, wt.base, repo).finally(async () => {
+    void this.work(t, active, wt.path, baseSha ?? wt.base, repo).finally(async () => {
       this.active = undefined;
       // The next task of the line is asked about or started by the user's own queue tap (the ask is made before `idle` resolves).
       await this.slotFreed(t).catch(() => undefined);
@@ -1431,10 +1659,28 @@ export class TaskInbox {
     let stop = "";
     const progress = this.d.progress;
     const ticker = progress ? new ProgressTicker(() => ({ t, past: this.saved.tasks }), progress, () => this.now()) : undefined;
+    // The run guard (agent-watch.ts): stall, repeat, request budget and safety ceiling stop the run by cancelling the
+    // turn; a rescue hint is sent as the next prompt (an ACP turn cannot take a message while it runs).
+    const prompt0 = agentPrompt(t, t.branch);
+    const trainOk = this.s.opencode?.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok && scanDiff(prompt0.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
+    const guardStop = new AbortController();
+    const { guard, end: endGuard } = this.startGuard(t, worktree, {
+      stop: (r) => {
+        a.why ??= r;
+        void a.agent?.cancel().catch(() => undefined);
+      },
+      inject: () => async (hint) => {
+        a.hint = hint;
+        await a.agent?.cancel().catch(() => undefined);
+      },
+      canTrain: trainOk,
+      signal: guardStop.signal,
+    });
     const handlers: AcpHandlers = {
       update: (u) => {
         if (u.kind === "plan") t.plan = u.entries.slice(0, 40).map((e) => ({ content: e.content.slice(0, 200), status: e.status }));
         else if (u.kind === "tool") {
+          if (!toolIds.has(u.id)) guard.step({ tool: u.toolKind ?? "tool", args: u.title ?? u.id });
           toolIds.add(u.id);
           t.steps = toolIds.size;
         } else if (u.kind === "text") text = (text + u.text).slice(-6000);
@@ -1443,7 +1689,6 @@ export class TaskInbox {
       },
       permission: (p) => this.permission(t, a, p, ctx),
     };
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const agent = await this.d.startAgent(worktree, handlers);
       a.agent = agent;
@@ -1472,10 +1717,6 @@ export class TaskInbox {
         void this.save();
       };
       await use();
-      timer = setTimeout(() => {
-        a.why = "time";
-        void agent.cancel().catch(() => undefined);
-      }, t.maxMinutes * 60_000);
       while (a.why !== "stop") {
         try {
           const before = text.length;
@@ -1487,6 +1728,8 @@ export class TaskInbox {
           break;
         } catch (e) {
           const msg = (e as Error).message || String(e);
+          // The turn was cancelled to send a rescue hint: not a failure.
+          if (a.hint && !a.why) break;
           if (a.why || at + 1 >= chain.length || !isModelUnavailable(msg)) throw e;
           tried.push(`${t.modelUsed ?? chain[at]!.name} (${isQuotaError(msg) ? "quota" : "unavailable"})`);
           const fam = chain[at] ? familyOf(chain[at]!.name) : undefined;
@@ -1499,6 +1742,12 @@ export class TaskInbox {
           await use();
           t.modelFallback = `${tried.join(" → ")} → ${t.modelUsed ?? chain[at]!.name}`;
         }
+      }
+      // A rescue hint: the cancelled turn is followed by one that carries it (once per run).
+      while (a.hint && !a.why) {
+        const hint = a.hint;
+        delete a.hint;
+        stop = await agent.prompt(`A colleague suggests: ${hint}\n\nContinue the task with that in mind.`);
       }
       // A research agent sometimes gives up after one refused step and writes nothing: ask once more, in the same
       // session, for the report with what it has (two deep-research runs ended this way).
@@ -1513,7 +1762,8 @@ export class TaskInbox {
     } catch (e) {
       error = (e as Error).message || String(e);
     } finally {
-      if (timer) clearTimeout(timer);
+      endGuard();
+      guardStop.abort();
       ticker?.stop();
       a.agent?.close();
     }
@@ -1521,7 +1771,7 @@ export class TaskInbox {
     const quota = error && isQuotaError(error) ? quotaUntil(error, this.now()) : undefined;
     if (quota) this.saved.quota = { ...quota, taskId: t.id };
     const ok = !error && stop === "end_turn" && !a.why;
-    const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? "Stopped by you." : a.why === "time" ? `Stopped at the ${t.maxMinutes}-minute limit.` : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
+    const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? "Stopped by you." : a.why ? this.stopText(t, a.why) : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
     await this.finish(t, worktree, base, repo, ok, why, quota ? "deferred-quota" : undefined);
   }
 
@@ -2045,6 +2295,11 @@ export class TaskInbox {
   private async loopWork(): Promise<void> {
     if (this.s.loop === false) return;
     await this.importResearch().catch(() => undefined);
+    const day = localDay(this.now());
+    if (this.savingsDay !== day) {
+      this.savingsDay = day;
+      await this.savingsPass().catch(() => undefined);
+    }
     await this.feedFromResearch().catch(() => undefined);
     await this.offerWaiting().catch(() => undefined);
     await this.loopStanding().catch(() => undefined);
@@ -2251,6 +2506,14 @@ export class TaskInbox {
       why = "Antigravity ended at once without changing anything (its quota is likely spent); it waits and tries again later.";
     } else if (!files.length) status = forced ?? "failed";
     else status = forced ?? (ok && allOk ? "done" : "partial");
+    // A second model reads the finished diff (done or partial); "reject" keeps a done task from being called done.
+    if (files.length && !blocked && (status === "done" || status === "partial")) {
+      await this.reviewDiff(t, diff);
+      if (t.review?.verdict === "reject") {
+        if (status === "done") status = "partial";
+        why = `${why ? `${why} ` : ""}Reviewer: ${t.review.reasons.join("; ") || "the change does not fit the task"}.`;
+      }
+    }
     if (status === "partial" || (status === "deferred-quota" && files.length)) {
       const partial = `${t.branch}-partial`;
       if (validBranchName(partial) && (await git(["branch", "-m", partial])).code === 0) t.branch = partial;
@@ -2258,7 +2521,7 @@ export class TaskInbox {
     t.note = blocked ? `${why ? `${why} ` : ""}Not committed or pushed: ${checks.filter((c) => !c.ok).map((c) => c.note).join("; ")}. The work stays on this PC only (${t.branch}).` : why || (files.length ? undefined : "The agent changed no files.");
     if (!t.note) delete t.note;
     if (files.length && !blocked) {
-      const msg = [`Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by ${t.runBy === "opencode" ? "OpenCode Go" : "Antigravity"}${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
+      const msg = [`${status === "partial" ? "partial: " : ""}Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by ${t.runBy === "opencode" ? "OpenCode Go" : "Antigravity"}${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
       const c = await git([...AUTHOR, "commit", "--quiet", "--no-verify", "-m", msg]);
       if (c.code === 0) {
         t.headSha = (await git(["rev-parse", "HEAD"])).out.trim().slice(0, 40);
@@ -2272,6 +2535,8 @@ export class TaskInbox {
     }
     t.status = status;
     t.endedAt = this.now();
+    this.log(t, "run-end", status === "failed" ? "error" : status === "done" ? "info" : "warning", { requests: t.steps ?? 0, minutes: Math.round(((t.endedAt - (t.startedAt ?? t.endedAt)) / 60_000) * 10) / 10, files: files.length, ok: status === "done" ? 1 : 0, paid: this.paidRuns.get(t.id) === false ? 0 : 1 }, `${status}${t.note ? `: ${t.note}` : ""}`);
+    this.paidRuns.delete(t.id);
     delete t.pending;
     // The branch keeps the work; the folder goes (unless the work was blocked and is kept for a look).
     if (!blocked) await this.d.git(repo, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
@@ -2311,7 +2576,8 @@ export class TaskInbox {
     t.runBy = to;
     t.executor = to;
     t.status = to === "antigravity" || to === "gemini" || to === "opencode" ? "waiting" : "queued";
-    t.branch = branchFor(t, to);
+    // A partial attempt's branch stays: the next attempt continues from it (resumeRef).
+    if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "antigravity"))) t.branch = branchFor(t, to);
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;

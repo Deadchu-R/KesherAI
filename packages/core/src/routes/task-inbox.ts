@@ -8,6 +8,7 @@ import type { TaskInbox } from "../inbox-runner.js";
 import type { KesherServices } from "../services.js";
 import { validBranchName } from "../task-inbox.js";
 import { DIGEST_FILE } from "../inbox-digest.js";
+import { usageQueryOf } from "../usage-log.js";
 import { parseAssignTo, parseWorkList, type InboxTaskView } from "@kesher/shared";
 
 /**
@@ -147,6 +148,11 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     return ok ? { ok } : reply.code(410).send({ error: "That step is no longer waiting." });
   });
 
+  // The usage log (usage-log.ts): read only, so a paired phone may read it too. Filters: level, executor, task, since (ms), grep.
+  app.get<{ Querystring: Record<string, string | undefined> }>("/api/usage-log", async (req) => inbox.usageLog(usageQueryOf(req.query)));
+  // The savings finder on demand (it also runs once a day): writes `suggestion` entries, applies nothing.
+  app.post("/api/usage-log/savings", async () => ({ suggestions: await inbox.savingsPass() }));
+
   /** Settings > Task inbox. */
   // The research backlog (research-tasks.ts): what the loop will feed next, and the lead tasks waiting for a decision.
   app.get("/api/task-inbox/research", async () => inbox.researchBacklog());
@@ -157,7 +163,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     const bool = (k: "enabled" | "paused" | "notWhileGame" | "notWhileEditor") => {
       if (typeof b[k] === "boolean") cur[k] = b[k] as boolean;
     };
-    const int = (k: "fetchMinutes" | "dailyCap" | "maxMinutes" | "gpuBusyPercent", min: number, max: number) => {
+    const int = (k: "fetchMinutes" | "dailyCap" | "maxMinutes" | "stallMinutes" | "maxRequests" | "gpuBusyPercent", min: number, max: number) => {
       if (b[k] === undefined) return;
       const n = Number(b[k]);
       if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${k} must be ${min}–${max}.`);
@@ -183,7 +189,9 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
       }
       int("fetchMinutes", 1, 120);
       int("dailyCap", 0, 100);
-      int("maxMinutes", 1, 60);
+      int("maxMinutes", 1, 480);
+      int("stallMinutes", 1, 120);
+      int("maxRequests", 1, 1000);
       int("gpuBusyPercent", 0, 100);
       list("allowedPaths", 40);
       list("forbiddenPaths", 60);

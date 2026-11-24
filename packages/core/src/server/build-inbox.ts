@@ -2,9 +2,11 @@ import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
-import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ToolContext } from "@kesher/agent";
+import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ModelTurn, type ToolContext } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
-import { FREE_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, type InboxBusy } from "@kesher/shared";
+import { FREE_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, trainingRiskOf, type InboxBusy } from "@kesher/shared";
+import { UsageLog } from "../usage-log.js";
+import type { WatchdogModel } from "../watchdog-model.js";
 import { fetchFreeUsage } from "../openrouter-free.js";
 import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
@@ -118,7 +120,7 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
         ];
       }),
     ),
-    run: async ({ worktree, title, prompt, model, signal, onStep }) => {
+    run: async ({ worktree, title, prompt, model, signal, onStep, attach }) => {
       // Only models the inbox may use run here (the free ones of OpenRouter, Z.ai, ...): a last guard. The runner has
       // already checked the task itself for the services that may train; here only the setting is known.
       if (!inboxModelAllowed(model, p.config.taskInbox?.opencode?.freeTrainingOk !== false)) throw new Error(`The task inbox may not use ${model}.`);
@@ -129,8 +131,10 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
       (await session())?.setUnattended(true);
       signal.addEventListener("abort", () => chats.stop(c.id), { once: true });
       await chats.send(c.id, prompt);
+      // The run guard's rescue hint joins the running turn at its next step (steer).
+      attach?.(async (text) => void (await chats.send(c.id, text, { steer: true })));
       const startedAt = Date.now();
-      let steps = -1;
+      let reported = 0;
       for (;;) {
         await new Promise((r) => setTimeout(r, 2000));
         if (signal.aborted) throw new Error("Stopped.");
@@ -138,8 +142,13 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
         if (!s) throw new Error("The OpenCode Go chat is gone.");
         const status = s.info().status;
         const events = s.events;
-        const n = events.reduce((k, e) => (e.type === "tool_call" ? k + 1 : k), 0);
-        if (n !== steps) onStep((steps = n));
+        // Each new tool call is one step for the run guard: its tool, arguments and (when it failed) the error.
+        const calls = events.filter((e): e is Extract<typeof e, { type: "tool_call" }> => e.type === "tool_call");
+        for (; reported < calls.length; reported++) {
+          const call = calls[reported]!;
+          const res = events.find((e): e is Extract<typeof e, { type: "tool_result" }> => e.type === "tool_result" && e.callId === call.callId);
+          onStep(reported + 1, { tool: call.name, args: call.input, ...(res && !res.ok ? { error: String(res.output).slice(0, 200) } : {}) });
+        }
         if (status === "running" || status === "waiting") continue;
         // The turn may not have started yet right after the send.
         if (status === "idle" && !events.some((e) => e.type === "assistant") && Date.now() - startedAt < 15_000) continue;
@@ -155,6 +164,45 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
 }
 
 /**
+ * The second models of the run guard (agent-watch.ts): `ask` (a rescue hint, the end review) goes to the local chat model
+ * when it is loaded and idle, else to the free cloud helpers (never a paid model); a pool whose services may train on
+ * prompts is used only when `canTrain` says the text may go there. `look` (the watchdog) uses the small local router
+ * model, on loan (CPU only, loaded for the check); when it is not on this computer the check is skipped.
+ *
+ * @param p - The config, the providers, the free cloud pool, which local chat model is loaded now and the watchdog's model.
+ */
+export function inboxHelpers(p: { config: KesherConfig; registry: ProviderRegistry; freeCloud?: FreeCloudPool; localChat?: () => string | undefined; watchdog?: WatchdogModel }): NonNullable<TaskInboxDeps["helpers"]> {
+  const run = async (turn: ModelTurn, o: { system: string; prompt: string; signal: AbortSignal }): Promise<string> => {
+    const signal = AbortSignal.any([o.signal, AbortSignal.timeout(60_000)]);
+    const r = await turn({ messages: [{ role: "system", content: o.system }, { role: "user", content: o.prompt }], tools: [] }, signal, () => undefined);
+    return r.text;
+  };
+  return {
+    ask: async (o) => {
+      const local = p.localChat?.();
+      if (local) {
+        try {
+          return { text: await run(modelTurnFor(p.registry, local, { temperature: 0.2 }, "helper"), o), model: local };
+        } catch {
+          // Not loaded after all or busy: the free cloud helpers next.
+        }
+      }
+      const pool = p.freeCloud;
+      if (!pool?.candidates("background").length) return undefined;
+      // A service that may train never gets what the task says it must not (the `:free` probe matches OpenRouter's rule).
+      if (!o.canTrain && pool.candidates("background").some((id) => trainingRiskOf(`${id}/x:free`))) return undefined;
+      try {
+        return { text: await run(pool.turn("background"), o), model: "free cloud helper" };
+      } catch {
+        return undefined;
+      }
+    },
+    // The watchdog's small model is on loan (watchdog-model.ts): CPU only, loaded for the check, unloaded after a minute.
+    look: async (o) => p.watchdog?.ask(o.system, o.prompt, AbortSignal.any([o.signal, AbortSignal.timeout(60_000)])),
+  };
+}
+
+/**
  * Builds the task inbox: git and checks as argument lists, the unmodified `agy acp` (it signs in by itself), the
  * shared board, notifications to this PC and the phone, and the busy check (games, editors, the graphics card).
  *
@@ -162,7 +210,7 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
  *   tasks run on its "gemini" provider), and the chats (OpenCode Go code tasks run in code chats).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager }): TaskInbox {
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager; localChat?: () => string | undefined; watchdog?: WatchdogModel }): TaskInbox {
   const git = runner("git", false);
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
@@ -246,6 +294,8 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       },
     },
     ...(p.chats ? { coder: opencodeCoder({ config: p.config, registry: p.registry, chats: p.chats }) } : {}),
+    usage: new UsageLog(join(p.root, "usage-log")),
+    helpers: inboxHelpers({ config: p.config, registry: p.registry, ...(p.freeCloud ? { freeCloud: p.freeCloud } : {}), ...(p.localChat ? { localChat: p.localChat } : {}), ...(p.watchdog ? { watchdog: p.watchdog } : {}) }),
     board: p.board,
     notify: (title, body, opts) => void p.notifier.send({ title, body, path: opts?.path ?? "#/task-inbox", tags: ["inbox_tray"], ...(opts?.actions ? { actions: opts.actions } : {}), ...(opts?.ref ? { ref: opts.ref } : {}) }).catch(() => undefined),
     // A running Antigravity task's live progress: the phone app only (one notification per task, updated in place).

@@ -20,7 +20,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { ensureMemoryWatchdog } from "./memory-watchdog.js";
 import { BUILT_IN_FACTORIES, ProviderRegistry } from "@kesher/providers";
 import { DownloadManager } from "@kesher/downloads";
-import { ASSIGN_CHOICES, beaconSecret, branding, features, helperHandoff, parseWorkList } from "@kesher/shared";
+import { ASSIGN_CHOICES, beaconSecret, branding, features, helperHandoff, parseWorkList, ROUTER_MODEL } from "@kesher/shared";
 import type { HelperRunInfo } from "@kesher/shared";
 import { saveConfig } from "./config.js";
 import { AssetStore } from "./assets.js";
@@ -35,7 +35,7 @@ import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
 import { Knowledge } from "./knowledge.js";
 import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
-import { ensureEngine, loadModel } from "./routes/engine.js";
+import { ensureEngine, loadModel, modelsOnComputer } from "./routes/engine.js";
 import { SIDE_PROVIDER, SideEngine, sideEngineOf } from "./side-engine.js";
 import { buildTranslator } from "./server/build-translator.js";
 import type { HelperEngine } from "./chat-helpers.js";
@@ -49,7 +49,7 @@ import { BgRemover } from "./bg-remove.js";
 import { bgRemoveRoutes } from "./routes/bg-remove.js";
 import { localCall } from "./local-call.js";
 import { buildResume } from "./server/build-resume.js";
-import { scanComputer, scanFolder } from "./model-scan.js";
+import { matchRecommended, scanComputer, scanFolder } from "./model-scan.js";
 import { Prompts } from "./prompts.js";
 import { Notifier } from "./notify.js";
 import { ApiKeys } from "./api-keys.js";
@@ -69,6 +69,7 @@ import { saveHubDiag } from "./hub-diag.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { buildWatchdog } from "./server/build-watchdog.js";
 import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFactory } from "./free-cloud.js";
 import { FREE_PROVIDER_IDS } from "./free-cloud-catalog.js";
 import { freeCloudFileStore } from "./routes/free-cloud.js";
@@ -662,7 +663,21 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.workerHost = options.workerHost;
   services.board = taskBoard;
   // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
-  const taskInbox = buildTaskInbox({ config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations });
+  // The run guard's helpers: the loaded chat model (rescue, review) and the small router model on loan, CPU only (watchdog).
+  const watchdog = buildWatchdog({
+    paths,
+    config,
+    binary: () => engine.status().binaryPath,
+    routerFile: async () => matchRecommended(await modelsOnComputer(services).catch(() => []), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern)?.path,
+    log: (line) => console.info(`[task-inbox] ${line}`),
+  });
+  const taskInbox = buildTaskInbox({
+    config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
+    localChat: () => {
+      const st = engine.status();
+      return st.running && st.modelPath && !st.job ? `llamacpp/${basename(st.modelPath).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}` : undefined;
+    },
+  });
   services.taskInbox = taskInbox;
   // "Continue what was running" after a restart (resume-board.ts): the main app only; a worker has no card.
   if (!options.worker) services.resume = buildResume(paths.root, services);

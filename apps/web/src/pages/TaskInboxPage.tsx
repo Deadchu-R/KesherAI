@@ -546,7 +546,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
           {t.outOfScope && <div><b className="small">{L("מחוץ לתחום", "Out of scope")}</b><p className="tinbox-goal">{t.outOfScope}</p></div>}
           <div><b className="small">{L("נתיבים מותרים", "Allowed paths")}</b><div className="row wrap">{t.allowedPaths.map((p) => <code key={p} dir="ltr">{p}</code>)}</div></div>
           {t.check && <div><b className="small">{L("בדיקה", "Check")}</b> <code dir="ltr">{t.check}</code></div>}
-          <p className="small muted">{L(`גבולות: ${t.maxMinutes} דק׳ · עד ${t.maxFiles} קבצים · סיכון ${t.risk === "low" ? "נמוך" : t.risk === "high" ? "גבוה" : "בינוני"}`, `Limits: ${t.maxMinutes} min · up to ${t.maxFiles} files · ${t.risk} risk`)}</p>
+          <p className="small muted">{L(`גבולות: תקרה ${Math.max(t.maxMinutes, 120)} דק׳ · עד ${t.maxFiles} קבצים · סיכון ${t.risk === "low" ? "נמוך" : t.risk === "high" ? "גבוה" : "בינוני"}`, `Limits: ${Math.max(t.maxMinutes, 120)} min ceiling · up to ${t.maxFiles} files · ${t.risk} risk`)}</p>
         </section>
 
         <section className="card stack">
@@ -555,6 +555,20 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
           <b className="small">{L("אישורים בדרך", "Approvals on the way")}</b>
           <p className="small">{L(`אוטומטי · ${auto} צעדים לפי כלל`, `Automatic · ${auto} steps by rule`)}</p>
           {denied.slice(-6).map((d, i) => <p key={i} className="small"><span className="tinbox-st bad">{L("נדחה לפי כלל", "Denied by rule")}</span> <code dir="ltr">{d.what}</code> <span className="muted">({ruleText(d.rule)})</span></p>)}
+          {t.review && (
+            <div className="stack">
+              <b className="small">{L("סקירה של מודל שני", "Second model's review")}</b>
+              <p className="small"><span className={`tinbox-st ${t.review.verdict === "ok" ? "ok" : "bad"}`}>{t.review.verdict === "ok" ? L("תקין", "OK") : t.review.verdict === "doubtful" ? L("מפוקפק", "Doubtful") : L("נדחה", "Rejected")}</span> <span className="muted">({t.review.model})</span></p>
+              {t.review.reasons.map((r, i) => <p key={i} className="small">{r}</p>)}
+              {t.review.offTask && <p className="small">{L("השומר ראה עבודה מחוץ למשימה:", "The watchdog saw off-task work:")} {t.review.offTask}</p>}
+            </div>
+          )}
+          {t.watchLog?.length ? (
+            <div className="stack">
+              <b className="small">{L("השומר והצלה", "Watchdog and rescue")}</b>
+              {t.watchLog.slice(-6).map((w, i) => <p key={i} className="small" dir="ltr">{w.text}</p>)}
+            </div>
+          ) : null}
           {(t.decisions ?? []).filter((d) => d.verdict === "ask").map((d, i) => <p key={`a${i}`} className="small"><span className="tinbox-st ask">{L("נשאל", "Asked")}</span> <code dir="ltr">{d.what}</code> → {d.answer === "allow" ? L("אושר", "allowed") : d.answer === "timeout" ? L("נדחה (אין תשובה)", "denied (no answer)") : d.answer ? L("נדחה", "denied") : L("מחכה", "waiting")}</p>)}
         </section>
       </div>

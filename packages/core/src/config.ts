@@ -297,7 +297,9 @@ export const KesherConfigSchema = z.object({
           freeTrainingOk: z.boolean().default(true),
         })
         .prefault({}),
-      maxMinutes: z.number().int().min(1).max(60).default(15),
+      maxMinutes: z.number().int().min(1).max(480).default(120),
+      stallMinutes: z.number().int().min(1).max(120).default(10),
+      maxRequests: z.number().int().min(1).max(1000).default(80),
       model: z.string().max(80).default(""),
       allowedPaths: z.array(z.string().max(120)).max(40).optional(),
       forbiddenPaths: z.array(z.string().max(120)).max(60).optional(),

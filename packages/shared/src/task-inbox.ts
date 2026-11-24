@@ -320,6 +320,16 @@ export interface InboxTaskSpec {
   report?: string;
 }
 
+/** A second model's review of a finished task's diff against its goal and allowed paths. */
+export interface InboxReview {
+  verdict: "ok" | "doubtful" | "reject";
+  reasons: string[];
+  /** The model that reviewed. */
+  model: string;
+  /** The watchdog saw the agent work off the task (what it saw). */
+  offTask?: string;
+}
+
 /** What KesherAI decided about one agent step (a permission request). */
 export interface InboxDecision {
   at: number;
@@ -379,6 +389,10 @@ export interface InboxTaskView extends InboxTaskSpec {
   plan?: Array<{ content: string; status: string }>;
   steps?: number;
   decisions?: InboxDecision[];
+  /** What the run guard did: a rescue hint, a watchdog worry (newest last, at most 30). */
+  watchLog?: Array<{ at: number; text: string }>;
+  /** The second model's look at the finished diff (inbox-guard.ts). */
+  review?: InboxReview;
   pending?: InboxApprovalAsk;
   checks?: InboxCheck[];
   files?: Array<{ path: string; added: number; removed: number }>;
@@ -440,7 +454,15 @@ export interface InboxSettings {
   opencode?: OpencodeSettings;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
   loop?: boolean;
+  /**
+   * The safety ceiling in minutes (default 120): a run is stopped here whatever it does. The real stop is progress-based
+   * (`stallMinutes`, `maxRequests`); a task's own `maxMinutes` counts too, the longer of the two wins.
+   */
   maxMinutes: number;
+  /** Stop a run when nothing changed (no changed file, no new step) for this many minutes (default 10). */
+  stallMinutes?: number;
+  /** Most agent requests (steps) one task may use (default 80). */
+  maxRequests?: number;
   /** The model inside Antigravity (empty: Gemini's default). */
   model: string;
   /**

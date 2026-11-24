@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isFreeOpencodeModel, OPENCODE_DEFAULTS, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder } from "@kesher/shared";
 import { inboxSnapshot } from "./agent-activity.js";
+import { UsageLog } from "./usage-log.js";
 import { OPENCODE_LIMIT_MS, TaskInbox, type RunCmd, type TaskInboxDeps } from "./inbox-runner.js";
 import { taskSize } from "./task-inbox.js";
 
@@ -98,7 +99,7 @@ function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undef
 /** How many times a test inbox tried to start Antigravity (it must stay 0 without the user's Run answer). */
 let agyStarts = 0;
 
-function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], settings: Record<string, unknown> = {}, now = () => Date.now()) {
+function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], settings: Record<string, unknown> = {}, now = () => Date.now(), extra: Partial<TaskInboxDeps> = {}) {
   const notes: string[] = [];
   const inbox = new TaskInbox({
     settings: () => ({ enabled: true, repo, branch: "kesher-inbox", dailyCap: 10, ...settings }), // read each time: a test may change `settings`
@@ -113,6 +114,7 @@ function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], set
     busy: async () => ({ free: true, reasons: [] }),
     ...(coder ? { coder } : {}),
     now,
+    ...extra,
   });
   return { inbox, notes };
 }
@@ -572,6 +574,182 @@ test("opencode: queuing a waiting task moves it to the front", async () => {
     s.paused = false;
     await syncAndRun(inbox);
     assert.match(runs[0]?.title ?? "", /c-20261122-32/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/** A fake coder that edits a file, takes `steps` steps (as the guard sees them), then waits to be stopped if it is not finished. */
+function guardedCoder(o: { steps: Array<{ tool: string; args: unknown }>; hang?: boolean; onRun?: (n: number) => void; onInject?: (text: string) => void; value?: number; skew?: { add: (ms: number) => void; stall?: boolean } }) {
+  let runs = 0;
+  const coder: NonNullable<TaskInboxDeps["coder"]> = {
+    ready: () => true,
+    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    free: {},
+    run: async ({ worktree, signal, onStep, attach }) => {
+      runs++;
+      o.onRun?.(runs);
+      attach?.(async (text) => o.onInject?.(text));
+      writeFileSync(join(worktree, "apps", "a.ts"), `export const a = ${o.value ?? runs + 10};\n`);
+      if (o.skew?.stall) o.skew.add(11 * 60_000);
+      o.steps.forEach((s, i) => onStep(i + 1, s));
+      if (o.hang) await new Promise<never>((_, rej) => signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
+      return { text: "Changed apps/a.ts." };
+    },
+  };
+  return { coder, runs: () => runs };
+}
+
+test("run guard: the request budget ends a run with changes as partial (committed, pushed), and the next attempt continues from that branch", async () => {
+  const { root, repo } = await setup({ "c-20261124-01": TASK("c-20261124-01", "opencode", "size: S\n") });
+  const steps = Array.from({ length: 10 }, (_, i) => ({ tool: "edit", args: i }));
+  const g = guardedCoder({ steps, hang: true });
+  const usage = new UsageLog(join(root, "usage"));
+  const { inbox } = inboxFor(repo, root, g.coder, { maxRequests: 5 }, undefined, { watchEveryMs: 5_000, usage });
+  try {
+    await syncAndRun(inbox);
+    const a = await inbox.task("c-20261124-01");
+    assert.equal(a.status, "partial");
+    assert.match(a.note ?? "", /Stopped at the request budget \(5\)\./);
+    assert.equal(a.pushed, true);
+    assert.match(a.branch, /^ocgo\/c-20261124-01-.*-partial$/);
+    // The usage log: start, the stop (a warning with the note) and the end (partial, with the request count).
+    const logged = await usage.read({ task: "c-20261124-01" });
+    assert.deepEqual(logged.map((e) => e.event).slice(0, 3), ["run-start", "stop", "run-end"]);
+    assert.equal(logged[1]!.level, "warning");
+    assert.match(logged[1]!.why!, /request budget \(5\)/);
+    assert.deepEqual([logged[2]!.numbers!.requests! >= 5, logged[2]!.numbers!.ok, logged[2]!.size], [true, 0, "S"]);
+    const partial = a.branch;
+    const partialSha = a.headSha;
+    assert.match(await sh(repo, "log", "-1", "--format=%s", partial), /^partial: Inbox c-20261124-01/);
+    // Again (the user taps Run again): the new branch starts from the partial one, so its first commit's parent is the partial head.
+    const g2 = guardedCoder({ steps: [{ tool: "edit", args: "x" }], value: 77 });
+    (inbox as unknown as { d: TaskInboxDeps }).d.coder = g2.coder;
+    await inbox.reassign("c-20261124-01", "opencode", { again: true });
+    await inbox.pumpOpencode();
+    await inbox.idle();
+    const b = await inbox.task("c-20261124-01");
+    assert.equal(b.status, "done");
+    assert.match(b.note ?? "", /^$|Continuing/);
+    assert.notEqual(b.branch, partial);
+    assert.equal(await sh(repo, "rev-parse", `${b.branch}~1`), partialSha);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run guard: the same step 4 times stops the run; without changes it fails with the reason", async () => {
+  const { root, repo } = await setup({ "c-20261124-02": TASK("c-20261124-02", "opencode", "size: S\n") });
+  const same = Array.from({ length: 6 }, () => ({ tool: "run", args: "pnpm test" }));
+  const coder: NonNullable<TaskInboxDeps["coder"]> = {
+    ready: () => true,
+    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    free: {},
+    run: async ({ signal, onStep }) => {
+      same.forEach((s, i) => onStep(i + 1, s)); // no file changed
+      await new Promise<never>((_, rej) => signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
+      return { text: "" };
+    },
+  };
+  const { inbox } = inboxFor(repo, root, coder, {}, undefined, { watchEveryMs: 5_000 });
+  try {
+    await syncAndRun(inbox);
+    const a = await inbox.task("c-20261124-02");
+    assert.equal(a.status, "failed");
+    assert.match(a.note ?? "", /Stopped: the same step repeated 4 times\./);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run guard: a stall (fake clock) is rescued once by a second model, the hint is injected and logged; then the run finishes", async () => {
+  const { root, repo } = await setup({ "c-20261124-03": TASK("c-20261124-03", "opencode", "size: S\n") });
+  let skew = 0;
+  const injected: string[] = [];
+  const asked: Array<{ canTrain: boolean; prompt: string }> = [];
+  // The coder stalls (the clock jumps 11 min after its first step) and waits for the hint, then ends.
+  let hintSeen!: () => void;
+  const hinted = new Promise<void>((r) => (hintSeen = r));
+  const coder: NonNullable<TaskInboxDeps["coder"]> = {
+    ready: () => true,
+    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    free: {},
+    run: async ({ worktree, onStep, attach }) => {
+      attach?.(async (text) => {
+        injected.push(text);
+        hintSeen();
+      });
+      writeFileSync(join(worktree, "apps", "a.ts"), "export const a = 99;\n");
+      onStep(1, { tool: "read", args: "a" });
+      skew += 11 * 60_000;
+      await hinted;
+      return { text: "Changed apps/a.ts." };
+    },
+  };
+  const helpers: NonNullable<TaskInboxDeps["helpers"]> = {
+    ask: async (o) => {
+      asked.push({ canTrain: o.canTrain, prompt: o.prompt });
+      return o.system.includes("review") ? { text: '{"verdict":"ok","reasons":[]}', model: "fake-local" } : { text: "Edit apps/a.ts first.\nThen run the check.", model: "fake-local" };
+    },
+    look: async () => undefined,
+  };
+  const { inbox } = inboxFor(repo, root, coder, {}, () => Date.now() + skew, { watchEveryMs: 5, helpers });
+  try {
+    await syncAndRun(inbox);
+    const a = await inbox.task("c-20261124-03");
+    assert.deepEqual(injected, ["Edit apps/a.ts first.\nThen run the check."]);
+    assert.ok(a.watchLog?.some((l) => /^Rescued by fake-local: Edit apps\/a\.ts first\.$/.test(l.text)), JSON.stringify(a.watchLog));
+    assert.equal(a.status, "done");
+    assert.equal(a.review?.verdict, "ok");
+    assert.equal(asked[0]!.canTrain, false); // a medium-risk task never goes to a service that may train
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run guard: the reviewer's reject turns a finished task into partial with a note; a medium-risk task never lets a training service see the diff", async () => {
+  const { root, repo } = await setup({ "c-20261124-04": TASK("c-20261124-04", "opencode", "size: S\n") });
+  const seen: boolean[] = [];
+  const helpers: NonNullable<TaskInboxDeps["helpers"]> = {
+    ask: async (o) => (seen.push(o.canTrain), { text: '{"verdict":"reject","reasons":["does not add a button"]}', model: "fake" }),
+    look: async () => undefined,
+  };
+  const { coder } = fakeCoder();
+  const { inbox } = inboxFor(repo, root, coder, {}, undefined, { helpers });
+  try {
+    await syncAndRun(inbox);
+    const a = await inbox.task("c-20261124-04");
+    assert.equal(a.status, "partial");
+    assert.match(a.note ?? "", /Reviewer: does not add a button\./);
+    assert.deepEqual([a.review?.verdict, a.review?.model], ["reject", "fake"]);
+    assert.deepEqual(seen, [false]); // the task is medium risk: no training service
+    assert.match(a.branch, /-partial$/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run guard: the safety ceiling is never below 120 minutes (an old 15-minute setting no longer kills a run)", async () => {
+  const { root, repo } = await setup({ "c-20261124-05": TASK("c-20261124-05", "opencode", "size: S\nmax_minutes: 15\n") });
+  let skew = 0;
+  const coder: NonNullable<TaskInboxDeps["coder"]> = {
+    ready: () => true,
+    models: async () => ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
+    free: {},
+    run: async ({ worktree, onStep }) => {
+      for (let i = 1; i <= 5; i++) {
+        writeFileSync(join(worktree, "apps", "a.ts"), `export const a = ${i + 50};\n`);
+        onStep(i, { tool: "edit", args: i });
+        skew += 8 * 60_000; // 40 minutes in all (the old limit was 15), with progress every 8
+        await new Promise((r) => setTimeout(r, 40));
+      }
+      return { text: "ok" };
+    },
+  };
+  const { inbox } = inboxFor(repo, root, coder, { maxMinutes: 15 }, () => Date.now() + skew, { watchEveryMs: 5 });
+  try {
+    await syncAndRun(inbox);
+    assert.equal((await inbox.task("c-20261124-05")).status, "done");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
