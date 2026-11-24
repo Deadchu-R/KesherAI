@@ -6,6 +6,7 @@ export const ASSIGN_CHOICES = [
     { to: "claude", icon: "✷", he: "Claude (סוכן Opus)", en: "Claude (Opus agent)", noteHe: "Claude מריץ אותה בסוכן שלו", noteEn: "Claude runs it with its own agent" },
     { to: "antigravity", icon: "✦", he: "Antigravity", en: "Antigravity", noteHe: "מחכה ללחיצה על הרצה", noteEn: "Waits for your Run" },
     { to: "gemini", icon: "✧", he: "Gemini (חינמי, מחקר)", en: "Gemini (free, research)", noteHe: "רץ לבד, למשימות מחקר בלבד", noteEn: "Runs by itself, research tasks only" },
+    { to: "claude-code", icon: "✳", he: "Claude Code במחשב", en: "Claude Code on the PC", noteHe: "המנוי שלך, מחכה ללחיצה על הרצה", noteEn: "Your subscription, waits for your Run" },
     { to: "opencode", icon: "◈", he: "OpenCode Go (תוכנית קבועה)", en: "OpenCode Go (flat plan)", noteHe: "רץ לבד, משימות קוד", noteEn: "Runs by itself, code tasks" },
     { to: "local", icon: "◆", he: "מודל מקומי (עבודה עצמית)", en: "Local model (self-work)", noteHe: "דרך לוח המשימות", noteEn: "Through the task board" },
     { to: "helper:lookup", icon: "🔎", he: "סוכן חיפוש בצ׳אט", en: "Lookup agent in a chat", noteHe: "צ׳אט קוד חדש", noteEn: "A new code chat" },
@@ -28,13 +29,13 @@ export function parseAssignTo(x) {
 }
 /** The task inbox's executor for a target (a chat role has none: it leaves the inbox). */
 export function inboxExecutorOf(to) {
-    return to === "claude" ? "opus" : to === "antigravity" || to === "local" || to === "gemini" || to === "opencode" ? to : undefined;
+    return to === "claude" ? "opus" : to === "claude-code" ? "claude" : to === "antigravity" || to === "local" || to === "gemini" || to === "opencode" ? to : undefined;
 }
 /** A chat role of a target, if it is one: a helper type, or an engine specialist. */
 export const roleOf = (to) => (to.startsWith("helper:") ? to.slice(7) : undefined);
 /** The current executor of an inbox task as a target (to mark it in the list). */
 export function assignOfExecutor(runBy) {
-    return runBy === "opus" ? "claude" : runBy === "antigravity" || runBy === "local" || runBy === "gemini" || runBy === "opencode" ? runBy : undefined;
+    return runBy === "opus" ? "claude" : runBy === "claude" ? "claude-code" : runBy === "antigravity" || runBy === "local" || runBy === "gemini" || runBy === "opencode" ? runBy : undefined;
 }
 /**
  * The first message of the chat a task is handed to (a chat role): the lead hands the whole task to one sub-agent of
