@@ -462,5 +462,5 @@ Fits (flat, no per-use billing, drivable from KesherAI):
 Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0.50 per 1M), the dit.ai list (DeepInfra, Groq, Together, DeepSeek API). Cursor Plus is IDE-only; Zed Pro bills past its credits.
 
 ## Roee 24.11 evening
-- ⬜ Local model unloads itself after a short idle time; small internal requests (titles, digests, reports) go to a free cloud provider first and load the local model only when needed (Roee: "rather it isn't loaded if it doesn't have to be").
+- ⬜ Local model unloads itself after a short idle time; small internal requests go first to the small CPU model (the watchdog one: loads per request, unloads after 60 s; titles and short private summaries), longer non-private ones (digests, reports) to a free cloud provider, and the big GPU model loads only when quality needs it (Roee: "rather it isn't loaded if it doesn't have to be").
 - ⬜ Task inbox uses the free-cloud keys too (fc-openrouter / fc-zhipu / fc-cloudflare), so keys are entered once.
