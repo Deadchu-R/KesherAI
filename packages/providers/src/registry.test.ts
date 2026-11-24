@@ -80,3 +80,9 @@ test("another computer's models show at once from the last list; a computer that
   reg.setAway("pc", undefined);
   assert.equal((await reg.listAllModels()).models.length, 1);
 });
+
+test("withDeadline rejects a call that never settles", async () => {
+  const { withDeadline } = await import("./registry.js");
+  await assert.rejects(withDeadline(new Promise(() => undefined), 20, "stuck"), /stuck did not answer/);
+  assert.equal(await withDeadline(Promise.resolve(3), 20, "fast"), 3);
+});

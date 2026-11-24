@@ -1,6 +1,22 @@
 import { parseModelId, type ModelInfo } from "@kesher/shared";
 import type { Provider, ProviderConfig, ProviderFactory } from "./provider.js";
 
+/**
+ * Settles with `work`, or rejects once `ms` pass, whichever is first.
+ *
+ * @param work - The call.
+ * @param ms - The longest wait.
+ * @param id - The provider, for the message.
+ * @returns What `work` returned.
+ */
+export function withDeadline<T>(work: Promise<T>, ms: number, id: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${id} did not answer within ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
 /** Result of {@link ProviderRegistry.listAllModels}: models plus per-provider errors. */
 export interface ModelListing {
   models: ModelInfo[];
@@ -197,7 +213,8 @@ export class ProviderRegistry {
     }
     // Servers on another network (another computer through the internet) get longer: their own list asks their providers first.
     const wait = (p: Provider) => (p.location === "server" ? Math.max(timeoutMs, 15_000) : timeoutMs);
-    const results = await Promise.allSettled(ask.map((provider) => provider.listModels(AbortSignal.timeout(wait(provider)))));
+    // The deadline is kept here too: a provider that ignores its signal must not hold the whole list (and every page) hostage.
+    const results = await Promise.allSettled(ask.map((provider) => withDeadline(provider.listModels(AbortSignal.timeout(wait(provider))), wait(provider) + 1_000, provider.id)));
     results.forEach((r, i) => {
       const providerId = ask[i]!.id;
       if (r.status === "fulfilled") {

@@ -4,7 +4,7 @@ import { mkdir, readdir, rmdir, stat, unlink } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { PROVIDER_PRESETS, type ProviderConfig } from "@kesher/providers";
+import { PROVIDER_PRESETS, type ProviderConfig, withDeadline } from "@kesher/providers";
 import { detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { scanComputer, scanFolder } from "../model-scan.js";
@@ -377,7 +377,7 @@ export async function modelRoutes(app: FastifyInstance, s: KesherServices): Prom
         ...mask(config),
         capabilities: provider.capabilities,
         autodetected: s.autodetected.has(config.id),
-        healthy: await provider.checkHealth(AbortSignal.timeout(2500)),
+        healthy: await withDeadline(provider.checkHealth(AbortSignal.timeout(2500)), 3_000, config.id).catch(() => false),
       })),
     ),
   );
