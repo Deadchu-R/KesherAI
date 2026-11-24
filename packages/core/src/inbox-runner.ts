@@ -8,7 +8,7 @@ import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
 import { isPrivacySkip } from "./privacy-guard.js";
-import { createSessionWorktree, excludeWorktrees, type Git } from "./session-worktrees.js";
+import { createSessionWorktree, excludeWorktrees, sweepWorktrees, tidyWorktreesRoot, worktreeFolder, type Git } from "./session-worktrees.js";
 import { heavyGate } from "./heavy-gate.js";
 import { UsageLog, baselineOf, overBaseline, type UsageEntry } from "./usage-log.js";
 import { findSavings } from "./savings.js";
@@ -619,7 +619,14 @@ export class TaskInbox {
       this.loopTimer.unref?.();
     }
     void this.sync().catch(() => undefined);
+    // Once after each start (an update restarts the app): clear finished worktrees, after the queue has loaded.
+    if (!this.sweptAtStart) {
+      this.sweptAtStart = true;
+      setTimeout(() => void this.sweepWorktreesOnce().catch(() => undefined), 60_000).unref?.();
+    }
   }
+
+  private sweptAtStart = false;
 
   /** Stops fetching (Off is the kill switch: it also stops a run). */
   async stopAll(): Promise<void> {
@@ -886,7 +893,7 @@ export class TaskInbox {
   private async commitToInbox(files: Array<[string, string]>, message: string): Promise<void> {
     const repo = this.repo();
     const br = this.branch();
-    const wt = join(repo, ".kesher", "worktrees", "inbox");
+    const wt = worktreeFolder(repo, "inbox");
     const remote = (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${br}`])).code === 0;
     if (!existsSync(wt)) {
       await excludeWorktrees(repo, this.gitStrict);
@@ -2442,7 +2449,7 @@ export class TaskInbox {
         if (shown.code === 0) text = shown.out;
       }
       if (!text?.trim()) continue;
-      const wt = join(repo, ".kesher", "worktrees", "research-main");
+      const wt = worktreeFolder(repo, "research-main");
       if (!existsSync(wt)) {
         await excludeWorktrees(repo, this.gitStrict);
         await mkdir(dirname(wt), { recursive: true });
@@ -2591,6 +2598,24 @@ export class TaskInbox {
   }
 
   /**
+   * Once a day: removes finished worktrees of the project (session-worktrees.ts `sweepWorktrees`: pushed, clean, no task
+   * running, over a day old), each logged to the usage log (info).
+   *
+   * @returns The folders removed.
+   */
+  async sweepWorktreesOnce(): Promise<string[]> {
+    const ids = this.saved.tasks.filter((t) => t.status === "running" || t.status === "needs-approval" || t.status === "waiting").map((t) => `-${t.id}-`);
+    const gone = await sweepWorktrees(this.repo(), async (cwd, args) => {
+      const r = await this.d.git(cwd, args);
+      if (r.code) throw new Error(r.out.trim());
+      return r.out;
+    }, { isBusy: (p) => ids.some((id) => p.includes(id)) });
+    await tidyWorktreesRoot();
+    for (const w of gone) void this.d.usage?.append({ level: "info", executor: "inbox", event: "cleanup", why: `Removed ${w.orphan ? "leftover worktree folder" : "finished worktree"} ${basename(w.path)}${w.branch ? ` (${w.branch})` : ""}${w.orphan ? "" : ": pushed and clean"}.` });
+    return gone.map((w) => w.path);
+  }
+
+  /**
    * The work loop (Settings › Task inbox › Keep the work loop running, `loop`): read new research tasks, keep the lines
    * fed, offer the standing "what to research next" task when the backlog is empty, and send the 21:00 summary.
    */
@@ -2601,6 +2626,7 @@ export class TaskInbox {
     if (this.savingsDay !== day) {
       this.savingsDay = day;
       await this.savingsPass().catch(() => undefined);
+      await this.sweepWorktreesOnce().catch(() => undefined);
     }
     await this.feedFromResearch().catch(() => undefined);
     await this.offerWaiting().catch(() => undefined);
@@ -2840,8 +2866,13 @@ export class TaskInbox {
     this.log(t, "run-end", status === "failed" ? "error" : status === "done" ? "info" : "warning", { requests: t.steps ?? 0, minutes: Math.round(((t.endedAt - (t.startedAt ?? t.endedAt)) / 60_000) * 10) / 10, files: files.length, ok: status === "done" ? 1 : 0, paid: this.paidRuns.get(t.id) === false ? 0 : 1 }, `${status}${t.note ? `: ${t.note}` : ""}`);
     this.paidRuns.delete(t.id);
     delete t.pending;
-    // The branch keeps the work; the folder goes (unless the work was blocked and is kept for a look).
-    if (!blocked) await this.d.git(repo, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
+    // The branch keeps the work; the folder goes once the work is pushed or there is nothing to keep. It stays when the
+    // work was blocked or the push failed (the only copy), until the daily sweep finds it safe on the remote.
+    if (!blocked && (t.pushed || !files.length)) {
+      await this.d.git(repo, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
+      await this.d.git(repo, ["worktree", "prune"]).catch(() => undefined);
+      await tidyWorktreesRoot();
+    }
     await this.save();
     if (t.boardId && this.d.board) {
       const line = `${status}${t.pushed ? `: branch ${t.branch} (${(t.headSha ?? "").slice(0, 7)})` : ""}${t.note ? ` — ${t.note}` : ""}`.slice(0, 1000);

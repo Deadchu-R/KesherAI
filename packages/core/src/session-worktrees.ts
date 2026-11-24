@@ -3,8 +3,11 @@
  * its own folder and branch, so two sessions on one project never touch each other's files and the
  * user's own checkout stays as it is.
  *
- * - Folder: `<repo>/.kesher/worktrees/<name>`, branch `kesher/<name>`, from the checkout's current commit.
- *   `.kesher/worktrees/` goes in the repo's local exclude file (`.git/info/exclude`), never in its .gitignore.
+ * - Folder: `<worktreesDir>/<repo name>/<name>` when a worktrees folder is set (see {@link resolveWorktreesDir}: by
+ *   default a `worktrees` folder next to the models folder when that is on another drive than Windows, because each
+ *   worktree gets its own packages, GBs on the system drive); otherwise `<repo>/.kesher/worktrees/<name>`.
+ *   Branch `kesher/<name>`, from the checkout's current commit. `.kesher/worktrees/` goes in the repo's local exclude
+ *   file (`.git/info/exclude`), never in its .gitignore.
  * - `.worktreeinclude` at the repo root (the file Claude Code reads, .gitignore syntax) names ignored files
  *   to copy into each new worktree, such as `.env`. Only ignored files are copied; tracked ones are already there.
  * - Removing: only when it holds no work (no changed or untracked files, no commits of its own),
@@ -12,7 +15,8 @@
  */
 import { copyFile, mkdir, readFile, appendFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readdir, rm, rmdir, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve, win32 } from "node:path";
 import ignore from "ignore";
 
 /** Runs git in a folder; resolves with its output, rejects with its error text. */
@@ -27,6 +31,39 @@ export interface SessionWorktree {
   branch: string;
   /** The commit it started from. */
   base: string;
+}
+
+/** The configured worktrees folder (set once at start-up from {@link resolveWorktreesDir}); undefined: inside each repo. */
+let worktreesRoot: string | undefined;
+
+/** Sets the folder all session, inbox and self-work worktrees go under (undefined: `<repo>/.kesher/worktrees`). */
+export function setWorktreesRoot(dir: string | undefined): void {
+  worktreesRoot = dir && isAbsolute(dir) ? dir : undefined;
+}
+
+/** The worktrees folder in use (undefined: inside each repo). */
+export function getWorktreesRoot(): string | undefined {
+  return worktreesRoot;
+}
+
+/**
+ * Where worktrees go: the `worktreesDir` setting; else a `worktrees` folder next to the models folder when that is on
+ * another drive than Windows (so the GBs of packages leave C:); else undefined (inside each repo, as before).
+ *
+ * @param configured - The `worktreesDir` setting.
+ * @param modelsDir - The models folder.
+ * @param systemDrive - Windows' drive (`C:`); default from the environment.
+ */
+export function resolveWorktreesDir(configured: string | undefined, modelsDir: string, systemDrive = process.env.SystemDrive ?? "C:"): string | undefined {
+  if (configured?.trim()) return resolve(configured.trim());
+  const drive = /^([A-Za-z]:)/.exec(modelsDir)?.[1]?.toUpperCase();
+  if (!drive || drive === systemDrive.toUpperCase()) return undefined;
+  return win32.join(win32.dirname(modelsDir), "worktrees");
+}
+
+/** The folder of one worktree: `<root>/<repo name>/<name>` with a worktrees folder, else inside the repo. */
+export function worktreeFolder(repo: string, name: string): string {
+  return worktreesRoot ? join(worktreesRoot, basename(repo), name) : join(repo, ".kesher", "worktrees", name);
 }
 
 /** A name safe for a folder and a branch. */
@@ -83,9 +120,9 @@ export async function createSessionWorktree(folder: string, name: string, git: G
   }
   const base = (await git(repo, ["rev-parse", "--verify", `${opts.base ?? "HEAD"}^{commit}`]).catch(() => "")).trim();
   if (!base) throw new Error(opts.base ? `There is no commit ${opts.base} in this project.` : "The git project has no commit yet: commit once, then start a session in a worktree.");
-  const path = join(repo, ".kesher", "worktrees", name);
+  const path = worktreeFolder(repo, name);
   const branch = opts.branch ?? `kesher/${name}`;
-  await excludeWorktrees(repo, git);
+  if (!worktreesRoot) await excludeWorktrees(repo, git);
   await mkdir(dirname(path), { recursive: true });
   await git(repo, ["worktree", "add", "-b", branch, path, base]);
   // .worktreeinclude: ignored files (.env and the like) the new checkout needs.
@@ -124,4 +161,72 @@ export async function removeSessionWorktree(wt: SessionWorktree, git: Git, force
   else await git(wt.repo, ["worktree", "prune"]).catch(() => "");
   await git(wt.repo, ["branch", "-D", wt.branch]).catch(() => "");
   return true;
+}
+
+/** One finished worktree the sweep removed. */
+export interface SweptWorktree {
+  path: string;
+  branch?: string;
+  /** A leftover folder git no longer knows (its registration was pruned), removed as a plain folder. */
+  orphan?: true;
+}
+
+/**
+ * The daily sweep: removes worktrees of `repo` that are done with. A worktree goes when it is one KesherAI made (under
+ * the worktrees folder or `<repo>/.kesher/worktrees`), no task runs in it, it was last touched more than a day ago,
+ * it has no uncommitted or untracked files and its HEAD is on a remote branch (so the work is safe on the remote).
+ * Everything else stays. Then `git worktree prune`.
+ *
+ * @param repo - The repo root.
+ * @param git - Runs git.
+ * @param o - `isBusy`: whether a task still uses this folder; `now`: the time (ms); `minAgeMs`: how old, default 1 day.
+ * @returns The worktrees removed.
+ */
+export async function sweepWorktrees(repo: string, git: Git, o: { isBusy?: (path: string) => boolean; now?: number; minAgeMs?: number } = {}): Promise<SweptWorktree[]> {
+  const now = o.now ?? Date.now();
+  const minAge = o.minAgeMs ?? 24 * 3600_000;
+  const inside = (p: string, root: string) => resolve(p).toLowerCase().startsWith(`${resolve(root).toLowerCase()}${resolve(root).includes("\\") ? "\\" : "/"}`);
+  const roots = [join(repo, ".kesher", "worktrees"), ...(worktreesRoot ? [join(worktreesRoot, basename(repo))] : [])];
+  const listed = (await git(repo, ["worktree", "list", "--porcelain"]).catch(() => "")).split(/\r?\n\r?\n/);
+  const removed: SweptWorktree[] = [];
+  const known = new Set<string>();
+  for (const block of listed) {
+    const path = /^worktree (.+)$/m.exec(block)?.[1]?.trim();
+    if (path) known.add(resolve(path).toLowerCase());
+    if (!path || !roots.some((r) => inside(path, r))) continue;
+    if (o.isBusy?.(path)) continue;
+    const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1]?.trim();
+    const touched = await stat(path).then((st) => st.mtimeMs).catch(() => undefined);
+    if (touched !== undefined && now - touched < minAge) continue;
+    if (touched !== undefined) {
+      // Uncommitted work, or a HEAD no remote branch holds, keeps the folder.
+      const dirty = (await git(path, ["status", "--porcelain"]).catch(() => "x")).trim();
+      const onRemote = (await git(path, ["branch", "-r", "--contains", "HEAD"]).catch(() => "")).trim();
+      if (dirty || !onRemote) continue;
+      await git(repo, ["worktree", "remove", "--force", path]).catch(() => "");
+    }
+    removed.push({ path, ...(branch ? { branch } : {}) });
+  }
+  await git(repo, ["worktree", "prune"]).catch(() => "");
+  // Orphans: folders directly under a worktrees folder that git has forgotten (a pushed branch kept the work).
+  for (const root of roots) {
+    for (const d of await readdir(root).catch(() => [])) {
+      const path = join(root, d);
+      if (known.has(resolve(path).toLowerCase()) || o.isBusy?.(path)) continue;
+      const touched = await stat(path).then((st) => (st.isDirectory() ? st.mtimeMs : undefined)).catch(() => undefined);
+      if (touched === undefined || now - touched < minAge) continue;
+      await rm(path, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
+      if (!existsSync(path)) removed.push({ path, orphan: true });
+    }
+  }
+  return removed;
+}
+
+/** Empty folders left under the worktrees folder after removals (`<root>/<repo name>`), best effort. */
+export async function tidyWorktreesRoot(): Promise<void> {
+  if (!worktreesRoot) return;
+  for (const d of await readdir(worktreesRoot).catch(() => [])) {
+    const dir = join(worktreesRoot, d);
+    if (!(await readdir(dir).catch(() => ["x"])).length) await rmdir(dir).catch(() => undefined);
+  }
 }

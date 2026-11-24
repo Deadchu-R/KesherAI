@@ -70,6 +70,7 @@ import { saveHubDiag } from "./hub-diag.js";
 import { HubClient } from "./hub-client.js";
 import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
+import { resolveWorktreesDir, setWorktreesRoot } from "./session-worktrees.js";
 import { buildWatchdog } from "./server/build-watchdog.js";
 import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFactory } from "./free-cloud.js";
 import { FREE_PROVIDER_IDS } from "./free-cloud-catalog.js";
@@ -674,6 +675,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     routerFile: async () => matchRecommended(await modelsOnComputer(services).catch(() => []), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern)?.path,
     log: (line) => console.info(`[task-inbox] ${line}`),
   });
+  // Agent worktrees (GBs of packages each) go next to the models folder when that is on another drive than Windows.
+  setWorktreesRoot(resolveWorktreesDir(config.worktreesDir, paths.models));
   const taskInbox = buildTaskInbox({
     config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
     githubToken: () => github.pushToken(),

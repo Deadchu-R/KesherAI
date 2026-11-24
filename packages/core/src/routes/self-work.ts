@@ -10,6 +10,7 @@ import { detectHardwareCached, freeSpace } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import type { SelfWorkState } from "../self-work.js";
 import type { BoardChange } from "../task-board.js";
+import { getWorktreesRoot } from "../session-worktrees.js";
 import { CooldownHandoff, onClaudeError, type HandoffSettings } from "../cooldown-handoff.js";
 
 /**
@@ -66,7 +67,7 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     // A run makes a copy of the project and installs its packages: on a full disk every check fails (found on the PC
     // with 0.2 GB left: the tests themselves failed) and Windows itself gets unstable.
     // The copies' folder: this app's setting (a worker gets it from the main app, which is a local request).
-    const worktrees = (isLocalRequest(req) && typeof b.worktrees === "string" && isAbsolute(b.worktrees) ? b.worktrees : undefined) ?? s.config.selfWorkDir;
+    const worktrees = (isLocalRequest(req) && typeof b.worktrees === "string" && isAbsolute(b.worktrees) ? b.worktrees : undefined) ?? s.config.selfWorkDir ?? getWorktreesRoot();
     const free = await freeSpace(worktrees ?? repo).catch(() => undefined);
     // 5 GB; the tests set KESHER_SELF_WORK_MIN_GB=0 (they only check the flow, and build machines are often fuller).
     const minGb = Number(process.env.KESHER_SELF_WORK_MIN_GB ?? 5);

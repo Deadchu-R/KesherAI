@@ -123,6 +123,12 @@ export const KesherConfigSchema = z.object({
   /** Where self-work makes its copies of a project (a folder per run). Defaults to `<project>-self-work` next to it. */
   selfWorkDir: z.string().optional(),
   /**
+   * Where agent worktrees (task inbox runs, code chats, self-work) are made. Each holds its own packages (GBs), so by
+   * default a `worktrees` folder next to the models folder when that is on another drive than Windows; else inside
+   * each project (`.kesher/worktrees`). See session-worktrees.ts `resolveWorktreesDir`.
+   */
+  worktreesDir: z.string().optional(),
+  /**
    * The local model carries "local ok" tasks while Claude cools down (cooldown-handoff.ts): on, the project and its
    * check self-work uses (chosen on the computer), tasks per day and per run.
    */
