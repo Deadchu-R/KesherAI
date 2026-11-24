@@ -558,7 +558,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         </section>
 
         <section className="card stack">
-          <h2>{L("תוכנית", "Plan")} <span className="small muted">{L("חי, מ-Antigravity", "live, from Antigravity")}</span></h2>
+          <h2>{L("תוכנית", "Plan")} <span className="small muted">{(() => { const who = t.runBy === "claude" ? "Claude Code" : t.runBy === "opencode" ? "OpenCode Go" : t.runBy === "local" ? L("המודל המקומי", "the local model") : "Antigravity"; return L(`חי, מ-${who}`, `live, from ${who}`); })()}</span></h2>
           {t.plan?.length ? <ul className="tinbox-plan">{t.plan.map((p, i) => <li key={i} className={p.status}>{p.status === "completed" ? "✓" : p.status === "in_progress" ? "▸" : "○"} {p.content}</li>)}</ul> : <p className="small muted">{L("עוד אין תוכנית.", "No plan yet.")}</p>}
           <b className="small">{L("אישורים בדרך", "Approvals on the way")}</b>
           <p className="small">{L(`אוטומטי · ${auto} צעדים לפי כלל`, `Automatic · ${auto} steps by rule`)}</p>
