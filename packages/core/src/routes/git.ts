@@ -89,7 +89,7 @@ export async function gitRoutes(app: FastifyInstance, s: KesherServices): Promis
 
   app.post<{ Params: { id: string } }>("/api/conversations/:id/git/push", async (req, reply) => {
     const r = await repoOf(req.params.id, reply);
-    return r ? once(r.repo, reply, () => gitPush(r.repo)) : undefined;
+    return r ? once(r.repo, reply, () => gitPush(r.repo, s.github.pushToken())) : undefined;
   });
 
   app.post<{ Params: { id: string } }>("/api/conversations/:id/git/pull", async (req, reply) => {
@@ -136,7 +136,7 @@ export async function gitRoutes(app: FastifyInstance, s: KesherServices): Promis
   });
 
   // ---- The session's pull request (like Claude Code's desktop PR view) ----
-  const gh = new GitHubApi(() => s.github.token());
+  const gh = new GitHubApi(() => s.github.getToken(), fetch, () => s.github.connected);
   const prState = async (repo: string) => {
     const state = await gitState(repo);
     if (!state.github || !state.branch) return { state, slug: undefined as string | undefined };
@@ -196,7 +196,7 @@ export async function gitRoutes(app: FastifyInstance, s: KesherServices): Promis
     const { state, slug } = await prState(r.repo);
     if (!slug) return reply.code(400).send({ error: "This project's origin is not on GitHub." });
     return once(r.repo, reply, async () => {
-      const pushed = await gitPush(r.repo);
+      const pushed = await gitPush(r.repo, s.github.pushToken());
       if (!pushed.ok) return reply.code(409).send({ error: `Push failed: ${pushed.out.slice(-600)}` });
       if (!gh.connected) return { compare: compareUrl(slug, "main", state.branch!) };
       try {
@@ -299,7 +299,7 @@ export async function gitRoutes(app: FastifyInstance, s: KesherServices): Promis
     if (!r) return;
     const state = await gitState(r.repo);
     if (!state.github) return { runs: [], reason: "not-github" };
-    const token = s.github.token();
+    const token = await s.github.getToken();
     const sha = String(req.query.sha ?? "");
     if (sha && !/^[0-9a-f]{7,40}$/i.test(sha)) return reply.code(400).send({ error: "Which commit?" });
     const full = sha || (await git(r.repo, ["rev-parse", "HEAD"])).out.trim();

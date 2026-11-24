@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { githubTokenEnv } from "./git-credential.js";
 
 /**
  * The project's own git, for the code page's Changes panel (like Claude Code
@@ -48,14 +49,15 @@ export interface GitResult {
  * @param repo - The project folder.
  * @param args - git's arguments.
  * @param timeout - Milliseconds.
+ * @param env - Extra environment for this one run (e.g. {@link githubTokenEnv} for a push).
  * @returns Whether it succeeded, and its output (stdout, then stderr).
  */
-export function git(repo: string, args: string[], timeout = 30_000): Promise<GitResult> {
+export function git(repo: string, args: string[], timeout = 30_000, env: Record<string, string> = {}): Promise<GitResult> {
   return new Promise((resolve) => {
     execFile(
       "git",
       ["-c", "core.quotepath=false", "-c", "color.ui=false", ...args],
-      { cwd: repo, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" } },
+      { cwd: repo, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", ...env } },
       (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout}${stderr ? (stdout ? "\n" : "") + stderr : ""}`.trimEnd() || (err?.message ?? "") }),
     );
   });
@@ -200,14 +202,17 @@ export async function gitCommit(repo: string, message: string): Promise<GitResul
  * Pushes the current branch; the first push of a new branch sets its upstream.
  *
  * @param repo - The project folder.
+ * @param githubToken - The token from KesherAI's GitHub device sign-in, for https remotes on github.com (given to git
+ *   through the environment only); without it git uses its own credentials (Git Credential Manager, ssh).
  */
-export async function gitPush(repo: string): Promise<GitResult> {
+export async function gitPush(repo: string, githubToken?: string): Promise<GitResult> {
+  const env = githubToken ? githubTokenEnv(githubToken) : {};
   const branch = (await git(repo, ["branch", "--show-current"])).out.trim();
   const up = await git(repo, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
   // Only to a branch of the same name. A self-work branch follows origin/main, and a plain `git push` could then go to
   // main under some git settings (push.default=upstream): it goes to origin/<its own name> instead (2026-11-15).
-  if (up.ok && branch && up.out.trim().replace(/^[^/]+\//, "") === branch) return git(repo, ["push"], 180_000);
-  return git(repo, ["push", "-u", "origin", branch ? `HEAD:refs/heads/${branch}` : "HEAD"], 180_000);
+  if (up.ok && branch && up.out.trim().replace(/^[^/]+\//, "") === branch) return git(repo, ["push"], 180_000, env);
+  return git(repo, ["push", "-u", "origin", branch ? `HEAD:refs/heads/${branch}` : "HEAD"], 180_000, env);
 }
 
 /**

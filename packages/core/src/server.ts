@@ -223,7 +223,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const persistEarly = () => saveConfig(paths, config);
   const github = new GitHubAuth(config.github, persistEarly, options.githubClientId ?? process.env.KESHER_GITHUB_CLIENT_ID ?? (branding.github.clientId || undefined));
   const runtimes = new Runtimes(join(paths.engines, "runtimes"), downloads);
-  const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.token() : undefined), (env) => runtimes.env(env));
+  const mcp = new McpManager(join(paths.root, "mcp.json"), join(paths.root, "mcp-auth.json"), (cfg) => (cfg.preset === "github" || /api\.githubcopilot\.com/.test(cfg.url ?? "") ? github.getToken() : undefined), (env) => runtimes.env(env));
   void mcp.load();
   const journal = buildJournal(paths, config, registry, options.screen);
   // Study (students): courses, lectures, flashcards and quizzes, with the active chat model.
@@ -673,6 +673,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   });
   const taskInbox = buildTaskInbox({
     config, root: paths.root, board: taskBoard, notifier, guard, registry, freeCloud, chats: () => services.conversations, watchdog,
+    githubToken: () => github.pushToken(),
     localChat: () => {
       const st = engine.status();
       return st.running && st.modelPath && !st.job ? `llamacpp/${basename(st.modelPath).replace(/\.gguf$/i, "").replace(/[\s/]+/g, "-")}` : undefined;

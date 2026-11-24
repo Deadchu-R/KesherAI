@@ -21,7 +21,11 @@ import { TaskInbox, isQuotaError, type RunCmd, type TaskInboxDeps } from "../inb
 import type { Notifier } from "../notify.js";
 import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js";
 import { findGamesAndStoreApps } from "../pc-games.js";
+import { githubTokenEnv } from "../git-credential.js";
 import type { TaskBoard } from "../task-board.js";
+
+/** git commands that talk to the remote (the only ones given the GitHub token). */
+const NETWORK_GIT = new Set(["push", "fetch", "pull", "ls-remote"]);
 
 /**
  * Runs a program at (optionally) low priority, keeping up to 4 MB of output (a diff or a task file must not be cut).
@@ -30,8 +34,9 @@ import type { TaskBoard } from "../task-board.js";
  *   inbox once ran `fetch …` through cmd.exe and never got a task); "run": a check command, program first
  *   (inbox-spawn.ts `commandPlan`).
  * @param lowPriority - Lower the child's priority (checks and builds), so the PC stays responsive.
+ * @param extraEnv - Extra environment for one run, from its arguments.
  */
-function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
+function runner(kind: "git" | "run", lowPriority: boolean, extraEnv: (args: string[]) => Record<string, string> = () => ({})): RunCmd {
   let git: string | undefined;
   return (cwd, args, timeoutMs = 10 * 60_000) =>
     new Promise((resolve) => {
@@ -39,7 +44,7 @@ function runner(kind: "git" | "run", lowPriority: boolean): RunCmd {
       if ("refused" in plan) return resolve({ code: -1, out: plan.refused });
       const isGit = kind === "git" || /^git(\.exe)?$/i.test(plan.program);
       let out = "";
-      const child = spawn(plan.program, plan.args, { cwd, shell: plan.shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY } });
+      const child = spawn(plan.program, plan.args, { cwd, shell: plan.shell, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...AGENT_GIT_IDENTITY, ...extraEnv(args) } });
       if (lowPriority && child.pid) {
         try {
           setPriority(child.pid, 10);
@@ -253,8 +258,13 @@ export function claudeCode(p: { root: string }): NonNullable<TaskInboxDeps["clau
  *   tasks run on its "gemini" provider), and the chats (OpenCode Go code tasks run in code chats).
  * @returns The inbox (fetching starts when it is on).
  */
-export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager; localChat?: () => string | undefined; watchdog?: WatchdogModel }): TaskInbox {
-  const git = runner("git", false);
+export function buildTaskInbox(p: { config: KesherConfig; root: string; board: TaskBoard; notifier: Notifier; guard: GpuGuard; registry: ProviderRegistry; freeCloud?: FreeCloudPool; chats?: () => ConversationManager; localChat?: () => string | undefined; watchdog?: WatchdogModel; githubToken?: () => string | undefined }): TaskInbox {
+  // The inbox's own fetches and pushes use the GitHub device sign-in's token when there is one (through the
+  // environment only, never the remote URL); task programs ("run") never get it.
+  const git = runner("git", false, (args) => {
+    const token = NETWORK_GIT.has(args[0] ?? "") ? p.githubToken?.() : undefined;
+    return token ? githubTokenEnv(token) : {};
+  });
   let games: { at: number; list: Array<{ name: string; folder: string }> } = { at: 0, list: [] };
   let programs: { at: number; list: Awaited<ReturnType<typeof runningPrograms>> } = { at: 0, list: [] };
   let gpuHighSince: number | undefined;

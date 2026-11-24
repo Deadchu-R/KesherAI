@@ -4829,3 +4829,8 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 @media (max-width: 480px) { .privacy-hit .privacy-actions { flex-direction: column; } .train-warn { font-size: 12px; } }
 .privacy-mode { align-items: flex-start; }
 .privacy-service { gap: 8px; align-items: center; }
+
+/* Settings › Connections › GitHub (GitHubCard.tsx): the permissions list. */
+.gh-scopes { margin: 0; padding-inline-start: 18px; display: grid; gap: 2px; }
+.gh-scopes code { font-size: 12px; }
+.gh-repos { overflow-wrap: anywhere; }

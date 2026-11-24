@@ -29,21 +29,25 @@ type Fetch = typeof fetch;
 /** GitHub's REST API with the connected account's token. */
 export class GitHubApi {
   /**
-   * @param token - The connected account's token, read on each call.
+   * @param token - The connected account's token, read on each call (GCM's is asked for, so it may be a promise).
    * @param f - fetch (a fake in tests).
+   * @param isConnected - Whether an account is connected without asking for the token (default: a token is at hand).
    */
   constructor(
-    private token: () => string | undefined,
+    private token: () => string | undefined | Promise<string | undefined>,
     private f: Fetch = fetch,
+    private isConnected?: () => boolean,
   ) {}
 
   /** Whether an account is connected (a token to open PRs and merge with). */
   get connected(): boolean {
-    return !!this.token();
+    if (this.isConnected) return this.isConnected();
+    const t = this.token();
+    return typeof t === "string" ? !!t : t !== undefined;
   }
 
   private async call<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-    const token = this.token();
+    const token = await this.token();
     const res = await this.f(`https://api.github.com${path}`, {
       method: init.method ?? "GET",
       headers: {
@@ -98,7 +102,7 @@ export class GitHubApi {
     const failed = (jobs.jobs ?? []).filter((j) => j.conclusion === "failure").slice(0, 3);
     const parts: string[] = [];
     for (const j of failed) {
-      const token = this.token();
+      const token = await this.token();
       // The log is a redirect to a file; fetch follows it.
       const res = await this.f(`https://api.github.com/repos/${slug}/actions/jobs/${j.id}/logs`, {
         headers: { "user-agent": "KesherAI", ...(token ? { authorization: `Bearer ${token}` } : {}) },

@@ -4719,3 +4719,33 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - Note: brief entry from these tools' public repos as known, no fresh web check today (research goes to Gemini); the
   CLI flags were checked against `claude --help` 2.1.x and the status-line docs.
 - Stopped at: done (built the same day).
+
+## 2026-11-24 — Signing in to GitHub without a pasted token (Claude helper, brief, for Roee 24.11 "git tools without a token")
+- **VS Code**: the built-in GitHub Authentication extension; OAuth web flow (browser → vscode.dev/redirect or a
+  localhost loopback → back into the editor), device code as the fallback when no browser can come back. Scopes are
+  asked per use (`read:user user:email repo workflow` for git and PRs). Token in the OS secret store (Windows
+  Credential Manager / Keychain / libsecret) via SecretStorage; git push uses VS Code's own askpass with that session.
+- **GitHub Desktop**: OAuth web flow, callback to its own protocol handler (`x-github-desktop-auth://`); scopes
+  `repo user workflow`; token in the OS keychain; Desktop is the credential helper for the git it runs.
+- **Claude (GitHub connector)**: GitHub App install + OAuth web flow in the browser; tokens kept on the server side,
+  never in the client. **Cursor**: the same as VS Code (its fork of GitHub Authentication), plus a cursor.com web
+  sign-in for its own background agents (GitHub App).
+- **gh CLI**: `gh auth login --web` = device flow (one-time code + browser); default scopes `repo read:org gist`
+  (+`workflow` on request); token in the OS keyring, plain `hosts.yml` only as a fallback; `gh auth setup-git`
+  makes gh a git credential helper (`!gh auth git-credential`) so pushes use the same token.
+- **Git Credential Manager** (ships with Git for Windows): `git credential fill` for github.com opens a picker
+  (browser / device code / token); browser = OAuth with a loopback callback, its own OAuth app (scopes
+  `repo gist workflow`); stored in Windows Credential Manager; every https git command and any tool that asks
+  `git credential fill` gets it.
+- **Take**: two ways, no app registration needed for the first. (a) On the PC with GCM: "Sign in with GitHub" runs
+  `git credential fill` for github.com (GCM opens the browser), KesherAI checks it with `GET /user`, keeps only the
+  login name, and asks GCM again (non-interactive) whenever it needs the token; nothing on KesherAI's disk.
+  (b) Device flow everywhere, also from the phone (KesherAI already has the public client id in branding): the code
+  shows where you are, the link opens there; token sealed in config (`enc:v1`, OS protection), scopes
+  `repo read:org workflow` (repos/PRs/issues, orgs read, Actions for the GitHub MCP tools; `/user` needs no
+  `read:user`). Pushes with the device token go through a one-shot credential helper given in the environment
+  (`GIT_CONFIG_*` + `KESHER_GITHUB_TOKEN`): never in the URL, the remote, the command line or a log.
+- **Leave**: a localhost OAuth web flow of our own (needs a client secret in the app), PATs as the main path,
+  writing tokens into `.git/config` remotes (gh's old `https://token@` habit).
+- Tasks: WORK_LIST g-01..g-03 (Tuesday 24.11).
+- Stopped at: done (brief).

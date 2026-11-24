@@ -29,6 +29,13 @@ export function McpSection() {
   const [ghDialog, setGhDialog] = useState(false);
   useEffect(() => void api<{ configured: boolean; connected: boolean; login: string | null }>("/api/github").then(setGh, () => undefined), []);
   const load = () => api<{ servers: Server[]; presets: Preset[] }>("/api/mcp").then((r) => { setServers(r.servers); setPresets(r.presets); }, () => undefined);
+  /** Adds the official GitHub MCP server with the account signed in above (Settings › Connections › GitHub). */
+  const addGitHub = async () => {
+    const preset = presets.find((x) => x.id === "github");
+    if (preset) await api("/api/mcp/servers", { method: "PUT", body: { id: "github", name: "GitHub", preset: "github", transport: "http", url: preset.url, headers: {}, enabled: true } }).catch((e: Error) => toast(e.message));
+    setGh(await api("/api/github"));
+    await load();
+  };
   useEffect(() => {
     void load();
     const id = setInterval(load, 3000);
@@ -102,7 +109,7 @@ export function McpSection() {
       {unused.length > 0 && (
         <div className="mcp-presets">
           {unused.map((p) => (
-            <button key={p.id} type="button" className="mcp-preset" onClick={() => (p.id === "github" && gh?.configured ? setGhDialog(true) : setAdding(p))} title={getLocale() === "he" ? p.he : p.en}>
+            <button key={p.id} type="button" className="mcp-preset" onClick={() => (p.id === "github" && gh?.connected ? void addGitHub() : p.id === "github" && gh?.configured ? setGhDialog(true) : setAdding(p))} title={getLocale() === "he" ? p.he : p.en}>
               <strong>{p.name}</strong>
               <span className="muted small">{getLocale() === "he" ? p.he : p.en}</span>
             </button>
@@ -121,10 +128,7 @@ export function McpSection() {
           onClose={() => setGhDialog(false)}
           onDone={async () => {
             setGhDialog(false);
-            const preset = presets.find((x) => x.id === "github");
-            if (preset) await api("/api/mcp/servers", { method: "PUT", body: { id: "github", name: "GitHub", preset: "github", transport: "http", url: preset.url, headers: {}, enabled: true } }).catch((e: Error) => toast(e.message));
-            setGh(await api("/api/github"));
-            await load();
+            await addGitHub();
           }}
         />
       )}

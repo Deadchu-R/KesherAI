@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gitPush } from "./git-panel.js";
@@ -34,4 +34,20 @@ test("a branch that follows origin/main (as self-work's do) is pushed to its own
   assert.ok((await gitPush(work)).ok);
   assert.equal(g(remote, "rev-parse", "kesher-self/1"), g(work, "rev-parse", "HEAD"));
   assert.equal(g(remote, "rev-parse", "main"), mainBefore);
+});
+
+test("a push with the GitHub sign-in's token: the token never lands in the repository's settings or the output", async () => {
+  const remote = await mkdtemp(join(tmpdir(), "kesher-remote-"));
+  g(remote, "init", "--bare", "-b", "main");
+  const work = await mkdtemp(join(tmpdir(), "kesher-work-"));
+  g(work, "init", "-b", "main");
+  await writeFile(join(work, "a.txt"), "one");
+  g(work, "add", ".");
+  g(work, "commit", "-m", "one");
+  g(work, "remote", "add", "origin", remote);
+  const r = await gitPush(work, "gho_secret_for_test");
+  assert.ok(r.ok, r.out);
+  assert.ok(!r.out.includes("gho_secret_for_test"));
+  assert.equal(g(remote, "rev-parse", "main"), g(work, "rev-parse", "HEAD"));
+  assert.ok(!(await readFile(join(work, ".git", "config"), "utf8")).includes("gho_"), "nothing written to .git/config");
 });

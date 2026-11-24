@@ -1,0 +1,277 @@
+{
+ "group": "חיבורים · GitHub",
+ "now": "2026-11-24T10:00:00Z",
+ "mocks": [],
+ "boards": [
+  {
+   "id": "GitHubSignIn",
+   "title": "חיבורים › GitHub במחשב: \"התחבר עם GitHub\" דרך Git Credential Manager (בלי טוקן), או \"התחבר עם קוד\"; ההרשאות במילים",
+   "titleEn": "Connections › GitHub on the PC: Sign in with GitHub through Git Credential Manager (no token), or with a code; permissions in words",
+   "route": "#/connections",
+   "viewports": [
+    "desktop"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": false,
+      "via": null,
+      "login": null,
+      "scopes": null,
+      "customClient": false,
+      "gcm": true,
+      "pending": null
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubGcmWaiting",
+   "title": "חיבורים › GitHub: חלון ההתחברות של GCM נפתח במחשב; הכרטיס מתעדכן לבד, ביטול",
+   "titleEn": "Connections › GitHub: GCM's sign-in window opened on the PC; the card updates by itself, Cancel",
+   "route": "#/connections",
+   "viewports": [
+    "desktop"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": false,
+      "via": null,
+      "login": null,
+      "scopes": null,
+      "customClient": false,
+      "gcm": true,
+      "pending": {
+       "kind": "gcm",
+       "state": "waiting"
+      }
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubSignInByCode",
+   "title": "חיבורים › GitHub בטלפון: \"התחבר עם GitHub\" בקוד (GCM רק במחשב)",
+   "titleEn": "Connections › GitHub on the phone: Sign in with GitHub by code (GCM only on the PC)",
+   "route": "#/connections",
+   "viewports": [
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": false,
+      "via": null,
+      "login": null,
+      "scopes": null,
+      "customClient": false,
+      "gcm": false,
+      "pending": null
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubDeviceCode",
+   "title": "חיבורים › GitHub: הקוד גדול, \"העתק ופתח את GitHub\" (נפתח איפה שאתה: במחשב או בטלפון), ממתין לאישור",
+   "titleEn": "Connections › GitHub: the code, Copy and open GitHub (opens where you are: PC or phone), waiting for approval",
+   "route": "#/connections",
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": false,
+      "via": null,
+      "login": null,
+      "scopes": null,
+      "customClient": false,
+      "gcm": false,
+      "pending": {
+       "kind": "device",
+       "state": "waiting"
+      }
+     }
+    },
+    {
+     "url": "**/api/github/connect",
+     "method": "POST",
+     "json": {
+      "userCode": "WDJB-MJHT",
+      "verificationUri": "https://github.com/login/device",
+      "expiresIn": 900,
+      "interval": 5
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "click": ".gh-card button.primary"
+    },
+    {
+     "wait": ".gh-card .gh-code"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubSignedIn",
+   "title": "חיבורים › GitHub מחובר: החשבון, מה KesherAI יכול לעשות (repo, read:org, workflow), כמה מאגרים, התנתק",
+   "titleEn": "Connections › GitHub signed in: account, what KesherAI may do (repo, read:org, workflow), repositories reached, Sign out",
+   "route": "#/connections",
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": true,
+      "via": "device",
+      "login": "kesher-user",
+      "scopes": "repo, read:org, workflow",
+      "customClient": false,
+      "gcm": false,
+      "pending": null
+     }
+    },
+    {
+     "url": "**/api/github/repos",
+     "method": "GET",
+     "json": {
+      "count": 14,
+      "more": false,
+      "names": [
+       "kesher-user/KesherAI",
+       "kesher-user/portfolio",
+       "kesher-user/game-jam"
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubSignedInGcm",
+   "title": "חיבורים › GitHub מחובר דרך Git Credential Manager: הטוקן נשאר ב-Windows; התנתקות לא מנתקת את git",
+   "titleEn": "Connections › GitHub signed in through Git Credential Manager: the token stays in Windows; Sign out leaves git signed in",
+   "route": "#/connections",
+   "viewports": [
+    "desktop"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": true,
+      "connected": true,
+      "via": "gcm",
+      "login": "kesher-user",
+      "scopes": "gist, repo, workflow",
+      "customClient": false,
+      "gcm": true,
+      "pending": null
+     }
+    },
+    {
+     "url": "**/api/github/repos",
+     "method": "GET",
+     "json": {
+      "count": 14,
+      "more": false,
+      "names": [
+       "kesher-user/KesherAI",
+       "kesher-user/portfolio",
+       "kesher-user/game-jam"
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  },
+  {
+   "id": "GitHubNoClientId",
+   "title": "חיבורים › GitHub בלי Client ID ובלי GCM: איך רושמים OAuth App פעם אחת ומדביקים רק את ה-Client ID (בטלפון: במחשב)",
+   "titleEn": "Connections › GitHub with no Client ID and no GCM: register an OAuth App once and paste only its Client ID (on the phone: on the PC)",
+   "route": "#/connections",
+   "mocks": [
+    {
+     "url": "**/api/github",
+     "method": "GET",
+     "json": {
+      "configured": false,
+      "connected": false,
+      "via": null,
+      "login": null,
+      "scopes": null,
+      "customClient": false,
+      "gcm": false,
+      "pending": null
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".gh-card"
+    },
+    {
+     "top": ".gh-card"
+    }
+   ]
+  }
+ ]
+}

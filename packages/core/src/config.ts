@@ -456,10 +456,11 @@ export const KesherConfigSchema = z.object({
       lastUrls: z.record(z.string(), z.string().max(300)).prefault({}),
     })
     .prefault({}),
-  /** "Connect with GitHub" (device sign-in). */
+  /** "Connect with GitHub": device sign-in (token sealed here), or Git Credential Manager (`via: "gcm"`, no token here). */
   github: z
     .object({
       token: z.string().optional(),
+      via: z.enum(["gcm"]).optional(),
       login: z.string().optional(),
       scopes: z.string().optional(),
       clientId: z.string().optional(),
