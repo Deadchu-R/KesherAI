@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -51,8 +52,8 @@ test("/api/logs: sources, search, patterns, labels; Explain needs a local model;
     assert.equal((await app.inject({ method: "POST", url: "/api/logs/files", payload: { path: "/etc/passwd" }, ...remote })).statusCode, 403);
     assert.equal((await app.inject({ method: "DELETE", url: "/api/logs/files/file-x", ...remote })).statusCode, 403);
     // On the computer, a file outside the home folder is refused.
-    // (On Windows the temp folder is inside the home folder, so this only holds where it is not.)
-    if (!root.toLowerCase().startsWith(homedir().toLowerCase())) assert.equal((await app.inject({ method: "POST", url: "/api/logs/files", payload: { path: join(root, "logs", "main.log") } })).statusCode, 400);
+    // (On Windows the temp folder is inside the home folder, often under an 8.3 short name: compare real paths.)
+    if (!realpathSync.native(root).toLowerCase().startsWith(realpathSync.native(homedir()).toLowerCase())) assert.equal((await app.inject({ method: "POST", url: "/api/logs/files", payload: { path: join(root, "logs", "main.log") } })).statusCode, 400);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });
