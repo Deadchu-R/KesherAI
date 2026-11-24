@@ -27,13 +27,13 @@ test("added files: inside home only, real files, not keys, not binary, links res
     await writeFile(join(home, "blob.log"), Buffer.from([1, 0, 2, 3]));
     await writeFile(join(base, "outside.log"), "x\n");
     await symlink(join(base, "outside.log"), join(home, "link.log"));
-    assert.match(await checkAddedFile(join(home, "game", "run.log"), home, "linux"), /run\.log$/);
-    await assert.rejects(checkAddedFile(join(base, "outside.log"), home, "linux"), /home folder/);
-    await assert.rejects(checkAddedFile(join(home, "link.log"), home, "linux"), /home folder/);
-    await assert.rejects(checkAddedFile(join(home, ".env"), home, "linux"), /key or password/);
-    await assert.rejects(checkAddedFile(join(home, "blob.log"), home, "linux"), /not a text/);
-    await assert.rejects(checkAddedFile(join(home, "game"), home, "linux"), /folder/);
-    await assert.rejects(checkAddedFile("game/run.log", home, "linux"), /full path/);
+    assert.match(await checkAddedFile(join(home, "game", "run.log"), home), /run\.log$/);
+    await assert.rejects(checkAddedFile(join(base, "outside.log"), home), /home folder/);
+    await assert.rejects(checkAddedFile(join(home, "link.log"), home), /home folder/);
+    await assert.rejects(checkAddedFile(join(home, ".env"), home), /key or password/);
+    await assert.rejects(checkAddedFile(join(home, "blob.log"), home), /not a text/);
+    await assert.rejects(checkAddedFile(join(home, "game"), home), /folder/);
+    await assert.rejects(checkAddedFile("game/run.log", home), /full path/);
   } finally {
     await rm(base, { recursive: true, force: true });
   }
@@ -77,7 +77,7 @@ test("the reader: sources, search, patterns with labels that last, new since las
     const now = Date.parse("2026-11-24T12:00:00Z");
     await writeFile(join(root, "logs", "main.log"), ["2026-11-24T11:30:00Z [ERROR] Hub answered 502 for /api/x", "2026-11-24T11:40:00Z [ERROR] Hub answered 503 for /api/y", "2026-11-24T11:41:00Z memory ok"].join("\n") + "\n");
     let engine = ["srv load_model: loading", "E: out of memory"];
-    const r = new LogReader({ root, home, platform: "linux", env: {}, engineLog: () => engine, now: () => now });
+    const r = new LogReader({ root, home, platform: process.platform, env: {}, engineLog: () => engine, now: () => now });
     const ids = (await r.list()).map((s) => s.id);
     assert.ok(ids.includes("kesher-main") && ids.includes("engine-llama"));
     assert.ok(!ids.includes("kesher-faults"));
@@ -93,7 +93,7 @@ test("the reader: sources, search, patterns with labels that last, new since las
 
     // A new kind of line after the look is new; the label is kept (a fresh reader reads it from the file).
     await writeFile(join(root, "logs", "main.log"), "2026-11-24T11:50:00Z [ERROR] Disk full on drive D\n", { flag: "a" });
-    const r2 = new LogReader({ root, home, platform: "linux", env: {}, now: () => now });
+    const r2 = new LogReader({ root, home, platform: process.platform, env: {}, now: () => now });
     const second = await r2.patterns("kesher-main");
     assert.equal(second.patterns.find((p) => p.id === hub.id)!.label, "known");
     assert.equal(second.patterns.find((p) => p.template.startsWith("Disk full"))!.isNew, true);
