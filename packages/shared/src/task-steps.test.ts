@@ -28,3 +28,10 @@ test("a code task: files, goal length and a check", () => {
   assert.equal(estimateTaskSteps({ ...base, maxFiles: 60 }), 3 + 15 + 1);
   assert.equal(estimateTaskSteps({ ...base, runBy: "local", maxFiles: 0, goal: "" }), 4);
 });
+
+test("a task with a plan: the plan's items are the estimate, the formula is only the fallback", () => {
+  const plan = (n: number) => Array.from({ length: n }, (_, i) => ({ content: `step ${i}`, status: "pending" }));
+  assert.equal(estimateTaskSteps({ ...base, plan: plan(5) }), 5, "the plan wins over the formula (which says 8)");
+  assert.equal(estimateTaskSteps({ ...base, plan: [] }), 3 + 4 + 1, "an empty plan is no plan");
+  assert.equal(estimateTaskSteps({ ...base, plan: plan(50) }), 40, "capped at 40");
+});

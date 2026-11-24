@@ -265,9 +265,15 @@ test("a free-Gemini task keeps its own executor; a quota deferral carries the re
   assert.equal(hubInboxTask(inboxTask({ status: "deferred-quota" }), 1)!.state, "waiting-run");
   assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1, steps: 4 }), 1)!.steps, 4);
   assert.equal(hubInboxTask({ ...g, status: "done", startedAt: 1, summary: "Report." }, 1)!.result, "Report.");
-});
+  });
 
-test("inbox tasks map to the hub's states and executors, metadata only", () => {
+  test("a task with a plan: the hub's step count is the plan's items, not the formula", () => {
+  const plan = ["read the file", "fix it", "typecheck", "test", "report"].map((content) => ({ content, status: "pending" }));
+  assert.equal(hubInboxTask(inboxTask({ plan }), 1)!.estSteps, 5, "the formula would say 3 + 15 + 1");
+  assert.equal(hubInboxTask(inboxTask({ plan: [] }), 1)!.estSteps, 3 + 15 + 1, "an empty plan falls back to the formula");
+  });
+
+  test("inbox tasks map to the hub's states and executors, metadata only", () => {
   const w = hubInboxTask(inboxTask({}), 1)!;
   assert.deepEqual(w, { taskId: "c-1120-01", title: "Fix the hub status", state: "waiting-run", executor: "antigravity", from: "claude", estSteps: 3 + 15 + 1, runId: "in-c-1120-01", kind: "code", at: 1 });
   assert.equal(hubInboxTask(inboxTask({ status: "running", startedAt: 1 }), 1)!.branch, "agy/c-1120-01-fix");
