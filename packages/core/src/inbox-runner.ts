@@ -2200,8 +2200,10 @@ export class TaskInbox {
     await this.load();
     const t = this.find(id);
     if (!by) throw fail("Only your paired phone or this computer can queue a task.", 403);
-    if (t.runBy === "opencode" && (t.status === "waiting" || t.status === "deferred-quota")) {
-      // OpenCode Go takes the first waiting task in the list: queuing one moves it to the front.
+    if (t.runBy === "opencode" && (t.status === "waiting" || t.status === "deferred-quota" || t.status === "failed" || t.status === "partial")) {
+      // OpenCode Go takes the first waiting task in the list: queuing one moves it to the front. A failed or partial
+      // one goes back to waiting (a partial run continues from its pushed branch).
+      if (t.status === "failed" || t.status === "partial") Object.assign(t, { status: "waiting", resultWritten: false });
       const i = this.saved.tasks.indexOf(t);
       if (i > 0) this.saved.tasks.unshift(...this.saved.tasks.splice(i, 1));
       t.note = "Next for OpenCode Go.";
@@ -2209,7 +2211,7 @@ export class TaskInbox {
       void this.pumpOpencode();
       return this.withPlace(t);
     }
-    if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : t.runBy === "claude" ? "Claude Code runs one task per Run; press Run on it." : "Claude runs this task; it has no queue here.", 409);
+    if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : t.runBy === "claude" ? "Claude Code runs one task per Run; press Run on it." : t.runBy === "opencode" ? "This OpenCode Go task cannot be queued now (it is running or finished)." : "Claude runs this task; it has no queue here.", 409);
     const no = this.cannotRun(t, true, true);
     if (no) throw fail(no.msg, no.code);
     const ex: QueueExecutor = t.runBy;
