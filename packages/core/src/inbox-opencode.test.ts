@@ -101,7 +101,7 @@ let agyStarts = 0;
 function inboxFor(repo: string, root: string, coder: TaskInboxDeps["coder"], settings: Record<string, unknown> = {}, now = () => Date.now()) {
   const notes: string[] = [];
   const inbox = new TaskInbox({
-    settings: () => ({ enabled: true, repo, branch: "kesher-inbox", dailyCap: 10, ...settings }),
+    settings: () => ({ enabled: true, repo, branch: "kesher-inbox", dailyCap: 10, ...settings }), // read each time: a test may change `settings`
     file: join(root, "inbox.json"),
     git,
     run: async (cwd, args) => (args[0] === "git" ? git(cwd, args.slice(1)) : { code: 1, out: "not in tests" }),
@@ -555,6 +555,23 @@ test("privacy guard: a file the task read holds a secret, so the task leaves the
     const t = await inbox.task("c-20261123-37");
     assert.equal(t.status, "done");
     assert.equal(t.mayTrain, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("opencode: queuing a waiting task moves it to the front", async () => {
+  const { root, repo } = await setup({ "c-20261122-31": TASK("c-20261122-31", "opencode", "size: S\n"), "c-20261122-32": TASK("c-20261122-32", "opencode", "size: S\n") });
+  const { coder, runs } = fakeCoder();
+  const s: Record<string, unknown> = { paused: true };
+  const { inbox } = inboxFor(repo, root, coder, s);
+  try {
+    await inbox.sync();
+    await inbox.idle();
+    await inbox.queueAdd("c-20261122-32", "pc");
+    s.paused = false;
+    await syncAndRun(inbox);
+    assert.match(runs[0]?.title ?? "", /c-20261122-32/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

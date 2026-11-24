@@ -1018,6 +1018,9 @@ export class TaskInbox {
     if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
     const run: { id: string; ctl: AbortController; why?: "stop" | "time" } = { id: t.id, ctl: new AbortController() };
     this.opencodeStop = run;
+    // A task keeps the limit it was made with, unless the user's setting is longer now (23.11: tasks made at 15 min
+    // all stopped at 15 after the setting was raised to 40).
+    t.maxMinutes = Math.max(t.maxMinutes, this.s.maxMinutes);
     const timer = setTimeout(() => {
       run.why ??= "time";
       run.ctl.abort();
@@ -1647,6 +1650,15 @@ export class TaskInbox {
     await this.load();
     const t = this.find(id);
     if (!by) throw fail("Only your paired phone or this computer can queue a task.", 403);
+    if (t.runBy === "opencode" && (t.status === "waiting" || t.status === "deferred-quota")) {
+      // OpenCode Go takes the first waiting task in the list: queuing one moves it to the front.
+      const i = this.saved.tasks.indexOf(t);
+      if (i > 0) this.saved.tasks.unshift(...this.saved.tasks.splice(i, 1));
+      t.note = "Next for OpenCode Go.";
+      await this.save();
+      void this.pumpOpencode();
+      return this.withPlace(t);
+    }
     if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : "Claude runs this task; it has no queue here.", 409);
     const no = this.cannotRun(t, true, true);
     if (no) throw fail(no.msg, no.code);
