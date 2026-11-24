@@ -62,7 +62,10 @@ export async function pipelineRoutes(app: FastifyInstance, s: KesherServices): P
     // only with the same project and check as the last run (the rule of the panel's Start).
     if (b.action?.type === "self-work" && !isLocalRequest(req)) {
       const last = (await localCall<{ run?: { repo?: string; check?: string } | null }>(s.config.port, "GET", "/api/self-work").catch(() => ({ json: { run: null } }))).json.run;
-      if (!last || resolve(String(b.action.repo)) !== last.repo || b.action.check !== last.check) {
+      // Without a project or check it continues the last run's, so nothing new runs on this computer.
+      const sameProject = b.action.repo === undefined || (!!last && resolve(String(b.action.repo)) === last.repo);
+      const sameCheck = b.action.check === undefined || (!!last && b.action.check === last.check);
+      if (!sameProject || !sameCheck) {
         return reply.code(403).send({ error: "Choose the project and its check on the computer first; from the phone you can save a routine with the same ones." });
       }
     }

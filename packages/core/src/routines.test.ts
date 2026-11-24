@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Routines, nextRun, pageChange } from "./routines.js";
+import { DEFAULT_ROUTINES, Routines, nextRun, pageChange, parseAt } from "./routines.js";
 
 test("next run: daily at a time on chosen days, and every N minutes", () => {
   const mon9 = new Date(2026, 10, 9, 9, 0).getTime(); // Monday 9:00
@@ -203,5 +203,143 @@ test("a folder routine refuses a folder that is not there", async () => {
   await assert.rejects(r.save({ name: "F", schedule: { kind: "folder", path: "/no/such/folder/here" }, action: { type: "prompt", prompt: "x" } }), /folder on this computer/);
   const dir = await mkdtemp(join(tmpdir(), "kesher-watch-"));
   await r.save({ name: "F", schedule: { kind: "folder", path: dir }, action: { type: "prompt", prompt: "Sort the new files." } });
+  r.close();
+});
+
+/** Deps whose actions only record what they were asked. */
+function recorder(calls: string[]): ConstructorParameters<typeof Routines>[1] {
+  const ok = (what: string) => async () => (calls.push(what), { ok: true, message: what, link: "#/x" });
+  return {
+    runPipeline: ok("pipeline"),
+    runPrompt: ok("prompt"),
+    startSelfWork: async (o) => (calls.push(`self-work ${o.hours}h ${o.repo ?? "-"} ${o.goal ?? "-"}`), { ok: true, message: "started", link: "#/code" }),
+    inboxRun: async (id) => (calls.push(`inbox-run ${id}`), { ok: true, message: "asked", link: "#/task-inbox" }),
+    inboxSet: async (p) => (calls.push(`inbox-set ${JSON.stringify(p)}`), { ok: true, message: "set", link: "#/task-inbox" }),
+    digest: ok("digest"),
+    notify: async () => undefined,
+  };
+}
+
+test("once: parses ISO and local times, fires once, then turns itself off", async () => {
+  assert.ok(Number.isNaN(parseAt("2026-11-30")), "a date alone is refused (it would be UTC midnight)");
+  assert.equal(parseAt("2026-11-30 21:00"), new Date(2026, 10, 30, 21, 0).getTime(), "local time, space allowed");
+  assert.equal(parseAt("2026-11-30T21:00:00Z"), Date.UTC(2026, 10, 30, 21, 0));
+  const at = new Date(2026, 10, 30, 21, 0).getTime();
+  assert.equal(nextRun({ kind: "once", at: "2026-11-30T21:00" }, at - 3_600_000, undefined, at - 7_200_000), at);
+  assert.equal(nextRun({ kind: "once", at: "2026-11-30T21:00" }, at + 5000, at + 1000, at - 7_200_000), Infinity, "already ran");
+  assert.equal(nextRun({ kind: "once", at: "nonsense" }, at), Infinity);
+
+  let now = at - 60_000;
+  const calls: string[] = [];
+  const dir = await mkdtemp(join(tmpdir(), "kesher-once-"));
+  const r = new Routines(join(dir, "routines.json"), recorder(calls), () => now);
+  await assert.rejects(r.save({ name: "Bad", schedule: { kind: "once", at: "tomorrow" }, action: { type: "digest" } }), /2026-11-30 21:00/);
+  await r.save({ name: "Once", schedule: { kind: "once", at: "2026-11-30T21:00" }, action: { type: "digest" } });
+  await r.tick();
+  assert.deepEqual(calls, [], "not yet");
+  now = at + 1000;
+  await r.tick();
+  assert.deepEqual(calls, ["digest"]);
+  const [l] = await r.list();
+  assert.equal(l!.enabled, false, "turned itself off");
+  assert.equal(l!.nextRun, null);
+  now += 86_400_000;
+  await r.tick();
+  assert.equal(calls.length, 1, "never again");
+  r.close();
+});
+
+test("once: missed while KesherAI was closed runs soon after the next start", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-once-"));
+  const file = join(dir, "routines.json");
+  const at = new Date(2026, 10, 30, 3, 0).getTime();
+  let now = at - 3_600_000;
+  const first = new Routines(file, recorder([]), () => now);
+  await first.save({ name: "Overnight", schedule: { kind: "once", at: "2026-11-30T03:00" }, action: { type: "digest" } });
+  first.close();
+  // KesherAI starts again at 08:00: not at once, but a minute after the start.
+  now = new Date(2026, 10, 30, 8, 0).getTime();
+  const calls: string[] = [];
+  const second = new Routines(file, recorder(calls), () => now);
+  await second.start();
+  await second.tick();
+  assert.deepEqual(calls, [], "waits a minute for the models and chats to be up");
+  now += 61_000;
+  await second.tick();
+  assert.deepEqual(calls, ["digest"]);
+  second.close();
+});
+
+test("the new actions call what they run on, and the self-work action fills in nothing itself", async () => {
+  const calls: string[] = [];
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-act-")), "routines.json"), recorder(calls));
+  const run = async (action: Parameters<Routines["save"]>[0]["action"]) => {
+    const x = await r.save({ name: action.type, schedule: { kind: "every", minutes: 60 }, action });
+    await r.runNow(x.id);
+  };
+  await run({ type: "inbox-run", taskId: "t-12" });
+  await run({ type: "inbox-pause" });
+  await run({ type: "inbox-resume" });
+  await run({ type: "loop", on: false });
+  await run({ type: "self-work", hours: 6 });
+  await run({ type: "self-work", hours: 2, goal: "do x", repo: "/p" });
+  await run({ type: "digest" });
+  assert.deepEqual(calls, ["inbox-run t-12", 'inbox-set {"paused":true}', 'inbox-set {"paused":false}', 'inbox-set {"loop":false}', "self-work 6h - -", "self-work 2h /p do x", "digest"]);
+  await assert.rejects(r.save({ name: "x", schedule: { kind: "every", minutes: 60 }, action: { type: "inbox-run", taskId: "../etc" } }), /inbox task/);
+  await assert.rejects(r.save({ name: "x", schedule: { kind: "every", minutes: 60 }, action: { type: "self-work", hours: 99 } }), /24 hours/);
+  r.close();
+});
+
+test("an action this build cannot do reports it instead of throwing", async () => {
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-act-")), "routines.json"), { runPipeline: async () => ({ ok: true, message: "", link: "" }), runPrompt: async () => ({ ok: true, message: "", link: "" }), notify: async () => undefined });
+  const x = await r.save({ name: "d", schedule: { kind: "every", minutes: 60 }, action: { type: "digest" } });
+  await r.runNow(x.id);
+  const [l] = await r.list();
+  assert.equal(l!.lastStatus, "error");
+  assert.match(l!.lastMessage ?? "", /not available/);
+  r.close();
+});
+
+test("defaults are made once on the first start and stay removed", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kesher-def-"));
+  const file = join(dir, "routines.json");
+  const first = new Routines(file, recorder([]), Date.now, DEFAULT_ROUTINES);
+  const made = await first.list();
+  assert.deepEqual(made.map((x) => x.name).sort(), ["Inbox digest (evening)", "Inbox digest (morning)", "Self-work at night"]);
+  const night = made.find((x) => x.name === "Self-work at night")!;
+  assert.deepEqual(night.schedule, { kind: "daily", time: "00:30" });
+  assert.deepEqual(night.action, { type: "self-work", hours: 6, whenFree: true });
+  assert.deepEqual(made.filter((x) => x.action.type === "digest").map((x) => (x.schedule as { time: string }).time).sort(), ["09:45", "21:15"]);
+  await first.remove(night.id);
+  first.close();
+  const second = new Routines(file, recorder([]), Date.now, DEFAULT_ROUTINES);
+  assert.equal((await second.list()).length, 2, "the removed one is not made again");
+  second.close();
+});
+
+test("a when-free self-work routine waits while the computer is busy and skips the turn after 4 hours", async () => {
+  let now = new Date(2026, 10, 24, 0, 29).getTime();
+  let busy = true;
+  const calls: string[] = [];
+  const r = new Routines(join(await mkdtemp(join(tmpdir(), "kesher-free-")), "routines.json"), { ...recorder(calls), busy: () => busy }, () => now);
+  await r.save({ name: "Night", schedule: { kind: "daily", time: "00:30" }, action: { type: "self-work", hours: 6, whenFree: true } });
+  now += 2 * 60_000;
+  await r.tick();
+  assert.deepEqual(calls, [], "busy: waits");
+  busy = false;
+  now += 30_000;
+  await r.tick();
+  assert.deepEqual(calls, ["self-work 6h - -"], "free: starts");
+  // The next night it stays busy past 04:30: that turn is skipped, and the day after it runs.
+  now = new Date(2026, 10, 25, 0, 31).getTime();
+  busy = true;
+  await r.tick();
+  now = new Date(2026, 10, 25, 5, 0).getTime();
+  await r.tick();
+  busy = false;
+  now += 30_000;
+  await r.tick();
+  assert.equal(calls.length, 1, "skipped, not started in the morning");
+  assert.match((await r.list())[0]!.lastMessage ?? "", /Skipped/);
   r.close();
 });

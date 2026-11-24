@@ -19,7 +19,9 @@ import { transcribeWith } from "../speech-tools.js";
 import type { WhisperEngine } from "../whisper.js";
 import { IMAGE_SUPPORT_FILE } from "../chat-tools-media.js";
 import type { LlamaEngine } from "../llamacpp.js";
-import { Routines } from "../routines.js";
+import { DEFAULT_ROUTINES, Routines } from "../routines.js";
+import { buildDigest, DIGEST_FILE, digestSince } from "../inbox-digest.js";
+import type { InboxState, InboxTaskView } from "@kesher/shared";
 import { runIn } from "../run-in.js";
 import { SelfWork } from "../self-work.js";
 import type { KesherServerOptions } from "./options.js";
@@ -57,9 +59,44 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
     // The same checks as the panel's Start (through the route, so a worker is used when there is one).
     startSelfWork: async (o) => {
       if (!injectRef.app) return { ok: false, message: "KesherAI is still starting.", link: "#/code" };
-      const r = await localCall<{ run?: { branch?: string; convId?: string }; error?: string }>(config.port, "POST", "/api/self-work/start", o).catch((err: Error) => ({ status: 0, json: { error: err.message } as { run?: { branch?: string; convId?: string }; error?: string } }));
+      // Without a project and check the routine continues the last run's (chosen on this computer), else the inbox's project.
+      const last = o.repo && o.check ? undefined : (await localCall<{ run?: { repo?: string; check?: string } | null }>(config.port, "GET", "/api/self-work").catch(() => undefined))?.json.run;
+      const repo = o.repo ?? last?.repo ?? config.taskInbox.repo;
+      if (!repo) return { ok: false, message: "Start self-work once on the Code page first, so the routine knows the project.", link: "#/code" };
+      const start = { ...o, repo, check: o.check ?? last?.check ?? "pnpm -s typecheck && pnpm -s lint", goal: o.goal ?? "Work through the open small tasks on the shared task board (docs/WORK_LIST.md) one at a time: claim each before you start it and mark it done or blocked. When none is left, that is ALL DONE." };
+      const r = await localCall<{ run?: { branch?: string; convId?: string }; error?: string }>(config.port, "POST", "/api/self-work/start", start).catch((err: Error) => ({ status: 0, json: { error: err.message } as { run?: { branch?: string; convId?: string }; error?: string } }));
       const body = r.json;
       return r.status === 200 && body.run ? { ok: true, message: `Self-work started on ${body.run.branch ?? "a new branch"}.`, link: "#/code" } : { ok: false, message: body.error ?? `It did not start (${r.status}).`, link: "#/code" };
+    },
+    // The task inbox through its own routes (as this computer): an Antigravity task is only asked about, never started.
+    inboxRun: async (taskId) => {
+      const link = "#/task-inbox";
+      const path = `/api/task-inbox/tasks/${encodeURIComponent(taskId)}`;
+      const t = await localCall<InboxTaskView & { error?: string }>(config.port, "GET", path).catch(() => undefined);
+      if (!t || t.status !== 200) return { ok: false, message: t?.json.error ?? "KesherAI is still starting.", link };
+      const answer = (r: { status: number; json: { error?: string } }, ok: string) => (r.status === 200 ? { ok: true, message: ok, link } : { ok: false, message: r.json.error ?? `It did not start (${r.status}).`, link });
+      if (t.json.runBy === "antigravity") return answer(await localCall<{ error?: string }>(config.port, "POST", `${path}/ask`, {}), `Asked "Run this task in Antigravity?" for ${t.json.title}. It starts when you answer Run.`);
+      const run = await localCall<{ error?: string }>(config.port, "POST", `${path}/run`, {});
+      // Another task is running: wait in line instead.
+      if (run.status === 409) return answer(await localCall<{ error?: string }>(config.port, "POST", `${path}/queue`, {}), `${t.json.title} is in line.`);
+      return answer(run, `Started ${t.json.title}.`);
+    },
+    inboxSet: async (patch) => {
+      const r = await localCall<{ error?: string }>(config.port, "PUT", "/api/task-inbox/settings", patch).catch((e: Error) => ({ status: 0, json: { error: e.message } }));
+      const what = patch.loop !== undefined ? `The work loop is ${patch.loop ? "on" : "off"}.` : patch.paused ? "The task inbox is paused." : "The task inbox is running again.";
+      return r.status === 200 ? { ok: true, message: what, link: "#/task-inbox" } : { ok: false, message: r.json.error ?? `It did not change (${r.status}).`, link: "#/task-inbox" };
+    },
+    // The digest: the inbox's state read through its route, written as one file (no model).
+    digest: async () => {
+      const link = "#/task-inbox";
+      const st = await localCall<InboxState & { error?: string }>(config.port, "GET", "/api/task-inbox").catch(() => undefined);
+      if (!st || st.status !== 200) return { ok: false, message: st?.json.error ?? "KesherAI is still starting.", link };
+      const file = join(paths.root, DIGEST_FILE);
+      const now = Date.now();
+      const since = digestSince(await readFileFs(file, "utf8").catch(() => ""), now);
+      const sw = (await localCall<{ run?: { status?: string; branch?: string; note?: string } | null }>(config.port, "GET", "/api/self-work").catch(() => undefined))?.json.run;
+      await writeFileFs(file, buildDigest({ state: st.json, since, now, ...(sw?.status ? { selfWork: { status: sw.status, ...(sw.branch ? { branch: sw.branch } : {}), ...(sw.note ? { note: sw.note } : {}) } } : {}) }));
+      return { ok: true, message: `Digest written (${st.json.tasks.length} tasks in the inbox).`, link };
     },
     runPrompt: async (name, prompt, modelId, personaId, opts = {}) => {
       // The engine log says who sent a request no chat on screen asked for.
@@ -101,7 +138,7 @@ export function buildRoutines(p: { paths: DataPaths; pipelines: Pipelines; injec
     // Also while another program works the graphics card hard (a game, a shader build): a background routine would
     // load a model under it.
     busy: () => Object.keys(chats().activity()).length > 0 || engine?.status().job?.phase === "loading" || !!p.othersBusy?.(),
-  });
+  }, Date.now, DEFAULT_ROUTINES);
 }
 
 /**

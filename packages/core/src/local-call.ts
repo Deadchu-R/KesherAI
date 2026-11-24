@@ -4,12 +4,12 @@
  * cookie helper is an ES module that cannot be required there).
  *
  * @param port - The port KesherAI listens on.
- * @param method - GET or POST.
+ * @param method - GET, POST or PUT.
  * @param path - The route, e.g. `/api/self-work`.
- * @param body - A JSON body for POST.
+ * @param body - A JSON body for POST or PUT.
  * @returns The status and the parsed answer (an empty object when it is not JSON).
  */
-export async function localCall<T = unknown>(port: number, method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; json: T }> {
+export async function localCall<T = unknown>(port: number, method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<{ status: number; json: T }> {
   const r = await fetch(`http://127.0.0.1:${port}${path}`, {
     method,
     ...(body !== undefined ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),

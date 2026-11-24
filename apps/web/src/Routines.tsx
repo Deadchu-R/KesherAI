@@ -7,11 +7,37 @@ import { Select } from "./ui/Select";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
-type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number } | { kind: "page"; url: string; minutes: number } | { kind: "folder"; path: string } | { kind: "download"; match?: string };
-type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean } | { type: "self-work"; repo: string; goal: string; hours: number; check: string; modelId?: string };
+type Schedule = { kind: "daily"; time: string; days?: number[] } | { kind: "every"; minutes: number } | { kind: "startup"; delayMinutes?: number } | { kind: "page"; url: string; minutes: number } | { kind: "folder"; path: string } | { kind: "download"; match?: string } | { kind: "once"; at: string };
+type Action = { type: "pipeline"; pipelineId: string; inputs?: Record<string, string> } | { type: "prompt"; prompt: string; modelId?: string; personaId?: string; quiet?: boolean; web?: boolean; folder?: string; background?: boolean } | { type: "self-work"; repo?: string; goal?: string; hours: number; check?: string; modelId?: string; whenFree?: boolean } | { type: "inbox-run"; taskId: string } | { type: "inbox-pause" } | { type: "inbox-resume" } | { type: "loop"; on: boolean } | { type: "digest" };
 interface Routine { id?: string; name: string; enabled: boolean; schedule: Schedule; action: Action; notify: boolean; telegram?: boolean; lastRun?: string; lastStatus?: string; lastMessage?: string; lastLink?: string; nextRun?: string | null; running?: boolean }
 
 const DAYS: Array<[string, string]> = [["א׳", "Su"], ["ב׳", "Mo"], ["ג׳", "Tu"], ["ד׳", "We"], ["ה׳", "Th"], ["ו׳", "Fr"], ["ש׳", "Sa"]];
+/** The routine's action kinds the picker offers besides a prompt and a pipeline (the work-driving ones), with their labels. */
+const WORK_ACTIONS: Array<[Action["type"], string, string]> = [
+  ["self-work", "עבודה עצמית (הפרויקט האחרון)", "Self-work (the last project)"],
+  ["inbox-run", "הרצת משימה מתיבת המשימות", "Run an inbox task"],
+  ["inbox-pause", "השהיית תיבת המשימות", "Pause the task inbox"],
+  ["inbox-resume", "המשך תיבת המשימות", "Resume the task inbox"],
+  ["loop", "מתג לולאת העבודה", "Work loop switch"],
+  ["digest", "תקציר תיבת המשימות לקובץ (בלי מודל)", "Write the inbox digest (no model)"],
+];
+
+/** A new action of a kind, with its usual starting values. */
+const newAction = (type: string, pipelines: Array<{ id?: string }>): Action =>
+  type === "pipeline" ? { type: "pipeline", pipelineId: pipelines[0]?.id ?? "" }
+  : type === "self-work" ? { type: "self-work", hours: 6, whenFree: true }
+  : type === "inbox-run" ? { type: "inbox-run", taskId: "" }
+  : type === "inbox-pause" || type === "inbox-resume" || type === "digest" ? { type }
+  : type === "loop" ? { type: "loop", on: true }
+  : { type: "prompt", prompt: "" };
+
+/** The local date and time `YYYY-MM-DDTHH:mm` an hour from now (the one-time picker's start). */
+const inAnHour = () => {
+  const d = new Date(Date.now() + 3_600_000);
+  d.setMinutes(0, 0, 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`;
+};
+
 const when = (iso: string) => new Date(iso).toLocaleString(getLocale() === "he" ? "he-IL" : undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 /** Routines: pipelines and prompts that run by themselves on a schedule. */
@@ -20,6 +46,13 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
   const [list, setList] = useState<Routine[]>([]);
   const [draft, setDraft] = useState<Routine | null>(null);
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([]);
+  /** The inbox tasks that can still be run (for "Run an inbox task"), loaded when that action is picked. */
+  const [inboxTasks, setInboxTasks] = useState<Array<{ id: string; title: string }>>([]);
+  const wantsTasks = draft?.action.type === "inbox-run";
+  useEffect(() => {
+    if (wantsTasks) void api<{ tasks: Array<{ id: string; title: string; status: string }> }>("/api/task-inbox").then((r) => setInboxTasks(r.tasks.filter((t) => ["waiting", "failed", "partial", "deferred-quota"].includes(t.status))), () => undefined);
+  }, [wantsTasks]);
+  const setWork = (patch: Record<string, unknown>) => draft && setDraft({ ...draft, action: { ...draft.action, ...patch } as Action });
   useEffect(() => {
     void api<{ models: Array<{ id: string; name: string; category: string }> }>("/api/models").then((r) => setModels(r.models.filter((m) => m.category === "chat")), () => undefined);
   }, []);
@@ -40,7 +73,8 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
     }
   };
   const describe = (s: Schedule) =>
-    s.kind === "page" ? L(`כשהעמוד משתנה (בדיקה כל ${s.minutes} דק׳)`, `when the page changes (checked every ${s.minutes} min)`)
+    s.kind === "once" ? L(`פעם אחת ב-${s.at.replace("T", " ")}`, `once at ${s.at.replace("T", " ")}`)
+    : s.kind === "page" ? L(`כשהעמוד משתנה (בדיקה כל ${s.minutes} דק׳)`, `when the page changes (checked every ${s.minutes} min)`)
     : s.kind === "folder" ? L(`כשקבצים משתנים ב-${s.path}`, `when files change in ${s.path}`)
     : s.kind === "download" ? L(`כשהורדה מסתיימת${s.match ? ` (${s.match})` : ""}`, `when a download finishes${s.match ? ` (${s.match})` : ""}`)
     : s.kind === "startup" ? L(`בכל הפעלה (+${s.delayMinutes ?? 3} דק׳)`, `each start (+${s.delayMinutes ?? 3} min)`) : s.kind === "every" ? L(`כל ${s.minutes} דקות`, `every ${s.minutes} min`) : `${s.days?.length && s.days.length < 7 ? s.days.map((d) => L(...DAYS[d]!)).join(" ") : L("כל יום", "daily")} ${s.time}`;
@@ -62,7 +96,7 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
           <div className="row">
             <Select value={draft.schedule.kind} onChange={(e) => {
               const k = e.target.value;
-              setDraft({ ...draft, schedule: k === "every" ? { kind: "every", minutes: 60 } : k === "startup" ? { kind: "startup", delayMinutes: 3 } : k === "page" ? { kind: "page", url: "", minutes: 60 } : k === "folder" ? { kind: "folder", path: "" } : k === "download" ? { kind: "download" } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } });
+              setDraft({ ...draft, schedule: k === "every" ? { kind: "every", minutes: 60 } : k === "startup" ? { kind: "startup", delayMinutes: 3 } : k === "page" ? { kind: "page", url: "", minutes: 60 } : k === "folder" ? { kind: "folder", path: "" } : k === "download" ? { kind: "download" } : k === "once" ? { kind: "once", at: inAnHour() } : { kind: "daily", time: "08:00", days: [0, 1, 2, 3, 4] } });
             }}>
               <option value="daily">{L("בשעה קבועה", "At a time")}</option>
               <option value="every">{L("כל כמה דקות", "Every few minutes")}</option>
@@ -70,8 +104,11 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
               <option value="page">{L("כשעמוד אינטרנט משתנה", "When a web page changes")}</option>
               <option value="folder">{L("כשקבצים משתנים בתיקייה", "When files change in a folder")}</option>
               <option value="download">{L("כשהורדה מסתיימת", "When a download finishes")}</option>
+              <option value="once">{L("פעם אחת, בתאריך ושעה", "Once, at a date and time")}</option>
             </Select>
-            {draft.schedule.kind === "page" ? (
+            {draft.schedule.kind === "once" ? (
+              <input type="datetime-local" className="grow" value={draft.schedule.at} onChange={(e) => setDraft({ ...draft, schedule: { kind: "once", at: e.target.value } })} aria-label={L("תאריך ושעה", "Date and time")} title={L("אחרי הריצה השגרה מכבה את עצמה; אם KesherAI היה סגור, היא רצה זמן קצר אחרי ההפעלה", "It turns itself off after it ran; if KesherAI was closed, it runs soon after the next start")} />
+            ) : draft.schedule.kind === "page" ? (
               <>
                 <input className="grow" type="url" dir="ltr" placeholder="https://…" value={draft.schedule.url} onChange={(e) => setDraft({ ...draft, schedule: { ...(draft.schedule as Extract<Schedule, { kind: "page" }>), url: e.target.value } })} aria-label={L("כתובת העמוד", "The page's address")} />
                 <label className="row">{L("בדיקה כל", "Check every")}<input type="number" min={15} value={draft.schedule.minutes} onChange={(e) => setDraft({ ...draft, schedule: { ...(draft.schedule as Extract<Schedule, { kind: "page" }>), minutes: Number(e.target.value) } })} style={{ width: 80 }} />{L("דקות", "minutes")}</label>
@@ -107,10 +144,10 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
             )}
           </div>
           <div className="row">
-            <Select value={draft.action.type} onChange={(e) => setDraft({ ...draft, action: e.target.value === "pipeline" ? { type: "pipeline", pipelineId: pipelines[0]?.id ?? "" } : { type: "prompt", prompt: "" } })}>
+            <Select value={draft.action.type} onChange={(e) => setDraft({ ...draft, action: newAction(e.target.value, pipelines) })}>
               <option value="prompt">{L("שאלה למודל (שיחה חדשה כל פעם)", "Ask a model (a new chat each time)")}</option>
               <option value="pipeline" disabled={!pipelines.length}>{L("הרצת צינור", "Run a pipeline")}</option>
-              {draft.action.type === "self-work" && <option value="self-work">{L("עבודה עצמית (נקבעה בדף הקוד)", "Self-work (set on the code page)")}</option>}
+              {WORK_ACTIONS.map(([v, he, en]) => <option key={v} value={v}>{L(he, en)}</option>)}
             </Select>
             {draft.action.type === "prompt" && personas.length > 0 && (
               <Select value={draft.action.personaId ?? ""} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), ...(e.target.value ? { personaId: e.target.value } : { personaId: undefined }) } })}>
@@ -130,6 +167,42 @@ export function RoutinesSection({ pipelines }: { pipelines: Array<{ id?: string;
               </Select>
             )}
           </div>
+          {draft.action.type === "self-work" && (
+            <>
+              <div className="row">
+                <label className="row">{L("שעות", "Hours")}<input type="number" min={0.25} max={24} step={0.25} value={draft.action.hours} onChange={(e) => setWork({ hours: Number(e.target.value) })} style={{ width: 80 }} /></label>
+                {models.length > 0 && (
+                  <Select value={draft.action.modelId ?? ""} onChange={(e) => setWork({ modelId: e.target.value || undefined })} aria-label={L("מודל", "Model")}>
+                    <option value="">{L("המודל הטוב ביותר לקוד", "Best coding model")}</option>
+                    {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </Select>
+                )}
+              </div>
+              <textarea rows={2} dir="auto" value={draft.action.goal ?? ""} placeholder={L("מה לעשות (לא חובה; ריק = משימות פתוחות ברשימת העבודה)", "What to do (optional; empty = the open tasks of the work list)")} onChange={(e) => setWork({ goal: e.target.value || undefined })} />
+              <label className="check"><input type="checkbox" checked={!!draft.action.whenFree} onChange={(e) => setWork({ whenFree: e.target.checked })} /> {L("רק כשהמחשב פנוי (אין צ'אט, טעינת מודל או משחק; מחכה עד 4 שעות)", "Only when the computer is free (no chat, model load or game; waits up to 4 hours)")}</label>
+              <p className="muted small">{L("הפרויקט ופקודת הבדיקה הם של הריצה האחרונה שהתחלת בדף הקוד במחשב.", "The project and check are the last run you started on the Code page on the computer.")}</p>
+            </>
+          )}
+          {draft.action.type === "inbox-run" && (() => {
+            const taskId = draft.action.taskId;
+            return (
+            <>
+              <Select value={taskId} onChange={(e) => setWork({ taskId: e.target.value })} aria-label={L("משימה", "Task")}>
+                <option value="">{L("בחר משימה…", "Choose a task…")}</option>
+                {draft.action.taskId && !inboxTasks.some((t) => t.id === taskId) && <option value={draft.action.taskId}>{draft.action.taskId}</option>}
+                {inboxTasks.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.title.slice(0, 60)}</option>)}
+              </Select>
+              <p className="muted small">{L("משימת Antigravity לא מתחילה מעצמה: נשלחת שאלה \"להריץ ב-Antigravity?\" למחשב ולטלפון, ורק לחיצת Run שלך מתחילה אותה.", "An Antigravity task does not start by itself: the \"Run this task in Antigravity?\" ask goes to the PC and the phone, and only your Run starts it.")}</p>
+            </>
+            );
+          })()}
+          {draft.action.type === "loop" && (
+            <Select value={draft.action.on ? "on" : "off"} onChange={(e) => setWork({ on: e.target.value === "on" })} aria-label={L("לולאת העבודה", "Work loop")}>
+              <option value="on">{L("להפעיל את לולאת העבודה", "Turn the work loop on")}</option>
+              <option value="off">{L("לכבות את לולאת העבודה", "Turn the work loop off")}</option>
+            </Select>
+          )}
+          {draft.action.type === "digest" && <p className="muted small">{L("כותב את inbox-digest.md בתיקיית הנתונים (מה הסתיים, נכשל, חלקי וממתין לכל מבצע, ענפים, מכסות). בלי מודל.", "Writes inbox-digest.md in the data folder (what finished, failed, partly done or waits per executor, branches, quotas). No model.")}</p>}
           {draft.action.type === "prompt" && <textarea rows={3} dir="auto" value={draft.action.prompt} placeholder={L("למשל: סכם את המיילים שלא נקראו ואת הפגישות של היום", "e.g. Summarize my unread mail and today's meetings")} onChange={(e) => setDraft({ ...draft, action: { ...(draft.action as Extract<Action, { type: "prompt" }>), prompt: e.target.value } })} />}
           {draft.action.type === "pipeline" && (() => {
             const a = draft.action;

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { isLocalRequest, pairedDeviceIdOf, pairedDeviceOf } from "../auth.js";
@@ -6,6 +7,7 @@ import { inboxRunId } from "../agent-activity.js";
 import type { TaskInbox } from "../inbox-runner.js";
 import type { KesherServices } from "../services.js";
 import { validBranchName } from "../task-inbox.js";
+import { DIGEST_FILE } from "../inbox-digest.js";
 import { parseAssignTo, parseWorkList, type InboxTaskView } from "@kesher/shared";
 
 /**
@@ -35,6 +37,12 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   app.get("/api/task-inbox", async (req) => {
     const st = await inbox.state(isLocalRequest(req));
     return { ...st, tasks: st.tasks.map(labelled) };
+  });
+
+  /** The inbox digest (inbox-digest.ts): what finished, failed or waits per executor, and the quotas, written by the digest routine. */
+  app.get("/api/task-inbox/digest", async (_req, reply) => {
+    const text = await readFile(join(s.paths.root, DIGEST_FILE), "utf8").catch(() => "");
+    return text ? reply.type("text/markdown; charset=utf-8").send(text) : reply.code(404).send({ error: "No digest yet: it is written by the digest routine (Routines page, Run now)." });
   });
 
   app.get<{ Params: { id: string } }>("/api/task-inbox/tasks/:id", async (req, reply) => inbox.task(req.params.id).then(labelled, (e) => failed(reply, e)));
