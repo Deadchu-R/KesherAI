@@ -4647,3 +4647,44 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
 - Sources: docs.litellm.ai (PII masking v2 with Presidio), developers.cloudflare.com/ai-gateway/features/dlp,
   openwebui.com/f/justinrahb/pii_filter, dev.to/crp4222 (tool call arguments), requesty.ai (guardrails and redaction).
 - Stopped at: done.
+
+## 2026-11-24 — Smart log reader: search and group logs inside KesherAI (Claude helper, for Roee 24.11 "a smart log reader")
+- **lnav** (terminal log navigator): knows formats by regex (timestamp, level, body), merges many files into one
+  time-ordered view, colours by level, `:filter-in`/`:filter-out` regex, jumps to the next error (`e`/`E`), SQL over
+  parsed fields, a histogram of messages per time bucket. **Take**: per-format line parsers that pull time/level/body,
+  one merged view, "next error", a small per-minute histogram. **Leave**: SQL and key-heavy UI.
+- **Grafana Logs Drilldown / Loki**: no query language needed: pick a service, then tabs Logs · Fields · Patterns;
+  Patterns are Drain-mined templates (`<_>` for variable parts) with a count sparkline; one tap includes/excludes a
+  pattern. Loki itself stores labels, not full text, and filters line-by-line (`|=`, `|~` regex) over a time range.
+  **Take**: the Patterns tab with a sparkline per pattern, include/exclude a pattern, labels (source, level) as the
+  filters, text then regex filter on the lines.
+- **Datadog Log Patterns**: clusters by masking variable tokens (numbers, ids, IPs, quoted strings), shows count,
+  status, a sample and "first seen / last seen"; "Watchdog Insights" flags a pattern that is new or spiking.
+  **Take**: masking classes, first/last seen, "new" and "rising" flags. **Leave**: cloud ingestion.
+- **Sentry issue grouping**: fingerprint = the stack trace's in-app frames (else the message with numbers/ids
+  stripped); an issue keeps first/last seen, events count, and states: unresolved / resolved / ignored ("archived until
+  it escalates"); a resolved issue that happens again is a regression. **Take**: the stack trace stays one event with
+  its message; user states per pattern (bug / known / ignore) that are kept and applied next time; an ignored pattern
+  is hidden but comes back flagged if it rises; "new since last look".
+- **VS Code problem matchers / Output channels**: a regex per tool maps a line to file, line, column, severity and
+  message; multi-line matchers for compilers that print the file on one line and errors under it; one Output channel
+  per source with a drop-down. **Take**: a source list (one channel each), the severity mapping, and file:line links
+  where a line has one (shown, not opened from the phone).
+- **Unreal Output Log**: lines are `[2026.11.24-10.00.00:123][ 42]LogCategory: Verbosity: message`; filters by
+  verbosity (Messages/Warnings/Errors) and a Categories menu (LogBlueprint, LogTemp…), plain-text search, "Clear on
+  PIE". **Take**: parse category and verbosity (Error/Warning/Display/Log/Verbose; `Fatal` = error), a category filter
+  for Unreal logs, Saved/Logs of a found project opened from Unreal's page.
+- **Seq** (structured logs): message templates (`User {Id} logged in`) are the grouping key ("event type" hash);
+  signals = saved filters shown as toggles; a query bar that takes plain text or an expression. **Take**: saved filters
+  as chips; JSONL logs keep their fields (level, kind, message) instead of being read as text.
+- **Plan for KesherAI**: read-only source adapters (own logs, usage log when present, inbox/self-work runs, engine
+  logs, Unreal/Unity logs, files the user adds inside home with a size cap), tail-only reads with byte and line caps;
+  one parser (time, level, category, message; stack traces kept with their line); search with text/regex/level/source/
+  time and context lines; Drain-like patterns (mask → group by token count → merge similar templates with `<*>`),
+  count, first/last seen, 12-bucket trend, user labels (bug / known / ignore) saved and applied, "new since last
+  look"; "Explain this pattern" and "Summarize the last hour's errors" on the local model (the small one beside first,
+  thinking off), a cloud model only when the user picks it, through the leak guard.
+- Sources: lnav.org docs (formats, filters), grafana.com/docs/grafana/latest/explore/simplified-exploration/logs
+  (patterns), datadoghq.com docs (log patterns), docs.sentry.io (grouping, fingerprint, issue states),
+  code.visualstudio.com/docs/editor/tasks (problem matchers), dev.epicgames.com (Output Log), docs.datalust.co (Seq).
+- Stopped at: done (built in the same task; see WORK_LIST "Smart log reader").

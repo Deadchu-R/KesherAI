@@ -119,3 +119,15 @@ export function smallerBeside(side: { running: boolean; modelPath?: string; mode
   const big = sizeOf(mainPath);
   return small && big && small <= big * 0.6 ? side.modelId : undefined;
 }
+
+/**
+ * The model loaded beside the main one now, if any, without making the beside engine (the log reader's Explain
+ * prefers this small model).
+ *
+ * @param registry - The app's provider registry.
+ * @returns Its model id while it runs.
+ */
+export function besideModelOf(registry: ProviderRegistry): string | undefined {
+  const st = shared.get(registry)?.status();
+  return st?.running ? st.modelId : undefined;
+}

@@ -29,6 +29,7 @@ const PAGE_LINES: Record<string, { he: string; en: string }> = {
   "#/connections": { he: "חיבורים (ענן, שרתים, MCP, המכשירים שלך), פלאגינים ומודים, וחלקי KesherAI שפועלים.", en: "Connections (cloud, servers, MCP, your devices), plugins and mods, and which parts of KesherAI are on." },
   "#/plugins": { he: "תוספות שמרחיבות את KesherAI, ושינויי מראה.", en: "Add-ons that extend KesherAI, and changes to its look." },
   "#/parts": { he: "הפעלה וכיבוי של חלקים שלמים, כדי שיישאר רק מה שצריך.", en: "Turn whole parts on and off, to keep only what you need." },
+  "#/logs": { he: "כל היומנים במקום אחד: חיפוש, תבניות והסבר עם המודל המקומי.", en: "Every log in one place: search, patterns and Explain with the local model." },
   "#/health": { he: "מצב הזיכרון, הדיסק וכרטיס המסך, ומה אפשר לשחרר.", en: "Memory, disk and graphics card, and what can be freed." },
   "#/remote": { he: "לראות ולהפעיל את המחשב הזה מהטלפון.", en: "See and use this computer from the phone." },
   "#/updates": { he: "הגרסה המותקנת, מה חדש, והתקנת עדכון.", en: "The installed version, what is new, and installing an update." },

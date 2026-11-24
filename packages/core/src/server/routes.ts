@@ -58,6 +58,7 @@ import { translateRoutes } from "../routes/translate.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
 import { healthRoutes } from "../routes/health.js";
+import { logRoutes } from "../routes/logs.js";
 import { webSearchCheckRoutes } from "../routes/web-search-check.js";
 import { hfTokenRoutes } from "../routes/hf-token.js";
 import { freeCloudRoutes } from "../routes/free-cloud.js";
@@ -146,6 +147,8 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await coachRoutes(app, services);
   await memoryRoutes(app, services);
   await healthRoutes(app, services);
+  // The smart log reader (Logs page): sources, search, patterns, labels, Explain.
+  logRoutes(app, services);
   await webSearchCheckRoutes(app, services);
   await hfTokenRoutes(app, services);
   await freeCloudRoutes(app, services);

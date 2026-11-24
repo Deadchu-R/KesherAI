@@ -1,0 +1,60 @@
+/* The Logs page (pages/LogsPage.tsx): sources on the side on a wide screen, a picker on top on a phone. */
+.logs-page .logs-head { flex-wrap: wrap; gap: 8px; }
+.logs-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.logs-sources { display: flex; flex-direction: column; gap: 12px; padding: 12px; position: sticky; top: 12px; max-height: calc(100vh - 120px); overflow-y: auto; }
+.logs-group { display: flex; flex-direction: column; gap: 2px; }
+.logs-group-title { padding: 0 6px 2px; text-transform: uppercase; letter-spacing: .04em; font-size: 11px; }
+.logs-source { display: flex; align-items: center; gap: 4px; border-radius: calc(8px * var(--r-scale, 1)); }
+.logs-source.on { background: var(--raised); }
+.logs-source-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 1px; text-align: start; height: auto; padding: 6px 8px; background: transparent; border: 0; color: var(--text); }
+.logs-source-pick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logs-add input { width: 100%; }
+.logs-source-select { display: none; }
+.logs-filters { display: flex; flex-direction: column; gap: 8px; }
+.logs-search input { min-width: 0; }
+.logs-chips { flex-wrap: wrap; gap: 6px; }
+.chip-text.on { background: var(--raised); color: var(--text); border-color: var(--accent); }
+.lvl-chip.lvl-error.on { border-color: var(--bad); color: var(--bad); }
+.lvl-chip.lvl-warning.on { border-color: var(--warn); color: var(--warn); }
+.logs-model { font-size: 13px; }
+.logs-model summary { cursor: pointer; }
+.logs-model select { margin-top: 6px; max-width: 100%; }
+.logs-cloud-note { display: block; margin-top: 4px; color: var(--warn); }
+.logs-patterns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.log-pattern { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-inline-start: 3px solid var(--border-strong); }
+.log-pattern.lvl-error { border-inline-start-color: var(--bad); }
+.log-pattern.lvl-warning { border-inline-start-color: var(--warn); }
+.log-pattern.is-new { box-shadow: inset 0 0 0 1px var(--accent); }
+.log-pattern.dim { opacity: .6; }
+.log-pattern-head { gap: 8px; flex-wrap: wrap; }
+.log-count { font-weight: 600; font-variant-numeric: tabular-nums; }
+.log-count.lvl-error { color: var(--bad); }
+.log-count.lvl-warning { color: var(--warn); }
+.log-new { color: var(--accent); border-color: var(--accent); }
+.log-rising { color: var(--warn); }
+.log-trend path { fill: var(--text-2); }
+.log-trend.rising path { fill: var(--warn); }
+.log-template { font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.log-actions { gap: 6px; flex-wrap: wrap; }
+.log-label { height: 28px; font-size: 12.5px; }
+.logs-explain { padding: 8px 10px; background: var(--panel-2); border-radius: calc(8px * var(--r-scale, 1)); }
+.log-lines { display: flex; flex-direction: column; gap: 2px; padding: 6px; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; overflow-x: auto; }
+.log-hit { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.log-hit:last-child { border-bottom: 0; }
+.log-line { display: flex; flex-wrap: wrap; gap: 0 8px; padding: 1px 4px; border-inline-start: 2px solid transparent; }
+.log-line.lvl-error { border-inline-start-color: var(--bad); }
+.log-line.lvl-warning { border-inline-start-color: var(--warn); }
+.log-line.dim { opacity: .55; }
+.log-meta { color: var(--muted); white-space: nowrap; }
+.log-msg { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.log-extra { flex-basis: 100%; }
+.log-extra summary { cursor: pointer; color: var(--muted); }
+.log-extra pre { margin: 4px 0 0; white-space: pre; overflow-x: auto; }
+@media (max-width: 760px) {
+  .logs-body { grid-template-columns: minmax(0, 1fr); }
+  .logs-sources { display: none; }
+  .logs-source-select { display: block; width: 100%; }
+  .logs-page .logs-head h1 { flex-basis: 100%; }
+  .logs-page .logs-head button { flex: 1 1 auto; }
+  .log-when { display: none; }
+}

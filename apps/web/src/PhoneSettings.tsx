@@ -126,6 +126,7 @@ export function PhoneSettings({ onLocale }: { onLocale: () => void }) {
           <div className="phone-set-group">
             <a className="button" href="#/settings" onClick={close}>🖥 {L("הגדרות המחשב (PC settings)", "PC settings (the computer's)")}</a>
             <a className="button" href="#/health" onClick={close}>❤ {L("בריאות המחשב והטלפון", "PC and phone health")}</a>
+            <a className="button" href="#/logs" onClick={close}>📜 {L("יומנים (לוגים) של המחשב", "The computer's logs")}</a>
           </div>
           <div className="phone-set-group">
             <div className="side-edit-title">{L("התראות", "Notifications")}</div>

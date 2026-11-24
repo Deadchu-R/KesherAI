@@ -1,0 +1,1391 @@
+{
+ "group": "יומנים · Logs",
+ "mocks": [
+  {
+   "url": "**/api/logs/sources",
+   "method": "GET",
+   "json": {
+    "sources": [
+     {
+      "id": "kesher-main",
+      "name": "KesherAI log",
+      "nameHe": "היומן של KesherAI",
+      "group": "kesher",
+      "size": 812000,
+      "modified": {
+       "$agoMs": "2m"
+      }
+     },
+     {
+      "id": "kesher-faults",
+      "name": "KesherAI faults",
+      "nameHe": "התקלות של KesherAI",
+      "group": "kesher",
+      "size": 41000,
+      "modified": {
+       "$agoMs": "25m"
+      }
+     },
+     {
+      "id": "usage",
+      "name": "Usage log",
+      "nameHe": "יומן השימוש",
+      "group": "kesher",
+      "size": 220000,
+      "modified": {
+       "$agoMs": "1m"
+      }
+     },
+     {
+      "id": "inbox-runs",
+      "name": "Task inbox runs",
+      "nameHe": "הרצות תיבת המשימות",
+      "group": "agents",
+      "size": 96000,
+      "modified": {
+       "$agoMs": "12m"
+      }
+     },
+     {
+      "id": "self-work",
+      "name": "Self-work",
+      "nameHe": "עבודה עצמית",
+      "group": "agents",
+      "size": 5000,
+      "modified": {
+       "$agoMs": "3h"
+      }
+     },
+     {
+      "id": "engine-llama",
+      "name": "Chat engine (llama.cpp)",
+      "nameHe": "מנוע הצ'אט (llama.cpp)",
+      "group": "engines"
+     },
+     {
+      "id": "engine-comfy",
+      "name": "ComfyUI",
+      "nameHe": "ComfyUI",
+      "group": "engines"
+     },
+     {
+      "id": "unreal-3f9a1c2b7d",
+      "name": "Unreal · ForMigration",
+      "nameHe": "Unreal · ForMigration",
+      "group": "unreal",
+      "size": 14200000,
+      "modified": {
+       "$agoMs": "6m"
+      }
+     },
+     {
+      "id": "unity-editor",
+      "name": "Unity Editor",
+      "nameHe": "עורך Unity",
+      "group": "unity",
+      "size": 3100000,
+      "modified": {
+       "$agoMs": "1d"
+      }
+     },
+     {
+      "id": "file-8c21d0e4aa",
+      "name": "server.log",
+      "nameHe": "server.log",
+      "group": "added",
+      "size": 64000,
+      "modified": {
+       "$agoMs": "40m"
+      },
+      "removable": true
+     }
+    ]
+   }
+  }
+ ],
+ "boards": [
+  {
+   "id": "LogsPatterns",
+   "title": "יומנים: מקורות בצד, חיפוש/רמה/זמן; \"תבניות\" מקבצת שורות דומות עם ספירה, ראשונה/אחרונה, מגמה, \"חדש\"/\"עולה\" ותווית (באג/ידוע/להתעלם)",
+   "titleEn": "Logs: sources on the side, search/level/time; Patterns groups alike lines with count, first/last seen, trend, new/rising and a label (bug/known/ignore)",
+   "route": "#/logs",
+   "height": {
+    "desktop": 1100,
+    "phone": 2000
+   },
+   "mocks": [
+    {
+     "url": "**/api/logs/patterns?*",
+     "method": "GET",
+     "json": {
+      "total": 18342,
+      "readTruncated": false,
+      "patterns": [
+       {
+        "id": "p1",
+        "template": "Hub answered <num> for <path> (<num> ms)",
+        "level": "error",
+        "count": 214,
+        "first": {
+         "$agoMs": "23h"
+        },
+        "last": {
+         "$agoMs": "2m"
+        },
+        "trend": [
+         2,
+         3,
+         4,
+         3,
+         5,
+         6,
+         9,
+         14,
+         22,
+         38,
+         51,
+         57
+        ],
+        "rising": true,
+        "sample": "Hub answered 502 for /api/board (30012 ms)",
+        "sampleLine": 18210,
+        "isNew": false
+       },
+       {
+        "id": "p2",
+        "template": "memory-watchdog: heap <num> free <num> of <num>",
+        "level": "info",
+        "count": 2870,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "1m"
+        },
+        "trend": [
+         240,
+         238,
+         241,
+         239,
+         240,
+         242,
+         238,
+         240,
+         239,
+         241,
+         236,
+         236
+        ],
+        "rising": false,
+        "sample": "memory-watchdog: heap 612MB free 61.2GB of 95.8GB",
+        "sampleLine": 18341,
+        "label": "known"
+       },
+       {
+        "id": "p3",
+        "template": "llama-server exited with code <num> while loading <str>",
+        "level": "error",
+        "count": 3,
+        "first": {
+         "$agoMs": "40m"
+        },
+        "last": {
+         "$agoMs": "9m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         1
+        ],
+        "rising": true,
+        "sample": "llama-server exited with code 3221226505 while loading \"Qwen3.6-27B-Q4_K_M\"",
+        "sampleLine": 18290,
+        "isNew": true
+       },
+       {
+        "id": "p4",
+        "template": "update check: <*> is the newest (<num>)",
+        "level": "info",
+        "count": 96,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "30m"
+        },
+        "trend": [
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8
+        ],
+        "rising": false,
+        "sample": "update check: 0.6.471 is the newest (0.6.471)",
+        "sampleLine": 18100
+       },
+       {
+        "id": "p5",
+        "template": "tunnel: reconnecting in <num> s",
+        "level": "warning",
+        "count": 41,
+        "first": {
+         "$agoMs": "20h"
+        },
+        "last": {
+         "$agoMs": "3h"
+        },
+        "trend": [
+         5,
+         9,
+         7,
+         6,
+         4,
+         3,
+         3,
+         2,
+         1,
+         1,
+         0,
+         0
+        ],
+        "rising": false,
+        "sample": "tunnel: reconnecting in 30 s",
+        "sampleLine": 17020,
+        "label": "bug"
+       },
+       {
+        "id": "p6",
+        "template": "inbox: <id> needs approval: <str>",
+        "level": "warning",
+        "count": 7,
+        "first": {
+         "$agoMs": "5h"
+        },
+        "last": {
+         "$agoMs": "12m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         0,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "rising": false,
+        "sample": "inbox: r-20261124-03 needs approval: \"git push origin kesher/r-03\"",
+        "sampleLine": 18280,
+        "isNew": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".log-pattern"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "LogsPatternOpen",
+   "title": "תבנית פתוחה: השורות שלה (stack trace מקופל) ו\"✨ הסבר\" עם המודל המקומי; מודל ענן רק אם נבחר, ואז פרטים רגישים מוסתרים",
+   "titleEn": "An open pattern: its lines (trace folded) and \"✨ Explain\" with the local model; a cloud model only when picked, sensitive details hidden",
+   "route": "#/logs",
+   "height": {
+    "desktop": 1300,
+    "phone": 2400
+   },
+   "mocks": [
+    {
+     "url": "**/api/logs/patterns/*/lines*",
+     "method": "GET",
+     "json": {
+      "pattern": {
+       "id": "p1",
+       "template": "Hub answered <num> for <path> (<num> ms)",
+       "level": "error",
+       "count": 214,
+       "first": {
+        "$agoMs": "23h"
+       },
+       "last": {
+        "$agoMs": "2m"
+       },
+       "trend": [
+        2,
+        3,
+        4,
+        3,
+        5,
+        6,
+        9,
+        14,
+        22,
+        38,
+        51,
+        57
+       ],
+       "rising": true,
+       "sample": "Hub answered 502 for /api/board (30012 ms)",
+       "sampleLine": 18210,
+       "isNew": false
+      },
+      "entries": [
+       {
+        "n": 18190,
+        "t": {
+         "$agoMs": "14m"
+        },
+        "level": "error",
+        "msg": "Hub answered 502 for /api/board (30007 ms)"
+       },
+       {
+        "n": 18201,
+        "t": {
+         "$agoMs": "8m"
+        },
+        "level": "error",
+        "msg": "Hub answered 504 for /api/inbox/claim (30001 ms)",
+        "extra": [
+         "    at hubFetch (hub-client.js:212:11)",
+         "    at async TaskInbox.claim (task-inbox.js:880:17)"
+        ]
+       },
+       {
+        "n": 18210,
+        "t": {
+         "$agoMs": "2m"
+        },
+        "level": "error",
+        "msg": "Hub answered 502 for /api/board (30012 ms)"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/logs/explain",
+     "method": "POST",
+     "json": {
+      "text": "**מה זה:** השרת של ה-hub (ב-Cloudflare) לא ענה בזמן, ולכן KesherAI קיבל 502/504 אחרי 30 שניות.\n\n**למה כנראה:** זה התחיל לעלות לפני כשעה, ורוב הבקשות הן `/api/board`: ה-Worker כנראה נתקע בקריאה ל-GitHub (מגבלת קצב) ולא ה-PC.\n\n**מה לבדוק:** את יומן ה-hub (hub-diag), אם יש 403 מ-GitHub; להקטין את הקריאות ל-board מכל 15 שניות לכל דקה.\n\n**אפשר להתעלם?** לא: משימות מהטלפון לא מגיעות בזמן הזה.",
+      "model": "llamacpp-beside/Gemma-4-E4B-Q4_K_M",
+      "hidden": 0
+     }
+    },
+    {
+     "url": "**/api/logs/patterns?*",
+     "method": "GET",
+     "json": {
+      "total": 18342,
+      "readTruncated": false,
+      "patterns": [
+       {
+        "id": "p1",
+        "template": "Hub answered <num> for <path> (<num> ms)",
+        "level": "error",
+        "count": 214,
+        "first": {
+         "$agoMs": "23h"
+        },
+        "last": {
+         "$agoMs": "2m"
+        },
+        "trend": [
+         2,
+         3,
+         4,
+         3,
+         5,
+         6,
+         9,
+         14,
+         22,
+         38,
+         51,
+         57
+        ],
+        "rising": true,
+        "sample": "Hub answered 502 for /api/board (30012 ms)",
+        "sampleLine": 18210,
+        "isNew": false
+       },
+       {
+        "id": "p2",
+        "template": "memory-watchdog: heap <num> free <num> of <num>",
+        "level": "info",
+        "count": 2870,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "1m"
+        },
+        "trend": [
+         240,
+         238,
+         241,
+         239,
+         240,
+         242,
+         238,
+         240,
+         239,
+         241,
+         236,
+         236
+        ],
+        "rising": false,
+        "sample": "memory-watchdog: heap 612MB free 61.2GB of 95.8GB",
+        "sampleLine": 18341,
+        "label": "known"
+       },
+       {
+        "id": "p3",
+        "template": "llama-server exited with code <num> while loading <str>",
+        "level": "error",
+        "count": 3,
+        "first": {
+         "$agoMs": "40m"
+        },
+        "last": {
+         "$agoMs": "9m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         1
+        ],
+        "rising": true,
+        "sample": "llama-server exited with code 3221226505 while loading \"Qwen3.6-27B-Q4_K_M\"",
+        "sampleLine": 18290,
+        "isNew": true
+       },
+       {
+        "id": "p4",
+        "template": "update check: <*> is the newest (<num>)",
+        "level": "info",
+        "count": 96,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "30m"
+        },
+        "trend": [
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8
+        ],
+        "rising": false,
+        "sample": "update check: 0.6.471 is the newest (0.6.471)",
+        "sampleLine": 18100
+       },
+       {
+        "id": "p5",
+        "template": "tunnel: reconnecting in <num> s",
+        "level": "warning",
+        "count": 41,
+        "first": {
+         "$agoMs": "20h"
+        },
+        "last": {
+         "$agoMs": "3h"
+        },
+        "trend": [
+         5,
+         9,
+         7,
+         6,
+         4,
+         3,
+         3,
+         2,
+         1,
+         1,
+         0,
+         0
+        ],
+        "rising": false,
+        "sample": "tunnel: reconnecting in 30 s",
+        "sampleLine": 17020,
+        "label": "bug"
+       },
+       {
+        "id": "p6",
+        "template": "inbox: <id> needs approval: <str>",
+        "level": "warning",
+        "count": 7,
+        "first": {
+         "$agoMs": "5h"
+        },
+        "last": {
+         "$agoMs": "12m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         0,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "rising": false,
+        "sample": "inbox: r-20261124-03 needs approval: \"git push origin kesher/r-03\"",
+        "sampleLine": 18280,
+        "isNew": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".log-pattern"
+    },
+    {
+     "click": ".log-pattern >> nth=0 >> .log-actions button >> nth=0"
+    },
+    {
+     "wait": ".log-pattern .log-lines"
+    },
+    {
+     "click": ".log-pattern >> nth=0 >> .log-actions button >> nth=1"
+    },
+    {
+     "wait": ".log-pattern .logs-explain"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "LogsLines",
+   "title": "\"שורות\": חיפוש טקסט או ביטוי רגולרי, סינון רמה/זמן/קטגוריה, כל תוצאה עם 2 שורות הקשר; נקראים 16 MB האחרונים",
+   "titleEn": "Lines: text or regex search, level/time/category filters, each hit with 2 context lines; the last 16 MB of each log are read",
+   "route": "#/logs",
+   "height": {
+    "desktop": 1000,
+    "phone": 1900
+   },
+   "mocks": [
+    {
+     "url": "**/api/logs/search?*",
+     "method": "GET",
+     "json": {
+      "hits": [
+       {
+        "entry": {
+         "n": 18201,
+         "t": {
+          "$agoMs": "8m"
+         },
+         "level": "error",
+         "msg": "Hub answered 504 for /api/inbox/claim (30001 ms)",
+         "extra": [
+          "    at hubFetch (hub-client.js:212:11)",
+          "    at async TaskInbox.claim (task-inbox.js:880:17)"
+         ]
+        },
+        "before": [
+         {
+          "n": 18199,
+          "t": {
+           "$agoMs": "8m"
+          },
+          "level": "info",
+          "msg": "inbox: fetch from hub (2 new)"
+         },
+         {
+          "n": 18200,
+          "t": {
+           "$agoMs": "8m"
+          },
+          "level": "info",
+          "msg": "memory-watchdog: heap 610MB free 61.4GB of 95.8GB"
+         }
+        ],
+        "after": [
+         {
+          "n": 18202,
+          "t": {
+           "$agoMs": "8m"
+          },
+          "level": "warning",
+          "msg": "inbox: claim failed, will try again in 60 s"
+         },
+         {
+          "n": 18203,
+          "t": {
+           "$agoMs": "7m"
+          },
+          "level": "info",
+          "msg": "update check: 0.6.471 is the newest (0.6.471)"
+         }
+        ]
+       },
+       {
+        "entry": {
+         "n": 18210,
+         "t": {
+          "$agoMs": "2m"
+         },
+         "level": "error",
+         "msg": "Hub answered 502 for /api/board (30012 ms)"
+        },
+        "before": [
+         {
+          "n": 18208,
+          "t": {
+           "$agoMs": "2m"
+          },
+          "level": "info",
+          "msg": "board: 14 items, 3 claimed"
+         },
+         {
+          "n": 18209,
+          "t": {
+           "$agoMs": "2m"
+          },
+          "level": "info",
+          "msg": "inbox: fetch from hub (0 new)"
+         }
+        ],
+        "after": [
+         {
+          "n": 18211,
+          "t": {
+           "$agoMs": "1m"
+          },
+          "level": "info",
+          "msg": "memory-watchdog: heap 612MB free 61.2GB of 95.8GB"
+         }
+        ]
+       }
+      ],
+      "matched": 214,
+      "truncated": true,
+      "total": 18342,
+      "readTruncated": false,
+      "cats": []
+     }
+    },
+    {
+     "url": "**/api/logs/patterns?*",
+     "method": "GET",
+     "json": {
+      "total": 18342,
+      "readTruncated": false,
+      "patterns": [
+       {
+        "id": "p1",
+        "template": "Hub answered <num> for <path> (<num> ms)",
+        "level": "error",
+        "count": 214,
+        "first": {
+         "$agoMs": "23h"
+        },
+        "last": {
+         "$agoMs": "2m"
+        },
+        "trend": [
+         2,
+         3,
+         4,
+         3,
+         5,
+         6,
+         9,
+         14,
+         22,
+         38,
+         51,
+         57
+        ],
+        "rising": true,
+        "sample": "Hub answered 502 for /api/board (30012 ms)",
+        "sampleLine": 18210,
+        "isNew": false
+       },
+       {
+        "id": "p2",
+        "template": "memory-watchdog: heap <num> free <num> of <num>",
+        "level": "info",
+        "count": 2870,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "1m"
+        },
+        "trend": [
+         240,
+         238,
+         241,
+         239,
+         240,
+         242,
+         238,
+         240,
+         239,
+         241,
+         236,
+         236
+        ],
+        "rising": false,
+        "sample": "memory-watchdog: heap 612MB free 61.2GB of 95.8GB",
+        "sampleLine": 18341,
+        "label": "known"
+       },
+       {
+        "id": "p3",
+        "template": "llama-server exited with code <num> while loading <str>",
+        "level": "error",
+        "count": 3,
+        "first": {
+         "$agoMs": "40m"
+        },
+        "last": {
+         "$agoMs": "9m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         1
+        ],
+        "rising": true,
+        "sample": "llama-server exited with code 3221226505 while loading \"Qwen3.6-27B-Q4_K_M\"",
+        "sampleLine": 18290,
+        "isNew": true
+       },
+       {
+        "id": "p4",
+        "template": "update check: <*> is the newest (<num>)",
+        "level": "info",
+        "count": 96,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "30m"
+        },
+        "trend": [
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8
+        ],
+        "rising": false,
+        "sample": "update check: 0.6.471 is the newest (0.6.471)",
+        "sampleLine": 18100
+       },
+       {
+        "id": "p5",
+        "template": "tunnel: reconnecting in <num> s",
+        "level": "warning",
+        "count": 41,
+        "first": {
+         "$agoMs": "20h"
+        },
+        "last": {
+         "$agoMs": "3h"
+        },
+        "trend": [
+         5,
+         9,
+         7,
+         6,
+         4,
+         3,
+         3,
+         2,
+         1,
+         1,
+         0,
+         0
+        ],
+        "rising": false,
+        "sample": "tunnel: reconnecting in 30 s",
+        "sampleLine": 17020,
+        "label": "bug"
+       },
+       {
+        "id": "p6",
+        "template": "inbox: <id> needs approval: <str>",
+        "level": "warning",
+        "count": 7,
+        "first": {
+         "$agoMs": "5h"
+        },
+        "last": {
+         "$agoMs": "12m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         0,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "rising": false,
+        "sample": "inbox: r-20261124-03 needs approval: \"git push origin kesher/r-03\"",
+        "sampleLine": 18280,
+        "isNew": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".log-pattern"
+    },
+    {
+     "click": ".logs-tabs .seg-pills button >> nth=1"
+    },
+    {
+     "fill": ".logs-search input",
+     "value": "hub answered"
+    },
+    {
+     "wait": ".log-hit"
+    },
+    {
+     "waitMs": 500
+    }
+   ]
+  },
+  {
+   "id": "LogsSummary",
+   "title": "\"✨ סכם את השגיאות של השעה האחרונה\": תבניות השגיאה מכל היומנים (בלי המסומנות להתעלם) למודל המקומי: מה חשוב ומה קודם",
+   "titleEn": "\"✨ Summarize the last hour's errors\": error patterns of all logs (not ignored ones) to the local model: what matters and what first",
+   "route": "#/logs",
+   "height": {
+    "desktop": 1100,
+    "phone": 2300
+   },
+   "mocks": [
+    {
+     "url": "**/api/logs/explain",
+     "method": "POST",
+     "json": {
+      "text": "1. **ה-hub לא עונה (×57 בשעה, עולה)** — הכי חשוב: משימות מהטלפון לא מגיעות. כנראה מגבלת קצב של GitHub ב-Worker.\n2. **llama-server קרס בטעינה (×3)** — קוד 3221226505 = קריסה בזיכרון הכרטיס; קרה כשנטען גם ComfyUI. לטעון את Qwen עם הקשר קטן יותר או לסגור את ComfyUI קודם.\n3. **Unreal · ForMigration: Blueprint compile (×4)** — BP_Door מפנה לפונקציה שנמחקה; מתוקן בפתיחה הבאה של העורך.\n\nקודם: ה-hub (1), אחר כך הזיכרון בטעינה (2).",
+      "model": "llamacpp-beside/Gemma-4-E4B-Q4_K_M",
+      "hidden": 0
+     }
+    },
+    {
+     "url": "**/api/logs/patterns?*",
+     "method": "GET",
+     "json": {
+      "total": 18342,
+      "readTruncated": false,
+      "patterns": [
+       {
+        "id": "p1",
+        "template": "Hub answered <num> for <path> (<num> ms)",
+        "level": "error",
+        "count": 214,
+        "first": {
+         "$agoMs": "23h"
+        },
+        "last": {
+         "$agoMs": "2m"
+        },
+        "trend": [
+         2,
+         3,
+         4,
+         3,
+         5,
+         6,
+         9,
+         14,
+         22,
+         38,
+         51,
+         57
+        ],
+        "rising": true,
+        "sample": "Hub answered 502 for /api/board (30012 ms)",
+        "sampleLine": 18210,
+        "isNew": false
+       },
+       {
+        "id": "p2",
+        "template": "memory-watchdog: heap <num> free <num> of <num>",
+        "level": "info",
+        "count": 2870,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "1m"
+        },
+        "trend": [
+         240,
+         238,
+         241,
+         239,
+         240,
+         242,
+         238,
+         240,
+         239,
+         241,
+         236,
+         236
+        ],
+        "rising": false,
+        "sample": "memory-watchdog: heap 612MB free 61.2GB of 95.8GB",
+        "sampleLine": 18341,
+        "label": "known"
+       },
+       {
+        "id": "p3",
+        "template": "llama-server exited with code <num> while loading <str>",
+        "level": "error",
+        "count": 3,
+        "first": {
+         "$agoMs": "40m"
+        },
+        "last": {
+         "$agoMs": "9m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         1
+        ],
+        "rising": true,
+        "sample": "llama-server exited with code 3221226505 while loading \"Qwen3.6-27B-Q4_K_M\"",
+        "sampleLine": 18290,
+        "isNew": true
+       },
+       {
+        "id": "p4",
+        "template": "update check: <*> is the newest (<num>)",
+        "level": "info",
+        "count": 96,
+        "first": {
+         "$agoMs": "1d"
+        },
+        "last": {
+         "$agoMs": "30m"
+        },
+        "trend": [
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8,
+         8
+        ],
+        "rising": false,
+        "sample": "update check: 0.6.471 is the newest (0.6.471)",
+        "sampleLine": 18100
+       },
+       {
+        "id": "p5",
+        "template": "tunnel: reconnecting in <num> s",
+        "level": "warning",
+        "count": 41,
+        "first": {
+         "$agoMs": "20h"
+        },
+        "last": {
+         "$agoMs": "3h"
+        },
+        "trend": [
+         5,
+         9,
+         7,
+         6,
+         4,
+         3,
+         3,
+         2,
+         1,
+         1,
+         0,
+         0
+        ],
+        "rising": false,
+        "sample": "tunnel: reconnecting in 30 s",
+        "sampleLine": 17020,
+        "label": "bug"
+       },
+       {
+        "id": "p6",
+        "template": "inbox: <id> needs approval: <str>",
+        "level": "warning",
+        "count": 7,
+        "first": {
+         "$agoMs": "5h"
+        },
+        "last": {
+         "$agoMs": "12m"
+        },
+        "trend": [
+         0,
+         0,
+         0,
+         0,
+         1,
+         1,
+         0,
+         1,
+         1,
+         1,
+         1,
+         1
+        ],
+        "rising": false,
+        "sample": "inbox: r-20261124-03 needs approval: \"git push origin kesher/r-03\"",
+        "sampleLine": 18280,
+        "isNew": true
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".log-pattern"
+    },
+    {
+     "click": ".logs-head button.primary"
+    },
+    {
+     "wait": ".logs-explain"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  },
+  {
+   "id": "LogsUnreal",
+   "title": "יומן Unreal מדף הפרויקט (\"📜 יומן\"): Saved/Logs עם קטגוריות Unreal כמסנן; שגיאת Blueprint מוסברת, גם כש-Unreal סגור",
+   "titleEn": "An Unreal log from the project page (\"📜 Log\"): Saved/Logs with Unreal categories as a filter; a Blueprint error explained, Unreal closed too",
+   "route": "#/logs?unreal=ForMigration",
+   "height": {
+    "desktop": 1200,
+    "phone": 2300
+   },
+   "mocks": [
+    {
+     "url": "**/api/logs/patterns/*/lines*",
+     "method": "GET",
+     "json": {
+      "pattern": {
+       "id": "u1",
+       "template": "[Compiler] In use pin <str> no longer exists on node <str>. Please refresh node or break links to remove pin.",
+       "level": "error",
+       "cat": "LogBlueprint",
+       "count": 4,
+       "first": {
+        "$agoMs": "6h"
+       },
+       "last": {
+        "$agoMs": "6m"
+       },
+       "trend": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1
+       ],
+       "rising": false,
+       "sample": "[Compiler] In use pin  Target  no longer exists on node  Open Door . Please refresh node or break links to remove pin.",
+       "sampleLine": 60110,
+       "isNew": true
+      },
+      "entries": [
+       {
+        "n": 58800,
+        "t": {
+         "$agoMs": "6h"
+        },
+        "level": "error",
+        "msg": "[Compiler] In use pin  Target  no longer exists on node  Open Door . Please refresh node or break links to remove pin.",
+        "cat": "LogBlueprint"
+       },
+       {
+        "n": 60110,
+        "t": {
+         "$agoMs": "6m"
+        },
+        "level": "error",
+        "msg": "[Compiler] In use pin  Target  no longer exists on node  Open Door . Please refresh node or break links to remove pin.",
+        "cat": "LogBlueprint",
+        "extra": [
+         "LogBlueprint: Error: [Compiler] BP_Door: 1 error, 0 warnings"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/logs/explain",
+     "method": "POST",
+     "json": {
+      "text": "**מה זה:** ב-BP_Door יש צומת \"Open Door\" שמחובר לפין Target שכבר לא קיים (הפונקציה שונתה או נמחקה).\n\n**מה לעשות:** לפתוח את BP_Door, ללחוץ Refresh Node על \"Open Door\" (או לנתק את הקישור לפין), ולקמפל. אפשר גם מהטלפון: \"תקן את BP_Door\" בצ'אט עם Unreal מחובר.\n\n**אפשר להתעלם?** לא: הדלת לא תיפתח במשחק עד שזה מתוקן.",
+      "model": "llamacpp-beside/Gemma-4-E4B-Q4_K_M",
+      "hidden": 0
+     }
+    },
+    {
+     "url": "**/api/logs/patterns?*",
+     "method": "GET",
+     "json": {
+      "total": 61210,
+      "readTruncated": false,
+      "patterns": [
+       {
+        "id": "u1",
+        "template": "[Compiler] In use pin <str> no longer exists on node <str>. Please refresh node or break links to remove pin.",
+        "level": "error",
+        "cat": "LogBlueprint",
+        "count": 4,
+        "first": {
+         "$agoMs": "6h"
+        },
+        "last": {
+         "$agoMs": "6m"
+        },
+        "trend": [
+         1,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         0,
+         0,
+         0,
+         1,
+         1
+        ],
+        "rising": false,
+        "sample": "[Compiler] In use pin  Target  no longer exists on node  Open Door . Please refresh node or break links to remove pin.",
+        "sampleLine": 60110,
+        "isNew": true
+       },
+       {
+        "id": "u2",
+        "template": "KesherBridge: listening on <ip>",
+        "level": "info",
+        "cat": "LogKesherBridge",
+        "count": 12,
+        "first": {
+         "$agoMs": "6h"
+        },
+        "last": {
+         "$agoMs": "6m"
+        },
+        "trend": [
+         2,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         1,
+         0,
+         1
+        ],
+        "rising": false,
+        "sample": "KesherBridge: listening on 127.0.0.1:30020",
+        "sampleLine": 60002
+       },
+       {
+        "id": "u3",
+        "template": "Failed to load <path> Referenced by <path>",
+        "level": "warning",
+        "cat": "LogLinker",
+        "count": 38,
+        "first": {
+         "$agoMs": "6h"
+        },
+        "last": {
+         "$agoMs": "7m"
+        },
+        "trend": [
+         4,
+         3,
+         3,
+         3,
+         3,
+         3,
+         3,
+         3,
+         3,
+         3,
+         3,
+         4
+        ],
+        "rising": false,
+        "sample": "Failed to load /Game/OldAssets/M_Rust.M_Rust Referenced by /Game/Levels/Yard",
+        "sampleLine": 60090,
+        "label": "known"
+       },
+       {
+        "id": "u4",
+        "template": "Shader compile job <num> took <num> s",
+        "level": "warning",
+        "cat": "LogShaderCompilers",
+        "count": 122,
+        "first": {
+         "$agoMs": "6h"
+        },
+        "last": {
+         "$agoMs": "6m"
+        },
+        "trend": [
+         40,
+         30,
+         20,
+         10,
+         5,
+         3,
+         2,
+         2,
+         2,
+         2,
+         3,
+         3
+        ],
+        "rising": false,
+        "sample": "Shader compile job 5512 took 61.2 s",
+        "sampleLine": 60120,
+        "label": "ignore"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".log-pattern"
+    },
+    {
+     "click": ".log-pattern >> nth=0 >> .log-actions button >> nth=0"
+    },
+    {
+     "wait": ".log-pattern .log-lines"
+    },
+    {
+     "click": ".log-pattern >> nth=0 >> .log-actions button >> nth=1"
+    },
+    {
+     "wait": ".log-pattern .logs-explain"
+    },
+    {
+     "waitMs": 300
+    }
+   ]
+  }
+ ]
+}

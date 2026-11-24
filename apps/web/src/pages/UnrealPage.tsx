@@ -389,6 +389,8 @@ export function UnrealPage({ kind = "unreal" }: { kind?: "unreal" | "unity" }) {
         <span className={`pill ${st.connected ? "good" : ""}`}>
           {st.connected ? `🟢 ${L("מחובר", "Connected")} · ${st.editor!.project} · ${unity ? "Unity" : "UE"} ${st.editor!.engine}` : ready ? `🟡 ${L(`${app} סגור · עובד ברקע (איטי יותר)`, `${app} is closed · works in the background (slower)`)}${list?.project ? ` · ${list.project}` : ""}` : `⚪ ${L(`${app} לא מחובר`, `${app} not connected`)}${list?.project ? ` · ${L("מציג עותק שמור של", "showing the saved copy of")} ${list.project}` : ""}`}
         </span>
+        {/* The project's editor log in the Logs page (search, patterns, Explain), also with Unreal closed. */}
+        {unity ? <a className="button" href="#/logs?source=unity-editor">📜 {L("יומן", "Log")}</a> : list?.project ? <a className="button" href={`#/logs?unreal=${encodeURIComponent(list.project)}`}>📜 {L("יומן", "Log")}</a> : null}
         {st.connected && <CloseEditor kind={unity ? "unity" : "unreal"} onClosed={() => { loadStatus(); loadList(); }} />}
       </div>
       {unity && <UnityCliPanel hasProject={st.projects.length > 0} onMade={() => { loadStatus(); loadList(); }} />}
