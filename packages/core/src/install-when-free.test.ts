@@ -44,3 +44,21 @@ test("writes the resume record before it installs, and installs even if writing 
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(order, ["save", "apply"]);
 });
+
+test("a check that never answers does not stop later looks", async () => {
+  let applied = 0;
+  let calls = 0;
+  const w = new InstallWhenFree({
+    state: async () => ({ chats: 0, selfWork: false, downloads: 0, updating: false, study: 0 }),
+    available: () => (++calls === 1 ? new Promise<boolean>(() => undefined) : Promise.resolve(true)),
+    apply: async () => void applied++,
+    everyMs: 3_600_000,
+    checkEveryMs: 0,
+    lookMs: 30,
+  });
+  w.set(true); // the first look hangs on `available`, then gives up after 30 ms
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(await w.tick(), true);
+  assert.equal(applied, 1);
+  w.stop();
+});

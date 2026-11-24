@@ -47,6 +47,24 @@ export interface FreeState {
   agentTask?: string;
 }
 
+/** The longest one look may wait on a check; a hung check must never stop every later look. */
+const LOOK_MS = 60_000;
+
+/**
+ * Settles with `work`, or rejects after `ms`.
+ * @param work - The call.
+ * @param ms - The longest wait.
+ * @returns What `work` returned.
+ */
+function within<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timed out")), ms);
+    timer.unref?.();
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Whether the computer is free for a restart.
  * @param s - What is busy now.
@@ -59,6 +77,8 @@ export function isFree(s: FreeState): boolean {
 export interface InstallWhenFreeDeps {
   /** Reads what is busy now. */
   state: () => Promise<FreeState>;
+  /** The longest one look waits on `state` or `available` (default 60 s). */
+  lookMs?: number;
   /** Whether a newer version is ready to install. */
   available: () => Promise<boolean>;
   /** Installs it (restarts KesherAI). */
@@ -132,14 +152,14 @@ export class InstallWhenFree {
     try {
       if (!this.ready || Date.now() - this.lastCheck > (this.deps.checkEveryMs ?? 300_000)) {
         this.lastCheck = Date.now();
-        this.ready = await this.deps.available().catch(() => false);
+        this.ready = await within(this.deps.available(), this.deps.lookMs ?? LOOK_MS).catch(() => false);
       }
       const drain = this.deps.drain;
       // A ready version drains: running work finishes, nothing new starts (so a free moment comes).
       if (this.ready) drain?.begin();
       else drain?.end();
       if (!this.ready) return false;
-      if (!isFree(await this.deps.state())) {
+      if (!isFree(await within(this.deps.state(), this.deps.lookMs ?? LOOK_MS))) {
         if (drain?.takeLongNotice()) await Promise.resolve(this.deps.onLongDrain?.()).catch(() => undefined);
         return false;
       }
