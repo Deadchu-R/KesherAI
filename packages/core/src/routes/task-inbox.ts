@@ -116,11 +116,13 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     const model = typeof req.body?.model === "string" ? req.body.model.slice(0, 80) : "";
     return inbox.setModel(req.params.id, model).catch((e) => failed(reply, e));
   });
+  // Settings › Connections › Claude Code: check the install and the login again (Claude Code's own `auth status`).
+  app.post("/api/task-inbox/claude/check", async (_req, reply) => (await inbox.claudeCheckNow()) ?? reply.code(404).send({ error: "Claude Code is not available here." }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {
-    const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : req.body?.to === "opencode" ? "opencode" : undefined;
-    if (!to) return reply.code(400).send({ error: "to is local, opus or opencode." });
+    const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : req.body?.to === "opencode" ? "opencode" : req.body?.to === "claude" ? "claude" : undefined;
+    if (!to) return reply.code(400).send({ error: "to is local, opus, opencode or claude." });
     return inbox.reassign(req.params.id, to).catch((e) => failed(reply, e));
   });
 
@@ -215,6 +217,28 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
           oc.dailyCap = n;
         }
         cur.opencode = oc;
+      }
+      // Claude Code (Settings › Task inbox card): on/off, Run tap per task, the daily cap, the two quota thresholds, the model.
+      if (b.claude && typeof b.claude === "object") {
+        const o = b.claude as Record<string, unknown>;
+        const cl = { ...cur.claude };
+        if (typeof o.enabled === "boolean") cl.enabled = o.enabled;
+        if (typeof o.askRun === "boolean") cl.askRun = o.askRun;
+        const n = (k: "dailyCap" | "fiveHourMax" | "weekMax", min: number, max: number) => {
+          if (o[k] === undefined) return;
+          const v = Number(o[k]);
+          if (!Number.isInteger(v) || v < min || v > max) throw new Error(`The Claude Code ${k} must be ${min}–${max}.`);
+          cl[k] = v;
+        };
+        n("dailyCap", 0, 50);
+        n("fiveHourMax", 10, 100);
+        n("weekMax", 10, 100);
+        if (o.model !== undefined) {
+          const m = String(o.model).trim();
+          if (m.length > 80 || !/^[\w.:[\]-]*$/.test(m)) throw new Error("The Claude model name has odd characters.");
+          cl.model = m;
+        }
+        cur.claude = cl;
       }
       if (typeof b.model === "string") {
         if (b.model.length > 80 || !/^[\w .:/()-]*$/.test(b.model)) throw new Error("The model name has odd characters.");

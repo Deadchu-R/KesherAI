@@ -34,7 +34,7 @@ export const INBOX_DEFAULTS: InboxSettings = {
   gpuBusyPercent: 40,
 };
 
-const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini", "opencode"]);
+const EXECUTORS = new Set<InboxExecutor>(["auto", "antigravity", "local", "opus", "gemini", "opencode", "claude"]);
 const RISKS = new Set<InboxRisk>(["low", "medium", "high"]);
 const FROM = new Set<InboxFrom>(["claude", "roee", "self-work", "hub", "device"]);
 /** The biggest task file read (bigger ones are refused, not cut). */
@@ -72,8 +72,8 @@ export function validBranchName(name: string): boolean {
 export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
   if (typeof ref !== "string" || !validBranchName(ref)) return false;
   if (ref === inboxBranch && validBranchName(inboxBranch) && !inboxBranch.includes("/") && inboxBranch !== "main" && inboxBranch !== "master" && inboxBranch !== "release") return true;
-  // agy/*: Antigravity's work; ocgo/*: OpenCode Go's. Both wait for Claude's review, never merged here.
-  return /^(agy|ocgo)\/[a-z0-9][a-z0-9._-]*$/.test(ref);
+  // agy/*: Antigravity's work; ocgo/*: OpenCode Go's; claude/*: Claude Code's. All wait for review, never merged here.
+  return /^(agy|ocgo|claude)\/[a-z0-9][a-z0-9._-]*$/.test(ref);
 }
 
 /**
@@ -86,7 +86,7 @@ export function pushAllowed(ref: string, inboxBranch = INBOX_BRANCH): boolean {
  * @throws When the ref is not allowed (nothing runs) or the push failed.
  */
 export async function pushRef(git: (cwd: string, args: string[]) => Promise<{ code: number; out: string }>, repo: string, ref: string, inboxBranch = INBOX_BRANCH): Promise<void> {
-  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/* and ocgo/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
+  if (!pushAllowed(ref, inboxBranch)) throw new Error(`KesherAI may push only agy/*, ocgo/* and claude/* branches and ${inboxBranch}; refused: ${ref.slice(0, 80)}`);
   const r = await git(repo, ["push", "--no-verify", "origin", `refs/heads/${ref}:refs/heads/${ref}`]);
   if (r.code !== 0) throw new Error(`git push failed: ${r.out.slice(0, 300)}`);
 }
@@ -102,7 +102,8 @@ export function slugOf(text: string): string {
 }
 
 /**
- * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `ocgo/<id>-<slug>` (OpenCode Go), `local/<id>-<slug>` (self-work, never pushed) or
+ * The work branch for a task: `agy/<id>-<slug>` (Antigravity), `ocgo/<id>-<slug>` (OpenCode Go), `claude/<id>-<slug>`
+ * (Claude Code on the PC), `local/<id>-<slug>` (self-work, never pushed) or
  * `helper/<id>-<slug>` (Claude's Opus agent, in the cloud); `-partial` when the work was kept unfinished.
  *
  * @param spec - The task.
@@ -110,7 +111,7 @@ export function slugOf(text: string): string {
  * @param partial - Unfinished work.
  */
 export function branchFor(spec: Pick<InboxTaskSpec, "id" | "title">, runBy: Exclude<InboxExecutor, "auto">, partial = false): string {
-  const prefix = runBy === "antigravity" ? "agy" : runBy === "opencode" ? "ocgo" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
+  const prefix = runBy === "antigravity" ? "agy" : runBy === "opencode" ? "ocgo" : runBy === "claude" ? "claude" : runBy === "local" ? "local" : runBy === "gemini" ? "gemini" : "helper";
   const name = `${prefix}/${spec.id}-${slugOf(spec.title)}${partial ? "-partial" : ""}`;
   if (!validBranchName(name)) throw new Error("Bad branch name.");
   return name;
@@ -226,7 +227,7 @@ export function parseTaskFile(text: string, fileId: string, defaults: Pick<Inbox
   const title = str("title", 200);
   if (!title) return { error: "The task has no title." };
   const executor = (str("executor", 20) || "auto") as InboxExecutor;
-  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus, gemini or opencode." };
+  if (!EXECUTORS.has(executor)) return { error: "executor must be auto, antigravity, local, opus, gemini, opencode or claude." };
   const kind = (str("kind", 10) || "code") as InboxKind;
   if (kind !== "code" && kind !== "research") return { error: "kind must be code or research." };
   if (executor === "gemini" && kind !== "research") return { error: "executor gemini is only for kind: research." };

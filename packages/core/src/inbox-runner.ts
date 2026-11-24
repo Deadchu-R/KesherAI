@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -12,6 +12,7 @@ import { createSessionWorktree, excludeWorktrees, type Git } from "./session-wor
 import { heavyGate } from "./heavy-gate.js";
 import { UsageLog, baselineOf, overBaseline, type UsageEntry } from "./usage-log.js";
 import { findSavings } from "./savings.js";
+import type { ClaudeEvent, ClaudeRunEnd } from "./claude-exec.js";
 import { limitsFor, parseReview, parseWatchVerdict, reviewPrompt, rescuePrompt, RunGuard, RunWatch, stopNote, watchdogPrompt, type AgentStep, type GuardHooks, type StopReason } from "./agent-watch.js";
 import { retryAfterMs } from "./free-cloud.js";
 import { nextUtcMidnight, type FreeUsage } from "./openrouter-free.js";
@@ -89,6 +90,17 @@ export interface TaskInboxDeps {
     run: (o: { worktree: string; title: string; prompt: string; model: string; signal: AbortSignal; onStep: (steps: number, step?: AgentStep) => void; attach?: (send: (text: string) => Promise<void>) => void }) => Promise<{ text: string }>;
   };
   /**
+   * Claude Code on this PC (claude-exec.ts; absent: none can run), signed in with the user's own subscription. `check`:
+   * installed and signed in (Claude Code's own `auth status`; the token is never read). `quota`: the last reading of the
+   * subscription's limits. `run`: one task headless in the worktree; it resolves with how the run ended (a usage-limit
+   * message in `limit`) and rejects only when the program could not start.
+   */
+  claude?: {
+    check: () => Promise<Pick<ClaudeState, "installed" | "version" | "loggedIn" | "account" | "plan">>;
+    quota: () => Promise<ClaudeQuota | undefined>;
+    run: (o: { worktree: string; prompt: string; model: string; commands: readonly string[]; signal: AbortSignal; onEvent: (e: ClaudeEvent) => void; attach: (send: (text: string) => Promise<void>) => void }) => Promise<ClaudeRunEnd>;
+  };
+  /**
    * Second models for the run guard (agent-watch.ts). `ask`: a model other than the agent's, for one rescue hint and the
    * end review: the local chat model when loaded and idle, else an open free provider, never a paid one; `canTrain`
    * false means a service that may train on prompts must not get it. `look`: the small local router model for the
@@ -129,6 +141,8 @@ interface Saved {
   familyUntil?: Partial<Record<ModelFamily, number>>;
   /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
   opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
+  /** Claude Code: tasks started today (UTC), and the end of a usage limit its CLI reported (ms since epoch). */
+  claude?: { date: string; used: number; until?: number };
   /** The free services (shared FREE_PROVIDERS), by connection id: today's requests (UTC; failed ones too), the day's limit when known, and a stop until a time (402, 429 or the limit). */
   free?: Record<string, { date: string; used: number; limit?: number; until?: number }>;
   /** Research → tasks (research-tasks.ts): reports read (path → blob id), tasks not made yet, and the ones made. */
@@ -231,6 +245,9 @@ export class TaskInbox {
   private geminiStop?: AbortController;
   /** The OpenCode Go loop (one task at a time) and the stop for its running task. */
   private opencodeRun?: Promise<void>;
+  /** The Claude Code run going on now (one at a time), and how to stop it. */
+  private claudeRun?: Promise<void>;
+  private claudeStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
   private opencodeStop?: { id: string; ctl: AbortController; why?: "stop" | StopReason };
 
   /** @param d - What it needs from KesherAI. */
@@ -245,7 +262,20 @@ export class TaskInbox {
     const given = Object.fromEntries(Object.entries(this.d.settings()).filter(([, v]) => v !== undefined));
     const ask = { ...INBOX_DEFAULTS.askBeforeNext, ...((given.askBeforeNext as Partial<InboxSettings["askBeforeNext"]> | undefined) ?? {}) };
     const opencode = { ...OPENCODE_DEFAULTS, ...((given.opencode as Partial<OpencodeSettings> | undefined) ?? {}) };
-    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode } as InboxSettings;
+    const claude = { ...CLAUDE_DEFAULTS, ...((given.claude as Partial<ClaudeSettings> | undefined) ?? {}) };
+    return { ...INBOX_DEFAULTS, ...given, askBeforeNext: ask, opencode, claude } as InboxSettings;
+  }
+
+  /** The Claude Code settings, with the defaults filled in. */
+  private get cs(): ClaudeSettings {
+    return this.s.claude ?? CLAUDE_DEFAULTS;
+  }
+
+  /** Today's Claude Code count (UTC); a usage limit's end stays across the day. */
+  private claudeToday(): { date: string; used: number; until?: number } {
+    const date = new Date(this.now()).toISOString().slice(0, 10);
+    if (this.saved.claude?.date !== date) this.saved.claude = { date, used: 0, ...(this.saved.claude?.until ? { until: this.saved.claude.until } : {}) };
+    return this.saved.claude;
   }
 
   /** The OpenCode Go settings, with the defaults filled in. */
@@ -387,7 +417,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -395,7 +425,7 @@ export class TaskInbox {
       if (t.status === "running" || t.status === "needs-approval") {
         // Cut off by a restart, not by the agent: back in line where it was (creation order), ready for Run again.
         t.status = t.runBy === "local" ? "queued" : "waiting";
-        t.note = t.runBy === "opencode" ? "KesherAI restarted during the run; it starts again by itself." : "KesherAI restarted during the run; it is back in line — press Run again.";
+        t.note = t.runBy === "opencode" || (t.runBy === "claude" && !this.cs.askRun) ? "KesherAI restarted during the run; it starts again by itself." : "KesherAI restarted during the run; it is back in line — press Run again.";
         delete t.pending;
       } else if (t.note?.startsWith("Queued") && RUNNABLE.has(t.status)) {
         // The line was in memory only: it is gone, the task waits for Run again.
@@ -501,6 +531,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      ...(this.d.claude ? { claude: await this.claudeState() } : {}),
       ...(await this.freeStates()),
       loop: this.loopNow(),
     };
@@ -545,6 +576,7 @@ export class TaskInbox {
     await this.active?.done;
     await this.geminiRun;
     await this.opencodeRun;
+    await this.claudeRun;
   }
 
   /**
@@ -590,6 +622,10 @@ export class TaskInbox {
     if (this.loopTimer) clearInterval(this.loopTimer);
     this.loopTimer = undefined;
     this.geminiStop?.abort();
+    if (this.claudeStop) {
+      this.claudeStop.why = "stop";
+      this.claudeStop.ctl.abort();
+    }
     if (this.opencodeStop) {
       this.opencodeStop.why = "stop";
       this.opencodeStop.ctl.abort();
@@ -688,6 +724,7 @@ export class TaskInbox {
     await this.save();
     void this.pumpGemini().catch(() => undefined);
     void this.pumpOpencode().catch(() => undefined);
+    void this.pumpClaude().catch(() => undefined);
     void this.pump().catch(() => undefined);
   }
 
@@ -717,12 +754,12 @@ export class TaskInbox {
       ...spec,
       runBy,
       branch: branchFor(spec, runBy),
-      status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" ? "waiting" : "queued",
-      ...(runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : {}),
+      status: runBy === "antigravity" || runBy === "gemini" || runBy === "opencode" || runBy === "claude" ? "waiting" : "queued",
+      ...(runBy === "claude" ? { note: this.claudeNote() } : runBy === "opus" ? { note: "Claude runs it with its own Opus agent." } : runBy === "local" ? { note: "Self-work takes it from the task board." } : runBy === "gemini" ? { note: "Runs by itself with the free Gemini key." } : runBy === "opencode" ? { note: opencodeNote(spec, this.oc, spec.executor === "auto") } : {}),
     };
     if (boardId) t.boardId = boardId;
     else if (this.d.board) {
-      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : runBy === "opencode" ? ` (automatic, OpenCode Go · ${opencodeModelName(opencodeModelFor({ ...spec, size: taskSize(spec) }, this.oc))})` : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: boardSizeFor(spec, runBy) }]).catch(() => undefined);
+      const b = await this.d.board.change("claude", [{ op: "add", title: `[Inbox ${spec.id}] ${spec.title}`, details: [`From the task inbox (tasks/${spec.id}.md on ${this.s.branch}).`, `Executor: ${runBy}${runBy === "antigravity" ? " (waits for Run on the PC)" : runBy === "gemini" ? " (automatic, free Gemini)" : runBy === "opencode" ? ` (automatic, OpenCode Go · ${opencodeModelName(opencodeModelFor({ ...spec, size: taskSize(spec) }, this.oc))})` : runBy === "claude" ? ` (Claude Code on the PC${this.cs.askRun ? ", waits for Run" : ", automatic"})` : ""}.`, ...(runBy === "gemini" ? [] : [`Branch: ${t.branch}`])].join("\n"), size: boardSizeFor(spec, runBy) }]).catch(() => undefined);
       const added = b?.tasks.at(-1);
       if (added) {
         t.boardId = added.id;
@@ -735,7 +772,8 @@ export class TaskInbox {
     if (this.saved.tasks.length > 300) this.saved.tasks = this.saved.tasks.slice(-300);
     // An Antigravity task: the PC asks right away (on the PC and the phone); it starts only on the user's tap.
     // (A task the work loop makes is offered later, one ask at a time: see offerWaiting.)
-    if (!this.feeding && (runBy !== "antigravity" || !this.makeAsk(t))) this.d.notify("📥 A new task in the inbox", `${spec.id}: ${spec.title}`);
+    if (!this.feeding && ((runBy !== "antigravity" && !(runBy === "claude" && this.cs.askRun)) || !this.makeAsk(t))) this.d.notify("📥 A new task in the inbox", `${spec.id}: ${spec.title}`);
+    if (runBy === "claude" && !this.cs.askRun) void this.pumpClaude().catch(() => undefined);
     return t;
   }
 
@@ -818,7 +856,7 @@ export class TaskInbox {
     const day = new Date(this.now()).toISOString().slice(0, 10).replace(/-/g, "");
     let n = 1;
     while (this.saved.tasks.some((t) => t.id === `r-${day}-${String(n).padStart(2, "0")}`)) n++;
-    const executor = ["auto", "antigravity", "local", "opus", "opencode"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
+    const executor = ["auto", "antigravity", "local", "opus", "opencode", "claude"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
     const size = ["S", "M", "L"].includes(String(input.size)) ? (input.size as InboxTaskSpec["size"]) : undefined;
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
     const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
@@ -1168,6 +1206,226 @@ export class TaskInbox {
     await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
   }
 
+  /** The note on a Claude Code task that waits. */
+  private claudeNote(): string {
+    return this.cs.askRun ? "Claude Code runs it on this PC after your Run (uses the same limits as your Claude app)." : "Claude Code runs it on this PC by itself (uses the same limits as your Claude app).";
+  }
+
+  /** The last install/login check and quota reading of Claude Code (refreshed by {@link refreshClaude}). */
+  private claudeCache: { check?: Awaited<ReturnType<NonNullable<TaskInboxDeps["claude"]>["check"]>>; checkedAt?: number; quota?: ClaudeQuota } = {};
+
+  /**
+   * Reads Claude Code's quota file, and checks the install and login again when the last check is older than 10
+   * minutes (or `force`), so the sync checks of {@link claudeBlocked} see fresh values.
+   */
+  private async refreshClaude(force = false): Promise<void> {
+    const c = this.d.claude;
+    if (!c) return;
+    if (force || !this.claudeCache.checkedAt || this.now() - this.claudeCache.checkedAt > 10 * 60_000) {
+      this.claudeCache.check = await c.check().catch(() => ({ installed: false }));
+      this.claudeCache.checkedAt = this.now();
+    }
+    const q = await c.quota().catch(() => undefined);
+    if (q) this.claudeCache.quota = q;
+    else delete this.claudeCache.quota;
+  }
+
+  /**
+   * Why a Claude Code task cannot start now, from the last check and reading (undefined: it can): off, not installed,
+   * not signed in or signed in with an API key, a usage limit the CLI reported, today's cap, the quota thresholds, or
+   * another Claude Code task running.
+   */
+  private claudeBlocked(): { msg: string; code: number; until?: number } | undefined {
+    const cs = this.cs;
+    if (!this.d.claude) return { msg: "Claude Code is not available in this KesherAI.", code: 409 };
+    if (!this.s.enabled) return { msg: "The inbox is off (Settings > Task inbox).", code: 409 };
+    if (this.s.paused) return { msg: "The inbox is paused.", code: 409 };
+    if (!cs.enabled) return { msg: "Claude Code is off (Settings › Task inbox › Claude Code).", code: 409 };
+    const c = this.claudeCache.check;
+    if (c && !c.installed) return { msg: "Claude Code is not installed on this PC (Settings › Connections › Claude Code).", code: 409 };
+    if (c?.account === "api-key") return { msg: "Claude Code is signed in with an API key. KesherAI runs it only with your Claude subscription: run claude, then /login with your Claude account.", code: 409 };
+    if (c?.loggedIn === false) return { msg: "Claude Code is not signed in: run claude once and sign in with your Claude account.", code: 409 };
+    const day = this.claudeToday();
+    if (day.until && day.until > this.now()) return { msg: `Claude's usage limit was reached; it can run again at ${new Date(day.until).toISOString()}.`, code: 429, until: day.until };
+    if (day.used >= cs.dailyCap) return { msg: `Today's limit of ${cs.dailyCap} Claude Code tasks is reached (Settings › Task inbox › Claude Code).`, code: 429, until: nextUtcMidnight(this.now()) };
+    const b = claudeQuotaBlock(this.claudeCache.quota, cs, this.now());
+    if (b) return { msg: `Claude's ${b.window === "five_hour" ? "5-hour" : "weekly"} usage is at ${Math.round(b.used)}% (KesherAI stops at ${b.window === "five_hour" ? cs.fiveHourMax : cs.weekMax}%): no new task until ${new Date(b.until).toISOString()}.`, code: 429, until: b.until };
+    if (this.claudeRun) return { msg: "Claude Code is running another task; one at a time.", code: 409 };
+    return undefined;
+  }
+
+  /**
+   * Checks Claude Code's install and login now (Settings › Connections › "Check again").
+   *
+   * @returns Its state (undefined when this KesherAI has no Claude Code support).
+   */
+  async claudeCheckNow(): Promise<ClaudeState | undefined> {
+    if (!this.d.claude) return undefined;
+    await this.load();
+    await this.refreshClaude(true);
+    return this.claudeState();
+  }
+
+  /** Claude Code's state for Settings › Connections and the inbox card. */
+  private async claudeState(): Promise<ClaudeState> {
+    await this.refreshClaude();
+    const c = this.claudeCache.check ?? { installed: false };
+    const no = this.claudeBlocked();
+    // "Another task is running" is not a block to show on the card.
+    const blocked = no && !this.claudeRun ? { why: no.msg, ...(no.until ? { until: no.until } : {}) } : undefined;
+    return { ...c, used: this.claudeToday().used, ...(this.claudeCache.quota ? { quota: this.claudeCache.quota } : {}), ...(blocked ? { blocked } : {}), ...(this.claudeCache.checkedAt ? { checkedAt: this.claudeCache.checkedAt } : {}) };
+  }
+
+  /**
+   * Starts a Claude Code task after the user's Run (the press on this PC or the "Run" answer to its ask; checked by
+   * {@link run}). Returns at once; the run goes on in the background.
+   *
+   * @param t - The task.
+   * @returns The task, marked as starting.
+   */
+  private async startClaude(t: InboxTaskView): Promise<InboxTaskView> {
+    if (t.status === "running" && this.claudeStop?.id === t.id) return t;
+    await this.refreshClaude(true);
+    const no = RUNNABLE.has(t.status) ? this.claudeBlocked() : { msg: "This task cannot be run now.", code: 409 };
+    if (no) throw fail(no.msg, no.code);
+    delete t.runAsk;
+    this.claudeRun = this.runClaudeTask(t).catch(async (e: unknown) => {
+      this.claudeStop = undefined;
+      if (t.status !== "running") return;
+      Object.assign(t, { status: "failed" as InboxStatus, endedAt: this.now(), note: `Claude Code could not run: ${((e as Error).message || String(e)).slice(0, 200)}` });
+      await this.save();
+    }).finally(() => {
+      this.claudeRun = undefined;
+      // Run tap off: the next waiting task starts by itself.
+      if (!this.cs.askRun) void this.pumpClaude().catch(() => undefined);
+    });
+    return t;
+  }
+
+  /**
+   * With "Run tap per task" off: runs the waiting Claude Code tasks by themselves, one at a time, while nothing blocks
+   * (the task keeps the reason as its note). With it on this does nothing: each task waits for the user's Run.
+   *
+   * @returns Resolves when no task is left to start now.
+   */
+  async pumpClaude(): Promise<void> {
+    await this.load();
+    const s = this.s;
+    if (!this.d.claude || this.cs.askRun || !s.enabled || s.paused || !s.repo || this.claudeRun) return;
+    const t = this.saved.tasks.find((x) => x.runBy === "claude" && (x.status === "waiting" || x.status === "deferred-quota"));
+    if (!t) return;
+    await this.refreshClaude();
+    const no = this.claudeBlocked();
+    if (no) {
+      if (t.note !== no.msg) {
+        t.note = no.msg;
+        await this.save();
+      }
+      return;
+    }
+    await this.startClaude(t);
+  }
+
+  /**
+   * One Claude Code task: its own worktree and `claude/*` branch, Claude Code headless in it with every step on the
+   * task and the run guard (stall, repeat, budget, rescue through stdin, watchdog), then the same checks, review,
+   * commit and push as the others'. A usage-limit message defers it until the reset.
+   */
+  private async runClaudeTask(t: InboxTaskView): Promise<void> {
+    const c = this.d.claude!;
+    const repo = this.repo();
+    // Stop works from here on (also while the worktree is made and the packages are installed).
+    const run: { id: string; ctl: AbortController; why?: "stop" | StopReason } = { id: t.id, ctl: new AbortController() };
+    this.claudeStop = run;
+    t.status = "running";
+    t.note = "Starting…";
+    await this.save();
+    await this.d.git(repo, ["fetch", "--quiet", "--no-tags", "origin"], 60_000);
+    const taskBase = t.base.startsWith("origin/") ? `refs/remotes/${t.base}` : t.base;
+    const resume = await this.resumeRef(repo, t);
+    const base = resume ?? taskBase;
+    let attempt = t.startedAt ? Number(/-r(\d+)$/.exec(t.branch.replace(/-partial$/, ""))?.[1] ?? 1) + 1 : 1;
+    const named = (n: number): string => `${branchFor(t, "claude")}${n > 1 ? `-r${n}` : ""}`;
+    // A branch left by an earlier failed start: take the next free name; never delete the old branch.
+    for (let i = 0; i < 20 && (await this.d.git(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${named(attempt)}`])).code === 0; i++) attempt++;
+    const branch = named(attempt);
+    let wt: Awaited<ReturnType<typeof createSessionWorktree>>;
+    try {
+      if (!validBranchName(branch)) throw new Error("Bad branch name.");
+      wt = await createSessionWorktree(repo, `claude-${t.id}-${attempt}`.slice(0, 60), this.gitStrict, { branch, base, copyIncluded: false });
+    } catch (e) {
+      this.claudeStop = undefined;
+      Object.assign(t, { status: "failed" as InboxStatus, endedAt: this.now(), note: `Could not make the work folder: ${(e as Error).message.slice(0, 200)}` });
+      await this.save();
+      return;
+    }
+    const baseSha = resume ? await this.commitOf(repo, taskBase) : undefined;
+    const cs = this.cs;
+    Object.assign(t, { status: "running" as InboxStatus, branch, startedAt: this.now(), steps: 0, checks: [], files: [], pushed: false, resultWritten: false, modelUsed: `Claude Code${cs.model ? ` · ${cs.model}` : ""}` });
+    for (const k of ["endedAt", "note", "summary", "headSha", "diff", "modelFallback", "mayTrain", "retryAt", "plan", "decisions", "watchLog", "review"] as const) delete t[k];
+    if (resume) t.note = `Continuing from the partial branch ${resume.replace(/^refs\/(heads|remotes\/origin)\//, "")}.`;
+    // A started task counts toward today's cap (a failed one too: it used the limits).
+    this.claudeToday().used++;
+    await this.save();
+    this.d.notify("✳ Claude Code התחיל משימה", t.title, { path: `#/task-inbox/${t.id}` });
+    if (existsSync(join(wt.path, "pnpm-lock.yaml"))) await this.d.run(wt.path, ["pnpm", "install", "--frozen-lockfile", "--prefer-offline", "--ignore-scripts"], 10 * 60_000).catch(() => undefined);
+    const prompt = agentPrompt(t, branch);
+    const canTrain = this.s.opencode?.freeTrainingOk !== false && safeForTrainingProvider({ ...t, size: taskSize(t) }).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
+    let send: ((text: string) => Promise<void>) | undefined;
+    const { guard, end } = this.startGuard(t, wt.path, {
+      stop: (r) => {
+        run.why ??= r;
+        run.ctl.abort();
+      },
+      inject: () => send,
+      canTrain,
+      signal: run.ctl.signal,
+    });
+    let out: ClaudeRunEnd;
+    try {
+      if (run.ctl.signal.aborted) throw new Error("Stopped before Claude Code started.");
+      out = await c.run({
+        worktree: wt.path,
+        prompt,
+        model: cs.model,
+        commands: this.s.commands,
+        signal: run.ctl.signal,
+        attach: (fn) => {
+          send = fn;
+        },
+        onEvent: (e) => {
+          if (e.kind === "init" && e.model) t.modelUsed = `Claude Code · ${e.model}`;
+          if (e.kind !== "step") return;
+          t.steps = (t.steps ?? 0) + 1;
+          guard.step(e.step);
+          void this.save();
+        },
+      });
+    } catch (e) {
+      out = { code: -1, stderr: (e as Error).message };
+    } finally {
+      end();
+      this.claudeStop = undefined;
+    }
+    this.paidRuns.set(t.id, false);
+    t.summary = out.result?.text.trim().slice(-2000) || undefined;
+    const limited = !run.why && !!out.limit;
+    let why = "";
+    if (limited) {
+      // The reset the CLI said, else the quota file's window that is full, else 5 hours (estimated).
+      await this.refreshClaude();
+      const q = this.claudeCache.quota;
+      const full = [q?.fiveHour, q?.sevenDay].filter((w) => w && w.resetsAt > this.now() && w.usedPercentage >= 99).map((w) => w!.resetsAt);
+      const until = out.limit!.until ?? (full.length ? Math.max(...full) : this.now() + OPENCODE_LIMIT_MS);
+      this.claudeToday().until = until;
+      this.log(t, "quota", "warning", { requests: t.steps ?? 0 }, (out.result?.text || out.stderr).slice(0, 160));
+      why = `Claude's usage limit was reached; it can run again at ${new Date(until).toISOString()}${out.limit!.until || full.length ? "" : " (estimated)"}.`;
+    } else if (run.why === "stop") why = "Stopped by you.";
+    else if (run.why) why = this.stopText(t, run.why);
+    else if (!out.result?.ok) why = `Claude Code failed: ${(out.result?.text || out.stderr || `exit code ${out.code}`).slice(0, 300)}`;
+    await this.finish(t, wt.path, baseSha ?? wt.base, repo, !!out.result?.ok && !run.why && !limited, why, limited ? "deferred-quota" : undefined);
+  }
+
   /**
    * Starts the run guard for one run (agent-watch.ts): the hard rules (stall, repeat, request budget, safety ceiling), the
    * rescue and the watchdog. It stops the run only through `stop`; the timer is checked every {@link TaskInboxDeps.watchEveryMs}.
@@ -1402,7 +1660,9 @@ export class TaskInbox {
     const s = this.s;
     if (!s.enabled) return { msg: "The inbox is off (Settings > Task inbox).", code: 409 };
     if (s.paused) return { msg: "The inbox is paused.", code: 409 };
-    if (viaQueue && t.runBy === "local") return RUNNABLE.has(t.status) ? undefined : { msg: "This task cannot be run now.", code: 409 };    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
+    if (viaQueue && t.runBy === "local") return RUNNABLE.has(t.status) ? undefined : { msg: "This task cannot be run now.", code: 409 };
+    if (t.runBy === "claude") return RUNNABLE.has(t.status) ? this.claudeBlocked() : { msg: "This task cannot be run now.", code: 409 };
+    if (t.runBy !== "antigravity") return { msg: t.runBy === "local" ? "Self-work runs this task from the board." : t.runBy === "gemini" ? "This research runs by itself with the free Gemini key." : "Claude runs this task.", code: 409 };
     if (this.active && !ignoreActive) return { msg: BUSY_RUN_TEXT.he, code: 409 };
     if (!RUNNABLE.has(t.status)) return { msg: "This task cannot be run now.", code: 409 };
     if (this.saved.quota && this.saved.quota.until > this.now()) return { msg: `Antigravity's quota ran out; it can run again at ${new Date(this.saved.quota.until).toISOString()}.`, code: 429 };
@@ -1429,10 +1689,12 @@ export class TaskInbox {
   private makeAsk(t: InboxTaskView, next?: { done: string; more: number }, quiet = false): boolean {
     if (this.cannotRun(t, false, !!next)) return false;
     const now = this.now();
-    t.runAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + (this.d.approvalMs ?? 30 * 60_000), left: Math.max(0, this.s.dailyCap - this.today().used), ...(next ? { next } : {}) };
+    const left = t.runBy === "claude" ? this.cs.dailyCap - this.claudeToday().used : this.s.dailyCap - this.today().used;
+    t.runAsk = { requestId: randomBytes(12).toString("hex"), at: now, until: now + (this.d.approvalMs ?? 30 * 60_000), left: Math.max(0, left), ...(next ? { next } : {}) };
     if (next) {
       if (!quiet) this.d.notify("✦ Next in line — Start?", nextInLineTitle(next.done, t.title));
     }
+    else if (t.runBy === "claude") this.d.notify("✳ Run this task in Claude Code?", `${t.id}: ${t.title} · ${t.runAsk.left} left today · uses your Claude limits`, { path: `#/task-inbox/${t.id}` });
     else this.d.notify("✦ Run this task in Antigravity?", `${t.id}: ${t.title} · ${t.runAsk.left} left today`);
     return true;
   }
@@ -1567,6 +1829,7 @@ export class TaskInbox {
     const t = this.find(id);
     // Google's terms for a personal plan: every message to Antigravity comes from the user's own press.
     if ("here" in how ? !how.here : !how.approvedBy) throw fail("On the phone, Run answers the PC's ask: tap Run on its card.", 403);
+    if (t.runBy === "claude") return this.startClaude(t);
     // A second press on a task that is already starting or running (a hub card and the phone's ask both tapped): nothing more to start.
     if (t.status === "running" && this.active?.id === id) {
       delete t.runAsk;
@@ -1870,6 +2133,13 @@ export class TaskInbox {
   /** Stops a running task: the agent's turn is cancelled, the work so far is kept as a `-partial` branch. */
   async stop(id: string): Promise<boolean> {
     await this.load();
+    const cl = this.claudeStop;
+    if (cl?.id === id) {
+      cl.why = "stop";
+      cl.ctl.abort();
+      await this.claudeRun;
+      return true;
+    }
     const oc = this.opencodeStop;
     if (oc?.id === id) {
       oc.why = "stop";
@@ -1909,7 +2179,7 @@ export class TaskInbox {
       void this.pumpOpencode();
       return this.withPlace(t);
     }
-    if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : "Claude runs this task; it has no queue here.", 409);
+    if (t.runBy !== "antigravity" && t.runBy !== "local") throw fail(t.runBy === "gemini" ? "Free-Gemini research runs by itself; no queue is needed." : t.runBy === "claude" ? "Claude Code runs one task per Run; press Run on it." : "Claude runs this task; it has no queue here.", 409);
     const no = this.cannotRun(t, true, true);
     if (no) throw fail(no.msg, no.code);
     const ex: QueueExecutor = t.runBy;
@@ -2281,6 +2551,7 @@ export class TaskInbox {
       await this.loopWork();
       await this.save();
       void this.pumpOpencode().catch(() => undefined);
+      void this.pumpClaude().catch(() => undefined);
       void this.pump().catch(() => undefined);
     })().finally(() => {
       this.syncing = undefined;
@@ -2521,7 +2792,7 @@ export class TaskInbox {
     t.note = blocked ? `${why ? `${why} ` : ""}Not committed or pushed: ${checks.filter((c) => !c.ok).map((c) => c.note).join("; ")}. The work stays on this PC only (${t.branch}).` : why || (files.length ? undefined : "The agent changed no files.");
     if (!t.note) delete t.note;
     if (files.length && !blocked) {
-      const msg = [`${status === "partial" ? "partial: " : ""}Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by ${t.runBy === "opencode" ? "OpenCode Go" : "Antigravity"}${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
+      const msg = [`${status === "partial" ? "partial: " : ""}Inbox ${t.id}: ${t.title}`.slice(0, 120), "", `From the task inbox (${t.from}), run by ${t.runBy === "opencode" ? "OpenCode Go" : t.runBy === "claude" ? "Claude Code" : "Antigravity"}${t.modelUsed ? ` (${t.modelUsed})` : ""}; checked by KesherAI: ${checks.map((c) => `${c.name} ${c.ok ? "ok" : "failed"}`).join(", ")}.`, ...(status !== "done" ? [`Status: ${status}.`] : []), "", `Desktop-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200), `Phone-he: משימה מתיבת המשימות: ${t.title}`.slice(0, 200)].join("\n");
       const c = await git([...AUTHOR, "commit", "--quiet", "--no-verify", "-m", msg]);
       if (c.code === 0) {
         t.headSha = (await git(["rev-parse", "HEAD"])).out.trim().slice(0, 40);
@@ -2551,7 +2822,8 @@ export class TaskInbox {
     await this.save();
     const icon = status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕";
     // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
-    if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
+    if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
     else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
   }
 
@@ -2564,28 +2836,30 @@ export class TaskInbox {
    * @param to - The local model (self-work, through the board), Claude's Opus agent, or Antigravity (waits for Run).
    * @param o.again - Run a finished task again with the new executor (the user confirmed).
    */
-  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini" | "opencode", o: { again?: boolean } = {}): Promise<InboxTaskView> {
+  async reassign(id: string, to: "local" | "opus" | "antigravity" | "gemini" | "opencode" | "claude", o: { again?: boolean } = {}): Promise<InboxTaskView> {
     await this.load();
     const t = this.find(id);
     if (t.status === "running" || t.status === "needs-approval") throw fail("Stop it first.", 409);
     if ((t.status === "done" || t.status === "partial") && !o.again) throw fail("It is done.", 409);
     if (to === "gemini" && t.kind !== "research") throw fail("Free Gemini does only research tasks.", 409);
     if (to === "opencode" && t.kind === "research") throw fail("OpenCode Go does only code tasks.", 409);
+    if (to === "claude" && t.kind === "research") throw fail("Claude Code here does only code tasks.", 409);
     this.lines.remove(id);
     delete t.boardState;
     t.runBy = to;
     t.executor = to;
-    t.status = to === "antigravity" || to === "gemini" || to === "opencode" ? "waiting" : "queued";
+    t.status = to === "antigravity" || to === "gemini" || to === "opencode" || to === "claude" ? "waiting" : "queued";
     // A partial attempt's branch stays: the next attempt continues from it (resumeRef).
-    if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "antigravity"))) t.branch = branchFor(t, to);
+    if (!(t.headSha && t.branch.endsWith("-partial") && (to === "opencode" || to === "antigravity" || to === "claude"))) t.branch = branchFor(t, to);
     delete t.endedAt;
     delete t.runAsk;
     t.resultWritten = false;
-    t.note = to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
+    t.note = to === "claude" ? this.claudeNote() : to === "opencode" ? opencodeNote(t, this.oc, false) : to === "gemini" ? "Runs by itself with the free Gemini key." : to === "local" ? "Self-work takes it from the task board." : to === "opus" ? "Claude runs it with its own Opus agent." : "Antigravity runs it after your Run.";
     if (t.boardId) await this.d.board?.change("roee", [{ op: "reopen", id: t.boardId }, { op: "edit", id: t.boardId, size: to === "local" ? "small" : "big", forKesher: to === "local" }]).catch(() => undefined);
     await this.save();
     // Antigravity asks "Run this?" on the PC and the phone, as for a new task.
-    if (to === "antigravity") this.makeAsk(t);
+    if (to === "antigravity" || (to === "claude" && this.cs.askRun)) this.makeAsk(t);
+    if (to === "claude" && !this.cs.askRun) void this.pumpClaude().catch(() => undefined);
     if (to === "gemini") void this.pumpGemini().catch(() => undefined);
     if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
     return t;

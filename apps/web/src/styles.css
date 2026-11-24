@@ -4460,6 +4460,10 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* OpenCode Go's card in Settings > Task inbox: long model names never push the phone layout (390 px) wider. */
 .tinbox-ocgo select { max-width: 100%; min-width: 0; }
 .tinbox-ex.opus { color: #e8b4ff; border-color: rgb(232 180 255 / 0.35); }
+.tinbox-ex.claude { color: #f0a77e; border-color: rgb(240 167 126 / 0.35); }
+/* Claude Code's cards (Settings › Connections, Settings › Task inbox): the quota line wraps on a 390 px phone. */
+.claude-quota { overflow-wrap: anywhere; }
+.tinbox-claude select, .tinbox-claude input { max-width: 100%; min-width: 0; }
 .tinbox-st { display: inline-block; padding: 2px 9px; border-radius: calc(999px * var(--r-scale, 1)); font-size: 12px; background: var(--panel-2); color: var(--text-2); }
 .tinbox-st.run { color: var(--accent); }
 .tinbox-st.ask { color: var(--warn); }

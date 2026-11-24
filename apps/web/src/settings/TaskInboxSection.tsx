@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
+import { CLAUDE_DEFAULTS, OPENCODE_DEFAULTS, OPENCODE_MONTHLY_REQUESTS, opencodeModelName, type InboxState } from "@kesher/shared";
+import { ClaudeQuotaLine, claudeWhen } from "../ClaudeCodeCard";
 import { api, isRemote } from "../api";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
@@ -97,6 +98,50 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
 }
 
 /**
+ * Settings → Task inbox → Claude Code: Claude Code on this PC with the user's own subscription (the same limits as
+ * the Claude app). On/off, a Run tap per task (default on), the daily limit with today's count, the 5-hour and weekly
+ * thresholds above which no task starts until the reset, and the model. Works from the phone.
+ *
+ * @param p - The inbox's state and the settings writer.
+ */
+function ClaudeSettingsCard({ s, put }: { s: InboxState; put: (body: Record<string, unknown>) => void }) {
+  const c = { ...CLAUDE_DEFAULTS, ...s.settings.claude };
+  const st = s.claude;
+  const set = (v: Record<string, unknown>) => put({ claude: v });
+  const pick = (key: "dailyCap" | "fiveHourMax" | "weekMax", options: number[], he: string, en: string, suffix = "") => (
+    <label className="row wrap small">
+      <span className="grow">{L(he, en)}</span>
+      <select value={c[key]} disabled={!c.enabled} onChange={(e) => set({ [key]: Number(e.target.value) })} aria-label={L(he, en)}>
+        {[...new Set([...options, c[key]])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}{suffix}</option>)}
+      </select>
+    </label>
+  );
+  return (
+    <div className="stack tinbox-claude">
+      <div className="row">
+        <h3 className="grow">✳ Claude Code</h3>
+        <label className="row small"><input type="checkbox" checked={c.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> {L("פעיל", "On")}</label>
+      </div>
+      <p className="small muted">{L("משימות קוד רצות ב-Claude Code במחשב, עם המנוי שלך: אותן מגבלות Max כמו אפליקציית Claude. העבודה בענף claude/*, אף פעם לא ב-main, ומחכה לבדיקה.", "Code tasks run in Claude Code on this PC with your own subscription: the same Max limits as your Claude app. The work goes to a claude/* branch, never main, and waits for review.")}</p>
+      {!st?.installed && <p className="small tinbox-err">{L("Claude Code לא מותקן או לא מחובר: הגדרות › חיבורים › Claude Code.", "Claude Code is not installed or not signed in: Settings › Connections › Claude Code.")} <a href="#/connections">{L("לחיבורים", "Connections")}</a></p>}
+      {st && <ClaudeQuotaLine s={st} max={{ fiveHour: c.fiveHourMax, week: c.weekMax }} />}
+      {st?.blocked && <p className="small tinbox-err" dir="auto">⏸ {st.blocked.why}{st.blocked.until ? L(` (עד ${claudeWhen(st.blocked.until)})`, ` (until ${claudeWhen(st.blocked.until)})`) : ""}</p>}
+      <label className="row wrap small">
+        <input type="checkbox" checked={c.askRun} disabled={!c.enabled} onChange={(e) => set({ askRun: e.target.checked })} />
+        <span className="grow">{L('כל משימה מחכה ללחיצה שלי על "הפעל" (מומלץ)', "Each task waits for my Run tap (recommended)")}</span>
+      </label>
+      {pick("dailyCap", [1, 2, 3, 5, 8, 10, 15, 20], `סף יומי (היום ${st?.used ?? 0})`, `Daily limit (today ${st?.used ?? 0})`)}
+      {pick("fiveHourMax", [50, 60, 70, 80, 90, 95], "לא להתחיל משימה כשחלון 5 השעות מעל", "Start no task while the 5-hour window is above", "%")}
+      {pick("weekMax", [50, 60, 70, 80, 85, 90, 95], "לא להתחיל משימה כשהחלון השבועי מעל", "Start no task while the weekly window is above", "%")}
+      <label className="row wrap small">
+        <span className="grow">{L("מודל (ריק: ברירת המחדל של Claude Code)", "Model (empty: Claude Code's default)")}</span>
+        <input dir="ltr" defaultValue={c.model} placeholder="sonnet / opus" maxLength={80} disabled={!c.enabled} onBlur={(e) => e.target.value.trim() !== c.model && set({ model: e.target.value.trim() })} aria-label={L("מודל ל-Claude Code", "Claude Code model")} />
+      </label>
+    </div>
+  );
+}
+
+/**
  * Settings → Task inbox (packages/core/src/inbox-runner.ts): on/off (the kill switch also stops fetching), the project
  * and its inbox branch, how often to look, the daily limit for Antigravity (default 10) and the minutes per task, the
  * model inside Antigravity (empty: Gemini's default), who does each kind of task, what KesherAI may push, the paths and
@@ -169,16 +214,19 @@ export function TaskInboxSection() {
 
       <OpencodeSettings s={s} put={put} />
 
+      <ClaudeSettingsCard s={s} put={put} />
+
       <h3>{L("מבצע לכל סוג משימה", "Who does each kind of task")}</h3>
       <div className="small stack">
         <span><span className="tinbox-ex local">{L("◆ מודל מקומי", "◆ Local model")}</span> {L("עבודה עצמית לוקחת אותן מלוח המשימות כשהמחשב פנוי.", "Self-work takes them from the task board when the PC is free.")}</span>
         <span><span className="tinbox-ex agy">✦ Antigravity</span> {L('רק ב"הפעל".', "Only on Run.")}</span>
         <span><span className="tinbox-ex ocgo">◈ OpenCode Go</span> {L("רץ לבד, משימות קוד קטנות ובינוניות כש-Antigravity נגמר.", "Runs by itself: small and medium code tasks while Antigravity is out.")}</span>
+        <span><span className="tinbox-ex claude">✳ Claude Code</span> {L('רק משימות שנשלחו אליו, ב"הפעל" (ברירת מחדל), עם המנוי שלך.', "Only tasks sent to it, on Run (default), with your subscription.")}</span>
         <span><span className="tinbox-ex opus">{L("✷ סוכן Opus", "✷ Opus agent")}</span> {L("של Claude, לא רץ במחשב. Claude מחליט.", "Claude's own, not on this PC. Claude decides.")}</span>
       </div>
 
       <h3>Git</h3>
-      <p className="small">{L(`KesherAI דוחף רק ענפי agy/* ו-ocgo/* ואת ${c.branch}.`, `KesherAI pushes only agy/* and ocgo/* branches and ${c.branch}.`)}</p>
+      <p className="small">{L(`KesherAI דוחף רק ענפי agy/*, ocgo/* ו-claude/* ואת ${c.branch}.`, `KesherAI pushes only agy/*, ocgo/* and claude/* branches and ${c.branch}.`)}</p>
       <p className="small">✕ {L("אף פעם לא: main, תגיות, מחיקת ענפים, force push.", "Never: main, tags, deleting branches, force push.")}</p>
       <p className="small">✕ {L("לסוכן עצמו אין הרשאת push: רק KesherAI, אחרי הבדיקות.", "The agent itself cannot push: only KesherAI, after its checks.")}</p>
 

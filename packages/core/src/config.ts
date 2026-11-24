@@ -297,6 +297,17 @@ export const KesherConfigSchema = z.object({
           freeTrainingOk: z.boolean().default(true),
         })
         .prefault({}),
+      // Claude Code on this PC (claude-exec.ts): the user's own subscription; Run tap per task by default.
+      claude: z
+        .object({
+          enabled: z.boolean().default(true),
+          askRun: z.boolean().default(true),
+          dailyCap: z.number().int().min(0).max(50).default(5),
+          fiveHourMax: z.number().int().min(10).max(100).default(80),
+          weekMax: z.number().int().min(10).max(100).default(85),
+          model: z.string().max(80).default(""),
+        })
+        .prefault({}),
       maxMinutes: z.number().int().min(1).max(480).default(120),
       stallMinutes: z.number().int().min(1).max(120).default(10),
       maxRequests: z.number().int().min(1).max(1000).default(80),

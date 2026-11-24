@@ -377,11 +377,11 @@ export const inboxRunId = (taskId: string): string => `in-${taskId.replace(/[^\w
  * @param t - The task.
  * @param ask - Its open run ask, if any.
  * @param inboxAsks - The conversation id the PC uses for those asks.
- * @returns The snapshot, or undefined when the task is not an Antigravity or OpenCode Go run.
+ * @returns The snapshot, or undefined when the task is not an Antigravity, OpenCode Go or Claude Code run.
  */
 export function inboxSnapshot(t: InboxTaskView, ask: InboxRunAsk | undefined, inboxAsks: string): RunSnapshot | undefined {
-  // OpenCode Go's tasks show too (Roee wants to see it take tasks): as the task inbox's own runs, with their model.
-  if (t.runBy !== "antigravity" && t.runBy !== "opencode") return undefined;
+  // OpenCode Go's and Claude Code's tasks show too (Roee wants to see them take tasks): as the inbox's own runs, with their model.
+  if (t.runBy !== "antigravity" && t.runBy !== "opencode" && t.runBy !== "claude") return undefined;
   const state = (
     {
       waiting: ask ? "waiting" : "queued",
@@ -401,7 +401,7 @@ export function inboxSnapshot(t: InboxTaskView, ask: InboxRunAsk | undefined, in
   const lastStep = t.decisions?.at(-1)?.what;
   return {
     runId: inboxRunId(t.id),
-    source: t.runBy === "opencode" ? "inbox" : "antigravity",
+    source: t.runBy === "antigravity" ? "antigravity" : "inbox",
     title: t.title,
     ...(t.modelUsed ? { model: t.modelUsed } : {}),
     state,

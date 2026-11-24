@@ -4688,3 +4688,34 @@ Sources: product docs as known to the helper plus [browser-computer-control](res
   (patterns), datadoghq.com docs (log patterns), docs.sentry.io (grouping, fingerprint, issue states),
   code.visualstudio.com/docs/editor/tasks (problem matchers), dev.epicgames.com (Output Log), docs.datalust.co (Seq).
 - Stopped at: done (built in the same task; see WORK_LIST "Smart log reader").
+
+## 2026-11-24 — Claude Code as an executor: how Claude Squad, Conductor, Crystal and Vibe Kanban drive it (Claude helper, brief, for "Claude as a KesherAI executor")
+- **Claude Squad** (Go TUI): one tmux session per instance, each in its own git worktree on a `<prefix>/<name>`
+  branch; runs the *interactive* `claude` and reads the tmux pane; "auto-yes" mode presses Enter on every prompt
+  (string-matching the pane). No usage-limit handling; the session just sits at the limit message.
+- **Conductor** (Mac app): a "workspace" per task = a worktree under its own folder; runs Claude Code through the
+  Agent SDK (same stream as `--output-format stream-json`), signed in with the user's own Claude login (Pro/Max) or an
+  API key; diff view, then PR/merge from the app. Per-repo setup script (install) when a workspace is made.
+- **Crystal** (Electron): a worktree per session; spawns `claude -p … --output-format stream-json --verbose` and shows
+  each JSON message as a step; permissions either through `--permission-prompt-tool` (an MCP tool that asks in the
+  app) or `--dangerously-skip-permissions`; "squash and rebase to main" at the end.
+- **Vibe Kanban**: a task card per attempt, worktree on `vk/<id>-<slug>`, `claude -p --output-format=stream-json
+  --verbose` (skip-permissions by default), the stream normalized into one log of tool calls; setup/cleanup scripts;
+  review the diff, then merge or open a PR. A limit message is shown as a failed attempt.
+- **Quota**: none of the four reads the Max limits; the official sources are the status line's `rate_limits`
+  (`five_hour`/`seven_day` `used_percentage` 0–100, `resets_at` epoch seconds; Pro/Max only, after the first answer;
+  code.claude.com/docs/en/statusline) and the stream's `rate_limit_event` (`rate_limit_info.status`
+  allowed/allowed_warning/rejected, `rateLimitType`, `resetsAt`, `utilization` 0–1 when present).
+- **Take**: Vibe Kanban/Crystal's shape — headless `-p`, stream-json parsed into KesherAI's own step events, one
+  worktree + branch per task (`claude/<id>-<slug>`), review before merge. Prompt and rescue hints through
+  `--input-format stream-json` on stdin (no long command line on Windows; the watch's rescue can be injected).
+  Permissions: `--permission-mode acceptEdits` (edits only inside the worktree), Bash only for the inbox's allowed
+  check commands (`--allowedTools "Bash(pnpm -s typecheck:*)"`), push/fetch-from-web denied, `--setting-sources project`
+  and `--strict-mcp-config` so his own global settings, hooks and MCP servers are not used; any other ask is refused
+  by `-p` itself. API-key variables are removed from the child's environment, and `claude auth status` must say a
+  claude.ai login (never an API key, never pay-per-use). Quota from both official sources into one file KesherAI reads.
+- **Leave**: `--dangerously-skip-permissions` (all four offer it), driving the interactive TUI through tmux/pty
+  (fragile), unofficial usage endpoints and reading the login token (ccusage-style log scraping is not needed).
+- Note: brief entry from these tools' public repos as known, no fresh web check today (research goes to Gemini); the
+  CLI flags were checked against `claude --help` 2.1.x and the status-line docs.
+- Stopped at: done (built the same day).

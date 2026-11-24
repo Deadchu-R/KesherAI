@@ -3,6 +3,7 @@ import { api } from "../api";
 import { t } from "../i18n";
 import { McpSection } from "../McpSection";
 import { DevicesSection } from "../DevicesSection";
+import { ClaudeCodeCard } from "../ClaudeCodeCard";
 import { TrainTag } from "../privacy";
 import { Select } from "../ui/Select";
 
@@ -104,6 +105,8 @@ export function ConnectionsPage() {
       </section>
 
       <DevicesSection />
+
+      <ClaudeCodeCard />
 
       <McpSection />
 

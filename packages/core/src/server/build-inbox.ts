@@ -10,6 +10,7 @@ import type { WatchdogModel } from "../watchdog-model.js";
 import { fetchFreeUsage } from "../openrouter-free.js";
 import { AcpAgent } from "../acp.js";
 import { agyPath } from "../agy-path.js";
+import { checkClaude, claudeArgs, claudeEnv, claudeOnce, fileExists, findClaude, mergeClaudeLimit, readClaudeQuota, runClaude, writeClaudeSettings } from "../claude-exec.js";
 import type { KesherConfig } from "../config.js";
 import { modelTurnFor, withFilter, type ConversationManager } from "../conversations.js";
 import { researchReport } from "../deep-research.js";
@@ -203,6 +204,48 @@ export function inboxHelpers(p: { config: KesherConfig; registry: ProviderRegist
 }
 
 /**
+ * Claude Code on this PC for the inbox (the `claude` executor, claude-exec.ts): the user's own `claude` program and
+ * login, KesherAI's status-line settings in its own folder (`<data>/claude-code`, never the user's global settings),
+ * and the quota file that status line and the stream's rate-limit events write.
+ *
+ * @param p.root - KesherAI's data folder.
+ * @returns The inbox's `claude`.
+ */
+export function claudeCode(p: { root: string }): NonNullable<TaskInboxDeps["claude"]> {
+  const dir = join(p.root, "claude-code");
+  const quotaFile = join(dir, "quota.json");
+  // Looked up each time: Roee may install or sign in while KesherAI runs.
+  const cli = () => findClaude({ platform: process.platform, env: process.env, home: homedir(), exists: fileExists });
+  let files: ReturnType<typeof writeClaudeSettings> | undefined;
+  return {
+    check: async () => {
+      const c = cli();
+      return c ? checkClaude(claudeOnce(c, claudeEnv(process.env))) : { installed: false };
+    },
+    quota: () => readClaudeQuota(quotaFile),
+    run: async (o) => {
+      const c = cli();
+      if (!c) throw new Error("Claude Code is not installed on this PC.");
+      // Written once per start of KesherAI (the Node path changes with an update).
+      const f = await (files ??= writeClaudeSettings(dir));
+      return runClaude({
+        cli: c,
+        cwd: o.worktree,
+        args: claudeArgs({ settings: f.settings, commands: o.commands, model: o.model }),
+        prompt: o.prompt,
+        env: claudeEnv(process.env),
+        signal: o.signal,
+        attach: o.attach,
+        onEvent: (e) => {
+          if (e.kind === "limit") void mergeClaudeLimit(f.quota, e, Date.now()).catch(() => undefined);
+          o.onEvent(e);
+        },
+      });
+    },
+  };
+}
+
+/**
  * Builds the task inbox: git and checks as argument lists, the unmodified `agy acp` (it signs in by itself), the
  * shared board, notifications to this PC and the phone, and the busy check (games, editors, the graphics card).
  *
@@ -294,6 +337,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
       },
     },
     ...(p.chats ? { coder: opencodeCoder({ config: p.config, registry: p.registry, chats: p.chats }) } : {}),
+    claude: claudeCode({ root: p.root }),
     usage: new UsageLog(join(p.root, "usage-log")),
     helpers: inboxHelpers({ config: p.config, registry: p.registry, ...(p.freeCloud ? { freeCloud: p.freeCloud } : {}), ...(p.localChat ? { localChat: p.localChat } : {}), ...(p.watchdog ? { watchdog: p.watchdog } : {}) }),
     board: p.board,

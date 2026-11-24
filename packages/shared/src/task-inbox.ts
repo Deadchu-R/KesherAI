@@ -7,13 +7,16 @@
 import type { InboxModel } from "./inbox-models.js";
 import type { AgentLabel } from "./agent-label.js";
 import { freeTierTrains } from "./training-risk.js";
+import type { ClaudeSettings, ClaudeState } from "./claude-code.js";
 
 /**
  * Who does a task: `auto` resolves by the routing table (see `routeTask` in packages/core/src/task-inbox.ts).
  * `opencode`: a code task on the user's flat OpenCode Go plan, run by itself in a code chat (no Run press: it is the
  * user's own API key, not an agent's account), on a cheap model for size S and a strong one for M and L.
+ * `claude`: a code task for Claude Code on this PC (claude-code.ts), signed in with the user's own subscription; it
+ * waits for the user's Run tap by default. Never picked by `auto` (it spends the same limits as the Claude app).
  */
-export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini" | "opencode";
+export type InboxExecutor = "auto" | "antigravity" | "local" | "opus" | "gemini" | "opencode" | "claude";
 
 /** How big a task is (research reports' "Size S/M/L"; picks the OpenCode Go model). */
 export type InboxSize = "S" | "M" | "L";
@@ -452,6 +455,8 @@ export interface InboxSettings {
   dailyCap: number;
   /** OpenCode Go: the flat coding plan that takes S/M code tasks while Antigravity is out (absent: the defaults). */
   opencode?: OpencodeSettings;
+  /** Claude Code on this PC (absent: the defaults, CLAUDE_DEFAULTS). */
+  claude?: ClaudeSettings;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
   loop?: boolean;
   /**
@@ -519,6 +524,8 @@ export interface InboxState {
   models?: InboxModel[];
   /** OpenCode Go now: its connection is set up with a key, today's count, and its limit's end when it answered 429. */
   opencode?: OpencodeState;
+  /** Claude Code on this PC: installed, signed in, its quota reading and whether a task may start. */
+  claude?: ClaudeState;
   /** The connected free services (OpenRouter, Z.ai, Mistral, NVIDIA, ...) that take S tasks after Beam Free. */
   free?: FreeProviderState[];
   /**

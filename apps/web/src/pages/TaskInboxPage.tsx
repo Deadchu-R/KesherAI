@@ -15,6 +15,7 @@ import { toast } from "../library";
 import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
 import { AssignPicker } from "../AssignPicker";
 import { RunUndoButton } from "./RunUndoButton";
+import { ClaudeQuotaLine } from "../ClaudeCodeCard";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 
@@ -26,6 +27,7 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 function modelLine(t: InboxTaskView): string | null {
   // OpenCode Go: the runner and its model ("OpenCode Go · kimi-k3"), set when the task starts.
   if (t.runBy === "opencode") return t.modelUsed?.replace(/^OpenCode Go · /, "") ?? null;
+  if (t.runBy === "claude") return t.modelUsed?.replace(/^Claude Code · /, "") ?? null;
   if (t.runBy !== "antigravity") return null;
   if (t.modelUsed) return `${t.modelFallback ? "↘ " : ""}${t.modelUsed}`;
   return t.model ?? null;
@@ -49,7 +51,7 @@ function stepsText(t: InboxTaskView): string | null {
 function statusChip(t: InboxTaskView): { text: string; cls: string } {
   const step = t.plan?.length ? ` · ${L("שלב", "step")} ${Math.min(t.plan.filter((p) => p.status === "completed").length + 1, t.plan.length)}/${t.plan.length}` : "";
   const m: Record<InboxStatus, [string, string, string]> = {
-    waiting: [t.runBy === "antigravity" ? 'ממתין ל"הפעל"' : t.runBy === "opencode" ? "ממתין ל-OpenCode Go" : "ממתין", t.runBy === "antigravity" ? "Waiting for Run" : t.runBy === "opencode" ? "Waiting for OpenCode Go" : "Waiting", ""],
+    waiting: [t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? 'ממתין ל"הפעל"' : t.runBy === "opencode" ? "ממתין ל-OpenCode Go" : t.runBy === "claude" ? "ממתין ל-Claude Code" : "ממתין", t.runBy === "antigravity" || (t.runBy === "claude" && t.runAsk) ? "Waiting for Run" : t.runBy === "opencode" ? "Waiting for OpenCode Go" : t.runBy === "claude" ? "Waiting for Claude Code" : "Waiting", ""],
     queued: [t.runBy === "opus" ? "בתור" : t.boardState === "claimed" ? "הסוכן המקומי עובד עליה" : "ממתין לסוכן המקומי", t.runBy === "opus" ? "Queued" : t.boardState === "claimed" ? "The local agent is on it" : "Waiting for the local agent", t.boardState === "claimed" ? "run" : ""],
     running: [`רץ${step}`, `Running${step}`, "run"],
     "needs-approval": ["🔔 צריך אישור", "🔔 Needs approval", "ask"],
@@ -73,6 +75,7 @@ function executorChip(runBy: InboxTaskView["runBy"], kind?: InboxTaskView["kind"
   if (runBy === "gemini") return { text: L("✧ מחקר · אוטומטי (Gemini חינם)", "✧ Research · automatic (free Gemini)"), cls: "local" };
   if (runBy === "antigravity") return { text: "✦ Antigravity", cls: "agy" };
   if (runBy === "opencode") return { text: "◈ OpenCode Go", cls: "ocgo" };
+  if (runBy === "claude") return { text: "✳ Claude Code", cls: "claude" };
   if (runBy === "local") return { text: L("◆ מודל מקומי", "◆ Local model"), cls: "local" };
   return { text: L("✷ סוכן Opus", "✷ Opus agent"), cls: "opus" };
 }
@@ -192,6 +195,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
             {s.loop.why && <span className="muted"> · {s.loop.why === "cap" ? L("הסף היומי", "today's limit") : L("מכסה", "quota")}</span>}
           </a>
         )}
+        {s.claude?.installed && <a href="#/connections" className={`tinbox-chip ${s.claude.blocked ? "warn" : ""}`}><ClaudeQuotaLine s={s.claude} max={{ fiveHour: s.settings.claude?.fiveHourMax ?? 80, week: s.settings.claude?.weekMax ?? 85 }} /></a>}
         <span className="tinbox-chip" dir="ltr">⟳ {s.settings.branch}{s.lastFetch ? ` · ${ago(Date.now() - s.lastFetch)}` : ""}</span>
         <button type="button" className="chip-text" disabled={busy || !s.settings.enabled} onClick={() => void act("/api/task-inbox/sync")}>{L("בדוק עכשיו", "Check now")}</button>
       </div>
@@ -320,7 +324,9 @@ function RunAsk({ t, state, act, busy }: { t: InboxTaskView; state: InboxState; 
       <div className="row wrap">
         <b className="grow">{ask.next
           ? <>✦ {L(`הסתיים: ${ask.next.done.slice(0, 60)}. הבא בתור: ${t.title.slice(0, 60)} — להתחיל?`, `Done: ${ask.next.done.slice(0, 60)}. Next in line: ${t.title.slice(0, 60)} — Start?`)}</>
-          : <>✦ {L("להריץ את המשימה ב-Antigravity?", "Run this task in Antigravity?")}</>}</b>
+          : t.runBy === "claude"
+            ? <>✳ {L("להריץ את המשימה ב-Claude Code?", "Run this task in Claude Code?")} <span className="small muted">{L("(אותן מגבלות כמו אפליקציית Claude)", "(the same limits as your Claude app)")}</span></>
+            : <>✦ {L("להריץ את המשימה ב-Antigravity?", "Run this task in Antigravity?")}</>}</b>
         <span className="small muted">{L(`פג תוקף ${ago(Date.now() - ask.until)}`, `Expires ${ago(Date.now() - ask.until)}`)}</span>
       </div>
       <p><b>{t.title}</b> <span className="small muted" dir="ltr">{t.id}</span></p>
@@ -356,7 +362,8 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
   const st = statusChip(t);
   const ex = executorChip(t.runBy, t.kind);
   const open = () => (location.hash = `#/task-inbox/${t.id}`);
-  const runnable = t.runBy === "antigravity" && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
+  // Antigravity and Claude Code start on the user's Run (on the PC, or the ask on the phone).
+  const runnable = (t.runBy === "antigravity" || t.runBy === "claude") && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
   // Antigravity and the local model have a line: "Add to queue" (the tap is the user's own start for the task).
   const queueable = (t.runBy === "antigravity" || t.runBy === "local") && ["waiting", "failed", "partial", "deferred-quota"].includes(t.status);
   const copy = () => void navigator.clipboard?.writeText(forClaude(t)).then(() => toast(L("הועתק", "Copied")), () => toast(forClaude(t)));
@@ -461,6 +468,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
             <option value="antigravity">✦ Antigravity</option>
             <option value="local">{L("◆ מודל מקומי", "◆ Local model")}</option>
             <option value="opencode">◈ OpenCode Go</option>
+            <option value="claude">✳ Claude Code</option>
             <option value="opus">{L("✷ סוכן Opus", "✷ Opus agent")}</option>
           </select>
         </label>
@@ -503,7 +511,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
       <div className="row wrap">
         <h1 className="grow" dir="auto">{t.label?.name || t.title}</h1>
         <button type="button" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>✎ {t.label?.name || t.label?.note ? L("ערוך שם והערה", "Edit name & note") : L("שם והערה", "Name & note")}</button>
-        <span className={`tinbox-ex ${ex.cls}`}>{ex.text}{t.modelUsed ? ` · ${t.modelUsed}` : ""}</span>
+        <span className={`tinbox-ex ${ex.cls}`}>{ex.text}{t.modelUsed ? ` · ${t.modelUsed.replace(/^(OpenCode Go|Claude Code) · /, "")}` : ""}</span>
         {t.mayTrain && <span className="train-tag" title={L("השירות הזה עשוי להשתמש במה שנשלח אליו לאימון; מידע רגיש מוסתר לפני שליחה", "This service may use what it is sent for training; sensitive info is hidden before sending")}>⚠ {L("עשוי לאמן על המידע שלך", "may train on your data")}</span>}
         <span className={`tinbox-st ${st.cls}`}>{st.text}{minutes !== undefined ? ` · ${minutes} ${L("דק׳", "min")}` : ""}</span>
         {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
