@@ -14,9 +14,9 @@
  *   unless the user says to remove it anyway.
  */
 import { copyFile, mkdir, readFile, appendFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { readdir, rm, rmdir, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve, win32 } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from "node:path";
 import ignore from "ignore";
 
 /** Runs git in a folder; resolves with its output, rejects with its error text. */
@@ -185,14 +185,23 @@ export interface SweptWorktree {
 export async function sweepWorktrees(repo: string, git: Git, o: { isBusy?: (path: string) => boolean; now?: number; minAgeMs?: number } = {}): Promise<SweptWorktree[]> {
   const now = o.now ?? Date.now();
   const minAge = o.minAgeMs ?? 24 * 3600_000;
-  const inside = (p: string, root: string) => resolve(p).toLowerCase().startsWith(`${resolve(root).toLowerCase()}${resolve(root).includes("\\") ? "\\" : "/"}`);
+  // Real, long paths on both sides: git prints long paths with "/", while a folder can be reached through a short 8.3
+  // name or a link (Windows temp folders do), and a mismatch would treat a live worktree as an orphan.
+  const real = (p: string) => {
+    try {
+      return realpathSync.native(p).toLowerCase();
+    } catch {
+      return resolve(p).toLowerCase();
+    }
+  };
+  const inside = (p: string, root: string) => real(p).startsWith(`${real(root)}${sep}`);
   const roots = [join(repo, ".kesher", "worktrees"), ...(worktreesRoot ? [join(worktreesRoot, basename(repo))] : [])];
   const listed = (await git(repo, ["worktree", "list", "--porcelain"]).catch(() => "")).split(/\r?\n\r?\n/);
   const removed: SweptWorktree[] = [];
   const known = new Set<string>();
   for (const block of listed) {
     const path = /^worktree (.+)$/m.exec(block)?.[1]?.trim();
-    if (path) known.add(resolve(path).toLowerCase());
+    if (path) known.add(real(path));
     if (!path || !roots.some((r) => inside(path, r))) continue;
     if (o.isBusy?.(path)) continue;
     const branch = /^branch refs\/heads\/(.+)$/m.exec(block)?.[1]?.trim();
@@ -212,7 +221,7 @@ export async function sweepWorktrees(repo: string, git: Git, o: { isBusy?: (path
   for (const root of roots) {
     for (const d of await readdir(root).catch(() => [])) {
       const path = join(root, d);
-      if (known.has(resolve(path).toLowerCase()) || o.isBusy?.(path)) continue;
+      if (known.has(real(path)) || o.isBusy?.(path)) continue;
       const touched = await stat(path).then((st) => (st.isDirectory() ? st.mtimeMs : undefined)).catch(() => undefined);
       if (touched === undefined || now - touched < minAge) continue;
       await rm(path, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
