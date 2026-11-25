@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, relayReport, type RelayRun, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -88,7 +88,7 @@ export interface TaskInboxDeps {
      * The free services after Beam Free (shared `FREE_PROVIDERS`), by connection id: `ready` (connection with a key),
      * its chat `models`, and `usage` (OpenRouter's own count of today's free requests, when it can say).
      */
-    free?: Record<string, { ready: () => boolean; models: () => Promise<string[]>; usage?: () => Promise<FreeUsage | undefined> }>;
+    free?: Record<string, { ready: () => boolean; models: () => Promise<string[]>; usage?: () => Promise<FreeUsage | undefined>; probe?: (model: string, signal: AbortSignal) => Promise<string> }>;
     /**
      * `onStep` gets the step count and, when known, the step itself (tool and arguments) for the run guard.
      * `attach` is called once with a function that sends a user message into the running chat (the rescue hint).
@@ -136,6 +136,8 @@ interface Saved {
   tasks: InboxTaskView[];
   /** The relay's attempts (GhostCLI trial), the last 200. */
   relayLog?: RelayRun[];
+  /** The relay's last small "are you there" message (every 15 minutes): it gets tasks only while this answered. */
+  relayHealth?: RelayProbe;
   today: { date: string; used: number };
   quota?: InboxState["quota"];
   /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
@@ -345,6 +347,8 @@ export class TaskInbox {
    */
   private async relayModels(c: NonNullable<TaskInboxDeps["coder"]>): Promise<string[]> {
     const out: string[] = [];
+    // Only while the last small message answered (a relay that hangs would burn each task it gets).
+    if (!this.saved.relayHealth?.ok) return out;
     for (const r of RELAY_PROVIDERS) {
       const conn = c.free?.[r.id];
       if (!conn?.ready()) continue;
@@ -441,7 +445,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}), ...(raw.relayHealth ? { relayHealth: raw.relayHealth } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -555,7 +559,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
-      ...(this.saved.relayLog?.length ? { relay: relayReport(this.saved.relayLog) } : {}),
+      ...(this.saved.relayLog?.length ? { relay: { ...relayReport(this.saved.relayLog), ...(this.saved.relayHealth ? { health: this.saved.relayHealth } : {}) } } : {}),
       ...(this.d.claude ? { claude: await this.claudeState() } : {}),
       ...(await this.freeStates()),
       loop: this.loopNow(),
@@ -684,6 +688,7 @@ export class TaskInbox {
    * writes results that were not written yet. Only reads `tasks/*.md` through git (nothing is checked out from it).
    */
   sync(): Promise<void> {
+    void this.probeRelays().catch(() => undefined);
     this.syncing ??= this.doSync().finally(() => {
       this.syncing = undefined;
     });
@@ -1196,7 +1201,7 @@ export class TaskInbox {
           ]);
           // A free model that ended without changing anything (23.11: Beam Free answered nothing and touched no file)
           // did not do the work: the task goes on to a paid model like after any free-model failure.
-          if (isFreeOpencodeModel(model) && !run.why && !(await this.d.git(wt.path, ["status", "--porcelain"])).out.trim()) {
+          if ((isFreeOpencodeModel(model) || relayProviderOf(model)) && !run.why && !(await this.d.git(wt.path, ["status", "--porcelain"])).out.trim()) {
             throw new Error(`${opencodeModelName(model)} changed no files.`);
           }
           text = r.text;
@@ -1268,6 +1273,47 @@ export class TaskInbox {
       await this.save();
     }
   }
+
+  /**
+   * Sends the relay a small "reply with ok" every 15 minutes (Roee, 25.11: keep checking it answers): the relay gets tasks
+   * only while the last one answered, and the phone is told when it starts or stops answering.
+   */
+  private async probeRelays(): Promise<void> {
+    const c = this.d.coder;
+    if (!c || this.oc.useRelay === false || this.probing) return;
+    const last = this.saved.relayHealth;
+    if (last && this.now() - last.at < RELAY_PROBE_MS) return;
+    this.probing = true;
+    try {
+      for (const r of RELAY_PROVIDERS) {
+        const conn = c.free?.[r.id];
+        if (!conn?.ready() || !conn.probe) continue;
+        const model = r.pick(await conn.models().catch(() => [] as string[]))[0];
+        if (!model) continue;
+        const t0 = this.now();
+        let ok = false;
+        let note = "";
+        try {
+          const text = await conn.probe(model, AbortSignal.timeout(90_000));
+          ok = text.trim().length > 0;
+          note = ok ? text.trim().slice(0, 80) : "an empty answer";
+        } catch (e) {
+          note = ((e as Error).message || String(e)).slice(0, 160);
+        }
+        const was = this.saved.relayHealth?.ok;
+        this.saved.relayHealth = { at: this.now(), ok, ms: this.now() - t0, model, note };
+        this.saved.relayLog = [...(this.saved.relayLog ?? []), { at: this.now(), id: "probe", model, status: (ok ? "probe-ok" : "probe-failed") as RelayRun["status"], ms: this.now() - t0 }].slice(-200);
+        await this.save();
+        // It answers again: load it right away (Roee, 25.11: "when they are available, load them up").
+        if (ok && !was) void this.pumpOpencode();
+        if (was !== ok && (was !== undefined || ok)) this.d.notify(ok ? `✓ ${r.name} עונה` : `✕ ${r.name} לא עונה`, ok ? `${opencodeModelName(model)} answered in ${Math.round((this.now() - t0) / 1000)} s; heavy tasks go to it again.` : `${note}. No tasks go to it until it answers again (checked every 15 minutes).`, { path: "#/settings/task-inbox" });
+      }
+    } finally {
+      this.probing = false;
+    }
+  }
+
+  private probing = false;
 
   /** Adds one relay attempt to the trial report (the last 200 are kept). */
   private noteRelay(r: RelayRun): void {
@@ -3030,6 +3076,9 @@ export function isScratchFile(path: string): boolean {
   if (/\.(log|tmp|out)$/i.test(name) || /([-_.]out|output|stdout|stderr)\.txt$/i.test(name)) return true;
   return !path.includes("/") && /\.txt$/i.test(name) && !/^(license|notice|readme|changelog|requirements|robots)/i.test(name);
 }
+
+/** How often the relay gets its small "are you there" message. */
+const RELAY_PROBE_MS = 15 * 60_000;
 
 /** The icon of a task's end notice. */
 const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");

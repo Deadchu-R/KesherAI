@@ -471,3 +471,4 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 - ✅ GhostCLI trial report (data): every relay attempt is logged (done/partial/failed/rate-limited, minutes, model); `relay` in /api/task-inbox gives the totals and the last 20.
 - ⬜ GhostCLI trial report card in Settings › Task inbox (design board in the cloud/tasks doc first) and on the phone.
 - ⬜ Parallel relay runs (2–3 at once) for the stress test, if Roee wants them.
+- ✅ GhostCLI availability check (Roee 25.11: "check availability, and when they're available, load them up"): a small "reply with ok" every 15 minutes; tasks go to it only while the last one answered; when it answers again the queue starts at once; the phone is told when it starts or stops answering. A relay run that ends empty with no change moves on to the next model.

@@ -229,5 +229,30 @@ export const opencodeModelName = (id) => id.replace(new RegExp(`^(${OPENCODE_PRO
  * own Hebrew and English text for it instead of the raw system message (on Windows, cmd.exe's "is not recognized").
  */
 export const INBOX_GIT_MISSING = "Git for Windows is not installed / not found: install it from git-scm.com (or `winget install Git.Git`) and restart KesherAI.";
+/**
+ * Sums relay attempts into the trial report.
+ *
+ * @param log - The attempts, oldest first.
+ * @returns The report.
+ */
+export function relayReport(log) {
+    const probes = log.filter((r) => r.status === "probe-ok" || r.status === "probe-failed");
+    const tasks = log.filter((r) => r.status !== "probe-ok" && r.status !== "probe-failed");
+    const finished = tasks.filter((r) => r.status === "done" || r.status === "partial");
+    const limited = tasks.filter((r) => r.status === "rate-limited");
+    return {
+        probes: probes.length,
+        probesOk: probes.filter((r) => r.status === "probe-ok").length,
+        runs: tasks.length,
+        done: tasks.filter((r) => r.status === "done").length,
+        partial: tasks.filter((r) => r.status === "partial").length,
+        failed: tasks.filter((r) => r.status === "failed" || r.status === "declined").length,
+        rateLimited: limited.length,
+        ...(limited.length ? { lastRateLimitAt: limited[limited.length - 1].at } : {}),
+        ...(finished.length ? { avgMinutes: Math.round(finished.reduce((n, r) => n + r.ms, 0) / finished.length / 6_000) / 10 } : {}),
+        ...(tasks.length ? { since: tasks[0].at } : {}),
+        recent: tasks.slice(-20).reverse(),
+    };
+}
 /** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */
 export const BUSY_RUN_TEXT = { he: "משימה רצה, אין להריץ עד שתסתיים", en: "A task is running; do not run another until it ends" };

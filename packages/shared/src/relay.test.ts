@@ -23,3 +23,13 @@ test("heavy tasks without sensitive content may go to the relay", async () => {
   assert.equal(inboxModelAllowed("ghostcli/claude-opus-5-5", false, true), true);
   assert.deepEqual(RELAY_PROVIDERS[0]!.pick(["ghostcli/claude-haiku-5-5", "ghostcli/claude-sonnet-5", "ghostcli/claude-opus-5-5", "nvidia-nim/x"]), ["ghostcli/claude-opus-5-5", "ghostcli/claude-sonnet-5"]);
 });
+
+test("check messages are counted apart from tasks", async () => {
+  const { relayReport } = await import("./task-inbox.js");
+  const r = relayReport([
+    { at: 1, id: "probe", model: "ghostcli/claude-opus-5-5", status: "probe-failed", ms: 90_000 },
+    { at: 2, id: "probe", model: "ghostcli/claude-opus-5-5", status: "probe-ok", ms: 2_000 },
+    { at: 3, id: "a", model: "ghostcli/claude-opus-5-5", status: "done", ms: 60_000 },
+  ]);
+  assert.deepEqual({ probes: r.probes, ok: r.probesOk, runs: r.runs, since: r.since, recent: r.recent.length }, { probes: 2, ok: 1, runs: 1, since: 3, recent: 1 });
+});

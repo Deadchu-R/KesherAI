@@ -569,14 +569,33 @@ export interface RelayRun {
   id: string;
   /** The model asked. */
   model: string;
-  /** How it ended: a task status, or `rate-limited` (the relay said "too many requests"). */
-  status: InboxStatus | "rate-limited";
+  /** How it ended: a task status, `rate-limited` (the relay said "too many requests"), or a small check message's result. */
+  status: InboxStatus | "rate-limited" | "probe-ok" | "probe-failed";
   /** How long it ran (ms). */
   ms: number;
 }
 
+/** The relay's last small "are you there" message. */
+export interface RelayProbe {
+  /** When (ms). */
+  at: number;
+  /** It answered with text. */
+  ok: boolean;
+  /** How long it took (ms). */
+  ms: number;
+  /** The model asked. */
+  model: string;
+  /** The start of the answer, or why it failed. */
+  note: string;
+}
+
 /** The relay's trial report (Roee, 25.11: is "unlimited" real?). */
 export interface RelayReport {
+  /** The last small check message, when one was sent. */
+  health?: RelayProbe;
+  /** Small check messages sent, and how many answered. */
+  probes: number;
+  probesOk: number;
   /** Attempts in the report (the last 200). */
   runs: number;
   done: number;
@@ -601,18 +620,22 @@ export interface RelayReport {
  * @returns The report.
  */
 export function relayReport(log: readonly RelayRun[]): RelayReport {
-  const finished = log.filter((r) => r.status === "done" || r.status === "partial");
-  const limited = log.filter((r) => r.status === "rate-limited");
+  const probes = log.filter((r) => r.status === "probe-ok" || r.status === "probe-failed");
+  const tasks = log.filter((r) => r.status !== "probe-ok" && r.status !== "probe-failed");
+  const finished = tasks.filter((r) => r.status === "done" || r.status === "partial");
+  const limited = tasks.filter((r) => r.status === "rate-limited");
   return {
-    runs: log.length,
-    done: log.filter((r) => r.status === "done").length,
-    partial: log.filter((r) => r.status === "partial").length,
-    failed: log.filter((r) => r.status === "failed" || r.status === "declined").length,
+    probes: probes.length,
+    probesOk: probes.filter((r) => r.status === "probe-ok").length,
+    runs: tasks.length,
+    done: tasks.filter((r) => r.status === "done").length,
+    partial: tasks.filter((r) => r.status === "partial").length,
+    failed: tasks.filter((r) => r.status === "failed" || r.status === "declined").length,
     rateLimited: limited.length,
     ...(limited.length ? { lastRateLimitAt: limited[limited.length - 1]!.at } : {}),
     ...(finished.length ? { avgMinutes: Math.round(finished.reduce((n, r) => n + r.ms, 0) / finished.length / 6_000) / 10 } : {}),
-    ...(log.length ? { since: log[0]!.at } : {}),
-    recent: log.slice(-20).reverse(),
+    ...(tasks.length ? { since: tasks[0]!.at } : {}),
+    recent: tasks.slice(-20).reverse(),
   };
 }
 

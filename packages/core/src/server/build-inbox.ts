@@ -112,6 +112,13 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
               list = { at: Date.now(), ids };
               return ids;
             },
+            // A small "reply with ok" (the relay's availability check): the answer's text, or a throw.
+            probe: async (model: string, signal: AbortSignal) => {
+              const provider = p.registry.get(f.id);
+              if (!provider?.chatWithTools) throw new Error("This connection cannot chat.");
+              const r = await provider.chatWithTools({ providerModelId: model.slice(f.id.length + 1), messages: [{ role: "user", content: "Reply with: ok" }], tools: [], maxTokens: 1024 }, signal);
+              return r.text;
+            },
             ...(f.id === "openrouter"
               ? {
                   usage: async () => {
