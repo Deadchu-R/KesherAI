@@ -463,7 +463,7 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 
 ## Roee 24.11 evening
 - ⬜ Local model unloads itself after a short idle time; small internal requests go first to the small CPU model (the watchdog one: loads per request, unloads after 60 s; titles and short private summaries), longer non-private ones (digests, reports) to a free cloud provider, and the big GPU model loads only when quality needs it (Roee: "rather it isn't loaded if it doesn't have to be").
-- ⬜ Task inbox uses the free-cloud keys too (fc-openrouter / fc-zhipu / fc-cloudflare), so keys are entered once.
+- ✅ Task inbox uses the free-cloud keys too (see below).
 - ✅ Inbox commit: files outside the allowed paths that the agent made as scratch output (e.g. base-out.txt, test-out.txt with test logs) are dropped from the commit instead of blocking the whole run (25.11: s-20261122-01 lost its work this way; the leak guard rightly found personal paths in them).
 - ⬜ Medium tasks that read for 80+ requests before the first edit: give the agent a "plan, then edit early" line in the prompt and check the task specs (s-20261122-*, r-58..62 Godot) are small enough.
 - ✅ GhostCLI relay (Roee 25.11, one-month trial): Connections preset (openai-compatible, ghostcli.cloud/v1), inbox sends medium/large tasks that pass safeForRelay (no high risk, no security paths or words, prompt scan clean) to its Opus/Sonnet first, outside OpenCode's daily cap; marked "may train" so the leak guard and warnings apply; setting "Heavy tasks to GhostCLI" in Settings › Task inbox.
@@ -472,3 +472,4 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 - ⬜ GhostCLI trial report card in Settings › Task inbox (design board in the cloud/tasks doc first) and on the phone.
 - ⬜ Parallel relay runs (2–3 at once) for the stress test, if Roee wants them.
 - ✅ GhostCLI availability check (Roee 25.11: "check availability, and when they're available, load them up"): a small "reply with ok" every 15 minutes; tasks go to it only while the last one answered; when it answers again the queue starts at once; the phone is told when it starts or stops answering. A relay run that ends empty with no change moves on to the next model.
+- ✅ Task inbox uses the free cloud helpers' keys (fc-zhipu / fc-openrouter / fc-cloudflare) for small tasks, with the same free-only rules — no second key in Connections.

@@ -63,3 +63,13 @@ test("safeForTrainingProvider: risk, size, research, paths and words each keep a
   assert.equal(safeForTrainingProvider({ ...safe, title: "תיקון הרשאות" }).ok, false);
   assert.equal(safeForTrainingProvider({ ...safe, goal: "Fix the keyboard focus ring" }).ok, true);
 });
+
+test("the free cloud helpers' keys serve the inbox too, with the same free-only rules", () => {
+  assert.equal(isFreeOpencodeModel("fc-openrouter/openrouter/free"), true);
+  assert.equal(isFreeOpencodeModel("fc-openrouter/qwen/qwen3-coder:free"), true);
+  assert.equal(isFreeOpencodeModel("fc-openrouter/anthropic/claude-opus-5-5"), false);
+  assert.equal(isFreeOpencodeModel("fc-zhipu/glm-4.5-flash"), true);
+  assert.equal(isFreeOpencodeModel("fc-zhipu/glm-5.3"), false);
+  assert.equal(isFreeOpencodeModel("fc-cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct"), true);
+  assert.equal(inboxModelAllowed("fc-openrouter/anthropic/claude-opus-5-5", true), false);
+});

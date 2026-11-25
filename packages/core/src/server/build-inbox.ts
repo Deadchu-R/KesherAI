@@ -99,7 +99,8 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
       [...FREE_PROVIDERS, ...RELAY_PROVIDERS].filter((f) => f.id !== OPENCODE_PROVIDER).map((f) => {
         let list: { at: number; ids: string[] } | undefined;
         let use: { at: number; v: Awaited<ReturnType<typeof fetchFreeUsage>> } | undefined;
-        const key = () => p.config.providers.find((x) => x.id === f.id)?.apiKey;
+        // Connections keep their key in the config; the free cloud helpers' (`fc-…`) live with their own registry entry.
+        const key = () => p.config.providers.find((x) => x.id === f.id)?.apiKey ?? p.registry.list().find((r) => r.config.id === f.id)?.config.apiKey;
         return [
           f.id,
           {

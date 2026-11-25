@@ -158,6 +158,20 @@ export const FREE_PROVIDERS: readonly FreeProvider[] = [
   { id: "nvidia-nim", name: "NVIDIA", trainsOnData: freeTierTrains("nvidia-nim"), allowed: (id) => /^nvidia-nim\/[\w./:-]+$/.test(id), pick: (l) => coderFirst(l.filter((m) => m.startsWith("nvidia-nim/")), 2) },
   // OpenCode's "Contributor" free models answer only with the data-sharing opt-in.
   { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: freeTierTrains("opencode-go"), allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
+  // The same services through the keys entered once in Settings › Accounts › Free cloud helpers (Roee, 24.11: no
+  // second key in Connections). Same rules as their Connections twins.
+  { id: "fc-zhipu", name: "Z.ai (free cloud)", trainsOnData: freeTierTrains("fc-zhipu"), allowed: (id) => /^fc-zhipu\/glm-[\w.-]*flash$/i.test(id), pick: (l) => l.filter((m) => /^fc-zhipu\/glm-[\w.-]*flash$/i.test(m)).sort().reverse().slice(0, 1) },
+  {
+    id: "fc-openrouter",
+    name: "OpenRouter (free cloud)",
+    trainsOnData: freeTierTrains("fc-openrouter"),
+    allowed: (id) => id === "fc-openrouter/openrouter/free" || /^fc-openrouter\/[\w.-]+\/[\w.-]+:free$/.test(id),
+    pick: (l) => {
+      const free = l.filter((m) => m === "fc-openrouter/openrouter/free" || /^fc-openrouter\/[\w.-]+\/[\w.-]+:free$/.test(m));
+      return [...free.filter((m) => m === "fc-openrouter/openrouter/free"), ...coderFirst(free.filter((m) => m !== "fc-openrouter/openrouter/free"), 2)];
+    },
+  },
+  { id: "fc-cloudflare", name: "Cloudflare (free cloud)", trainsOnData: freeTierTrains("fc-cloudflare"), allowed: (id) => /^fc-cloudflare\/@cf\/[\w./:-]+$/.test(id), pick: (l) => l.filter((m) => /^fc-cloudflare\/@cf\//.test(m) && /coder/i.test(m)).slice(0, 1) },
 ];
 
 /** A flat-rate relay the user pays for (GhostCLI): heavy tasks without sensitive content, not counted in OpenCode Go's day. */
