@@ -310,7 +310,7 @@ export class OpenAICompatibleProvider implements Provider {
     const toolCalls: ToolCall[] = [...calls.entries()]
       .sort(([a], [b]) => a - b)
       .filter(([, c]) => c.name)
-      .map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, arguments: parseToolArguments(c.args) }));
+      .map(([, c]) => ({ id: c.id || newToolCallId(), name: c.name, arguments: parseToolArguments(c.args) }));
     // A local model that wrote its call as text (Qwen3-Coder XML, Hermes JSON): run it rather than ending the turn.
     if (!toolCalls.length && request.tools?.length) {
       const found = textToolCalls(text);
@@ -378,6 +378,18 @@ export function toOpenAIMessages(messages: AgentMessage[]): Array<Record<string,
     }
     return [{ role: m.role, content: m.content }];
   });
+}
+
+/**
+ * An id for a tool call the server sent without one. Unique in the conversation (`call_0` came back every turn and
+ * clashed) and 9 letters and digits, the strictest form servers ask for (Mistral-style backends refused `call_0` with
+ * "messages[2].tool_call_id: invalid value", 25.11).
+ *
+ * @returns The id.
+ */
+export function newToolCallId(): string {
+  const abc = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  return Array.from(crypto.getRandomValues(new Uint8Array(9)), (b) => abc[b % abc.length]).join("");
 }
 
 /** The slot each agent kind keeps on llama.cpp's server, so one kind's prompt never pushes out another's cache. */

@@ -169,3 +169,10 @@ test("invalid tool JSON is kept, not thrown", () => {
   assert.deepEqual(parseToolArguments('{"a":1}'), { a: 1 });
   assert.deepEqual(parseToolArguments("{oops"), { _invalidJson: "{oops" });
 });
+
+test("a tool call without an id gets a unique 9-character one", async () => {
+  const { newToolCallId } = await import("./openai-compatible.js");
+  const a = newToolCallId();
+  assert.match(a, /^[a-zA-Z0-9]{9}$/);
+  assert.notEqual(a, newToolCallId());
+});
