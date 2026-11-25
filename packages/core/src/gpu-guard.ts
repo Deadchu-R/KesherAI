@@ -360,8 +360,8 @@ export class GpuGuard {
     const tick = async () => {
       await this.check().catch(() => undefined);
       const busy = this.running > 0 || this.waiting > 0 || this.cooling || !!this.sysHold;
-      this.timer = setTimeout(() => void tick(), busy ? 3000 : 15_000);
-      this.timer.unref?.();
+      this.timer = setTimeout(() => void tick(), busy ? 3000 : 2_000);
+              this.timer.unref?.();
     };
     void tick();
   }
