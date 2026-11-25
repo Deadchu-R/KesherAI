@@ -186,14 +186,6 @@ function platformOf(ctx: LeakContext): string | undefined {
 }
 
 /**
- * Finds the sensitive spans in a text. Hits never overlap (the first kind found wins: private keys, keys, settings,
- * then the rest). Only offsets are returned, so a finding can be logged without the secret.
- *
- * @param text - Any text: a message, a file an agent read, a tool's output.
- * @param ctx - This computer's user name and home folder, and the user's "never send" list.
- * @returns The hits, sorted by where they start.
- */
-/**
  * Whether a key-shaped string is plainly a made-up one from tests or docs (`sk-test-abc123…`, `ghp_xxxxxxxx…`,
  * `AKIAEXAMPLE…`): a fake/test/example word, a long run of one character, or a counting pattern. Real keys are random,
  * so this never matches one. Used only where a hit would stop an unattended run, never to send a key (25.11: fake keys
@@ -209,6 +201,14 @@ export function looksFakeKey(s: string): boolean {
   return body.length >= 16 && entropy(body) < 3;
 }
 
+/**
+ * Finds the sensitive spans in a text. Hits never overlap (the first kind found wins: private keys, keys, settings,
+ * then the rest). Only offsets are returned, so a finding can be logged without the secret.
+ *
+ * @param text - Any text: a message, a file an agent read, a tool's output.
+ * @param ctx - This computer's user name and home folder, and the user's "never send" list.
+ * @returns The hits, sorted by where they start.
+ */
 export function findLeaks(text: string, ctx: LeakContext = {}): LeakHit[] {
   if (!text) return [];
   const hits: LeakHit[] = [];
