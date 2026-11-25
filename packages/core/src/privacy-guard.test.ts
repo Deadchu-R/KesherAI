@@ -58,3 +58,14 @@ test("the chat's check says what was found and gives the hidden text", () => {
   assert.deepEqual(checkText("ollama/llama3", key).found, []);
   setPrivacyGuard(undefined);
 });
+
+test("an unattended run is not stopped by the user folder alone in what it read (it is hidden)", () => {
+  set("ask");
+  const read: AgentMessage[] = [
+    { role: "user", content: "fix the test" },
+    { role: "tool", toolCallId: "a1", toolName: "bash", content: "at /home/dana/app/src/x.ts:3\nat /home/dana/app/src/y.ts:9" },
+  ];
+  const r = guardMessages("opencode-go/big-pickle-contributor-free", read, { unattended: true });
+  assert.equal(r.hidden, 2);
+  assert.ok(!JSON.stringify(r.messages).includes("/home/dana"));
+});

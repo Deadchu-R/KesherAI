@@ -106,8 +106,12 @@ export function guardMessages(modelId: string, messages: readonly AgentMessage[]
   if (mode === "block-training-providers") {
     throw new Error(`${PRIVACY_ERROR} blocked. This request holds ${describe(all)}, and ${service} may train on what it is sent, so nothing was sent. Choose a local model or one that does not train, or change Settings › Privacy.`);
   }
-  if (opts.unattended && inTools.length) {
-    throw new Error(`${PRIVACY_ERROR} skip. A file this run read holds ${describe(inTools)}; it is not sent to ${service}, which may train on it. The task goes to a model that does not train.`);
+  // The user folder and name are hidden and need not stop the run: they come from tool output (test logs, absolute
+  // paths), not from the code, so a placeholder never lands in a file (25.11: 72 folder paths moved a task off three
+  // free models). Keys, passwords and the rest still stop it.
+  const stopping = inTools.filter((h) => h.kind !== "path" && h.kind !== "user");
+  if (opts.unattended && stopping.length) {
+    throw new Error(`${PRIVACY_ERROR} skip. A file this run read holds ${describe(stopping)}; it is not sent to ${service}, which may train on it. The task goes to a model that does not train.`);
   }
   const first = out.findIndex((m) => m.role === "system");
   if (first >= 0) out[first] = { ...out[first]!, content: `${out[first]!.content}\n\n${HIDDEN_NOTE}` };
