@@ -110,7 +110,8 @@ test("install state machine, Unity: reading, installing, done; never twice at on
   });
   assert.equal(c.current(), undefined);
   const first = c.install(copyOf("unity"), project);
-  await new Promise((r) => setTimeout(r, 30));
+  // The slow Windows runner may still be reading after 30 ms: wait for the step, up to 3 s.
+  for (let i = 0; i < 100 && c.current()?.state !== "installing"; i++) await new Promise((r) => setTimeout(r, 30));
   assert.equal(c.current()?.state, "installing");
   await assert.rejects(c.install(copyOf("unity"), project), /being installed/);
   release();
