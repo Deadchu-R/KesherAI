@@ -784,6 +784,9 @@ export class ChatReports {
    * uploading the chat again.
    */
   async retry(id: string, ask: Ask): Promise<StoredReport> {
+    // A report that just failed saves its error a moment before its run ends: give that moment (up to 2 s) before
+    // answering "still being written" (25.11, seen on the slow Windows runner).
+    for (let i = 0; i < 100 && this.running.has(id); i++) await new Promise((ok) => setTimeout(ok, 20));
     if (this.running.has(id)) throw Object.assign(new Error("The report is still being written."), { statusCode: 409 });
     const r = await this.get(id);
     if (r.status !== "error") throw Object.assign(new Error("Only a report that failed can be tried again."), { statusCode: 400 });
