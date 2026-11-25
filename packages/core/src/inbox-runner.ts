@@ -1140,6 +1140,7 @@ export class TaskInbox {
       const stopped = new Promise<never>((_, rej) => run.ctl.signal.addEventListener("abort", () => rej(new Error("stopped")), { once: true }));
       for (;;) {
         let attemptSteps = 0;
+        guard.watch.newAttempt();
         try {
           // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
           // services only when allowed): refused here, before anything is sent.
@@ -1471,7 +1472,7 @@ export class TaskInbox {
    * @returns The guard and `end`, which stops its timer.
    */
   private startGuard(t: InboxTaskView, worktree: string, o: { stop: (r: StopReason) => void; inject?: () => ((hint: string) => Promise<void>) | undefined; canTrain: boolean; signal: AbortSignal }): { guard: RunGuard; end: () => void } {
-    const lim = limitsFor(t.maxMinutes, this.s);
+    const lim = limitsFor(t.maxMinutes, { ...this.s, maxRequests: requestBudget({ size: taskSize(t) }, this.s.maxRequests) });
     const probe = async () => {
       const status = (await this.d.git(worktree, ["status", "--porcelain"])).out;
       const diff = (await this.d.git(worktree, ["diff", "HEAD"])).out;
@@ -1583,7 +1584,7 @@ export class TaskInbox {
 
   /** The note of a guard stop, with this task's numbers. */
   private stopText(t: InboxTaskView, r: StopReason): string {
-    const l = limitsFor(t.maxMinutes, this.s);
+    const l = limitsFor(t.maxMinutes, { ...this.s, maxRequests: requestBudget({ size: taskSize(t) }, this.s.maxRequests) });
     return stopNote(r, { stallMinutes: l.stallMinutes, maxRequests: l.maxRequests, ceilingMinutes: l.ceilingMinutes });
   }
 
@@ -2960,6 +2961,18 @@ export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
 
 /** An OpenCode Go task's end, in Hebrew, for the notification. */
 const OPENCODE_END_HE: Partial<Record<InboxStatus, string>> = { done: "סיים משימה", partial: "סיים חלקית", failed: "נכשל", "deferred-quota": "הגיע למגבלה" };
+
+/**
+ * A task's request budget: the setting for a small task, half again for a medium one and twice for a large one (found
+ * 25.11: medium tasks spent all 80 requests reading before their first edit, so nothing was saved).
+ *
+ * @param t - The task (its size).
+ * @param base - The setting (default 80).
+ * @returns The budget.
+ */
+export function requestBudget(t: { size?: string }, base = 80): number {
+  return Math.round(base * (t.size === "L" ? 2 : t.size === "M" ? 1.5 : 1));
+}
 
 /** The icon of a task's end notice. */
 const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");

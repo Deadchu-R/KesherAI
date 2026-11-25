@@ -874,3 +874,8 @@ test("an end notice that did not finish says why", async () => {
   assert.equal(endBody({ title: "T", note: "Today's limit of 10 OpenCode Go tasks is reached." }, "deferred-quota"), "T\nToday's limit of 10 OpenCode Go tasks is reached.");
   assert.equal(endBody({ title: "T", pushed: true, branch: "b", note: "x" }, "done"), "T · b");
 });
+
+test("the request budget grows with the task's size", async () => {
+  const { requestBudget } = await import("./inbox-runner.js");
+  assert.deepEqual([requestBudget({ size: "S" }), requestBudget({ size: "M" }), requestBudget({ size: "L" }, 100)], [80, 120, 200]);
+});

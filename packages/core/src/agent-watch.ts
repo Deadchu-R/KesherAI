@@ -130,6 +130,17 @@ export class RunWatch {
   }
 
   /**
+   * A new attempt on another model: its own request budget, repeat count and stall window (found 25.11: free models that
+   * failed first spent the budget, and the paid model that took over was stopped after 6 steps).
+   */
+  newAttempt(): void {
+    this.requests = 0;
+    this.streak = 0;
+    this.prevKey = undefined;
+    this.lastProgress = this.now();
+  }
+
+  /**
    * Records one step. A step that is not a repeat of the one before counts as progress.
    *
    * @returns `budget` or `repeat` when this step reached that limit.

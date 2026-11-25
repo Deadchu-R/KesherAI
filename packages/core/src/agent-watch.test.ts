@@ -191,3 +191,14 @@ test("parseWatchVerdict and parseReview read JSON inside text; rubbish is undefi
   assert.deepEqual(parseReview('Sure: {"verdict":"reject","reasons":["touches unrelated files","no test"]}'), { verdict: "reject", reasons: ["touches unrelated files", "no test"] });
   assert.equal(parseReview('{"verdict":"great"}'), undefined);
 });
+
+test("a new attempt gets its own request budget", async () => {
+  const { RunWatch } = await import("./agent-watch.js");
+  const w = new RunWatch({ stallMs: 60_000, maxRequests: 3, ceilingMs: 600_000 }, () => 0);
+  w.step({ tool: "read", args: 1 });
+  w.step({ tool: "read", args: 2 });
+  w.newAttempt();
+  assert.equal(w.step({ tool: "read", args: 3 }), undefined);
+  assert.equal(w.step({ tool: "read", args: 4 }), undefined);
+  assert.equal(w.step({ tool: "read", args: 5 }), "budget");
+});
