@@ -93,15 +93,15 @@ export const FREE_PROVIDERS = [
     },
     { id: "fc-cloudflare", name: "Cloudflare (free cloud)", trainsOnData: freeTierTrains("fc-cloudflare"), allowed: (id) => /^fc-cloudflare\/@cf\/[\w./:-]+$/.test(id), pick: (l) => l.filter((m) => /^fc-cloudflare\/@cf\//.test(m) && /coder/i.test(m)).slice(0, 1) },
 ];
-/** Opus first, then Sonnet, then the rest; Haiku-size models are skipped (heavy tasks only). */
-const relayRank = (id) => (/opus/i.test(id) ? 0 : /sonnet/i.test(id) ? 1 : /fable/i.test(id) ? 2 : 3);
+/** Opus first, then Sonnet, then GLM 5.x and the rest; Haiku-size models are skipped (heavy tasks only). */
+const relayRank = (id) => (/opus/i.test(id) ? 0 : /sonnet/i.test(id) ? 1 : /fable/i.test(id) ? 2 : /glm-5/i.test(id) ? 3 : 4);
 /** The relays the task inbox can use. */
 export const RELAY_PROVIDERS = [
     {
         id: "ghostcli",
         name: "GhostCLI",
         allowed: (id) => /^ghostcli\/[\w./:-]+$/.test(id),
-        pick: (l) => l.filter((m) => m.startsWith("ghostcli/") && !/haiku|mini|nano|flash/i.test(m)).sort((a, b) => relayRank(a) - relayRank(b)).slice(0, 2),
+        pick: (l) => l.filter((m) => m.startsWith("ghostcli/") && !/haiku|mini|nano|flash/i.test(m)).sort((a, b) => relayRank(a) - relayRank(b)).slice(0, 3),
     },
 ];
 /** The relay a model id belongs to. */
