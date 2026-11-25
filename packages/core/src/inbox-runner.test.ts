@@ -885,3 +885,11 @@ test("scratch output files are told apart from work", async () => {
   assert.deepEqual(["base-out.txt", "test-out.txt", "run.log", "apps/x/output.txt", "notes.tmp"].map(isScratchFile), [true, true, true, true, true]);
   assert.deepEqual(["README.txt", "LICENSE.txt", "docs/plan.txt", "apps/web/src/a.ts", "requirements.txt"].map(isScratchFile), [false, false, false, false, false]);
 });
+
+test("a failure goes back to the queue unless a safety rule stopped it", async () => {
+  const { retryable } = await import("./inbox-runner.js");
+  assert.equal(retryable("Stopped at the request budget (120)."), true);
+  assert.equal(retryable("POST https://x/v1 → 502 Bad Gateway"), true);
+  assert.equal(retryable("Privacy guard: skip. A file this run read holds 1 key"), false);
+  assert.equal(retryable("Not committed or pushed: outside the allowed paths: a.txt"), false);
+});

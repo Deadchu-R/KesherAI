@@ -459,6 +459,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   modelFallback?: string;
   plan?: Array<{ content: string; status: string }>;
   steps?: number;
+  /** Times a failure sent it back to the queue by itself (at most 2). */
+  autoRetries?: number;
   /** The last steps in short (task-steps.ts), newest last, while it runs and after: the card's "what it does". */
   stepLog?: import("./task-steps.js").StepNote[];
   decisions?: InboxDecision[];

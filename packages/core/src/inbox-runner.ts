@@ -1034,6 +1034,7 @@ export class TaskInbox {
     });
     await this.save();
     this.d.notify(`${endIcon(status)} ${t.id} ${endWord(t, status)}`, endBody(t, status), { path: `#/task-inbox/${t.id}` });
+    await this.retryLater(t);
   }
 
   /**
@@ -3009,6 +3010,26 @@ export class TaskInbox {
     if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
     else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
     else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
+    await this.retryLater(t);
+  }
+
+  /**
+   * A failed task goes back to the queue (Roee, 25.11: "after a failure it should be pending"), at most
+   * {@link AUTO_RETRIES} times; a run stopped by a safety rule (privacy, paths, a model it may not use) stays failed.
+   *
+   * @param t - The task that just ended.
+   */
+  private async retryLater(t: InboxTaskView): Promise<void> {
+    if (t.status !== "failed" || (t.autoRetries ?? 0) >= AUTO_RETRIES || !retryable(t.note)) return;
+    t.autoRetries = (t.autoRetries ?? 0) + 1;
+    t.note = `Failed: ${(t.note ?? "").slice(0, 200)} — back in the queue (try ${t.autoRetries + 1} of ${AUTO_RETRIES + 1}).`;
+    t.status = t.runBy === "local" || t.runBy === "opus" ? "queued" : "waiting";
+    delete t.endedAt;
+    t.resultWritten = false;
+    await this.save();
+    if (t.runBy === "opencode") void this.pumpOpencode().catch(() => undefined);
+    if (t.runBy === "gemini") void this.pumpGemini().catch(() => undefined);
+    if (t.runBy === "antigravity") this.makeAsk(t);
   }
 
   /**
@@ -3114,6 +3135,18 @@ const RELAY_PROBE_MS = 15 * 60_000;
  */
 const endWord = (t: { note?: string }, status: InboxStatus): string =>
   status === "deferred-quota" && !/limit|quota|429|rate|too many/i.test(t.note ?? "") ? "נדחתה" : (OPENCODE_END_HE[status] ?? status);
+
+/** How many times a failed task goes back to the queue by itself. */
+const AUTO_RETRIES = 2;
+
+/**
+ * Whether a failure may be tried again by itself: not when a safety rule stopped it.
+ *
+ * @param note - Why it failed.
+ */
+export function retryable(note?: string): boolean {
+  return !/privacy guard|may not use|outside the allowed paths|personal path|user name|declined|security|forbidden/i.test(note ?? "");
+}
 
 /** The icon of a task's end notice. */
 const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");
