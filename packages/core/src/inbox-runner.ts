@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, relayReport, type RelayRun, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
@@ -2834,6 +2834,15 @@ export class TaskInbox {
       await git(["add", "-A"]);
       checks.push({ name: "report redaction", ok: true, note: `personal paths and the user name replaced with ~ and <user> in ${redacted.slice(0, 5).join(", ")}` });
     }
+    // Scratch output the agent made (a test log piped into base-out.txt): dropped, not a reason to lose the whole run
+    // (25.11: s-20261122-01 was blocked by two such files, which also held personal paths from the logs).
+    const added = (await git(["diff", "--cached", "--name-only", "--diff-filter=A", base])).out.split(/\r?\n/).filter(Boolean);
+    const scratch = added.filter((f) => isScratchFile(f) && checkPaths([f], t).outside.length > 0);
+    if (scratch.length) {
+      await git(["rm", "--cached", "-q", "-f", "--", ...scratch]);
+      await Promise.all(scratch.map((f) => rm(join(worktree, ...f.split("/")), { force: true }).catch(() => undefined)));
+      checks.push({ name: "scratch files", ok: true, note: `left out of the commit: ${scratch.slice(0, 5).join(", ")}` });
+    }
     const numstat = await git(["diff", "--cached", "--numstat", base]);
     const files = numstat.out.split(/\r?\n/).filter((l) => l.trim()).map((l) => {
       const [a, r, ...p] = l.split("\t");
@@ -3008,6 +3017,18 @@ const OPENCODE_END_HE: Partial<Record<InboxStatus, string>> = { done: "סיים 
  */
 export function requestBudget(t: { size?: string }, base = 80): number {
   return Math.round(base * (t.size === "L" ? 2 : t.size === "M" ? 1.5 : 1));
+}
+
+/**
+ * Whether a new file is an agent's scratch output rather than work: a log or text dump at the top of the repo, or a file
+ * named like one (`*-out.txt`, `*.log`, `*.tmp`, `output.txt`).
+ *
+ * @param path - The file, relative to the repo.
+ */
+export function isScratchFile(path: string): boolean {
+  const name = path.split("/").pop() ?? "";
+  if (/\.(log|tmp|out)$/i.test(name) || /([-_.]out|output|stdout|stderr)\.txt$/i.test(name)) return true;
+  return !path.includes("/") && /\.txt$/i.test(name) && !/^(license|notice|readme|changelog|requirements|robots)/i.test(name);
 }
 
 /** The icon of a task's end notice. */

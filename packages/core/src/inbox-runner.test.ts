@@ -879,3 +879,9 @@ test("the request budget grows with the task's size", async () => {
   const { requestBudget } = await import("./inbox-runner.js");
   assert.deepEqual([requestBudget({ size: "S" }), requestBudget({ size: "M" }), requestBudget({ size: "L" }, 100)], [80, 120, 200]);
 });
+
+test("scratch output files are told apart from work", async () => {
+  const { isScratchFile } = await import("./inbox-runner.js");
+  assert.deepEqual(["base-out.txt", "test-out.txt", "run.log", "apps/x/output.txt", "notes.tmp"].map(isScratchFile), [true, true, true, true, true]);
+  assert.deepEqual(["README.txt", "LICENSE.txt", "docs/plan.txt", "apps/web/src/a.ts", "requirements.txt"].map(isScratchFile), [false, false, false, false, false]);
+});
