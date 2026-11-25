@@ -1008,7 +1008,7 @@ export class TaskInbox {
       this.saved.lastError = `Could not write the result: ${(e as Error).message.slice(0, 160)}`;
     });
     await this.save();
-    this.d.notify(`${status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : "✕"} ${t.id} ${status}`, t.title);
+    this.d.notify(`${endIcon(status)} ${t.id} ${OPENCODE_END_HE[status] ?? status}`, endBody(t, status), { path: `#/task-inbox/${t.id}` });
   }
 
   /**
@@ -1081,7 +1081,9 @@ export class TaskInbox {
     let model = opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now()) ?? opencodeFreeModel(order, this.opencodeCooldowns(), this.now(), wanted) ?? wanted;
     if (!paidLeft && !opencodeFreeModel(freeFirst, this.opencodeCooldowns(), this.now())) {
       // The daily cap is reached and no free model can take it: the task waits for tomorrow (nothing was started).
-      Object.assign(t, { status: "deferred-quota" as InboxStatus, note: `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached, and no free model is open.` });
+      const back = Math.min(...freeFirst.map((m) => this.opencodeCooldowns()[m] ?? Infinity));
+      const when = Number.isFinite(back) ? ` A free model opens again at ${new Date(back).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.` : " It runs again after midnight.";
+      Object.assign(t, { status: "deferred-quota" as InboxStatus, note: `Today's limit of ${this.oc.dailyCap} OpenCode Go tasks is reached, and no free model is open.${when}` });
       await this.save();
       return;
     }
@@ -2884,11 +2886,12 @@ export class TaskInbox {
       this.saved.lastError = `Could not write the result: ${(e as Error).message.slice(0, 160)}`;
     });
     await this.save();
-    const icon = status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕";
+    const icon = endIcon(status);
+    const body = endBody(t, status);
     // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
-    if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
-    else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`, { path: `#/task-inbox/${t.id}` });
-    else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${status}`, `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`);
+    if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
   }
 
   /**
@@ -2957,6 +2960,23 @@ export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
 
 /** An OpenCode Go task's end, in Hebrew, for the notification. */
 const OPENCODE_END_HE: Partial<Record<InboxStatus, string>> = { done: "סיים משימה", partial: "סיים חלקית", failed: "נכשל", "deferred-quota": "הגיע למגבלה" };
+
+/** The icon of a task's end notice. */
+const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");
+
+/**
+ * The body of a task's end notice: the task, its branch when pushed, and, when it did not finish, why (the note the
+ * task card shows), so the phone never says less than the card (found on the phone: "reached its limit" with no reason).
+ *
+ * @param t - The task.
+ * @param status - How it ended.
+ * @returns The text.
+ */
+export function endBody(t: { title: string; pushed?: boolean; branch?: string; note?: string }, status: InboxStatus): string {
+  const head = `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`;
+  const why = status !== "done" && t.note ? t.note.replace(/\s+/g, " ").trim() : "";
+  return why ? `${head}\n${why.length > 160 ? `${why.slice(0, 159)}…` : why}` : head;
+}
 
 /**
  * The note an OpenCode Go task shows in the queue: the model it runs on, and why it went there.

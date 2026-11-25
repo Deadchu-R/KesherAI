@@ -868,3 +868,9 @@ test("inbox models: the default for its kind (Opus for code with a check), Opus 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("an end notice that did not finish says why", async () => {
+  const { endBody } = await import("./inbox-runner.js");
+  assert.equal(endBody({ title: "T", note: "Today's limit of 10 OpenCode Go tasks is reached." }, "deferred-quota"), "T\nToday's limit of 10 OpenCode Go tasks is reached.");
+  assert.equal(endBody({ title: "T", pushed: true, branch: "b", note: "x" }, "done"), "T · b");
+});
