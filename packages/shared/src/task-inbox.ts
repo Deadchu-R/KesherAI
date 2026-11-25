@@ -560,7 +560,6 @@ export interface InboxBusy {
  */
 export const INBOX_GIT_MISSING = "Git for Windows is not installed / not found: install it from git-scm.com (or `winget install Git.Git`) and restart KesherAI.";
 
-/** `GET /api/task-inbox`: the queue and its state. */
 /** One relay attempt (GhostCLI), for its trial report. */
 export interface RelayRun {
   /** When it ended (ms). */
@@ -639,6 +638,7 @@ export function relayReport(log: readonly RelayRun[]): RelayReport {
   };
 }
 
+/** `GET /api/task-inbox`: the queue and its state. */
 export interface InboxState {
   settings: InboxSettings;
   today: { date: string; used: number };
