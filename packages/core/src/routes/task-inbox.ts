@@ -57,9 +57,9 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
     }
   });
 
-  app.post<{ Body: { title?: string; goal?: string; executor?: string; risk?: string; check?: string; acceptance?: string } }>("/api/task-inbox/tasks", async (req, reply) => {
+  app.post<{ Body: { title?: string; goal?: string; executor?: string; risk?: string; check?: string; acceptance?: string; kind?: string } }>("/api/task-inbox/tasks", async (req, reply) => {
     const b = req.body ?? {};
-    return inbox.add({ title: String(b.title ?? ""), goal: String(b.goal ?? ""), ...(b.executor ? { executor: b.executor } : {}), ...(b.risk ? { risk: b.risk } : {}), ...(b.check ? { check: b.check } : {}), ...(b.acceptance ? { acceptance: b.acceptance } : {}) }).catch((e) => failed(reply, e));
+    return inbox.add({ title: String(b.title ?? ""), goal: String(b.goal ?? ""), ...(b.executor ? { executor: b.executor } : {}), ...(b.risk ? { risk: b.risk } : {}), ...(b.check ? { check: b.check } : {}), ...(b.acceptance ? { acceptance: b.acceptance } : {}), ...(b.kind ? { kind: b.kind } : {}) }).catch((e) => failed(reply, e));
   });
 
   /** Run on the PC itself. On the phone, Run is the answer to the PC's ask (`/run-answer`). */

@@ -885,7 +885,7 @@ export class TaskInbox {
    * @param input - Title, goal and the rest; paths and limits default to Settings. `extraPaths`: more folders the task
    *   may change, only `integrations/<engine>/<folder>/**` (an engine plugin's AI-converted copy, engine-support.ts). `maxFiles`: 1–60 (default 15).
    */
-  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number; size?: string }): Promise<InboxTaskView> {
+  async add(input: { title: string; goal: string; executor?: string; risk?: string; check?: string; acceptance?: string; extraPaths?: string[]; maxFiles?: number; size?: string; kind?: string }): Promise<InboxTaskView> {
     await this.load();
     const s = this.s;
     const title = String(input.title ?? "").trim().slice(0, 200);
@@ -894,10 +894,13 @@ export class TaskInbox {
     const day = new Date(this.now()).toISOString().slice(0, 10).replace(/-/g, "");
     let n = 1;
     while (this.saved.tasks.some((t) => t.id === `r-${day}-${String(n).padStart(2, "0")}`)) n++;
-    const executor = ["auto", "antigravity", "local", "opus", "opencode", "claude"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
+    // A research task ("research only", no code) is marked so: free Gemini and Antigravity take it (25.11: four research
+    // tasks went to the Claude queue as code tasks).
+    const research = input.kind === "research" || (input.kind === undefined && /^research\b|^מחקר/i.test(input.title.trim()) && /research only|no code|רק מחקר/i.test(input.goal));
+    const executor = ["auto", "antigravity", "local", "opus", "opencode", "claude", "gemini"].includes(String(input.executor)) ? (input.executor as InboxTaskSpec["executor"]) : "auto";
     const size = ["S", "M", "L"].includes(String(input.size)) ? (input.size as InboxTaskSpec["size"]) : undefined;
     const risk = ["low", "medium", "high"].includes(String(input.risk)) ? (input.risk as InboxTaskSpec["risk"]) : "medium";
-    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
+    const spec: InboxTaskSpec = { id: `r-${day}-${String(n).padStart(2, "0")}`, title, executor, risk, from: "roee", base: "origin/main", allowedPaths: [...s.allowedPaths, ...(input.extraPaths ?? []).filter((x) => /^integrations\/[a-z]+\/[\w.-]+\/\*\*$/.test(x) && !x.includes("..")).slice(0, 2)], forbiddenPaths: [...s.forbiddenPaths], check: String(input.check ?? "").trim().slice(0, 300), maxMinutes: s.maxMinutes, maxFiles: Math.min(60, Math.max(1, Math.round(Number(input.maxFiles) || 15))), goal, ...(size ? { size } : {}), ...(research ? { kind: "research" as const } : {}), ...(input.acceptance?.trim() ? { acceptance: input.acceptance.trim().slice(0, 3000) } : {}) };
     // The same checks as a file from git (the text is data either way).
     const parsed = parseTaskFile(taskFileText(spec), spec.id, s);
     if ("error" in parsed) throw fail(parsed.error, 400);
