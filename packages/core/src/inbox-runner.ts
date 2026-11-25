@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -334,6 +334,22 @@ export class TaskInbox {
       await this.syncFreeUsage(f.id, conn);
     }
     return freeModelsFor(listed, trainOk).filter((m) => this.freeOpen(freeProviderOf(m)!.id));
+  }
+
+  /**
+   * The relays' models to try (GhostCLI): what each relay connection with a key lists now, best first.
+   *
+   * @param c - The coder (its connections).
+   */
+  private async relayModels(c: NonNullable<TaskInboxDeps["coder"]>): Promise<string[]> {
+    const out: string[] = [];
+    for (const r of RELAY_PROVIDERS) {
+      const conn = c.free?.[r.id];
+      if (!conn?.ready()) continue;
+      const listed = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((res) => setTimeout(() => res([]), 5000).unref?.())]);
+      out.push(...r.pick(listed));
+    }
+    return out;
   }
 
   /** Takes a service's own count of today's requests (OpenRouter: `free_model_daily_requests`) when it answers; else the local count stays. */
@@ -1071,8 +1087,12 @@ export class TaskInbox {
     const safe = safeForTrainingProvider({ ...t, size: taskSize(t) });
     const trainOk = this.oc.freeTrainingOk !== false && safe.ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
     const services = taskSize(t) === "S" ? await this.freeServiceModels(c, listed, trainOk) : [];
+    // A flat-rate relay (GhostCLI) for tasks without sensitive content: first for medium and large tasks (what it is paid
+    // for), after the free services for small ones. Its prompt is scanned like a training service's.
+    const relayOk = this.oc.useRelay !== false && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
+    const relays = relayOk ? await this.relayModels(c) : [];
     // Free services first, Beam Free last of the free ones: on 23.11 it ended 3 of 3 real tasks without changing a file.
-    const freeFirst = [...services, ...opencodeFreeFirst(this.oc, listed)];
+    const freeFirst = taskSize(t) === "S" ? [...services, ...relays, ...opencodeFreeFirst(this.oc, listed)] : [...relays, ...services, ...opencodeFreeFirst(this.oc, listed)];
     const paidLeft = this.ocToday().used < this.oc.dailyCap;
     // The plan's free models go first (they do not count toward the daily cap); paid ones only while the cap allows.
     const order = [...freeFirst, ...(paidLeft ? opencodeModelOrder(this.oc) : [])];
@@ -1144,7 +1164,7 @@ export class TaskInbox {
         try {
           // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
           // services only when allowed): refused here, before anything is sent.
-          if (!inboxModelAllowed(model, trainOk)) throw new Error(`The task inbox may not use ${model}.`);
+          if (!inboxModelAllowed(model, trainOk, relayOk)) throw new Error(`The task inbox may not use ${model}.`);
           // Every attempt counts toward the service's day, failed ones too (OpenRouter's docs); each tool call is another request.
           const attemptFree = freeProviderOf(model);
           if (attemptFree) this.freeDay(attemptFree.id).used++;
@@ -1187,7 +1207,7 @@ export class TaskInbox {
           // that does not train takes the task; the model itself is fine (no cooldown).
           const privacy = isPrivacySkip(error);
           // A free model that fails in any way (the offer ended, it is overloaded) hands the task to the paid order.
-          if (!privacy && (run.why || (!quota && !isFreeOpencodeModel(model)))) break;
+          if (!privacy && (run.why || (!quota && !isFreeOpencodeModel(model) && !relayProviderOf(model)))) break;
           // A 429 blocks only this model (until its reset, else 5 hours; a failing free model 1 hour); the task goes
           // on to the next model that is not cooling down: at most one paid retry after the free ones.
           if (privacy) {
@@ -1226,7 +1246,7 @@ export class TaskInbox {
       this.opencodeStop = undefined;
     }
     // Only paid models count toward the daily cap (a task that ended on a free one cost nothing).
-    if (!isFreeOpencodeModel(model)) this.ocToday().used++;
+    if (!isFreeOpencodeModel(model) && !relayProviderOf(model)) this.ocToday().used++;
     this.paidRuns.set(t.id, !isFreeOpencodeModel(model));
     t.summary = text.trim().slice(-2000) || undefined;
     const limited = !run.why && !!error && (isQuotaError(error) || exhausted);

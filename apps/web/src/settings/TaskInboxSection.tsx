@@ -71,6 +71,10 @@ function OpencodeSettings({ s, put }: { s: InboxState; put: (body: Record<string
         <input type="checkbox" checked={c.useFree !== false} disabled={!c.enabled} onChange={(e) => set({ useFree: e.target.checked })} />
         <span className="grow">{L("קודם המודלים החינמיים (Beam Free): לא נספרים בסף היומי", "Free models first (Beam Free): they don't count toward the daily limit")}</span>
       </label>
+      <label className="row wrap small">
+        <input type="checkbox" checked={c.useRelay !== false} disabled={!c.enabled} onChange={(e) => set({ useRelay: e.target.checked })} />
+        <span className="grow">{L("משימות כבדות בלי מידע רגיש ל-GhostCLI (מנוי חודשי, לא נספר בסף היומי). עובד רק אחרי שמוסיפים אותו בחיבורים", "Heavy tasks without sensitive content to GhostCLI (monthly plan, outside the daily limit). Works once it is added in Connections")}</span>
+      </label>
       {(s.free ?? []).length > 0 && (
         <ul className="small stack" dir="ltr">
           {(s.free ?? []).map((f) => (

@@ -45,6 +45,11 @@ export interface OpencodeSettings {
    * A task on a free model does not count toward `dailyCap`; when they are gone or fail, the paid order takes over.
    */
   useFree?: boolean;
+  /**
+   * Send heavy tasks without sensitive content to a flat-rate relay the user pays for (GhostCLI), before the paid plan's
+   * models; outside the daily cap (Roee, 25.11: a one-month trial).
+   */
+  useRelay?: boolean;
 }
 
 /** The defaults: a cheap model for small work, a stronger (still cheap) one for the rest, 15 a day. */
@@ -155,6 +160,53 @@ export const FREE_PROVIDERS: readonly FreeProvider[] = [
   { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: freeTierTrains("opencode-go"), allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
 ];
 
+/** A flat-rate relay the user pays for (GhostCLI): heavy tasks without sensitive content, not counted in OpenCode Go's day. */
+export interface RelayProvider {
+  /** The connection id (Settings › Connections). */
+  id: string;
+  /** Shown in the task card and the settings. */
+  name: string;
+  /** Whether a KesherAI model id is one of its models. */
+  allowed: (id: string) => boolean;
+  /** The models to try, best first, from what the connection lists. */
+  pick: (listed: readonly string[]) => string[];
+}
+
+/** Opus first, then Sonnet, then the rest; Haiku-size models are skipped (heavy tasks only). */
+const relayRank = (id: string): number => (/opus/i.test(id) ? 0 : /sonnet/i.test(id) ? 1 : /fable/i.test(id) ? 2 : 3);
+
+/** The relays the task inbox can use. */
+export const RELAY_PROVIDERS: readonly RelayProvider[] = [
+  {
+    id: "ghostcli",
+    name: "GhostCLI",
+    allowed: (id) => /^ghostcli\/[\w./:-]+$/.test(id),
+    pick: (l) => l.filter((m) => m.startsWith("ghostcli/") && !/haiku|mini|nano|flash/i.test(m)).sort((a, b) => relayRank(a) - relayRank(b)).slice(0, 2),
+  },
+];
+
+/** The relay a model id belongs to. */
+export const relayProviderOf = (id: string): RelayProvider | undefined => RELAY_PROVIDERS.find((p) => p.allowed(id));
+
+/**
+ * Whether a task may go to a relay (Roee, 25.11: "heavy tasks without sensitive information"): any size, but not high
+ * risk, path-limited, and nothing security-related in its paths or text. The caller also scans the prompt, and the leak
+ * guard hides secrets in every request (the relay is in the training-risk table).
+ *
+ * @param t - The task.
+ * @returns `ok`, or `why` (English) it stays with the other models.
+ */
+export function safeForRelay(t: { risk?: string; allowedPaths?: readonly string[]; title?: string; goal?: string; readFirst?: string; acceptance?: string; outOfScope?: string }): { ok: boolean; why?: string } {
+  if (t.risk === "high") return { ok: false, why: "high-risk tasks stay off the relay" };
+  const paths = t.allowedPaths ?? [];
+  if (!paths.length) return { ok: false, why: "the task has no path limit" };
+  const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || /^\*{0,2}(\/\*\*)?$/.test(g));
+  if (bad) return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad})` };
+  const text = [t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n");
+  if (SECURITY_WORDS.test(text)) return { ok: false, why: "its text mentions a security topic" };
+  return { ok: true };
+}
+
 /** The free service a model id belongs to, when it is one of the free tier's models. */
 export const freeProviderOf = (id: string): FreeProvider | undefined => FREE_PROVIDERS.find((p) => p.allowed(id));
 
@@ -168,9 +220,11 @@ export const isFreeOpencodeModel = (id: string): boolean => OPENCODE_FREE_MODELS
  *
  * @param id - The KesherAI model id.
  * @param freeTrainingOk - The user's setting (default false).
+ * @param relayOk - This task passed {@link safeForRelay} and the relay is on (default false).
  */
-export function inboxModelAllowed(id: string, freeTrainingOk = false): boolean {
+export function inboxModelAllowed(id: string, freeTrainingOk = false, relayOk = false): boolean {
   if (CHAT_ONLY_PROVIDERS.some((p) => id.startsWith(`${p}/`))) return false;
+  if (relayProviderOf(id)) return relayOk;
   const fp = freeProviderOf(id);
   if (fp) return !fp.trainsOnData || freeTrainingOk;
   // A model of a free service's connection that is not one of its free models is never allowed (paid ids included).

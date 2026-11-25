@@ -147,6 +147,13 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = withTrainingRisk([
     needsApiKey: true,
   },
   {
+    // A flat-rate relay to frontier coding models (Roee, 25.11: one-month trial). Unofficial: it sees what it is sent, so the
+    // task inbox gives it only tasks without sensitive content (safeForRelay) and the leak guard hides secrets.
+    config: { id: "ghostcli", type: "openai-compatible", name: "GhostCLI", baseUrl: "https://ghostcli.cloud/v1", location: "cloud" },
+    description: "Frontier coding models on a monthly plan through an unofficial relay (it sees what you send).",
+    needsApiKey: true,
+  },
+  {
     // Workers AI: 10,000 Neurons a day free on every account (resets 00:00 UTC). Replace ACCOUNT_ID in the address with your
     // Cloudflare account id when you add the key (an API token with Workers AI access). A free coder for the task inbox.
     config: { id: "cloudflare-ai", type: "openai-compatible", name: "Cloudflare Workers AI", baseUrl: "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1", location: "cloud" },

@@ -299,6 +299,8 @@ export const KesherConfigSchema = z.object({
           dailyCap: z.number().int().min(0).max(100).default(15),
           // Free models first (Beam Free), outside the daily cap.
           useFree: z.boolean().default(true),
+          // A flat-rate relay (GhostCLI) for heavy tasks without sensitive content; used only when its connection has a key.
+          useRelay: z.boolean().default(true),
           // Free services that may train on prompts (Gemini free, Mistral, NVIDIA, OpenCode Contributor): only low-risk non-security tasks go there (safeForTrainingProvider); off stops them.
           freeTrainingOk: z.boolean().default(true),
         })

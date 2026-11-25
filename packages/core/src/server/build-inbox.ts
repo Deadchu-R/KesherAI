@@ -4,7 +4,7 @@ import { homedir, setPriority, userInfo } from "node:os";
 import { join } from "node:path";
 import { AGENT_GIT_IDENTITY, searchWeb, webFetchTool, type ModelTurn, type ToolContext } from "@kesher/agent";
 import type { ProviderRegistry } from "@kesher/providers";
-import { FREE_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, trainingRiskOf, type InboxBusy } from "@kesher/shared";
+import { FREE_PROVIDERS, RELAY_PROVIDERS, OPENCODE_PROVIDER, inboxModelAllowed, trainingRiskOf, type InboxBusy } from "@kesher/shared";
 import { UsageLog } from "../usage-log.js";
 import type { WatchdogModel } from "../watchdog-model.js";
 import { fetchFreeUsage } from "../openrouter-free.js";
@@ -96,7 +96,7 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
     // The free services (OpenRouter, Z.ai, Mistral, NVIDIA): each connection's chat models (asked at most every 10 minutes)
     // and, for OpenRouter, today's free request count (at most once a minute). The key is read only for that one call.
     free: Object.fromEntries(
-      FREE_PROVIDERS.filter((f) => f.id !== OPENCODE_PROVIDER).map((f) => {
+      [...FREE_PROVIDERS, ...RELAY_PROVIDERS].filter((f) => f.id !== OPENCODE_PROVIDER).map((f) => {
         let list: { at: number; ids: string[] } | undefined;
         let use: { at: number; v: Awaited<ReturnType<typeof fetchFreeUsage>> } | undefined;
         const key = () => p.config.providers.find((x) => x.id === f.id)?.apiKey;

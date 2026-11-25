@@ -204,6 +204,7 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
         const oc = { ...cur.opencode };
         if (typeof o.enabled === "boolean") oc.enabled = o.enabled;
         if (typeof o.useFree === "boolean") oc.useFree = o.useFree;
+        if (typeof o.useRelay === "boolean") oc.useRelay = o.useRelay;
         if (typeof o.freeTrainingOk === "boolean") oc.freeTrainingOk = o.freeTrainingOk;
         for (const k of ["small", "strong"] as const) {
           if (o[k] === undefined) continue;
