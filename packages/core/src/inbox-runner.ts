@@ -1032,7 +1032,7 @@ export class TaskInbox {
       this.saved.lastError = `Could not write the result: ${(e as Error).message.slice(0, 160)}`;
     });
     await this.save();
-    this.d.notify(`${endIcon(status)} ${t.id} ${OPENCODE_END_HE[status] ?? status}`, endBody(t, status), { path: `#/task-inbox/${t.id}` });
+    this.d.notify(`${endIcon(status)} ${t.id} ${endWord(t, status)}`, endBody(t, status), { path: `#/task-inbox/${t.id}` });
   }
 
   /**
@@ -1094,7 +1094,8 @@ export class TaskInbox {
     const prompt = agentPrompt(t, t.branch);
     const safe = safeForTrainingProvider({ ...t, size: taskSize(t) });
     const trainOk = this.oc.freeTrainingOk !== false && safe.ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
-    const services = taskSize(t) === "S" ? await this.freeServiceModels(c, listed, trainOk) : [];
+    // Free services take small tasks; larger ones too once the paid day is used up (better than waiting for midnight).
+    const services = taskSize(t) === "S" || this.ocToday().used >= this.oc.dailyCap ? await this.freeServiceModels(c, listed, trainOk) : [];
     // A flat-rate relay (GhostCLI) for tasks without sensitive content: first for medium and large tasks (what it is paid
     // for), after the free services for small ones. Its prompt is scanned like a training service's.
     const relayOk = this.oc.useRelay !== false && safeForRelay(t).ok && scanDiff(prompt.split("\n").map((l) => `+${l}`).join("\n"), this.d.me).length === 0;
@@ -2650,7 +2651,12 @@ export class TaskInbox {
 
   /** Whether one of OpenCode Go's free models (Settings › Task inbox › free first) is open now (not cooling down). */
   private opencodeFreeOpen(): boolean {
-    return !!opencodeFreeModel(opencodeFreeFirst(this.oc, this.ocListed), this.opencodeCooldowns(), this.now());
+    if (opencodeFreeModel(opencodeFreeFirst(this.oc, this.ocListed), this.opencodeCooldowns(), this.now())) return true;
+    // A free service with a key (Z.ai, OpenRouter, Cloudflare…), or the relay while it answers, can take the task too
+    // (25.11: with the paid day used up and Beam Free failing, the inbox sat idle though three free keys were in).
+    const free = this.d.coder?.free ?? {};
+    if (this.oc.useFree !== false && FREE_PROVIDERS.some((f) => f.id !== OPENCODE_PROVIDER && free[f.id]?.ready())) return true;
+    return this.oc.useRelay !== false && !!this.saved.relayHealth?.ok && RELAY_PROVIDERS.some((r) => free[r.id]?.ready());
   }
 
   /** The work loop's state now (work-loop.ts): running, paused until Antigravity can work again, or off. */
@@ -2981,9 +2987,9 @@ export class TaskInbox {
     const icon = endIcon(status);
     const body = endBody(t, status);
     // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
-    if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
-    else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
-    else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${OPENCODE_END_HE[status] ?? status}`, body, { path: `#/task-inbox/${t.id}` });
+    if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
+    else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
   }
 
   /**
@@ -3079,6 +3085,16 @@ export function isScratchFile(path: string): boolean {
 
 /** How often the relay gets its small "are you there" message. */
 const RELAY_PROBE_MS = 15 * 60_000;
+
+/**
+ * The words of a task's end notice: "reached its limit" only when it was a limit; a task put off by an error (a free
+ * model's 400, 25.11) says it was put off (the reason follows in the body).
+ *
+ * @param t - The task (its note).
+ * @param status - How it ended.
+ */
+const endWord = (t: { note?: string }, status: InboxStatus): string =>
+  status === "deferred-quota" && !/limit|quota|429|rate|too many/i.test(t.note ?? "") ? "נדחתה" : (OPENCODE_END_HE[status] ?? status);
 
 /** The icon of a task's end notice. */
 const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");
