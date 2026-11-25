@@ -353,7 +353,8 @@ export class TaskInbox {
       const conn = c.free?.[r.id];
       if (!conn?.ready()) continue;
       const listed = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((res) => setTimeout(() => res([]), 5000).unref?.())]);
-      out.push(...r.pick(listed));
+      const fine = this.saved.relayHealth.answered;
+      out.push(...r.pick(listed).filter((m) => !fine || fine.includes(m)));
     }
     return out;
   }
@@ -1289,20 +1290,27 @@ export class TaskInbox {
       for (const r of RELAY_PROVIDERS) {
         const conn = c.free?.[r.id];
         if (!conn?.ready() || !conn.probe) continue;
-        const model = r.pick(await conn.models().catch(() => [] as string[]))[0];
-        if (!model) continue;
+        // Each candidate in turn, best first (25.11: Opus and Sonnet came back empty while GLM 5.3 answered).
+        const candidates = r.pick(await conn.models().catch(() => [] as string[]));
+        if (!candidates.length) continue;
         const t0 = this.now();
-        let ok = false;
+        const answered: string[] = [];
         let note = "";
-        try {
-          const text = await conn.probe(model, AbortSignal.timeout(90_000));
-          ok = text.trim().length > 0;
-          note = ok ? text.trim().slice(0, 80) : "an empty answer";
-        } catch (e) {
-          note = ((e as Error).message || String(e)).slice(0, 160);
+        for (const model of candidates) {
+          try {
+            const text = (await conn.probe(model, AbortSignal.timeout(90_000))).trim();
+            if (text) {
+              answered.push(model);
+              if (!note) note = `${opencodeModelName(model)}: ${text.slice(0, 60)}`;
+            } else if (!answered.length) note = `${opencodeModelName(model)}: an empty answer`;
+          } catch (e) {
+            if (!answered.length) note = `${opencodeModelName(model)}: ${((e as Error).message || String(e)).slice(0, 120)}`;
+          }
         }
+        const ok = answered.length > 0;
+        const model = answered[0] ?? candidates[0]!;
         const was = this.saved.relayHealth?.ok;
-        this.saved.relayHealth = { at: this.now(), ok, ms: this.now() - t0, model, note };
+        this.saved.relayHealth = { at: this.now(), ok, ms: this.now() - t0, model, note, answered };
         this.saved.relayLog = [...(this.saved.relayLog ?? []), { at: this.now(), id: "probe", model, status: (ok ? "probe-ok" : "probe-failed") as RelayRun["status"], ms: this.now() - t0 }].slice(-200);
         await this.save();
         // It answers again: load it right away (Roee, 25.11: "when they are available, load them up").
