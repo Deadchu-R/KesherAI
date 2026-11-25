@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, relayReport, type RelayRun, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -134,6 +134,8 @@ const AUTHOR = ["-c", `user.name=${AGENT_GIT_IDENTITY.GIT_AUTHOR_NAME}`, "-c", `
 /** What is kept in the queue file. */
 interface Saved {
   tasks: InboxTaskView[];
+  /** The relay's attempts (GhostCLI trial), the last 200. */
+  relayLog?: RelayRun[];
   today: { date: string; used: number };
   quota?: InboxState["quota"];
   /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
@@ -439,7 +441,7 @@ export class TaskInbox {
     this.loaded = true;
     try {
       const raw = JSON.parse(await readFile(this.d.file, "utf8")) as Saved;
-      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}) };
+      this.saved = { tasks: Array.isArray(raw.tasks) ? raw.tasks : [], today: raw.today ?? { date: "", used: 0 }, ...(raw.quota ? { quota: raw.quota } : {}), ...(raw.geminiUntil ? { geminiUntil: raw.geminiUntil } : {}), ...(raw.opencode ? { opencode: raw.opencode } : {}), ...(raw.claude ? { claude: raw.claude } : {}), ...(raw.free ? { free: raw.free } : {}), ...(raw.lastFetch ? { lastFetch: raw.lastFetch } : {}), ...(Array.isArray(raw.relayLog) ? { relayLog: raw.relayLog } : {}) };
     } catch {
       this.saved = { tasks: [], today: { date: "", used: 0 } };
     }
@@ -553,6 +555,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      ...(this.saved.relayLog?.length ? { relay: relayReport(this.saved.relayLog) } : {}),
       ...(this.d.claude ? { claude: await this.claudeState() } : {}),
       ...(await this.freeStates()),
       loop: this.loopNow(),
@@ -1151,6 +1154,7 @@ export class TaskInbox {
       signal: run.ctl.signal,
     });
     let seq = 0;
+    let attemptAt = this.now();
     let text = "";
     let error = "";
     const tried: string[] = [];
@@ -1161,6 +1165,7 @@ export class TaskInbox {
       for (;;) {
         let attemptSteps = 0;
         guard.watch.newAttempt();
+        attemptAt = this.now();
         try {
           // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
           // services only when allowed): refused here, before anything is sent.
@@ -1200,6 +1205,8 @@ export class TaskInbox {
         } catch (e) {
           error = (e as Error).message || String(e);
           const quota = isQuotaError(error);
+          // The relay's trial report: a failed attempt, or a "too many requests" answer (is "unlimited" real?).
+          if (relayProviderOf(model)) this.noteRelay({ at: this.now(), id: t.id, model, status: quota ? "rate-limited" : "failed", ms: this.now() - attemptAt });
           const fp = freeProviderOf(model);
           // A negative balance blocks OpenRouter's free models (402): that service is out until the next UTC midnight.
           const pay = !!fp && /\b402\b|payment required|insufficient (credits|balance)|negative balance/i.test(error);
@@ -1256,6 +1263,15 @@ export class TaskInbox {
     const until = limited ? (exhausted ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
     const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `OpenCode Go limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why ? this.stopText(t, run.why) : error ? `OpenCode Go failed: ${error.slice(0, 300)}` : "";
     await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
+    if (relayProviderOf(model) && !error) {
+      this.noteRelay({ at: this.now(), id: t.id, model, status: t.status, ms: this.now() - attemptAt });
+      await this.save();
+    }
+  }
+
+  /** Adds one relay attempt to the trial report (the last 200 are kept). */
+  private noteRelay(r: RelayRun): void {
+    this.saved.relayLog = [...(this.saved.relayLog ?? []), r].slice(-200);
   }
 
   /** The note on a Claude Code task that waits. */

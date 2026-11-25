@@ -561,6 +561,61 @@ export interface InboxBusy {
 export const INBOX_GIT_MISSING = "Git for Windows is not installed / not found: install it from git-scm.com (or `winget install Git.Git`) and restart KesherAI.";
 
 /** `GET /api/task-inbox`: the queue and its state. */
+/** One relay attempt (GhostCLI), for its trial report. */
+export interface RelayRun {
+  /** When it ended (ms). */
+  at: number;
+  /** The task. */
+  id: string;
+  /** The model asked. */
+  model: string;
+  /** How it ended: a task status, or `rate-limited` (the relay said "too many requests"). */
+  status: InboxStatus | "rate-limited";
+  /** How long it ran (ms). */
+  ms: number;
+}
+
+/** The relay's trial report (Roee, 25.11: is "unlimited" real?). */
+export interface RelayReport {
+  /** Attempts in the report (the last 200). */
+  runs: number;
+  done: number;
+  partial: number;
+  failed: number;
+  /** "Too many requests" answers: none means no limit was seen. */
+  rateLimited: number;
+  /** The last one (ms). */
+  lastRateLimitAt?: number;
+  /** Average minutes of a finished (done or partial) run. */
+  avgMinutes?: number;
+  /** Since (ms): the first attempt in the report. */
+  since?: number;
+  /** The last attempts, newest first (up to 20). */
+  recent: RelayRun[];
+}
+
+/**
+ * Sums relay attempts into the trial report.
+ *
+ * @param log - The attempts, oldest first.
+ * @returns The report.
+ */
+export function relayReport(log: readonly RelayRun[]): RelayReport {
+  const finished = log.filter((r) => r.status === "done" || r.status === "partial");
+  const limited = log.filter((r) => r.status === "rate-limited");
+  return {
+    runs: log.length,
+    done: log.filter((r) => r.status === "done").length,
+    partial: log.filter((r) => r.status === "partial").length,
+    failed: log.filter((r) => r.status === "failed" || r.status === "declined").length,
+    rateLimited: limited.length,
+    ...(limited.length ? { lastRateLimitAt: limited[limited.length - 1]!.at } : {}),
+    ...(finished.length ? { avgMinutes: Math.round(finished.reduce((n, r) => n + r.ms, 0) / finished.length / 6_000) / 10 } : {}),
+    ...(log.length ? { since: log[0]!.at } : {}),
+    recent: log.slice(-20).reverse(),
+  };
+}
+
 export interface InboxState {
   settings: InboxSettings;
   today: { date: string; used: number };
@@ -578,6 +633,8 @@ export interface InboxState {
   models?: InboxModel[];
   /** OpenCode Go now: its connection is set up with a key, today's count, and its limit's end when it answered 429. */
   opencode?: OpencodeState;
+  /** The relay's trial report (GhostCLI), once it ran a task. */
+  relay?: RelayReport;
   /** Claude Code on this PC: installed, signed in, its quota reading and whether a task may start. */
   claude?: ClaudeState;
   /** The connected free services (OpenRouter, Z.ai, Mistral, NVIDIA, ...) that take S tasks after Beam Free. */

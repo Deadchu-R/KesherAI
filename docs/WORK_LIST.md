@@ -468,3 +468,6 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 - ⬜ Medium tasks that read for 80+ requests before the first edit: give the agent a "plan, then edit early" line in the prompt and check the task specs (s-20261122-*, r-58..62 Godot) are small enough.
 - ✅ GhostCLI relay (Roee 25.11, one-month trial): Connections preset (openai-compatible, ghostcli.cloud/v1), inbox sends medium/large tasks that pass safeForRelay (no high risk, no security paths or words, prompt scan clean) to its Opus/Sonnet first, outside OpenCode's daily cap; marked "may train" so the leak guard and warnings apply; setting "Heavy tasks to GhostCLI" in Settings › Task inbox.
 - ⬜ After a month (≈25.12): compare GhostCLI's results in the usage log (done/partial/failed, time) against OpenCode Go and decide.
+- ✅ GhostCLI trial report (data): every relay attempt is logged (done/partial/failed/rate-limited, minutes, model); `relay` in /api/task-inbox gives the totals and the last 20.
+- ⬜ GhostCLI trial report card in Settings › Task inbox (design board in the cloud/tasks doc first) and on the phone.
+- ⬜ Parallel relay runs (2–3 at once) for the stress test, if Roee wants them.
