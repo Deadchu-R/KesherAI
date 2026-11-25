@@ -137,7 +137,8 @@ export function opencodeCoder(p: { config: KesherConfig; registry: ProviderRegis
     run: async ({ worktree, title, prompt, model, signal, onStep, attach }) => {
       // Only models the inbox may use run here (the free ones of OpenRouter, Z.ai, ...): a last guard. The runner has
       // already checked the task itself for the services that may train; here only the setting is known.
-      if (!inboxModelAllowed(model, p.config.taskInbox?.opencode?.freeTrainingOk !== false)) throw new Error(`The task inbox may not use ${model}.`);
+      // The relay's models pass here: the runner already checked the task with safeForRelay and the relay's last answer.
+      if (!inboxModelAllowed(model, p.config.taskInbox?.opencode?.freeTrainingOk !== false, true)) throw new Error(`The task inbox may not use ${model}.`);
       const chats = p.chats();
       const c = await chats.create({ kind: "code", workspace: worktree, mode: "auto", title, modelId: model });
       const session = async () => (await chats.open(c.id))?.session;
