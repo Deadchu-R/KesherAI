@@ -13,6 +13,8 @@ export const TRAINING_RULES = [
     { connection: "openrouter", risk: "may", models: /(^|\/)[\w.-]+:free$|^openrouter\/free$/, freeTierTrains: false, why: "OpenRouter's free models are served by many providers; some log prompts and may train on them." },
     // The free cloud helpers' own connections (Settings › Free cloud helpers): free tiers only.
     { connection: "fc-mistral", risk: "yes", freeTierTrains: true, why: "The free cloud helpers use Mistral's free Experiment plan, which may use data to train models." },
+    // A flat-rate relay the user pays for (Roee, 25.11: a one-month trial for heavy tasks without sensitive content).
+    { connection: "ghostcli", risk: "may", freeTierTrains: false, why: "GhostCLI is an unofficial relay to other companies' models; what it keeps or passes on is unknown." },
     { connection: "fc-openrouter", risk: "may", freeTierTrains: false, why: "The free cloud helpers use OpenRouter's free models; some of their providers log prompts and may train on them." },
 ];
 /** The rule for a model id (`<connection>/<model>`), when its service may train on prompts. */

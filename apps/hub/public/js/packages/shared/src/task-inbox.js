@@ -79,6 +79,41 @@ export const FREE_PROVIDERS = [
     // OpenCode's "Contributor" free models answer only with the data-sharing opt-in.
     { id: "opencode-go", name: "OpenCode Contributor", trainsOnData: freeTierTrains("opencode-go"), allowed: isContributorFree, pick: (l) => l.filter(isContributorFree).slice(0, 1) },
 ];
+/** Opus first, then Sonnet, then the rest; Haiku-size models are skipped (heavy tasks only). */
+const relayRank = (id) => (/opus/i.test(id) ? 0 : /sonnet/i.test(id) ? 1 : /fable/i.test(id) ? 2 : 3);
+/** The relays the task inbox can use. */
+export const RELAY_PROVIDERS = [
+    {
+        id: "ghostcli",
+        name: "GhostCLI",
+        allowed: (id) => /^ghostcli\/[\w./:-]+$/.test(id),
+        pick: (l) => l.filter((m) => m.startsWith("ghostcli/") && !/haiku|mini|nano|flash/i.test(m)).sort((a, b) => relayRank(a) - relayRank(b)).slice(0, 2),
+    },
+];
+/** The relay a model id belongs to. */
+export const relayProviderOf = (id) => RELAY_PROVIDERS.find((p) => p.allowed(id));
+/**
+ * Whether a task may go to a relay (Roee, 25.11: "heavy tasks without sensitive information"): any size, but not high
+ * risk, path-limited, and nothing security-related in its paths or text. The caller also scans the prompt, and the leak
+ * guard hides secrets in every request (the relay is in the training-risk table).
+ *
+ * @param t - The task.
+ * @returns `ok`, or `why` (English) it stays with the other models.
+ */
+export function safeForRelay(t) {
+    if (t.risk === "high")
+        return { ok: false, why: "high-risk tasks stay off the relay" };
+    const paths = t.allowedPaths ?? [];
+    if (!paths.length)
+        return { ok: false, why: "the task has no path limit" };
+    const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || /^\*{0,2}(\/\*\*)?$/.test(g));
+    if (bad)
+        return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad})` };
+    const text = [t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n");
+    if (SECURITY_WORDS.test(text))
+        return { ok: false, why: "its text mentions a security topic" };
+    return { ok: true };
+}
 /** The free service a model id belongs to, when it is one of the free tier's models. */
 export const freeProviderOf = (id) => FREE_PROVIDERS.find((p) => p.allowed(id));
 /** Whether a model is a free one (the plan's Beam Free or a free service's): it does not count toward the daily cap. */
@@ -90,10 +125,13 @@ export const isFreeOpencodeModel = (id) => OPENCODE_FREE_MODELS.includes(id) || 
  *
  * @param id - The KesherAI model id.
  * @param freeTrainingOk - The user's setting (default false).
+ * @param relayOk - This task passed {@link safeForRelay} and the relay is on (default false).
  */
-export function inboxModelAllowed(id, freeTrainingOk = false) {
+export function inboxModelAllowed(id, freeTrainingOk = false, relayOk = false) {
     if (CHAT_ONLY_PROVIDERS.some((p) => id.startsWith(`${p}/`)))
         return false;
+    if (relayProviderOf(id))
+        return relayOk;
     const fp = freeProviderOf(id);
     if (fp)
         return !fp.trainsOnData || freeTrainingOk;
