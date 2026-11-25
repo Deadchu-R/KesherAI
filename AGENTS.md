@@ -38,3 +38,8 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 - Text a user sees: Hebrew and English (`L(he, en)`), and it works on a 390 px phone.
 - Before you say ITEM DONE, read your own diff once, the way a reviewer would.
 - Name the item with its board id: `ITEM DONE: t26: what changed`.
+
+## Research rule (Roee, 25.11)
+Every research of a new feature or addition (Claude, Gemini, Antigravity or a helper) includes a "Language and weight"
+part: for each part of it, the language/runtime that runs fastest and lightest on the PC, the gain, the cost, and what to
+measure first. The findings go into docs/RESEARCH_LOG.md and are broken into tasks.
