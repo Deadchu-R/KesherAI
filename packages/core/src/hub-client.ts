@@ -297,7 +297,8 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     taskId: t.id,
     title: (t.title || t.id).slice(0, 200),
     state,
-    executor: t.runBy === "opus" ? "claude" : t.runBy,
+    // A run on the relay (GhostCLI) shows as its own worker in the hub's agents list.
+    executor: t.runBy === "opus" ? "claude" : t.runBy === "opencode" && /ghostcli\//.test(t.modelUsed ?? "") ? "ghostcli" : t.runBy,
     from: t.from === "roee" || t.from === "self-work" ? t.from : "claude",
     // The branch shows once there is work on it (a started or ended run), never a planned name.
     ...(t.branch && (t.startedAt || ended) && t.status !== "declined" ? { branch: t.branch } : {}),

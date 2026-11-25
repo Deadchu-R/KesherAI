@@ -376,6 +376,12 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}</div>
         {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
+        {t.status === "running" && !!t.steps && (
+          <div className="tinbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={estimateTaskSteps(t)} aria-valuenow={Math.min(t.steps, estimateTaskSteps(t))}>
+            <i style={{ width: `${Math.min(95, Math.round((t.steps / estimateTaskSteps(t)) * 100))}%` }} />
+          </div>
+        )}
+        {t.status === "running" && !!t.stepLog?.length && <div className="small muted" dir="auto">{describeStep(t.stepLog[t.stepLog.length - 1]!, getLocale() === "he")}</div>}
       </div>
       <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span>{modelLine(t) && <span className="small muted tinbox-model" dir="ltr" title={t.modelFallback}>{modelLine(t)}</span>}</span>
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>
@@ -534,6 +540,11 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
       {!!t.stepLog?.length && (
         <section className="card stack tinbox-doing">
           <b>{t.status === "running" ? L("מה הוא עושה עכשיו", "What it is doing") : L("הצעדים האחרונים", "The last steps")}</b>
+          {t.status === "running" && !!t.steps && (
+            <div className="tinbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={estimateTaskSteps(t)} aria-valuenow={Math.min(t.steps, estimateTaskSteps(t))} title={stepsText(t) ?? ""}>
+              <i style={{ width: `${Math.min(95, Math.round((t.steps / estimateTaskSteps(t)) * 100))}%` }} />
+            </div>
+          )}
           <ol className="small tinbox-doing-list">
             {[...t.stepLog].reverse().map((s, i) => (
               <li key={`${s.at}-${i}`} className={`${i === 0 && t.status === "running" ? "now" : "muted"}${s.error ? " err" : ""}`} dir="auto">

@@ -43,6 +43,7 @@ const WORKER = {
     antigravity: ["✦ Antigravity", "✦ Antigravity"],
     gemini: ["✧ Gemini (חינמי)", "✧ Gemini (free)"],
     opencode: ["◈ OpenCode Go", "◈ OpenCode Go"],
+    ghostcli: ["👻 GhostCLI", "👻 GhostCLI"],
     local: ["◆ סוכן מקומי", "◆ Local agent"],
     claude: ["✷ Claude", "✷ Claude"],
 };
@@ -80,8 +81,10 @@ function nowRow(v, r, pcsOn) {
         ];
     // What it is doing now, in plain words (task-steps.ts): "Reading …", "Running the tests".
     const doing = !r.free && r.now ? h("div", { class: "xs nw-now", dir: "auto" }, describeStep(r.now, L("he", "en") === "he")) : null;
+    // Progress: steps done of the estimate (capped short of full while it still runs).
+    const bar = !r.free && r.step && r.of ? h("div", { class: "nw-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(r.of), "aria-valuenow": String(Math.min(r.step, r.of)) }, h("i", { style: `width:${Math.min(95, Math.round((r.step / r.of) * 100))}%` })) : null;
     const facts = r.free ? null : h("div", { class: "row wrap xs mut nw-facts" }, stepText(r.step, r.of) ? h("span", { class: "chip steps" }, stepText(r.step, r.of)) : null, r.model ? h("span", { class: "chip" }, r.model) : null, r.since ? h("span", null, L("מ-", "since ") + when(r.since)) : null);
-    return h(open ? "button" : "div", { ...(open ? { type: "button", onclick: open } : {}), class: `nowrow${r.free ? " free" : ""}`, "aria-label": `${workerName(r.worker)}: ${r.free ? L("פנוי", "free") : r.title ?? ""}` }, h("div", { class: "row nw-top" }, h("b", { class: "nw-who" }, workerName(r.worker)), ...body), doing, facts);
+    return h(open ? "button" : "div", { ...(open ? { type: "button", onclick: open } : {}), class: `nowrow${r.free ? " free" : ""}`, "aria-label": `${workerName(r.worker)}: ${r.free ? L("פנוי", "free") : r.title ?? ""}` }, h("div", { class: "row nw-top" }, h("b", { class: "nw-who" }, workerName(r.worker)), ...body), bar, doing, facts);
 }
 /** The Now strip: who works on what right now, one row per worker. */
 function nowStrip(v, all, board) {

@@ -1215,7 +1215,12 @@ export class TaskInbox {
           error = (e as Error).message || String(e);
           const quota = isQuotaError(error);
           // The relay's trial report: a failed attempt, or a "too many requests" answer (is "unlimited" real?).
-          if (relayProviderOf(model)) this.noteRelay({ at: this.now(), id: t.id, model, status: quota ? "rate-limited" : "failed", ms: this.now() - attemptAt });
+          if (relayProviderOf(model)) {
+            this.noteRelay({ at: this.now(), id: t.id, model, status: quota ? "rate-limited" : "failed", ms: this.now() - attemptAt });
+            // Its server failed (25.11: a 502 Bad Gateway 10 minutes into a run): no more tasks to it until the next
+            // availability check answers again.
+            if (/\b(5\d\d|bad gateway|timeout|timed out|did not complete|unavailable|ECONNRESET)\b/i.test(error) && this.saved.relayHealth) this.saved.relayHealth = { ...this.saved.relayHealth, ok: false, note: `${opencodeModelName(model)}: ${error.slice(0, 120)}` };
+          }
           const fp = freeProviderOf(model);
           // A negative balance blocks OpenRouter's free models (402): that service is out until the next UTC midnight.
           const pay = !!fp && /\b402\b|payment required|insufficient (credits|balance)|negative balance/i.test(error);

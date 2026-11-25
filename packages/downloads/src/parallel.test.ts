@@ -155,8 +155,12 @@ test("stopped half way, then resumed: each part continues from its own offset", 
     // Let it get about a third of the way.
     while (dm.list()[0]!.received <= PAYLOAD.length / 3) await new Promise((r) => setTimeout(r, 10));
     dm.pause(job0.id);
-    await new Promise((r) => setTimeout(r, 100));
-    const saved = await loadParts(`${dest}.part`, PAYLOAD.length);
+    // The parts file is written a moment after the pause (slower on the Windows runner): wait for it, up to 3 s.
+    let saved = await loadParts(`${dest}.part`, PAYLOAD.length);
+    for (let i = 0; i < 30 && !(saved && saved.parts.some((p) => p.done > 0)); i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      saved = await loadParts(`${dest}.part`, PAYLOAD.length);
+    }
     assert.ok(saved, "parts are saved");
     const doneBefore = saved.parts.reduce((n, p) => n + p.done, 0);
     assert.ok(doneBefore > 0 && doneBefore < PAYLOAD.length);

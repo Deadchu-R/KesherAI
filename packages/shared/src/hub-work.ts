@@ -10,7 +10,7 @@ import { isGoing, shownState, type AgentCard } from "./hub-agents.js";
 import { boardWho, HUB_WORK_KINDS, type HubBoardItem, type HubInboxTask, type HubWorkKind } from "./hub-protocol.js";
 
 /** The workers the Now strip always lists (a worker that nothing reported on says "free"); Claude only when reported. */
-export const WORKERS = ["antigravity", "gemini", "local", "claude"] as const;
+export const WORKERS = ["antigravity", "gemini", "opencode", "ghostcli", "local", "claude"] as const;
 
 /** What the page keeps of a task-inbox report (device.ts adds the PC's id). */
 export interface InboxMeta {

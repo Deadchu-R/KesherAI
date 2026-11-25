@@ -310,3 +310,5 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 
 /* What it is doing now, one plain line (task-steps.ts). */
 .nw-now { margin-top: 2px; opacity: .9; }
+.nw-bar { height: 4px; border-radius: 2px; background: var(--raised, #2a2a2a); overflow: hidden; margin-top: 4px; }
+.nw-bar > i { display: block; height: 100%; background: var(--accent, #7c6cff); transition: width .4s; }

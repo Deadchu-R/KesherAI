@@ -4839,3 +4839,5 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-doing-list { margin: 0; padding-inline-start: 18px; display: flex; flex-direction: column; gap: 2px; }
 .tinbox-doing-list li.now { font-weight: 600; }
 .tinbox-doing-list li.err { color: var(--danger, #e5484d); }
+.tinbox-bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
+.tinbox-bar > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }

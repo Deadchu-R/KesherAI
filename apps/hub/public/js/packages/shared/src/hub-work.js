@@ -1,7 +1,7 @@
 import { isGoing, shownState } from "./hub-agents.js";
 import { boardWho, HUB_WORK_KINDS } from "./hub-protocol.js";
 /** The workers the Now strip always lists (a worker that nothing reported on says "free"); Claude only when reported. */
-export const WORKERS = ["antigravity", "gemini", "local", "claude"];
+export const WORKERS = ["antigravity", "gemini", "opencode", "ghostcli", "local", "claude"];
 /**
  * The page's record of a task-inbox report, so the PC's newest fields replace the old ones (a field a PC stops
  * sending is gone, not kept).

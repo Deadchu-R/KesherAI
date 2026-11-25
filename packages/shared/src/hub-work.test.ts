@@ -74,7 +74,7 @@ test("Next: by board priority, then queue order, then age; deferred last; board 
 test("Now: one row per worker, idle ones say free, a live run adds step and model, helpers and board items get rows", () => {
   const now = 20_000;
   const rows = nowRows([wt({ id: "t1", status: "running", title: "Fix it", worker: "antigravity", startedAt: 500, estSteps: 6 })], [card({ model: "Gemini 3" })], [], now, () => "pc1/r1");
-  assert.deepEqual(rows.map((r) => [r.worker, r.free]), [["antigravity", false], ["gemini", true], ["local", true]]);
+  assert.deepEqual(rows.map((r) => [r.worker, r.free]), [["antigravity", false], ["gemini", true], ["opencode", true], ["ghostcli", true], ["local", true]]);
   assert.deepEqual([rows[0]!.step, rows[0]!.of, rows[0]!.model, rows[0]!.since, rows[0]!.runKey], [3, 8, "Gemini 3", 1000, "pc1/r1"]);
   // Without a live run the task's own numbers show; the linked run is not listed twice.
   const plain = nowRows([wt({ status: "running", worker: "gemini", steps: 2, estSteps: 5, startedAt: 700, model: "gemini-flash" })], [], [], now);
