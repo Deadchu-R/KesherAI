@@ -258,6 +258,9 @@ export class Notifier {
       // Stopped by the user is not "Done" (found on the phone: a stopped run said "Done… Finished after 2 min").
       const stopped = this.stoppedBy.delete(convId) && !failed;
       if (stopped) return;
+      // A task-inbox agent run sends its own end notice (done, partial, limit reached…): a "Done" here would contradict
+      // it (found on the phone: "OpenCode Go reached its limit" next to "Done… Finished after 3 min").
+      if (isInboxRunTitle(title())) return;
       const text = s.includeText ? (lastAnswer() ?? "").replace(/\s+/g, " ").trim().slice(0, 200) : "";
       void this.send({
         title: failed ? `Stopped with an error: ${title()}` : `Done: ${title()}`,
@@ -473,4 +476,14 @@ export function helperPath(run: { chatId: string; id: string }): string {
 /** HTTP headers must be plain text; ntfy reads UTF-8 titles sent as RFC 2047. */
 function ascii(s: string): string {
   return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`;
+}
+
+/**
+ * Whether a conversation is a task-inbox agent run (its title starts with the agent's mark).
+ *
+ * @param title - The conversation's title.
+ * @returns True for an inbox run.
+ */
+export function isInboxRunTitle(title: string): boolean {
+  return /^◈ OpenCode Go · /.test(title);
 }

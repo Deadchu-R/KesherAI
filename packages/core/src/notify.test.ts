@@ -223,3 +223,9 @@ test("big downloads: a note for done and failed ones of 200 MB and up, none for 
   on.close();
   off.close();
 });
+
+test("an inbox agent run is not announced as Done (the inbox sends its own end notice)", async () => {
+  const { isInboxRunTitle } = await import("./notify.js");
+  assert.equal(isInboxRunTitle("◈ OpenCode Go · Muse-parity asset pipelines"), true);
+  assert.equal(isInboxRunTitle("Fix the login page"), false);
+});
