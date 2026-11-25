@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { countPlaceholders, entropy, findLeaks, leakSummary, luhn, privacyModeOf, redactLeaks, type LeakKind } from "./leak-guard.js";
+import { countPlaceholders, entropy, findLeaks, looksFakeKey, leakSummary, luhn, privacyModeOf, redactLeaks, type LeakKind } from "./leak-guard.js";
 import { connectionTrainingRisk, freeTierTrains, trainingRiskOf } from "./training-risk.js";
 import { FREE_PROVIDERS } from "./task-inbox.js";
 
@@ -128,4 +128,11 @@ test("training risk: one table for chat, presets and the inbox", () => {
   assert.equal(connectionTrainingRisk("gemini"), "may");
   assert.equal(connectionTrainingRisk("ollama"), undefined);
   for (const p of FREE_PROVIDERS) assert.equal(p.trainsOnData, freeTierTrains(p.id), p.id);
+});
+
+test("made-up keys from tests and docs are not leaks; real-looking ones still are", () => {
+  for (const fake of ["sk-test-xxxxxxxxxxxxxxxxxxxxxxxx", "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "AKIAIOSFODNN7EXAMPLE", ["sk", "ant", "api03", "FAKEKEY1234567890abcdefgh"].join("-")]) {
+    assert.equal(looksFakeKey(fake), true, fake);
+  }
+  assert.equal(looksFakeKey(["sk", "ant", "api03", "q8Zr2LpX7vNw4KmT9bHc"].join("-")), false);
 });

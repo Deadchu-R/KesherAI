@@ -69,3 +69,15 @@ test("an unattended run is not stopped by the user folder alone in what it read 
   assert.equal(r.hidden, 2);
   assert.ok(!JSON.stringify(r.messages).includes("/home/dana"));
 });
+
+test("a made-up key in a file an unattended run read is hidden but does not stop it", () => {
+  set("ask");
+  const fake = ["ghp", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"].join("_");
+  const read: AgentMessage[] = [
+    { role: "user", content: "fix the test" },
+    { role: "tool", toolCallId: "a1", toolName: "read", content: `const token = "${fake}";` },
+  ];
+  const r = guardMessages("opencode-go/big-pickle-contributor-free", read, { unattended: true });
+  assert.ok(r.hidden >= 1);
+  assert.ok(!JSON.stringify(r.messages).includes(fake));
+});

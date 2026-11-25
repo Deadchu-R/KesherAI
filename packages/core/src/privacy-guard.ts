@@ -8,7 +8,7 @@
  * - An unattended run (task inbox, self-work) whose hit is in a file the agent read stops with a "privacy skip": the
  *   task moves to a model that does not train, so placeholders are never written back into the code it edits.
  */
-import { LEAK_LABEL, leakSummary, privacyModeOf, redactLeaks, trainingRiskOf, type AgentMessage, type LeakContext, type LeakHit, type PrivacyMode } from "@kesher/shared";
+import { LEAK_LABEL, leakSummary, looksFakeKey, privacyModeOf, redactLeaks, trainingRiskOf, type AgentMessage, type LeakContext, type LeakHit, type PrivacyMode } from "@kesher/shared";
 
 /** What the guard needs from the server: the user's settings and this computer's user name and home folder. */
 export interface PrivacyGuardSource {
@@ -97,7 +97,8 @@ export function guardMessages(modelId: string, messages: readonly AgentMessage[]
     const argHits: LeakHit[] = [];
     const toolCalls = m.toolCalls?.map((c) => ({ ...c, arguments: redactArgs(c.arguments, ctx, argHits) as Record<string, unknown> }));
     all.push(...r.hits, ...argHits);
-    if (m.role === "tool") inTools.push(...r.hits);
+    // A made-up key in a file the agent read (KesherAI's own tests) is hidden like any other, but need not stop the run.
+    if (m.role === "tool") inTools.push(...r.hits.filter((h) => !(h.kind === "key" && looksFakeKey(m.content.slice(h.start, h.end)))));
     if (!r.hits.length && !argHits.length) return m;
     return { ...m, content: r.text, ...(toolCalls ? { toolCalls } : {}) };
   });
