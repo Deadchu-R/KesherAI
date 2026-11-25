@@ -1,10 +1,3 @@
-/**
- * "Who works on what" for the hub page and the phone's Cloud tab (the same page): the pure part. It turns what the PCs
- * report (inbox tasks, board items, live agent runs) into the page's Now strip (one row per worker), the Next list
- * (by priority), the Active / Done / Failed phases and the filters by agent, model and kind. No browser API, so it
- * is tested in Node and compiled into the hub page as is. Layout: the design doc's HubNowNext, HubWorkTabs and
- * HubWorkFilters boards (and their PhoneHub twins).
- */
 import { isGoing, shownState } from "./hub-agents.js";
 import { boardWho, HUB_WORK_KINDS } from "./hub-protocol.js";
 /** The workers the Now strip always lists (a worker that nothing reported on says "free"); Claude only when reported. */
@@ -26,6 +19,7 @@ export function inboxMetaOf(r, deviceId) {
         at: r.at,
         ...(r.estSteps ? { estSteps: r.estSteps } : {}),
         ...(r.steps ? { steps: r.steps } : {}),
+        ...(r.now ? { now: r.now } : {}),
         ...(r.retryAt ? { retryAt: r.retryAt } : {}),
         ...(r.model ? { model: r.model } : {}),
         ...(r.boardId ? { boardId: r.boardId } : {}),
@@ -105,6 +99,7 @@ export function toWorkTask(t, expired, board) {
         ...(i?.model ? { model: i.model } : {}),
         ...(i?.kind ? { kind: i.kind } : {}),
         ...(i?.steps ? { steps: i.steps } : {}),
+        ...(i?.now ? { now: i.now } : {}),
         ...(i?.estSteps ? { estSteps: i.estSteps } : {}),
         ...(i?.startedAt ? { startedAt: i.startedAt } : {}),
         ...(i?.endedAt ? { endedAt: i.endedAt } : {}),
@@ -213,7 +208,7 @@ export function nowRows(tasks, cards, board, now, runKeyOf = () => undefined) {
         const of = c?.state.of || t.estSteps;
         const model = c?.state.model ?? t.model;
         const since = c?.state.startedAt || t.startedAt || t.at;
-        rows.push({ worker: t.worker, free: false, title: t.title, ...(steps ? { step: steps } : {}), ...(of ? { of } : {}), ...(model ? { model } : {}), ...(since ? { since } : {}), ...(st === "waiting" || st === "stale" ? { flag: st } : {}), ...(key && c ? { runKey: key } : {}), taskId: t.id });
+        rows.push({ worker: t.worker, free: false, title: t.title, ...(steps ? { step: steps } : {}), ...(of ? { of } : {}), ...(model ? { model } : {}), ...(t.now ? { now: t.now } : {}), ...(since ? { since } : {}), ...(st === "waiting" || st === "stale" ? { flag: st } : {}), ...(key && c ? { runKey: key } : {}), taskId: t.id });
     }
     for (const [key, c] of byKey) {
         const st = shownState(c, now);

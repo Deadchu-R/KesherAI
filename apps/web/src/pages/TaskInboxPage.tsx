@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -531,6 +531,19 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
       )}
       {t.runAsk && <RunAsk t={t} state={state} act={act} busy={busy} />}
       {t.note && <p className="small tinbox-err">{t.note}</p>}
+      {!!t.stepLog?.length && (
+        <section className="card stack tinbox-doing">
+          <b>{t.status === "running" ? L("מה הוא עושה עכשיו", "What it is doing") : L("הצעדים האחרונים", "The last steps")}</b>
+          <ol className="small tinbox-doing-list">
+            {[...t.stepLog].reverse().map((s, i) => (
+              <li key={`${s.at}-${i}`} className={`${i === 0 && t.status === "running" ? "now" : "muted"}${s.error ? " err" : ""}`} dir="auto">
+                {describeStep(s, getLocale() === "he")}
+                <span className="muted"> · {ago(Date.now() - s.at)}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {t.pending && (
         <section className="card stack tinbox-approve">

@@ -391,6 +391,8 @@ export interface HubInboxTask {
   estSteps?: number;
   /** The steps the agent has taken so far while it runs ("step X of ~N"). */
   steps?: number;
+  /** The step it is on now, in short (task-steps.ts), while it runs. */
+  now?: import("./task-steps.js").StepNote;
   /** `deferred` only: when the quota resets and the task may try once more (ms since epoch). */
   retryAt?: number;
   /** The live agent run (the Agents tab's card), while it has one. */

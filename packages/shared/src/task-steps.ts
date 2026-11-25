@@ -59,3 +59,88 @@ export function estimateTaskSteps(t: StepEstimateInput): number {
   }
   return Math.min(MAX_STEPS, Math.max(MIN_STEPS, Math.round(n)));
 }
+
+// ── Readable steps (Roee, 24.11: "it isn't clear what each step means"): an agent's step (a tool and its arguments) as
+// one plain line for the task card, the hub and the phone. Only a short target is kept, the user folder as `~`.
+
+/** One step as kept on a task: the tool, a short target, and when. */
+export interface StepNote {
+  tool: string;
+  /** The file, search or command it worked on (short, user folder as `~`). */
+  target?: string;
+  at: number;
+  /** The step failed. */
+  error?: boolean;
+}
+
+const PATH_KEYS = ["path", "file_path", "filePath", "file", "filename", "target_file", "dir", "directory", "cwd"];
+const QUERY_KEYS = ["pattern", "query", "regex", "search", "glob", "q"];
+const CMD_KEYS = ["command", "cmd", "script"];
+const URL_KEYS = ["url", "href"];
+
+/** The user folder (Windows, macOS, Linux) as `~`, and a long path cut to its last parts. */
+function tidy(s: string, max = 70): string {
+  let t = s.replace(/[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s"']+/gi, "~").replace(/\/(?:home|Users)\/[^/\s"']+/g, "~").replace(/\s+/g, " ").trim();
+  // A path inside a run's worktree: from the repo's own folders on.
+  t = t.replace(/^.*?[\\/](?=(?:apps|packages|plugins|docs|tools|scripts|src)[\\/])/, "");
+  return t.length > max ? `…${t.slice(t.length - max + 1)}` : t;
+}
+
+/** The first string under one of the keys. */
+function pick(args: Record<string, unknown>, keys: readonly string[]): string | undefined {
+  for (const k of keys) {
+    const v = args[k];
+    if (typeof v === "string" && v.trim()) return v;
+    if (Array.isArray(v) && typeof v[0] === "string") return v.join(" ");
+  }
+  return undefined;
+}
+
+/**
+ * Keeps a step as a {@link StepNote}.
+ *
+ * @param tool - The tool's name.
+ * @param args - Its arguments (an object or a string).
+ * @param at - When (ms).
+ * @param error - It failed.
+ * @returns The note.
+ */
+export function stepNote(tool: string, args: unknown, at: number, error = false): StepNote {
+  let target: string | undefined;
+  if (typeof args === "string") target = args;
+  else if (args && typeof args === "object") {
+    const a = args as Record<string, unknown>;
+    target = pick(a, CMD_KEYS) ?? pick(a, PATH_KEYS) ?? pick(a, QUERY_KEYS) ?? pick(a, URL_KEYS);
+  }
+  return { tool, ...(target ? { target: tidy(target) } : {}), at, ...(error ? { error: true } : {}) };
+}
+
+/**
+ * A step in plain words.
+ *
+ * @param s - The step.
+ * @param he - Hebrew (else English).
+ * @returns One line.
+ */
+export function describeStep(s: Pick<StepNote, "tool" | "target" | "error">, he: boolean): string {
+  const tool = s.tool.toLowerCase();
+  const t = s.target ? ` ${s.target}` : "";
+  const say = (h: string, e: string) => (he ? h : e) + t;
+  let line: string;
+  if (/^(bash|shell|run|exec|terminal|powershell|command|run_command|cmd)/.test(tool) || /(_command|_shell)$/.test(tool)) {
+    const c = (s.target ?? "").toLowerCase();
+    if (/\b(test|vitest|jest|tsx --test|pytest)\b/.test(c)) line = he ? "מריץ בדיקות" : "Running the tests";
+    else if (/\b(tsc|build|lint|eslint|typecheck)\b/.test(c)) line = he ? "בודק שהקוד נבנה ותקין" : "Checking the code builds";
+    else if (/^git\b/.test(c)) line = say("git:", "git:");
+    else line = say("מריץ פקודה:", "Running:");
+  } else if (/(read|view|cat|open|get_file|show)/.test(tool)) line = say("קורא", "Reading");
+  else if (/(edit|patch|replace|apply|update|str_replace|multi_edit)/.test(tool)) line = say("עורך", "Editing");
+  else if (/(write|create|new_file|save)/.test(tool)) line = say("כותב", "Writing");
+  else if (/(grep|search|find|glob|rg|ripgrep|codebase)/.test(tool)) line = say("מחפש", "Searching for");
+  else if (/(^ls$|list|dir|tree)/.test(tool)) line = say("מסתכל בתיקייה", "Looking in");
+  else if (/(fetch|web|http|browse|url)/.test(tool)) line = say("קורא דף", "Reading the page");
+  else if (/(todo|plan|think|task)/.test(tool)) line = he ? "מתכנן את הצעדים" : "Planning the steps";
+  else if (/(delete|remove|rm)/.test(tool)) line = say("מוחק", "Deleting");
+  else line = he ? `משתמש בכלי ${s.tool}${t}` : `Using ${s.tool}${t}`;
+  return s.error ? `${line} ${he ? "(נכשל)" : "(failed)"}` : line;
+}

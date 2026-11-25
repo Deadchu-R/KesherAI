@@ -5,6 +5,7 @@
  * is tested in Node and compiled into the hub page as is. Layout: the design doc's HubNowNext, HubWorkTabs and
  * HubWorkFilters boards (and their PhoneHub twins).
  */
+import type { StepNote } from "./task-steps.js";
 import { isGoing, shownState, type AgentCard } from "./hub-agents.js";
 import { boardWho, HUB_WORK_KINDS, type HubBoardItem, type HubInboxTask, type HubWorkKind } from "./hub-protocol.js";
 
@@ -20,6 +21,8 @@ export interface InboxMeta {
   at: number;
   estSteps?: number;
   steps?: number;
+  /** The step it is on now (task-steps.ts). */
+  now?: StepNote;
   retryAt?: number;
   model?: string;
   boardId?: string;
@@ -54,6 +57,7 @@ export function inboxMetaOf(r: HubInboxTask, deviceId: string): InboxMeta {
     at: r.at,
     ...(r.estSteps ? { estSteps: r.estSteps } : {}),
     ...(r.steps ? { steps: r.steps } : {}),
+    ...(r.now ? { now: r.now } : {}),
     ...(r.retryAt ? { retryAt: r.retryAt } : {}),
     ...(r.model ? { model: r.model } : {}),
     ...(r.boardId ? { boardId: r.boardId } : {}),
@@ -128,6 +132,8 @@ export interface WorkTask {
   model?: string;
   kind?: HubWorkKind;
   steps?: number;
+  /** The step it is on now. */
+  now?: StepNote;
   estSteps?: number;
   startedAt?: number;
   endedAt?: number;
@@ -172,6 +178,7 @@ export function toWorkTask(t: WorkSource, expired: boolean, board?: ReadonlyMap<
     ...(i?.model ? { model: i.model } : {}),
     ...(i?.kind ? { kind: i.kind } : {}),
     ...(i?.steps ? { steps: i.steps } : {}),
+    ...(i?.now ? { now: i.now } : {}),
     ...(i?.estSteps ? { estSteps: i.estSteps } : {}),
     ...(i?.startedAt ? { startedAt: i.startedAt } : {}),
     ...(i?.endedAt ? { endedAt: i.endedAt } : {}),
@@ -278,6 +285,8 @@ export interface NowRow {
   step?: number;
   of?: number;
   model?: string;
+  /** The step it is on now, in short: shown as a plain line (describeStep). */
+  now?: StepNote;
   /** Since when it works on this (ms since epoch). */
   since?: number;
   /** The run waits for the owner, or its heartbeat stopped. */
@@ -318,7 +327,7 @@ export function nowRows(tasks: readonly WorkTask[], cards: Iterable<AgentCard>, 
     const of = c?.state.of || t.estSteps;
     const model = c?.state.model ?? t.model;
     const since = c?.state.startedAt || t.startedAt || t.at;
-    rows.push({ worker: t.worker, free: false, title: t.title, ...(steps ? { step: steps } : {}), ...(of ? { of } : {}), ...(model ? { model } : {}), ...(since ? { since } : {}), ...(st === "waiting" || st === "stale" ? { flag: st } : {}), ...(key && c ? { runKey: key } : {}), taskId: t.id });
+    rows.push({ worker: t.worker, free: false, title: t.title, ...(steps ? { step: steps } : {}), ...(of ? { of } : {}), ...(model ? { model } : {}), ...(t.now ? { now: t.now } : {}), ...(since ? { since } : {}), ...(st === "waiting" || st === "stale" ? { flag: st } : {}), ...(key && c ? { runKey: key } : {}), taskId: t.id });
   }
   for (const [key, c] of byKey) {
     const st = shownState(c, now);

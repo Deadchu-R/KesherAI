@@ -304,6 +304,7 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     ...(result ? { result } : {}),
     estSteps: estimateTaskSteps(t),
     ...(state === "running" && t.steps ? { steps: t.steps } : {}),
+    ...(state === "running" && t.stepLog?.length ? { now: t.stepLog[t.stepLog.length - 1] } : {}),
     ...(state === "deferred" && t.retryAt ? { retryAt: t.retryAt } : {}),
     ...(going ? { runId: inboxRunId(t.id) } : {}),
     // The hub's "who works on what": the model, the board item and its priority, the queue place, what it is, when it

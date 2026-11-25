@@ -9,6 +9,7 @@
  * Move to Antigravity. Nothing here is stored except the filters, in this browser.
  */
 import { assignOfExecutor, assignQuestion } from "../../../packages/shared/src/task-assign.js";
+import { describeStep } from "../../../packages/shared/src/task-steps.js";
 import { cleanFilters, filtersOn, leavers, modelsOf, nextEntries, nowRows, NO_FILTERS, passes, phaseCounts, WORKERS } from "../../../packages/shared/src/hub-work.js";
 import { h, L, when } from "./dom.js";
 import { get, put } from "./kv.js";
@@ -77,8 +78,10 @@ function nowRow(v, r, pcsOn) {
             h("span", { class: "grow min0 wrapl nw-title", dir: "auto" }, r.title ?? ""),
             r.flag === "waiting" ? h("span", { class: "tag t-ask" }, L("מחכה לך", "Waits for you")) : r.flag === "stale" ? h("span", { class: "tag t-wait" }, L("לא עונה", "Not answering")) : null,
         ];
+    // What it is doing now, in plain words (task-steps.ts): "Reading …", "Running the tests".
+    const doing = !r.free && r.now ? h("div", { class: "xs nw-now", dir: "auto" }, describeStep(r.now, L("he", "en") === "he")) : null;
     const facts = r.free ? null : h("div", { class: "row wrap xs mut nw-facts" }, stepText(r.step, r.of) ? h("span", { class: "chip steps" }, stepText(r.step, r.of)) : null, r.model ? h("span", { class: "chip" }, r.model) : null, r.since ? h("span", null, L("מ-", "since ") + when(r.since)) : null);
-    return h(open ? "button" : "div", { ...(open ? { type: "button", onclick: open } : {}), class: `nowrow${r.free ? " free" : ""}`, "aria-label": `${workerName(r.worker)}: ${r.free ? L("פנוי", "free") : r.title ?? ""}` }, h("div", { class: "row nw-top" }, h("b", { class: "nw-who" }, workerName(r.worker)), ...body), facts);
+    return h(open ? "button" : "div", { ...(open ? { type: "button", onclick: open } : {}), class: `nowrow${r.free ? " free" : ""}`, "aria-label": `${workerName(r.worker)}: ${r.free ? L("פנוי", "free") : r.title ?? ""}` }, h("div", { class: "row nw-top" }, h("b", { class: "nw-who" }, workerName(r.worker)), ...body), doing, facts);
 }
 /** The Now strip: who works on what right now, one row per worker. */
 function nowStrip(v, all, board) {

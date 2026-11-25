@@ -307,3 +307,6 @@ button.nowrow { cursor: pointer; } button.nowrow:hover { background: #1e1e22; }
 .tag.needsrun { font-weight: 600; }
 .trow.ghead { flex-wrap: wrap; }
 .trow.ghead .curtain { flex: 1 1 9rem; }
+
+/* What it is doing now, one plain line (task-steps.ts). */
+.nw-now { margin-top: 2px; opacity: .9; }

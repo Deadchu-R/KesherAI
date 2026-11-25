@@ -28,3 +28,13 @@ test("a code task: files, goal length and a check", () => {
   assert.equal(estimateTaskSteps({ ...base, maxFiles: 60 }), 3 + 15 + 1);
   assert.equal(estimateTaskSteps({ ...base, runBy: "local", maxFiles: 0, goal: "" }), 4);
 });
+
+test("a step in plain words, with the user folder hidden", async () => {
+  const { stepNote, describeStep } = await import("./task-steps.js");
+  const read = stepNote("read_file", { path: "C:\\Users\\dana\\x\\worktrees\\r1\\apps\\web\\src\\Chat.tsx" }, 1);
+  assert.equal(read.target, "apps\\web\\src\\Chat.tsx");
+  assert.equal(describeStep(read, false), "Reading apps\\web\\src\\Chat.tsx");
+  assert.equal(describeStep(stepNote("bash", { command: "pnpm vitest run" }, 1), true), "מריץ בדיקות");
+  assert.equal(describeStep(stepNote("grep", { pattern: "stepLine" }, 1), false), "Searching for stepLine");
+  assert.equal(describeStep(stepNote("edit", { file_path: "/home/dana/app/a.ts" }, 1, true), false), "Editing ~/app/a.ts (failed)");
+});
