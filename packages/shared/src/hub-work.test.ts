@@ -120,3 +120,9 @@ test("a run becomes a work task with its name, steps and the failure line; the l
   assert.deepEqual([w.title, w.phase, w.worker, w.cause, w.endedAt], ["Login checker", "failed", "antigravity", "Quota", 5000]);
   assert.deepEqual(leavers(new Set(["a", "b", "c"]), new Set(["b", "d"])), ["a", "c"]);
 });
+
+test("Now: a run whose task already ended is not shown as working", () => {
+  const now = 100_000;
+  const rows = nowRows([wt({ id: "t9", status: "failed", worker: "antigravity" })], [card({ model: "Opus" })], [], now, () => "pc1/r1");
+  assert.ok(!rows.some((r) => !r.free && r.worker === "antigravity"), JSON.stringify(rows));
+});

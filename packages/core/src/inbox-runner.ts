@@ -1320,6 +1320,10 @@ export class TaskInbox {
         this.saved.relayHealth = { at: this.now(), ok, ms: this.now() - t0, model, note, answered };
         this.saved.relayLog = [...(this.saved.relayLog ?? []), { at: this.now(), id: "probe", model, status: (ok ? "probe-ok" : "probe-failed") as RelayRun["status"], ms: this.now() - t0 }].slice(-200);
         await this.save();
+        // A model that answered is not cooling down any more (25.11: after a 502 the models stayed out for an hour
+        // although the next check answered).
+        const until = this.ocToday().modelUntil;
+        if (answered.length && until) for (const m of answered) delete until[m];
         // It answers again: load it right away (Roee, 25.11: "when they are available, load them up").
         if (ok && !was) void this.pumpOpencode();
         if (was !== ok && (was !== undefined || ok)) this.d.notify(ok ? `✓ ${r.name} עונה` : `✕ ${r.name} לא עונה`, ok ? `${opencodeModelName(model)} answered in ${Math.round((this.now() - t0) / 1000)} s; heavy tasks go to it again.` : `${note}. No tasks go to it until it answers again (checked every 15 minutes).`, { path: "#/settings/task-inbox" });

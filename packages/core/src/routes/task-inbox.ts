@@ -121,8 +121,9 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/stop", async (req) => ({ stopped: await inbox.stop(req.params.id) }));
   app.post<{ Params: { id: string } }>("/api/task-inbox/tasks/:id/skip", async (req, reply) => inbox.skip(req.params.id).catch((e) => failed(reply, e)));
   app.post<{ Params: { id: string }; Body: { to?: string } }>("/api/task-inbox/tasks/:id/reassign", async (req, reply) => {
-    const to = req.body?.to === "local" ? "local" : req.body?.to === "opus" ? "opus" : req.body?.to === "opencode" ? "opencode" : req.body?.to === "claude" ? "claude" : undefined;
-    if (!to) return reply.code(400).send({ error: "to is local, opus, opencode or claude." });
+    const ALL = ["local", "opus", "antigravity", "gemini", "opencode", "claude"] as const;
+    const to = ALL.find((x) => x === req.body?.to);
+    if (!to) return reply.code(400).send({ error: `to is ${ALL.join(", ")}.` });
     return inbox.reassign(req.params.id, to).catch((e) => failed(reply, e));
   });
 

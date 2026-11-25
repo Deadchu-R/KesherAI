@@ -329,9 +329,12 @@ export function nowRows(tasks: readonly WorkTask[], cards: Iterable<AgentCard>, 
     const since = c?.state.startedAt || t.startedAt || t.at;
     rows.push({ worker: t.worker, free: false, title: t.title, ...(steps ? { step: steps } : {}), ...(of ? { of } : {}), ...(model ? { model } : {}), ...(t.now ? { now: t.now } : {}), ...(since ? { since } : {}), ...(st === "waiting" || st === "stale" ? { flag: st } : {}), ...(key && c ? { runKey: key } : {}), taskId: t.id });
   }
+  // A run whose task already ended (failed, done) is not working, even if its card was never closed (25.11: an
+  // Antigravity card from Sunday 10:17 stayed under "Working now" and could not be opened).
+  const ended = new Set(tasks.filter((t) => t.status !== "running").map((t) => runKeyOf(t.id)).filter((k): k is string => !!k));
   for (const [key, c] of byKey) {
     const st = shownState(c, now);
-    if (linked.has(key) || !isGoing(c) || st === "queued") continue;
+    if (linked.has(key) || ended.has(key) || !isGoing(c) || st === "queued") continue;
     // Antigravity waiting for Run has not started: it is in the Next list, not working.
     if (c.state.state === "waiting" && c.state.waiting?.reason === "run-press") continue;
     const s = c.state;
