@@ -39,6 +39,36 @@ function modelProp(t: InboxTaskView, state: InboxState): { model?: { list: Inbox
   return { model: { list: state.models ?? [], pick: t.model ?? "", auto: defaultFamilyFor(t) } };
 }
 
+/** The provider filter's order. */
+const PROVIDERS = ["ghostcli", "opencode", "opencode-free", "zai", "openrouter", "cloudflare", "nvidia", "gemini", "antigravity", "local", "claude", "opus"];
+
+/**
+ * Who does (or did) a task, by provider: the model it ran on when that says more than the executor (GhostCLI, the free
+ * services, OpenCode's free model), else the executor.
+ *
+ * @param t - The task.
+ */
+function providerOf(t: InboxTaskView): string {
+  const m = t.modelUsed ?? "";
+  if (/ghostcli\//.test(m)) return "ghostcli";
+  if (/fc-zhipu|zai\//i.test(m)) return "zai";
+  if (/openrouter/i.test(m)) return "openrouter";
+  if (/cloudflare/i.test(m)) return "cloudflare";
+  if (/nvidia/i.test(m)) return "nvidia";
+  if (/beam-free/i.test(m)) return "opencode-free";
+  return t.runBy ?? t.executor ?? "";
+}
+
+/** A provider's shown name. */
+function providerName(p: string): string {
+  const names: Record<string, [string, string]> = {
+    ghostcli: ["👻 GhostCLI", "👻 GhostCLI"], opencode: ["◈ OpenCode Go", "◈ OpenCode Go"], "opencode-free": ["◈ OpenCode (חינם)", "◈ OpenCode (free)"],
+    zai: ["Z.ai", "Z.ai"], openrouter: ["OpenRouter", "OpenRouter"], cloudflare: ["Cloudflare", "Cloudflare"], nvidia: ["NVIDIA", "NVIDIA"],
+    gemini: ["✧ Gemini", "✧ Gemini"], antigravity: ["✦ Antigravity", "✦ Antigravity"], local: ["◆ מודל מקומי", "◆ Local model"], claude: ["✳ Claude Code", "✳ Claude Code"], opus: ["✷ Claude", "✷ Claude"],
+  };
+  return names[p] ? L(...names[p]!) : p;
+}
+
 function stepsText(t: InboxTaskView): string | null {
   if (t.status === "skipped" || t.status === "declined") return null;
   const est = estimateTaskSteps(t);
@@ -128,6 +158,7 @@ const startingNow = (t: InboxTaskView): boolean => runStarting(runTapped.get(t.i
 export function TaskInboxPage({ id }: { id?: string }) {
   const [s, setS] = useState<InboxState | null>(null);
   const [filter, setFilter] = useState<"all" | "open" | "waiting" | "running" | "ask" | "ended">("open");
+  const [prov, setProv] = useState("");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   /** The task whose Run the PC refused because another one runs: its row says so and offers "Add to queue". */
@@ -177,7 +208,8 @@ export function TaskInboxPage({ id }: { id?: string }) {
     ask: s.tasks.filter((t) => inFilter(t, "ask")).length,
     ended: s.tasks.filter((t) => inFilter(t, "ended")).length,
   };
-  const shown = s.tasks.filter((t) => inFilter(t, filter));
+  const provs = [...new Set(s.tasks.map(providerOf))].sort((a, b) => PROVIDERS.indexOf(a) - PROVIDERS.indexOf(b));
+  const shown = s.tasks.filter((t) => inFilter(t, filter) && (!prov || providerOf(t) === prov));
   const asks = s.tasks.filter((t) => t.runAsk && t.runAsk.until > Date.now());
   const local = s.tasks.filter((t) => t.runBy === "local").length;
   // "Run all (N)": the Antigravity tasks that wait for Run, from two up, on this computer (the first runs, the rest queue
@@ -256,6 +288,15 @@ export function TaskInboxPage({ id }: { id?: string }) {
         {([["open", "פתוחות", "Open"], ["all", "הכול", "All"], ["waiting", "ממתינות", "Waiting"], ["running", "רצות", "Running"], ["ask", "צריך אישור", "Needs approval"], ["ended", "הסתיימו", "Ended"]] as const).map(([k, he, en]) => (
           <button key={k} type="button" role="tab" aria-selected={filter === k} className={`chip-text${filter === k ? " on" : ""}`} onClick={() => setFilter(k)}>{L(he, en)} {counts[k]}</button>
         ))}
+        <label className="row small">
+          {L("ספק", "Provider")}
+          <select value={prov} onChange={(e) => setProv(e.target.value)} aria-label={L("סינון לפי ספק", "Filter by provider")}>
+            <option value="">{L("כולם", "All")}</option>
+            {provs.map((p) => (
+              <option key={p} value={p}>{providerName(p)} ({s.tasks.filter((t) => inFilter(t, filter) && providerOf(t) === p).length})</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="card tinbox-table">
