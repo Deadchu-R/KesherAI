@@ -10,7 +10,7 @@ function deps(tasks: Record<string, Partial<InboxTaskView>>) {
     fromDrive: async (rid) => (rid === "drive-1" ? "r-1" : undefined),
     workItem: async (id) => (id === "w-abc" ? { title: "Write docs", text: "Write docs for X" } : undefined),
     stop: async (id) => (calls.push(`stop ${id}`), true),
-    reassign: async (id, to, again) => calls.push(`reassign ${id} ${to}${again ? " again" : ""}`),
+    reassign: async (id, to, again, relay) => calls.push(`reassign ${id} ${to}${again ? " again" : ""}${relay ? " relay" : ""}`),
     add: async (i) => (calls.push(`add ${i.title} ${i.executor}`), { id: "r-9" }),
     toChat: async (role, title) => (calls.push(`chat ${role} ${title}`), `🛠️ ${title}`),
     movedOut: async (id) => calls.push(`moved ${id}`),
@@ -44,4 +44,12 @@ test("a chat role opens a chat and the task leaves the inbox; a work-list item b
   assert.equal((await assignTask(d, "w-nope", "claude")).ok, false);
   assert.equal((await assignTask(d, "r-404", "claude")).text, "This PC does not have that task.");
   assert.deepEqual(calls, ["chat build Fix the build", "moved r-1", "add Write docs local", "chat research Write docs"]);
+});
+
+test("GhostCLI is OpenCode pinned to the relay: a pinned task is already with it, a plain OpenCode one is not", async () => {
+  const { d, calls } = deps({ "r-1": { runBy: "opencode" }, "r-2": { runBy: "opencode", model: "ghostcli/*" } });
+  assert.equal((await assignTask(d, "r-1", "ghostcli")).ok, true);
+  assert.equal((await assignTask(d, "r-2", "ghostcli")).text, "It is already with GhostCLI (relay, trial).");
+  assert.equal((await assignTask(d, "r-2", "opencode")).ok, true);
+  assert.deepEqual(calls, ["reassign r-1 opencode relay", "reassign r-2 opencode"]);
 });

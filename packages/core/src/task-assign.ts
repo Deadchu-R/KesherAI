@@ -10,7 +10,7 @@
  * - A running task is stopped, and a finished one run again, only after the user's yes (`confirm`); without it the
  *   answer is a question (`ask`).
  */
-import { ASSIGN_CHOICES, inboxExecutorOf, roleOf, type AssignResult, type AssignRole, type AssignTo, type InboxTaskView, type SpecialistId } from "@kesher/shared";
+import { RELAY_PIN, ASSIGN_CHOICES, inboxExecutorOf, roleOf, type AssignResult, type AssignRole, type AssignTo, type InboxTaskView, type SpecialistId } from "@kesher/shared";
 
 /** What an assignment needs from the app. */
 export interface AssignDeps {
@@ -21,7 +21,7 @@ export interface AssignDeps {
   /** A work-list item by its id (`w-…`): its title and whole text. */
   workItem?: (id: string) => Promise<{ title: string; text: string } | undefined>;
   stop: (id: string) => Promise<boolean>;
-  reassign: (id: string, to: "opus" | "antigravity" | "local" | "gemini" | "opencode" | "claude", again: boolean) => Promise<unknown>;
+  reassign: (id: string, to: "opus" | "antigravity" | "local" | "gemini" | "opencode" | "claude", again: boolean, relay?: boolean) => Promise<unknown>;
   add: (input: { title: string; goal: string; executor: string }) => Promise<{ id: string }>;
   /** Opens a code chat whose lead hands the task to a sub-agent of the role; returns the chat's title. */
   toChat?: (role: AssignRole | SpecialistId, title: string, text: string) => Promise<string>;
@@ -59,7 +59,7 @@ export async function assignTask(d: AssignDeps, taskId: string, to: AssignTo, co
     if (!id || !t) return { ok: false, text: "This PC does not have that task." };
     const running = t.status === "running" || t.status === "needs-approval";
     const finished = t.status === "done" || t.status === "partial";
-    if (exec && exec === t.runBy && !running && !finished) return { ok: true, text: `It is already with ${nameOf(to)}.` };
+    if (exec && exec === t.runBy && (to === "ghostcli") === (t.model === RELAY_PIN) && !running && !finished) return { ok: true, text: `It is already with ${nameOf(to)}.` };
     if (running && !confirm) return { ok: false, text: "It is running now.", ask: "running" };
     if (finished && !confirm) return { ok: false, text: "It has finished.", ask: "finished" };
     if (running && !(await d.stop(id))) return { ok: false, text: "It could not be stopped." };
@@ -69,7 +69,7 @@ export async function assignTask(d: AssignDeps, taskId: string, to: AssignTo, co
       await d.movedOut(id, `to a ${role} agent in the chat "${chat}"`);
       return { ok: true, text: `Sent to a new chat: ${chat}.` };
     }
-    await d.reassign(id, exec!, finished || running);
+    await d.reassign(id, exec!, finished || running, to === "ghostcli");
     return { ok: true, text: `Given to ${nameOf(to)}.` };
   } catch (e) {
     return { ok: false, text: ((e as Error).message || "It did not work.").slice(0, 300) };

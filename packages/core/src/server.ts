@@ -738,7 +738,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
       return item && { title: item.title, text: item.text };
     },
     stop: (id) => taskInbox.stop(id),
-    reassign: (id, to, again) => taskInbox.reassign(id, to, { again }),
+    reassign: (id, to, again, relay) => taskInbox.reassign(id, to, { again, relay }),
     add: (input) => taskInbox.add(input),
     toChat: async (role, title, text) => {
       const repo = config.taskInbox.repo;

@@ -462,7 +462,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
         {t.runBy === "opus" && t.status === "queued" && <span className="small muted">{L("Claude מריץ", "Claude runs it")}</span>}
         {["running", "needs-approval", "partial", "failed", "deferred-quota", "declined"].includes(t.status) && <button type="button" onClick={open}>{L("פתח", "Open")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} onDone={onAssigned} {...modelProp(t, state)} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} onDone={onAssigned} {...modelProp(t, state)} />}
       </span>
     </div>
   );
@@ -583,7 +583,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         {stepsText(t) && <span className="small muted tinbox-steps">{stepsText(t)}</span>}
         {(t.status === "running" || t.status === "needs-approval") && <button type="button" className="danger" disabled={busy} onClick={() => void act(`/api/task-inbox/tasks/${t.id}/stop`)}>■ {L("עצור", "Stop")}</button>}
         {t.status === "done" && <button type="button" onClick={copy}>📋 {L("העתק ל-Claude", "Copy for Claude")}</button>}
-        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy)} {...modelProp(t, state)} />}
+        {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} {...modelProp(t, state)} />}
       </div>
       {t.modelFallback && <p className="small warn" dir="auto">↘ {L("המודל שנבחר לא היה זמין (מכסה), עבר אוטומטית:", "The chosen model could not run (quota), switched by itself:")} <span dir="ltr">{t.modelFallback}</span></p>}
       <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
