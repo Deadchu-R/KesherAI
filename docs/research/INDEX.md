@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| r-20261126-05 | Research: where agent task runs live, so they do not flood the chat list | [r-20261126-05.md](r-20261126-05.md) |
 | r-20261126-04 | Research: updates in parts (only the changed component, not the whole app) | [r-20261126-04.md](r-20261126-04.md) |
 | r-20261126-03 | Research: the best language for each KesherAI component (speed, RAM, CPU) | [r-20261126-03.md](r-20261126-03.md) |
 | r-20261126-02 | Research: Tauri vs Electron for KesherAI; Rust inference engines vs llama.cpp | [r-20261126-02.md](r-20261126-02.md) |
