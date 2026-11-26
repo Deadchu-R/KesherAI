@@ -517,3 +517,9 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
 - r-20261126-09 (Antigravity quota): watchers read it from Antigravity's local language server (process found by name; CSRF token and port from its command line; GetUserStatus returns per-model remaining fraction and reset time). Report lacked the exact endpoint.
   - ✅ KesherAI reads the quota locally (read-only, every 5 minutes), shows it on the tasks page and the hub's Antigravity chip, sets the real reset time, and lifts the stop (with a notice) when it renews (0.6.485).
   - ⬜ Check on the PC that the reading works with Antigravity open; the design-doc board for the quota line.
+
+## Where it stopped (26.11 19:51 — power cut at Roee's, PC offline)
+- 0.6.487/0.6.488 built; 0.6.489 (model chip picker on Antigravity rows; "ended at once" only ≤3 steps and no quota left) building. Not yet checked on the PC.
+- Antigravity line set to Claude: r-20261123-09, -08 Opus 4.6; -11, r-20261122-40 Sonnet 4.6; -12 Sonnet (may not have saved). Antigravity quota at 19:12: Gemini 99%/100%, Claude+GPT 70% (5h) / 44% (weekly).
+- ⬜ When the PC is back: version, the model button, the line runs on Claude, agQuota or agQuotaWhy shown.
+- ⬜ GPT-OSS 120B refused by setModel ("Antigravity does not offer that model") although listed: check pickableModels / saved.models.
