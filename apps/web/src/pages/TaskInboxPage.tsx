@@ -353,6 +353,13 @@ function WorkListSend({ onSent }: { onSent: () => void }) {
   );
 }
 
+/** Why the last run did not succeed, for the task's box: kept after it goes back to the queue, hidden once it is done or running. */
+function failLine(t: InboxTaskView): string | undefined {
+  if (!t.lastFail || t.status === "done" || t.status === "running") return undefined;
+  const word = t.lastFail.status === "deferred-quota" ? L("נדחתה", "Put off") : t.lastFail.status === "partial" ? L("הסתיימה חלקית", "Partly done") : L("לא הצליחה", "Did not succeed");
+  return `⚠ ${word} (${new Date(t.lastFail.at).toLocaleString()}): ${t.lastFail.note}`;
+}
+
 /** Google's terms for a personal plan, in one short note (docs/RESEARCH_LOG.md, the 2026-11-19 terms entry). */
 function TermsNote() {
   return (
@@ -434,6 +441,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
           </div>
         )}
         {t.status === "running" && !!t.stepLog?.length && <div className="small muted" dir="auto">{describeStep(t.stepLog[t.stepLog.length - 1]!, getLocale() === "he")}</div>}
+        {failLine(t) && <div className="small tinbox-err" dir="auto">{failLine(t)}</div>}
       </div>
       <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span>{modelLine(t) && <span className="small muted tinbox-model" dir="ltr" title={t.modelFallback}>{modelLine(t)}</span>}</span>
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>

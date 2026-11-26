@@ -1039,6 +1039,8 @@ export class TaskInbox {
     });
     await this.save();
     this.d.notify(`${endIcon(status)} ${t.id} ${endWord(t, status)}`, endBody(t, status), { path: `#/task-inbox/${t.id}` });
+    rememberFail(t, status, this.now());
+    await this.save();
     await this.retryLater(t);
   }
 
@@ -3015,6 +3017,8 @@ export class TaskInbox {
     if (t.runBy === "claude") this.d.notify(`${icon} Claude Code ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
     else if (t.runBy === "opencode") this.d.notify(`${icon} OpenCode Go ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
     else if (t.runBy !== "antigravity") this.d.notify(`${icon} ${t.id} ${endWord(t, status)}`, body, { path: `#/task-inbox/${t.id}` });
+    rememberFail(t, status, this.now());
+    await this.save();
     await this.retryLater(t);
   }
 
@@ -3155,6 +3159,12 @@ export function retryable(note?: string): boolean {
 
 /** The icon of a task's end notice. */
 const endIcon = (status: InboxStatus): string => (status === "done" ? "✓" : status === "deferred-quota" ? "⏸" : status === "partial" ? "◐" : "✕");
+
+/** Keeps why a run did not succeed on the task (its box shows it even after it goes back to the queue); a done run clears it. */
+export function rememberFail(t: InboxTaskView, status: InboxStatus, at: number): void {
+  if (status === "done") delete t.lastFail;
+  else t.lastFail = { at, status, note: (t.note ?? "").slice(0, 400) || status };
+}
 
 /**
  * The body of a task's end notice: the task, its branch when pushed, and, when it did not finish, why (the note the

@@ -461,6 +461,8 @@ export interface InboxTaskView extends InboxTaskSpec {
   steps?: number;
   /** Times a failure sent it back to the queue by itself (at most 2). */
   autoRetries?: number;
+  /** Why the last run did not succeed (kept when the task goes back to the queue), shown in its box; cleared once it is done. */
+  lastFail?: { at: number; status: InboxStatus; note: string };
   /** The last steps in short (task-steps.ts), newest last, while it runs and after: the card's "what it does". */
   stepLog?: import("./task-steps.js").StepNote[];
   decisions?: InboxDecision[];

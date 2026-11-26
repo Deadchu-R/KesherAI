@@ -8,7 +8,7 @@ import { agent } from "@agentclientprotocol/sdk";
 import { INBOX_GIT_MISSING } from "@kesher/shared";
 import { AcpAgent } from "./acp.js";
 import { modelAgent } from "./acp-models.test.js";
-import { TaskInbox, isQuotaError, nextInLineTitle, quotaUntil, type RunCmd } from "./inbox-runner.js";
+import { TaskInbox, isQuotaError, rememberFail, nextInLineTitle, quotaUntil, type RunCmd } from "./inbox-runner.js";
 import { TaskBoard } from "./task-board.js";
 
 // The tester's own git identity, as a user's global config would have it: the inbox must never commit with it.
@@ -892,4 +892,14 @@ test("a failure goes back to the queue unless a safety rule stopped it", async (
   assert.equal(retryable("POST https://x/v1 → 502 Bad Gateway"), true);
   assert.equal(retryable("Privacy guard: skip. A file this run read holds 1 key"), false);
   assert.equal(retryable("Not committed or pushed: outside the allowed paths: a.txt"), false);
+});
+
+test("rememberFail keeps why a run did not succeed, and a done run clears it", () => {
+  const t = { id: "x", title: "x", status: "failed", note: "Antigravity quota spent" } as Parameters<typeof rememberFail>[0];
+  rememberFail(t, "deferred-quota", 5);
+  assert.deepEqual(t.lastFail, { at: 5, status: "deferred-quota", note: "Antigravity quota spent" });
+  t.note = "Queued";
+  assert.equal(t.lastFail?.note, "Antigravity quota spent");
+  rememberFail(t, "done", 6);
+  assert.equal(t.lastFail, undefined);
 });
