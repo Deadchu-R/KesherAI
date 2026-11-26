@@ -884,6 +884,8 @@ test("scratch output files are told apart from work", async () => {
   const { isScratchFile } = await import("./inbox-runner.js");
   assert.deepEqual(["base-out.txt", "test-out.txt", "run.log", "apps/x/output.txt", "notes.tmp"].map(isScratchFile), [true, true, true, true, true]);
   assert.deepEqual(["README.txt", "LICENSE.txt", "docs/plan.txt", "apps/web/src/a.ts", "requirements.txt"].map(isScratchFile), [false, false, false, false, false]);
+  assert.deepEqual(["prev_llamacpp.test.ts", "old-config.json", "server.ts.bak", "app.orig"].map(isScratchFile), [true, true, true, true]);
+  assert.deepEqual(["previews.ts", "copyright.md", "packages/core/src/old.ts"].map(isScratchFile), [false, false, false]);
 });
 
 test("a failure goes back to the queue unless a safety rule stopped it", async () => {

@@ -155,6 +155,8 @@ interface Saved {
   modelsAt?: number;
   /** A model family whose quota ran out, and until when (ms): later tasks start on the next model of their chain. */
   familyUntil?: Partial<Record<ModelFamily, number>>;
+  /** Families whose `familyUntil` came from Antigravity's own words ("Individual quota reached … Resets in 1h19m"), not a guess. */
+  familySure?: Partial<Record<ModelFamily, boolean>>;
   /** OpenCode Go: tasks started today, and the end of its plan's limit after a 429 (ms since epoch). */
   opencode?: { date: string; used: number; modelUntil?: Record<string, number> };
   /** Claude Code: tasks started today (UTC), and the end of a usage limit its CLI reported (ms since epoch). */
@@ -1379,6 +1381,7 @@ export class TaskInbox {
       // quota: any of them with quota opens the Flash family.
       const open = new Set(q.models.filter((m) => m.left > 0).map((m) => familyOf(m.name) ?? (/gemini/i.test(m.name) ? "flash" : undefined)).filter(Boolean));
       if (this.saved.familyUntil) for (const f of open) delete this.saved.familyUntil[f as ModelFamily];
+      if (this.saved.familySure) for (const f of open) delete this.saved.familySure[f as ModelFamily];
       const was = last ? antigravityQuotaSummary(last).left : undefined;
       this.saved.agQuota = q;
       const s = antigravityQuotaSummary(q);
@@ -2214,7 +2217,11 @@ export class TaskInbox {
       // "quota spent" guess sent every run to Gemini Flash while Claude had 70% left); a real quota answer still
       // moves on to the next one.
       const picked = !!t.model && !!chain[0] && matchModel(agent.models, t.model)?.id === chain[0].id;
-      while (at + 1 < chain.length && spent(at) && !(picked && at === 0)) {
+      const sure = (i: number) => {
+        const f = chain[i] ? familyOf(chain[i]!.name) : undefined;
+        return f !== undefined && !!this.saved.familySure?.[f];
+      };
+      while (at + 1 < chain.length && spent(at) && !(picked && at === 0 && !sure(0))) {
         tried.push(`${chain[at]!.name} (quota)`);
         at++;
       }
@@ -2276,8 +2283,19 @@ export class TaskInbox {
       a.agent?.close();
     }
     t.summary = text.trim().slice(-2000) || undefined;
-    const quota = error && isQuotaError(error) ? quotaUntil(error, this.now()) : undefined;
-    if (quota) this.saved.quota = { ...quota, taskId: t.id };
+    // Antigravity also says its quota in its answer text, not as an error (26.11: "⚠ Individual quota reached. Please
+    // upgrade your subscription … Resets in 1h19m10s." — the run then counted as "changed no files" and failed).
+    const said = /^⚠[^\n]*(quota|limit)[^\n]*$/im.exec(text)?.[0];
+    const quota = error && isQuotaError(error) ? quotaUntil(error, this.now()) : said ? quotaUntil(said, this.now()) : undefined;
+    if (quota && said && !error) {
+      // Only that model group is out (Claude and GPT share one quota, Gemini another), until the time it gave.
+      const fam = t.modelUsed ? familyOf(t.modelUsed) ?? (/gemini/i.test(t.modelUsed) ? "flash" : undefined) : undefined;
+      const fams: ModelFamily[] = fam === "flash" ? ["flash"] : ["opus", "sonnet"];
+      for (const f of fams) {
+        this.saved.familyUntil = { ...this.saved.familyUntil, [f]: quota.until };
+        this.saved.familySure = { ...this.saved.familySure, [f]: !quota.estimated };
+      }
+    } else if (quota) this.saved.quota = { ...quota, taskId: t.id };
     const ok = !error && stop === "end_turn" && !a.why;
     const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? "Stopped by you." : a.why ? this.stopText(t, a.why) : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
     await this.finish(t, worktree, base, repo, ok, why, quota ? "deferred-quota" : undefined);
@@ -3246,7 +3264,9 @@ export function requestBudget(t: { size?: string }, base = 80): number {
  */
 export function isScratchFile(path: string): boolean {
   const name = path.split("/").pop() ?? "";
-  if (/\.(log|tmp|out)$/i.test(name) || /([-_.]out|output|stdout|stderr)\.txt$/i.test(name)) return true;
+  if (/\.(log|tmp|out|bak|orig|old)$/i.test(name) || /([-_.]out|output|stdout|stderr)\.txt$/i.test(name)) return true;
+  // A copy an agent kept of a file it changed (26.11: "prev_llamacpp.test.ts" at the top blocked a whole task).
+  if (/^(prev|old|orig|backup|bak|copy)[_-]|[_.-](prev|old|orig|backup|bak|copy)(\.[\w]+)?$/i.test(name.replace(/\.(test|spec)(?=\.[\w]+$)/i, ""))) return true;
   return !path.includes("/") && /\.txt$/i.test(name) && !/^(license|notice|readme|changelog|requirements|robots)/i.test(name);
 }
 
