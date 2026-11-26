@@ -498,3 +498,21 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
 - ⬜ Re-ask r-20261126-07 style shortlists per platform (macOS/Apple Silicon, Linux, AMD, CPU-only laptops), not only the 3090.
 - ⬜ Updates in parts: bundles and the manifest for every platform's installer, not only Windows.
 - ⬜ Native modules (napi-rs etc.) built for win/mac/linux × x64/arm64, with the TypeScript fallback kept.
+
+## Research results 26.11 evening (Gemini) → tasks
+- r-20261126-06 (runs vs chats): runs live inside the task, not in the chat list (like Claude's background tasks, Cursor's Agents window, Codex cloud tasks).
+  - ⬜ Inbox runs stop creating chats: one Run per task, model attempts nested inside it.
+  - ⬜ A "Runs" section on the task page: attempts, model, steps, time, result.
+  - ⬜ "Continue as a chat" button: turns a run into a chat only when asked.
+  - ⬜ Phone: one status pill per task, tap → the run view.
+  - ⬜ Retention: keep a summary per attempt; prune raw run logs after 30 days.
+- r-20261126-07 (what to make faster first), ranked:
+  - ⬜ 1. Idle unload of the local llama.cpp model (measure VRAM idle 5/10/30 min first).
+  - ⬜ 2. Lazy-load the web UI's heavy pages (React.lazy) — measure time-to-interactive and heap first.
+  - ⬜ 3. napi-rs Rust module for log search / file indexing (only if the baseline shows stutter).
+  - ⬜ 4. Electron window show on ready-to-show; defer background jobs after first paint.
+- r-20261126-08 (engine per platform): llama.cpp CUDA on NVIDIA; MLX on Apple Silicon (≈20–30% faster than llama.cpp Metal); llama.cpp Vulkan for AMD/Intel; CPU builds otherwise. Report was thin on auto-pick.
+  - ⬜ Hardware detection → pick the engine build (CUDA / Vulkan / Metal / CPU), MLX as an option on Apple Silicon.
+  - ⬜ Ship the CPU build in the installer; download the GPU build that fits on first run.
+- r-20261126-09 (Antigravity quota): watchers read it from Antigravity's local language server (process found by name; CSRF token and port from its command line; GetUserStatus returns per-model remaining fraction and reset time). Report lacked the exact endpoint.
+  - ⬜ KesherAI reads the quota locally (read-only, every few minutes), shows it in the hub and the tasks page, and starts waiting Antigravity tasks when it resets.
