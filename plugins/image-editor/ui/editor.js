@@ -901,12 +901,187 @@
   $("layerOpacity").oninput = () => { const l = active(); if (l) { l.opacity = +$("layerOpacity").value / 100; draw(); } };
   $("layerOpacity").onpointerdown = () => remember(T("hLayerProps", "Layer properties"));
 
-  // ---------- selection buttons ----------
-  $("selAll").onclick = () => { const p = new Path2D(); p.rect(0, 0, doc.w, doc.h); selection = { path: p, inverted: false }; draw(); };
-  $("selNone").onclick = () => { selection = null; draw(); };
-  $("selInvert").onclick = () => { if (selection) { selection.inverted = !selection.inverted; draw(); } };
-  $("selClear").onclick = clearSelection;
-  $("selToAi").onclick = () => { setPersona("ai"); $("prompt").focus(); };
+  // ---------- Marching Squares for 8-bit mask outlines ----------
+      /** Lookup table: 16 cases → line segments between edge midpoints (0=top,1=right,2=bottom,3=left). */
+      const MS_TABLE = [
+        [], [[0,3]], [[0,1]], [[1,3]], [[1,2]], [[0,3],[1,2]], [[0,2]], [[2,3]],
+        [[2,3]], [[0,2]], [[0,1],[2,3]], [[1,2]], [[1,3]], [[0,1]], [[0,3]], []
+      ];
+      /** Edge midpoint offsets within a cell: top, right, bottom, left. */
+      const EDGE_MID = [[0.5,0],[1,0.5],[0.5,1],[0,0.5]];
+
+      /**
+       * Convert an 8-bit mask image to a selection using Marching Squares isocontour at threshold 128.
+       * Supports soft masks from guided-filter refine as well as binary masks.
+       * @param {HTMLCanvasElement|HTMLImageElement} img - source mask (white = selected)
+       * @param {boolean} add - union with existing selection
+       */
+      function maskToSelection(img, add) {
+        const k = Math.min(1, 512 / Math.max(doc.w, doc.h));
+        const w = Math.max(1, Math.round(doc.w * k)), h = Math.max(1, Math.round(doc.h * k));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0, w, h);
+        const d = g.getImageData(0, 0, w, h).data;
+        const T = 128;
+        const val = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : d[(y * w + x) * 4];
+        const keep = add && selection && !selection.inverted;
+        const path = keep ? new Path2D(selection.path) : new Path2D();
+        const outline = keep ? new Path2D(selection.outline ?? selection.path) : new Path2D();
+        let any = false;
+        // Fill path with thresholded rects for clipping operations
+        for (let y = 0; y < h; y++) {
+          let x = 0;
+          while (x < w) {
+            while (x < w && val(x, y) < T) x++;
+            const x0 = x;
+            while (x < w && val(x, y) >= T) x++;
+            if (x > x0) { path.rect(x0 / k, y / k, (x - x0) / k, 1 / k + 0.5); any = true; }
+          }
+        }
+        // Marching Squares outline
+        for (let cy = 0; cy < h - 1; cy++) {
+          for (let cx = 0; cx < w - 1; cx++) {
+            const v0 = val(cx, cy), v1 = val(cx + 1, cy), v2 = val(cx + 1, cy + 1), v3 = val(cx, cy + 1);
+            const idx = (v0 >= T ? 1 : 0) | (v1 >= T ? 2 : 0) | (v2 >= T ? 4 : 0) | (v3 >= T ? 8 : 0);
+            const segs = MS_TABLE[idx];
+            for (const [ea, eb] of segs) {
+              const ma = EDGE_MID[ea], mb = EDGE_MID[eb];
+              outline.moveTo((cx + ma[0]) / k, (cy + ma[1]) / k);
+              outline.lineTo((cx + mb[0]) / k, (cy + mb[1]) / k);
+            }
+          }
+        }
+        return any ? { path, outline } : null;
+      }
+
+      // ---------- selection buttons ----------
+          $("selAll").onclick = () => { const p = new Path2D(); p.rect(0, 0, doc.w, doc.h); selection = { path: p, inverted: false }; draw(); };
+      $("selNone").onclick = () => { selection = null; draw(); };
+      $("selInvert").onclick = () => { if (selection) { selection.inverted = !selection.inverted; draw(); } };
+      $("selClear").onclick = clearSelection;
+      $("selRefine").onclick = refineEdge;
+      $("selToAi").onclick = () => { setPersona("ai"); $("prompt").focus(); };
+
+      /**
+       * Refine Edge: Guided Filter on the current selection mask using the active layer as guidance.
+       * Produces a soft 8-bit alpha mask with sub-pixel hair/fur detail, then regenerates the marching ants outline.
+       */
+      async function refineEdge() {
+        const l = active();
+        if (!l || !selection) return msg(T("refineNeed", "Select something first"), true);
+        busy(T("refining", "Refining edge…"));
+        await new Promise(r => requestAnimationFrame(r));
+        const w = doc.w, h = doc.h;
+        // Build rough binary mask from current selection
+        const mc = document.createElement("canvas"); mc.width = w; mc.height = h;
+        const mx = mc.getContext("2d", { willReadFrequently: true });
+        mx.fillStyle = "#000"; mx.fillRect(0, 0, w, h);
+        mx.fillStyle = "#fff";
+        if (selection.path) { mx.save(); if (selection.inverted) { mx.rect(0,0,w,h); mx.clip("evenodd"); } mx.fill(selection.path); mx.restore(); }
+        const md = mx.getImageData(0, 0, w, h).data;
+        // Guidance image (active layer composited)
+        const gc = document.createElement("canvas"); gc.width = w; gc.height = h;
+        const gx = gc.getContext("2d", { willReadFrequently: true });
+        gx.drawImage(shown(l), l.x, l.y);
+        const gd = gx.getImageData(0, 0, w, h).data;
+        // Guided filter parameters
+        const r = 10, eps = 1e-4;
+        const N = w * h;
+        const meanI_r = new Float32Array(N), meanI_g = new Float32Array(N), meanI_b = new Float32Array(N);
+        const meanP = new Float32Array(N), meanIP_r = new Float32Array(N), meanIP_g = new Float32Array(N), meanIP_b = new Float32Array(N);
+        const meanII_rr = new Float32Array(N), meanII_rg = new Float32Array(N), meanII_rb = new Float32Array(N);
+        const meanII_gg = new Float32Array(N), meanII_gb = new Float32Array(N), meanII_bb = new Float32Array(N);
+        // Box filter via cumulative sums for O(N)
+        function boxFilter(src, dst, radius) {
+          const tmp = new Float32Array(N);
+          // Horizontal pass
+          for (let y = 0; y < h; y++) {
+            let sum = 0, count = 0;
+            for (let x = 0; x < Math.min(radius + 1, w); x++) { sum += src[y * w + x]; count++; }
+            for (let x = 0; x < w; x++) {
+              const add = x + radius, rem = x - radius - 1;
+              if (add < w) { sum += src[add]; count++; }
+              if (rem >= 0) { sum -= src[rem]; count--; }
+              tmp[y * w + x] = sum / count;
+            }
+          }
+          // Vertical pass
+          for (let x = 0; x < w; x++) {
+            let sum = 0, count = 0;
+            for (let y = 0; y < Math.min(radius + 1, h); y++) { sum += tmp[y * w + x]; count++; }
+            for (let y = 0; y < h; y++) {
+              const add = y + radius, rem = y - radius - 1;
+              if (add < h) { sum += tmp[add * w + x]; count++; }
+              if (rem >= 0) { sum -= tmp[rem * w + x]; count--; }
+              dst[y * w + x] = sum / count;
+            }
+          }
+        }
+        // Prepare input arrays
+        const pArr = new Float32Array(N);
+        const iR = new Float32Array(N), iG = new Float32Array(N), iB = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          pArr[i] = md[i * 4] / 255;
+          iR[i] = gd[i * 4] / 255; iG[i] = gd[i * 4 + 1] / 255; iB[i] = gd[i * 4 + 2] / 255;
+        }
+        const pI_r = new Float32Array(N), pI_g = new Float32Array(N), pI_b = new Float32Array(N);
+        const ii_rr = new Float32Array(N), ii_rg = new Float32Array(N), ii_rb = new Float32Array(N);
+        const ii_gg = new Float32Array(N), ii_gb = new Float32Array(N), ii_bb = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          pI_r[i] = pArr[i] * iR[i]; pI_g[i] = pArr[i] * iG[i]; pI_b[i] = pArr[i] * iB[i];
+          ii_rr[i] = iR[i] * iR[i]; ii_rg[i] = iR[i] * iG[i]; ii_rb[i] = iR[i] * iB[i];
+          ii_gg[i] = iG[i] * iG[i]; ii_gb[i] = iG[i] * iB[i]; ii_bb[i] = iB[i] * iB[i];
+        }
+        boxFilter(iR, meanI_r, r); boxFilter(iG, meanI_g, r); boxFilter(iB, meanI_b, r);
+        boxFilter(pArr, meanP, r);
+        boxFilter(pI_r, meanIP_r, r); boxFilter(pI_g, meanIP_g, r); boxFilter(pI_b, meanIP_b, r);
+        boxFilter(ii_rr, meanII_rr, r); boxFilter(ii_rg, meanII_rg, r); boxFilter(ii_rb, meanII_rb, r);
+        boxFilter(ii_gg, meanII_gg, r); boxFilter(ii_gb, meanII_gb, r); boxFilter(ii_bb, meanII_bb, r);
+        // Solve 3x3 linear system per pixel for a_k, b_k
+        const aR = new Float32Array(N), aG = new Float32Array(N), aB = new Float32Array(N), bK = new Float32Array(N);
+        for (let i = 0; i < N; i++) {
+          const mr = meanI_r[i], mg = meanI_g[i], mb = meanI_b[i];
+          const cov_rp = meanIP_r[i] - mr * meanP[i];
+          const cov_gp = meanIP_g[i] - mg * meanP[i];
+          const cov_bp = meanIP_b[i] - mb * meanP[i];
+          const var_rr = meanII_rr[i] - mr * mr + eps;
+          const var_rg = meanII_rg[i] - mr * mg;
+          const var_rb = meanII_rb[i] - mr * mb;
+          const var_gg = meanII_gg[i] - mg * mg + eps;
+          const var_gb = meanII_gb[i] - mg * mb;
+          const var_bb = meanII_bb[i] - mb * mb + eps;
+          // Cramer's rule for 3x3 symmetric positive-definite system
+          const det = var_rr * (var_gg * var_bb - var_gb * var_gb)
+                    - var_rg * (var_rg * var_bb - var_rb * var_gb)
+                    + var_rb * (var_rg * var_gb - var_rb * var_gg);
+          if (Math.abs(det) < 1e-12) { aR[i] = aG[i] = aB[i] = 0; bK[i] = meanP[i]; continue; }
+          const invDet = 1 / det;
+          aR[i] = invDet * (cov_rp * (var_gg * var_bb - var_gb * var_gb) - cov_gp * (var_rg * var_bb - var_rb * var_gb) + cov_bp * (var_rg * var_gb - var_rb * var_gg));
+          aG[i] = invDet * (meanIP_g[i] /* placeholder — full expansion below */);
+          aB[i] = invDet * (cov_bp * (var_rr * var_gg - var_rg * var_rg) - cov_rp * (var_rg * var_gb - var_rb * var_gg) + cov_gp * (var_rr * var_gb - var_rg * var_rb));
+          // Correct aG via cofactor
+          aG[i] = invDet * (cov_gp * (var_rr * var_bb - var_rb * var_rb) - cov_rp * (var_rg * var_bb - var_rb * var_gb) + cov_bp * (var_rg * var_rb - var_rr * var_gb));
+          bK[i] = meanP[i] - aR[i] * mr - aG[i] * mg - aB[i] * mb;
+        }
+        // Second box filter on coefficients
+        const maR = new Float32Array(N), maG = new Float32Array(N), maB = new Float32Array(N), mb = new Float32Array(N);
+        boxFilter(aR, maR, r); boxFilter(aG, maG, r); boxFilter(aB, maB, r); boxFilter(bK, mb, r);
+        // Output refined mask
+        const out = mx.createImageData(w, h);
+        for (let i = 0; i < N; i++) {
+          const q = maR[i] * iR[i] + maG[i] * iG[i] + maB[i] * iB[i] + mb[i];
+          const v = Math.max(0, Math.min(255, Math.round(q * 255)));
+          out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = v;
+          out.data[i * 4 + 3] = 255;
+        }
+        mx.putImageData(out, 0, 0);
+        // Regenerate selection from refined mask using marching squares
+        const refined = maskToSelection(mc, false);
+        if (refined) { selection = { ...refined, inverted: selection.inverted }; draw(); }
+        msg(T("refineDone", "Edge refined"));
+      }
   $("delLayer").onclick = () => {
     if (doc.layers.length < 2) return;
     remember(T("deleteLayer", "Delete layer"));
@@ -1260,54 +1435,7 @@
       fit();
     });
 
-  /**
-   * A mask picture as a selection: the white parts, traced row by row into rectangles (at most 512 across, so the
-   * path stays small), joined with what was selected when `add`.
-   */
-  function maskToSelection(img, add) {
-    const k = Math.min(1, 512 / Math.max(doc.w, doc.h));
-    const w = Math.max(1, Math.round(doc.w * k)), h = Math.max(1, Math.round(doc.h * k));
-    const c = document.createElement("canvas");
-    c.width = w; c.height = h;
-    const g = c.getContext("2d", { willReadFrequently: true });
-    g.drawImage(img, 0, 0, w, h);
-    const d = g.getImageData(0, 0, w, h).data;
-    // White, and opaque (a cut-out's clear parts are not selected).
-    const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && d[(y * w + x) * 4 + 3] > 127 && d[(y * w + x) * 4] > 127;
-    const keep = add && selection && !selection.inverted;
-    const path = keep ? new Path2D(selection.path) : new Path2D();
-    // The marching ants go round the edge only (not round every row), so the outline is drawn from the cells' edges.
-    const outline = keep ? new Path2D(selection.outline ?? selection.path) : new Path2D();
-    let any = false;
-    for (let y = 0; y < h; y++) {
-      let x = 0;
-      while (x < w) {
-        while (x < w && !on(x, y)) x++;
-        const x0 = x;
-        while (x < w && on(x, y)) x++;
-        if (x > x0) { path.rect(x0 / k, y / k, (x - x0) / k, 1 / k + 0.5); any = true; }
-      }
-      // Horizontal edges above this row, joined where they run on.
-      for (let x2 = 0; x2 < w; ) {
-        if (on(x2, y) === on(x2, y - 1)) { x2++; continue; }
-        const s0 = x2;
-        while (x2 < w && on(x2, y) !== on(x2, y - 1)) x2++;
-        outline.moveTo(s0 / k, y / k); outline.lineTo(x2 / k, y / k);
-      }
-    }
-    // Vertical edges, column by column.
-    for (let x = 0; x <= w; x++) {
-      for (let y = 0; y < h; ) {
-        if (on(x, y) === on(x - 1, y)) { y++; continue; }
-        const s0 = y;
-        while (y < h && on(x, y) !== on(x - 1, y)) y++;
-        outline.moveTo(x / k, s0 / k); outline.lineTo(x / k, y / k);
-      }
-    }
-    // The bottom edge of the last row.
-    for (let x2 = 0; x2 < w; x2++) if (on(x2, h - 1)) { outline.moveTo(x2 / k, h / k); outline.lineTo((x2 + 1) / k, h / k); }
-    return any ? { path, outline } : null;
-  }
+
 
   // Select an object by tapping it (Photoshop's Object Selection, Segment Anything): SAM on the computer, through the
   // background remover's engine; Shift adds to the selection.
