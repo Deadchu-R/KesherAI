@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { makeDiff, type AgentTool } from "@kesher/agent";
 import { addEngineFolders, editorExe, findEngines, readProject, enableUnrealMcp, keepEditorPluginsOutOfGame, engineVersion, type UnrealEngine } from "./unreal-install.js";
 import { knownIssues, preflight } from "./known-issues.js";
+import { unrealSupport } from "./engine-support.js";
 import type { Phone } from "./phones.js";
 import { compileErrors, describePlugins, installBuiltPlugin, listPlugins, readPlugin } from "./unreal-plugins.js";
 import { lintUnrealSource, shortErrors } from "./unreal-lint.js";
@@ -189,7 +190,7 @@ export function newProjectFiles(name: string, engine: string): Record<string, st
           // Editor tools only: kept out of the game itself (a phone build otherwise packs and starts editor-only, NoRedist plugins).
           { Name: "PythonScriptPlugin", Enabled: true, TargetAllowList: ["Editor"] },
           { Name: "EditorScriptingUtilities", Enabled: true, TargetAllowList: ["Editor"] },
-          ...(/^5\.([89]|\d\d)/.test(engine) || /^[6-9]\./.test(engine) ? [{ Name: "ModelContextProtocol", Enabled: true, TargetAllowList: ["Editor"] }, { Name: "AllToolsets", Enabled: true, TargetAllowList: ["Editor"] }] : []),
+          ...(unrealSupport(engine).full ? [{ Name: "ModelContextProtocol", Enabled: true, TargetAllowList: ["Editor"] }, { Name: "AllToolsets", Enabled: true, TargetAllowList: ["Editor"] }] : []),
         ],
         TargetPlatforms: ["Android", "Windows"],
       },
@@ -327,7 +328,7 @@ export function unrealTools(state: { project?: string }, logsDir: string, jobs?:
           await writeFile(join(dir, rel), text);
         }
         await mkdir(join(dir, "Content"), { recursive: true });
-        const mcp = /^5\.[0-7]/.test(e.version) ? "" : ` ${await enableUnrealMcp(dir).catch(() => "")}`;
+        const mcp = unrealSupport(e.version).full ? ` ${await enableUnrealMcp(dir).catch(() => "")}` : "";
         state.project = dir;
         onProject?.();
         return { output: `Made ${dir} for Unreal ${e.version}: Source/${name}/ (module, ${name}GameMode), Config/ set for phones, the game starts with ${name}GameMode on the engine's empty map.${mcp}\nNext: write the game's C++ with unreal_write_source, then unreal_compile.` };

@@ -23,7 +23,12 @@ test("a new project is a C++ game for phones with MCP on 5.8", () => {
   assert.match(f["Source/AutoShooter/AutoShooterGameMode.h"]!, /class AUTOSHOOTER_API AAutoShooterGameMode/);
   const old = JSON.parse(newProjectFiles("Game", "5.6")["Game.uproject"]!) as { Plugins: Array<{ Name: string }> };
   assert.ok(!old.Plugins.some((p) => p.Name === "ModelContextProtocol"));
-});
+  // The gate is unrealSupport().full everywhere: no MCP plugins on 4.27, and 5.10+ still gets them.
+  const legacy = JSON.parse(newProjectFiles("Game", "4.27")["Game.uproject"]!) as { Plugins: Array<{ Name: string }> };
+  assert.ok(!legacy.Plugins.some((p) => p.Name === "ModelContextProtocol"));
+  const future = JSON.parse(newProjectFiles("Game", "5.10")["Game.uproject"]!) as { Plugins: Array<{ Name: string }> };
+  assert.ok(future.Plugins.some((p) => p.Name === "ModelContextProtocol"));
+  });
 
 test("source tools stay inside the project and its code folders", async () => {
   const dir = await mkdtemp(join(tmpdir(), "kesher-ue-"));
