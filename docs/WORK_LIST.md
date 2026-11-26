@@ -507,7 +507,7 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
   - ⬜ Phone: one status pill per task, tap → the run view.
   - ⬜ Retention: keep a summary per attempt; prune raw run logs after 30 days.
 - r-20261126-07 (what to make faster first), ranked:
-  - ⬜ 1. Idle unload of the local llama.cpp model (measure VRAM idle 5/10/30 min first).
+  - ✅ 1. Idle unload of the local llama.cpp model: already built (Settings › graphics card guard: unloads after 20 min idle on Roee's PC; measured 26.11: model unloaded, 2.7 GB VRAM used = the desktop only).
   - ⬜ 2. Lazy-load the web UI's heavy pages (React.lazy) — measure time-to-interactive and heap first.
   - ⬜ 3. napi-rs Rust module for log search / file indexing (only if the baseline shows stutter).
   - ⬜ 4. Electron window show on ready-to-show; defer background jobs after first paint.
