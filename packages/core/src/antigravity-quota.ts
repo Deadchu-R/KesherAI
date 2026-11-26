@@ -66,7 +66,9 @@ export function parseServers(lines: string): LangServer[] {
   const out: LangServer[] = [];
   for (const line of lines.split(/\r?\n/)) {
     const m = /^\s*(\d+)[\s,]+(.*)$/.exec(line);
-    if (!m || !/language_server/i.test(m[2]!) || !/antigravity|[\\/]agy[\\/]/i.test(m[2]!)) continue;
+    // Newer Antigravity builds may run the server inside another program (26.11: only "ide.exe" was there): any of
+    // Antigravity's processes with a CSRF token on its command line is asked.
+    if (!m || !/antigravity|[\\/]agy[\\/]/i.test(m[2]!)) continue;
     const csrf = /--csrf_token[= ]"?([\w-]+)/.exec(m[2]!)?.[1];
     if (!csrf) continue;
     const port = Number(/--extension_server_port[= ]"?(\d+)/.exec(m[2]!)?.[1]) || undefined;
@@ -143,7 +145,7 @@ export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?
   const now = o.now ?? Date.now();
   const list =
     platform === "win32"
-      ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name like '%language_server%' or Name like '%antigravity%'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"])
+      ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name like '%language_server%' or Name like '%antigravity%' or Name = 'ide.exe' or CommandLine like '%csrf_token%'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"])
       : // `-x` without `-a`: this user's own processes only (another account's fake "language_server" is never asked).
         await run("ps", ["-x", "-o", "pid=,command="]);
   const servers = parseServers(list);
