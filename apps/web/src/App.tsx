@@ -46,12 +46,7 @@ import { UpdatedCard } from "./UpdatedCard";
 import { ResumeCard } from "./ResumeCard";
 import { PhoneUpdateBanner } from "./pages/UpdatesPage";
 import { useParts } from "./parts";
-import { CodeHome } from "./pages/CodeHome";
 import { ArchivedPage } from "./pages/ArchivedPage";
-import { SelfWorkPage } from "./pages/SelfWorkPage";
-import { TaskInboxPage } from "./pages/TaskInboxPage";
-import { TasksPage } from "./pages/TasksPage";
-import { StudyPage } from "./pages/StudyPage";
 import { AvatarFeed } from "./pages/AvatarCamera";
 import { PadHints } from "./PadHints";
 import { GameHelper } from "./pages/GameHelper";
@@ -60,6 +55,12 @@ import { TextHelper } from "./pages/TextHelper";
 import { Dictate } from "./pages/Dictate";
 
 /* Pages load only when opened, so starting KesherAI (and a part that is off) costs nothing. */
+// Loaded when first opened (research r-20261126-07: a smaller first bundle, a faster window at start).
+const CodeHome = lazy(() => import("./pages/CodeHome").then((m) => ({ default: m.CodeHome })));
+const SelfWorkPage = lazy(() => import("./pages/SelfWorkPage").then((m) => ({ default: m.SelfWorkPage })));
+const TaskInboxPage = lazy(() => import("./pages/TaskInboxPage").then((m) => ({ default: m.TaskInboxPage })));
+const TasksPage = lazy(() => import("./pages/TasksPage").then((m) => ({ default: m.TasksPage })));
+const StudyPage = lazy(() => import("./pages/StudyPage").then((m) => ({ default: m.StudyPage })));
 const UsagePage = lazy(() => import("./pages/Usage").then((m) => ({ default: m.UsagePage })));
 const DayPage = lazy(() => import("./pages/Day").then((m) => ({ default: m.DayPage })));
 const KnowledgePage = lazy(() => import("./pages/Knowledge").then((m) => ({ default: m.KnowledgePage })));

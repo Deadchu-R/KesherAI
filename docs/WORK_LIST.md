@@ -462,7 +462,7 @@ Fits (flat, no per-use billing, drivable from KesherAI):
 Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0.50 per 1M), the dit.ai list (DeepInfra, Groq, Together, DeepSeek API). Cursor Plus is IDE-only; Zed Pro bills past its credits.
 
 ## Roee 24.11 evening
-- ⬜ Local model unloads itself after a short idle time; small internal requests go first to the small CPU model (the watchdog one: loads per request, unloads after 60 s; titles and short private summaries), longer non-private ones (digests, reports) to a free cloud provider, and the big GPU model loads only when quality needs it (Roee: "rather it isn't loaded if it doesn't have to be").
+- ✅ (checked 26.11) Idle unload exists (20 min). No internal job loads the GPU model just for itself: the inbox helpers and the tool router use it only when already loaded (else a free cloud model), memory filing and the goal check use the chat's own model, the watchdog and quota tip already use the small CPU model. Moving more to the 2B CPU model would cost accuracy (Hebrew, JSON) for no VRAM gain — closed. Original item: Local model unloads itself after a short idle time; small internal requests go first to the small CPU model (the watchdog one: loads per request, unloads after 60 s; titles and short private summaries), longer non-private ones (digests, reports) to a free cloud provider, and the big GPU model loads only when quality needs it (Roee: "rather it isn't loaded if it doesn't have to be").
 - ✅ Task inbox uses the free-cloud keys too (see below).
 - ✅ Inbox commit: files outside the allowed paths that the agent made as scratch output (e.g. base-out.txt, test-out.txt with test logs) are dropped from the commit instead of blocking the whole run (25.11: s-20261122-01 lost its work this way; the leak guard rightly found personal paths in them).
 - ⬜ Medium tasks that read for 80+ requests before the first edit: give the agent a "plan, then edit early" line in the prompt and check the task specs (s-20261122-*, r-58..62 Godot) are small enough.
@@ -508,7 +508,7 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
   - ⬜ Retention: keep a summary per attempt; prune raw run logs after 30 days.
 - r-20261126-07 (what to make faster first), ranked:
   - ✅ 1. Idle unload of the local llama.cpp model: already built (Settings › graphics card guard: unloads after 20 min idle on Roee's PC; measured 26.11: model unloaded, 2.7 GB VRAM used = the desktop only).
-  - ⬜ 2. Lazy-load the web UI's heavy pages (React.lazy) — measure time-to-interactive and heap first.
+  - ✅ 2. Lazy-load the web UI's heavy pages: 39 were already lazy; Study, Task inbox, Tasks, Code home and Self-work now too — the first bundle went from 1,852 KB to 1,362 KB (−26%) (0.6.486).
   - ⬜ 3. napi-rs Rust module for log search / file indexing (only if the baseline shows stutter).
   - ⬜ 4. Electron window show on ready-to-show; defer background jobs after first paint.
 - r-20261126-08 (engine per platform): llama.cpp CUDA on NVIDIA; MLX on Apple Silicon (≈20–30% faster than llama.cpp Metal); llama.cpp Vulkan for AMD/Intel; CPU builds otherwise. Report was thin on auto-pick.
