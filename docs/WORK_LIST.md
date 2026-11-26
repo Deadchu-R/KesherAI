@@ -491,3 +491,10 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
   - ⬜ The updater reads the manifest, verifies, downloads only changed bundles, swaps them atomically, rolls back if the new part fails to start; running chats/agents keep going (Roee).
 - r-20261126-03 (language per component): cut off before its shortlist → re-asked short: r-20261126-07.
 - r-20261126-05 (runs vs chats): came back empty → re-asked short: r-20261126-06.
+
+## All platforms, not only Roee's PC (Roee, 26.11 — not urgent)
+KesherAI is for every user. Whatever is faster on another platform goes in, chosen per platform at run time.
+- ⬜ Engines per platform: llama.cpp CUDA (NVIDIA), Vulkan/ROCm (AMD), Metal or MLX (Apple Silicon), CPU-only builds; pick the fastest automatically from the detected hardware.
+- ⬜ Re-ask r-20261126-07 style shortlists per platform (macOS/Apple Silicon, Linux, AMD, CPU-only laptops), not only the 3090.
+- ⬜ Updates in parts: bundles and the manifest for every platform's installer, not only Windows.
+- ⬜ Native modules (napi-rs etc.) built for win/mac/linux × x64/arm64, with the TypeScript fallback kept.

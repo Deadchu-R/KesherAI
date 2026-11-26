@@ -42,4 +42,4 @@ Rules for any coding agent in this repository (KesherAI's own code chats and sel
 ## Research rule (Roee, 25.11)
 Every research of a new feature or addition (Claude, Gemini, Antigravity or a helper) includes a "Language and weight"
 part: for each part of it, the language/runtime that runs fastest and lightest on the PC, the gain, the cost, and what to
-measure first. The findings go into docs/RESEARCH_LOG.md and are broken into tasks.
+measure first. The findings go into docs/RESEARCH_LOG.md and are broken into tasks. KesherAI is for all users, so check every platform (Windows, macOS, Linux, Android, NVIDIA/AMD/Apple GPUs, CPU-only); a choice that is faster on another platform still goes in, behind a per-platform switch (Roee, 26.11, not urgent).
