@@ -127,7 +127,7 @@ const startingNow = (t: InboxTaskView): boolean => runStarting(runTapped.get(t.i
 /** The page. */
 export function TaskInboxPage({ id }: { id?: string }) {
   const [s, setS] = useState<InboxState | null>(null);
-  const [filter, setFilter] = useState<"all" | "waiting" | "running" | "ask" | "ended">("all");
+  const [filter, setFilter] = useState<"all" | "open" | "waiting" | "running" | "ask" | "ended">("open");
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   /** The task whose Run the PC refused because another one runs: its row says so and offers "Add to queue". */
@@ -159,14 +159,25 @@ export function TaskInboxPage({ id }: { id?: string }) {
   if (!s) return <div className="page"><h1>📥 {L("תיבת משימות", "Task inbox")}</h1></div>;
   if (id) return <TaskPage id={id} state={s} act={act} busy={busy} />;
 
+  // Open: everything not finished — waiting, queued, running, waiting for an answer, or put off until a model is free
+  // (Roee, 26.11). A task put off by a quota waits; it is not ended.
+  const ENDED = ["done", "partial", "failed", "declined", "skipped"];
+  const inFilter = (t: InboxTaskView, f: typeof filter): boolean =>
+    f === "all" ? true
+    : f === "open" ? !ENDED.includes(t.status)
+    : f === "waiting" ? t.status === "waiting" || t.status === "queued" || t.status === "deferred-quota"
+    : f === "running" ? t.status === "running"
+    : f === "ask" ? t.status === "needs-approval" || !!t.runAsk
+    : ENDED.includes(t.status);
   const counts = {
     all: s.tasks.length,
-    waiting: s.tasks.filter((t) => t.status === "waiting" || t.status === "queued").length,
-    running: s.tasks.filter((t) => t.status === "running").length,
-    ask: s.tasks.filter((t) => t.status === "needs-approval" || t.runAsk).length,
-    ended: s.tasks.filter((t) => ["done", "partial", "failed", "declined", "skipped", "deferred-quota"].includes(t.status)).length,
+    open: s.tasks.filter((t) => inFilter(t, "open")).length,
+    waiting: s.tasks.filter((t) => inFilter(t, "waiting")).length,
+    running: s.tasks.filter((t) => inFilter(t, "running")).length,
+    ask: s.tasks.filter((t) => inFilter(t, "ask")).length,
+    ended: s.tasks.filter((t) => inFilter(t, "ended")).length,
   };
-  const shown = s.tasks.filter((t) => filter === "all" || (filter === "waiting" ? t.status === "waiting" || t.status === "queued" : filter === "running" ? t.status === "running" : filter === "ask" ? t.status === "needs-approval" || !!t.runAsk : ["done", "partial", "failed", "declined", "skipped", "deferred-quota"].includes(t.status)));
+  const shown = s.tasks.filter((t) => inFilter(t, filter));
   const asks = s.tasks.filter((t) => t.runAsk && t.runAsk.until > Date.now());
   const local = s.tasks.filter((t) => t.runBy === "local").length;
   // "Run all (N)": the Antigravity tasks that wait for Run, from two up, on this computer (the first runs, the rest queue
@@ -242,7 +253,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
       {adding && <AddTask onDone={() => { setAdding(false); load(); }} />}
 
       <div className="row wrap tinbox-filters" role="tablist">
-        {([["all", "הכול", "All"], ["waiting", "ממתינות", "Waiting"], ["running", "רצות", "Running"], ["ask", "צריך אישור", "Needs approval"], ["ended", "הסתיימו", "Ended"]] as const).map(([k, he, en]) => (
+        {([["open", "פתוחות", "Open"], ["all", "הכול", "All"], ["waiting", "ממתינות", "Waiting"], ["running", "רצות", "Running"], ["ask", "צריך אישור", "Needs approval"], ["ended", "הסתיימו", "Ended"]] as const).map(([k, he, en]) => (
           <button key={k} type="button" role="tab" aria-selected={filter === k} className={`chip-text${filter === k ? " on" : ""}`} onClick={() => setFilter(k)}>{L(he, en)} {counts[k]}</button>
         ))}
       </div>
