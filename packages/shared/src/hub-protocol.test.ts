@@ -196,3 +196,13 @@ test("inbox models over the hub: the model list on a task, and `assign` with a m
   assert.equal((parseSealedBody({ ...cmd, model: "<script>" }, "command") as Record<string, unknown>).model, undefined, "odd characters are dropped");
   assert.equal((parseSealedBody({ ...cmd, to: "local", model: "x" }, "command") as Record<string, unknown>).model, undefined, "a model only goes with Antigravity");
 });
+
+test("inbox_task: the current step and Antigravity's quota pass checked (one line, capped, numbers clamped); junk is dropped", () => {
+  const base = { type: "inbox_task", taskId: "c-1126-01", title: "T", state: "running", executor: "antigravity", from: "claude", at: 5 };
+  const got = parseSealedBody({ ...base, now: { tool: "read\n<b>x</b>", target: "a".repeat(500), at: 9, error: true, extra: 1 }, agQuota: { left: 7, resetAt: 1_700_000_000_000, x: "y" } }, "inbox_task") as Record<string, unknown>;
+  assert.deepEqual(got.now, { tool: "read <b>x</b>", target: "a".repeat(200), at: 9, error: true });
+  assert.deepEqual(got.agQuota, { left: 1, resetAt: 1_700_000_000_000 });
+  const bad = parseSealedBody({ ...base, now: { target: "x" }, agQuota: { left: "1" } }, "inbox_task") as Record<string, unknown>;
+  assert.equal(bad.now, undefined);
+  assert.equal(bad.agQuota, undefined);
+});

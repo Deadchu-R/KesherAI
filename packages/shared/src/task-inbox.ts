@@ -214,8 +214,9 @@ export function safeForRelay(t: { risk?: string; allowedPaths?: readonly string[
   if (t.risk === "high") return { ok: false, why: "high-risk tasks stay off the relay" };
   const paths = t.allowedPaths ?? [];
   if (!paths.length) return { ok: false, why: "the task has no path limit" };
-  const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || /^\*{0,2}(\/\*\*)?$/.test(g));
-  if (bad) return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad})` };
+  const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || UNLIMITED_PATH.test(g));
+  // `!== undefined`: an empty path ("") is found too, and it is falsy.
+  if (bad !== undefined) return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad || "an empty path"})` };
   const text = [t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n");
   if (SECURITY_WORDS.test(text)) return { ok: false, why: "its text mentions a security topic" };
   return { ok: true };
@@ -245,6 +246,19 @@ export function inboxModelAllowed(id: string, freeTrainingOk = false, relayOk = 
   return !FREE_PROVIDERS.some((p) => p.id !== OPENCODE_PROVIDER && id.startsWith(`${p.id}/`)) && !isContributorFree(id);
 }
 
+// A path limit that is no limit: empty, or a wildcard at the top ("**", "**/*", "*/**", "./**") reaches every folder.
+const UNLIMITED_PATH = /^(\.?\/)?(\*|$)/;
+/**
+ * A security-sensitive file a relay or a service that may train must not change (checked on the real files at commit,
+ * not only on the task's path patterns).
+ *
+ * @param path - A changed file.
+ * @returns True when it is one.
+ */
+export function isSecurityFile(path: string): boolean {
+  return SECURITY_PATH.test(path) || /^\.github(\/|$)|(^|\/)\.env/.test(path);
+}
+
 const SECURITY_PATH = /(^|[/._@-])(auth|crypt|key|secret|token|passw|credential|permission|control-reviewer|relay-keys|hub-protocol|pairing|sandbox|gate|updates?|installer|cert|signing)/i;
 const SECURITY_WORDS = /\b(security|secure|vulnerab\w*|exploit\w*|passwords?|tokens?|keys?|secrets?|encrypt\w*|decrypt\w*|crypto\w*|auth\w*|permissions?|credentials?|cve(-\d+)?|sandbox|pairing|sealing|relay|installer|signing)\b|אבטח|סיסמ|מפתח|הרשא|הצפנ|טוקן|סוד|פגיעות/i;
 
@@ -262,8 +276,9 @@ export function safeForTrainingProvider(t: { kind?: string; risk?: string; size?
   if (t.size !== "S") return { ok: false, why: "only small (S) tasks go to services that may train" };
   const paths = t.allowedPaths ?? [];
   if (!paths.length) return { ok: false, why: "the task has no path limit" };
-  const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || /^\*{0,2}(\/\*\*)?$/.test(g));
-  if (bad) return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad})` };
+  const bad = paths.find((g) => SECURITY_PATH.test(g) || /^\.github(\/|$)|(^|\/)\.env/.test(g) || UNLIMITED_PATH.test(g));
+  // `!== undefined`: an empty path ("") is found too, and it is falsy.
+  if (bad !== undefined) return { ok: false, why: `its paths touch a sensitive or unlimited area (${bad || "an empty path"})` };
   const text = [t.title, t.goal, t.readFirst, t.acceptance, t.outOfScope].filter(Boolean).join("\n");
   if (SECURITY_WORDS.test(text)) return { ok: false, why: "its text mentions a security topic" };
   return { ok: true };

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { isSecurityFile, safeForRelay, safeForTrainingProvider } from "./task-inbox.js";
 
 test("the relay report counts results and rate limits", async () => {
   const { relayReport } = await import("./task-inbox.js");
@@ -32,4 +33,18 @@ test("check messages are counted apart from tasks", async () => {
     { at: 3, id: "a", model: "ghostcli/claude-opus-5-5", status: "done", ms: 60_000 },
   ]);
   assert.deepEqual({ probes: r.probes, ok: r.probesOk, runs: r.runs, since: r.since, recent: r.recent.length }, { probes: 2, ok: 1, runs: 1, since: 3, recent: 1 });
+});
+
+test("a wildcard at the top of a path limit is no limit: the relay and training services refuse it", () => {
+  for (const g of ["**", "**/*", "*/**", "./**", "/**", "**/*.ts", ""]) {
+    assert.equal(safeForRelay({ risk: "low", allowedPaths: [g], title: "Tidy the list" }).ok, false, g);
+    assert.equal(safeForTrainingProvider({ kind: "code", risk: "low", size: "S", allowedPaths: [g], title: "Tidy the list" }).ok, false, g);
+  }
+  assert.equal(safeForRelay({ risk: "low", allowedPaths: ["apps/ui/src/**"], title: "Tidy the list" }).ok, true);
+});
+
+test("security files are found on the real changed paths", () => {
+  assert.equal(isSecurityFile("packages/core/src/pairing.ts"), true);
+  assert.equal(isSecurityFile(".github/workflows/release.yml"), true);
+  assert.equal(isSecurityFile("apps/web/src/pages/TaskInboxPage.tsx"), false);
 });

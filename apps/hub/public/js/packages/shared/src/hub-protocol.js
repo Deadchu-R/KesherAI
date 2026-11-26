@@ -442,7 +442,7 @@ export function parseSealedBody(x, kind) {
             // An unknown executor from a newer PC is kept as written (a short word); only a missing or odd one is "claude".
             const executor = typeof b.executor === "string" && /^[a-z][a-z-]{0,23}$/.test(b.executor) ? b.executor : "claude";
             const from = b.from === "roee" || b.from === "self-work" ? b.from : "claude";
-            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(Array.isArray(b.models) ? { models: b.models.filter((m) => typeof m === "string" && m.length > 0).slice(0, 12).map((m) => m.slice(0, HUB_LIMITS.nameChars)) } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
+            return { type: "inbox_task", taskId: b.taskId, title, state, executor, from, ...optStr("branch", b.branch, 200), ...optStr("result", b.result, 300), ...optNum("estSteps", b.estSteps), ...optNum("steps", b.steps), ...stepNoteOf(b.now), ...agQuotaOf(b.agQuota), ...(state === "deferred" ? optNum("retryAt", b.retryAt) : {}), ...(isHubId(b.runId) ? { runId: b.runId } : {}), ...optStr("model", b.model, HUB_LIMITS.nameChars), ...(isHubId(b.boardId) ? { boardId: b.boardId } : {}), ...optNum("priority", b.priority), ...optNum("queuePos", b.queuePos), ...optNum("lineAt", b.lineAt), ...(typeof b.askNext === "boolean" ? { askNext: b.askNext } : {}), ...(Array.isArray(b.models) ? { models: b.models.filter((m) => typeof m === "string" && m.length > 0).slice(0, 12).map((m) => m.slice(0, HUB_LIMITS.nameChars)) } : {}), ...(b.standing === true ? { standing: true } : {}), ...(HUB_WORK_KINDS.includes(b.kind) ? { kind: b.kind } : {}), ...optNum("startedAt", b.startedAt), ...optNum("endedAt", b.endedAt), ...optStr("cause", oneLine(b.cause), 160), at: num(b.at) };
         }
         case "ask_note": {
             const a = b.ask && typeof b.ask === "object" ? b.ask : undefined;
@@ -574,6 +574,26 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math
 const optNum = (k, v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? { [k]: Math.floor(v) } : {});
 /** A string on one line (whitespace runs become one space), or undefined for anything else. */
 const oneLine = (v) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim() : undefined);
+/** A running task's current step (task-steps.ts StepNote), checked: short one-line strings, numbers only. */
+function stepNoteOf(v) {
+    if (!v || typeof v !== "object")
+        return {};
+    const o = v;
+    const tool = oneLine(o.tool)?.slice(0, 60);
+    if (!tool)
+        return {};
+    const target = oneLine(o.target)?.slice(0, 200);
+    return { now: { tool, ...(target ? { target } : {}), at: num(o.at), ...(o.error === true ? { error: true } : {}) } };
+}
+/** Antigravity's quota as the PC reported it: a share 0..1 and an optional reset time. */
+function agQuotaOf(v) {
+    if (!v || typeof v !== "object")
+        return {};
+    const o = v;
+    if (typeof o.left !== "number" || !Number.isFinite(o.left))
+        return {};
+    return { agQuota: { left: Math.max(0, Math.min(1, o.left)), ...optNum("resetAt", o.resetAt) } };
+}
 const optStr = (k, v, max) => (typeof v === "string" && v ? { [k]: v.slice(0, max) } : {});
 /**
  * A file path as an event may carry it: relative, forward slashes, no `..`, no drive or home prefix, at most 160

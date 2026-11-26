@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { RELAY_PIN, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -338,7 +338,7 @@ export class TaskInbox {
     for (const f of FREE_PROVIDERS) {
       const conn = c.free?.[f.id];
       if (f.id === OPENCODE_PROVIDER || !conn?.ready()) continue;
-      listed[f.id] = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]);
+      listed[f.id] = await this.connModels(f.id, conn);
       await this.syncFreeUsage(f.id, conn);
     }
     return freeModelsFor(listed, trainOk).filter((m) => this.freeOpen(freeProviderOf(m)!.id));
@@ -357,7 +357,7 @@ export class TaskInbox {
     for (const r of RELAY_PROVIDERS) {
       const conn = c.free?.[r.id];
       if (!conn?.ready()) continue;
-      const listed = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((res) => setTimeout(() => res([]), 5000).unref?.())]);
+      const listed = await this.connModels(r.id, conn);
       const fine = pinned ? undefined : this.saved.relayHealth?.answered;
       out.push(...r.pick(listed).filter((m) => !fine || fine.includes(m)));
     }
@@ -365,7 +365,21 @@ export class TaskInbox {
   }
 
   /** Takes a service's own count of today's requests (OpenRouter: `free_model_daily_requests`) when it answers; else the local count stays. */
+  /** Model lists per connection, kept {@link CONN_CACHE_MS}: the page polls state(), which must not hit the network each time. */
+  private modelsCache = new Map<string, { at: number; list: string[] }>();
+  private usageAt = new Map<string, number>();
+
+  private async connModels(id: string, conn: { models: () => Promise<string[]> }): Promise<string[]> {
+    const hit = this.modelsCache.get(id);
+    if (hit && this.now() - hit.at < CONN_CACHE_MS) return hit.list;
+    const list = await Promise.race([conn.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]);
+    this.modelsCache.set(id, { at: this.now(), list });
+    return list;
+  }
+
   private async syncFreeUsage(id: string, conn: { usage?: () => Promise<FreeUsage | undefined> }): Promise<void> {
+    if (this.now() - (this.usageAt.get(id) ?? -Infinity) < CONN_CACHE_MS) return;
+    this.usageAt.set(id, this.now());
     const u: FreeUsage | undefined = await conn.usage?.().catch(() => undefined);
     if (!u) return;
     const d = this.freeDay(id);
@@ -580,7 +594,7 @@ export class TaskInbox {
 
   /** The models the OpenCode Go connection lists now (asked for at most 5 s; empty when it could not be asked). */
   private async opencodeListed(c: NonNullable<TaskInboxDeps["coder"]>): Promise<string[]> {
-    this.ocListed = await Promise.race([c.models().catch(() => [] as string[]), new Promise<string[]>((r) => setTimeout(() => r([]), 5000).unref?.())]);
+    this.ocListed = await this.connModels(OPENCODE_PROVIDER, c);
     return this.ocListed;
   }
 
@@ -1205,7 +1219,8 @@ export class TaskInbox {
         try {
           // Only the plan's own models and the free ones may run unattended (never a paid OpenRouter id; the training-prone
           // services only when allowed): refused here, before anything is sent.
-          if (!inboxModelAllowed(model, trainOk, relayOk)) throw new Error(`The task inbox may not use ${model}.`);
+          // A task given to GhostCLI passed the same content checks (pinnedOk) without the relay setting.
+          if (!inboxModelAllowed(model, trainOk, relayOk || pinnedOk)) throw new Error(`The task inbox may not use ${model}.`);
           // Every attempt counts toward the service's day, failed ones too (OpenRouter's docs); each tool call is another request.
           const attemptFree = freeProviderOf(model);
           if (attemptFree) this.freeDay(attemptFree.id).used++;
@@ -1323,6 +1338,8 @@ export class TaskInbox {
   }
 
   private agReading = false;
+  private agTriedAt = -Infinity;
+  private probeTriedAt = -Infinity;
 
   /**
    * Reads Antigravity's quota from its local language server (every {@link AG_QUOTA_MS}), read-only. All models used
@@ -1333,6 +1350,9 @@ export class TaskInbox {
     if (!this.d.agQuota || this.agReading) return;
     const last = this.saved.agQuota;
     if (last && this.now() - last.at < AG_QUOTA_MS) return;
+    // Also after a failed reading (no language server): do not spawn powershell/netstat on every sync.
+    if (this.now() - this.agTriedAt < AG_QUOTA_MS) return;
+    this.agTriedAt = this.now();
     this.agReading = true;
     try {
       const q = await this.d.agQuota();
@@ -1354,6 +1374,8 @@ export class TaskInbox {
     if (!c || this.oc.useRelay === false || this.probing) return;
     const last = this.saved.relayHealth;
     if (last && this.now() - last.at < RELAY_PROBE_MS) return;
+    if (this.now() - this.probeTriedAt < RELAY_PROBE_MS) return;
+    this.probeTriedAt = this.now();
     this.probing = true;
     try {
       for (const r of RELAY_PROVIDERS) {
@@ -2988,9 +3010,14 @@ export class TaskInbox {
     checks.push({ name: "paths", ok: !paths.outside.length && !paths.tooMany, note: paths.outside.length ? `outside the allowed paths: ${paths.outside.slice(0, 5).join(", ")}` : paths.tooMany ? `${files.length} files, more than ${t.maxFiles}` : `${files.length} files inside the allowed paths` });
     const found = scanDiff(diff, this.d.me);
     checks.push({ name: "secrets and privacy", ok: !found.length, note: found.length ? found.map((f) => `${f.kind} in ${f.file}`).slice(0, 5).join(", ") : "nothing found" });
+    // A run on a relay or a service that may train (third parties) must not change security files: checked on the real
+    // files, since the path patterns can be broad (security scan 26.11).
+    const thirdParty = t.model === RELAY_PIN || /ghostcli/i.test(t.modelUsed ?? "") || !!t.mayTrain;
+    const touched = thirdParty ? files.map((f) => f.path).filter(isSecurityFile) : [];
+    if (touched.length) checks.push({ name: "security files", ok: false, note: `a third-party model changed security files: ${touched.slice(0, 5).join(", ")}` });
     const version = changesVersion(diff);
     if (version) checks.push({ name: "version fields", ok: false, note: "a package.json version changed (releases are the lead's)" });
-    const blocked = !!paths.outside.length || paths.tooMany || !!found.length || version;
+    const blocked = !!paths.outside.length || paths.tooMany || !!found.length || version || !!touched.length;
     let tail = "";
     if (files.length && !blocked) {
       const parts = checkParts(t.check, this.s.commands);
@@ -3194,6 +3221,8 @@ export function isScratchFile(path: string): boolean {
 
 /** How often the relay gets its small "are you there" message. */
 const RELAY_PROBE_MS = 15 * 60_000;
+/** How long a connection's model list / usage reading is reused (the page polls state()). */
+const CONN_CACHE_MS = 30_000;
 /** How often Antigravity's quota is read on the PC (a local request; the watchers poll every 1-5 minutes). */
 const AG_QUOTA_MS = 5 * 60_000;
 

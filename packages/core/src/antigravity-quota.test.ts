@@ -41,3 +41,20 @@ test("the reading asks the language server on 127.0.0.1 with its token, and is u
   assert.equal(asked[0], "51001 true 1a2b-3c");
   assert.equal(await readAntigravityQuota({ platform: "linux", run: async () => "", post, now: 5 }), undefined);
 });
+
+test("the CSRF token goes only to ports the language server itself listens on, and only this user's processes are listed", async () => {
+  const asked: number[] = [];
+  const files: string[][] = [];
+  // The command line names port 51000, but another process listens there; the server's own port is 51001.
+  const run = async (file: string, args: string[]) => (files.push([file, ...args]), file === "ps" ? CMD.replace(/^\d+ C:\S+/, "4242 /opt/antigravity/language_server_linux") : "node 999 me 20u IPv4 0t0 TCP 127.0.0.1:51000 (LISTEN)\nlanguage_ 4242 me 21u IPv4 0t0 TCP 127.0.0.1:51001 (LISTEN)");
+  const post = async (port: number) => (asked.push(port), undefined);
+  assert.equal(await readAntigravityQuota({ platform: "linux", run, post, now: 5 }), undefined);
+  assert.deepEqual([...new Set(asked)], [51001]);
+  assert.deepEqual(files[0], ["ps", "-x", "-o", "pid=,command="]);
+});
+
+test("model names and counts in the answer are capped", () => {
+  const q = readQuota({ m: Array.from({ length: 100 }, (_, i) => ({ label: `${"x".repeat(200)}${i}`, quotaInfo: { remainingFraction: 0.5 } })) }, 1);
+  assert.equal(q?.models.length, 40);
+  assert.ok(q!.models.every((m) => m.name.length <= 80));
+});

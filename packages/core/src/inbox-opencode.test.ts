@@ -753,3 +753,21 @@ test("run guard: the safety ceiling is never below 120 minutes (an old 15-minute
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("ghostcli: a task given to GhostCLI runs on it with the automatic relay off; a sensitive one never reaches it", async () => {
+  const { root, repo } = await setup({ "c-20261126-41": TASK("c-20261126-41", "opencode"), "c-20261126-42": TASK("c-20261126-42", "opencode").replace("Add a clear button", "Rotate the API token") });
+  const { coder, runs } = fakeCoder({ listed: ["opencode-go/mimo-v2.6-flash"], free: { ghostcli: ["ghostcli/claude-opus-5-5"] } });
+  const { inbox } = inboxFor(repo, root, coder, { opencode: { enabled: true, useRelay: false, dailyCap: 0 } });
+  try {
+    await inbox.sync();
+    await inbox.reassign("c-20261126-41", "opencode", { relay: true });
+    await assert.rejects(inbox.reassign("c-20261126-42", "opencode", { relay: true }), /Not for GhostCLI/);
+    await inbox.pumpOpencode();
+    await inbox.idle();
+    assert.deepEqual(runs.filter((r) => r.title.includes("c-20261126-41")).map((r) => r.model), ["ghostcli/claude-opus-5-5"]);
+    assert.ok(runs.every((r) => !r.title.includes("c-20261126-42") || !r.model.startsWith("ghostcli/")));
+    assert.equal((await inbox.task("c-20261126-41")).status, "done");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

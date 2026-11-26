@@ -23,6 +23,9 @@ const runText: RunText = (file, args) =>
     execFile(file, args, { windowsHide: true, timeout: 15_000, maxBuffer: 8 * 1024 * 1024 }, (_e, out) => res(String(out ?? "")));
   });
 
+/** The longest answer read from the language server. */
+const MAX_BODY = 1024 * 1024;
+
 const postLocal: PostLocal = (port, path, body, headers, tls) =>
   new Promise((res) => {
     const opts = { host: "127.0.0.1", port, path, method: "POST", headers: { ...headers, "content-length": Buffer.byteLength(body) }, timeout: 5000 };
@@ -31,7 +34,14 @@ const postLocal: PostLocal = (port, path, body, headers, tls) =>
     req.on("response", (r) => {
       let s = "";
       r.setEncoding("utf8");
-      r.on("data", (c: string) => (s += c));
+      // A status answer is a few KB: anything past MAX_BODY is not one (and must not fill memory).
+      r.on("data", (c: string) => {
+        s += c;
+        if (s.length > MAX_BODY) {
+          req.destroy();
+          res(undefined);
+        }
+      });
       r.on("end", () => res(r.statusCode && r.statusCode < 300 ? s : undefined));
     });
     req.on("timeout", () => req.destroy());
@@ -100,12 +110,12 @@ export function readQuota(json: unknown, now: number): AntigravityQuota | undefi
     const o = x as Record<string, unknown>;
     const q = o.quotaInfo as { remainingFraction?: unknown; resetTime?: unknown } | undefined;
     const name = typeof o.label === "string" ? o.label : typeof o.modelName === "string" ? o.modelName : typeof o.model === "string" ? o.model : undefined;
-    if (q && typeof q === "object" && name && !seen.has(name)) {
+    if (q && typeof q === "object" && name && !seen.has(name) && models.length < 40) {
       seen.add(name);
       // An exhausted model has no `remainingFraction` in the answer (proto3 drops a zero).
       const left = typeof q.remainingFraction === "number" ? Math.max(0, Math.min(1, q.remainingFraction)) : 0;
       const reset = typeof q.resetTime === "string" ? Date.parse(q.resetTime) : NaN;
-      models.push({ name, left, ...(Number.isFinite(reset) ? { resetAt: reset } : {}) });
+      models.push({ name: name.slice(0, 80), left, ...(Number.isFinite(reset) ? { resetAt: reset } : {}) });
     }
     for (const v of Object.values(o)) walk(v, depth + 1);
   };
@@ -133,12 +143,15 @@ export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?
   const list =
     platform === "win32"
       ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name like 'language_server%'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"])
-      : await run("ps", ["-ax", "-o", "pid=,command="]);
+      : // `-x` without `-a`: this user's own processes only (another account's fake "language_server" is never asked).
+        await run("ps", ["-x", "-o", "pid=,command="]);
   const servers = parseServers(list);
   if (!servers.length) return undefined;
   const net = platform === "win32" ? await run("netstat", ["-ano", "-p", "TCP"]) : await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]);
   for (const s of servers) {
-    const ports = [...new Set([...listeningPorts(net, s.pid), ...(s.port ? [s.port] : [])])];
+    // Only ports the server's own process listens on: the command line's `--extension_server_port` belongs to another
+    // process (or to whoever bound it), and the request carries the language server's CSRF token.
+    const ports = listeningPorts(net, s.pid);
     for (const port of ports) {
       for (const tls of [true, false]) {
         const text = await post(port, PATH, BODY, { "content-type": "application/json", "connect-protocol-version": "1", "x-codeium-csrf-token": s.csrf }, tls);
