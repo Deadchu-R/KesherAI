@@ -4841,3 +4841,4 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-doing-list li.err { color: var(--danger, #e5484d); }
 .tinbox-bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; }
 .tinbox-bar > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.tinbox-agq { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }

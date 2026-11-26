@@ -393,6 +393,8 @@ export interface HubInboxTask {
   steps?: number;
   /** The step it is on now, in short (task-steps.ts), while it runs. */
   now?: import("./task-steps.js").StepNote;
+  /** An Antigravity task: Antigravity's quota on the PC now (the best model's share left, 0..1; the reset when all are used up). */
+  agQuota?: { left: number; resetAt?: number };
   /** `deferred` only: when the quota resets and the task may try once more (ms since epoch). */
   retryAt?: number;
   /** The live agent run (the Agents tab's card), while it has one. */

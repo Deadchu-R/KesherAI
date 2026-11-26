@@ -270,3 +270,9 @@ export function relayReport(log) {
 }
 /** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */
 export const BUSY_RUN_TEXT = { he: "משימה רצה, אין להריץ עד שתסתיים", en: "A task is running; do not run another until it ends" };
+/** A short summary for a line: the best model's share left and, when all are used up, the earliest reset. */
+export function antigravityQuotaSummary(q) {
+    const left = Math.max(0, ...q.models.map((m) => m.left));
+    const resets = q.models.filter((m) => m.left <= 0 && m.resetAt).map((m) => m.resetAt);
+    return { left, ...(left <= 0 && resets.length ? { resetAt: Math.min(...resets) } : {}) };
+}

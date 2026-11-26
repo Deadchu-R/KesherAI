@@ -23,6 +23,7 @@ import { commandPlan, findGit, gitPlan, startErrorText } from "../inbox-spawn.js
 import { findGamesAndStoreApps } from "../pc-games.js";
 import { githubTokenEnv } from "../git-credential.js";
 import type { TaskBoard } from "../task-board.js";
+import { readAntigravityQuota } from "../antigravity-quota.js";
 
 /** git commands that talk to the remote (the only ones given the GitHub token). */
 const NETWORK_GIT = new Set(["push", "fetch", "pull", "ls-remote"]);
@@ -293,6 +294,8 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     settings: () => p.config.taskInbox,
     ...(p.draining ? { draining: p.draining } : {}),
     file: join(p.root, "task-inbox.json"),
+    // Antigravity's quota from its own local language server, read-only (antigravity-quota.ts).
+    agQuota: () => readAntigravityQuota(),
     git,
     run: runner("run", true),
     // The unmodified Antigravity CLI in ACP mode, in the task's worktree only; no token or key passes through KesherAI.

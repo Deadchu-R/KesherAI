@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView } from "@kesher/shared";
+import { BUSY_RUN_TEXT, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView, type AntigravityQuota } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -253,6 +253,8 @@ export function TaskInboxPage({ id }: { id?: string }) {
 
       <TermsNote />
 
+      {s.agQuota && <AgQuotaLine q={s.agQuota} />}
+
       {s.quota && (
         <section className="card tinbox-quota">
           <p><b>⏸ {L(`הגעת למכסה של Gemini. Antigravity יוכל לעבוד שוב ב-${clock(s.quota.until)} (${ago(Date.now() - s.quota.until)})`, `You reached Gemini's quota. Antigravity can work again at ${clock(s.quota.until)} (${ago(Date.now() - s.quota.until)})`)}{s.quota.estimated ? L(" · הערכה", " · estimate") : ""}</b></p>
@@ -350,6 +352,22 @@ function WorkListSend({ onSent }: { onSent: () => void }) {
           </div>
         ))}
     </section>
+  );
+}
+
+/** Antigravity's quota as read on the PC: each model's share left, and when a used-up one fills again. */
+function AgQuotaLine({ q }: { q: AntigravityQuota }) {
+  const old = Date.now() - q.at > 60 * 60_000;
+  return (
+    <div className="small tinbox-agq" role="group" aria-label={L("המכסה של Antigravity", "Antigravity's quota")}>
+      <b>✦ {L("מכסת Antigravity", "Antigravity quota")}</b>{" "}
+      {q.models.map((m) => (
+        <span key={m.name} className={`tinbox-chip${m.left <= 0 ? " tinbox-err" : ""}`} dir="ltr" title={m.name}>
+          {m.name.replace(/\s*\(.*\)$/, "")} · {Math.round(m.left * 100)}%{m.left <= 0 && m.resetAt ? ` · ${L("מתחדש", "back")} ${new Date(m.resetAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
+        </span>
+      ))}
+      <span className="muted"> {old ? L("(קריאה ישנה)", "(old reading)") : L(`נקרא ${new Date(q.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, `read ${new Date(q.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`)}</span>
+    </div>
   );
 }
 

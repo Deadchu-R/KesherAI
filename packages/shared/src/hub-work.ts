@@ -23,6 +23,7 @@ export interface InboxMeta {
   steps?: number;
   /** The step it is on now (task-steps.ts). */
   now?: StepNote;
+  agQuota?: HubInboxTask["agQuota"];
   retryAt?: number;
   model?: string;
   boardId?: string;
@@ -58,6 +59,7 @@ export function inboxMetaOf(r: HubInboxTask, deviceId: string): InboxMeta {
     ...(r.estSteps ? { estSteps: r.estSteps } : {}),
     ...(r.steps ? { steps: r.steps } : {}),
     ...(r.now ? { now: r.now } : {}),
+    ...(r.agQuota ? { agQuota: r.agQuota } : {}),
     ...(r.retryAt ? { retryAt: r.retryAt } : {}),
     ...(r.model ? { model: r.model } : {}),
     ...(r.boardId ? { boardId: r.boardId } : {}),
@@ -134,6 +136,8 @@ export interface WorkTask {
   steps?: number;
   /** The step it is on now. */
   now?: StepNote;
+  /** Antigravity's quota as its PC last reported it (on Antigravity tasks). */
+  agQuota?: HubInboxTask["agQuota"];
   estSteps?: number;
   startedAt?: number;
   endedAt?: number;
@@ -179,6 +183,7 @@ export function toWorkTask(t: WorkSource, expired: boolean, board?: ReadonlyMap<
     ...(i?.kind ? { kind: i.kind } : {}),
     ...(i?.steps ? { steps: i.steps } : {}),
     ...(i?.now ? { now: i.now } : {}),
+    ...(i?.agQuota ? { agQuota: i.agQuota } : {}),
     ...(i?.estSteps ? { estSteps: i.estSteps } : {}),
     ...(i?.startedAt ? { startedAt: i.startedAt } : {}),
     ...(i?.endedAt ? { endedAt: i.endedAt } : {}),

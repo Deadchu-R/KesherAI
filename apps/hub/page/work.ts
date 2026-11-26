@@ -212,10 +212,12 @@ export function nowNextSections(v: WorkView): Array<HTMLElement | null> {
 }
 
 /** An agent chip (several can be on) with the number of tasks it would show. */
-function whoChip(v: WorkView, w: string, n: number): HTMLElement {
+function whoChip(v: WorkView, w: string, n: number, quota?: WorkTask["agQuota"]): HTMLElement {
   const f = workState.filters;
   const on = f.who.includes(w);
-  return h("button", { type: "button", class: `chip${on ? " chip-on" : ""}`, "aria-pressed": String(on), onclick: () => setFilters(v, { ...f, who: on ? f.who.filter((x) => x !== w) : [...f.who, w] }) }, `${workerName(w)} ${n}`);
+  // Antigravity's chip says how much quota its PC reported, and when a used-up quota is back.
+  const q = quota ? ` · ${Math.round(quota.left * 100)}%${quota.left <= 0 && quota.resetAt ? ` ${L("עד", "until")} ${new Date(quota.resetAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : ""}` : "";
+  return h("button", { type: "button", class: `chip${on ? " chip-on" : ""}`, "aria-pressed": String(on), title: quota ? L("המכסה של Antigravity במחשב", "Antigravity's quota on the PC") : "", onclick: () => setFilters(v, { ...f, who: on ? f.who.filter((x) => x !== w) : [...f.who, w] }) }, `${workerName(w)} ${n}${q}`);
 }
 
 /**
@@ -239,7 +241,7 @@ export function workTabs(v: WorkView, items: WorkTask[]): HTMLElement {
     "div",
     { class: "worktabs" },
     h("div", { class: "row wtabs", role: "tablist", "aria-label": L("מצב המשימות", "Task state") }, tab("active", "פעילות", "Active", "w-active"), tab("done", "הושלמו", "Done", "w-done"), tab("failed", "נכשלו", "Failed", "w-failed")),
-    h("div", { class: "row wrap filters wfilters", role: "group", "aria-label": L("סינון לפי מודל וסוכן", "Filter by agent and model") }, present.map((w) => whoChip(v, w, ofPhase.filter((x) => x.worker === w && inTab(x, "who")).length)), models.length ? h("select", { class: "inp wmodel", "aria-label": L("מודל", "Model"), onchange: (e: Event) => setFilters(v, { ...f, model: (e.target as HTMLSelectElement).value }) }, h("option", { value: "", selected: !f.model }, L("כל המודלים", "All models")), models.map((m) => h("option", { value: m, selected: m === f.model }, m))) : null),
+    h("div", { class: "row wrap filters wfilters", role: "group", "aria-label": L("סינון לפי מודל וסוכן", "Filter by agent and model") }, present.map((w) => whoChip(v, w, ofPhase.filter((x) => x.worker === w && inTab(x, "who")).length, w === "antigravity" ? items.find((x) => x.worker === "antigravity" && x.agQuota)?.agQuota : undefined)), models.length ? h("select", { class: "inp wmodel", "aria-label": L("מודל", "Model"), onchange: (e: Event) => setFilters(v, { ...f, model: (e.target as HTMLSelectElement).value }) }, h("option", { value: "", selected: !f.model }, L("כל המודלים", "All models")), models.map((m) => h("option", { value: m, selected: m === f.model }, m))) : null),
     h("div", { class: "row wrap filters wfilters", role: "group", "aria-label": L("סינון לפי סוג", "Filter by kind") }, kinds.map((k) => { const on = f.kind === k; return h("button", { type: "button", class: `chip${on ? " chip-on" : ""}`, "aria-pressed": String(on), onclick: () => setFilters(v, { ...f, kind: on ? "" : k }) }, `${L(...KIND[k])} ${ofPhase.filter((x) => x.kind === k && inTab(x, "kind")).length}`); }), filtersOn(f) ? h("button", { type: "button", class: "link sm", onclick: () => setFilters(v, { ...NO_FILTERS, who: [] }) }, L("נקה סינון", "Clear filters")) : null),
   );
 }

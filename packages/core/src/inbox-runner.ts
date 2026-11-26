@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
+import { RELAY_PIN, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -81,6 +81,8 @@ export interface TaskInboxDeps {
    * the worktree, on the model; it resolves with the model's last answer, or throws the provider's error (a 429 carries
    * `retryAfterMs` when the answer said how long to wait).
    */
+  /** Reads Antigravity's quota on this PC (antigravity-quota.ts); absent in tests. */
+  agQuota?: () => Promise<AntigravityQuota | undefined>;
   coder?: {
     ready: () => boolean;
     models: () => Promise<string[]>;
@@ -138,6 +140,8 @@ interface Saved {
   relayLog?: RelayRun[];
   /** The relay's last small "are you there" message (every 15 minutes): it gets tasks only while this answered. */
   relayHealth?: RelayProbe;
+  /** Antigravity's quota, last read on this PC (every few minutes). */
+  agQuota?: AntigravityQuota;
   today: { date: string; used: number };
   quota?: InboxState["quota"];
   /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
@@ -563,6 +567,7 @@ export class TaskInbox {
       ...(this.s.repo ? { project: basename(this.s.repo) } : {}),
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
+      ...(this.saved.agQuota ? { agQuota: this.saved.agQuota } : {}),
       ...(this.saved.relayLog?.length ? { relay: { ...relayReport(this.saved.relayLog), ...(this.saved.relayHealth ? { health: this.saved.relayHealth } : {}) } } : {}),
       ...(this.d.claude ? { claude: await this.claudeState() } : {}),
       ...(await this.freeStates()),
@@ -693,6 +698,7 @@ export class TaskInbox {
    */
   sync(): Promise<void> {
     void this.probeRelays().catch(() => undefined);
+    void this.readAgQuota().catch(() => undefined);
     this.syncing ??= this.doSync().finally(() => {
       this.syncing = undefined;
     });
@@ -1310,6 +1316,39 @@ export class TaskInbox {
    * Sends the relay a small "reply with ok" every 15 minutes (Roee, 25.11: keep checking it answers): the relay gets tasks
    * only while the last one answered, and the phone is told when it starts or stops answering.
    */
+  /** Antigravity's quota for the hub's cards: the summary of the last reading, when it is under an hour old. */
+  agQuotaSummary(): { left: number; resetAt?: number } | undefined {
+    const q = this.saved.agQuota;
+    return q && this.now() - q.at < 60 * 60_000 ? antigravityQuotaSummary(q) : undefined;
+  }
+
+  private agReading = false;
+
+  /**
+   * Reads Antigravity's quota from its local language server (every {@link AG_QUOTA_MS}), read-only. All models used
+   * up → the inbox's quota stop is set to the real reset (not a guess from an error text); quota back → the stop is
+   * lifted, so put-off Antigravity tasks can run again.
+   */
+  private async readAgQuota(): Promise<void> {
+    if (!this.d.agQuota || this.agReading) return;
+    const last = this.saved.agQuota;
+    if (last && this.now() - last.at < AG_QUOTA_MS) return;
+    this.agReading = true;
+    try {
+      const q = await this.d.agQuota();
+      if (!q) return;
+      const was = last ? antigravityQuotaSummary(last).left : undefined;
+      this.saved.agQuota = q;
+      const s = antigravityQuotaSummary(q);
+      if (s.left <= 0 && s.resetAt && s.resetAt > this.now()) this.saved.quota = { until: s.resetAt, estimated: false, ...(this.saved.quota?.taskId ? { taskId: this.saved.quota.taskId } : {}) };
+      else if (s.left > 0 && this.saved.quota && this.saved.quota.until > this.now()) delete this.saved.quota;
+      await this.save();
+      if (was !== undefined && was <= 0 && s.left > 0) this.d.notify("✦ Antigravity is back", `Its quota renewed (${Math.round(s.left * 100)}% left).`, { path: "#/task-inbox" });
+    } finally {
+      this.agReading = false;
+    }
+  }
+
   private async probeRelays(): Promise<void> {
     const c = this.d.coder;
     if (!c || this.oc.useRelay === false || this.probing) return;
@@ -3155,6 +3194,8 @@ export function isScratchFile(path: string): boolean {
 
 /** How often the relay gets its small "are you there" message. */
 const RELAY_PROBE_MS = 15 * 60_000;
+/** How often Antigravity's quota is read on the PC (a local request; the watchers poll every 1-5 minutes). */
+const AG_QUOTA_MS = 5 * 60_000;
 
 /**
  * The words of a task's end notice: "reached its limit" only when it was a limit; a task put off by an error (a free

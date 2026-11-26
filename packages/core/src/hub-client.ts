@@ -154,6 +154,8 @@ export interface HubClientDeps {
   assign?: (taskId: string, to: AssignTo, confirm: boolean) => Promise<AssignResult>;
   /** The models Antigravity offers (names, inbox-models.ts `pickableModels`), sent with tasks that have not started. */
   inboxModels?: () => string[];
+  /** Antigravity's quota on this PC now (antigravity-quota.ts), for its tasks' cards in the hub. */
+  inboxAgQuota?: () => { left: number; resetAt?: number } | undefined;
   /** Picks the model of an Antigravity task ("" = the default for its kind), from the owner's phone or hub page. */
   inboxModel?: (taskId: string, model: string) => Promise<AssignResult>;
   /** Renames an agent run and sets its note, from the owner's phone or hub page (agent-labels.ts). */
@@ -280,7 +282,7 @@ const INBOX_STATE: Record<InboxTaskView["status"], HubInboxState> = {
  *   the waiting tasks (1 = next). Both optional; an older page ignores them.
  * @returns The report, or undefined when it is not reported.
  */
-export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number; askNext?: { antigravity: boolean; local: boolean }; models?: string[] } = {}): HubInboxTask | undefined {
+export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: number; queuePos?: number; askNext?: { antigravity: boolean; local: boolean }; models?: string[]; agQuota?: { left: number; resetAt?: number } } = {}): HubInboxTask | undefined {
   if (t.from === "hub" || !/^[\w-]{1,64}$/.test(t.id)) return undefined;
   let state = INBOX_STATE[t.status];
   // An Antigravity task waiting on the PC waits for the user's Run; a local one waits for self-work.
@@ -319,6 +321,8 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     // The model picker's choices, only for an Antigravity task that has not started (a running one keeps its model).
     ...(order.models?.length && t.runBy === "antigravity" && !t.startedAt && (state === "waiting" || state === "waiting-run") ? { models: order.models.slice(0, 12) } : {}),
     ...(order.askNext && (t.runBy === "antigravity" || t.runBy === "local") ? { askNext: order.askNext[t.runBy] } : {}),
+    // Rounded to 5%, so a small change does not send every card again.
+    ...(order.agQuota && t.runBy === "antigravity" && !ended ? { agQuota: { left: Math.round(order.agQuota.left * 20) / 20, ...(order.agQuota.resetAt ? { resetAt: order.agQuota.resetAt } : {}) } } : {}),
     kind: workKindOf({ kind: t.kind, title: t.title, goal: t.goal }),
     ...(t.startedAt ? { startedAt: t.startedAt } : {}),
     ...(ended && t.endedAt ? { endedAt: t.endedAt } : {}),
@@ -1403,7 +1407,8 @@ export class HubClient {
       const waits = base?.state === "waiting" || base?.state === "waiting-run";
       const askNext = this.deps.inboxAskNext?.();
       const models = this.deps.inboxModels?.();
-      const report = base && hubInboxTask(t, now, { ...(askNext ? { askNext } : {}), ...(models?.length ? { models } : {}), ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
+      const agQuota = this.deps.inboxAgQuota?.();
+      const report = base && hubInboxTask(t, now, { ...(agQuota ? { agQuota } : {}), ...(askNext ? { askNext } : {}), ...(models?.length ? { models } : {}), ...(t.boardId && prio.has(t.boardId) ? { priority: prio.get(t.boardId)! } : {}), ...(waits ? { queuePos: ++place } : {}) });
       if (!report) continue;
       const { at: _at, ...shape } = report;
       const hash = createHash("sha256").update(JSON.stringify(shape)).digest("base64url").slice(0, 16);

@@ -515,4 +515,5 @@ KesherAI is for every user. Whatever is faster on another platform goes in, chos
   - ⬜ Hardware detection → pick the engine build (CUDA / Vulkan / Metal / CPU), MLX as an option on Apple Silicon.
   - ⬜ Ship the CPU build in the installer; download the GPU build that fits on first run.
 - r-20261126-09 (Antigravity quota): watchers read it from Antigravity's local language server (process found by name; CSRF token and port from its command line; GetUserStatus returns per-model remaining fraction and reset time). Report lacked the exact endpoint.
-  - ⬜ KesherAI reads the quota locally (read-only, every few minutes), shows it in the hub and the tasks page, and starts waiting Antigravity tasks when it resets.
+  - ✅ KesherAI reads the quota locally (read-only, every 5 minutes), shows it on the tasks page and the hub's Antigravity chip, sets the real reset time, and lifts the stop (with a notice) when it renews (0.6.485).
+  - ⬜ Check on the PC that the reading works with Antigravity open; the design-doc board for the quota line.

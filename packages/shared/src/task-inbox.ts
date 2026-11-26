@@ -680,6 +680,8 @@ export interface InboxState {
   opencode?: OpencodeState;
   /** The relay's trial report (GhostCLI), once it ran a task. */
   relay?: RelayReport;
+  /** Antigravity's quota as read on the PC (antigravity-quota.ts), when Antigravity runs. */
+  agQuota?: AntigravityQuota;
   /** Claude Code on this PC: installed, signed in, its quota reading and whether a task may start. */
   claude?: ClaudeState;
   /** The connected free services (OpenRouter, Z.ai, Mistral, NVIDIA, ...) that take S tasks after Beam Free. */
@@ -722,3 +724,25 @@ export interface OpencodeState {
 
 /** What the PC answers (HTTP 409) when Run is pressed on an Antigravity task while another one runs. */
 export const BUSY_RUN_TEXT = { he: "משימה רצה, אין להריץ עד שתסתיים", en: "A task is running; do not run another until it ends" } as const;
+
+/** One Antigravity model's quota as Antigravity's local language server reports it (antigravity-quota.ts). */
+export interface AntigravityModelQuota {
+  name: string;
+  /** What is left, 0..1 (0 = used up). */
+  left: number;
+  /** When it fills again (ms since epoch), when the answer says. */
+  resetAt?: number;
+}
+
+/** Antigravity's quota, read on the PC (read-only, every few minutes while Antigravity runs). */
+export interface AntigravityQuota {
+  at: number;
+  models: AntigravityModelQuota[];
+}
+
+/** A short summary for a line: the best model's share left and, when all are used up, the earliest reset. */
+export function antigravityQuotaSummary(q: AntigravityQuota): { left: number; resetAt?: number } {
+  const left = Math.max(0, ...q.models.map((m) => m.left));
+  const resets = q.models.filter((m) => m.left <= 0 && m.resetAt).map((m) => m.resetAt!);
+  return { left, ...(left <= 0 && resets.length ? { resetAt: Math.min(...resets) } : {}) };
+}

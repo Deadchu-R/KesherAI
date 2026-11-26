@@ -825,6 +825,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     assign: (taskId, to, confirm) => assignTask(assignDeps, taskId, to, confirm),
     // The model an Antigravity task runs on, picked on the phone or the hub page (inbox-models.ts).
     inboxModels: () => taskInbox.modelNames(),
+    inboxAgQuota: () => taskInbox.agQuotaSummary(),
     inboxModel: (taskId, model) =>
       taskInbox.setModel(taskId, model).then(
         (t) => ({ ok: true, text: t.model ? `It runs on ${t.model}.` : "It runs on the default model for its kind." }),
