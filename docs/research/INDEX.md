@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| r-20261126-02 | Research: Tauri vs Electron for KesherAI; Rust inference engines vs llama.cpp | [r-20261126-02.md](r-20261126-02.md) |
 | r-20261126-01 | Research: Kaggle (and similar free notebooks) as a cloud worker for KesherAI self-work | [r-20261126-01.md](r-20261126-01.md) |
 | c-20261121-15 | Research before building — full design refresh (colour-coded, light theme, one unified menu) | [c-20261121-15.md](c-20261121-15.md) |
 | browser-computer-control | Browser and computer control: how others do it, and the plan for KesherAI | [browser-computer-control.md](browser-computer-control.md) |
