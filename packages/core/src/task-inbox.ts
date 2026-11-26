@@ -150,23 +150,22 @@ export function taskSize(spec: Pick<InboxTaskSpec, "size" | "maxFiles" | "risk">
 const SENSITIVE = /secur|auth|token|password|secret|share.?link|updater|release|migrat|\bgit\b|\bacp\b|אבטח|טוקן|סיסמ/i;
 
 /**
- * Picks the executor for a task whose spec says `auto` (the research entry's table): the local model for small
- * mechanical work, Antigravity for medium well-specified work with a check, Claude's Opus agent for hard, risky,
- * vague or security work.
- *
- * A research task (`kind: research`) has no check to route by: high risk goes to Claude's Opus agent, low risk is
- * small research for the free Gemini key (automatic), the rest is big research for Antigravity (needs Run).
+ * Picks the executor for a task whose spec says `auto`: the local model for small mechanical work, OpenCode Go (with
+ * the free services and the relay first) for medium well-specified work with a check, Claude's Opus agent for hard,
+ * risky, vague or security work. A research task goes to the free Gemini key. All of these run by themselves;
+ * Antigravity, which needs a Run tap, gets a task only when it is chosen.
  *
  * @param spec - The task.
  * @returns Its executor.
  */
 export function routeTask(spec: Pick<InboxTaskSpec, "executor" | "risk" | "title" | "goal" | "check" | "acceptance" | "maxFiles"> & { kind?: InboxKind }): Exclude<InboxExecutor, "auto"> {
   if (spec.executor !== "auto") return spec.executor;
-  if (spec.kind === "research") return spec.risk === "high" ? "opus" : spec.risk === "low" ? "gemini" : "antigravity";
+  // Roee, 26.11: what runs by itself goes to an automatic executor; Antigravity (needs a Run tap) only when chosen.
+  if (spec.kind === "research") return "gemini";
   if (spec.risk === "high" || SENSITIVE.test(`${spec.title}\n${spec.goal}`)) return "opus";
   if (!spec.check.trim() || !spec.acceptance?.trim()) return "opus";
   if (spec.maxFiles <= 2 && spec.risk === "low") return "local";
-  if (spec.maxFiles <= 15) return "antigravity";
+  if (spec.maxFiles <= 15) return "opencode";
   return "opus";
 }
 

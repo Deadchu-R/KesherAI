@@ -171,15 +171,14 @@ test("opencode: an explicit task runs by itself on its size's model, on an ocgo/
 
 test("opencode: auto routing gives S/M code tasks to OpenCode Go only while Antigravity is out (L stays)", async () => {
   const tasks = { "c-20261122-03": TASK("c-20261122-03", "auto"), "c-20261122-04": TASK("c-20261122-04", "auto", "size: L\n") };
-  // Antigravity has room: the task waits for its Run as before.
+  // Antigravity has room: an auto code task still goes to OpenCode Go, which runs by itself (Roee, 26.11).
   {
     const { root, repo } = await setup(tasks);
-    const { coder, runs } = fakeCoder();
+    const { coder } = fakeCoder();
     const { inbox } = inboxFor(repo, root, coder, { dailyCap: 10 });
     try {
       await syncAndRun(inbox);
-      assert.equal((await inbox.task("c-20261122-03")).runBy, "antigravity");
-      assert.equal(runs.length, 0);
+      assert.equal((await inbox.task("c-20261122-03")).runBy, "opencode", "auto code runs by itself (26.11)");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

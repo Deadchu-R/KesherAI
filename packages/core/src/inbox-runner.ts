@@ -436,7 +436,9 @@ export class TaskInbox {
    */
   private routeFor(spec: InboxTaskSpec): Exclude<InboxTaskSpec["executor"], "auto"> {
     const runBy = routeTask(spec);
-    if (spec.executor === "auto" && runBy === "antigravity" && spec.kind !== "research" && taskSize(spec) !== "L" && this.antigravityOut() && !this.opencodeBlocked()) return "opencode";
+    // Big work stays with Antigravity and its one Run tap (Roee, 21.11), and so does a task OpenCode Go can't take
+    // (no connection, or turned off).
+    if (spec.executor === "auto" && runBy === "opencode" && (taskSize(spec) === "L" || !this.d.coder?.ready() || this.oc.enabled === false)) return "antigravity";
     return runBy;
   }
 

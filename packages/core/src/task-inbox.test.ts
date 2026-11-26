@@ -88,7 +88,7 @@ test("inbox: KesherAI may push only agy/* branches and the inbox branch", async 
 test("inbox: routing picks the executor for auto tasks", () => {
   const base = { executor: "auto" as const, risk: "low" as const, title: "Hebrew strings", goal: "Add strings", check: "pnpm -s typecheck", acceptance: "builds", maxFiles: 2 };
   assert.equal(routeTask(base), "local");
-  assert.equal(routeTask({ ...base, maxFiles: 8, risk: "medium" }), "antigravity");
+  assert.equal(routeTask({ ...base, maxFiles: 8, risk: "medium" }), "opencode", "medium code runs by itself; Antigravity only when chosen");
   assert.equal(routeTask({ ...base, maxFiles: 8, title: "Refresh the remote token" }), "opus");
   assert.equal(routeTask({ ...base, risk: "high" }), "opus");
   assert.equal(routeTask({ ...base, check: "" }), "opus", "no check: Claude's");
@@ -151,11 +151,11 @@ test("inbox: a research task is forced to one report file, no check, and round-t
   assert.match((parseTaskFile(FILE.replace("executor: antigravity", "executor: gemini"), "c-20261119-04", defaults) as { error: string }).error, /only for kind: research/);
 });
 
-test("inbox: research routing — low risk to free Gemini, bigger to Antigravity, high to Opus; explicit executors stay", () => {
+test("inbox: research routing — auto research goes to free Gemini; explicit executors stay", () => {
   const base = { title: "Compare sync", goal: "How do they sync?", check: "", acceptance: undefined, maxFiles: 1, kind: "research" as const };
   assert.equal(routeTask({ ...base, executor: "auto", risk: "low" }), "gemini");
-  assert.equal(routeTask({ ...base, executor: "auto", risk: "medium" }), "antigravity");
-  assert.equal(routeTask({ ...base, executor: "auto", risk: "high" }), "opus");
+  assert.equal(routeTask({ ...base, executor: "auto", risk: "medium" }), "gemini");
+  assert.equal(routeTask({ ...base, executor: "auto", risk: "high" }), "gemini");
   assert.equal(routeTask({ ...base, executor: "antigravity", risk: "low" }), "antigravity");
   assert.equal(routeTask({ ...base, executor: "gemini", risk: "medium" }), "gemini");
   // A code task never goes to Gemini by routing.
