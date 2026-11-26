@@ -25,6 +25,8 @@ export interface SceneObjectChange {
   kind: "added" | "removed" | "changed";
   /** Its path or label as the engine shows it ("Level/Door", "BP_Door_2"). */
   name: string;
+  /** Stable id for click-to-highlight in the open engine (Unity instanceID, Unreal GUID/path, Godot node path). */
+  id?: string;
   /** Its class or type ("Cube", "StaticMeshActor", "Node2D"), when known. */
   type?: string;
   /** Components (Unity), nodes (Godot) or actor components (Unreal) added to it or removed from it. */
@@ -132,8 +134,10 @@ function cleanObject(v: unknown): SceneObjectChange | undefined {
   const name = str(o.name);
   if (!kind || !name) return undefined;
   const out: SceneObjectChange = { kind, name };
-  const type = str(o.type);
-  if (type) out.type = type;
+      const id = str(o.id);
+      if (id) out.id = id;
+      const type = str(o.type);
+      if (type) out.type = type;
   const comps = (o.components ?? {}) as Record<string, unknown>;
   const added = strs(comps.added);
   const removed = strs(comps.removed);

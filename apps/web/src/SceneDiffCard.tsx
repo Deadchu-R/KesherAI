@@ -7,120 +7,137 @@ import "./scene-diff.css";
  * What a Unity, Unreal or Godot tool will change in a scene, on its approval card (shared/scene-diff.ts): the objects
  * added, removed and changed, each value as old → new, and how it can be undone. Shown inside ApprovalCard, so the
  * Allow / Deny buttons stay the card's own; the same on the phone (390 px: values wrap, nothing is cut).
+ *
+ * GE-28: when `onSelectObject` is provided, each object row with an `id` is clickable and highlights the object in the
+ * open engine (Unity instanceID / Unreal path / Godot node path carried on `SceneObjectChange.id`). Rows without an id
+ * stay plain text.
  */
 
-const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
+const L = (he: string, en: string) => (getLocale() === "he" ? he : en);
 
-/** Objects shown before "Show all". */
-const FIRST = 8;
+const FIRST = 6;
 
-const ENGINE = { unity: ["סצנת Unity", "Unity scene"], unreal: ["שלב Unreal", "Unreal level"], godot: ["סצנת Godot", "Godot scene"] } as const;
+const ENGINE: Record<SceneDiff["engine"], [string, string]> = {
+ unity: ["Unity", "Unity"],
+ unreal: ["Unreal", "Unreal"],
+ godot: ["Godot", "Godot"],
+};
 
 function kindText(k: SceneObjectChange["kind"]): string {
-  return k === "added" ? L("נוסף", "Added") : k === "removed" ? L("נמחק", "Removed") : L("משתנה", "Changed");
+ return k === "added" ? L("נוסף", "Added") : k === "removed" ? L("הוסר", "Removed") : L("שונה", "Changed");
 }
 
 function undoText(d: SceneDiff): string {
-  switch (d.undo) {
-    case "undo": return L("צעד ביטול אחד בעורך (Ctrl+Z). נקודת שמירה נשמרת כשהסצנה נשמרת.", "One undo step in the editor (Ctrl+Z). A checkpoint is kept when the scene is saved.");
-    case "checkpoint": return L("הקובץ נשמר בנקודת שמירה של הצ'אט לפני השינוי (↺ להחזרה).", "The file is kept in this chat's checkpoint before the change (↺ to go back).");
-    case "queued": return L("העורך סגור: השינוי ממתין ויוחל בסנכרון הבא, עם נקודת שמירה של הקובץ לפניו.", "The editor is closed: the change waits for the next sync, with a checkpoint of the file before it.");
-  }
+ if (d.undo === "checkpoint") return L("שמור כנקודת חזרה לפני ההרצה", "Saved as a checkpoint before running");
+ return L("צעד אחד של Undo בעורך הפתוח", "One Undo step in the open editor");
 }
 
-/** One side of the before/after picture: the rest as grey dots, the objects that change as bigger ones. */
-function PlanSide({ plan, side }: { plan: ScenePlan; side: "before" | "after" }) {
-  const W = Math.max(1e-6, plan.max[0] - plan.min[0]);
-  const D = Math.max(1e-6, plan.max[1] - plan.min[1]);
-  // 100 units wide; z grows upward (forward), so the picture is flipped to read like a map.
-  const H = Math.min(200, Math.max(40, (100 * D) / W));
-  const k = 100 / W;
-  const at = (p: [number, number]) => ({ cx: (p[0] - plan.min[0]) * k, cy: H - (p[1] - plan.min[1]) * (H / D) });
-  const r = Math.max(0.8, Math.min(2.2, 100 / (plan.rest.length + plan.after.length + 8)));
-  const list = side === "before" ? plan.before : plan.after;
-  return (
-    <figure className="sd-plan-side">
-      <svg viewBox={`0 0 100 ${H}`} role="img" aria-label={side === "before" ? L("לפני", "Before") : L("אחרי", "After")} preserveAspectRatio="xMidYMid meet">
-        <rect x="0" y="0" width="100" height={H} className="sd-plan-bg" />
-        {plan.rest.map((p, i) => <circle key={`r${i}`} {...at(p)} r={r} className="sd-dot-rest" />)}
-        {list.map((p, i) => <circle key={`m${i}`} {...at(p)} r={r * 1.3} className={side === "after" && i >= plan.moved ? "sd-dot-added" : "sd-dot-moved"} />)}
-      </svg>
-      <figcaption className="muted small">{side === "before" ? L("לפני", "Before") : L("אחרי", "After")}</figcaption>
-    </figure>
-  );
-}
-
-/** The top-down plan: before and after side by side (stacked on a phone). */
-function PlanPicture({ plan }: { plan: ScenePlan }) {
-  return (
-    <div className="sd-plan" role="group" aria-label={L("תוכנית מלמעלה", "Top-down plan")}>
-      {plan.moved > 0 && <PlanSide plan={plan} side="before" />}
-      <PlanSide plan={plan} side="after" />
-    </div>
-  );
+function PlanSvg({ plan }: { plan: ScenePlan }) {
+ const [minX, minY] = plan.min;
+ const [maxX, maxY] = plan.max;
+ const w = maxX - minX || 1;
+ const h = maxY - minY || 1;
+ const sx = 200 / w;
+ const sy = 200 / h;
+ const dots: Array<{ x: number; y: number; cls: string; key: string }> = [];
+ plan.rest.forEach(([x, y], i) => dots.push({ x, y, cls: "sd-dot-rest", key: `r-${i}` }));
+ plan.before.forEach(([x, y], i) => dots.push({ x, y, cls: "sd-dot-moved", key: `b-${i}` }));
+ plan.after.forEach(([x, y], i) => {
+ const cls = i < plan.moved ? "sd-dot-moved" : "sd-dot-added";
+ dots.push({ x, y, cls, key: `a-${i}` });
+ });
+ return (
+ <svg viewBox="0 0 200 200" role="img" aria-label={L("מפת שינויים", "Change map")}>
+ <rect className="sd-plan-bg" x="0" y="0" width="200" height="200" rx="8" />
+ {dots.map((d) => {
+ const cx = (d.x - minX) * sx + sx / 2;
+ const cy = (maxY - d.y) * sy + sy / 2;
+ return <circle key={d.key} className={d.cls} cx={cx} cy={cy} r="6" />;
+ })}
+ </svg>
+ );
 }
 
 /**
- * The scene diff on an approval card.
+ * A scene diff on an approval card: counts, per-object changes with old → new values, optional before/after plan, and
+ * undo hint. When `onSelectObject` is given, rows carrying an engine `id` become focusable buttons that call it.
  *
  * @param props.diff - The diff from the approval preview.
+ * @param props.onSelectObject - Optional callback fired with the object's engine id when a selectable row is activated.
  */
-export function SceneDiffCard({ diff }: { diff: SceneDiff }) {
-  const [all, setAll] = useState(false);
-  const c = sceneCounts(diff);
-  const shown = all ? diff.objects : diff.objects.slice(0, FIRST);
-  const [he, en] = ENGINE[diff.engine];
-  return (
-    <div className="sd-card" role="group" aria-label={L("מה ישתנה בסצנה", "What changes in the scene")}>
-      <p className="sd-head">
-        <b>{L(he, en)}</b>
-        {diff.scene && <> · <code dir="ltr">{diff.scene}</code></>}
-      </p>
-      {diff.plan && <PlanPicture plan={diff.plan} />}
-      <ul className="sd-counts" aria-label={L("סיכום", "Summary")}>
-        {c.added > 0 && <li className="sd-added">+{c.added} {L("נוספים", "added")}</li>}
-        {c.removed > 0 && <li className="sd-removed">−{c.removed} {L("נמחקים", "removed")}</li>}
-        {c.changed > 0 && <li className="sd-changed">~{c.changed} {L("משתנים", "changed")}</li>}
-      </ul>
-      <ul className="sd-objects">
-        {shown.map((o, i) => (
-          <li key={`${o.name}-${i}`} className={`sd-obj sd-${o.kind}`}>
-            <div className="sd-obj-head">
-              <span className="sd-kind">{kindText(o.kind)}</span>
-              <code className="sd-name" dir="ltr">{o.name}</code>
-              {o.type && <span className="muted small" dir="ltr">{o.type}</span>}
-            </div>
-            {(o.components?.added?.length || o.components?.removed?.length) && (
-              <p className="sd-comps">
-                {o.components?.added?.map((x) => <span key={`+${x}`} className="sd-chip sd-added" dir="ltr">+ {x}</span>)}
-                {o.components?.removed?.map((x) => <span key={`-${x}`} className="sd-chip sd-removed" dir="ltr">− {x}</span>)}
-              </p>
-            )}
-            {o.props && o.props.length > 0 && (
-              <table className="sd-props">
-                <tbody>
-                  {o.props.map((p) => (
-                    <tr key={p.name}>
-                      <th scope="row" dir="ltr">{p.name}</th>
-                      <td dir="ltr">
-                        {p.from !== undefined && <><del className="sd-old">{p.from}</del> <span aria-hidden="true">→</span> </>}
-                        <ins className="sd-new">{p.to}</ins>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </li>
-        ))}
-      </ul>
-      {diff.objects.length > FIRST && (
-        <button type="button" className="link sd-more" onClick={() => setAll(!all)}>
-          {all ? L("פחות", "Show less") : L(`הצג את כל ה-${diff.objects.length}`, `Show all ${diff.objects.length}`)}
-        </button>
-      )}
-      {!diff.readBefore && <p className="muted small">{L("העורך לא ענה, אז מוצגים רק הערכים החדשים.", "The editor did not answer, so only the new values are shown.")}</p>}
-      <p className="sd-undo muted small">↺ {undoText(diff)}</p>
-    </div>
-  );
+export function SceneDiffCard({ diff, onSelectObject }: { diff: SceneDiff; onSelectObject?: (id: string) => void }) {
+ const [all, setAll] = useState(false);
+ const c = sceneCounts(diff);
+ const shown = all ? diff.objects : diff.objects.slice(0, FIRST);
+ const [he, en] = ENGINE[diff.engine];
+ return (
+ <div className="sd-card" role="group" aria-label={L("מה ישתנה בסצנה", "What changes in the scene")}>
+ <p className="sd-head">
+ <b>{L(he, en)}</b>
+ {diff.scene && <> · <code dir="ltr">{diff.scene}</code></>}
+ </p>
+ <ul className="sd-counts">
+ {c.added > 0 && <li className="sd-added">{he$(String(c.added))} {L("נוספו", "added")}</li>}
+       {c.removed > 0 && <li className="sd-removed">{he$(String(c.removed))} {L("הוסרו", "removed")}</li>}
+       {c.changed > 0 && <li className="sd-changed">{he$(String(c.changed))} {L("שונו", "changed")}</li>}
+ </ul>
+ {diff.plan && (
+ <figure className="sd-plan-side">
+ <PlanSvg plan={diff.plan} />
+ <figcaption className="muted small">{L("לפני ואחרי", "Before and after")}</figcaption>
+ </figure>
+ )}
+ <ul className="sd-objects">
+ {shown.map((o, i) => {
+ const selectable = !!o.id && !!onSelectObject;
+ return (
+ <li
+ key={`${o.name}-${i}`}
+ className={`sd-obj sd-${o.kind}${selectable ? " sd-selectable" : ""}`}
+ role={selectable ? "button" : undefined}
+ tabIndex={selectable ? 0 : undefined}
+ aria-label={selectable ? L(`בחר את ${o.name} בעורך`, `Select ${o.name} in the editor`) : undefined}
+ onClick={selectable ? () => onSelectObject!(o.id!) : undefined}
+ onKeyDown={selectable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectObject!(o.id!); } } : undefined}
+ >
+ <div className="sd-obj-head">
+ <span className="sd-kind">{kindText(o.kind)}</span>
+ <code className="sd-name" dir="ltr">{o.name}</code>
+ {o.type && <span className="muted small" dir="ltr">{o.type}</span>}
+ {selectable && <span className="sd-select-hint muted small" aria-hidden="true">{L("🔍", "🔍")}</span>}
+ </div>
+ {(o.components?.added?.length || o.components?.removed?.length) && (
+ <p className="sd-comps">
+ {o.components?.added?.map((x) => <span key={`+${x}`} className="sd-chip sd-added" dir="ltr">+ {x}</span>)}
+ {o.components?.removed?.map((x) => <span key={`-${x}`} className="sd-chip sd-removed" dir="ltr">− {x}</span>)}
+ </p>
+ )}
+ {o.props && o.props.length > 0 && (
+ <table className="sd-props">
+ <tbody>
+ {o.props.map((p) => (
+ <tr key={p.name}>
+ <th scope="row" dir="ltr">{p.name}</th>
+ <td dir="ltr">
+ {p.from !== undefined && <><del className="sd-old">{p.from}</del> <span aria-hidden="true">→</span> </>}
+ <ins className="sd-new">{p.to}</ins>
+ </td>
+ </tr>
+ ))}
+ </tbody>
+ </table>
+ )}
+ </li>
+ );
+ })}
+ </ul>
+ {diff.objects.length > FIRST && (
+ <button type="button" className="link sd-more" onClick={() => setAll(!all)}>
+ {all ? L("פחות", "Show less") : L(`הצג את כל ה-${diff.objects.length}`, `Show all ${diff.objects.length}`)}
+ </button>
+ )}
+ {!diff.readBefore && <p className="muted small">{L("העורך לא ענה, אז מוצגים רק הערכים החדשים.", "The editor did not answer, so only the new values are shown.")}</p>}
+ <p className="sd-undo muted small">↺ {undoText(diff)}</p>
+ </div>
+ );
 }

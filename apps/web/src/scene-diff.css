@@ -36,3 +36,8 @@
 .sd-dot-rest { fill: rgba(127,127,127,.55); }
 .sd-dot-moved { fill: var(--accent); }
 .sd-dot-added { fill: #2e9d57; }
+
+/* GE-28 click-to-highlight: rows with an engine id are focusable and show a hint icon; works at 390 px. */
+.sd-selectable { cursor: pointer; outline: none; border-radius: 6px; padding: 4px 6px; margin: -4px -6px; transition: background-color .15s ease; }
+.sd-selectable:hover, .sd-selectable:focus-visible { background: var(--hover, rgba(127,127,127,.12)); }
+.sd-select-hint { margin-inline-start: auto; opacity: .7; font-size: 12px; }
