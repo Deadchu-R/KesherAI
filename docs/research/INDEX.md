@@ -6,6 +6,7 @@ Synthesis 2026-11-22: deduplicated tasks from all reports (co-developer, one cha
 
 | Id | Topic | File |
 |---|---|---|
+| r-20261126-09 | Research (short): read Google Antigravity's model quota and reset time locally | [r-20261126-09.md](r-20261126-09.md) |
 | r-20261126-08 | Research (short): the fastest local engine and settings per platform for KesherAI users | [r-20261126-08.md](r-20261126-08.md) |
 | r-20261126-07 | Research (short): ranked shortlist — which KesherAI parts to make faster or lighter first | [r-20261126-07.md](r-20261126-07.md) |
 | r-20261126-06 | Research (short): where agent task runs live so they do not flood the chat list | [r-20261126-06.md](r-20261126-06.md) |
