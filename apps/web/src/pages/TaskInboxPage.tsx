@@ -13,7 +13,7 @@ import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
 import { toast } from "../library";
 import { AgentLabelEditor, AgentLabelLines } from "../AgentLabel";
-import { AssignPicker } from "../AssignPicker";
+import { AssignPicker, ModelPick } from "../AssignPicker";
 import { RunUndoButton } from "./RunUndoButton";
 import { ClaudeQuotaLine } from "../ClaudeCodeCard";
 
@@ -35,7 +35,8 @@ function modelLine(t: InboxTaskView): string | null {
 
 /** The model picker's part of "Who does it", for an Antigravity task that has not started. */
 function modelProp(t: InboxTaskView, state: InboxState): { model?: { list: InboxModel[]; pick: string; auto: ModelFamily } } {
-  if (t.runBy !== "antigravity" || t.startedAt || !["waiting", "queued", "deferred-quota"].includes(t.status)) return {};
+  // Any time it is not running: a failed or put-off task runs again on the model picked here.
+  if (t.runBy !== "antigravity" || !["waiting", "queued", "deferred-quota", "failed", "partial"].includes(t.status)) return {};
   return { model: { list: state.models ?? [], pick: t.model ?? "", auto: defaultFamilyFor(t) } };
 }
 
@@ -462,7 +463,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.status === "running" && !!t.stepLog?.length && <div className="small muted" dir="auto">{describeStep(t.stepLog[t.stepLog.length - 1]!, getLocale() === "he")}</div>}
         {failLine(t) && <div className="small tinbox-err" dir="auto">{failLine(t)}</div>}
       </div>
-      <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span>{modelLine(t) && <span className="small muted tinbox-model" dir="ltr" title={t.modelFallback}>{modelLine(t)}</span>}</span>
+      <span><span className={`tinbox-ex ${ex.cls}`}>{ex.text}</span>{modelProp(t, state).model ? <ModelPick id={t.id} label={t.model ?? null} model={modelProp(t, state).model!} onDone={onAssigned} /> : modelLine(t) && <span className="small muted tinbox-model" dir="ltr" title={t.modelFallback}>{modelLine(t)}</span>}</span>
       <span><span className={`tinbox-st ${st.cls}`}>{st.text}</span></span>
       <span className="tinbox-branch small muted" dir="ltr" title={t.branch}>{t.branch}</span>
       <span className="row tinbox-actions">

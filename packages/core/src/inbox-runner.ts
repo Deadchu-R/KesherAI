@@ -1341,6 +1341,12 @@ export class TaskInbox {
   }
 
   private agReading = false;
+
+  /** Whether the last reading of Antigravity's quota (under 15 minutes old) shows any model with quota left. */
+  private agQuotaLeft(): boolean {
+    const q = this.saved.agQuota;
+    return !!q && this.now() - q.at < 15 * 60_000 && q.models.some((m) => m.left > 0);
+  }
   private agTriedAt = -Infinity;
   private probeTriedAt = -Infinity;
 
@@ -3049,7 +3055,9 @@ export class TaskInbox {
     const allOk = checks.every((c) => c.ok);
     let status: InboxStatus;
     if (blocked) status = "failed";
-    else if (!files.length && !forced && t.runBy === "antigravity" && !why && this.now() - (t.startedAt ?? this.now()) < 4 * 60_000) {
+    // Not when it took real steps (26.11: 22 steps on Gemini 4 Hydrogen, no change, read as "quota" and every family
+    // was marked out), nor when the quota just read on the PC shows quota left.
+    else if (!files.length && !forced && t.runBy === "antigravity" && !why && this.now() - (t.startedAt ?? this.now()) < 4 * 60_000 && (t.steps ?? 0) <= 3 && !this.agQuotaLeft()) {
       // Antigravity with a spent weekly quota sometimes ends at once with no text we recognise and no change
       // (2026-11-23: 11 research-loop tasks in a row, 1–2 minutes each). Treat it as the quota: the task waits, and the
       // family is marked out for 6 hours so the loop stops feeding Antigravity instead of failing task after task.

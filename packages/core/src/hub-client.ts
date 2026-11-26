@@ -319,7 +319,7 @@ export function hubInboxTask(t: InboxTaskView, now: number, order: { priority?: 
     ...(t.queued ? { lineAt: t.queued } : {}),
     ...(t.standing ? { standing: true } : {}),
     // The model picker's choices, only for an Antigravity task that has not started (a running one keeps its model).
-    ...(order.models?.length && t.runBy === "antigravity" && !t.startedAt && (state === "waiting" || state === "waiting-run") ? { models: order.models.slice(0, 12) } : {}),
+    ...(order.models?.length && t.runBy === "antigravity" && ["waiting", "queued", "deferred-quota", "failed", "partial"].includes(t.status) ? { models: order.models.slice(0, 12) } : {}),
     ...(order.askNext && (t.runBy === "antigravity" || t.runBy === "local") ? { askNext: order.askNext[t.runBy] } : {}),
     // Rounded to 5%, so a small change does not send every card again.
     ...(order.agQuota && t.runBy === "antigravity" && !ended ? { agQuota: { left: Math.round(order.agQuota.left * 20) / 20, ...(order.agQuota.resetAt ? { resetAt: order.agQuota.resetAt } : {}) } } : {}),

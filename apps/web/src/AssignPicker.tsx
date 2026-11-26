@@ -90,3 +90,50 @@ export function AssignPicker({ id, current, label, onDone, model }: { id: string
     </span>
   );
 }
+
+/**
+ * The model on an Antigravity task's row as a button (Roee, 26.11): tap it to pick another of Antigravity's models for
+ * the next run, in the same place the model is shown. "Auto" goes back to the default for the task's kind.
+ *
+ * @param p.id - The inbox task id.
+ * @param p.label - The model shown now (its pick, or the one it ran on).
+ * @param p.model - The models Antigravity offers, the task's pick ("" = the default) and the default's family.
+ * @param p.onDone - Called after a change (to load the list again).
+ */
+export function ModelPick({ id, label, model, onDone }: { id: string; label: string | null; model: { list: InboxModel[]; pick: string; auto: ModelFamily }; onDone?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const pick = async (name: string): Promise<void> => {
+    setBusy(true);
+    try {
+      await api(`/api/task-inbox/tasks/${encodeURIComponent(id)}/model`, { method: "PUT", body: { model: name } });
+      toast(name ? L(`ירוץ על ${name}`, `Runs on ${name}`) : L("ירוץ על ברירת המחדל לסוג המשימה", "Runs on the default for its kind"));
+      setOpen(false);
+      onDone?.();
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const auto = KNOWN_MODELS[model.auto].replace(/\s*\(.*\)$/, "");
+  return (
+    <span className="assign model-pick">
+      <button type="button" className="chip-text tinbox-model" dir="ltr" aria-expanded={open} aria-haspopup="true" disabled={busy} title={L("בחר מודל של Antigravity", "Pick Antigravity's model")} onClick={() => setOpen((o) => !o)}>
+        {label || `${L("אוטומטי", "Auto")} (${auto})`} ▾
+      </button>
+      {open && (
+        <span className="assign-list assign-models" role="group" aria-label={L("מודל ב-Antigravity", "Model in Antigravity")}>
+          <button type="button" className={`chip-text${!model.pick ? " on" : ""}`} aria-pressed={!model.pick} disabled={busy} onClick={() => void pick("")}>
+            {L("אוטומטי", "Auto")} <span className="muted">({auto})</span>
+          </button>
+          {model.list.map((m) => (
+            <button type="button" key={m.id} className={`chip-text${model.pick === m.name ? " on" : ""}`} aria-pressed={model.pick === m.name} disabled={busy} onClick={() => void pick(m.name)} dir="ltr">
+              {m.name}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
