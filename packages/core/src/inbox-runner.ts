@@ -2285,7 +2285,10 @@ export class TaskInbox {
       console.info(`[task-inbox] Antigravity's session lists no models (keys: ${agent.sessionKeys.join(", ") || "none"}).`);
       return;
     }
-    const list = agent.models.map((m) => ({ id: m.id, name: m.name, available: m.available }));
+    // Kept as a union (26.11: one session listed 3 models, so GPT-OSS and the Gemini 4 variants vanished from the
+    // picker and a pick of them was refused): this session's models first, then earlier ones it did not list.
+    const now = agent.models.map((m) => ({ id: m.id, name: m.name, available: m.available }));
+    const list = [...now, ...(this.saved.models ?? []).filter((o) => !now.some((m) => m.id === o.id))].slice(0, 40);
     if (JSON.stringify(list) !== JSON.stringify(this.saved.models)) {
       console.info(`[task-inbox] Antigravity models (${agent.models[0]!.via}): ${list.map((m) => `${m.name}${m.available ? "" : " [unavailable]"}`).join("; ")}`);
     }

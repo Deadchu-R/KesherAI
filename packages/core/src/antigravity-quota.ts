@@ -66,7 +66,7 @@ export function parseServers(lines: string): LangServer[] {
   const out: LangServer[] = [];
   for (const line of lines.split(/\r?\n/)) {
     const m = /^\s*(\d+)[\s,]+(.*)$/.exec(line);
-    if (!m || !/language_server/i.test(m[2]!) || !/antigravity/i.test(m[2]!)) continue;
+    if (!m || !/language_server/i.test(m[2]!) || !/antigravity|[\\/]agy[\\/]/i.test(m[2]!)) continue;
     const csrf = /--csrf_token[= ]"?([\w-]+)/.exec(m[2]!)?.[1];
     if (!csrf) continue;
     const port = Number(/--extension_server_port[= ]"?(\d+)/.exec(m[2]!)?.[1]) || undefined;
@@ -143,12 +143,14 @@ export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?
   const now = o.now ?? Date.now();
   const list =
     platform === "win32"
-      ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name like 'language_server%'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"])
+      ? await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance Win32_Process -Filter \"Name like '%language_server%' or Name like '%antigravity%'\" | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"])
       : // `-x` without `-a`: this user's own processes only (another account's fake "language_server" is never asked).
         await run("ps", ["-x", "-o", "pid=,command="]);
   const servers = parseServers(list);
   if (!servers.length) {
-    why(/language_server/i.test(list) ? "a language server runs, but not Antigravity's (or without a token)" : "Antigravity's language server is not running");
+    // Only the programs' names (never their paths or arguments), so the page can say what was there.
+    const names = [...new Set([...list.matchAll(/([\w.-]+\.exe|language_server[\w.-]*)/gi)].map((m) => m[1]!.toLowerCase()))].slice(0, 8);
+    why(/language_server/i.test(list) ? `a language server runs, but not Antigravity's or without a token (${names.join(", ")})` : names.length ? `no language server among Antigravity's programs (${names.join(", ")})` : list.trim() ? "Antigravity's language server is not running" : "the process list came back empty");
     return undefined;
   }
   const net = platform === "win32" ? await run("netstat", ["-ano", "-p", "TCP"]) : await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]);
