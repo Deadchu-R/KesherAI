@@ -480,3 +480,14 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 - ⬜ Verify the exact Kaggle AUP clause on long-running/outbound workers before building anything (the report cites forum posts, not the AUP text).
 - ⬜ If allowed: an ephemeral batch worker (small Go/Rust binary in a scheduled Kaggle notebook) that takes one batch of non-sensitive self-work tasks from the hub, runs llama.cpp CUDA, pushes branches, reports, and exits; measure model startup and tokens/s on one T4 first.
 - ⬜ Batch jobs that fit Kaggle as is: LoRA fine-tune of a small coding model on KesherAI's own code; big model-test sweeps.
+
+## Research results 26.11 (Gemini) → tasks
+- r-20261126-02 (Tauri / Rust engines): stay on Electron (node-pty and the Fastify server make Tauri costly); keep llama.cpp as the only engine (mistral.rs/Candle don't beat it on a 3090); speed up hot spots with napi-rs Rust modules.
+  - ⬜ Measure log search and file indexing on a big workspace (baseline).
+  - ⬜ napi-rs prototype package for log filtering; adopt only if the baseline shows it is slow.
+  - ⬜ Tune llama.cpp settings for the RTX 3090 / 9950X3D (context, batch, flash attention, threads).
+- r-20261126-04 (updates in parts): static Electron shell + signed, separately versioned bundles for the server and the web UI (≈2–15 MB instead of 121 MB), Turborepo-style build of only what changed, staged swap with rollback. Native modules stay in the shell.
+  - ⬜ CI publishes core/ui bundles + a signed (Ed25519) manifest next to the installer.
+  - ⬜ The updater reads the manifest, verifies, downloads only changed bundles, swaps them atomically, rolls back if the new part fails to start; running chats/agents keep going (Roee).
+- r-20261126-03 (language per component): cut off before its shortlist → re-asked short: r-20261126-07.
+- r-20261126-05 (runs vs chats): came back empty → re-asked short: r-20261126-06.
