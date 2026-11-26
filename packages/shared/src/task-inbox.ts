@@ -697,6 +697,8 @@ export interface InboxState {
   relay?: RelayReport;
   /** Antigravity's quota as read on the PC (antigravity-quota.ts), when Antigravity runs. */
   agQuota?: AntigravityQuota;
+  /** Why the last reading found nothing (Antigravity closed, no port, another answer shape). */
+  agQuotaWhy?: string;
   /** Claude Code on this PC: installed, signed in, its quota reading and whether a task may start. */
   claude?: ClaudeState;
   /** The connected free services (OpenRouter, Z.ai, Mistral, NVIDIA, ...) that take S tasks after Beam Free. */

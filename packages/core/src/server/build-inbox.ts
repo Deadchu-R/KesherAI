@@ -295,7 +295,7 @@ export function buildTaskInbox(p: { config: KesherConfig; root: string; board: T
     ...(p.draining ? { draining: p.draining } : {}),
     file: join(p.root, "task-inbox.json"),
     // Antigravity's quota from its own local language server, read-only (antigravity-quota.ts).
-    agQuota: () => readAntigravityQuota(),
+    agQuota: (why) => readAntigravityQuota(why ? { why } : {}),
     git,
     run: runner("run", true),
     // The unmodified Antigravity CLI in ACP mode, in the task's worktree only; no token or key passes through KesherAI.

@@ -82,7 +82,7 @@ export interface TaskInboxDeps {
    * `retryAfterMs` when the answer said how long to wait).
    */
   /** Reads Antigravity's quota on this PC (antigravity-quota.ts); absent in tests. */
-  agQuota?: () => Promise<AntigravityQuota | undefined>;
+  agQuota?: (why?: (step: string) => void) => Promise<AntigravityQuota | undefined>;
   coder?: {
     ready: () => boolean;
     models: () => Promise<string[]>;
@@ -142,6 +142,8 @@ interface Saved {
   relayHealth?: RelayProbe;
   /** Antigravity's quota, last read on this PC (every few minutes). */
   agQuota?: AntigravityQuota;
+  /** Why the last reading of Antigravity's quota found nothing (shown on the page, to fix it from there). */
+  agQuotaWhy?: string;
   today: { date: string; used: number };
   quota?: InboxState["quota"];
   /** The free Gemini key's limit ran out: no free-Gemini task starts before this (ms since epoch). */
@@ -582,6 +584,7 @@ export class TaskInbox {
       models: pickableModels(this.saved.models),
       opencode: await this.opencodeState(),
       ...(this.saved.agQuota ? { agQuota: this.saved.agQuota } : {}),
+      ...(this.saved.agQuotaWhy ? { agQuotaWhy: this.saved.agQuotaWhy } : {}),
       ...(this.saved.relayLog?.length ? { relay: { ...relayReport(this.saved.relayLog), ...(this.saved.relayHealth ? { health: this.saved.relayHealth } : {}) } } : {}),
       ...(this.d.claude ? { claude: await this.claudeState() } : {}),
       ...(await this.freeStates()),
@@ -1355,8 +1358,21 @@ export class TaskInbox {
     this.agTriedAt = this.now();
     this.agReading = true;
     try {
-      const q = await this.d.agQuota();
-      if (!q) return;
+      let why = "";
+      const q = await this.d.agQuota((w) => (why = w));
+      if (!q) {
+        if (why !== this.saved.agQuotaWhy) {
+          this.saved.agQuotaWhy = why || undefined;
+          await this.save();
+        }
+        return;
+      }
+      delete this.saved.agQuotaWhy;
+      // A model family with quota left is open again, whatever an earlier error text made the inbox guess (26.11: the
+      // line stayed paused for "every model's quota" while Antigravity showed 70-100% left). Gemini models share one
+      // quota: any of them with quota opens the Flash family.
+      const open = new Set(q.models.filter((m) => m.left > 0).map((m) => familyOf(m.name) ?? (/gemini/i.test(m.name) ? "flash" : undefined)).filter(Boolean));
+      if (this.saved.familyUntil) for (const f of open) delete this.saved.familyUntil[f as ModelFamily];
       const was = last ? antigravityQuotaSummary(last).left : undefined;
       this.saved.agQuota = q;
       const s = antigravityQuotaSummary(q);

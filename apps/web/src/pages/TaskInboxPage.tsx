@@ -254,6 +254,7 @@ export function TaskInboxPage({ id }: { id?: string }) {
       <TermsNote />
 
       {s.agQuota && <AgQuotaLine q={s.agQuota} />}
+      {!s.agQuota && s.agQuotaWhy && <p className="small muted" dir="auto">✦ {L("מכסת Antigravity לא נקראה:", "Antigravity's quota was not read:")} <span dir="ltr">{s.agQuotaWhy}</span></p>}
 
       {s.quota && (
         <section className="card tinbox-quota">

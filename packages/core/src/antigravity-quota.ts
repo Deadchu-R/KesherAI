@@ -135,7 +135,8 @@ const BODY = JSON.stringify({ metadata: { ideName: "antigravity", extensionName:
  * @param o.now - The time.
  * @returns The reading, or undefined (Antigravity is not running, or its answer has no quota).
  */
-export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?: RunText; post?: PostLocal; now?: number } = {}): Promise<AntigravityQuota | undefined> {
+export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?: RunText; post?: PostLocal; now?: number; why?: (step: string) => void } = {}): Promise<AntigravityQuota | undefined> {
+  const why = o.why ?? (() => undefined);
   const platform = o.platform ?? process.platform;
   const run = o.run ?? runText;
   const post = o.post ?? postLocal;
@@ -146,25 +147,35 @@ export async function readAntigravityQuota(o: { platform?: NodeJS.Platform; run?
       : // `-x` without `-a`: this user's own processes only (another account's fake "language_server" is never asked).
         await run("ps", ["-x", "-o", "pid=,command="]);
   const servers = parseServers(list);
-  if (!servers.length) return undefined;
+  if (!servers.length) {
+    why(/language_server/i.test(list) ? "a language server runs, but not Antigravity's (or without a token)" : "Antigravity's language server is not running");
+    return undefined;
+  }
   const net = platform === "win32" ? await run("netstat", ["-ano", "-p", "TCP"]) : await run("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"]);
+  const asked: string[] = [];
   for (const s of servers) {
     // Only ports the server's own process listens on: the command line's `--extension_server_port` belongs to another
     // process (or to whoever bound it), and the request carries the language server's CSRF token.
     const ports = listeningPorts(net, s.pid);
+    if (!ports.length) asked.push(`process ${s.pid}: no listening port found`);
     for (const port of ports) {
       for (const tls of [true, false]) {
         const text = await post(port, PATH, BODY, { "content-type": "application/json", "connect-protocol-version": "1", "x-codeium-csrf-token": s.csrf }, tls);
-        if (!text) continue;
+        if (!text) {
+          asked.push(`${port}${tls ? " https" : " http"}: no answer`);
+          continue;
+        }
         try {
           const q = readQuota(JSON.parse(text), now);
           if (q) return q;
+          asked.push(`${port}: answered, but no quota in it (keys: ${Object.keys(JSON.parse(text) as object).slice(0, 6).join(", ")})`);
         } catch {
-          /* not this port */
+          asked.push(`${port}: not JSON`);
         }
       }
     }
   }
+  why(asked.join("; ").slice(0, 400) || "no port to ask");
   return undefined;
 }
 
