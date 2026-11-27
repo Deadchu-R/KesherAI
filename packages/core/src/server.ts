@@ -100,6 +100,7 @@ import { Speakers } from "./speakers.js";
 import { Kokoro } from "./kokoro.js";
 import { F5Hebrew, classifySpeechModels, vocabBeside } from "./hebrew-tts.js";
 import { speechModelsOnComputer } from "./routes/speech.js";
+import { buildTravel } from "./travel/index.js";
 import { ChatTimers } from "./chat-timers.js";
 import { MemoryStore } from "./memory-store.js";
 import { Tor } from "./tor.js";
@@ -532,6 +533,9 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
   });
   void chatTimers.start();
+  // Travel search and price watches (travel/): search only; a drop in a watched price tells the phone.
+  const travel = buildTravel(paths.root, () => config.travel, async (title, body) => void (await notifier.send({ title, body, path: "#/settings/travel", tags: ["airplane"] })));
+  travel.watches.start();
   // While an update waits for a free moment no new agent run starts (inbox, work loop, routines): update-drain.ts.
   const updateDrain = new UpdateDrain();
   const routines = buildRoutines({ paths, pipelines, injectRef, chats: () => services.conversations, notifier, config, telegram, engine, othersBusy: () => guard.othersBusy(), draining: () => updateDrain.pending });
@@ -597,7 +601,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     engine,
     library,
     projectFacts,
-    conversations: buildConversations({ freeCloud, taskBoard, registry, library, embedder: () => semantic?.embedder(), assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
+    conversations: buildConversations({ freeCloud, taskBoard, registry, library, embedder: () => semantic?.embedder(), assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, travel, worker, persist, mainSlot: () => mainSlot, translator, ...(helperEngine ? { helperEngine } : {}), ...(options.renderPdf ? { renderPdf: options.renderPdf } : {}) }),
     coach,
     memory,
     computer,
@@ -1113,7 +1117,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   await guestRoutes(app, services);
 
   // Every area's routes, in their order (after the key check for remote access, above).
-  await registerRoutes(app, services, { paths, library, apiKeys, chatTimers, canvases, telegram });
+  await registerRoutes(app, services, { paths, library, apiKeys, chatTimers, canvases, telegram, travel });
 
   if (options.webDir && existsSync(options.webDir)) {
     await app.register(fastifyStatic, {

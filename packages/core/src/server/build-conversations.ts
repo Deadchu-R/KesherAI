@@ -27,6 +27,7 @@ import { googleTools } from "../google-tools.js";
 import { knowledgeTools } from "../knowledge.js";
 import { appUri, mcpResultText } from "../mcp.js";
 import { memoryTools } from "../memory-tools.js";
+import { buildTravel, travelTools } from "../travel/index.js";
 import { pastChatTools } from "../past-chat-tools.js";
 import { setAppearance } from "../routes/parts.js";
 import { queueUnityMoves, unitySceneOf, unityScenes } from "../routes/unity-scene.js";
@@ -128,6 +129,8 @@ export interface ConversationParts {
   memory: MemoryStore;
   canvases: CanvasStore;
   chatTimers: ChatTimers;
+  /** Travel search and price watches (travel/). */
+  travel: ReturnType<typeof buildTravel>;
   /** The worker's link to the main app (a window-less KesherAI that runs self-work), if this is the worker. */
   worker: { mainUrl: string; mainRoot: string; version: string } | undefined;
   /** The main app's context share, as the worker last read it. */
@@ -145,7 +148,7 @@ export interface ConversationParts {
  * @returns The conversation manager.
  */
 export function buildConversations(p: ConversationParts): ConversationManager {
-  const { renderPdf, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, worker, mainSlot, persist, helperEngine, translator } = p;
+  const { renderPdf, taskBoard, registry, library, assets, plugins, config, paths, personas, skills, projectFacts, engine, browser, tor, faults, updater, guard, sd, notifier, telegram, downloads, computer, google, knowledge, whisper, mcp, unityCli, unrealBridge, gameCheckpoints, godot, comfy, coach, memory, canvases, chatTimers, travel, worker, mainSlot, persist, helperEngine, translator } = p;
   /** Starts ComfyUI when nothing answers at its address. */
   const comfyUp = async () => {
     if (!registry.permitted("comfyui")) throw new Error("ComfyUI is turned off by business mode.");
@@ -340,6 +343,8 @@ export function buildConversations(p: ConversationParts): ConversationManager {
     memoryTools: (convId) => memoryTools(memory, () => (convId ? library.summary(convId) : undefined)),
     // Past chats: the embeddings role of the CPU pool, when set, ranks by meaning; otherwise keywords.
     pastChatTools: (convId) => pastChatTools({ library, ...(p.embedder ? { embedder: p.embedder } : {}) }, () => (convId ? library.summary(convId) : undefined)),
+    // Travel search and price watches (travel/): offered when the message is about flights, hotels or a trip.
+    travelTools: () => travelTools(travel),
     // None in an incognito chat: a timer is written to disk (scan 65).
     // The chat's canvas and its slide deck (design DeckEditor): none in an incognito chat.
     canvasTools: (convId) => (library.summary(convId)?.incognito ? [] : [...canvasTools(canvases, convId, () => library.summary(convId)?.title ?? ""), ...deckTools(deckStoreFor(join(paths.root, "decks")), convId, () => library.summary(convId)?.title ?? ""), ...docTools(docStoreFor(join(paths.root, "docs")), convId, () => library.summary(convId)?.title ?? "", { assets, ...(renderPdf ? { renderPdf } : {}) }), ...sheetTools(sheetStoreFor(join(paths.root, "sheets")), convId, () => library.summary(convId)?.title ?? "")]),

@@ -4903,6 +4903,21 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .scheduled-main { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
 .scheduled-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .scheduled-actions button { min-height: 36px; }
+/* Travel (Settings › Travel and the chat's flight table): watches reuse .scheduled-row; the table scrolls sideways on a phone. */
+.travel-spark { color: var(--muted, #888); flex: none; }
+.travel-down { color: var(--ok, #2e9e5b); }
+.travel-up { color: var(--danger, #d4503f); }
+.travel-err, .travel-nokey { color: var(--danger, #d4503f); }
+.travel-key { padding: 6px 0; }
+.travel-card { margin: 8px 0 0; display: grid; gap: 6px; }
+.travel-card-head { margin: 0; overflow-wrap: anywhere; }
+.travel-scroll { overflow-x: auto; max-width: 100%; }
+.travel-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.travel-table th, .travel-table td { padding: 5px 8px; text-align: start; border-bottom: 1px solid var(--border, rgba(127,127,127,.2)); white-space: nowrap; }
+.travel-table td:nth-child(n+3) { direction: ltr; unicode-bidi: plaintext; }
+.travel-table tr[data-il] td:nth-child(2) { font-weight: 600; }
+.travel-table tr:first-child td:last-child { font-weight: 700; color: var(--accent); }
+.travel-foot { margin: 0; }
 /* Files the agent sent into the chat (send_file): header, caption, preview, buttons. */
 .sent-file { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .sent-file-head { display: flex; align-items: center; gap: 12px; }

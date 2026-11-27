@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AgentEvent } from "@kesher/shared";
 import { explainCommand, parseScenePreview } from "@kesher/shared";
 import { api } from "./api";
-import { callDuration, errorLine, formatDuration, maskSecrets, paramSummary, pastChatHits, pastChatTitle, prettyOutput, searchHits, toolInfo, toolLabel } from "./chat/tool-cards";
+import { callDuration, errorLine, formatDuration, maskSecrets, paramSummary, pastChatHits, pastChatTitle, prettyOutput, searchHits, toolInfo, toolLabel, travelTable } from "./chat/tool-cards";
 import { FileChips } from "./MediaView";
 import { ShotThumb } from "./chat/ShotView";
 import { stepPreview, type ActedOn } from "./chat/step-fold";
@@ -99,7 +99,9 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
   // Past chats: "Searched past chats: 'X' · 3 results", with a link to each chat found.
   const past = /^(search_chats|recent_chats)$/.test(call.name) && result?.ok ? pastChatHits(result.output) : [];
   const pastTitle = pastChatTitle(call.name, call.input, result ? (result.ok ? past.length : 0) : undefined, he);
-  const out = result && !result.diff && !hits.length && !past.length ? prettyOutput(result.output) : "";
+  // Travel: a compact table (airline, times, stops, price in shekels) instead of the raw text.
+  const trip = /^travel_search_(flights|stays)$/.test(call.name) && result?.ok ? travelTable(result.output) : undefined;
+  const out = result && !result.diff && !hits.length && !past.length && !trip ? prettyOutput(result.output) : "";
   const preview = maskSecrets(stepPreview(call.name, result));
   const card = (
     <details className={`tool tool-card ${state}`}>
@@ -139,6 +141,21 @@ export function ToolCard({ call, result, convId, pinned, acted }: { call: Ev<"to
             </li>
           ))}
         </ol>
+      )}
+      {trip && (
+        <div className="travel-card">
+          <p className="travel-card-head small" dir="auto">{trip.head}</p>
+          <div className="travel-scroll">
+            <table className="travel-table">
+              <thead><tr>{trip.columns.map((c, i) => <th key={i}>{c}</th>)}</tr></thead>
+              <tbody>{trip.rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} dir="auto">{c}</td>)}</tr>)}</tbody>
+            </table>
+          </div>
+          {trip.foot.map((f, i) => <p key={i} className="travel-foot muted small" dir="auto">{f}</p>)}
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" onClick={() => composeText(L("תעקוב אחרי המחיר של האפשרות הראשונה ותתריע לי בטלפון כשהוא יורד", "Watch the price of the first option and alert my phone when it drops"))}>{L("עקוב אחרי המחיר", "Watch this price")}</button>
+          </div>
+        </div>
       )}
       {/* Files the step made: chips (download, Drive, editor). */}
       {!!result?.files?.length && convId && (

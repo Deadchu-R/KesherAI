@@ -89,6 +89,8 @@ export interface ConversationDeps {
   memoryTools?(convId?: string): AgentTool[];
   /** Search and read past chats (past-chat-tools.ts); none in an incognito chat. */
   pastChatTools?(convId?: string): AgentTool[];
+  /** Travel search and price watches (travel/tools.ts); the group's words decide when a message gets them. */
+  travelTools?(): AgentTool[];
   /** set_timer and notify_user for a chat (chat-timers.ts). */
   timerTools?(convId: string): AgentTool[];
   /** The `canvas` tool for a chat (canvas.ts). */

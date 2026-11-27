@@ -686,6 +686,23 @@ export const KesherConfigSchema = z.object({
    */
   privacy: z.object({ mode: z.enum(["ask", "auto-hide", "block-training-providers"]).default("ask"), neverSend: z.array(z.string().max(200)).max(200).default([]) }).default({ mode: "ask", neverSend: [] }),
   /** Settings > Web: the user's own free keys for Tavily and Brave Search (used first when set); never sent to a page. */
+  /**
+   * Travel (Settings › Travel): the user's own free keys for flight and hotel search (Amadeus Self-Service on its test or
+   * production host, Duffel search only), the home airport, how often price watches look, and when a drop alerts the
+   * phone. The keys are secrets: written encrypted, never sent to a page or logged. Search only, never booking.
+   */
+  travel: z
+    .object({
+      amadeusKey: z.string().max(200).optional(),
+      amadeusSecret: z.string().max(200).optional(),
+      amadeusHost: z.enum(["test", "production"]).default("test"),
+      duffelToken: z.string().max(300).optional(),
+      origin: z.string().regex(/^[A-Z]{3}$/).default("TLV"),
+      everyHours: z.number().int().min(1).max(24).default(6),
+      dropPercent: z.number().min(1).max(90).default(8),
+      dropShekel: z.number().int().min(10).max(5000).default(150),
+    })
+    .prefault({}),
   webKeys: z.object({ tavily: z.string().max(200).optional(), brave: z.string().max(200).optional() }).prefault({}),
   /** Settings > Web: which search engine is tried first ("auto": the best that works); the others are the fallbacks. */
   webEngine: z.enum(["auto", "tavily", "brave", "duckduckgo", "duckduckgo-lite", "yahoo", "startpage", "mojeek", "ecosia", "bing"]).default("auto"),
@@ -845,6 +862,8 @@ function secretSlots(c: Record<string, unknown>): Array<{ obj: Record<string, un
     slots.push({ obj: r, key: "token", slot: "remote:token" });
     if (r.guestGoogle && typeof r.guestGoogle === "object") slots.push({ obj: r.guestGoogle as Record<string, unknown>, key: "clientSecret", slot: "remote:guestGoogle:clientSecret" });
   }
+  // Travel search keys (Amadeus key and secret, Duffel token).
+  if (c.travel && typeof c.travel === "object") for (const k of ["amadeusKey", "amadeusSecret", "duffelToken"]) slots.push({ obj: c.travel as Record<string, unknown>, key: k, slot: `travel:${k}` });
   slots.push({ obj: c, key: "browserKey", slot: "browserKey" });
   return slots;
 }

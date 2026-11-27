@@ -49,6 +49,7 @@ import { isButtonTool, quickActionNames, quickActionProblem, quickTool, type Qui
 import { settingsTool } from "./chat-tools-settings.js";
 import { AutoModel } from "./auto-model.js";
 import { learnTools, splitTools } from "./chat-tools-work.js";
+import { TRAVEL_NOTE } from "./travel/index.js";
 import { PAST_CHATS_NOTE } from "./past-chat-tools.js";
 
 export { modelTurnFor, onModelSpeed } from "./model-turn.js";
@@ -319,7 +320,9 @@ export class ConversationManager {
     // Browser and computer tools: safety v2 decides each call (modes, sensitive sites, origin gate, local reviewer).
     const pastChats = id ? this.deps.pastChatTools?.(id) ?? [] : [];
     if (pastChats.length) media.notes.push(PAST_CHATS_NOTE);
-    const all = this.gateControl(id, [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...pastChats, ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
+    const travel = this.deps.travelTools?.() ?? [];
+    if (travel.length) media.notes.push(TRAVEL_NOTE);
+    const all = this.gateControl(id, [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...pastChats, ...travel, ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
     // Page text is data, never instructions (browser-safety.ts); said once wherever the browser tools are.
     if (all.some((t) => t.spec.name.startsWith("browser_"))) media.notes.push(UNTRUSTED_RULE);
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.

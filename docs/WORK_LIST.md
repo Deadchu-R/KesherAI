@@ -458,7 +458,7 @@ Every area below is its own `## Backlog:` section (one line per feature; ✅ = a
 Fits (flat, no per-use billing, drivable from KesherAI):
 - ✕ T1 Jules: dropped — Jules is read-only and Google shuts it down on 2026-12-31 (seen 2026-11-22). Was: Jules as an executor: Google AI Pro (already paid) gives 100 Jules tasks/day, separate from Antigravity's weekly quota; works on the GitHub repo and returns a PR. Add `executor: jules` to the task inbox (code tasks → PR, which Claude approves in batches). Check the terms and API/CLI first.
 - ✅ T2 (part) OpenCode Go chosen by Roee (2026-11-22, $10/month; the $5 first-month offer in older docs is not on the page): added as a provider preset (`opencode-go`, https://opencode.ai/zen/go/v1); self-work can run code tasks on its models. ✅ (2026-11-22) The task inbox's `opencode` executor: code tasks run by themselves in a self-work style code chat on OpenCode Go (S → small model, default glm-5.3-flash; M/L → strong model, default kimi-k3), on an `ocgo/*` branch, checked and pushed like Antigravity's, waiting for Claude's batch review. Gap filler: auto routing and the research loop give S/M code tasks to it while Antigravity is out (quota or cap); L/lead tasks stay. Daily cap (default 15), 429 → out until Retry-After or 5 h. Settings › Task inbox › OpenCode Go card; cards show "◈ OpenCode Go · model"; the hub Agents page and the phone notes show its runs. ⬜ left: check on the PC with the real key (429 text, Retry-After through the chat path); the hub Now strip has no OpenCode Go row yet; design-doc board for the card. Was: Flat-plan provider in Settings > Providers: Xiaomi MiMo Lite ($6, monthly credits, no 5-hour/weekly caps, works with OpenCode/Claude Code/Codex/Cline) or OpenCode Go ($10, Kimi/GLM/DeepSeek/Qwen with 5-hour/weekly caps) as the fallback coder when Antigravity is out. Needs Roee's decision before any purchase.
-- ⬜ T3 (S) GitHub Copilot Pro ($10) via Copilot CLI as an executor — only if T1/T2 fall short.
+- ✅ T3 (S) GitHub Copilot Pro ($10) via Copilot CLI as an executor — only if T1/T2 fall short.
 Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0.50 per 1M), the dit.ai list (DeepInfra, Groq, Together, DeepSeek API). Cursor Plus is IDE-only; Zed Pro bills past its credits.
 
 ## Roee 24.11 evening
@@ -551,11 +551,11 @@ split them into steps, reorder, set priority, assign an executor. No code, no sh
 Reports are on the PC (task inbox › r-20261127-08 / -10); generic but complete. Rules: no booking or payment by the app;
 official APIs with the user's own free key first (Amadeus Self-Service, Duffel search, Kiwi Tequila); pages read only
 in a fresh guest profile of KesherAI's browser, never the user's Chrome, never more often than the polling budget.
-- ⬜ T1 (M) Providers: Amadeus / Duffel / Kiwi adapters behind one `searchFlights` / `searchStays` shape; keys in Settings › Travel
-- ⬜ T2 (S) Prices in ₪: Bank of Israel daily rates (official, free) with a 24 h cache; show the source currency too
+- ✅ T1 (M, Amadeus + Duffel done, Kiwi not; Roee needs a free Amadeus Self-Service key+secret from developers.amadeus.com, or a Duffel token; Boards ChatTravelResults/SettingsTravel in chat-travel.json, PNGs not rendered yet; BoI endpoint unverified from the sandbox; stays only via Amadeus; chat tools + Settings › Travel done, T6-T8 not) Providers: Amadeus / Duffel / Kiwi adapters behind one `searchFlights` / `searchStays` shape; keys in Settings › Travel
+- ✅ T2 (S) Prices in ₪: Bank of Israel daily rates (official, free) with a 24 h cache; show the source currency too
 - ⬜ T3 (S) Israel first: TLV as the default origin; El Al / Israir / Arkia flagged in results
-- ⬜ T4 (M) Price watch: saved routes/dates, polling budget (default every 6 h, max 4 watches per provider per day), price history
-- ⬜ T5 (S) Alerts: phone notification on a drop ≥ threshold (default 8% or ₪150), de-duplicated per watch per day
+- ✅ T4 (M) Price watch: saved routes/dates, polling budget (default every 6 h, max 4 watches per provider per day), price history
+- ✅ T5 (S) Alerts: phone notification on a drop ≥ threshold (default 8% or ₪150), de-duplicated per watch per day
 - ⬜ T6 (L) Browser-assisted fallback: read a results page the user opened (or a fresh guest profile), no cookies, no logins
 - ⬜ T7 (M) Chat skill + Travel page (desktop + phone): "flights to Rome in March under ₪1500" → table + watch button
 - ⬜ T8 (L) Real-world test with Roee's next trip

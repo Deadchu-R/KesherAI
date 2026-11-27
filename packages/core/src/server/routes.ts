@@ -61,6 +61,8 @@ import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
 import { healthRoutes } from "../routes/health.js";
 import { logRoutes } from "../routes/logs.js";
+import { travelRoutes } from "../routes/travel.js";
+import type { buildTravel } from "../travel/index.js";
 import { webSearchCheckRoutes } from "../routes/web-search-check.js";
 import { hfTokenRoutes } from "../routes/hf-token.js";
 import { freeCloudRoutes } from "../routes/free-cloud.js";
@@ -132,8 +134,8 @@ import { onedriveRoutes } from "../routes/onedrive.js";
  * @param p - The data folders, the chats' library, the API keys, chat timers, canvases and Telegram (the few routes
  *   that take their own part instead of the services).
  */
-export async function registerRoutes(app: FastifyInstance, services: KesherServices, p: { paths: DataPaths; library: Library; apiKeys: ApiKeys; chatTimers: ChatTimers; canvases: CanvasStore; telegram: TelegramBridge }): Promise<void> {
-  const { paths, library, apiKeys, chatTimers, canvases, telegram } = p;
+export async function registerRoutes(app: FastifyInstance, services: KesherServices, p: { paths: DataPaths; library: Library; apiKeys: ApiKeys; chatTimers: ChatTimers; canvases: CanvasStore; telegram: TelegramBridge; travel: ReturnType<typeof buildTravel> }): Promise<void> {
+  const { paths, library, apiKeys, chatTimers, canvases, telegram, travel } = p;
   await systemRoutes(app, services);
   shortcutRoutes(app, services);
   await modelRoutes(app, services);
@@ -152,6 +154,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   // The smart log reader (Logs page): sources, search, patterns, labels, Explain.
   logRoutes(app, services);
   await webSearchCheckRoutes(app, services);
+  await travelRoutes(app, services, travel.watches, travel.service.rates);
   await hfTokenRoutes(app, services);
   await freeCloudRoutes(app, services);
   await storageRoutes(app, services);

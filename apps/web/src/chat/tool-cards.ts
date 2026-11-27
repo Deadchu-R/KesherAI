@@ -42,6 +42,10 @@ const TOOLS: Record<string, ToolInfo> = {
   search_chats: { icon: "🕘", he: "חיפוש בשיחות קודמות", en: "Search past chats", hePlural: "{n} חיפושים בשיחות קודמות", enPlural: "{n} past-chat searches" },
   recent_chats: { icon: "🕘", he: "שיחות אחרונות", en: "Recent chats" },
   read_chat: { icon: "🕘", he: "קריאת שיחה קודמת", en: "Read a past chat" },
+  travel_search_flights: { icon: "✈️", he: "חיפוש טיסות", en: "Search flights" },
+  travel_search_stays: { icon: "🏨", he: "חיפוש מלונות", en: "Search stays" },
+  travel_watch: { icon: "🔔", he: "מעקב מחיר", en: "Watch a price" },
+  travel_watches: { icon: "🔔", he: "מעקבי מחיר", en: "Price watches" },
   remember: { icon: "🧠", he: "שמירה בזיכרון", en: "Save to memory" },
   delegate: { icon: "👥", he: "הפניה לעוזרים", en: "Delegate to helpers" },
   deep_research: { icon: "🔬", he: "מחקר מעמיק", en: "Deep research" },
@@ -253,6 +257,28 @@ export function pastChatTitle(name: string, input: Record<string, unknown>, hits
   if (name === "recent_chats") return he ? "עיון בשיחות האחרונות" : "Looked at recent chats";
   if (name === "read_chat") return he ? "קריאת שיחה קודמת" : "Read a past chat";
   return undefined;
+}
+
+/** A flight or stay search result as a table: the header line, the columns, the rows and the lines after the table. */
+export interface TravelTable { head: string; columns: string[]; rows: string[][]; foot: string[] }
+
+/**
+ * Reads a travel_search_flights / travel_search_stays result (a header line, a Markdown table, then notes) into a table
+ * for the card.
+ *
+ * @param output - The tool's output.
+ * @returns The table, or undefined for any other text (an error, "add a key", no flights).
+ */
+export function travelTable(output: string): TravelTable | undefined {
+  const lines = output.split("\n");
+  const cells = (l: string) => l.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  const first = lines.findIndex((l) => l.startsWith("|"));
+  if (first < 1 || !lines[first + 1]?.startsWith("| -")) return undefined;
+  let end = first + 2;
+  while (end < lines.length && lines[end]!.startsWith("|")) end++;
+  const rows = lines.slice(first + 2, end).map(cells);
+  if (!rows.length) return undefined;
+  return { head: lines.slice(0, first).join(" "), columns: cells(lines[first]!), rows, foot: lines.slice(end).filter((l) => l.trim() && !/^\(\d+ more/.test(l)) };
 }
 
 /**

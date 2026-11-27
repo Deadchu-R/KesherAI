@@ -1,0 +1,480 @@
+{
+ "group": "צ'אט · Chat",
+ "now": "2026-11-28T10:00:00Z",
+ "boards": [
+  {
+   "id": "ChatTravelResults",
+   "title": "צ'אט: חיפוש טיסות — כרטיס טבלה (חברה, זמנים, עצירות, מחיר ב-₪ ובמטבע המקור, ★ ישראליות) וכפתור \"עקוב אחרי המחיר\"; בלי הזמנה",
+   "titleEn": "Chat: flight search — a table card (airline, times, stops, price in ₪ and source currency, ★ Israeli) and a Watch button; no booking",
+   "route": "#/c/c1",
+   "height": {
+    "desktop": 760,
+    "phone": 1300
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/conversations/c1",
+     "json": {
+      "id": "c1",
+      "projectId": null,
+      "title": "טיסה לרומא במרץ",
+      "kind": "chat",
+      "modelId": "llamacpp/Qwen3.8-27B-Q4",
+      "mode": "ask",
+      "createdAt": {
+       "$ago": "4m"
+      },
+      "updatedAt": {
+       "$ago": "1m"
+      },
+      "messageCount": 2,
+      "session": {
+       "id": "c1",
+       "status": "idle",
+       "modelId": "llamacpp/Qwen3.8-27B-Q4",
+       "mode": "ask",
+       "pendingApprovals": [],
+       "pendingQuestions": [],
+       "canUndo": false,
+       "grants": [],
+       "queued": [],
+       "contextTokens": 32768
+      },
+      "events": [
+       {
+        "seq": 1,
+        "at": {
+         "$ago": "50s"
+        },
+        "type": "user",
+        "text": "תמצא לי טיסה לרומא ב-12 במרץ, חוזר ב-19, מתחת ל-1500 ש\"ח"
+       },
+       {
+        "seq": 2,
+        "at": {
+         "$ago": "46s"
+        },
+        "type": "tool_call",
+        "turn": 1,
+        "callId": "t1",
+        "name": "travel_search_flights",
+        "input": {
+         "from": "TLV",
+         "to": "FCO",
+         "depart": "2027-03-12",
+         "return": "2027-03-19",
+         "adults": 1,
+         "cabin": "economy"
+        }
+       },
+       {
+        "seq": 3,
+        "at": {
+         "$ago": "40s"
+        },
+        "type": "tool_result",
+        "callId": "t1",
+        "name": "travel_search_flights",
+        "ok": true,
+        "output": "Flights TLV -> FCO · 2027-03-12 to 2027-03-19 · 1 adult · economy · Amadeus (test data)\nPrices in ILS (Bank of Israel rate of 2026-11-28); the price in the airline's currency is in brackets. ★ = Israeli airline.\n| # | Airline | Out | Back | Stops | Price |\n| 1 | Israir 6H ★ | 12 Mar 06:10 → 09:05 | 19 Mar 10:00 → 14:50 | 0 | ₪1,380 ($382) |\n| 2 | El Al LY ★ | 12 Mar 07:30 → 10:25 | 19 Mar 11:40 → 16:30 | 0 | ₪1,520 (€385) |\n| 3 | Arkia IZ ★ | 12 Mar 13:00 → 15:55 | 19 Mar 17:10 → 22:00 | 0 | ₪1,590 ($440) |\n| 4 | ITA Airways AZ | 12 Mar 05:20 → 09:40 | 19 Mar 12:15 → 18:30 | 1 | ₪1,210 (€307) |\n| 5 | Wizz Air W6 | 12 Mar 02:05 → 05:00 | 19 Mar 06:30 → 11:20 | 0 | ₪1,150 (€292) |\nCheapest: ₪1,150 (Wizz Air, no checked bag). Search only: prices are not a booking."
+       },
+       {
+        "seq": 4,
+        "at": {
+         "$ago": "30s"
+        },
+        "type": "assistant",
+        "turn": 2,
+        "text": "מצאתי 5 אפשרויות. מתחת ל-₪1,500 יש את Israir (₪1,380, ישירה, בלי עצירה), ITA (₪1,210, עם עצירה) ו-Wizz Air (₪1,150, בלי מזוודה). רוצה שאעקוב אחרי המחיר של Israir ואתריע בטלפון כשהוא יורד ב-8% או ב-₪150?"
+       }
+      ]
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/helpers",
+     "json": {
+      "runs": [],
+      "agents": []
+     }
+    },
+    {
+     "url": "**/api/conversations/c1/events*",
+     "json": null
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".activity summary"
+    },
+    {
+     "click": ".activity > details > summary"
+    },
+    {
+     "wait": ".tool-card"
+    },
+    {
+     "click": ".tool-card >> nth=0"
+    },
+    {
+     "wait": ".travel-table"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".activity summary"
+    },
+    {
+     "click": ".activity > details > summary"
+    },
+    {
+     "wait": ".tool-card"
+    },
+    {
+     "click": ".tool-card >> nth=0"
+    },
+    {
+     "wait": ".travel-table"
+    }
+   ]
+  },
+  {
+   "id": "SettingsTravel",
+   "title": "הגדרות › טיסות ומלונות: מפתחות חינמיים, שער ה-₪, ברירות מחדל ורשימת מעקבי מחיר עם השהיה / מחיקה (דסקטופ + טלפון)",
+   "titleEn": "Settings › Travel: free keys, the ₪ rate, defaults and the price-watch list with Pause / Delete (desktop + phone)",
+   "route": "#/settings/travel",
+   "height": {
+    "desktop": 900,
+    "phone": 1700
+   },
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "mocks": [
+    {
+     "url": "**/api/travel*",
+     "json": {
+      "keys": {
+       "amadeus": true,
+       "duffel": false
+      },
+      "amadeusHost": "test",
+      "origin": "TLV",
+      "everyHours": 6,
+      "dropPercent": 8,
+      "dropShekel": 150,
+      "maxWatches": 10,
+      "maxPollsPerDay": 4,
+      "rate": {
+       "USD": 3.58,
+       "EUR": 3.91,
+       "date": "2026-11-28",
+       "source": "Bank of Israel"
+      },
+      "watches": [
+       {
+        "id": "w1",
+        "kind": "flight",
+        "label": "TLV → FCO · 12–19 Mar 2027",
+        "maxIls": 1500,
+        "lastIls": 1380,
+        "lowestIls": 1380,
+        "firstIls": 1560,
+        "paused": false,
+        "lastPollAt": {
+         "$agoMs": "2h"
+        },
+        "pollsToday": 2,
+        "history": [
+         {
+          "at": {
+           "$agoMs": "72h"
+          },
+          "ils": 1580
+         },
+         {
+          "at": {
+           "$agoMs": "66h"
+          },
+          "ils": 1560
+         },
+         {
+          "at": {
+           "$agoMs": "60h"
+          },
+          "ils": 1560
+         },
+         {
+          "at": {
+           "$agoMs": "54h"
+          },
+          "ils": 1540
+         },
+         {
+          "at": {
+           "$agoMs": "48h"
+          },
+          "ils": 1520
+         },
+         {
+          "at": {
+           "$agoMs": "42h"
+          },
+          "ils": 1520
+         },
+         {
+          "at": {
+           "$agoMs": "36h"
+          },
+          "ils": 1490
+         },
+         {
+          "at": {
+           "$agoMs": "30h"
+          },
+          "ils": 1460
+         },
+         {
+          "at": {
+           "$agoMs": "24h"
+          },
+          "ils": 1460
+         },
+         {
+          "at": {
+           "$agoMs": "18h"
+          },
+          "ils": 1430
+         },
+         {
+          "at": {
+           "$agoMs": "12h"
+          },
+          "ils": 1400
+         },
+         {
+          "at": {
+           "$agoMs": "6h"
+          },
+          "ils": 1380
+         },
+         {
+          "at": {
+           "$agoMs": "0h"
+          },
+          "ils": 1370
+         }
+        ],
+        "carrier": "Israir 6H ★"
+       },
+       {
+        "id": "w2",
+        "kind": "flight",
+        "label": "TLV → ATH · 3–7 Apr 2027",
+        "maxIls": 900,
+        "lastIls": 1040,
+        "lowestIls": 980,
+        "firstIls": 1010,
+        "paused": false,
+        "lastPollAt": {
+         "$agoMs": "5h"
+        },
+        "pollsToday": 1,
+        "history": [
+         {
+          "at": {
+           "$agoMs": "72h"
+          },
+          "ils": 1180
+         },
+         {
+          "at": {
+           "$agoMs": "66h"
+          },
+          "ils": 1160
+         },
+         {
+          "at": {
+           "$agoMs": "60h"
+          },
+          "ils": 1160
+         },
+         {
+          "at": {
+           "$agoMs": "54h"
+          },
+          "ils": 1140
+         },
+         {
+          "at": {
+           "$agoMs": "48h"
+          },
+          "ils": 1120
+         },
+         {
+          "at": {
+           "$agoMs": "42h"
+          },
+          "ils": 1120
+         },
+         {
+          "at": {
+           "$agoMs": "36h"
+          },
+          "ils": 1090
+         },
+         {
+          "at": {
+           "$agoMs": "30h"
+          },
+          "ils": 1060
+         },
+         {
+          "at": {
+           "$agoMs": "24h"
+          },
+          "ils": 1060
+         },
+         {
+          "at": {
+           "$agoMs": "18h"
+          },
+          "ils": 1030
+         },
+         {
+          "at": {
+           "$agoMs": "12h"
+          },
+          "ils": 1000
+         },
+         {
+          "at": {
+           "$agoMs": "6h"
+          },
+          "ils": 980
+         },
+         {
+          "at": {
+           "$agoMs": "0h"
+          },
+          "ils": 970
+         }
+        ],
+        "carrier": "Aegean A3"
+       },
+       {
+        "id": "w3",
+        "kind": "stay",
+        "label": "Rome · 12–19 Mar 2027 · 2 guests",
+        "maxIls": 4200,
+        "lastIls": 4510,
+        "lowestIls": 4380,
+        "firstIls": 4600,
+        "paused": true,
+        "lastPollAt": {
+         "$agoMs": "2d"
+        },
+        "pollsToday": 0,
+        "history": [
+         {
+          "at": {
+           "$agoMs": "72h"
+          },
+          "ils": 4580
+         },
+         {
+          "at": {
+           "$agoMs": "66h"
+          },
+          "ils": 4560
+         },
+         {
+          "at": {
+           "$agoMs": "60h"
+          },
+          "ils": 4560
+         },
+         {
+          "at": {
+           "$agoMs": "54h"
+          },
+          "ils": 4540
+         },
+         {
+          "at": {
+           "$agoMs": "48h"
+          },
+          "ils": 4520
+         },
+         {
+          "at": {
+           "$agoMs": "42h"
+          },
+          "ils": 4520
+         },
+         {
+          "at": {
+           "$agoMs": "36h"
+          },
+          "ils": 4490
+         },
+         {
+          "at": {
+           "$agoMs": "30h"
+          },
+          "ils": 4460
+         },
+         {
+          "at": {
+           "$agoMs": "24h"
+          },
+          "ils": 4460
+         },
+         {
+          "at": {
+           "$agoMs": "18h"
+          },
+          "ils": 4430
+         },
+         {
+          "at": {
+           "$agoMs": "12h"
+          },
+          "ils": 4400
+         },
+         {
+          "at": {
+           "$agoMs": "6h"
+          },
+          "ils": 4380
+         },
+         {
+          "at": {
+           "$agoMs": "0h"
+          },
+          "ils": 4370
+         }
+        ],
+        "carrier": "Hotel Colosseo"
+       }
+      ]
+     }
+    }
+   ],
+   "steps": [
+    {
+     "wait": ".travel-watch"
+    }
+   ],
+   "phoneSteps": [
+    {
+     "wait": ".travel-watch"
+    }
+   ]
+  }
+ ]
+}

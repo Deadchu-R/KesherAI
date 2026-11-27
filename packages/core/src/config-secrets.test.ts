@@ -57,3 +57,11 @@ test("the backup relays' keys are secrets (the Supabase URL is not)", () => {
   assert.ok(text.includes("https://abcdefghijkl.supabase.co"));
   assert.deepEqual((withSecrets(sealed, "unseal", box).hub as { relays: unknown }).relays, { ablyKey: "a.b:ablysecret", supabaseUrl: "https://abcdefghijkl.supabase.co", supabaseKey: "sbsecret" });
 });
+
+test("the travel search keys (Amadeus key and secret, Duffel token) are secrets; the host and airport are not", () => {
+  const sealed = withSecrets({ travel: { amadeusKey: "amk-1", amadeusSecret: "ams-2", duffelToken: "duffel_test_3", amadeusHost: "test", origin: "TLV" } }, "seal", box);
+  const raw = JSON.stringify(sealed);
+  assert.ok(!raw.includes("amk-1") && !raw.includes("ams-2") && !raw.includes("duffel_test_3"), "none in plain text");
+  assert.ok(raw.includes('"TLV"') && raw.includes('"test"'));
+  assert.deepEqual(withSecrets(sealed, "unseal", box).travel, { amadeusKey: "amk-1", amadeusSecret: "ams-2", duffelToken: "duffel_test_3", amadeusHost: "test", origin: "TLV" });
+});
