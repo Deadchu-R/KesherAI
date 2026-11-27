@@ -354,6 +354,8 @@ export type AgentEvent = EventBase &
         promptUsed?: string;
         /** Files made for the user, relative to the conversation's folder (e.g. a built .exe). */
         files?: string[];
+        /** File cards `send_file` posted (see `FileCardInfo`). */
+        cards?: import("./file-card.js").FileCardInfo[];
         /** An MCP App: the tool's own view (a `ui://` resource on that server), with the call's input and result. */
         app?: McpAppRef;
       }

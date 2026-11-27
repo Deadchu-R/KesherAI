@@ -1925,6 +1925,7 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
         ...(out.audioIds?.length ? { audioIds: out.audioIds } : {}),
         ...(out.promptUsed ? { promptUsed: out.promptUsed.slice(0, 2000) } : {}),
         ...(out.files?.length ? { files: out.files } : {}),
+        ...(out.cards?.length ? { cards: out.cards } : {}),
         ...(out.app ? { app: out.app } : {}),
       });
       return output;

@@ -7,6 +7,7 @@ import type { AgentTool, ToolContext } from "./tools.js";
 import { fetchPublic, privateHostName } from "./public-url.js";
 import { MAX_OUTPUT, refreshPath, runShell } from "./shell.js";
 import { resolveForTool } from "./workspace.js";
+import { sendFileTool } from "./send-file.js";
 import { safeValue, searchBackends } from "./web-search.js";
 
 /**
@@ -334,4 +335,4 @@ export const downloadFileTool: AgentTool = {
 };
 
 /** Tools for the computer and the web, added to every conversation. */
-export const SYSTEM_TOOLS: readonly AgentTool[] = [checkToolsTool, installToolTool, webSearchTool, webFetchTool, downloadFileTool];
+export const SYSTEM_TOOLS: readonly AgentTool[] = [checkToolsTool, installToolTool, webSearchTool, webFetchTool, downloadFileTool, sendFileTool];

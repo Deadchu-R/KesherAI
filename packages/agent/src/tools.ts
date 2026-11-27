@@ -29,6 +29,8 @@ export interface ToolOutput {
   audioIds?: string[];
   /** Files the tool made for the user (paths relative to the workspace), shown as cards with Download. */
   files?: string[];
+  /** Cards `send_file` posts into the chat (name, size, kind, caption, how to show it). */
+  cards?: import("@kesher/shared").FileCardInfo[];
   /** Pictures for the model to look at (vision models), e.g. a screenshot. Only the latest ones are kept in the conversation. */
   images?: Array<{ mimeType: string; data: string }>;
   /** An MCP App: the tool's own view, shown under the result (the model does not see it). */

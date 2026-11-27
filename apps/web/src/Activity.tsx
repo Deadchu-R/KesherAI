@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileChips, MadeMedia, MediaView, fileUrl } from "./MediaView";
+import { SentFileCard } from "./chat/SentFileCard";
 import { MemoryChip } from "./chat/MemoryChip";
 import { InstallOffer } from "./chat/InstallOffer";
 import { mediaKindOf } from "./chat/chat-inline";
@@ -184,7 +185,10 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
     const list = s === lastEngine ? all : all.filter((a) => a.id !== "engine" && a.id !== "undo");
     return list.length ? [{ key: s.call.callId, list }] : [];
   });
-  const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : []));
+  // Cards from send_file: the file is shown as its card, not again as a plain file chip.
+  const cards = steps.flatMap((s) => s.result?.cards ?? []);
+  const carded = new Set(cards.map((c) => c.path));
+  const made = steps.flatMap((s) => s.result?.files ?? (s.call.name === "build_executable" && s.result?.ok ? [/Built (\S+?)\.\s/.exec(`${s.result.output} `)?.[1]].filter((x): x is string => !!x) : [])).filter((f) => !carded.has(f));
   return (
     <div className="activity">
       <details
@@ -251,6 +255,7 @@ export function ActivityGroup({ steps, live, renderStep, convId, liveOutput, aft
       {live && steps.filter((s) => !s.result && MEDIA_JOB.test(s.call.name)).map((s) => <JobProgressView key={s.call.callId} callId={s.call.callId} />)}
       {after && after.length > 0 && <div className="hcards">{after}</div>}
       {stepButtons.map((b) => <ResultActions key={b.key} actions={b.list} label={t("actionsStep")} />)}
+      {cards.length > 0 && convId && <div className="made">{cards.map((c) => <SentFileCard key={`${c.path}`} convId={convId} card={c} />)}</div>}
       {made.length > 0 && convId && <div className="made">{made.map((f) => <FileCard key={f} convId={convId} path={f} />)}</div>}
       {offers.length > 0 && <div className="memory-chips">{offers.map((o) => <InstallOffer key={o.key} id={o.id} {...(o.why ? { why: o.why } : {})} {...(convId ? { convId } : {})} />)}</div>}
       {kept.length > 0 && <div className="memory-chips">{kept.map((k) => <MemoryChip key={k.key} note={k.note} {...(k.topic ? { topic: k.topic } : {})} />)}</div>}

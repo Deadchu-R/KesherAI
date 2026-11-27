@@ -18,7 +18,7 @@ type Preview =
   | { kind: "image" | "model" | "none"; name: string; path: string };
 
 /** A Word or HTML page in a frame with no scripts, no forms and nothing from outside (only its own styles and pictures). */
-const framed = (html: string) =>
+export const framed = (html: string) =>
   `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>body{font:15px/1.6 system-ui,sans-serif;color:#1d1d1f;background:#fff;margin:24px;max-width:780px}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:4px 8px}img{max-width:100%}</style><body dir="auto">${html}`;
 
 /**

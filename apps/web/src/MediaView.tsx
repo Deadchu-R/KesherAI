@@ -23,7 +23,7 @@ export function fileUrl(f: FileRef): string {
 }
 
 /** True once the element is near the screen (players load only then; long chats stay light). */
-function useNear(ref: React.RefObject<HTMLElement | null>): boolean {
+export function useNear(ref: React.RefObject<HTMLElement | null>): boolean {
   const [near, setNear] = useState(() => typeof IntersectionObserver === "undefined");
   useEffect(() => {
     if (near || !ref.current) return;
