@@ -4,7 +4,6 @@ import { ControlLog } from "./control-policy.js";
 import { localControlReviewer } from "./control-reviewer.js";
 import { guestFileTools } from "./guests.js";
 import { GUEST_TEXT_RULE, guestLabelOf, guestThread, guestTurnNote, guestTurnTools, guestUntrusted, REMOVED, speakerLine } from "./shared-chat.js";
-import { STEPS_NOTE, stepsTool } from "./steps-tool.js";
 import { readAttachments, type ReadAttachments } from "./attachments.js";
 import { fileUndoStore } from "./undo-store.js";
 import { outsideAgent, type OutsideAgent } from "./acp-chat.js";
@@ -310,13 +309,13 @@ export class ConversationManager {
     media.notes.push(...games.notes);
     // Code sessions (self-work among them) share a task board with Claude on this computer.
     if (kind === "code" && this.deps.board) split.push(taskBoardTool(this.deps.board));
-    // The task's steps, shown beside the chat (every kind of chat).
-    media.notes.push(STEPS_NOTE);
+    // The task's steps: the session's own `todo` tool (packages/agent), offered only in turns with tools that do work,
+    // so its lines are no longer in every chat's prompt (set_steps and its note are gone; old chats still show theirs).
     // "Check my change" (like Claude's browser pane): in a code chat with KesherAI's own browser, look at the result.
     const hasBrowserPane = [...media.tools, ...computer].some((t) => t.spec.name === "browser_open") && this.deps.browserPane?.() === true;
     if (kind === "code" && hasBrowserPane) media.notes.push(CHECK_IN_BROWSER_NOTE);
     // Browser and computer tools: safety v2 decides each call (modes, sensitive sites, origin gate, local reviewer).
-    const all = this.gateControl(id, [stepsTool(), ...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
+    const all = this.gateControl(id, [...code, ...media.tools, ...split, ...computer, ...group.tools, ...this.pluginTools(), ...skills, ...(this.deps.memoryTools?.(id) ?? []), ...(id ? this.deps.timerTools?.(id) ?? [] : []), ...(id ? this.deps.canvasTools?.(id) ?? [] : []), ...(this.deps.mcpTools?.() ?? [])]);
     // Page text is data, never instructions (browser-safety.ts); said once wherever the browser tools are.
     if (all.some((t) => t.spec.name.startsWith("browser_"))) media.notes.push(UNTRUSTED_RULE);
     // Helpers: other models (or the same one) do read-only legwork in parallel and report back.

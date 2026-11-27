@@ -1,6 +1,6 @@
 /**
  * The Steps pane: the steps of the task the model is working on, ticked as it goes (the list Claude shows beside
- * a conversation). The model writes the list with its `set_steps` tool; the latest call is the list. A model
+ * a conversation). The model writes the list with its `todo` tool (older chats: `set_steps`); the latest one is the list. A model
  * that does not use the tool still gets a list: the folded groups of its tool calls, one line each, so the pane
  * is never empty while work happens.
  */
@@ -21,6 +21,11 @@ export function currentSteps(events: AgentEvent[]): { steps: ShownStep[]; curren
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i]!;
     if (e.type === "user" && lastUser < 0) lastUser = i;
+    // The agent's `todo` list (its live task list) is the same list; set_steps calls are from older chats.
+    if (e.type === "todo") {
+      if (!e.items.length) return { steps: [], current: false };
+      return { steps: e.items.map((t) => ({ text: t.state === "in_progress" && t.activeForm ? t.activeForm : t.title, status: t.state === "in_progress" ? "doing" : t.state })), current: i > lastUser };
+    }
     if (e.type !== "tool_call" || e.name !== "set_steps") continue;
     const raw = (e.input as { steps?: unknown }).steps;
     if (!Array.isArray(raw)) continue;

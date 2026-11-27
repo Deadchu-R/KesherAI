@@ -10,6 +10,7 @@
  */
 
 import type { ChecklistMark, SpecialistId } from "./engine-specialists.js";
+import type { TodoItem } from "./todo-list.js";
 
 /** A media job's progress, as a tool reports it (ComfyUI's `/ws` messages, the built-in engine's console). */
 export interface JobProgress {
@@ -303,6 +304,8 @@ export type AgentEvent = EventBase &
     | { type: "approval_result"; requestId: string; decision: ApprovalDecision; feedback?: string }
     /** Plan mode: the agent's plan, for the user to approve (then it runs) or change. */
     | { type: "plan"; callId: string; text: string }
+    /** The chat's live task list, whole, after a `todo` call (todo-list.ts); the newest one is the list. */
+    | { type: "todo"; callId: string; items: TodoItem[] }
     | {
         type: "question";
         questionId: string;

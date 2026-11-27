@@ -1042,3 +1042,29 @@ test("a turn cut off at the token limit gets one nudge to answer briefly, and it
   assert.equal(session.events.some((e) => e.type === "tool_call"), false);
   assert.equal(session.events.filter((e) => e.type === "note" && /ran out of room/.test(e.text)).length, 1);
 });
+
+test("todo: offered with tools that do work, keeps the list in a saved event, and set marks steps", async () => {
+  const { session, seen } = await makeSession([
+    { calls: [{ name: "todo", arguments: { items: [{ title: "Write a.txt", state: "in_progress" }, { title: "Check it" }] } }] },
+    { calls: [{ name: "todo", arguments: { set: [{ id: "1", state: "done" }, { id: "2", state: "in_progress" }] } }] },
+    { calls: [{ name: "todo", arguments: { set: [{ id: "7", state: "done" }] } }] },
+    { text: "Done." },
+  ]);
+  session.send("make a file and check it");
+  await waitFor(session, (e) => e.type === "assistant" && e.text === "Done.");
+  assert.ok(seen[0]!.tools.some((t) => t.name === "todo"), "a code session is offered todo");
+  const lists = session.events.filter((e) => e.type === "todo");
+  assert.equal(lists.length, 2, "the refused call writes no list");
+  assert.deepEqual(lists.at(-1)!.type === "todo" && lists.at(-1)!.items.map((i) => i.state), ["done", "in_progress"]);
+  const toolText = seen.at(-1)!.messages.filter((m) => m.role === "tool").map((m) => String(m.content)).join("\n");
+  assert.match(toolText, /1\/2 done/);
+  assert.match(toolText, /no step "7"/);
+});
+
+test("todo: a chat without tools that do work is not offered it", async () => {
+  const { model, seen } = scripted([{ text: "Hi." }]);
+  const session = new AgentSession({ id: "t", modelId: "m", model, mode: "ask", tools: [], systemPrompt: "sys" });
+  session.send("hello");
+  await waitFor(session, (e) => e.type === "assistant");
+  assert.ok(!seen[0]!.tools.some((t) => t.name === "todo"));
+});

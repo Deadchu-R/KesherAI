@@ -13,8 +13,9 @@ const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
  *
  * @param props.status - What the turn does (from turnStatus).
  * @param props.local - The chat's model runs on this computer (only then does a game's Play make it wait).
+ * @param props.todo - The agent's task list of this turn, while steps are left: "· 3/7 tasks" (todo-view.ts).
  */
-export function TurnStatusLine({ status, local = false }: { status: TurnStatus; local?: boolean }) {
+export function TurnStatusLine({ status, local = false, todo }: { status: TurnStatus; local?: boolean; todo?: { done: number; total: number } }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -39,6 +40,7 @@ export function TurnStatusLine({ status, local = false }: { status: TurnStatus; 
       <span role="status">{what}</span>
       {status.kind === "approval" && tool && <span>{tool}</span>}
       {step && status.kind !== "tool" && <span>· {step}</span>}
+      {todo && <span>· <bdi dir="ltr">{todo.done}/{todo.total}</bdi> {L("משימות", "tasks")}</span>}
       {Number.isFinite(since) && <span className="turn-time" dir="ltr" aria-hidden="true">· {clock(now - since)}</span>}
       {status.tps && <span className="turn-time" dir="ltr" aria-hidden="true">· {speedText(status.tps)}</span>}
     </p>

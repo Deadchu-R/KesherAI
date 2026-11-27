@@ -23,6 +23,8 @@ import { ContextRing } from "../chat/ContextRing";
 import { dayBreaks, dayLabel } from "../chat-archive";
 import { deleteChatForever, setArchived } from "./ArchivedPage";
 import { TurnDoneLine, TurnStatusLine } from "../chat/TurnStatusLine";
+import { TodoCard } from "../chat/TodoCard";
+import { todoCount, todoView } from "../chat/todo-view";
 import { turnStatus, turnSummary } from "../turn-status";
 import { ChatLiveContext, mergeProgress } from "../chat/ChatLive";
 import { shortModelName } from "../ModelMenu";
@@ -475,7 +477,7 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
     for (const e of versions.shown) {
       if (e.type === "tool_call") {
         if (e.name === "ask_user" || e.name === "request_access") continue; // their question card shows instead
-        if (e.name === "set_steps") continue; // the Steps pane shows the list
+        if (e.name === "set_steps" || e.name === "todo") continue; // the task list card and the Steps pane show the list
         if (!group) {
           group = [];
           out.push({ kind: "group", key: e.seq, steps: group });
@@ -496,6 +498,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
   // The task's steps (the model's set_steps list). The pane opens by itself the first time a list appears in
   // this conversation, on a screen wide enough; closing it is remembered for the conversation.
   const taskSteps = useMemo(() => currentSteps(events), [events]);
+  // The agent's live task list (its `todo` tool): a card above the status line, and "3/7" in that line.
+  const todo = useMemo(() => todoView(events), [events]);
   const stepsFallback = useMemo(() => {
     const groups = blocks.filter((b): b is { kind: "group"; key: number; steps: Step[] } => b.kind === "group");
     const after = groups.filter((g) => g.key > versions.lastUser);
@@ -1223,7 +1227,8 @@ export function ConversationPage({ id, helper }: { id: string; helper?: string }
             <div key={`s${turn}`} className="msg streaming"><RichText text={text} /></div>
           ))}
           {/* What the turn does now (a tool, an approval, thinking) and how long it has run (turn-status.ts). */}
-          {busy && <TurnStatusLine local={modelOptions.find((m) => m.id === conv.modelId)?.location === "local"} status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} />}
+          {todo?.current && <TodoCard view={todo} busy={busy} />}
+          {busy && <TurnStatusLine local={modelOptions.find((m) => m.id === conv.modelId)?.location === "local"} status={turnStatus(events, info ?? {}, Object.keys(streaming).length > 0)} todo={todoCount(todo)} />}
           {/* When the turn ends, the live line collapses to "Done in 0:42 · 38 tok/s" (turn-status.ts). */}
           {!busy && events.at(-1)?.type === "assistant" && (() => {
             const summary = turnSummary(events);

@@ -17,12 +17,12 @@ import type {
   QueuedMessage,
   SignInInfo,
 } from "@kesher/shared";
-import { takeSteers } from "@kesher/shared";
+import { applyTodo, latestTodo, takeSteers, todoProgress, todoReply } from "@kesher/shared";
 import { dangerReason, decide } from "./permissions.js";
 import type { Reviewer } from "./reviewer.js";
 import { CHARS_PER_TOKEN, SUMMARY_PROMPT, cutPoint, shortenOldToolOutputs, sizeOf, transcript } from "./context.js";
 import { DEFAULT_TOOL_CAP, OPEN_CHARS, PRUNED_MARK, SUPERSEDED_MARK, TOOL_OUTPUT_TOOL, capTools, openToolOutput, pinnedBefore, pinnedOutputs, pruneToolOutputs } from "./budget.js";
-import { ASK_USER_TOOL, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
+import { ASK_USER_TOOL, TODO_TOOL, offersTodo, todoSpec, makeDiff, undoHunk, PRESENT_PLAN_TOOL, REQUEST_ACCESS_TOOL, askUserSpec, presentPlanSpec, requestAccessSpec, truncate, type AgentTool, type GateResult, type ToolContext } from "./tools.js";
 
 /** Added to the system prompt in plan mode. */
 const PLAN_NOTE =
@@ -1292,7 +1292,9 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
     // list, which sits at the top of the prompt, stays the same from turn to turn and the engine keeps its cache.
     const all = sortSpecs([...this.tools.values()].map((t) => t.spec).filter((t) => !this.hidden.has(t.name)));
     const core = this.toolSearch?.();
-    const base = [askUserSpec, requestAccessSpec, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
+    const list = latestTodo(this.events);
+    const todo = offersTodo(all.map((t) => t.name), !!list?.length && !todoProgress(list).finished) ? [todoSpec] : [];
+    const base = [askUserSpec, requestAccessSpec, ...todo, ...(this.mode === "plan" ? [presentPlanSpec] : []), ...(this.pruned().ids.length ? [toolOutputSpec] : [])];
     if (!core?.length) return [...base, ...all];
     // Tool search: the core tools and the ones loaded so far in full; the rest by name only. Loaded tools come after
     // the core ones, so loading one changes only the end of the list.
@@ -1713,6 +1715,16 @@ export class AgentSession extends EventEmitter<{ event: [AgentEvent] }> {
       this.push({ type: "plan", callId: call.id, text: plan });
       this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output: "Shown to the user." });
       return "The plan is shown to the user. Stop now: reply with one short sentence and wait. They will approve it (then you carry it out) or ask for changes.";
+    }
+
+    // The live task list: the whole list goes into a `todo` event (saved with the chat), which the page draws as a card.
+    if (call.name === TODO_TOOL) {
+      const r = applyTodo(latestTodo(this.events) ?? [], call.arguments);
+      if ("error" in r) return fail(r.error);
+      this.push({ type: "todo", callId: call.id, items: r.items });
+      const output = todoReply(r.items);
+      this.push({ type: "tool_result", callId: call.id, name: call.name, ok: true, output });
+      return output;
     }
 
     if (call.name === REQUEST_ACCESS_TOOL) {

@@ -157,6 +157,11 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
     // The task's steps, as the model set them (the same list a chat's Steps pane shows).
     let steps: ReturnType<typeof cleanSteps> = [];
     for (const e of [...(opened?.session.events ?? [])].reverse()) {
+      // The `todo` list (the agent's live task list); set_steps in runs from before it.
+      if (e.type === "todo") {
+        steps = e.items.map((i) => ({ text: i.title, status: i.state === "in_progress" ? "doing" : i.state }));
+        break;
+      }
       if (e.type !== "tool_call" || e.name !== "set_steps") continue;
       try {
         steps = cleanSteps((e.input as { steps?: unknown }).steps);
@@ -165,7 +170,7 @@ export async function selfWorkRoutes(app: FastifyInstance, s: KesherServices): P
       }
       break;
     }
-    return { lines: lines.filter((l) => !l.startsWith("🔧 set_steps")), waiting, steps };
+    return { lines: lines.filter((l) => !l.startsWith("🔧 set_steps") && !l.startsWith("🔧 todo ")), waiting, steps };
   });
 
   // Approve or deny what the run waits for (the worker's chat has no window of its own).

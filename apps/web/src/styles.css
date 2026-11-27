@@ -2316,6 +2316,19 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 .steps-head { align-items: center; }
 .steps-bar { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; display: flex; }
 .steps-bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s ease; }
+/* The chat's live task list (chat/TodoCard.tsx): ✅ done, 🔄 now, ⬜ next, above the turn's status line. */
+.todo-card { margin: 8px 0; padding: 10px 14px; display: grid; gap: 8px; max-width: 640px; }
+.todo-card > summary { list-style: none; cursor: pointer; gap: 8px; align-items: center; font-size: 14px; }
+.todo-card > summary::-webkit-details-marker { display: none; }
+.todo-card.finished { padding-block: 6px; }
+.todo-card.finished:not([open]) .steps-bar { display: none; }
+.todo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.todo-item { display: flex; gap: 8px; align-items: baseline; font-size: 14px; overflow-wrap: anywhere; }
+.todo-item.done { color: var(--muted); }
+.todo-item.done > span[dir] { text-decoration: line-through; text-decoration-color: var(--border-strong); }
+.todo-item.in_progress { font-weight: 500; }
+.todo-mark { flex: none; width: 18px; text-align: center; font-size: 13px; }
+@media (prefers-reduced-motion: no-preference) { .todo-item.live .todo-mark { animation: step-pulse 1.2s ease-in-out infinite; } }
 .steps-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .step { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--text-2, var(--text)); }
 .step.done { color: var(--muted); }

@@ -7,6 +7,7 @@ import { countPlaceholders } from "@kesher/shared";
 import { IGNORED_DIRS, displayPath, globToRegExp, resolveForTool } from "./workspace.js";
 import { buildExecutableTool } from "./build.js";
 import { SYSTEM_TOOLS } from "./system-tools.js";
+import { TODO_PROMPT } from "./prompt.js";
 import { MAX_OUTPUT, runShell } from "./shell.js";
 import { checkCodeTool, codeMapTool, findAssetsTool, findSymbolTool } from "./code-intel.js";
 import { readDocumentTool } from "./documents.js";
@@ -588,6 +589,54 @@ export const presentPlanSpec: ToolSpec = {
     "Plan mode: show the user your plan and stop. Write it in Markdown, in the user's language: the goal in one line, then numbered steps naming the files you will change or create and how, the commands you will run, and how you will check that it works. Mention risks or choices the user should know about.",
   inputSchema: { type: "object", properties: { plan: { type: "string" } }, required: ["plan"] },
 };
+
+/** Name of the special tool through which the agent keeps the chat's live task list. */
+export const TODO_TOOL = "todo";
+
+/** Spec of the todo tool; the session handles it itself (todo-list.ts in @kesher/shared has the rules). */
+export const todoSpec: ToolSpec = {
+  name: TODO_TOOL,
+  description: TODO_PROMPT,
+  inputSchema: {
+    type: "object",
+    properties: {
+      items: {
+        type: "array",
+        description: "The whole list (replaces the old one; [] clears it).",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Short id, e.g. 1." },
+            title: { type: "string", description: "The step, e.g. Write the tests." },
+            state: { type: "string", enum: ["pending", "in_progress", "done"] },
+            activeForm: { type: "string", description: "The step while it runs, e.g. Writing the tests." },
+          },
+          required: ["title"],
+        },
+      },
+      set: {
+        type: "array",
+        description: "State changes of steps already in the list.",
+        items: { type: "object", properties: { id: { type: "string" }, state: { type: "string", enum: ["pending", "in_progress", "done"] } }, required: ["id", "state"] },
+      },
+    },
+  },
+};
+
+/** Tools that do work in steps (files, commands, the browser, the screen, documents, game engines, helpers). */
+const STEP_TOOLS = /^(write_file|edit_file|run_command|build_executable|browser_|computer_|document$|sheet$|slides$|unity_|unreal_|godot_|delegate$)/;
+
+/**
+ * Whether a turn is offered `todo`: when it has tools that do work in steps (a chat that only answers does not pay
+ * for the tool's description), or when the chat's list still has steps left to mark.
+ *
+ * @param toolNames - The tools offered this turn (after the router hid the rest).
+ * @param listOpen - The chat has a list with steps not done.
+ * @returns True to offer it.
+ */
+export function offersTodo(toolNames: readonly string[], listOpen: boolean): boolean {
+  return listOpen || toolNames.some((n) => STEP_TOOLS.test(n));
+}
 
 /** Name of the special tool through which the agent asks for a folder or file outside its own. */
 export const REQUEST_ACCESS_TOOL = "request_access";

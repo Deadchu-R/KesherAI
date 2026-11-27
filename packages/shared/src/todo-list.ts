@@ -1,0 +1,144 @@
+/**
+ * The chat's live task list (as Claude's TaskCreate/TaskUpdate and TodoWrite): the agent writes a short list of the
+ * steps of the current job with the `todo` tool and marks each one as it goes; the chat shows it as a checklist card
+ * ("✅ done · 🔄 now · ⬜ next") and the turn's status line counts it ("3/7"). One list per chat: the newest `todo`
+ * event holds the whole list, so it is saved with the chat's events and comes back when the chat is opened again.
+ * Pure helpers, used by the agent loop (session.ts), its tool reply, and the page's card (TodoCard.tsx).
+ */
+
+/** Where a step of the list stands. */
+export type TodoState = "pending" | "in_progress" | "done";
+
+/** One step of the list. */
+export interface TodoItem {
+  /** Short id the model uses to update the step ("1", "2", … when it gives none). */
+  id: string;
+  /** What the step is, in the user's language ("Write the tests"). */
+  title: string;
+  state: TodoState;
+  /** The step while it runs ("Writing the tests"), shown instead of the title when it is in progress. */
+  activeForm?: string;
+}
+
+/** The most steps a list keeps (a longer list is cut; weak local models wrote 30-line lists). */
+export const TODO_MAX_ITEMS = 12;
+/** The longest title or active form kept, in characters. */
+export const TODO_MAX_TITLE = 120;
+
+/** Words weak models use for a state, mapped to the three states (as Claude's and ACP's names too). */
+const STATE_WORDS: Record<string, TodoState> = {
+  pending: "pending", todo: "pending", open: "pending", not_started: "pending",
+  in_progress: "in_progress", "in-progress": "in_progress", active: "in_progress", doing: "in_progress", running: "in_progress", current: "in_progress",
+  done: "done", completed: "done", complete: "done", finished: "done",
+};
+
+/**
+ * Reads a state the model wrote, in any of the usual spellings.
+ *
+ * @param v - The model's value ("completed", "in-progress", "Done").
+ * @returns The state, or undefined when it is not one.
+ */
+export function todoState(v: unknown): TodoState | undefined {
+  return typeof v === "string" ? STATE_WORDS[v.trim().toLowerCase().replace(/\s+/g, "_")] : undefined;
+}
+
+const text = (v: unknown): string => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, TODO_MAX_TITLE) : "");
+
+/** The result of a `todo` call: the new list, or why it was refused (sent back to the model). */
+export type TodoApply = { items: TodoItem[] } | { error: string };
+
+/**
+ * Applies one `todo` call to the chat's list. `items` writes the whole list (an empty list clears it); `set` changes
+ * the state of steps already in it, by id (cheaper for the model than writing the list again). Both may come together:
+ * `items` first, then `set`.
+ *
+ * @param prev - The list before the call (empty when there is none).
+ * @param input - The call's arguments: `{ items?: [{ id?, title, state, activeForm? }], set?: [{ id, state }] }`.
+ *   `content` and `status` are taken for `title` and `state` too.
+ * @returns The new list (the old one is not changed), or an error naming what to fix.
+ */
+export function applyTodo(prev: readonly TodoItem[], input: Record<string, unknown>): TodoApply {
+  let items = prev.map((i) => ({ ...i }));
+  if (input.items !== undefined) {
+    if (!Array.isArray(input.items)) return { error: 'todo: "items" must be a list of steps.' };
+    const used = new Set<string>();
+    items = [];
+    for (const [n, raw] of input.items.slice(0, TODO_MAX_ITEMS).entries()) {
+      const r = (raw && typeof raw === "object" ? raw : { title: raw }) as Record<string, unknown>;
+      const title = text(r.title ?? r.content);
+      if (!title) return { error: `todo: step ${n + 1} has no title.` };
+      let id = text(r.id).slice(0, 20) || String(n + 1);
+      if (used.has(id)) id = `${id}-${n + 1}`;
+      used.add(id);
+      const active = text(r.activeForm);
+      items.push({ id, title, state: todoState(r.state ?? r.status) ?? "pending", ...(active && active !== title ? { activeForm: active } : {}) });
+    }
+  }
+  if (input.set !== undefined) {
+    const changes = Array.isArray(input.set) ? input.set : [input.set];
+    for (const raw of changes) {
+      const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+      const id = text(r.id);
+      const state = todoState(r.state ?? r.status);
+      const item = items.find((i) => i.id === id);
+      if (!item) return { error: `todo: there is no step "${id}". Steps: ${items.map((i) => i.id).join(", ") || "(none yet: send items)"}.` };
+      if (!state) return { error: `todo: step "${id}" needs a state: pending, in_progress or done.` };
+      item.state = state;
+    }
+  }
+  if (input.items === undefined && input.set === undefined) return { error: 'todo needs "items" (the whole list) or "set" (state changes by id).' };
+  return { items };
+}
+
+/** How far the list is. */
+export interface TodoProgress {
+  done: number;
+  total: number;
+  /** The step in progress (the first one, when the model marked several). */
+  current?: TodoItem;
+  /** Every step is done (and there is at least one). */
+  finished: boolean;
+}
+
+/**
+ * Counts the list for the card's header and the status line.
+ *
+ * @param items - The list.
+ * @returns Done and total steps, the current step, and whether all are done.
+ */
+export function todoProgress(items: readonly TodoItem[]): TodoProgress {
+  const done = items.filter((i) => i.state === "done").length;
+  const current = items.find((i) => i.state === "in_progress");
+  return { done, total: items.length, ...(current ? { current } : {}), finished: items.length > 0 && done === items.length };
+}
+
+/**
+ * The chat's list: the one in its newest `todo` event.
+ *
+ * @param events - The chat's events (any objects with a `type`; `todo` ones carry `items`).
+ * @returns The list, or undefined when the agent never wrote one.
+ */
+export function latestTodo(events: readonly { type: string; items?: unknown }[]): TodoItem[] | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.type === "todo" && Array.isArray(e.items)) return e.items as TodoItem[];
+  }
+  return undefined;
+}
+
+/**
+ * What the `todo` tool answers the model: the list as it now stands, short, and what to do next.
+ *
+ * @param items - The new list.
+ * @returns One or two lines.
+ */
+export function todoReply(items: readonly TodoItem[]): string {
+  if (!items.length) return "The list is cleared.";
+  const p = todoProgress(items);
+  const mark = (i: TodoItem) => (i.state === "done" ? "[x]" : i.state === "in_progress" ? "[>]" : "[ ]");
+  const list = items.map((i) => `${mark(i)} ${i.id}. ${i.title}`).join("\n");
+  const next = p.finished ? "All steps are done: give the user a short summary."
+    : p.current ? `Now: ${p.current.id}. Mark it done as soon as it is finished.`
+    : "Mark the next step in_progress before you start it.";
+  return `${p.done}/${p.total} done.\n${list}\n${next}`;
+}

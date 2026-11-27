@@ -5,6 +5,9 @@ import type { AgentTool } from "@kesher/agent";
  * Claude shows beside a conversation). The whole list is sent each time; the app shows the latest one. The list
  * lives in the conversation's own events (the tool call), so it is saved with the chat and shows on every
  * device with nothing else to store.
+ *
+ * 27.11: chats no longer get set_steps; the agent's own `todo` tool (packages/agent, todo-list.ts in @kesher/shared)
+ * took its place. cleanSteps still reads the lists of older chats and self-work runs.
  */
 
 /** One step. */

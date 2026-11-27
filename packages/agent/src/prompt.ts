@@ -2,6 +2,14 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { platform } from "node:os";
 
+/**
+ * How to use the `todo` tool (the chat's live task list, todo-list.ts in @kesher/shared). It is the tool's own
+ * description, so it costs tokens only in turns where the tool is offered (session.ts: when the turn has tools that do
+ * work: files, commands, the browser, the screen, documents), not in every chat's system prompt.
+ */
+export const TODO_PROMPT =
+  "Your live task list, shown to the user as a checklist. Use it when a job has 3 or more steps or ends with a file; not for one quick answer. First write the steps (items, short, in the user's language; the last step checks the work). Mark a step in_progress just before you start it and done right after it is finished, with set: [{id, state}] (one step in progress at a time).";
+
 /** What goes into a system prompt. */
 export interface PromptOptions {
   /** Product name, from branding. */
