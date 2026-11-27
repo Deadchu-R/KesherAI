@@ -324,6 +324,21 @@ export function nextInLineTitle(done: string, next: string): string {
   return `Done: ${cut(done, 60)}. Next in line: ${cut(next, 60)} — Start?`;
 }
 
+/**
+ * Whether a task id is recent enough to be read from the inbox branch: ids carry their day (`o-20261127-05`); an id
+ * from more than 14 days before `now` is old (already run or pruned). Ids without a day are read.
+ *
+ * @param now - The time now (ms).
+ * @returns The check.
+ */
+export function freshTaskId(now: number): (id: string) => boolean {
+  const cutoff = new Date(now - 14 * 86_400_000).toISOString().slice(0, 10).replace(/-/g, "");
+  return (id) => {
+    const day = /-(\d{8})-/.exec(id)?.[1];
+    return !day || day >= cutoff;
+  };
+}
+
 /** The queue, its runs and the inbox branch. */
 export class TaskInbox {
   private saved: Saved = { tasks: [], today: { date: "", used: 0 } };
@@ -1085,10 +1100,16 @@ export class TaskInbox {
     } else {
       delete this.saved.lastError;
       const ls = await this.d.git(repo, ["ls-tree", "--name-only", `refs/remotes/origin/${br}`, "tasks/"]);
-      const names = ls.code === 0 ? ls.out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^tasks\/[a-z0-9-]+\.md$/.test(l)).slice(0, 200) : [];
+      // Every file is listed (ls-tree is cheap); only NEW ones are read, at most 200 per fetch. Capping the listing itself
+      // (it was 200, alphabetical) hid every task past the 200th name once the branch grew (27.11: r-* tasks never came).
+      // Tasks older than two weeks (by the date in their id) are never read again: the PC keeps only its last 300
+      // tasks, and a pruned one must not come back as new and run twice.
+      const known = new Set(this.saved.tasks.map((t) => t.id));
+      const fresh = freshTaskId(this.now());
+      const names = ls.code === 0 ? ls.out.split(/\r?\n/).map((l) => l.trim()).filter((l) => /^tasks\/[a-z0-9-]+\.md$/.test(l) && !known.has(l.slice(6, -3)) && fresh(l.slice(6, -3))).slice(0, 200) : [];
       for (const name of names) {
         const id = name.slice(6, -3);
-        if (!validTaskId(id) || this.saved.tasks.some((t) => t.id === id)) continue;
+        if (!validTaskId(id)) continue;
         const size = await this.d.git(repo, ["cat-file", "-s", `refs/remotes/origin/${br}:${name}`]);
         if (size.code !== 0 || Number(size.out.trim()) > 32 * 1024) {
           this.declined(id, "The task file is bigger than 32 KB.");

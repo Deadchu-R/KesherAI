@@ -1007,3 +1007,12 @@ test("fetchRepairing removes a damaged (empty) ref file git cannot delete, and f
   assert.notEqual(r2.code, 0);
   assert.deepEqual(removed, []);
 });
+
+test("freshTaskId: tasks from the last 14 days are read, older ones never come back", async () => {
+  const { freshTaskId } = await import("./inbox-runner.js");
+  const fresh = freshTaskId(Date.parse("2026-11-27T12:00:00Z"));
+  assert.ok(fresh("r-20261127-14"));
+  assert.ok(fresh("o-20261113-01"));
+  assert.equal(fresh("o-20261101-03"), false);
+  assert.ok(fresh("weird-id"), "no day: read");
+});
