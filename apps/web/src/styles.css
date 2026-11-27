@@ -4457,6 +4457,7 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 .tinbox-from { color: #c3a6ff; }
 /* Quota failover: "↪ moved from Antigravity (quota)" (quota-failover.ts). */
 .tinbox-moved { color: #8fd3ff; overflow-wrap: anywhere; }
+.tinbox-chain { color: #c9b6ff; overflow-wrap: anywhere; }
 .tinbox-fo-order { margin: 0; padding: 0; list-style: none; }
 .tinbox-fo-item { gap: 6px; align-items: center; }
 .tinbox-fo-item .chip-text { min-width: 36px; min-height: 36px; }

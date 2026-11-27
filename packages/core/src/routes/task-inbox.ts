@@ -233,6 +233,8 @@ export async function taskInboxRoutes(app: FastifyInstance, s: KesherServices, i
         }
         cur.failover = { enabled: fo.enabled, moveManual: fo.moveManual, code: cleanFailoverOrder("code", fo.code) as Array<"ghostcli" | "opencode" | "antigravity" | "local">, research: cleanFailoverOrder("research", fo.research) as Array<"gemini" | "ghostcli" | "antigravity"> };
       }
+      // Settings › Task inbox › "Hand partial work to the next agent" (task-handoff.ts; default on).
+      if (typeof b.handoff === "boolean") cur.handoff = b.handoff;
       // GhostCLI (Settings › Task inbox card): on/off, the daily cap, the model order (only `ghostcli/…` ids), heavy tasks to it.
       if (b.ghostcli && typeof b.ghostcli === "object") {
         const o = b.ghostcli as Record<string, unknown>;

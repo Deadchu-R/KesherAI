@@ -253,6 +253,11 @@ function FailoverSettingsCard({ s, put }: { s: InboxState; put: (body: Record<st
       {order("code")}
       {order("research")}
       <p className="small muted">🔒 {L("תמיד: משימה עם מידע רגיש לא עוברת לריליי או לשירות שעשוי לאמן; משימת אבטחה רק ל-Antigravity; משימת L לא עוברת ל-OpenCode Go; שום מעבר לא עולה כסף מעבר למה שכבר משולם.", "Always: a task with sensitive content never moves to a relay or a service that may train; a security task only to Antigravity; an L task never to OpenCode Go; no move ever costs more than you already pay.")}</p>
+      <label className="row wrap small tinbox-handoff-set">
+        <input type="checkbox" role="switch" checked={s.settings.handoff !== false} onChange={(e) => put({ handoff: e.target.checked })} />
+        <span className="grow">{L("להעביר עבודה חלקית לסוכן הבא", "Hand partial work to the next agent")}</span>
+      </label>
+      <p className="small muted">{L("ריצה שנעצרה באמצע (או נכשלה אחרי שינויים או דוח מועיל) עוברת לסוכן הבא בסדר עם פתק: מה נעשה, מה נשאר, מה השתבש, ומאיזה ענף להמשיך. שארית קטנה למודל המקומי או ל-OpenCode Go החינמי, גדולה ל-Antigravity או GhostCLI; לא לאותו סוכן אחרי שתי עצירות ברצף.", "A run that stopped part way (or failed after changes or a useful report) goes to the next agent in the order with a note: what was done, what is left, what went wrong and the branch to continue from. A small leftover goes to the local model or free OpenCode Go, a bigger one to Antigravity or GhostCLI; never the same agent after two stops in a row.")}</p>
     </div>
   );
 }

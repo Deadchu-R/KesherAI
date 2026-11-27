@@ -578,6 +578,39 @@ export interface InboxTaskView extends InboxTaskSpec {
   movedFrom?: InboxMove;
   /** When the PC last asked whether to move this hand-picked task (once per quota stop). */
   quotaAskAt?: number;
+  /** Partial work handed to the next executor (task-handoff.ts): the note its prompt starts with, until that run ends. */
+  handoff?: InboxHandoff;
+  /** Every run of the task, oldest first (at most 8): the page shows the chain once there was a handoff. */
+  chain?: HandoffStep[];
+}
+
+/** Where a continuation may go (task-handoff.ts): a failover target, or Claude's own Opus agent (security-sensitive or L work only). */
+export type HandoffTarget = "ghostcli" | "opencode" | "antigravity" | "local" | "gemini" | "opus";
+
+/** One run in a task's chain (the task page shows them in order). */
+export interface HandoffStep {
+  /** Who ran it. */
+  by: Exclude<InboxExecutor, "auto">;
+  /** It ran on a free model (OpenCode Go's free ones): shown as "OpenCode Go free". */
+  free?: boolean;
+  /** How the run ended. */
+  status: InboxStatus;
+  /** Files it changed (on the branch). */
+  files: number;
+  /** When it ended (ms). */
+  at: number;
+}
+
+/** The handoff waiting for the next run (cleared when that run ends). */
+export interface InboxHandoff {
+  from: Exclude<InboxExecutor, "auto">;
+  to: HandoffTarget;
+  /** When it was handed on (ms). */
+  at: number;
+  /** The branch the work continues from (absent when nothing was pushed). */
+  branch?: string;
+  /** The note, already through the leak guard (at most 40 lines). */
+  note: string;
 }
 
 /** A quota move of a task. */
@@ -626,6 +659,8 @@ export interface InboxSettings {
   claude?: ClaudeSettings;
   /** When a quota runs out: move waiting tasks to an executor with quota left (absent: FAILOVER_DEFAULTS). */
   failover?: Partial<import("./quota-failover.js").FailoverSettings>;
+  /** Hand partial work to the next agent (task-handoff.ts; absent: on). */
+  handoff?: boolean;
   /** Research → tasks loop: tasks from research reports fill the Antigravity and local lines by themselves (default on). */
   loop?: boolean;
   /**
@@ -684,7 +719,7 @@ export interface RelayRun {
   /** The model asked. */
   model: string;
   /** How it ended: a task status, `rate-limited` (the relay said "too many requests"), or a small check message's result. */
-  status: InboxStatus | "rate-limited" | "probe-ok" | "probe-failed";
+  status: InboxStatus | "rate-limited" | "probe-ok" | "probe-failed" | "handed-off";
   /** How long it ran (ms). */
   ms: number;
 }
@@ -717,6 +752,8 @@ export interface RelayReport {
   done: number;
   partial: number;
   failed: number;
+  /** Runs that stopped part way and were handed to the next agent (not counted as failed). */
+  handedOff: number;
   /** "Too many requests" answers: none means no limit was seen. */
   rateLimited: number;
   /** The last one (ms). */
@@ -767,6 +804,7 @@ export function relayReport(log: readonly RelayRun[]): RelayReport {
     done: tasks.filter((r) => r.status === "done").length,
     partial: tasks.filter((r) => r.status === "partial").length,
     failed: tasks.filter((r) => r.status === "failed" || r.status === "declined").length,
+    handedOff: tasks.filter((r) => r.status === "handed-off").length,
     rateLimited: limited.length,
     ...(limited.length ? { lastRateLimitAt: limited[limited.length - 1]!.at } : {}),
     ...(finished.length ? { avgMinutes: Math.round(finished.reduce((n, r) => n + r.ms, 0) / finished.length / 6_000) / 10 } : {}),

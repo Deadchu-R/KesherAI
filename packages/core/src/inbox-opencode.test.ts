@@ -78,13 +78,13 @@ async function setup(tasks: Record<string, string>, report?: string) {
 
 /** A fake OpenCode Go coder: writes a file in the worktree, or throws what `fail` says. */
 function fakeCoder(o: { ready?: boolean; fail?: (model: string) => Error | undefined; listed?: string[]; idle?: (model: string) => boolean; free?: Record<string, string[]>; usage?: { used: number; limit: number; remaining: number } } = {}) {
-  const runs: Array<{ model: string; title: string }> = [];
+  const runs: Array<{ model: string; title: string; prompt: string }> = [];
   const coder: NonNullable<TaskInboxDeps["coder"]> = {
     ready: () => o.ready ?? true,
     models: async () => o.listed ?? ["opencode-go/mimo-v2.6-flash", "opencode-go/mimo-v2.6-pro"],
     free: Object.fromEntries(Object.entries(o.free ?? {}).map(([id, ids]) => [id, { ready: () => true, models: async () => ids, ...(id === "openrouter" && o.usage ? { usage: async () => o.usage } : {}) }])),
-    run: async ({ worktree, model, title, onStep }) => {
-      runs.push({ model, title });
+    run: async ({ worktree, model, title, prompt, onStep }) => {
+      runs.push({ model, title, prompt });
       const err = o.fail?.(model);
       if (err) throw err;
       onStep(2);
@@ -323,7 +323,8 @@ test("opencode: the research loop fills the gap while Antigravity is out (M task
   const report = ["# Report", "", "## Tasks", "- **A1** — Add a sort button: Size M, who AGY.", "- **A2** — Rewrite the sync engine: Size L, who LEAD.", ""].join("\n");
   const { root, repo } = await setup({}, report);
   const { coder, runs } = fakeCoder();
-  const { inbox } = inboxFor(repo, root, coder, { dailyCap: 0 });
+  // Handoff off: this test is about the loop (a partial run would be handed on, see the handoff test).
+  const { inbox } = inboxFor(repo, root, coder, { dailyCap: 0, handoff: false });
   try {
     await syncAndRun(inbox);
     const tasks = await inbox.list();
@@ -714,7 +715,7 @@ test("run guard: the reviewer's reject turns a finished task into partial with a
     look: async () => undefined,
   };
   const { coder } = fakeCoder();
-  const { inbox } = inboxFor(repo, root, coder, {}, undefined, { helpers });
+  const { inbox } = inboxFor(repo, root, coder, { handoff: false }, undefined, { helpers });
   try {
     await syncAndRun(inbox);
     const a = await inbox.task("c-20261124-04");
@@ -722,6 +723,29 @@ test("run guard: the reviewer's reject turns a finished task into partial with a
     assert.match(a.note ?? "", /Reviewer: does not add a button\./);
     assert.deepEqual([a.review?.verdict, a.review?.model], ["reject", "fake"]);
     assert.deepEqual(seen, [false]); // the task is medium risk: no training service
+    assert.match(a.branch, /-partial$/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("handoff: a partial run is handed on with a note and continues from its branch; not to the same executor a third time", async () => {
+  const { root, repo } = await setup({ "c-20261127-31": TASK("c-20261127-31", "opencode", "size: S\n") });
+  const helpers: NonNullable<TaskInboxDeps["helpers"]> = { ask: async () => ({ text: '{"verdict":"reject","reasons":["half done"]}', model: "fake" }), look: async () => undefined };
+  const { coder, runs } = fakeCoder();
+  const { inbox } = inboxFor(repo, root, coder, {}, undefined, { helpers });
+  try {
+    await syncAndRun(inbox);
+    for (let i = 0; i < 50 && runs.length < 2; i++) await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 50 && (await inbox.task("c-20261127-31")).status === "running"; i++) await new Promise((r) => setTimeout(r, 50));
+    const a = await inbox.task("c-20261127-31");
+    // Only OpenCode Go is set up here: it continues once, then (two stops in a row) the task stays partial.
+    assert.equal(runs.length, 2);
+    assert.doesNotMatch(runs[0]!.prompt, /<handoff>/);
+    assert.match(runs[1]!.prompt, /^Continue this task\. [^\n]*ocgo\/c-20261127-31[^\n]*-partial/);
+    assert.match(runs[1]!.prompt, /<handoff>\nHanded on from OpenCode Go[\s\S]*Done so far \(1 file, on ocgo\/[^)]*-partial\):\n- apps\/a\.ts/);
+    assert.deepEqual([a.status, a.chain?.map((c) => `${c.by}:${c.status}`)], ["partial", ["opencode:partial", "opencode:partial"]]);
+    assert.equal(a.handoff, undefined);
     assert.match(a.branch, /-partial$/);
   } finally {
     rmSync(root, { recursive: true, force: true });

@@ -307,6 +307,7 @@ export function relayReport(log) {
         done: tasks.filter((r) => r.status === "done").length,
         partial: tasks.filter((r) => r.status === "partial").length,
         failed: tasks.filter((r) => r.status === "failed" || r.status === "declined").length,
+        handedOff: tasks.filter((r) => r.status === "handed-off").length,
         rateLimited: limited.length,
         ...(limited.length ? { lastRateLimitAt: limited[limited.length - 1].at } : {}),
         ...(finished.length ? { avgMinutes: Math.round(finished.reduce((n, r) => n + r.ms, 0) / finished.length / 6_000) / 10 } : {}),

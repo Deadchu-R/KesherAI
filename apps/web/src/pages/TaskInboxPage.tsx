@@ -7,7 +7,7 @@
  * page; at 390 px the table becomes cards.
  */
 import { useEffect, useState } from "react";
-import { BUSY_RUN_TEXT, EXECUTOR_NAMES, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView, type AntigravityQuota } from "@kesher/shared";
+import { BUSY_RUN_TEXT, EXECUTOR_NAMES, handoffChainText, RUN_ALL_KEY, agentDoing, describeStep, assignOfExecutor, defaultFamilyFor, type InboxModel, type ModelFamily, estimateTaskSteps, INBOX_GIT_MISSING, RUN_STARTING_MS, runStarting, WORK_LIST_STATUSES, type AgentLabel, type WorkListItem, type InboxState, type InboxStatus, type InboxTaskView, type AntigravityQuota } from "@kesher/shared";
 import { api } from "../api";
 import { LocalAgentNotice } from "../LocalAgentNotice";
 import { getLocale, he$ } from "../i18n";
@@ -131,6 +131,19 @@ function MovedLine({ t }: { t: InboxTaskView }) {
   }
   if (t.quotaAskAt && (t.status === "waiting" || t.status === "deferred-quota")) return <div className="small warn" dir="auto">↪ {L(`ל-${exName(t.runBy)} נגמרה המכסה: להעביר? (מי מבצע)`, `${exName(t.runBy)} is out of quota: move it? (Who does it)`)}</div>;
   return null;
+}
+
+/**
+ * The relay chain of a task handed between agents (task-handoff.ts): "GhostCLI (partial: 3 files) → OpenCode Go free
+ * (finished)", with the run going on now at the end. Nothing when there was no handoff. Its direction follows the
+ * language, not the first word (an executor's Latin name would turn a Hebrew line left to right).
+ */
+function HandoffLine({ t }: { t: InboxTaskView }) {
+  const ended = t.status === "done" || t.status === "partial" || t.status === "failed";
+  const he = getLocale() === "he";
+  const text = handoffChainText(t.chain ?? [], he, ended ? undefined : { by: t.runBy, status: t.status });
+  if (!text || (!t.handoff && (t.chain ?? []).every((c) => c.by === t.runBy))) return null;
+  return <div className="small tinbox-chain" dir={he ? "rtl" : "ltr"} title={t.handoff ? L("ממשיך עבודה של סוכן אחר", "Continues another agent's work") : undefined}>⇄ {text}</div>;
 }
 
 const fromName = (f: InboxTaskView["from"]) => ({ claude: "Claude", roee: L("רועי", "Roee"), "self-work": L("עבודה עצמית", "self-work"), hub: L("ענן Kesher", "Kesher Cloud"), device: L("מכשיר אחר", "another device") })[f];
@@ -477,6 +490,7 @@ function QueueRow({ t, state, act, busy, onAssigned, busyRun, clearBusy }: { t: 
         {t.label?.note && <div className="small alab-note" dir="auto">📝 {t.label.note}</div>}
         <div className="small tinbox-from">{L("מאת", "From")} {fromName(t.from)}{t.source ? ` · ${L("מקור", "Source")}: ${t.source.replace(/^docs\/research\//, "").replace(/\.md$/, "")}` : ""}</div>
         <MovedLine t={t} />
+        <HandoffLine t={t} />
         {stepsText(t) && <div className="small muted tinbox-steps">{stepsText(t)}</div>}
         {t.status === "running" && !!t.steps && (
           <div className="tinbox-bar" role="progressbar" aria-valuemin={0} aria-valuemax={estimateTaskSteps(t)} aria-valuenow={Math.min(t.steps, estimateTaskSteps(t))}>
@@ -630,6 +644,7 @@ function TaskPage({ id, state, act, busy }: { id: string; state: InboxState; act
         {t.status !== "declined" && t.status !== "skipped" && <AssignPicker id={t.id} current={assignOfExecutor(t.runBy, t.model)} {...modelProp(t, state)} />}
       </div>
       <MovedLine t={t} />
+      <HandoffLine t={t} />
       {t.modelFallback && <p className="small warn" dir="auto">↘ {L("המודל שנבחר לא היה זמין (מכסה), עבר אוטומטית:", "The chosen model could not run (quota), switched by itself:")} <span dir="ltr">{t.modelFallback}</span></p>}
       <AgentLabelLines title={t.title} name={t.label?.name} note={t.label?.note} doing={t.status === "running" ? agentDoing({ state: "running", tool: t.decisions?.at(-1)?.what.split(/\s+/)[0] }) : undefined} />
       {editing && (

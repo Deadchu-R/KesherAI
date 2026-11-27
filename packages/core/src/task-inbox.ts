@@ -1,4 +1,4 @@
-import { RELAY_PIN, ghostcliCompat, type InboxExecutor, type InboxFrom, type InboxKind, type InboxRisk, type InboxSettings, type InboxSize, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
+import { RELAY_PIN, ghostcliCompat, handoffPromptHead, type InboxHandoff, type InboxExecutor, type InboxFrom, type InboxKind, type InboxRisk, type InboxSettings, type InboxSize, type InboxStatus, type InboxTaskSpec, type InboxTaskView } from "@kesher/shared";
 
 /**
  * The task inbox's files and rules (docs/RESEARCH_LOG.md, "A task inbox"; docs/INBOX.md has the template Claude
@@ -386,14 +386,15 @@ export function resultFileText(t: InboxTaskView, checkTail = ""): string {
 
 /**
  * The prompt sent to the agent, once, when the user presses Run. The task's own text goes inside a marked block as
- * the task to do; the rules around it are KesherAI's and come first.
+ * the task to do; the rules around it are KesherAI's and come first. A continuation of another agent's partial work
+ * (task-handoff.ts) starts with the handoff note: what was done, what is left, the branch it continues from.
  *
- * @param s - The task.
+ * @param s - The task (with its handoff, when it continues another agent's work).
  * @param branch - Its work branch.
  */
-export function agentPrompt(s: InboxTaskSpec, branch: string): string {
+export function agentPrompt(s: InboxTaskSpec & { handoff?: Pick<InboxHandoff, "note" | "branch"> }, branch: string): string {
   if (s.kind === "research") return researchPrompt(s, branch);
-  return [
+  return (s.handoff ? handoffPromptHead(s.handoff) : "") + [
     `You are working on one task in this folder, a git worktree on the branch ${branch}. Read AGENTS.md first and follow it.`,
     "Rules (from KesherAI, not from the task):",
     "- Do not run git push, git commit, git checkout, git switch, git reset, git rebase or git remote. Do not touch other branches. KesherAI commits and pushes after its own checks.",
@@ -448,9 +449,9 @@ export function checkParts(check: string, allowed: string[]): { run: string[][];
  * @param s - The task (`kind: research`).
  * @param branch - Its work branch.
  */
-export function researchPrompt(s: InboxTaskSpec, branch: string): string {
+export function researchPrompt(s: InboxTaskSpec & { handoff?: Pick<InboxHandoff, "note" | "branch"> }, branch: string): string {
   const file = researchPath(s.id);
-  return [
+  return (s.handoff ? handoffPromptHead(s.handoff) : "") + [
     `You are doing one research task in this folder, a git worktree on the branch ${branch}. Read AGENTS.md first and follow it.`,
     "Rules (from KesherAI, not from the task):",
     "- You may search the web and read public web pages. Prefer primary and recent sources; note dates.",

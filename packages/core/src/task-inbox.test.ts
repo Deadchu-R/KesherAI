@@ -112,6 +112,17 @@ test("inbox: the prompt puts the task inside a marked block after KesherAI's rul
   assert.match(res, /- a\.ts \(\+2 -1\)/);
 });
 
+test("inbox: a continuation's prompt starts with the handoff note and the branch it continues from", () => {
+  const p = parseTaskFile(FILE, "c-20261119-04", INBOX_DEFAULTS);
+  assert.ok("spec" in p);
+  const text = agentPrompt({ ...p.spec, handoff: { note: "Done so far (1 file):\n- a.ts +2 -1\n\nLeft:\n- the tests", branch: "gcli/c-20261119-04-partial" } }, "ocgo/c-20261119-04");
+  assert.match(text, /^Continue this task\. .*from gcli\/c-20261119-04-partial/);
+  assert.match(text, /Do not redo the done parts/);
+  assert.ok(text.indexOf("</handoff>") < text.indexOf("You are working on one task"));
+  assert.match(text, /<handoff>\nDone so far \(1 file\):\n- a\.ts \+2 -1\n\nLeft:\n- the tests\n<\/handoff>/);
+  assert.doesNotMatch(agentPrompt(p.spec, "agy/x"), /<handoff>/);
+});
+
 test("inbox: local_ok marks a task the local model may carry during Claude's cooldown, never an Antigravity one", () => {
   const opus = parseTaskFile(FILE.replace("executor: antigravity", "executor: opus\nlocal_ok: true"), "c-20261119-04", INBOX_DEFAULTS);
   assert.ok("spec" in opus && opus.spec.localOk === true);

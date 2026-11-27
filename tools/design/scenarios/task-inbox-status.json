@@ -337,6 +337,101 @@
         "$inMs": "40m"
        }
       }
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0510",
+      "title": "להוסיף סינון לפי ספק בדף השימוש",
+      "goal": "להוסיף סינון לפי ספק בדף השימוש",
+      "status": "waiting",
+      "runBy": "opencode",
+      "branch": "gcli/t-0510-partial",
+      "headSha": "a1b2c3d",
+      "pushed": true,
+      "note": "Handed on from GhostCLI (partial: 3 files) to OpenCode Go; it continues from gcli/t-0510-partial.",
+      "chain": [
+       {
+        "by": "ghostcli",
+        "status": "partial",
+        "files": 3,
+        "at": {
+         "$agoMs": "6m"
+        }
+       }
+      ],
+      "handoff": {
+       "from": "ghostcli",
+       "to": "opencode",
+       "at": {
+        "$agoMs": "5m"
+       },
+       "branch": "gcli/t-0510-partial",
+       "note": "Done so far (3 files)…"
+      }
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0511",
+      "title": "לתקן את כפתור ההעתקה בכרטיס המשימה",
+      "goal": "לתקן את כפתור ההעתקה בכרטיס המשימה",
+      "status": "done",
+      "runBy": "opencode",
+      "modelUsed": "OpenCode Go · big-pickle",
+      "branch": "ocgo/t-0511",
+      "headSha": "d4e5f6a",
+      "pushed": true,
+      "startedAt": {
+       "$agoMs": "40m"
+      },
+      "endedAt": {
+       "$agoMs": "12m"
+      },
+      "files": [
+       {
+        "path": "apps/web/src/pages/TaskInboxPage.tsx",
+        "added": 14,
+        "removed": 3
+       }
+      ],
+      "chain": [
+       {
+        "by": "ghostcli",
+        "status": "partial",
+        "files": 3,
+        "at": {
+         "$agoMs": "45m"
+        }
+       },
+       {
+        "by": "opencode",
+        "free": true,
+        "status": "done",
+        "files": 2,
+        "at": {
+         "$agoMs": "12m"
+        }
+       }
+      ]
      }
     ],
     "models": [
@@ -676,6 +771,27 @@
     },
     {
      "top": ".tinbox-failover"
+    }
+   ]
+  },
+  {
+   "id": "InboxHandoffChain",
+   "title": "תיבת משימות: עבודה חלקית עוברת לסוכן הבא — \"⇄ GhostCLI (חלקי: 3 קבצים) ← OpenCode Go (ממתין)\", ושרשרת שהסתיימה",
+   "titleEn": "Task inbox: partial work handed to the next agent — \"⇄ GhostCLI (partial: 3 files) → OpenCode Go (waiting)\", and a finished chain",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 900,
+    "phone": 1400
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has-text('t-0510')"
+    },
+    {
+     "wait": ".tinbox-chain"
+    },
+    {
+     "top": ".tinbox-row:has-text('t-0510')"
     }
    ]
   }

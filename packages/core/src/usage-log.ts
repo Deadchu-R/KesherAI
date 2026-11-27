@@ -13,7 +13,7 @@ import { join } from "node:path";
 export type UsageLevel = "info" | "warning" | "error" | "suggestion";
 
 /** What happened. */
-export type UsageEvent = "saving" | "run-start" | "run-end" | "request" | "quota" | "anomaly" | "rescue" | "review" | "stop" | "cleanup";
+export type UsageEvent = "saving" | "run-start" | "run-end" | "request" | "quota" | "anomaly" | "rescue" | "review" | "stop" | "cleanup" | "handoff";
 
 /** One line of the log. */
 export interface UsageEntry {

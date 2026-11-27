@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask } from "@kesher/shared";
+import { RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask, buildHandoffNote, handoffPromptHead, handoffWorth, leftoverSize, pickHandoff, type HandoffTarget, type InboxHandoff } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -1830,7 +1830,7 @@ export class TaskInbox {
     // The earliest cooldown (a free model back, 1 hour for a failed one), else the paid cap's reset at the next UTC midnight.
     const cools = Object.values(cooldowns());
     const until = limited ? (exhausted || gh ? (cools.length ? Math.min(...cools) : nextUtcMidnight(this.now())) : this.ocToday().modelUntil?.[model]) : undefined;
-    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `${lane} limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? "Stopped by you." : run.why ? this.stopText(t, run.why) : error ? `${lane} failed: ${error.slice(0, 300)}` : "";
+    const why = exhausted && limited ? `No free model could do it (${opencodeModelName(model)}: ${error.slice(0, 120)}) and today's paid limit is reached: it goes again by itself at ${new Date(until ?? this.now()).toISOString()} or when a free model is open.` : limited ? `${lane} limit reached until ${new Date(until ?? this.now()).toISOString()} (${opencodeModelName(model)}).` : run.why === "stop" ? USER_STOP : run.why ? this.stopText(t, run.why) : error ? `${lane} failed: ${error.slice(0, 300)}` : "";
     await this.finish(t, wt.path, baseSha ?? wt.base, repo, !error && !run.why, why, limited ? "deferred-quota" : undefined);
     // GhostCLI's put-off task goes again by itself when its first model is back (doGhostcli skips it until then).
     if (gh && t.status === "deferred-quota" && until) {
@@ -1838,7 +1838,7 @@ export class TaskInbox {
       await this.save();
     }
     if (relayProviderOf(model) && !error) {
-      this.noteRelay({ at: this.now(), id: t.id, model, status: t.status, ms: this.now() - attemptAt });
+      this.noteRelay({ at: this.now(), id: t.id, model, status: t.handoff && t.handoff.at >= attemptAt ? "handed-off" : t.status, ms: this.now() - attemptAt });
       await this.save();
     }
   }
@@ -2182,7 +2182,7 @@ export class TaskInbox {
       this.claudeToday().until = until;
       this.log(t, "quota", "warning", { requests: t.steps ?? 0 }, (out.result?.text || out.stderr).slice(0, 160));
       why = `Claude's usage limit was reached; it can run again at ${new Date(until).toISOString()}${out.limit!.until || full.length ? "" : " (estimated)"}.`;
-    } else if (run.why === "stop") why = "Stopped by you.";
+    } else if (run.why === "stop") why = USER_STOP;
     else if (run.why) why = this.stopText(t, run.why);
     else if (!out.result?.ok) why = `Claude Code failed: ${(out.result?.text || out.stderr || `exit code ${out.code}`).slice(0, 300)}`;
     await this.finish(t, wt.path, baseSha ?? wt.base, repo, !!out.result?.ok && !run.why && !limited, why, limited ? "deferred-quota" : undefined);
@@ -2815,7 +2815,7 @@ export class TaskInbox {
       }
     } else if (quota) this.saved.quota = { ...quota, taskId: t.id };
     const ok = !error && stop === "end_turn" && !a.why;
-    const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? "Stopped by you." : a.why ? this.stopText(t, a.why) : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
+    const why = quota ? "Antigravity's quota ran out." : a.why === "stop" ? USER_STOP : a.why ? this.stopText(t, a.why) : error ? `The agent failed: ${error.slice(0, 300)}` : stop !== "end_turn" ? `The agent ended with ${stop || "no answer"}.` : "";
     await this.finish(t, worktree, base, repo, ok, why, quota ? "deferred-quota" : undefined);
   }
 
@@ -3678,7 +3678,9 @@ export class TaskInbox {
         why = `${why ? `${why} ` : ""}Reviewer: ${t.review.reasons.join("; ") || "the change does not fit the task"}.`;
       }
     }
-    if (status === "partial" || (status === "deferred-quota" && files.length)) {
+    // A failed run that changed files keeps them on a -partial branch too when the next agent may continue it (handoff).
+    const handOn = this.s.handoff !== false && !blocked && !why.startsWith(USER_STOP);
+    if (status === "partial" || (status === "deferred-quota" && files.length) || (status === "failed" && files.length && handOn)) {
       const partial = `${t.branch}-partial`;
       if (validBranchName(partial) && (await git(["branch", "-m", partial])).code === 0) t.branch = partial;
     }
@@ -3699,7 +3701,13 @@ export class TaskInbox {
     }
     t.status = status;
     t.endedAt = this.now();
-    this.log(t, "run-end", status === "failed" ? "error" : status === "done" ? "info" : "warning", { requests: t.steps ?? 0, minutes: Math.round(((t.endedAt - (t.startedAt ?? t.endedAt)) / 60_000) * 10) / 10, files: files.length, ok: status === "done" ? 1 : 0, paid: this.paidRuns.get(t.id) === false ? 0 : 1 }, `${status}${t.note ? `: ${t.note}` : ""}`);
+    // The chain of runs (the task page shows it once there was a handoff); the last handoff's note is used up.
+    const free = t.runBy === "opencode" && this.paidRuns.get(t.id) === false;
+    if (status === "done" || status === "partial" || status === "failed") t.chain = [...(t.chain ?? []), { by: t.runBy, ...(free ? { free: true } : {}), status, files: files.length, at: t.endedAt }].slice(-8);
+    delete t.handoff;
+    const next = handOn && handoffWorth({ status, files: files.length, pushed: t.pushed, summary: t.summary, blocked }) ? this.nextForHandoff(t, files.length) : undefined;
+    // A run handed on counts as "handed off" in the usage log, not as failed.
+    this.log(t, "run-end", next ? "warning" : status === "failed" ? "error" : status === "done" ? "info" : "warning", { requests: t.steps ?? 0, minutes: Math.round(((t.endedAt - (t.startedAt ?? t.endedAt)) / 60_000) * 10) / 10, files: files.length, ok: status === "done" ? 1 : 0, paid: this.paidRuns.get(t.id) === false ? 0 : 1 }, `${next ? `handed-off (${status})` : status}${t.note ? `: ${t.note}` : ""}`);
     this.paidRuns.delete(t.id);
     delete t.pending;
     // The branch keeps the work; the folder goes once the work is pushed or there is nothing to keep. It stays when the
@@ -3718,6 +3726,12 @@ export class TaskInbox {
       this.saved.lastError = `Could not write the result: ${(e as Error).message.slice(0, 160)}`;
     });
     await this.save();
+    // Handed on: the next agent continues from the partial branch (its own notification says where it went).
+    if (next) {
+      rememberFail(t, status, this.now());
+      await this.handOff(t, next, files);
+      return;
+    }
     const icon = endIcon(status);
     const body = endBody(t, status);
     // An Antigravity task's end is told by the freed-slot notification (slotFreed), one per slot.
@@ -3728,6 +3742,56 @@ export class TaskInbox {
     await this.save();
     await this.retryLater(t);
     if (t.status === "deferred-quota") await this.quotaFailover().catch(() => undefined);
+  }
+
+  /**
+   * Where a stopped run's leftover goes (task-handoff.ts): the failover order with its safety rules, the leftover's size,
+   * never the executor that just stopped once it stopped twice in a row here.
+   *
+   * @param t - The task that just ended (its chain includes this run).
+   * @param filesDone - Files the run changed.
+   */
+  private nextForHandoff(t: InboxTaskView, filesDone: number): HandoffTarget | undefined {
+    const task = { ...this.failoverTask(t), size: leftoverSize(taskSize(t), filesDone) };
+    return pickHandoff(task, this.failoverRooms(t), { ...FAILOVER_DEFAULTS, ...this.s.failover }, t.chain ?? [])?.to;
+  }
+
+  /**
+   * Hands a stopped run's work to the next executor (Roee, 27.11: "let it do half and bring the rest to the other
+   * agents"): the handoff note (done, left, what went wrong, the branch; through the leak guard) goes at the top of the
+   * next prompt, the task waits for the new executor and continues from the partial branch, so one branch keeps every
+   * agent's commits. The usage log gets a `handoff` line for the executor that stopped.
+   *
+   * @param t - The task that just ended partial or failed (not running).
+   * @param to - The next executor.
+   * @param files - The files the run changed (with their diff stats).
+   */
+  private async handOff(t: InboxTaskView, to: HandoffTarget, files: ReadonlyArray<{ path: string; added: number; removed: number }>): Promise<void> {
+    const from = t.runBy;
+    const ended = t.status;
+    const branch = t.pushed && t.branch.endsWith("-partial") ? t.branch : undefined;
+    const watch = (t.watchLog ?? []).slice(-3).map((w) => w.text);
+    const note = buildHandoffNote({ by: from, ...(t.modelUsed ? { model: t.modelUsed } : {}), status: ended, files, ...(branch ? { branch } : {}), ...(t.summary ? { summary: t.summary } : {}), ...(t.acceptance ? { acceptance: t.acceptance } : {}), ...(t.note ? { failNote: t.note } : {}), watch }, this.d.me ?? {});
+    this.log(t, "handoff", "info", { files: files.length }, `${ended} run handed from ${from} to ${to}`);
+    this.lines.remove(t.id);
+    delete t.boardState;
+    t.runBy = to;
+    if (t.model && !this.offersModel(to, t.model)) delete t.model;
+    for (const k of ["retryAt", "autoRetried", "runAsk", "endedAt", "quotaAskAt"] as const) delete t[k];
+    t.status = to === "local" || to === "opus" ? "queued" : "waiting";
+    // The partial branch stays for the executors that continue from it (resumeRef); the others get its name in the note.
+    if (!(branch && (to === "opencode" || to === "ghostcli" || to === "antigravity"))) t.branch = branchFor(t, to);
+    t.handoff = { from, to, at: this.now(), ...(branch ? { branch } : {}), note };
+    t.resultWritten = false;
+    const what = `${ended}${files.length ? `: ${files.length} file${files.length === 1 ? "" : "s"}` : ""}`;
+    t.note = `Handed on from ${EXECUTOR_NAMES[from]} (${what}) to ${EXECUTOR_NAMES[to]}${branch ? `; it continues from ${branch}` : ""}.`;
+    if (t.boardId) await this.d.board?.change("kesher", [{ op: "reopen", id: t.boardId }, ...(to === "local" ? [{ op: "edit" as const, id: t.boardId, size: "small" as const, forKesher: true }] : []), { op: "note", text: t.note, task: t.boardId }]).catch(() => undefined);
+    await this.save();
+    this.d.notify(`↪ ${t.id} ${EXECUTOR_NAMES[from]} → ${EXECUTOR_NAMES[to]}`, `${t.title} · ${what}`, { path: `#/task-inbox/${t.id}` });
+    if (to === "antigravity") this.makeAsk(t);
+    else if (to === "gemini") void this.pumpGemini().catch(() => undefined);
+    else if (to === "opencode") void this.pumpOpencode().catch(() => undefined);
+    else if (to === "ghostcli") void this.pumpGhostcli().catch(() => undefined);
   }
 
   /**
@@ -3818,8 +3882,8 @@ export class TaskInbox {
 }
 
 /** How long OpenCode Go waits after a 429 that does not say (its plan's shortest window is 5 hours). */
-/** The question a research run asks (Gemini's and GhostCLI's): the title, the goal, the acceptance and what is out of scope. */
-const researchQuestion = (t: Pick<InboxTaskSpec, "title" | "goal" | "acceptance" | "outOfScope">): string => [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
+/** The question a research run asks (Gemini's and GhostCLI's): the handoff note when it continues another agent's work, the title, the goal, the acceptance and what is out of scope. */
+const researchQuestion = (t: Pick<InboxTaskSpec, "title" | "goal" | "acceptance" | "outOfScope"> & { handoff?: Pick<InboxHandoff, "note" | "branch"> }): string => (t.handoff ? handoffPromptHead(t.handoff) : "") + [t.title, t.goal, t.acceptance ? `Acceptance:\n${t.acceptance}` : "", t.outOfScope ? `Out of scope:\n${t.outOfScope}` : ""].filter(Boolean).join("\n\n");
 
 /** A task's model, as shown on its card: GhostCLI's or the free service's name, else OpenCode Go. */
 /** "HH:MM UTC" of a time, for notes written on the PC (the pages show their own local time from the number). */
@@ -3827,6 +3891,9 @@ const hhmmUtc = (ms: number): string => `${new Date(ms).toISOString().slice(11, 
 const modelLabel = (model: string): string => `${relayProviderOf(model)?.name ?? freeProviderOf(model)?.name ?? "OpenCode Go"} · ${opencodeModelName(model).replace(/^ghostcli\//, "")}`;
 
 export const OPENCODE_LIMIT_MS = 5 * 3_600_000;
+
+/** A run's note when the user stopped it: such a run is never handed to another agent. */
+const USER_STOP = "Stopped by you.";
 
 /** An OpenCode Go task's end, in Hebrew, for the notification. */
 const OPENCODE_END_HE: Partial<Record<InboxStatus, string>> = { done: "סיים משימה", partial: "סיים חלקית", failed: "נכשל", "deferred-quota": "הגיע למגבלה" };

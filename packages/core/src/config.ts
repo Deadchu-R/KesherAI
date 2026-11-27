@@ -337,6 +337,8 @@ export const KesherConfigSchema = z.object({
           research: z.array(z.enum(["gemini", "ghostcli", "antigravity"])).max(3).optional(),
         })
         .optional(),
+      // Hand partial work to the next agent (task-handoff.ts): on unless turned off.
+      handoff: z.boolean().optional(),
       maxMinutes: z.number().int().min(1).max(480).default(120),
       stallMinutes: z.number().int().min(1).max(120).default(10),
       maxRequests: z.number().int().min(1).max(1000).default(80),
