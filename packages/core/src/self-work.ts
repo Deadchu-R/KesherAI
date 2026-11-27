@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { createHash } from "node:crypto";
 import { heavyGate } from "./heavy-gate.js";
+import { limitsFor, RunGuard, RunWatch, type StopReason } from "./agent-watch.js";
 
 /**
  * Self-work: KesherAI works on a git project by itself (its own code, on the
@@ -445,64 +447,90 @@ export class SelfWork {
   }
 
   /** The loop: a turn, its outcome, the check, a commit, the next turn. */
-  private async work(fresh: boolean, why = "KesherAI restarted"): Promise<void> {
-    const r = this.run_!;
-    if (!fresh) await this.d.send(r.convId, `${why}. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).`).catch(() => undefined);
-    try {
-      while (!this.stopRequested) {
-        if (Date.now() > r.until) return await this.end("stopped", "The time limit was reached.");
-        if (r.steps >= MAX_STEPS) return await this.end("stopped", `Stopped after ${MAX_STEPS} turns.`);
-        const st = await this.turn();
-        if (!st) return;
-        r.steps++;
-        if (st.status === "error") {
-          r.failures++;
-          if (r.failures >= MAX_FAILURES) {
-            if (await this.skip("The model stopped with errors 3 times in a row.")) continue;
-            return await this.end("failed", "The model stopped with errors 3 times in a row.");
-          }
-          await this.d.send(r.convId, "The last turn ended with an error. Continue with the current item.");
-          continue;
-        }
-        let out = readOutcome(st.last);
-        if (out.kind === "blocked") {
-          if (await this.skip(`Blocked: ${out.text}`)) continue;
-          return await this.end("blocked", out.text);
-        }
-        // Local models often finish the work and forget the closing line (found on the PC with Qwen3 Coder): when the
-        // worktree changed, the check decides, not the wording.
-        if (out.kind === "none") {
-          const changed = (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim();
-          // Named from the plan line it ticked, when it did.
-          if (changed) out = { kind: "item", text: tickedItem(await readFile(join(r.worktree ?? r.repo, ".kesher-self", "plan.md"), "utf8").catch(() => ""), r.planTicked) ?? "Changes (the model did not name the item)" };
-        }
-        if (out.kind === "none") {
-          r.failures++;
-          if (r.failures >= MAX_FAILURES) {
-            if (await this.skip("The model did not say what it finished 3 times in a row.")) continue;
-            return await this.end("blocked", "The model did not say what it finished 3 times in a row.");
-          }
-          await this.d.send(r.convId, "End your turn with one line: ITEM DONE: <item>, ALL DONE, or BLOCKED: <why>. If the item is not finished, finish it first.");
-          continue;
-        }
-        if (r.check) {
-          const c = await this.d.check(r.worktree ?? r.repo, r.check);
-          if (c.code !== 0) {
-            r.failures++;
-            await this.save();
-            if (r.failures >= MAX_FAILURES) {
-              if (await this.skip(`\`${r.check}\` failed 3 times in a row.`)) continue;
-              return await this.end("blocked", `\`${r.check}\` failed 3 times in a row.`);
-            }
-            await this.d.send(r.convId, `\`${r.check}\` failed after your change. Fix it before the next item (end with ITEM DONE again):\n${c.out.slice(-3000)}`);
-            continue;
-          }
-        }
-        // Once per item: the model reviews its own diff before the commit (catches the small bugs a check does not).
-        if (!r.reviewing && (out.kind === "item" || out.kind === "all") && (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim()) {
-          r.reviewing = true;
-          r.reviewLabel = out.text;
-          await this.save();
+      private async work(fresh: boolean, why = "KesherAI restarted"): Promise<void> {
+        const r = this.run_!;
+        if (!fresh) await this.d.send(r.convId, `${why}. Read .kesher-self/plan.md and continue with the next item (end with ITEM DONE / ALL DONE / BLOCKED).`).catch(() => undefined);
+        // Run guard (agent-watch.ts): the same hard rules as the task inbox — stall, repeat, request budget, safety ceiling — with a rescue hint injected into the chat when the run loops.
+        const worktree = r.worktree ?? r.repo;
+        const hours = Math.max(0.25, Math.min(12, (r.until - this.now()) / 3_600_000 || 4));
+        const lim = limitsFor(hours * 60, { maxRequests: MAX_STEPS * 8 });
+        const probe = async () => {
+          const status = (await this.d.git(worktree, ["status", "--porcelain"])).out;
+          const diff = (await this.d.git(worktree, ["diff", "HEAD"])).out;
+          return { fp: createHash("sha256").update(`${status}\n${diff}`).digest("hex"), files: status.split("\n").map((l) => l.trim()).filter(Boolean) };
+        };
+        let guardEnd: (() => void) | undefined;
+        let guard: RunGuard | undefined;
+        try {
+          const ac = new AbortController();
+          const stopSelfWork = async (reason: StopReason) => {
+            const note = stopNote(reason);
+            await this.end("stopped", note);
+            ac.abort();
+          };
+          guard = new RunGuard(new RunWatch(lim, () => this.now(), probe), {
+            log: () => undefined,
+            stop: (reason) => void stopSelfWork(reason),
+            inject: () => (hint: string) => this.d.send(r.convId, hint).catch(() => undefined),
+            canTrain: false,
+            signal: ac.signal,
+          }, () => this.now());
+          guardEnd = () => ac.abort();
+                      while (!this.stopRequested) {
+                        if (Date.now() > r.until) return await this.end("stopped", "The time limit was reached.");
+                        if (r.steps >= MAX_STEPS) return await this.end("stopped", `Stopped after ${MAX_STEPS} turns.`);
+                        const st = await this.turn();
+                        if (!st) return;
+                        r.steps++;
+                        guard.step({ tool: "turn", args: String(r.steps) });
+                        if (st.status === "error") {
+                          r.failures++;
+                          if (r.failures >= MAX_FAILURES) {
+                            if (await this.skip("The model stopped with errors 3 times in a row.")) continue;
+                            return await this.end("failed", "The model stopped with errors 3 times in a row.");
+                          }
+                          await this.d.send(r.convId, "The last turn ended with an error. Continue with the current item.");
+                          continue;
+                        }
+                        let out = readOutcome(st.last);
+                        if (out.kind === "blocked") {
+                                                  if (await this.skip(`Blocked: ${out.text}`)) continue;
+                                                  return await this.end("blocked", out.text);
+                                                }
+                                                // Local models often finish the work and forget the closing line (found on the PC with Qwen3 Coder): when the
+                                                // worktree changed, the check decides, not the wording.
+                                                if (out.kind === "none") {
+                                                  const changed = (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim();
+                                                  // Named from the plan line it ticked, when it did.
+                                                  if (changed) out = { kind: "item", text: tickedItem(await readFile(join(r.worktree ?? r.repo, ".kesher-self", "plan.md"), "utf8").catch(() => ""), r.planTicked) ?? "Changes (the model did not name the item)" };
+                                                }
+                                                if (out.kind === "none") {
+                                                  r.failures++;
+                                                  if (r.failures >= MAX_FAILURES) {
+                                                    if (await this.skip("The model did not say what it finished 3 times in a row.")) continue;
+                                                    return await this.end("blocked", "The model did not say what it finished 3 times in a row.");
+                                                  }
+                                                  await this.d.send(r.convId, "End your turn with one line: ITEM DONE: <item>, ALL DONE, or BLOCKED: <why>. If the item is not finished, finish it first.");
+                                                  continue;
+                                                }
+                                                if (r.check) {
+                                                  const c = await this.d.check(r.worktree ?? r.repo, r.check);
+                                                  if (c.code !== 0) {
+                                                    r.failures++;
+                                                    await this.save();
+                                                    if (r.failures >= MAX_FAILURES) {
+                                                      if (await this.skip(`\`${r.check}\` failed 3 times in a row.`)) continue;
+                                                      return await this.end("blocked", `\`${r.check}\` failed 3 times in a row.`);
+                                                    }
+                                                    await this.d.send(r.convId, `\`${r.check}\` failed after your change. Fix it before the next item (end with ITEM DONE again):\n${c.out.slice(-3000)}`);
+                                                    continue;
+                                                  }
+                                                }
+                                                // Once per item: the model reviews its own diff before the commit (catches the small bugs a check does not).
+                                                if (!r.reviewing && (out.kind === "item" || out.kind === "all") && (await this.d.git(r.worktree ?? r.repo, ["status", "--porcelain"])).out.trim()) {
+                                                  r.reviewing = true;
+                                                  r.reviewLabel = out.text;
+                                                  await this.save();
           await this.d.send(r.convId, REVIEW);
           continue;
         }
@@ -528,9 +556,12 @@ export class SelfWork {
         await this.save();
         await this.d.between?.();
         await this.d.send(r.convId, "Checked. If that item is on the board and not marked done yet, mark it done now. Then take the next item from .kesher-self/plan.md, and end your turn after that one item with ITEM DONE / ALL DONE / BLOCKED.");
-      }
-    } catch (e) {
-      await this.end("failed", (e as Error).message);
-    }
-  }
-}
+                }
+              } finally {
+                guardEnd?.();
+              }
+            } catch (e) {
+              await this.end("failed", (e as Error).message);
+            }
+          }
+        }
