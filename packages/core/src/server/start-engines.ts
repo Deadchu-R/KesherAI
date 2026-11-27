@@ -12,6 +12,7 @@ import type { KesherConfig } from "../config.js";
 import type { FaultLog } from "../fault-log.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import type { LlamaEngine } from "../llamacpp.js";
+import { GameWatch } from "../game-watch.js";
 import { PlayStandby } from "../play-standby.js";
 import { unityInPlay } from "../unity-play.js";
 import { closeLeftOverEngines, parseGpuApps, processParent } from "../pc-fix.js";
@@ -25,6 +26,7 @@ import type { KesherServices } from "../services.js";
  *   the fault log, the models, and whether this start follows Terminate (then nothing is loaded until asked).
  */
 export function startEngines(p: { app: FastifyInstance; services: KesherServices; guard: GpuGuard; engine: LlamaEngine; comfy: ComfyManager; config: KesherConfig; faults: FaultLog; registry: ProviderRegistry; afterTerminate: boolean }): void {
+  const games = new GameWatch();
   const { app, services, guard, engine, comfy, config, faults, registry, afterTerminate } = p;
   // Protect the graphics card: hold local work while it is too hot or paused, unload idle models.
   /** The last model's load at start-up, while it runs. */
@@ -48,6 +50,16 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
       // of his running; it was a start-up routine's chat).
       const busy = Object.keys(services.conversations.activity());
       const titles = busy.map((id) => services.library.listConversations().find((c) => c.id === id)?.title).filter(Boolean).slice(0, 2);
+      // No one's chat asked (a background job did): while a game runs it waits for the game to close instead of
+      // taking the card (Roee, 27.11: the 27B model loaded itself as Slay the Spire 2 started). A chat the user opens
+      // still loads it.
+      if (!titles.length && config.guard.freeForPlay !== false) {
+        const playing = await games.running();
+        if (playing.length) {
+          app.log.info(`chat model: not loaded for a background request while a game runs (${playing.slice(0, 2).join(", ")})`);
+          throw new Error(`A game is running (${playing[0]}): the chat model loads after it closes.`);
+        }
+      }
       await loadModel(services, path, undefined, titles.length ? { kind: "chat", chats: titles as string[] } : { kind: "request" });
     },
     pids: () => (engine.pid ? [engine.pid] : []),
