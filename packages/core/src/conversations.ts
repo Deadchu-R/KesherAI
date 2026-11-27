@@ -15,7 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, parse as parsePath, resolve as resolvePath } from "node:path";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
+import { AgentSession, CODE_TOOLS, modelReviewer, buildSystemPrompt, webSearchTool, webFetchTool, isSearchQuery, type AgentTool, type ModelTurn, type TeamMember } from "@kesher/agent";
 import { branding, editQueued, moveQueued, sendNowQueued, VOICE_BRIEF, type ThinkingLevel, type AgentEvent, type AgentMessage, type Conversation, type ConversationKind, type HelperRunInfo, type PermissionMode, type ProjectEnvironment, type Teammate, type StopAfter } from "@kesher/shared";
 import { UNITY_TOOL_NAMES } from "./unity-tools.js";
 import { UNREAL_TOOL_NAMES } from "./unreal-tools.js";
@@ -29,7 +29,7 @@ import { findEngines, readProject } from "./unreal-install.js";
 import { JobStore } from "./jobs.js";
 import { gameTools } from "./chat-tools-games.js";
 import { unityTurns } from "./unity-turns.js";
-import { CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
+import { asksToBrowse, CHAT_TOOL_GROUPS, computerGroup, connectorKey, forTelegram, groupOfTool, withoutOff } from "./chat-tool-groups.js";
 import { mcpToolName } from "./mcp.js";
 import { intentNote, isSimpleTurn, missingNote, musicNote, SEARCH_TOOLS, ToolRouter, type Route } from "./tool-router.js";
 import { OFFER_INSTALL_TOOL, offerInstallTool } from "./installables.js";
@@ -1427,9 +1427,14 @@ export class ConversationManager {
     // model's context with unrelated pages; the model can still search with its web_search tool when it needs to.
     const aboutProject = /^\s*\[[^\]\n]{0,40}project:/i.test(text);
     const steps: Array<Extract<AgentEvent, { type: "tool_call" | "tool_result" }> extends infer E ? (E extends unknown ? Omit<E, "seq" | "at"> : never) : never> = [];
-    if (opts.web && !aboutProject) {
-      // The words the user typed, without the "[Unity project: …]" header a project adds.
-      const query = text.replace(/^\s*\[[^\]\n]{1,300}\]\s*/, "").replace(/\s+/g, " ").trim().slice(0, 200);
+    // The words the user typed, without the "[Unity project: …]" header a project adds.
+    const typed = text.replace(/^\s*\[[^\]\n]{1,300}\]\s*/, "").replace(/\s+/g, " ").trim();
+    // No search first when the message asks to open an address (the page is the source) or is a long instruction
+    // rather than search words: the search refused it and left "The web search failed" on every such turn (27.11
+    // test on the PC). The model still has web_search and writes its own short query when it needs one.
+    const preSearch = opts.web && !aboutProject && !asksToBrowse(typed) && isSearchQuery(typed.slice(0, 200));
+    if (preSearch) {
+      const query = typed.slice(0, 200);
       const prefs = conversation.web;
       const ctx = { signal: AbortSignal.timeout(60_000), recordChange: () => undefined, ...(prefs ? { web: prefs } : {}) };
       try {
