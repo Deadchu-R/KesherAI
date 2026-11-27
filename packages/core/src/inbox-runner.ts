@@ -3,7 +3,7 @@ import { AGENT_GIT_IDENTITY } from "@kesher/agent";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { RELAY_PIN, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask } from "@kesher/shared";
+import { RELAY_PIN, relayNeedsProbe, GHOSTCLI_DEFAULTS, ghostcliCompat, type GhostcliSettings, type GhostcliState, matchModel, isSecurityFile, antigravityQuotaSummary, type AntigravityQuota, defaultFamilyFor, familyOf, isModelUnavailable, type ModelFamily, modelChain, pickableModels, BUSY_RUN_TEXT, INBOX_GIT_MISSING, OPENCODE_DEFAULTS, isFreeOpencodeModel, OPENCODE_PROVIDER, FREE_PROVIDERS, RELAY_PROVIDERS, relayProviderOf, safeForRelay, stepNote, relayReport, type RelayRun, type RelayProbe, freeModelsFor, freeProviderOf, inboxModelAllowed, safeForTrainingProvider, trainingRiskOf, type FreeProviderState, opencodeFreeFirst, opencodeFreeModel, opencodeModelFor, opencodeModelOrder, opencodeModelName, type OpencodeSettings, type OpencodeState, type InboxApprovalAsk, type InboxBusy, type InboxRunAsk, type InboxCheck, type InboxModel, type InboxSettings, type InboxState, type InboxStatus, type InboxTaskSpec, type InboxTaskView, CLAUDE_DEFAULTS, claudeQuotaBlock, type ClaudeQuota, type ClaudeSettings, type ClaudeState, cleanFailoverOrder, EXECUTOR_NAMES, FAILOVER_DEFAULTS, pickFailover, type ExecutorRoom, type FailoverSettings, type FailoverTarget, type FailoverTask } from "@kesher/shared";
 import type { AcpAgent, AcpHandlers, AcpPermission } from "./acp.js";
 import { optionFor } from "./acp-chat.js";
 import { changesVersion, checkPaths, decideStep, isResearchReport, redactReport, scanDiff } from "./inbox-policy.js";
@@ -1887,7 +1887,9 @@ export class TaskInbox {
     const c = this.d.coder;
     if (!c || !this.gc.enabled || this.probing) return;
     const last = this.saved.relayHealth;
-    if (last && this.now() - last.at < RELAY_PROBE_MS) return;
+    // Only when it is not known to answer, or after several failed runs in a row (Roee, 27.11).
+    if (!relayNeedsProbe(this.saved.relayLog ?? [], last)) return;
+    if (last && !last.ok && this.now() - last.at < RELAY_PROBE_MS) return;
     if (this.now() - this.probeTriedAt < RELAY_PROBE_MS) return;
     this.probeTriedAt = this.now();
     this.probing = true;
@@ -1927,7 +1929,7 @@ export class TaskInbox {
           void this.pumpGhostcli();
           void this.pumpOpencode();
         }
-        if (was !== ok && (was !== undefined || ok)) this.d.notify(ok ? `✓ ${r.name} עונה` : `✕ ${r.name} לא עונה`, ok ? `${opencodeModelName(model)} answered in ${Math.round((this.now() - t0) / 1000)} s; heavy tasks go to it again.` : `${note}. No tasks go to it until it answers again (checked every 15 minutes).`, { path: "#/settings/task-inbox" });
+        if (was !== ok && (was !== undefined || ok)) this.d.notify(ok ? `✓ ${r.name} עונה` : `✕ ${r.name} לא עונה`, ok ? `${opencodeModelName(model)} answered in ${Math.round((this.now() - t0) / 1000)} s; heavy tasks go to it again.` : `${note}. No tasks go to it until it answers again (checked every 15 minutes until it answers).`, { path: "#/settings/task-inbox" });
       }
     } finally {
       this.probing = false;
@@ -1939,6 +1941,8 @@ export class TaskInbox {
   /** Adds one relay attempt to the trial report (the last 200 are kept). */
   private noteRelay(r: RelayRun): void {
     this.saved.relayLog = [...(this.saved.relayLog ?? []), r].slice(-200);
+    // A finished run shows it answers: that is the health reading now (no separate check message needed).
+    if (r.status === "done" || r.status === "partial") this.saved.relayHealth = { ...this.saved.relayHealth, at: r.at, ok: true, ms: r.ms, model: r.model, note: "a task finished", answered: [r.model] };
   }
 
   /** The note on a Claude Code task that waits. */

@@ -48,3 +48,16 @@ test("security files are found on the real changed paths", () => {
   assert.equal(isSecurityFile(".github/workflows/release.yml"), true);
   assert.equal(isSecurityFile("apps/web/src/pages/TaskInboxPage.tsx"), false);
 });
+
+test("the relay check runs only when not known to answer or after 3 failed runs in a row", async () => {
+  const { relayNeedsProbe } = await import("./task-inbox.js");
+  const run = (at: number, status: string) => ({ at, id: "t", model: "ghostcli/x", status, ms: 1 }) as never;
+  assert.equal(relayNeedsProbe([], undefined), true);
+  assert.equal(relayNeedsProbe([], { ok: false, at: 1 }), true);
+  assert.equal(relayNeedsProbe([run(5, "done")], { ok: true, at: 1 }), false);
+  assert.equal(relayNeedsProbe([run(5, "failed"), run(6, "failed")], { ok: true, at: 1 }), false);
+  assert.equal(relayNeedsProbe([run(5, "failed"), run(6, "rate-limited"), run(7, "failed")], { ok: true, at: 1 }), true);
+  assert.equal(relayNeedsProbe([run(5, "failed"), run(6, "failed"), run(7, "done")], { ok: true, at: 1 }), false);
+  // Runs before the last good reading do not count.
+  assert.equal(relayNeedsProbe([run(2, "failed"), run(3, "failed"), run(4, "failed")], { ok: true, at: 10 }), false);
+});
