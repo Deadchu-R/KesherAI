@@ -61,6 +61,8 @@ export class Semantic {
       save: () => Promise<void>;
       /** Called when a model becomes active (re-index the knowledge bases). */
       changed: () => void;
+      /** The pool of CPU models: when it is on, the built-in embedding model runs there (its queue and idle unload). */
+      cpu?: () => import("./server/build-cpu-pool.js").CpuModels | undefined;
     },
   ) {}
 
@@ -73,6 +75,8 @@ export class Semantic {
       return {
         id,
         embed: async (texts, kind) => {
+          const pool = this.d.cpu?.();
+          if (pool?.enabled()) return pool.embed(texts.map((t) => embedText(id, t, kind).slice(0, 6000)));
           this.active++;
           try {
             await this.ensureRunning();

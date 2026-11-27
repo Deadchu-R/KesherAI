@@ -192,6 +192,60 @@
       "json": {
         "name": "PC-Haifa"
       }
+    },
+    {
+      "url": "**/api/cpu-pool",
+      "json": {
+        "available": true,
+        "engine": "router",
+        "pinnable": true,
+        "settings": {
+          "enabled": true,
+          "maxGenerating": 2,
+          "ramBudgetMb": 24576,
+          "idleWatchdog": 1,
+          "idleChat": 10,
+          "pinCcd": false,
+          "translatorDevice": "cpu"
+        },
+        "roles": [
+          {
+            "role": "chat",
+            "state": "unloaded",
+            "queued": 0
+          },
+          {
+            "role": "watchdog",
+            "model": "Qwen3.5-2B-Q4_K_M.gguf",
+            "state": "running",
+            "threads": 7,
+            "ramMb": 1720,
+            "tps": 38.4,
+            "queued": 0
+          },
+          {
+            "role": "translator",
+            "model": "translategemma-4b-it-Q4_K_M.gguf",
+            "state": "loaded",
+            "threads": 7,
+            "ramMb": 2960,
+            "tps": 21.7,
+            "queued": 1
+          },
+          {
+            "role": "embeddings",
+            "model": "Qwen3-Embedding-0.6B-Q8_0.gguf",
+            "state": "unloaded",
+            "queued": 2
+          }
+        ],
+        "running": 1,
+        "maxGenerating": 2,
+        "ramUsedMb": 4680,
+        "ramBudgetMb": 24576,
+        "threadsBudget": 14,
+        "playing": false
+      }
     }
   ],
   "boards": [
@@ -399,6 +453,58 @@
           "waitMs": 300
         }
       ]
+    },
+    {
+      "id": "CpuModelsCard",
+      "title": "בריאות המחשב: \"מודלים על המעבד\" — לכל תפקיד המודל, טעון או לא, טוקנים לשנייה, זיכרון ותור; הגדרות: איפה המתרגם רץ, כמה בבת אחת, הצמדה ל-X3D",
+      "titleEn": "PC Health: \"CPU models\" — per role its model, loaded or not, tokens/s, memory, queue; settings: translator device, how many at once, X3D pinning",
+      "route": "#/health",
+      "shot": {
+        "desktop": "section.cpu-models"
+      },
+      "steps": [
+        {
+          "local": {
+            "key": "kesher-token",
+            "value": "design"
+          }
+        },
+        {
+          "wait": "section.cpu-models"
+        },
+        {
+          "click": "section.cpu-models details summary"
+        },
+        {
+          "waitMs": 300
+        }
+      ],
+      "phoneSteps": [
+        {
+          "local": {
+            "key": "kesher-token",
+            "value": "design"
+          }
+        },
+        {
+          "wait": "section.cpu-models"
+        },
+        {
+          "click": "section.cpu-models details summary"
+        },
+        {
+          "waitMs": 300
+        },
+        {
+          "top": "section.cpu-models"
+        },
+        {
+          "waitMs": 300
+        }
+      ],
+      "height": {
+        "phone": 1100
+      }
     }
   ]
 }

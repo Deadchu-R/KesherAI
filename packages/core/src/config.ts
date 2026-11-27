@@ -442,6 +442,23 @@ export const KesherConfigSchema = z.object({
       maxCpuTemp: z.number().int().min(0).max(105).default(0),
     })
     .prefault({}),
+  /**
+   * The pool of small models on the processor (cpu-pool.ts): the watchdog, the translator and embeddings share one CPU
+   * budget. `ramBudgetMb` 0 means a quarter of the RAM; `pinCcd` keeps them on the X3D chip's plain CCD (measure
+   * first); `translatorDevice` runs TranslateGemma on the processor, the graphics card (beside the main model), or
+   * picks ("auto"): the processor while a game runs or the main model is loaded, else the card.
+   */
+  cpuPool: z
+    .object({
+      enabled: z.boolean().default(true),
+      maxGenerating: z.number().int().min(1).max(4).default(2),
+      ramBudgetMb: z.number().int().min(0).max(262_144).default(0),
+      idleWatchdog: z.number().int().min(0).max(1440).default(1),
+      idleChat: z.number().int().min(0).max(1440).default(10),
+      pinCcd: z.boolean().default(false),
+      translatorDevice: z.enum(["cpu", "gpu", "auto"]).default("cpu"),
+    })
+    .prefault({}),
   /** Microsoft 365 Copilot (work or school account with a Copilot licence). */
   copilot: z
     .object({

@@ -13,6 +13,10 @@ import type { LlamaEngine } from "../llamacpp.js";
 import { modelTurnFor } from "../model-turn.js";
 import { translatorModelId, type SideEngine } from "../side-engine.js";
 import { TRANSLATION_MODEL, Translator, pickFlash } from "../translate.js";
+import { CPU_PROVIDER, type CpuModels } from "./build-cpu-pool.js";
+
+/** The translator's model id while it runs in the CPU pool. */
+export const CPU_TRANSLATOR = `${CPU_PROVIDER}/translator`;
 
 /** The folder the translation model is downloaded into (under the models folder). */
 export const TRANSLATION_DIR = "translation";
@@ -77,8 +81,10 @@ export function translatorChosenAndPresent(config: Pick<KesherConfig, "translato
  * @param p.side - The engine beside the main one, where the translation model loads.
  * @param p.config - The settings.
  * @param p.modelsDir - The models folder.
+ * @param p.cpu - The pool of CPU models: the translation model runs there when Settings say so (processor, or
+ *   "automatic" while a game runs or the main model is loaded); otherwise beside the main model on the card.
  */
-export function buildTranslator(p: { registry: ProviderRegistry; engine: LlamaEngine; side: () => SideEngine; config: KesherConfig; modelsDir: () => string }): Translator {
+export function buildTranslator(p: { registry: ProviderRegistry; engine: LlamaEngine; side: () => SideEngine; config: KesherConfig; modelsDir: () => string; cpu?: () => CpuModels | undefined }): Translator {
   let flash: { at: number; id: string | undefined } | undefined;
   return new Translator({
     localChat: () => {
@@ -96,8 +102,23 @@ export function buildTranslator(p: { registry: ProviderRegistry; engine: LlamaEn
     },
     translatorFile: () => findTranslationFile(p.config, p.modelsDir()),
     translatorChosen: () => translatorChosenAndPresent(p.config, p.modelsDir()),
-    loadFile: (path) => translatorModelId(p.side(), path),
-    turn: (modelId) => modelTurnFor(p.registry, modelId, { temperature: 0.2 }, "helper"),
+    loadFile: async (path) => {
+      const cpu = p.cpu?.();
+      if (cpu && (await cpu.translatorOnCpu(p.engine.status().running))) {
+        cpu.useTranslator(path);
+        return CPU_TRANSLATOR;
+      }
+      return translatorModelId(p.side(), path);
+    },
+    turn: (modelId) => {
+      const cpu = p.cpu?.();
+      if (modelId !== CPU_TRANSLATOR || !cpu) return modelTurnFor(p.registry, modelId, { temperature: 0.2 }, "helper");
+      // On the processor: plain text messages through the pool's queue (no tools, no streaming).
+      return async (req, signal) => {
+        const messages = req.messages.map((m) => ({ role: m.role === "system" ? ("system" as const) : m.role === "assistant" ? ("assistant" as const) : ("user" as const), content: typeof m.content === "string" ? m.content : "" }));
+        return { text: await cpu.complete("translator", messages, { temperature: 0.2 }, signal), toolCalls: [] };
+      };
+    },
   });
 }
 

@@ -228,6 +228,8 @@ export interface KesherServices {
   resume?: import("./resume-board.js").ResumeBoard;
   /** Search by meaning (embeddings). */
   semantic: Semantic;
+  /** The pool of small models on the processor (watchdog, translator, embeddings): server/build-cpu-pool.ts. */
+  cpuModels?: import("./server/build-cpu-pool.js").CpuModels;
   /** KesherAI's translator (translate.ts): the Translate page and English prompts for media models. */
   translator?: import("./translate.js").Translator;
   /** "Access from anywhere" (Cloudflare tunnel). */

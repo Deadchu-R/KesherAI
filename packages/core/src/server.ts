@@ -39,7 +39,7 @@ import { Semantic } from "./semantic.js";
 import { Tailscale } from "./tailscale.js";
 import { ensureEngine, loadModel, modelsOnComputer } from "./routes/engine.js";
 import { SIDE_PROVIDER, SideEngine, sideEngineOf } from "./side-engine.js";
-import { buildTranslator } from "./server/build-translator.js";
+import { buildTranslator, findTranslationFile } from "./server/build-translator.js";
 import type { HelperEngine } from "./chat-helpers.js";
 import { StudyModelSwitch } from "./study-model.js";
 import { GodotBridge } from "./godot-bridge.js";
@@ -74,6 +74,8 @@ import { TasksSync } from "./tasks-sync.js";
 import { buildTaskInbox } from "./server/build-inbox.js";
 import { resolveWorktreesDir, setWorktreesRoot } from "./session-worktrees.js";
 import { buildWatchdog } from "./server/build-watchdog.js";
+import { buildCpuModels } from "./server/build-cpu-pool.js";
+import { GameWatch } from "./game-watch.js";
 import { FreeCloudPool, FreeCloudPoolProvider, FREE_POOL_PROVIDER, freeCloudFactory } from "./free-cloud.js";
 import { FREE_PROVIDER_IDS, freeProvider } from "./free-cloud-catalog.js";
 import { freeCloudFileStore } from "./routes/free-cloud.js";
@@ -507,6 +509,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     },
     save: persist,
     changed: () => void knowledge.reindexAll(),
+    cpu: () => services.cpuModels,
   });
   void semantic.resume().catch(() => undefined);
   guard.add(semantic.unloadable());
@@ -547,7 +550,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
     pids: () => [],
   });
   // KesherAI's translator (translate.ts): English prompts for media models, and the Translate page.
-  const translator = buildTranslator({ registry, engine, side: besideEngine, config, modelsDir: () => paths.models });
+  const translator = buildTranslator({ registry, engine, side: besideEngine, config, modelsDir: () => paths.models, cpu: () => services.cpuModels });
   const helperEngine: HelperEngine | undefined = worker
     ? undefined
     : {
@@ -670,11 +673,25 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   services.board = taskBoard;
   // The task inbox: Claude's tasks from the kesher-inbox branch; Antigravity runs only on the user's own Run.
   // The run guard's helpers: the loaded chat model (rescue, review) and the small router model on loan, CPU only (watchdog).
+  const routerFile = async () => matchRecommended(await modelsOnComputer(services).catch(() => []), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern)?.path;
+  // The small models on the processor share one pool (cpu-pool.ts): the watchdog, the translator and embeddings.
+  if (!worker) {
+    const cpuModels = await buildCpuModels({
+      config,
+      enginesDir: paths.engines,
+      binary: () => engine.status().binaryPath,
+      files: { watchdog: routerFile, translator: () => findTranslationFile(config, paths.models), embeddings: () => config.engines.embedModel },
+      games: new GameWatch(),
+      log: (line) => console.info(`[cpu-pool] ${line}`),
+    });
+    services.cpuModels = cpuModels;
+  }
   const watchdog = buildWatchdog({
     paths,
     config,
     binary: () => engine.status().binaryPath,
-    routerFile: async () => matchRecommended(await modelsOnComputer(services).catch(() => []), ROUTER_MODEL.repo, ROUTER_MODEL.filePattern)?.path,
+    routerFile,
+    cpu: () => services.cpuModels,
     log: (line) => console.info(`[task-inbox] ${line}`),
   });
   // Agent worktrees (GBs of packages each) go next to the models folder when that is on another drive than Windows.
@@ -1055,6 +1072,7 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
   const claudeUsage = new ClaudeUsageWatch({ root: paths.root, log: (l) => app.log.info(l) });
   claudeUsage.start();
   app.addHook("onClose", async () => claudeUsage.stop());
+  app.addHook("onClose", async () => services.cpuModels?.stop());
   await claudeUsageRoutes(app, claudeUsage);
   await resetRoutes(app, { root: paths.root, justReset: resetBackup, restartApp: options.restartApp, canReinstall: !!options.updates, reinstall: () => updater.reinstall() });
   const { accessLog, deviceKeys } = setupRemoteAccess(app, { paths, config, persist, notifier, apiKeys });

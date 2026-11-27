@@ -2493,6 +2493,17 @@ main h1[tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 .health-bar.warn > span { background: #e0a43a; }
 .health-bar.bad > span { background: var(--danger, #e5534b); }
 .health-folders { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+/* PC Health → CPU models (CpuModelsCard.tsx): one row per role; on a phone the numbers wrap under the name. */
+.cpu-roles { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cpu-role { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.cpu-role .stack { min-width: 0; gap: 2px; }
+.cpu-role .stack > span { overflow-wrap: anywhere; }
+.cpu-nums { text-align: end; }
+.cpu-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted, #888); flex: none; opacity: .5; }
+.cpu-role.loaded .cpu-dot { background: var(--ok, #3a8); opacity: 1; }
+.cpu-role.running .cpu-dot, .cpu-role.loading .cpu-dot { background: var(--accent, #48f); opacity: 1; }
+.cpu-settings { padding-top: 8px; }
+@media (max-width: 480px) { .cpu-nums { flex-basis: 100%; text-align: start; padding-inline-start: 19px; } }
 .health-advice { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; }
 
 /* The sidebar's edge: drag to widen or narrow it (double-click: back to the usual width). Not on a phone. */

@@ -6,20 +6,32 @@
 import type { DataPaths, KesherConfig } from "../config.js";
 import { freePort, LlamaEngine } from "../llamacpp.js";
 import { WatchdogModel, type WatchEngine } from "../watchdog-model.js";
+import type { CpuModels } from "./build-cpu-pool.js";
 
 /**
  * @param p.paths - The data folders (the engines folder).
  * @param p.config - The settings (the main engine's version and arguments).
  * @param p.binary - The main engine's llama-server (undefined until installed).
  * @param p.routerFile - The small model's GGUF file, if it is on this computer.
+ * @param p.cpu - The pool of CPU models (cpu-pool.ts): when it is on, CPU checks go through it.
  * @param p.log - Logs a line.
  * @returns The loan.
  */
-export function buildWatchdog(p: { paths: DataPaths; config: KesherConfig; binary: () => string | undefined; routerFile: () => Promise<string | undefined>; log: (line: string) => void }): WatchdogModel {
+export function buildWatchdog(p: { paths: DataPaths; config: KesherConfig; binary: () => string | undefined; routerFile: () => Promise<string | undefined>; cpu?: () => CpuModels | undefined; log: (line: string) => void }): WatchdogModel {
   return new WatchdogModel({
     modelPath: p.routerFile,
     log: p.log,
     make: async (cpu): Promise<WatchEngine | undefined> => {
+      // On the processor, through the pool: it loads the model itself (its queue, threads and idle unload).
+      const pool = cpu ? p.cpu?.() : undefined;
+      if (pool?.enabled()) {
+        return {
+          load: async () => undefined,
+          // The pool unloads it after its own idle minutes (CPU models card), not the loan's one minute.
+          stop: async () => undefined,
+          ask: (system, prompt, signal) => pool.complete("watchdog", [{ role: "system", content: system }, { role: "user", content: prompt }], { temperature: 0, maxTokens: 120 }, signal),
+        };
+      }
       const binaryPath = p.binary();
       if (!binaryPath) return undefined;
       const e = new LlamaEngine({

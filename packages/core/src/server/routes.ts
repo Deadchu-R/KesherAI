@@ -54,6 +54,7 @@ import { spanEditRoutes } from "../routes/span-edit.js";
 import { voiceRoutes } from "../routes/voice.js";
 import { privacyRoutes } from "../routes/privacy.js";
 import { guardRoutes } from "../routes/guard.js";
+import { cpuPoolRoutes } from "../routes/cpu-pool.js";
 import { translateRoutes } from "../routes/translate.js";
 import { selfWorkRoutes } from "../routes/self-work.js";
 import { memoryRoutes } from "../routes/memory.js";
@@ -226,6 +227,7 @@ export async function registerRoutes(app: FastifyInstance, services: KesherServi
   await googleRoutes(app, services);
   await onedriveRoutes(app, services);
   await guardRoutes(app, services);
+  await cpuPoolRoutes(app, services);
   await translateRoutes(app, services);
   await selfWorkRoutes(app, services);
   await unrealRoutes(app, services);

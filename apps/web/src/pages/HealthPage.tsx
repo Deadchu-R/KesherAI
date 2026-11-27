@@ -7,6 +7,7 @@ import { RichText } from "../RichText";
 import { ReportDialog } from "../ReportDialog";
 import { FixDialog } from "../FixDialog";
 import { StorageSection } from "../StorageSection";
+import { CpuModelsCard } from "../CpuModelsCard";
 
 const L = (he: string, en: string) => (getLocale() === "he" ? he$(he) : en);
 const PHONE_VERSION_URL = "https://github.com/Deadchu-R/KesherAI/releases/download/android-latest/android-version.json";
@@ -184,6 +185,7 @@ export function HealthPage() {
           <button type="button" style={{ alignSelf: "start" }} onClick={() => setFixing(true)}>{L("שחרר זיכרון…", "Free memory…")}</button>
         </section>
       )}
+      {device === "pc" && tab === "overview" && data && <CpuModelsCard />}
       {device === "pc" && tab === "storage" && <StorageSection />}
       {device === "phone" && phone && (
         <section className="card stack">
