@@ -43,6 +43,8 @@ export function inboxBusy(i: BusyInput, s: Pick<InboxSettings, "notWhileGame" | 
 export interface RunningProgram {
   name: string;
   path?: string;
+  /** The process id (Windows only), to match the graphics card's per-process list. */
+  pid?: number;
 }
 
 /**
@@ -53,7 +55,7 @@ export interface RunningProgram {
 export async function runningPrograms(): Promise<RunningProgram[]> {
   const win = process.platform === "win32";
   const [cmd, args] = win
-    ? ["powershell", ["-NoProfile", "-Command", "Get-Process | ForEach-Object { \"$($_.ProcessName)`t$($_.Path)\" }"]]
+    ? ["powershell", ["-NoProfile", "-Command", "Get-Process | ForEach-Object { \"$($_.ProcessName)`t$($_.Path)`t$($_.Id)\" }"]]
     : ["ps", ["-eo", "args="]];
   const out = await new Promise<string>((ok) => execFile(cmd as string, args as string[], { windowsHide: true, timeout: 20_000, maxBuffer: 8 * 1024 * 1024 }, (_e, stdout) => ok(String(stdout ?? ""))));
   return out
@@ -61,8 +63,9 @@ export async function runningPrograms(): Promise<RunningProgram[]> {
     .filter((l) => l.trim())
     .map((l) => {
       if (win) {
-        const [name, path] = l.split("\t");
-        return { name: name ?? "", ...(path ? { path } : {}) };
+        const [name, path, id] = l.split("\t");
+        const pid = Number(id);
+        return { name: name ?? "", ...(path ? { path } : {}), ...(Number.isInteger(pid) && pid > 0 ? { pid } : {}) };
       }
       const first = l.trim().split(/\s+/)[0] ?? "";
       return { name: first.split("/").pop() ?? first, path: first };

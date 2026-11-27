@@ -38,6 +38,11 @@ export class GameWatch {
     return this.programs.list.map((p) => p.name);
   }
 
+  /** Process id → name for the programs in the last look (Windows; empty elsewhere). For the graphics card's per-process list. */
+  programPids(): Map<number, string> {
+    return new Map(this.programs.list.flatMap((p) => (p.pid ? [[p.pid, p.name] as [number, string]] : [])));
+  }
+
   /** One look, with the caches. */
   private async look(): Promise<string[]> {
     const now = (this.d.now ?? Date.now)();

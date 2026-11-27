@@ -13,6 +13,7 @@ import type { FaultLog } from "../fault-log.js";
 import type { GpuGuard } from "../gpu-guard.js";
 import type { LlamaEngine } from "../llamacpp.js";
 import { GameWatch } from "../game-watch.js";
+import { GpuReader } from "../gpu-watch.js";
 import { LightProfile, readFullscreen } from "../heavy-app.js";
 import { PlayStandby } from "../play-standby.js";
 import { unityInPlay } from "../unity-play.js";
@@ -31,12 +32,14 @@ export function startEngines(p: { app: FastifyInstance; services: KesherServices
   const { app, services, guard, engine, comfy, config, faults, registry, afterTerminate } = p;
   // The automatic light profile: a heavy app (a game, a full-screen program) frees the card like a game in Play does.
   // One look every 10 s; the process list is the game watch's own (cached 30 s), the full-screen read is one PowerShell.
+  // The graphics rule's reader: nvidia-smi (pmon), at most every 10 s, only while the light profile is on.
+  const gpuReader = new GpuReader({ names: () => games.programPids(), ownPids: () => guard.ownPids() });
   const light = (services.lightProfile = new LightProfile({
     settings: () => config.lightProfile,
     actions: { unloadGpu: () => guard.unloadLoaded(), reloadGpu: (names) => guard.reloadNamed(names) },
     look: async () => {
-      const [g, fullscreen] = await Promise.all([games.running(), readFullscreen()]);
-      return { games: g, programs: games.programNames(), ...(fullscreen ? { fullscreen } : {}) };
+      const [g, fullscreen, gpu] = await Promise.all([games.running(), readFullscreen(), config.lightProfile.enabled ? gpuReader.read() : []]);
+      return { games: g, programs: games.programNames(), ...(fullscreen ? { fullscreen } : {}), ...(gpu.length ? { gpu } : {}) };
     },
     log: (line) => app.log.info(line),
   }));
