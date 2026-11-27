@@ -14,6 +14,8 @@ export interface ModelLoadSettings {
   flash?: "on" | "off";
   /** More arguments, from the allowed list below. */
   extra?: string[];
+  /** True: no sampling preset for this model (sampling-presets.ts); llama.cpp's own defaults apply. */
+  samplingOff?: boolean;
 }
 
 /**

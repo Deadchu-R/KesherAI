@@ -76,6 +76,21 @@ test("a logit bias (other alphabets in a Hebrew answer) is sent only when given"
   }
 });
 
+test("sampling fields (top_k, min_p, presence penalty) are sent only when given", async () => {
+  const srv = await sseServer([{ choices: [{ delta: { content: "ok" } }] }, "[DONE]"]);
+  try {
+    const p = new OpenAICompatibleProvider({ id: "llamacpp", type: "openai-compatible", baseUrl: `${srv.url}/v1` });
+    await p.chatWithTools({ providerModelId: "m", messages: history, tools: [], temperature: 0.6, topP: 0.95, topK: 20, minP: 0, presencePenalty: 0 });
+    const b = srv.body() as Record<string, unknown>;
+    assert.deepEqual([b.temperature, b.top_p, b.top_k, b.min_p, b.presence_penalty], [0.6, 0.95, 20, 0, 0]);
+    await p.chatWithTools({ providerModelId: "m", messages: history, tools: [] });
+    const c = srv.body() as Record<string, unknown>;
+    assert.deepEqual([c.temperature, c.top_p, c.top_k, c.min_p, c.presence_penalty], [undefined, undefined, undefined, undefined, undefined]);
+  } finally {
+    srv.close();
+  }
+});
+
 test("OpenAI requests without tools omit the tools field", () => {
   assert.deepEqual(toOpenAIMessages([{ role: "user", content: "hi" }]), [{ role: "user", content: "hi" }]);
 });

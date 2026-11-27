@@ -5,7 +5,7 @@ import { advise, parseBench, type CalAdvice, type CalRow } from "../calibrate.js
 import type { FastifyInstance } from "fastify";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { RECOMMENDED_MODELS, ROUTER_MODEL, checkLoadSettings, suggestModel, type ModelLoadSettings, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
+import { RECOMMENDED_MODELS, ROUTER_MODEL, checkLoadSettings, samplingSummary, suggestModel, type ModelLoadSettings, toolNeed, type ModelTool, type RecommendedModel } from "@kesher/shared";
 import { detectHardware, detectHardwareCached, estimatePerformance, listHubFiles } from "@kesher/downloads";
 import type { KesherServices } from "../services.js";
 import { enginePlatform, findLlamaRelease, vulkanIcds, waitForDownload, type LoadKind, type LoadReason } from "../llamacpp.js";
@@ -432,6 +432,8 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     return { ...s.engine.status(), mtpDraft: s.config.engines.mtpDraft ?? null, fitTargetMiB: s.config.engines.fitTargetMiB ?? 2048, kvType: s.config.engines.kvType ?? "q8_0" };
   });
 
+  /** A model's settings with the engine's own arguments added, so a `--temp` there counts as the user's sampling. */
+  const withEngineArgs = (m: ModelLoadSettings | undefined): ModelLoadSettings => ({ ...m, extra: [...s.config.engines.llamaServerArgs, ...(m?.extra ?? [])] });
   /**
    * A model's own load settings (Models → ⚙, as LM Studio keeps them per model): read, and save. Saved by the file's
    * name and used at each load of it; `reload` loads it again now when it is the running model. Empty settings remove
@@ -440,7 +442,8 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
   app.get<{ Querystring: { path?: string } }>("/api/models/load-settings", async (req, reply) => {
     const path = req.query.path ?? "";
     if (!allowedModelPath(s, path)) return reply.code(400).send({ error: "Only models in KesherAI's models folder or a folder you added" });
-    return { settings: s.config.engines.modelSettings[basename(path)] ?? {} };
+    const saved = s.config.engines.modelSettings[basename(path)];
+    return { settings: saved ?? {}, sampling: samplingSummary(basename(path), withEngineArgs(saved)) };
   });
   app.put<{ Body: { path?: string; settings?: ModelLoadSettings; reload?: boolean } }>("/api/models/load-settings", async (req, reply) => {
     const path = req.body?.path ?? "";
@@ -452,6 +455,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
       ...(raw.cpuMoe !== undefined && raw.cpuMoe !== null ? { cpuMoe: Number(raw.cpuMoe) } : {}),
       ...(raw.flash ? { flash: raw.flash } : {}),
       ...(Array.isArray(raw.extra) && raw.extra.length ? { extra: raw.extra.map(String) } : {}),
+      ...(raw.samplingOff === true ? { samplingOff: true } : {}),
     };
     const wrong = checkLoadSettings(settings);
     if (wrong) return reply.code(400).send({ error: wrong });
@@ -462,7 +466,7 @@ export async function engineRoutes(app: FastifyInstance, s: KesherServices): Pro
     const st = s.engine.status();
     const reloading = !!req.body?.reload && st.running && st.modelPath === path;
     if (reloading) void loadModel(s, path, undefined, { kind: "settings" }).catch((err) => s.engine.fail(err));
-    return { settings, reloading };
+    return { settings, reloading, sampling: samplingSummary(name, withEngineArgs(settings)) };
   });
 
   /**

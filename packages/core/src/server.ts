@@ -30,7 +30,7 @@ import { PluginHost } from "./plugins.js";
 import { InstallRequests } from "./plugin-store.js";
 import { findMmproj } from "./llamacpp.js";
 import { Library } from "./library.js";
-import { modelTurnFor, onModelSpeed } from "./conversations.js";
+import { modelTurnFor, onModelSettings, onModelSpeed } from "./conversations.js";
 import { Speeds } from "./speeds.js";
 import { noteRunVersion, Updater } from "./updates.js";
 import { GoogleDrive, GOOGLE_ENDPOINTS } from "./google.js";
@@ -413,6 +413,8 @@ export async function createKesherServer(options: KesherServerOptions = {}): Pro
 
   const speeds = new Speeds(join(paths.root, "speeds.json"));
   onModelSpeed((id, tokens, ms) => void speeds.record(id, tokens, ms));
+  // The engine's own arguments count too: a `--temp` there is the user's sampling choice for every model.
+  onModelSettings((file) => ({ ...config.engines.modelSettings[file], extra: [...config.engines.llamaServerArgs, ...(config.engines.modelSettings[file]?.extra ?? [])] }));
   const { tunnel, tailscaleCli } = buildTunnel(paths, downloads, config, persist);
   // Closes a Funnel the user did not choose and keeps the tailnet addresses for the phone's backup path (tailscale-watch.ts).
   const tailscaleWatch = new TailscaleWatch(tailscaleCli, { port: () => config.port, allowFunnel: () => config.remote.allowFunnel, remoteOn: () => config.remote.enabled, onChange: () => helloAgain?.sayHello() });

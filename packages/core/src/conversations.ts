@@ -52,7 +52,7 @@ import { learnTools, splitTools } from "./chat-tools-work.js";
 import { TRAVEL_NOTE } from "./travel/index.js";
 import { PAST_CHATS_NOTE } from "./past-chat-tools.js";
 
-export { modelTurnFor, onModelSpeed } from "./model-turn.js";
+export { modelTurnFor, onModelSettings, onModelSpeed } from "./model-turn.js";
 export { ruleAllows } from "./approval-rules.js";
 export type { ConversationDeps } from "./conversation-deps.js";
 

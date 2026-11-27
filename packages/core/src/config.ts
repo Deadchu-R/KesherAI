@@ -102,6 +102,7 @@ export const KesherConfigSchema = z.object({
             cpuMoe: z.number().int().optional(),
             flash: z.enum(["on", "off"]).optional(),
             extra: z.array(z.string()).optional(),
+            samplingOff: z.boolean().optional(),
           }),
         )
         .default({}),

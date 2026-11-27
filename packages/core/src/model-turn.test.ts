@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ProviderRegistry } from "@kesher/providers";
-import { modelTurnFor } from "./model-turn.js";
+import { modelTurnFor, onModelSettings } from "./model-turn.js";
 
 test("a model server that is not running is named as such, not as a too-long conversation", async () => {
   const refused = Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } });
@@ -44,4 +44,48 @@ test("a model that does not think is sent no thinking flag", async () => {
   const seen: Array<{ thinking?: string }> = [];
   await modelTurnFor(llamaRegistry("Llama-3.1-8B-Instruct", seen), "llamacpp/x")(ask, new AbortController().signal, () => undefined);
   assert.equal(seen[0]?.thinking, undefined);
+});
+
+type Sampled = { temperature?: number; topP?: number; topK?: number; minP?: number; presencePenalty?: number };
+
+/** A registry of one provider (llama.cpp or another) that records what the request carries. */
+function samplingRegistry(id: string, location: string, model: string, seen: Sampled[]): ProviderRegistry {
+  return {
+    resolve: () => ({ provider: { id, location, chatWithTools: async (r: Sampled) => (seen.push(Object.fromEntries((Object.entries(r) as Array<[string, number]>).filter(([k]) => ["temperature", "topP", "topK", "minP", "presencePenalty"].includes(k)))), { text: "ok", toolCalls: [] }) }, providerModelId: model }),
+  } as unknown as ProviderRegistry;
+}
+const agentAsk = { messages: [{ role: "user" as const, content: "hi" }], tools: [{ name: "t", description: "d", inputSchema: {} }] };
+
+test("a local Qwen3.6 agent turn carries the vendor's sampling; plain chat with thinking off carries the non-thinking values", async () => {
+  onModelSettings(() => undefined);
+  const seen: Sampled[] = [];
+  const reg = samplingRegistry("llamacpp", "local", "Qwen_Qwen3.6-27B-Q4_K_M", seen);
+  await modelTurnFor(reg, "llamacpp/x", undefined, "main", { thinking: () => "high" })(agentAsk, new AbortController().signal, () => undefined);
+  await modelTurnFor(reg, "llamacpp/x", undefined, "main", { thinking: () => "off" })(ask, new AbortController().signal, () => undefined);
+  assert.deepEqual(seen[0], { temperature: 0.6, topP: 0.95, topK: 20, minP: 0, presencePenalty: 0 });
+  assert.deepEqual(seen[1], { temperature: 0.7, topP: 0.8, topK: 20, minP: 0, presencePenalty: 1.5 });
+});
+
+test("the user's own sampling for the model wins over the preset; a persona's temperature wins its field", async () => {
+  const seen: Sampled[] = [];
+  const reg = samplingRegistry("llamacpp", "local", "Qwen_Qwen3.6-27B-Q4_K_M", seen);
+  onModelSettings((file) => (file === "Qwen_Qwen3.6-27B-Q4_K_M.gguf" ? { extra: ["--temp", "0.3"] } : undefined));
+  await modelTurnFor(reg, "llamacpp/x")(agentAsk, new AbortController().signal, () => undefined);
+  assert.deepEqual(seen[0], {});
+  onModelSettings(() => ({ samplingOff: true }));
+  await modelTurnFor(reg, "llamacpp/x")(agentAsk, new AbortController().signal, () => undefined);
+  assert.deepEqual(seen[1], {});
+  onModelSettings(() => undefined);
+  await modelTurnFor(reg, "llamacpp/x", { temperature: 0.2 })(agentAsk, new AbortController().signal, () => undefined);
+  assert.equal(seen[2]?.temperature, 0.2);
+  assert.equal(seen[2]?.topK, 20);
+});
+
+test("cloud and other servers get no preset", async () => {
+  onModelSettings(() => undefined);
+  for (const [id, loc] of [["openrouter", "cloud"], ["lmstudio", "local"]]) {
+    const seen: Sampled[] = [];
+    await modelTurnFor(samplingRegistry(id!, loc!, "Qwen_Qwen3.6-27B-Q4_K_M", seen), `${id}/x`)(agentAsk, new AbortController().signal, () => undefined);
+    assert.deepEqual(seen[0], {}, id);
+  }
 });

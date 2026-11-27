@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { checkExtraArgs, splitEngineArgs, type ModelLoadSettings } from "@kesher/shared";
-import { api } from "./api";
+import { checkExtraArgs, splitEngineArgs, type ModelLoadSettings, type SamplingValues } from "@kesher/shared";
+import { api, isRemote } from "./api";
 import { getLocale, he$ } from "./i18n";
 import { toast } from "./library";
 
@@ -15,6 +15,16 @@ function Pills<T extends string>({ value, options, onChange, label }: { value: T
       ))}
     </div>
   );
+}
+
+/** The model's sampling, as the server reports it (sampling-presets.ts `samplingSummary`). */
+type SamplingInfo = { state: "custom" | "off" | "preset" | "none"; label?: string; agent?: SamplingValues; chat?: SamplingValues };
+
+/** Sampling values as a short line, e.g. `temp 0.6 · top-p 0.95 · top-k 20`. */
+function samplingText(v: SamplingValues | undefined): string {
+  if (!v) return "";
+  const parts: Array<[string, number | undefined]> = [["temp", v.temperature], ["top-p", v.topP], ["top-k", v.topK], ["min-p", v.minP], ["presence", v.presencePenalty]];
+  return parts.filter(([, n]) => n !== undefined).map(([k, n]) => `${k} ${n}`).join(" · ");
 }
 
 /**
@@ -37,14 +47,16 @@ export function LoadSettingsButton({ path, name }: { path: string; name: string 
 
 function LoadSettingsDialog({ path, name, onClose }: { path: string; name: string; onClose: () => void }) {
   const [s, setS] = useState<ModelLoadSettings | null>(null);
+  const [sampling, setSampling] = useState<SamplingInfo>({ state: "none" });
   const [ctx, setCtx] = useState("");
   const [moe, setMoe] = useState("");
   const [extra, setExtra] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    void api<{ settings: ModelLoadSettings }>(`/api/models/load-settings?path=${encodeURIComponent(path)}`).then(
-      ({ settings }) => {
+    void api<{ settings: ModelLoadSettings; sampling?: SamplingInfo }>(`/api/models/load-settings?path=${encodeURIComponent(path)}`).then(
+      ({ settings, sampling: sm }) => {
         setS(settings);
+        if (sm) setSampling(sm);
         setCtx(settings.ctx ? String(settings.ctx) : "");
         setMoe(settings.cpuMoe !== undefined ? String(settings.cpuMoe) : "");
         setExtra((settings.extra ?? []).map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" "));
@@ -75,7 +87,10 @@ function LoadSettingsDialog({ path, name, onClose }: { path: string; name: strin
     ...(moe.trim() ? { cpuMoe: Number(moe) } : {}),
     ...(s?.flash ? { flash: s.flash } : {}),
     ...(extraArgs.length ? { extra: extraArgs } : {}),
+    ...(s?.samplingOff ? { samplingOff: true } : {}),
   });
+  // The saved choice, then what the server reports (a typed --temp in the arguments makes it the user's own).
+  const samplingState = sampling.state === "custom" ? "custom" : s?.samplingOff ? "off" : sampling.label ? "preset" : "none";
   const short = name.replace(/\.gguf$/i, "");
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
@@ -107,6 +122,26 @@ function LoadSettingsDialog({ path, name, onClose }: { path: string; name: strin
               <input dir="ltr" className="mono" placeholder="--temp 0.7 --top-k 20" value={extra} onChange={(e) => setExtra(e.target.value)} aria-invalid={!!extraWrong} />
               <span className={extraWrong ? "error small" : "muted small"} dir="auto">{extraWrong ? <>{L("יש כאן ארגומנט שלא מותר, או בלי ערך: ", "")}<span dir="ltr">{extraWrong}</span></> : L("רק הגדרות של טעינה ודגימה; קבצים, פורטים ומפתחות נדחים.", "Only load and sampling settings; files, ports and keys are refused.")}</span>
             </label>
+            {/* Sampling: where it comes from (the vendor's preset, the user's own, or llama.cpp's defaults). The phone only reads it. */}
+            <div className="stack" data-testid="sampling-line">
+              <span className="small" dir="auto">
+                {samplingState === "preset" && <>{L("דגימה: ", "Sampling: ")}<span dir="ltr">{sampling.label}</span>{L(" מומלץ (סוכן)", " recommended (agent)")}</>}
+                {samplingState === "custom" && L("דגימה: ההגדרות שלך", "Sampling: your own settings")}
+                {samplingState === "off" && L("דגימה: ברירות המחדל של llama.cpp", "Sampling: llama.cpp defaults")}
+                {samplingState === "none" && L("דגימה: ברירות המחדל של llama.cpp (אין ערך רשמי למשפחה הזו)", "Sampling: llama.cpp defaults (no official value for this family)")}
+              </span>
+              {samplingState === "preset" && (
+                <span className="muted small" dir="ltr">{L("סוכן: ", "Agent: ")}{samplingText(sampling.agent)}{" | "}{L("שיחה: ", "Chat: ")}{samplingText(sampling.chat)}</span>
+              )}
+              {!isRemote() && sampling.label && samplingState !== "custom" && (
+                <div className="row wrap">
+                  <button type="button" disabled={busy} onClick={() => setS({ ...s, samplingOff: s.samplingOff ? undefined : true })}>
+                    {s.samplingOff ? L("השתמש בערכים המומלצים", "Use the recommended values") : L("השתמש בברירות המחדל של llama.cpp", "Use llama.cpp defaults")}
+                  </button>
+                </div>
+              )}
+              {samplingState !== "none" && <span className="muted small">{isRemote() ? L("משנים במחשב.", "Change it on the computer.") : L("לערכים משלך: --temp, --top-p ועוד בארגומנטים למעלה.", "For your own values: --temp, --top-p and more in the arguments above.")}</span>}
+            </div>
             <div className="row wrap">
               <button type="submit" className="primary" disabled={busy || !!extraWrong}>{L("שמור וטען מחדש", "Save and reload")}</button>
               <button type="button" disabled={busy || !!extraWrong} onClick={() => void save(current(), false)}>{L("שמור", "Save")}</button>

@@ -4899,3 +4899,27 @@ Steps: (1) done-gate + recitation; (2) sampling presets behind a Settings switch
 
 - Stopped at: gaps verified by grep (`session.ts` loop, `unfinished()`, `todo`, `background-commands.ts`, providers sampling fields); not run on a real model. Next: step 1, then run the chat-checks on Qwen 27B before and after.
 - Sources: [Cursor planning](https://docs.cursor.com/agent/planning), [Claude Code interactive mode](https://code.claude.com/docs/en/interactive-mode), [Gemini Agent help](https://support.google.com/gemini/answer/16596215), [ChatGPT agent](https://openai.com/index/introducing-chatgpt-agent/), [Cowork scheduled tasks](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-claude-cowork), [Cowork Dispatch](https://support.claude.com/en/articles/13947068-assign-tasks-to-claude-from-anywhere-in-cowork), [Manus context engineering](https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus), [Anthropic tools](https://www.anthropic.com/engineering/writing-tools-for-agents), [Mingbird](https://arxiv.org/pdf/2610.02001), [arXiv 2601.16280](https://arxiv.org/pdf/2601.16280), [dev.to four failure modes](https://dev.to/thlandgraf/four-failure-modes-youll-hit-running-a-local-llm-in-a-multi-step-agentic-loop-3kd9), [dev.to 7 models](https://dev.to/kuroko1t/what-happens-when-local-llms-fail-at-tool-calling-testing-7-models-with-a-rust-coding-agent-cep), [Qwen sampling summary](https://glukhov.org/llm-performance/benchmarks/agentic-inference-parameters-reference/).
+
+## 2026-11-28 sampling presets per model family (Claude helper; official cards, fetched 28.11)
+
+Values the vendors give for local use. Applied in `packages/shared/src/sampling-presets.ts` to the managed llama.cpp engine only, and only when the user has set no sampling for the model (own `--temp`/`--top-p`/`--top-k`/`--min-p`/`--presence-penalty`/`--repeat-penalty`, in the model's or the engine's arguments, or the "llama.cpp defaults" switch).
+
+| Family and mode | temperature | top_p | top_k | min_p | presence penalty | Source |
+|---|---|---|---|---|---|---|
+| Qwen3.6 thinking, general | 1.0 | 0.95 | 20 | 0 | 0 | [Qwen3.6-27B card](https://huggingface.co/Qwen/Qwen3.6-27B) |
+| Qwen3.6 thinking, precise coding (used for agent turns) | 0.6 | 0.95 | 20 | 0 | 0 | same |
+| Qwen3.6 non-thinking | 0.7 | 0.8 | 20 | 0 | 1.5 | same |
+| Qwen3.5 thinking, general | 1.0 | 0.95 | 20 | 0 | 1.5 | [Qwen3.5-27B card](https://huggingface.co/qwen/Qwen3.5-27B) |
+| Qwen3.5 thinking, precise coding (agent) | 0.6 | 0.95 | 20 | 0 | 0 | same |
+| Qwen3.5 non-thinking, general | 0.7 | 0.8 | 20 | 0 | 1.5 | same |
+| Gemma 4 (all uses) | 1.0 | 0.95 | 64 | - | - | [Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4) |
+| GLM-4.7 default | 1.0 | 0.95 | - | - | - | [GLM-4.7 card](https://huggingface.co/zai-org/GLM-4.7) |
+| GLM-4.7 coding/terminal (agent) | 0.7 | 1.0 | - | - | - | same (its tau2 agentic benchmark used temperature 0; not used here) |
+| DeepSeek R1 | 0.6 | 0.95 | - | - | - | [R1 generation_config.json](https://huggingface.co/deepseek-ai/DeepSeek-R1/blob/refs%2Fpr%2F240/generation_config.json) (a PR copy; the R1 card says 0.5-0.7) |
+| DeepSeek V3.2 | 1.0 | 0.95 | - | - | - | [V3.2 card (mirror)](https://huggingface.co/russhar/DeepSeek-V3.2) |
+| Mistral Small 3.2 | 0.15 | - | - | - | - | [card](https://huggingface.co/mistralai/Mistral-Small-3.2-24B-Instruct-2506) |
+| Llama, Phi, older Qwen3, Gemma 3, other GLM/DeepSeek/Mistral | unset (llama defaults) | | | | | no value confirmed on an official card in this pass |
+
+- Decision: agent turns (a request with tools) always use the coding values, even with thinking off. The non-thinking Qwen value of presence penalty 1.5 punishes repeated quotes and brackets, which tool-call JSON needs (the log's gap 2 says "hot sampling breaks JSON, greedy loops"). Plain chat follows the card's thinking or non-thinking row. Not verified on a real model.
+- The earlier [secondary summary](https://glukhov.org/llm-performance/benchmarks/agentic-inference-parameters-reference/) was checked against the cards: Qwen3.5 does use presence 1.5 on general thinking; Qwen3.6 does not.
+- To confirm later: Llama 3.x `generation_config.json` (0.6 / 0.9 expected), Qwen3 (2507) and Gemma 3 cards. Next measure: chat-checks on Qwen 27B, default vs preset sampling.

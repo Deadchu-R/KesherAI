@@ -5,7 +5,7 @@
  */
 import type { PersonaParams } from "./personas.js";
 import { type ModelTurn } from "@kesher/agent";
-import { OTHER_SCRIPTS_BIAS, thinkingLevels, type ThinkingLevel } from "@kesher/shared";
+import { OTHER_SCRIPTS_BIAS, isReasoningModel, samplingFor, thinkingLevels, type ModelLoadSettings, type ThinkingLevel } from "@kesher/shared";
 import type { ProviderRegistry, SlotKind } from "@kesher/providers";
 import { isFreeCloudModel } from "./free-cloud.js";
 import { guardMessages } from "./privacy-guard.js";
@@ -27,6 +27,18 @@ let speedRecorder: ((modelId: string, tokens: number, ms: number) => void) | und
  */
 export function onModelSpeed(fn: typeof speedRecorder): void {
   speedRecorder = fn;
+}
+
+let settingsOf: ((modelFile: string) => ModelLoadSettings | undefined) | undefined;
+
+/**
+ * Where a local model's own saved settings come from, so a sampling preset (sampling-presets.ts) is applied only
+ * when the user has not set sampling for that model.
+ *
+ * @param fn - Gets the model's file name (with `.gguf`), returns its saved load settings.
+ */
+export function onModelSettings(fn: typeof settingsOf): void {
+  settingsOf = fn;
 }
 
 /**
@@ -113,7 +125,9 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       // Only for a local model the menu offers levels for (a cloud model or an unknown family is left as it is).
       const level = thinkingOf?.();
       const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: req.maxTokens ?? LOCAL_TURN_MAX_TOKENS } : req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
+      // The vendor's sampling for this family (local llama.cpp only; a persona's or the user's own settings win).
+      const preset = provider.id === "llamacpp" ? samplingFor(providerModelId, { agent: req.tools.length > 0, thinking: thinking ? thinking !== "off" : isReasoningModel(providerModelId) }, settingsOf?.(`${providerModelId.replace(/\.gguf$/i, "")}.gguf`), params) : {};
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...preset, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: req.maxTokens ?? LOCAL_TURN_MAX_TOKENS } : req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";

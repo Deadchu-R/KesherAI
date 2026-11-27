@@ -58,6 +58,12 @@ export interface ProviderToolChatRequest {
   temperature?: number;
   /** Nucleus sampling (0–1). */
   topP?: number;
+  /** llama.cpp only (sampling-presets.ts): keep the K likeliest tokens. */
+  topK?: number;
+  /** llama.cpp only: drop tokens below this share of the likeliest one (0 turns llama's own 0.05 off). */
+  minP?: number;
+  /** Punishes tokens already used (OpenAI-style field; llama.cpp honours it). */
+  presencePenalty?: number;
   /** Texts that end the answer. */
   stop?: string[];
   maxTokens?: number;
