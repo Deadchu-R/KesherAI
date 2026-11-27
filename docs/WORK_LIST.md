@@ -469,7 +469,7 @@ Not a fit (pay-per-use only): Runware, ElevenLabs API, Meta Muse Ember ($0.10/$0
 - ✅ GhostCLI relay (Roee 25.11, one-month trial): Connections preset (openai-compatible, ghostcli.cloud/v1), inbox sends medium/large tasks that pass safeForRelay (no high risk, no security paths or words, prompt scan clean) to its Opus/Sonnet first, outside OpenCode's daily cap; marked "may train" so the leak guard and warnings apply; setting "Heavy tasks to GhostCLI" in Settings › Task inbox.
 - ⬜ After a month (≈25.12): compare GhostCLI's results in the usage log (done/partial/failed, time) against OpenCode Go and decide.
 - ✅ GhostCLI trial report (data): every relay attempt is logged (done/partial/failed/rate-limited, minutes, model); `relay` in /api/task-inbox gives the totals and the last 20.
-- ⬜ GhostCLI trial report card in Settings › Task inbox (design board in the cloud/tasks doc first) and on the phone.
+- ✅ GhostCLI trial report card in Settings › Task inbox (design board in the cloud/tasks doc first) and on the phone.
 - ⬜ Parallel relay runs (2–3 at once) for the stress test, if Roee wants them.
 - ✅ GhostCLI availability check (Roee 25.11: "check availability, and when they're available, load them up"): a small "reply with ok" every 15 minutes; tasks go to it only while the last one answered; when it answers again the queue starts at once; the phone is told when it starts or stops answering. A relay run that ends empty with no change moves on to the next model.
 - ✅ Task inbox uses the free cloud helpers' keys (fc-zhipu / fc-openrouter / fc-cloudflare) for small tasks, with the same free-only rules — no second key in Connections.

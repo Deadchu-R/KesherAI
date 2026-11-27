@@ -116,9 +116,10 @@ function GhostcliSettings({ s, put }: { s: InboxState; put: (body: Record<string
   const cool = st?.cooldowns ?? {};
   const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
   return (
-    <div className="stack tinbox-gcli">
-      <div className="row">
-        <h3 className="grow">👻 GhostCLI</h3>
+      <>
+        <div className="stack tinbox-gcli">
+          <div className="row">
+            <h3 className="grow">👻 GhostCLI</h3>
         <label className="row small"><input type="checkbox" checked={c.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> {L("פעיל", "On")}</label>
       </div>
       <p className="small muted">{L("ריליי בתשלום חודשי: משימות קוד ומחקר בלי מידע רגיש רצות עליו לבד, עם הסף והמונים שלו (לא של OpenCode Go). העבודה בענף gcli/*.", "A monthly-paid relay: code and research tasks without sensitive content run on it by themselves, with its own limit and counters (not OpenCode Go's). Work goes to gcli/* branches.")}</p>
@@ -148,9 +149,84 @@ function GhostcliSettings({ s, put }: { s: InboxState; put: (body: Record<string
         {!order.length && !rest.length && <li className="muted">{L("עוד לא ידוע (צריך חיבור)", "Not known yet (needs the connection)")}</li>}
       </ul>
       {c.models.length > 0 && <button type="button" className="chip-text" disabled={!c.enabled} onClick={() => set({ models: [] })}>{L("חזרה לסדר של GhostCLI", "Back to GhostCLI's own order")}</button>}
-    </div>
-  );
-}
+            </div>
+            <GhostcliTrialReport s={s} />
+          </>
+        );
+      }
+
+      /**
+       * Settings → Task inbox → GhostCLI trial report card: health, runs / done / partial / failed, rate limits, average
+       * minutes and the last 10 attempts from the relay's trial report (`RelayReport`). Same layout on a 390 px phone.
+       * Read-only: nothing new on the server, just renders what `/api/task-inbox` already returns.
+       *
+       * @param p - The inbox state (its `relay` field holds the report).
+       */
+      function GhostcliTrialReport({ s }: { s: InboxState }) {
+        const r = s.relay;
+        if (!r) return null;
+        const hhmm = (ms: number) => new Date(ms).toLocaleTimeString(getLocale() === "he" ? "he-IL" : "en-US", { hour: "2-digit", minute: "2-digit" });
+        const mm = (ms: number) => (ms / 60_000).toFixed(1);
+        const statusLabel = (st: string) => {
+          if (st === "done") return L("הושלם", "done");
+          if (st === "partial") return L("חלקי", "partial");
+          if (st === "failed") return L("נכשל", "failed");
+          if (st === "rate-limited") return L("חסום", "rate-limited");
+          if (st === "handed-off") return L("הועבר", "handed-off");
+          if (st === "probe-ok") return L("בדיקה ✓", "probe ok");
+          if (st === "probe-failed") return L("בדיקה ✗", "probe fail");
+          return st;
+        };
+        return (
+          <div className="stack tinbox-gcli-report">
+            <h4>{L("דוח ניסוי", "Trial report")}</h4>
+            <dl className="tinbox-report-grid small">
+              <dt>{L("בריאות", "Health")}</dt>
+              <dd>
+                {r.health
+                  ? `${r.health.ok ? "✓" : "✗"} ${r.health.model ?? "-"} · ${mm(r.health.ms)} ${L("דק׳", "min")} (${hhmm(r.health.at)})`
+                  : L("לא נבדק עדיין", "Not probed yet")}
+              </dd>
+              <dt>{L("ניסיונות", "Runs")}</dt>
+              <dd>{r.runs}</dd>
+              <dt>{L("הושלמו", "Done")}</dt>
+              <dd>{r.done}</dd>
+              <dt>{L("חלקיים", "Partial")}</dt>
+              <dd>{r.partial}</dd>
+              <dt>{L("נכשלו", "Failed")}</dt>
+              <dd>{r.failed}</dd>
+              <dt>{L("חסומים", "Rate limited")}</dt>
+              <dd>{r.rateLimited}{r.lastRateLimitAt ? ` · ${L("אחרון", "last")} ${hhmm(r.lastRateLimitAt)}` : ""}</dd>
+              <dt>{L("ממוצע", "Average")}</dt>
+                      <dd>{r.avgMinutes !== undefined ? `${r.avgMinutes.toFixed(1)} ${L("דק׳", "min")}` : "-"}</dd>
+            </dl>
+            {r.recent.length > 0 && (
+              <div className="tinbox-report-table-wrap">
+                <table className="tinbox-report-table small">
+                  <thead>
+                    <tr>
+                      <th>{L("משימה", "Task")}</th>
+                      <th>{L("מודל", "Model")}</th>
+                      <th>{L("תוצאה", "Result")}</th>
+                      <th>{L("דק׳", "Min")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.recent.slice(0, 10).map((run, i) => (
+                      <tr key={`${run.at}-${i}`}>
+                        <td className="mono">{run.id}</td>
+                        <td className="mono">{run.model.replace(/^ghostcli\//, "")}</td>
+                        <td>{statusLabel(run.status)}</td>
+                        <td className="num">{run.ms !== undefined ? mm(run.ms) : "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      }
 
 /**
  * Settings → Task inbox → Claude Code: Claude Code on this PC with the user's own subscription (the same limits as

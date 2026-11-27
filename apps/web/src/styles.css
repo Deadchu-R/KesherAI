@@ -4473,6 +4473,21 @@ h1[tabindex="-1"]:focus:not(:focus-visible), h2[tabindex="-1"]:focus:not(:focus-
 /* OpenCode Go's card in Settings > Task inbox: long model names never push the phone layout (390 px) wider. */
 .tinbox-ocgo select, .tinbox-gcli select { max-width: 100%; min-width: 0; }
 .tinbox-gcli .chip-text { text-align: start; overflow-wrap: anywhere; }
+/* GhostCLI trial report card (Settings › Task inbox): stats grid + last-10 table that wraps on a 390 px phone. */
+.tinbox-gcli-report { gap: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.tinbox-gcli-report h4 { margin: 0; font-size: 14px; color: var(--text-2); }
+.tinbox-report-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; }
+.tinbox-report-grid dt { color: var(--text-2); white-space: nowrap; }
+.tinbox-report-grid dd { margin: 0; overflow-wrap: anywhere; }
+.tinbox-report-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tinbox-report-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tinbox-report-table th, .tinbox-report-table td { text-align: start; padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.tinbox-report-table td.mono, .tinbox-report-table td.num { font-family: ui-monospace, monospace; }
+.tinbox-report-table td.num { text-align: end; }
+@media (max-width: 760px) {
+  .tinbox-report-grid { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .tinbox-report-grid dt { margin-top: 6px; }
+}
 .tinbox-ex.opus { color: #e8b4ff; border-color: rgb(232 180 255 / 0.35); }
 .tinbox-ex.claude { color: #f0a77e; border-color: rgb(240 167 126 / 0.35); }
 /* Claude Code's cards (Settings › Connections, Settings › Task inbox): the quota line wraps on a 390 px phone. */
