@@ -46,7 +46,7 @@ export function sortSpecs(specs: readonly ToolSpec[]): ToolSpec[] {
 
 /** One model turn: give it the conversation and tools, get text and tool calls back. */
 export type ModelTurn = (
-  request: { messages: AgentMessage[]; tools: ToolSpec[] },
+  request: { messages: AgentMessage[]; tools: ToolSpec[]; /** The longest answer to ask for, thinking included (unset: the model's own limit). */ maxTokens?: number },
   signal: AbortSignal,
   onText: (delta: string) => void,
 ) => Promise<{ text: string; toolCalls: ToolCall[]; usage?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; cacheWriteTokens?: number }; truncated?: boolean }>;

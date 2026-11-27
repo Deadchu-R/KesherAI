@@ -113,7 +113,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       // Only for a local model the menu offers levels for (a cloud model or an unknown family is left as it is).
       const level = thinkingOf?.();
       const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
-      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: LOCAL_TURN_MAX_TOKENS } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
+      return provider.chatWithTools({ providerModelId, messages: req.messages, tools: req.tools, ...sampling, ...(provider.id === "llamacpp" ? { maxTokens: req.maxTokens ?? LOCAL_TURN_MAX_TOKENS } : req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(hebrew ? { logitBias: OTHER_SCRIPTS_BIAS } : {}), ...(slotKind ? { slotKind } : {}), ...(thinking ? { thinking } : {}) }, signal, onText);
     }
     if (!provider.chat) throw new Error(`${modelId} is not a chat model.`);
     let text = "";
@@ -122,7 +122,7 @@ function rawTurnFor(registry: ProviderRegistry, modelId: string, params?: Person
       .map((m) => ({ role: m.role, content: m.content }));
     const level = thinkingOf?.();
     const thinking = level && thinkingLevels(provider.id, providerModelId, provider.location).includes(level) ? level : undefined;
-    for await (const ev of provider.chat({ providerModelId, messages, ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}), ...(thinking ? { thinking } : {}) }, signal)) {
+    for await (const ev of provider.chat({ providerModelId, messages, ...(sampling.temperature !== undefined ? { temperature: sampling.temperature } : {}), ...(req.maxTokens ? { maxTokens: req.maxTokens } : {}), ...(thinking ? { thinking } : {}) }, signal)) {
       if (ev.type === "delta") {
         text += ev.text;
         onText(ev.text);

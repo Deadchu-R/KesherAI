@@ -539,7 +539,7 @@ export class FreeCloudPool {
           try {
             // Free tiers that may train (Mistral, OpenRouter's free models) get sensitive things hidden: privacy-guard.ts.
             const { messages } = guardMessages(`${id}/${model}`, req.messages);
-            return await provider.chatWithTools({ providerModelId: model, messages, tools: req.tools }, signal, (t) => {
+            return await provider.chatWithTools({ providerModelId: model, messages, tools: req.tools, ...(req.maxTokens ? { maxTokens: req.maxTokens } : {}) }, signal, (t) => {
               shown += t.length;
               onText(t);
             });

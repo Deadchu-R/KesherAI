@@ -177,3 +177,75 @@ test("researchReport: a search that found nothing keeps each backend's reason (n
   assert.equal(noSearchNote([]), NO_SEARCH_NOTE);
   assert.ok(noSearchNote(Array.from({ length: 9 }, (_, i) => `engine${i}: ${"x".repeat(90)}`)).length < 320);
 });
+
+/** A fake writer: the planner gets one part, every later call gets the next scripted answer (and the messages it was given). */
+function scripted(answers: Array<{ text: string; truncated?: boolean }>) {
+  const calls: Array<{ messages: Array<{ role: string; content: unknown }>; maxTokens?: number }> = [];
+  let i = 0;
+  const model: ModelTurn = async (req) => {
+    if ((req.messages[0]!.content as string).startsWith("Split")) return { text: '{"parts": ["a"]}', toolCalls: [] };
+    calls.push({ messages: req.messages, ...(req.maxTokens ? { maxTokens: req.maxTokens } : {}) });
+    return { toolCalls: [], ...answers[Math.min(i++, answers.length - 1)]! };
+  };
+  const deps = { model, search: async () => [{ title: "A", url: "https://a.io/x", snippet: "s" }], read: async () => "page text" };
+  return { calls, deps };
+}
+
+const GOAL = "Research X. Up to 1,500 words. Write a ## Tasks section.";
+
+test("reportWants and writerBudget: the length and the Tasks section come from the question, the budget fits them", async () => {
+  const { reportWants, writerBudget, endsCut, emptySections } = await import("./deep-research.js");
+  assert.deepEqual(reportWants(GOAL), { words: 1500, tasks: true });
+  assert.deepEqual(reportWants("What is X?"), {});
+  assert.ok(writerBudget(1500, false) >= 2500 + 2000, "report tokens plus thinking room");
+  assert.ok(writerBudget(1500, true) > writerBudget(1500, false));
+  assert.equal(endsCut("* Parallel helpers: using multiple agents or tools to"), true);
+  assert.equal(endsCut("Done sentence [2]."), false);
+  assert.equal(endsCut("## Tasks"), false);
+  assert.deepEqual(emptySections("# T\n\n## A\n\n## B\ntext\n\n## C\n"), ["A", "C"]);
+});
+
+test("researchReport: a MAX_TOKENS cut is continued from where it stopped, and the writer gets the budget", async () => {
+  const { researchReport, REPORT_INCOMPLETE } = await import("./deep-research.js");
+  const { calls, deps } = scripted([
+    { text: "# T\n\nSummary here [1].\n\n## Facts\n\nAgents help and", truncated: true },
+    { text: " they run in parallel [1].\n\n## Conclusion\n\nDone.\n\n## Tasks\n\nT1 Do it (S)" },
+  ]);
+  const r = await researchReport(GOAL, deps, new AbortController().signal);
+  assert.equal(calls.length, 2);
+  assert.ok((calls[0]!.maxTokens ?? 0) >= 4500, "budget sent with the writer's request");
+  assert.match(calls[0]!.messages[0]!.content as string, /about 1500 words/);
+  assert.match(calls[0]!.messages[0]!.content as string, /## Tasks/);
+  assert.match(calls[1]!.messages.at(-1)!.content as string, /Continue exactly from where it stopped/);
+  assert.match(r, /Agents help and they run in parallel \[1\]\.[\s\S]*## Tasks\n\nT1 Do it/);
+  assert.doesNotMatch(r, new RegExp(REPORT_INCOMPLETE));
+});
+
+test("researchReport: a report without Tasks gets one more pass for just that section", async () => {
+  const { researchReport } = await import("./deep-research.js");
+  const { calls, deps } = scripted([{ text: "# T\n\nAll good [1].\n\n## Conclusion\n\nFine." }, { text: "## Tasks\n\nT1 Build it (M)" }]);
+  const r = await researchReport(GOAL, deps, new AbortController().signal);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1]!.messages.at(-1)!.content as string, /no `## Tasks` section/);
+  assert.match(r, /Fine\.\n\n## Tasks\n\nT1 Build it \(M\)[\s\S]*## Sources/);
+});
+
+test("researchReport: still cut after two extra passes is marked incomplete, not passed off as done", async () => {
+  const { researchReport, REPORT_INCOMPLETE } = await import("./deep-research.js");
+  const { calls, deps } = scripted([{ text: "# T\n\nStart and", truncated: true }]);
+  const r = await researchReport(GOAL, deps, new AbortController().signal);
+  assert.equal(calls.length, 3, "one write and two continuations, then it stops asking");
+  assert.ok(r.includes(`${REPORT_INCOMPLETE} it stops in the middle`));
+});
+
+test("researchReport: a question without a Tasks request needs no extra pass; empty sections are filled once", async () => {
+  const { researchReport } = await import("./deep-research.js");
+  const plain = scripted([{ text: "# T\n\nOk [1]." }]);
+  await researchReport("What is X?", plain.deps, new AbortController().signal);
+  assert.equal(plain.calls.length, 1);
+  const empty = scripted([{ text: "# T\n\nSummary.\n\n## Facts\n\n## Conclusion\n" }, { text: "## Facts\n\nReal facts [1].\n\n## Conclusion\n\nShort." }]);
+  const r = await researchReport("What is X?", empty.deps, new AbortController().signal);
+  assert.equal(empty.calls.length, 2);
+  assert.match(r, /## Facts\n\nReal facts \[1\]\.\n\n## Conclusion\n\nShort\./);
+  assert.equal(r.match(/## Facts/g)?.length, 1);
+});

@@ -18,6 +18,7 @@ import { retryAfterMs } from "./free-cloud.js";
 import { nextUtcMidnight, type FreeUsage } from "./openrouter-free.js";
 import { freedSlotNote, periodicDue, PERIODIC_STANDING, queueStep, standingId, standingPlan, STANDING_TEMPLATE_ID, TaskLines, QUEUE_EXECUTORS, type QueueExecutor } from "./inbox-queue.js";
 import { ProgressTicker, progressRef, type ProgressNote } from "./inbox-progress.js";
+import { REPORT_INCOMPLETE } from "./deep-research.js";
 import { goalFor, nextForExecutor, parseResearchTasks, sameTask, type ResearchTask } from "./research-tasks.js";
 import { publishResearch } from "./research-publish.js";
 import { DRAIN_NOTE } from "./update-drain.js";
@@ -1400,9 +1401,13 @@ export class TaskInbox {
         new Promise<never>((_, rej) => stop.signal.addEventListener("abort", () => rej(new Error("Stopped at the safety limit.")), { once: true })),
       ])).trim();
       if (!report) throw new Error("The model wrote no report.");
+      // A report still cut off or without its Tasks after the extra passes: done, with a warning (deep-research.ts).
+      const warn = new RegExp(`\\s*${REPORT_INCOMPLETE} ?(.*)$`, "s").exec(report);
+      const clean = warn ? report.slice(0, warn.index).trim() : report;
+      if (warn) t.note = `Done with a warning: report incomplete (${(warn[1] || "cut off").trim().slice(0, 120)}). Run it again or finish it by hand.`;
       // Capped like its results file (task-inbox.ts): a model's runaway answer never bloats the saved inbox.
-      t.researchReport = report.slice(0, 60_000);
-      t.summary = report.slice(0, 2000);
+      t.researchReport = clean.slice(0, 60_000);
+      t.summary = clean.slice(0, 2000);
     } catch (e) {
       const msg = (e as Error).message || String(e);
       if (!stop.signal.aborted && searchRetryDue(msg, t.searchRetry)) {
@@ -4040,7 +4045,7 @@ export function rememberFail(t: InboxTaskView, status: InboxStatus, at: number):
  */
 export function endBody(t: { title: string; pushed?: boolean; branch?: string; note?: string }, status: InboxStatus): string {
   const head = `${t.title}${t.pushed ? ` · ${t.branch}` : ""}`;
-  const why = status !== "done" && t.note ? t.note.replace(/\s+/g, " ").trim() : "";
+  const why = (status !== "done" || t.note?.startsWith("Done with a warning")) && t.note ? t.note.replace(/\s+/g, " ").trim() : "";
   return why ? `${head}\n${why.length > 160 ? `${why.slice(0, 159)}…` : why}` : head;
 }
 
