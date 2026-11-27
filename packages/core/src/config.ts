@@ -643,6 +643,8 @@ export const KesherConfigSchema = z.object({
   browserKey: z.string().optional(),
   /** Sites where the browser tools may act without asking ("Always allow on this site"), e.g. "example.com". */
   browserSites: z.array(z.string()).default([]),
+  /** When each of those sites was kept and what it allows (open only, or click and type): shown in Settings › Sites. */
+  browserSiteInfo: z.record(z.string(), z.object({ at: z.string().optional(), level: z.enum(["open", "act"]).optional() })).default({}),
   /**
    * Whether helper agents may use "Always on this site" too. Off (the default): a helper asks before every action
    * on every site, whatever the chat allowed (decided by Claude overnight, 2026-11-20; reversible here).

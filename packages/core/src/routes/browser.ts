@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { mergeControlLog } from "../control-live.js";
 import "@fastify/websocket";
 import { existsSync } from "node:fs";
@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 import { timingSafeEqual } from "node:crypto";
 import type { KesherServices } from "../services.js";
 import { isLocalRequest } from "../auth.js";
+import { builtInSensitiveHosts } from "../control-policy.js";
+import { addSite, listSites, removeSite, validateSiteHost } from "../site-permissions.js";
 import { browserDebugRoutes } from "./browser-debug.js";
 
 /** Where the browser extension's files are: next to the installed app, or in the source tree. */
@@ -81,13 +83,34 @@ export async function browserRoutes(app: FastifyInstance, s: KesherServices): Pr
     return reply.type("application/zip").send(Buffer.from(zip));
   });
 
-  /** Sites where the browser tools act without asking ("Always on this site"), and taking one back. */
-  app.get("/api/browser/sites", async () => ({ sites: s.config.browserSites ?? [], helperAlways: s.config.browserHelperAlways === true }));
-  app.delete<{ Querystring: { site?: string } }>("/api/browser/sites", async (req) => {
-    const site = String(req.query.site ?? "");
-    s.config.browserSites = (s.config.browserSites ?? []).filter((x) => x !== site);
+  /**
+   * Standing site permissions (Settings › Browser and computer › Sites): the sites the browser tools act on without
+   * asking, with what each allows and since when, plus the sites that always ask (read-only). Adding by hand is for
+   * this computer only; the phone views and removes.
+   */
+  const sitesView = (req: FastifyRequest) => ({
+    sites: s.config.browserSites ?? [],
+    entries: listSites(s.config),
+    sensitive: { builtIn: builtInSensitiveHosts(), own: s.config.controlSensitive ?? [] },
+    blocked: s.config.controlBlocked ?? [],
+    canAdd: isLocalRequest(req),
+    helperAlways: s.config.browserHelperAlways === true,
+  });
+  app.get("/api/browser/sites", async (req) => sitesView(req));
+  app.post<{ Body: { site?: unknown; level?: unknown } }>("/api/browser/sites", async (req, reply) => {
+    if (!isLocalRequest(req)) return reply.code(403).send({ error: "Adding a site is only available on this computer" });
+    const v = validateSiteHost(req.body?.site, s.config.controlBlocked ?? [], s.config.controlSensitive ?? []);
+    if ("error" in v) return reply.code(400).send({ error: v.error });
+    const level = req.body?.level === "open" ? "open" : "act";
+    if ((s.config.browserSites ?? []).includes(v.host)) return reply.code(409).send({ error: "This site is already in the list." });
+    addSite(s.config, v.host, Date.now(), level);
     await s.saveConfig();
-    return { sites: s.config.browserSites };
+    return sitesView(req);
+  });
+  app.delete<{ Querystring: { site?: string } }>("/api/browser/sites", async (req) => {
+    removeSite(s.config, String(req.query.site ?? ""));
+    await s.saveConfig();
+    return sitesView(req);
   });
 
   /** What the browser tools did lately (the pane's activity strip, here and on the phone), and the one Stop for them. */

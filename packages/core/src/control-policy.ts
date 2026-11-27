@@ -107,6 +107,11 @@ const SENSITIVE_HOSTS: Record<Exclude<SensitiveKind, "user">, readonly string[]>
   government: ["gov.il", "gov.uk", "gov", "mil", "europa.eu", "irs.gov", "btl.gov.il"],
 };
 
+/** The built-in sensitive hosts by kind (read-only, for Settings › Sites: these always ask). */
+export function builtInSensitiveHosts(): Record<Exclude<SensitiveKind, "user">, readonly string[]> {
+  return SENSITIVE_HOSTS;
+}
+
 /** Host patterns that are sensitive whoever runs them (a bank's own domain, a webmail host, a government domain). */
 const SENSITIVE_PATTERNS: Array<[SensitiveKind, RegExp]> = [
   ["government", /(^|\.)gov(\.[a-z]{2})?$|(^|\.)gob\.[a-z]{2}$|(^|\.)gouv\.[a-z]{2}$|(^|\.)mil$/i],

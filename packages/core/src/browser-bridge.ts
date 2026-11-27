@@ -587,24 +587,44 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     const site = await tabSite(input, signal).catch(() => undefined);
     return site ? ` on ${site.slice(5)}` : "";
   };
+  /**
+   * Fills in which browser a call goes to when the model did not say (the user's setting, what is connected, what
+   * they named). Used before the approval card is built (its preview and site) and again when the tool runs, so the
+   * card names the browser that is really used.
+   *
+   * @param input - The call's arguments.
+   * @param ctx - The tool context (the user's latest message).
+   * @returns The arguments with `browser` set, or `ask` when the user named a browser that is not available.
+   */
+  const withBrowser = (input: Record<string, unknown>, ctx: ToolContext): { input: Record<string, unknown> } | { ask: string } => {
+    if (!both || input.browser !== undefined) return { input };
+    const c = chooseBrowser({ preferred: b.preferred(), pane: b.status().pane, chrome: b.status().extension, lastUser: ctx.lastUser });
+    return "ask" in c ? { ask: c.ask } : { input: { ...input, browser: c.browser } };
+  };
   const scoped = (t: AgentTool): AgentTool => ({
     ...t,
-    scopeOf: async (input, ctx) => (t.spec.name === "browser_open" ? siteOf(String(input.url ?? "")) : tabSite(input, ctx.signal)),
+    scopeOf: async (input, ctx) => {
+      const r = withBrowser(input, ctx);
+      const i = "input" in r ? r.input : input;
+      return t.spec.name === "browser_open" ? siteOf(String(i.url ?? "")) : tabSite(i, ctx.signal);
+    },
   });
   /** Logs each call (tool, site, what it acted on, result) and adds the always-ask rule. */
   const logged = (t: AgentTool): AgentTool => ({
     ...t,
     ...(ALWAYS_ASK[t.spec.name] ? { askFirst: () => ALWAYS_ASK[t.spec.name] } : {}),
+    // The card's text is made with the browser the call will really use (not the default).
+    ...(t.preview ? { preview: async (input: Record<string, unknown>, ctx: ToolContext) => { const r = withBrowser(input, ctx); return t.preview!("input" in r ? r.input : input, ctx); } } : {}),
     run: async (input0, ctx) => {
       // The user has the pane: wait, then give the model a fresh look instead of a command that may be stale.
       if (await b.waitForGiveBack(ctx.signal)) return gaveBack(ctx);
       // Which browser, when the model did not say: the user's setting, what is connected, what they named.
-      let input = input0;
-      if (both && input0.browser === undefined) {
-        const c = chooseBrowser({ preferred: b.preferred(), pane: b.status().pane, chrome: b.status().extension, lastUser: ctx.lastUser });
-        if ("ask" in c) throw new Error(c.ask);
-        input = { ...input0, browser: c.browser };
-      }
+      const resolved = withBrowser(input0, ctx);
+      if ("ask" in resolved) throw new Error(resolved.ask);
+      const input = resolved.input;
+      // The gate marked the original arguments (a password field): the copy with the browser filled in carries it on.
+      const wall0 = input === input0 ? undefined : secretCalls.get(input0);
+      if (wall0) secretCalls.set(input, wall0);
       const what = input.url ? String(input.url) : input.ref !== undefined ? await labelOf(input, ctx.signal) : undefined;
       try {
         const out = await t.run(input, ctx);
@@ -787,7 +807,10 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
           },
         };
   /** Where a call acts, for safety v2's gate and approval card v2: the site, the element and a picture of it. */
-  const where = async (input: Record<string, unknown>, ctx: { signal: AbortSignal }) => {
+  const where = async (input0: Record<string, unknown>, ctx: ToolContext) => {
+    // The browser the call will really use (not the default), so the card's site, label and picture are that browser's.
+    const resolved = withBrowser(input0, ctx);
+    const input = "input" in resolved ? resolved.input : input0;
     let url = typeof input.url === "string" ? input.url : undefined;
     if (!url) {
       const tabs = await b.call<BrowserTab[]>("tabs", { browser: input.browser }, ctx.signal).catch(() => [] as BrowserTab[]);
@@ -797,7 +820,7 @@ export function browserTools(b: BrowserBridge, saveShot?: (data: Buffer, mimeTyp
     const ref = input.ref !== undefined ? String(input.ref) : "";
     const label = ref ? await labelOf(input, ctx.signal) : undefined;
     const secret = typeof input.text === "string" ? secretFieldKind(label) : undefined;
-    if (secret) secretCalls.set(input, secret);
+    if (secret) secretCalls.set(input0, secret);
     return {
       ...(site ? { site } : {}),
       ...(url ? { url } : {}),

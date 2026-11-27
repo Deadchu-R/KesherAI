@@ -1,0 +1,154 @@
+{
+ "group": "דפדפן ומחשב · Browser & computer",
+ "now": "2026-11-27T10:00:00Z",
+ "boards": [
+  {
+   "id": "SettingsSites",
+   "title": "הגדרות › דפדפן ומחשב › אתרים: הרשאות קבועות עם מה שמותר, מאז מתי והסר; הוספה ידנית; \"תמיד שואלים\" לקריאה בלבד",
+   "titleEn": "Settings › Sites: standing permissions with what each allows, since when and Remove; add by hand; read-only \"always asks\" list",
+   "route": "#/settings/developers",
+   "viewports": [
+    "desktop",
+    "phone"
+   ],
+   "height": {
+    "desktop": 1500,
+    "phone": 2600
+   },
+   "steps": [
+    {
+     "wait": "#settings-sites"
+    },
+    {
+     "scroll": "#settings-sites"
+    }
+   ],
+   "mocks": [
+    {
+     "url": "**/api/browser/sites",
+     "method": "GET",
+     "json": {
+      "sites": [
+       "shop.example.com",
+       "docs.example.org",
+       "*.wiki.example"
+      ],
+      "entries": [
+       {
+        "site": "shop.example.com",
+        "level": "act",
+        "at": "2026-11-26T18:20:00Z",
+        "source": "always"
+       },
+       {
+        "site": "docs.example.org",
+        "level": "open",
+        "at": "2026-11-24T09:05:00Z",
+        "source": "always"
+       },
+       {
+        "site": "*.wiki.example",
+        "level": "open",
+        "at": "2026-11-20T12:00:00Z",
+        "source": "always"
+       }
+      ],
+      "sensitive": {
+       "builtIn": {
+        "bank": [
+         "leumi.co.il",
+         "chase.com",
+         "revolut.com"
+        ],
+        "payment": [
+         "paypal.com",
+         "stripe.com"
+        ],
+        "email": [
+         "mail.google.com",
+         "outlook.live.com"
+        ],
+        "account": [
+         "accounts.google.com"
+        ],
+        "government": [
+         "gov.il",
+         "gov.uk"
+        ]
+       },
+       "own": [
+        "portal.mycorp.example"
+       ]
+      },
+      "blocked": [
+       "ads.tracker.example"
+      ],
+      "canAdd": true,
+      "helperAlways": false
+     }
+    },
+    {
+     "url": "**/api/control/settings",
+     "json": {
+      "mode": "manual",
+      "helperMode": "manual",
+      "skipAllowed": false,
+      "js": "ask",
+      "sensitive": [
+       "portal.mycorp.example"
+      ],
+      "blocked": [
+       "ads.tracker.example"
+      ],
+      "helperAlways": false,
+      "browserPreferred": "auto"
+     }
+    },
+    {
+     "url": "**/api/control/decisions*",
+     "json": {
+      "decisions": [
+       {
+        "at": "2026-11-21T09:58:00Z",
+        "kind": "browser",
+        "tool": "browser_open",
+        "site": "shop.example",
+        "decision": "allow",
+        "by": "user"
+       },
+       {
+        "at": "2026-11-21T10:00:00Z",
+        "helper": "כותב המייל",
+        "kind": "browser",
+        "tool": "browser_type",
+        "site": "mail.example.com",
+        "target": "textbox \"To\"",
+        "decision": "allow",
+        "by": "user"
+       },
+       {
+        "at": "2026-11-21T10:02:00Z",
+        "kind": "computer",
+        "tool": "computer_invoke",
+        "app": "notepad",
+        "target": "Button \"Save\"",
+        "decision": "allow",
+        "by": "reviewer"
+       },
+       {
+        "at": "2026-11-21T10:03:00Z",
+        "helper": "Researcher",
+        "kind": "browser",
+        "tool": "browser_click",
+        "site": "bank.example",
+        "target": "link \"Transfer\"",
+        "decision": "expired",
+        "by": "timeout"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

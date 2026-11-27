@@ -304,3 +304,17 @@ test("browser bridge: a call the gate passed as a password field types nothing, 
   // A fresh call into the renamed field is an ordinary step (the gate decides it).
   assert.equal((await info(tools.browser_type!)({ ref: "2", text: "socks" }, ctx)).secretField, undefined);
 });
+
+test("browser bridge: the approval card names the browser that will really be used", async () => {
+  const b = new BrowserBridge();
+  b.attachPane(async () => ({ url: "https://a.test/", title: "A", text: "hi", elements: [] }));
+  b.attach(fakeSocket(() => ({})) as never, { browser: "Chrome" });
+  const open = () => browserTools(b).find((t) => t.spec.name === "browser_open")!;
+  const ctx = (lastUser: string) => ({ signal: new AbortController().signal, lastUser }) as never;
+  b.preferred = () => "auto";
+  assert.match(await open().preview!({ url: "https://mail.test/" }, ctx("open my gmail inbox")), /in your browser/, "own sign-in: the user's Chrome");
+  assert.match(await open().preview!({ url: "https://a.test/" }, ctx("look at a.test")), /in KesherAI's browser/, "otherwise the pane");
+  b.preferred = () => "chrome";
+  assert.match(await open().preview!({ url: "https://a.test/" }, ctx("look at a.test")), /in your browser/, "the setting");
+  assert.match(await open().preview!({ url: "https://a.test/", browser: "pane" }, ctx("look at a.test")), /in KesherAI's browser/, "what the model named wins");
+});

@@ -66,39 +66,102 @@ export function BrowserSection() {
   );
 }
 
+/** One standing site permission, as the server lists it. */
+interface SiteRow { site: string; level: "open" | "act"; at?: string; source: "always" | "grant" }
+interface SitesInfo {
+  entries: SiteRow[];
+  sensitive: { builtIn: Record<string, string[]>; own: string[] };
+  blocked: string[];
+  canAdd: boolean;
+  helperAlways?: boolean;
+}
+
+const KIND_NAMES: Record<string, [string, string]> = {
+  bank: ["בנקים", "Banks"],
+  payment: ["תשלומים", "Payments"],
+  email: ["דואר", "Mail"],
+  account: ["חשבונות והתחברות", "Accounts and sign-in"],
+  government: ["ממשלה", "Government"],
+};
+
 /**
- * Settings → sites where KesherAI's browser tools act without asking ("Always on this site" in an approval),
- * with a button to take each back. Works on the phone too.
+ * Settings › Browser and computer › Sites: the sites with a standing permission ("Always on this site" on an
+ * approval card, or added here), what each allows and since when, with Remove; the sites that always ask (read-only);
+ * and adding a site by hand (on the computer only). The phone views and removes.
  */
 export function BrowserSitesSection() {
-  const [sites, setSites] = useState<string[] | null>(null);
+  const [info, setInfo] = useState<SitesInfo | null>(null);
   const [helperAlways, setHelperAlways] = useState(false);
-  const load = () =>
-    void api<{ sites: string[]; helperAlways?: boolean }>("/api/browser/sites").then(
-      (r) => {
-        setSites(r.sites);
-        setHelperAlways(r.helperAlways === true);
-      },
-      () => setSites([]),
-    );
+  const [host, setHost] = useState("");
+  const [level, setLevel] = useState<"open" | "act">("act");
+  const [error, setError] = useState("");
+  const apply = (r: SitesInfo) => {
+    setInfo(r);
+    setHelperAlways(r.helperAlways === true);
+  };
+  const load = () => void api<SitesInfo>("/api/browser/sites").then(apply, () => setInfo(null));
   useEffect(load, []);
-  if (!sites) return null;
+  if (!info) return null;
+  const day = (iso: string) => new Date(iso).toLocaleDateString(getLocale() === "he" ? "he-IL" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const add = () => {
+    setError("");
+    void api<SitesInfo>("/api/browser/sites", { method: "POST", body: { site: host, level } }).then(
+      (r) => {
+        apply(r);
+        setHost("");
+      },
+      (e: Error) => setError(e.message),
+    );
+  };
   return (
-    <section className="card stack">
-      <h2>{L("אתרים שאושרו לדפדפן", "Sites approved for the browser")}</h2>
-      <p className="muted small">{L("באתרים האלה המודל פותח, לוחץ ומקליד בלי לשאול כל פעם (בחרתם \"תמיד באתר הזה\"). סיסמאות והורדות — אף פעם.", "On these sites the model opens, clicks and types without asking each time (you chose \"Always on this site\"). Passwords and downloads: never.")}</p>
-      {sites.length ? (
+    <section className="card stack" id="settings-sites">
+      <h2>{L("אתרים (הרשאות קבועות)", "Sites (standing permissions)")}</h2>
+      <p className="muted small">{L("באתרים האלה המודל פועל בלי לשאול כל פעם (בחרתם \"תמיד באתר הזה\" או הוספתם כאן). סיסמאות והורדות — אף פעם.", "On these sites the model acts without asking each time (you chose \"Always on this site\" or added it here). Passwords and downloads: never.")}</p>
+      {info.entries.length ? (
         <ul className="plain-list">
-          {sites.map((site) => (
-            <li key={site} className="row">
-              <code dir="ltr" className="grow">{site}</code>
-              <button type="button" onClick={() => void api(`/api/browser/sites?site=${encodeURIComponent(site)}`, { method: "DELETE" }).then(load)}>{L("הסר", "Remove")}</button>
+          {info.entries.map((e) => (
+            <li key={e.site} className="row">
+              <span className="grow">
+                <code dir="ltr">{e.site}</code>
+                <span className="muted small" dir="auto"> · {e.level === "open" ? L("פתיחה וקריאה בלבד", "Open and read only") : L("פתיחה, לחיצה והקלדה", "Open, click and type")}{e.at ? ` · ${L("מאז", "since")} ${day(e.at)}` : ""}</span>
+              </span>
+              <button type="button" onClick={() => void api<SitesInfo>(`/api/browser/sites?site=${encodeURIComponent(e.site)}`, { method: "DELETE" }).then(apply)}>{L("הסר", "Remove")}</button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="muted small">{L("עוד אין. אישורים חדשים לאתר (לצ'אט, לשעה או עד שתבטלו) נמצאים בהגדרות › אישורים.", "None yet. New site approvals (for a chat, 1 hour or until you revoke) are in Settings › Approvals.")}</p>
+        <p className="muted small">{L("עוד אין. אישורים לצ'אט או לשעה נמצאים בהגדרות › אישורים.", "None yet. Approvals for a chat or 1 hour are in Settings › Approvals.")}</p>
       )}
+      {info.canAdd ? (
+        <div className="stack">
+          <div className="row" style={{ flexWrap: "wrap" }}>
+            <input dir="ltr" className="grow" style={{ minWidth: "12rem" }} value={host} placeholder="example.com  /  *.example.com" aria-label={L("אתר", "Site")} onChange={(e) => setHost(e.target.value)} onKeyDown={(e) => e.key === "Enter" && host.trim() && add()} />
+            <select value={level} aria-label={L("מה מותר", "What is allowed")} onChange={(e) => setLevel(e.target.value as "open" | "act")}>
+              <option value="act">{L("פתיחה, לחיצה והקלדה", "Open, click and type")}</option>
+              <option value="open">{L("פתיחה וקריאה בלבד", "Open and read only")}</option>
+            </select>
+            <button type="button" disabled={!host.trim()} onClick={add}>{L("הוסף אתר", "Add site")}</button>
+          </div>
+          {error && <p className="small" role="alert" dir="auto">{error}</p>}
+          <p className="muted small">{L("שם האתר בלבד, בלי כתובת או נתיב. \"*.\" בהתחלה כולל גם תת-אתרים.", "Only the site's name, no address or path. A leading \"*.\" also covers its subdomains.")}</p>
+        </div>
+      ) : (
+        <p className="muted small">{L("הוספת אתר ידנית אפשרית רק במחשב עצמו; מכאן אפשר לצפות ולהסיר.", "Adding a site by hand is possible only on the computer; here you can view and remove.")}</p>
+      )}
+      <h3>{L("תמיד שואלים (לקריאה בלבד)", "Always asks (read-only)")}</h3>
+      <p className="muted small">{L("באתרים האלה אין \"תמיד\": כל פעולה מבקשת אישור. הרשימה שלכם — בהגדרות הבטיחות למעלה.", "These sites have no \"always\": every action asks. Your own list is in the safety settings above.")}</p>
+      <ul className="plain-list">
+        {Object.entries(info.sensitive.builtIn).map(([kind, hosts]) => (
+          <li key={kind}>
+            <details>
+              <summary dir="auto">{L(...(KIND_NAMES[kind] ?? [kind, kind]))} <span className="muted small">({hosts.length})</span></summary>
+              <p className="muted small" dir="ltr">{hosts.join(", ")}</p>
+            </details>
+          </li>
+        ))}
+        {info.sensitive.own.length > 0 && <li><span dir="auto">{L("שלכם", "Yours")}</span> <span className="muted small" dir="ltr">{info.sensitive.own.join(", ")}</span></li>}
+        {info.blocked.length > 0 && <li><span dir="auto">{L("חסומים (אף פעם לא נפתחים)", "Blocked (never opened)")}</span> <span className="muted small" dir="ltr">{info.blocked.join(", ")}</span></li>}
+      </ul>
       {/* Off by default: helper agents ask before every browser action, even on sites listed above. */}
       <label className="row">
         <input

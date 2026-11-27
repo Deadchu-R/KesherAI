@@ -39,6 +39,7 @@ import { modelTurnFor } from "./model-turn.js";
 import { answerInUserLanguage } from "./answer-language.js";
 import { ruleAllows } from "./approval-rules.js";
 import { targetOf } from "./approval-grants.js";
+import { addSite, siteAllows } from "./site-permissions.js";
 import { runIn } from "./run-in.js";
 import { filingPrompt, parseFiling, worthFiling } from "./memory-store.js";
 import { createSessionWorktree, removeSessionWorktree, worktreeName, worktreeWork, type Git, type SessionWorktree } from "./session-worktrees.js";
@@ -523,11 +524,7 @@ export class ConversationManager {
       isAlwaysAllowed: (tool, modelId, command, scope, input) => this.grantAllows(id, tool, modelId, command, scope, input),
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
-        const list = (this.deps.config.browserSites ??= []);
-        if (!list.includes(scope.slice(5))) {
-          list.push(scope.slice(5));
-          void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
-        }
+        if (addSite(this.deps.config, scope.slice(5), Date.now())) void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
       },
       helperSiteAlways: () => this.deps.config.browserHelperAlways === true,
     };
@@ -550,7 +547,7 @@ export class ConversationManager {
    * @param input - The call's arguments.
    */
   private grantAllows(id: string, tool: string, modelId: string, command?: string, scope?: string, input?: Record<string, unknown>): boolean {
-    if (scope?.startsWith("site:") && !tool.startsWith(HELPER_RULE) && (this.deps.config.browserSites ?? []).includes(scope.slice(5))) return true;
+    if (scope?.startsWith("site:") && !tool.startsWith(HELPER_RULE) && siteAllows(this.deps.config, scope.slice(5), tool, input)) return true;
     const target = targetOf(tool.replace(/^helper:/, ""), input, scope);
     // On a site only a grant kept for a site counts (a rule for every tool never opens the browser everywhere).
     return this.deps.config.permissions.some((r) => (!scope?.startsWith("site:") || !!r.target?.startsWith("site:")) && ruleAllows(r, { tool, modelId, conversationId: id, ...(command !== undefined ? { command } : {}), ...(target ? { target } : {}) }));
@@ -976,11 +973,7 @@ export class ConversationManager {
       onAlwaysScope: (scope) => {
         if (!scope.startsWith("site:")) return;
         const site = scope.slice(5);
-        const list = (this.deps.config.browserSites ??= []);
-        if (!list.includes(site)) {
-          list.push(site);
-          void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
-        }
+        if (addSite(this.deps.config, site, Date.now())) void Promise.resolve(this.deps.saveConfig?.()).catch(() => undefined);
       },
     });
     // Guests' messages (shared-chat.ts) go marked as untrusted, with their speaker, into summaries and the reviewer's brief.
