@@ -201,7 +201,10 @@ abstract class BaseTransport implements RelayTransport {
         return true;
       }
       this.publishFailing = true;
-      this.error = `publish ${r.status}`;
+      // The provider's own error code (Ably `{error:{code}}`, Supabase `{code}`), never its message: no key can leak.
+      const body = (await r.json().catch(() => undefined)) as { error?: { code?: unknown }; code?: unknown } | undefined;
+      const code = body?.error?.code ?? body?.code;
+      this.error = `publish ${r.status}${typeof code === "number" || (typeof code === "string" && /^[\w-]{1,20}$/.test(code)) ? ` (${code})` : ""}`;
       return false;
     } catch {
       this.publishFailing = true;
@@ -387,7 +390,7 @@ export class AblyTransport extends BaseTransport {
   protected publishRequest(channel: string, env: SealedEnvelope): { url: string; init: RequestInit } {
     return {
       url: `https://rest.ably.io/channels/${encodeURIComponent(channel)}/messages`,
-      init: { method: "POST", headers: { authorization: `Basic ${btoa(this.key)}`, "content-type": "application/json" }, body: JSON.stringify({ name: "env", clientId: ABLY_CLIENT_ID, data: JSON.stringify(env) }) },
+      init: { method: "POST", headers: { authorization: `Basic ${btoa(this.key)}`, "x-ably-clientid": btoa(ABLY_CLIENT_ID), "content-type": "application/json" }, body: JSON.stringify({ name: "env", clientId: ABLY_CLIENT_ID, data: JSON.stringify(env) }) },
     };
   }
 }

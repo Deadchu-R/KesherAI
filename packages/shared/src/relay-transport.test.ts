@@ -125,6 +125,7 @@ test("Ably: attaches after CONNECTED, delivers envelopes, publishes with REST an
   const p = f.posts[0]!;
   assert.equal(p.url, "https://rest.ably.io/channels/kesher-aa/messages");
   assert.equal((p.init.headers as Record<string, string>).authorization, `Basic ${btoa(ABLY_KEY)}`);
+  assert.equal((p.init.headers as Record<string, string>)["x-ably-clientid"], btoa("kesher"), "REST names the client too (basic auth)");
   assert.deepEqual(JSON.parse(String(p.init.body)), { name: "env", clientId: "kesher", data: JSON.stringify(env) });
   t.setChannels(["kesher-bb"]);
   assert.deepEqual(s.sent.slice(1), [{ action: 12, channel: "kesher-aa" }, { action: 10, channel: "kesher-bb" }]);
