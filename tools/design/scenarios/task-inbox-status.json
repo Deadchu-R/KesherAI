@@ -20,7 +20,16 @@
      ],
      "notWhileGame": true,
      "notWhileEditor": false,
-     "gpuBusyPercent": 0
+     "gpuBusyPercent": 0,
+     "ghostcli": {
+      "enabled": true,
+      "dailyCap": 30,
+      "models": [
+       "ghostcli/claude-opus-5-5",
+       "ghostcli/gpt-5-codex"
+      ],
+      "takeHeavy": true
+     }
     },
     "today": {
      "date": "2026-11-20",
@@ -50,9 +59,9 @@
       "id": "t-0501",
       "title": "להוסיף סינון לפי רמה ביומן השימוש",
       "status": "running",
-      "runBy": "opencode",
+      "runBy": "ghostcli",
       "model": "ghostcli/*",
-      "modelUsed": "ghostcli/claude-opus-5-5",
+      "modelUsed": "GhostCLI · claude-opus-5-5",
       "steps": 9,
       "startedAt": {
        "$agoMs": "12m"
@@ -109,7 +118,7 @@
        }
       ],
       "goal": "להוסיף סינון לפי רמה ביומן השימוש",
-      "branch": "agy/t-0501",
+      "branch": "gcli/t-0501",
       "from": "claude"
      },
      {
@@ -205,6 +214,51 @@
       "goal": "מחקר: איך מתחרים מציגים מכסות",
       "branch": "agy/t-0505",
       "from": "claude"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0506",
+      "title": "מחקר: איך מתחרים מציגים שימוש בטוקנים",
+      "goal": "מחקר: איך מתחרים מציגים שימוש בטוקנים",
+      "status": "waiting",
+      "runBy": "auto",
+      "kind": "research",
+      "branch": "gcli/t-0506"
+     },
+     {
+      "executor": "auto",
+      "risk": "low",
+      "base": "main",
+      "allowedPaths": [
+       "apps/web/"
+      ],
+      "forbiddenPaths": [],
+      "check": "pnpm -s typecheck",
+      "maxMinutes": 30,
+      "maxFiles": 6,
+      "from": "claude",
+      "id": "t-0507",
+      "title": "להוסיף כפתור ייצוא ליומן השימוש",
+      "goal": "להוסיף כפתור ייצוא ליומן השימוש",
+      "status": "running",
+      "runBy": "ghostcli",
+      "model": "ghostcli/*",
+      "modelUsed": "GhostCLI · gpt-5-codex",
+      "branch": "gcli/t-0507",
+      "steps": 4,
+      "startedAt": {
+       "$agoMs": "3m"
+      }
      }
     ],
     "models": [
@@ -262,6 +316,25 @@
        }
       }
      ]
+    },
+    "ghostcli": {
+     "ready": true,
+     "used": 7,
+     "models": [
+      "ghostcli/claude-opus-5-5",
+      "ghostcli/gpt-5-codex",
+      "ghostcli/gemini-3-pro",
+      "ghostcli/deepseek-v4"
+     ],
+     "cooldowns": {
+      "ghostcli/gpt-5-codex": {
+       "$inMs": "25m"
+      }
+     },
+     "answering": true,
+     "checkedAt": {
+      "$agoMs": "6m"
+     }
     }
    }
   },
@@ -400,7 +473,7 @@
    "route": "#/task-inbox",
    "height": {
     "desktop": 1100,
-    "phone": 1500
+    "phone": 2100
    },
    "steps": [
     {
@@ -429,6 +502,66 @@
    "steps": [
     {
      "wait": ".tinbox-task"
+    }
+   ]
+  },
+  {
+   "id": "SettingsGhostCard",
+   "title": "הגדרות › תיבת משימות › GhostCLI: פעיל/כבוי, סף יומי 30 (היום 7), סדר מודלים עם חסימה זמנית, משימות כבדות",
+   "titleEn": "Settings › Task inbox › GhostCLI: on/off, daily cap 30 (7 today), model order with a cooldown, heavy tasks",
+   "route": "#/settings/inbox",
+   "steps": [
+    {
+     "wait": ".tinbox-gcli"
+    },
+    {
+     "top": ".tinbox-gcli"
+    }
+   ],
+   "height": {
+    "desktop": 1000,
+    "phone": 1500
+   }
+  },
+  {
+   "id": "InboxWhoGhostResearch",
+   "title": "תיבת משימות: \"מי מבצע\" במשימת מחקר: 👻 GhostCLI עם \"קוד ומחקר, בלי מידע רגיש\"",
+   "titleEn": "Task inbox: \"Who does it\" on a research task: 👻 GhostCLI with \"Code and research, no sensitive content\"",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 1100,
+    "phone": 2100
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has-text('t-0506')"
+    },
+    {
+     "top": ".tinbox-row:has-text('t-0506')"
+    },
+    {
+     "click": ".tinbox-row:has-text('t-0506') .assign:not(.model-pick) > button"
+    },
+    {
+     "wait": ".assign-list"
+    }
+   ]
+  },
+  {
+   "id": "InboxGhostRow",
+   "title": "תיבת משימות: שורה שרצה על GhostCLI עם תג משלה (לא OpenCode Go) וענף gcli/*",
+   "titleEn": "Task inbox: a row run by GhostCLI with its own chip (not OpenCode Go) and a gcli/* branch",
+   "route": "#/task-inbox",
+   "height": {
+    "desktop": 900,
+    "phone": 1300
+   },
+   "steps": [
+    {
+     "wait": ".tinbox-row:has-text('t-0507')"
+    },
+    {
+     "top": ".tinbox-row:has-text('t-0507')"
     }
    ]
   }
